@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.turbo/
+.DS_Store
+*.log
+.env*
+coverage/
+.vscode/
+.idea/
+# Editor backup/swap files
+*.save
+*.save.*
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
