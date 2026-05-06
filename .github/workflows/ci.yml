@@ -2,28 +2,43 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  test-fast:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test:fast
       - run: pnpm bundle-check
-      - run: docker build --platform linux/arm64 -f infra/test-docker/Dockerfile .
-        continue-on-error: true
+
+  test-integration:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker test image
+        run: docker buildx build --platform linux/arm64 --load -t vgpu-test:s1 -f infra/test-docker/Dockerfile .
+      - name: Run integration tests in Docker
+        run: |
+          docker run --rm vgpu-test:s1 sh -lc '
+            Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 &
+            xvfb_pid=$!
+            pnpm test
+            status=$?
+            kill $xvfb_pid
+            exit $status
+          '
