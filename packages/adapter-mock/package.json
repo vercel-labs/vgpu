@@ -1,0 +1,11 @@
+{
+  "name": "@vgpu/adapter-mock",
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "src/**/*.docs.md"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": { "@vgpu/core": "workspace:*" },
+  "vgpuBundleBudgetGzipBytes": 20480
+}

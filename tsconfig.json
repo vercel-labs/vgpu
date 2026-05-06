@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/adapter-mock" },
+    { "path": "./packages/adapter-node" }
+  ]
+}

@@ -1,0 +1,11 @@
+name: Dawn binary build placeholder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  disabled-placeholder:
+    if: false
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - run: echo "Future issue #13 workflow: build webgpu@0.3.10 linux-arm64 Dawn binary, smoke-test on Node 20, and package @vgpu/adapter-node-linux-arm64."

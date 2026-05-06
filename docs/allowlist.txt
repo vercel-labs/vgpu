@@ -1,0 +1,11 @@
+@vgpu/core App packages/core/src/App.docs.md
+@vgpu/core Device packages/core/src/Device.docs.md
+@vgpu/core Buffer packages/core/src/Buffer.docs.md
+@vgpu/core Queue packages/core/src/Queue.docs.md
+@vgpu/core VGPUError packages/core/src/VGPUError.docs.md
+@vgpu/core ValidationError packages/core/src/VGPUError.docs.md
+@vgpu/core VGPUAdapter packages/core/src/VGPUAdapter.docs.md
+@vgpu/core createMockGPUDevice packages/core/src/createMockGPUDevice.docs.md
+@vgpu/adapter-mock createMockAdapter packages/adapter-mock/src/createMockAdapter.docs.md
+@vgpu/adapter-node createNodeAdapter packages/adapter-node/src/createNodeAdapter.docs.md
+@vgpu/adapter-node createNodeDevice packages/adapter-node/src/createNodeDevice.docs.md
