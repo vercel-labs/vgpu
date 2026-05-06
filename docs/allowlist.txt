@@ -29,6 +29,8 @@
 @vgpu/render createRenderPipeline packages/render/src/createRenderPipeline.docs.md
 @vgpu/render RenderPass packages/render/src/RenderPass.docs.md
 @vgpu/render RenderPassOptions packages/render/src/RenderPass.docs.md
+@vgpu/render RenderPassDrawOptions packages/render/src/RenderPass.docs.md
+@vgpu/render RenderPassDynamicOffsets packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
 @vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md
