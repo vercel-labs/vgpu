@@ -3,8 +3,21 @@
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "src/**/*.docs.md"],
-  "scripts": { "build": "tsc -b" },
-  "vgpuBundleBudgetGzipBytes": 51200
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/**/*.docs.md"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "vgpuBundleBudgetGzipBytes": 51200,
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*"
+  }
 }

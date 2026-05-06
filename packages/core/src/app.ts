@@ -1,4 +1,4 @@
-import type { AppCreateOptions, AppInstance } from "./types.ts";
+import type { AppCreateOptions, AppInstance } from "./app-types.ts";
 
 export class App {
   static async create(opts: AppCreateOptions): Promise<AppInstance> {

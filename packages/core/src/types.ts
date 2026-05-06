@@ -1,5 +1,3 @@
-import type { Device } from "./device.ts";
-
 export type BufferUsageName =
   | "map_read"
   | "map_write"
@@ -25,18 +23,13 @@ export interface CreateDeviceOptions {
   readonly label?: string;
 }
 
-export interface AppCreateOptions extends CreateDeviceOptions {
-  readonly adapter: VGPUAdapter;
-}
-
-export interface AppInstance {
-  readonly device: Device;
-  readonly queue: Device["queue"];
-}
-
-export interface VGPUAdapter {
-  requestDevice(opts?: CreateDeviceOptions): Promise<Device>;
-}
-
 export type BufferWriteData = ArrayBuffer | ArrayBufferView<ArrayBuffer>;
 
+export type TextureUsageName = "copy_src" | "copy_dst" | "texture_binding" | "storage_binding" | "render_attachment";
+
+export interface TextureOptions {
+  readonly size: readonly [width: number, height: number, depthOrArrayLayers?: number];
+  readonly format: GPUTextureFormat;
+  readonly usage: readonly TextureUsageName[];
+  readonly label?: string;
+}
