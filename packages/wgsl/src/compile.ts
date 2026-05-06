@@ -1,10 +1,11 @@
+import { wgslError, type WGSLError } from "./runtime/errors.ts";
 import type { ResolvedShader, SourceMap, WGSLAst } from "./types.ts";
 
 // Runtime import errors are native Errors augmented with public structured fields.
 type RuntimeImportError = Error & { code: string; severity: "error"; source: "wgsl" };
 
 export function compile(wgsl: string): ResolvedShader {
-  if (/\bimport\b/.test(wgsl)) throw runtimeImportError();
+  if (hasTopLevelImport(wgsl)) throw runtimeImportError();
   const sourceMap: SourceMap = { version: 1, mappings: [] };
   const ast: WGSLAst = {
     version: 1,
@@ -37,6 +38,11 @@ function entryPoints(wgsl: string): string[] {
   const pattern = /@(vertex|fragment|compute)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)/g;
   for (const match of wgsl.matchAll(pattern)) names.push(match[2]!);
   return names;
+}
+
+function hasTopLevelImport(wgsl: string): boolean {
+  const stripped = wgsl.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").trimStart();
+  return stripped.startsWith("import ") || stripped.startsWith("import{");
 }
 
 function runtimeImportError(): RuntimeImportError {

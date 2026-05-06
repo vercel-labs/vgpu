@@ -1,0 +1,54 @@
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
+import { assertNoMangleCollisions } from "../src/runtime/mangler.ts";
+import { parseModule } from "../src/runtime/parser.ts";
+import { resolveShader } from "@vgpu/wgsl/runtime";
+import { scan } from "../src/runtime/scanner.ts";
+const validation = process.env.VGPU_DOCKER_TEST === "1";
+
+describe("s3 §8 1-39", () => {
+  test("1 scanner emits atomic comments", () => expect(scan("/* import x */ fn f(){}")[0]).toMatchObject({ kind: "blockComment" }));
+  test("2 scanner identifies declarations", () => expect(parseModule(scan("fn f(){} struct S{} const C=1; alias A=u32; var<private> v:u32; override O=1; ")).locals.map((x) => x.name)).toEqual(["f", "S", "C", "A", "v", "O"]));
+  test("3 export attributes accepted and duplicate attribute rejected", () => { expect(parseModule(scan("@compute export fn main(){}" )).exports[0]?.name).toBe("main"); expect(parseModule(scan("export @compute fn main(){}" )).exports[0]?.name).toBe("main"); expect(() => parseModule(scan("@a export @b fn f(){}"))).toThrow(expect.objectContaining({ code: "VGPU-WGSL-EXP-NOTDECL" })); });
+  test("4 unterminated block comment rejected", () => expect(() => scan("/* nope")).toThrow(expect.objectContaining({ code: "VGPU-WGSL-LEX-UNTERM-COMMENT" })));
+  test("6 non-exported import errors", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { x } from './a.wgsl'; fn main(){x();}", "/a.wgsl": "fn x(){}" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-SYM-NOEXPORT" }));
+  test("7 import alias rebinds use sites", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { x as y } from './a.wgsl'; fn main(){y();}", "/a.wgsl": "export fn x(){}" }, validate: false })).wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__main\(\)\{_vgsl_[0-9a-f]{8}__x\(\);\}/));
+  test("10 conflicting imports error", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { a as x } from './a.wgsl'; import { b as x } from './b.wgsl';", "/a.wgsl": "export fn a(){}", "/b.wgsl": "export fn b(){}" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-SYM-IMPORT-SHADOW" }));
+  test("11 default import errors", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import x from './a.wgsl';", "/a.wgsl": "" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-IMP-DEFAULT" }));
+  test("12 side-effect import errors", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import './a.wgsl';", "/a.wgsl": "" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-IMP-SIDEEFFECT" }));
+  test("13 imports after declarations error", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "fn f(){} import { x } from './a.wgsl';", "/a.wgsl": "export fn x(){}" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-IMP-ORDER" }));
+  test("14 direct cycle prints path", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "import { b } from './b.wgsl'; export fn a(){b();}", "/b.wgsl": "import { a } from './a.wgsl'; export fn b(){a();}" }, validate: false })).rejects.toThrow(/a\.wgsl.*b\.wgsl.*a\.wgsl/));
+  test("15 self import errors", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "import { a } from './a.wgsl'; export fn a(){}" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-IMP-SELF" }));
+  test("17 re-export cycle errors", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "export { b } from './b.wgsl';", "/b.wgsl": "export { a } from './a.wgsl';" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-EXP-REEXPORT-CYCLE" }));
+  test("18 root alias resolves against rootDir", async () => expect((await resolveShader({ entry: "/main.wgsl", rootDir: "/src", modules: { "/main.wgsl": "import { x } from '@/x'; fn main(){x();}", "/src/x.wgsl": "export fn x(){}" }, validate: false })).wgsl).toContain("/src/x.wgsl"));
+  test("19 relative extension and index resolution", async () => { const dir = await mkdtemp(join(tmpdir(), "vgsl-")); await mkdir(join(dir, "foo")); await writeFile(join(dir, "main.wgsl"), "import { x } from './foo'; fn main(){x();}"); await writeFile(join(dir, "foo", "index.wgsl"), "export fn x(){}"); expect((await resolveShader({ entry: join(dir, "main.wgsl"), validate: false })).wgsl).toContain("index.wgsl"); });
+  test("20 missing file errors", async () => await expect(resolveShader({ entry: "/missing.wgsl", modules: {}, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-RES-NOTFOUND" }));
+  test("21 absolute imports error", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { x } from '/x.wgsl';" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-RES-ABS" }));
+  test("25 strings are not substituted", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { color } from './p.wgsl'; fn main(){ let s = 'color'; color(); }", "/p.wgsl": "export fn color(){}" }, validate: false })).wgsl).toContain("'color'"));
+  test("26 locals shadow module imports", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { foo } from './p.wgsl'; fn main(){ let foo = 1; let y = foo; }", "/p.wgsl": "export fn foo(){}" }, validate: false })).wgsl).toContain("let y = foo"));
+  test("27 same export names mangle distinctly", async () => { const out = (await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { x as a } from './a.wgsl'; import { x as b } from './b.wgsl'; fn main(){a();b();}", "/a.wgsl": "export fn x(){}", "/b.wgsl": "export fn x(){}" }, validate: false })).wgsl; expect(new Set(out.match(/_vgsl_[0-9a-f]{8}__x/g))).toHaveProperty("size", 2); });
+  test("28 member access is not mangled", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { foo } from './p.wgsl'; fn main(){ x.foo = foo(); }", "/p.wgsl": "export fn foo() -> f32 {return 1.0;}" }, validate: false })).wgsl).toContain("x.foo"));
+  test("29 namespace member uses definition module hash", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import * as math from './p.wgsl'; fn main(){math.foo();}", "/p.wgsl": "export fn foo(){}" }, validate: false })).wgsl).toMatch(/_vgsl_[0-9a-f]{8}__foo/));
+  test("30 reflection extracts bindings", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@group(1) @binding(2) var<storage> data: array<u32>;" }, validate: false })).reflection.bindings[0]).toMatchObject({ group: 1, binding: 2, name: "data" }));
+  test("31 reflection reports compute entry", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(2,3,4) fn main(){}" }, validate: false })).reflection.entryPoints[0]).toMatchObject({ stage: "compute", name: "main" }));
+  test("32 reflection uses original names", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" }, validate: false })).reflection.entryPoints[0]).toMatchObject({ name: "main", mangledName: "main" }));
+  test("33 reflection extracts enable features", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "enable f16;" }, validate: false })).reflection.featuresRequired).toContain("f16"));
+  test.skipIf(!validation)("34 validation maps module line", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "const A = 1u;\nconst B = 1u;\nconst C = 1u;\nconst D = 1u;\nfn main(){ let x: u32 = 1.0; }" } })).rejects.toMatchObject({ range: { file: "a.wgsl", start: { line: 5 } } }));
+  test.skipIf(!validation)("35 validation handles emitted fallback", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "fn bad( {" } })).rejects.toMatchObject({ range: { file: "a.wgsl" }, code: "VGPU-WGSL-NAGA-UNKNOWN" }));
+  test("36 validate false skips validation", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "fn bad( {" }, validate: false })).resolves.toHaveProperty("wgsl"));
+  test("37 json report is serializable", async () => expect(JSON.parse(JSON.stringify(await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "fn main(){}" }, validate: false })))).toHaveProperty("wgsl"));
+  test("38 deps mermaid can be formed", async () => { const ast = (await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { x } from './x.wgsl'; fn main(){x();}", "/x.wgsl": "export fn x(){}" }, validate: false })).ast; expect(`graph TD\n${ast.modules.map((m) => m.imports.map((i) => `${m.path}-->${i.from}`).join("\n")).join("\n")}`).toContain("graph TD"); });
+  test("39 repeated resolve bytes stable", async () => { const opts = { entry: "/m.wgsl", modules: { "/m.wgsl": "fn main(){}" }, validate: false }; expect((await resolveShader(opts)).wgsl).toBe((await resolveShader(opts)).wgsl); });
+  test("collision fixture throws", () => {
+    let thrown: Error | undefined;
+    try { assertNoMangleCollisions(["/collision/29126.wgsl", "/collision/49335.wgsl"]); } catch (error) { thrown = error as Error; }
+    expect(thrown).toBeDefined();
+    expect(thrown!.message).toMatch(/VGPU-WGSL-MANGLE-COLLISION/);
+    expect(thrown!.message).toContain("/collision/29126.wgsl");
+    expect(thrown!.message).toContain("/collision/49335.wgsl");
+    const hashes = [...thrown!.message.matchAll(/[0-9a-f]{16}/g)].map((match) => match[0]);
+    expect(new Set(hashes).size).toBeGreaterThanOrEqual(2);
+  });
+});

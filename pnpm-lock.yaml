@@ -17,6 +17,9 @@ importers:
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
+      esbuild:
+        specifier: ^0.21.5
+        version: 0.21.5
       pixelmatch:
         specifier: ^7.2.0
         version: 7.2.0

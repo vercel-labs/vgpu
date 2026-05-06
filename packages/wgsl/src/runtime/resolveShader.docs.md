@@ -1,0 +1,9 @@
+# resolveShader
+
+`resolveShader` loads a WGSL entry module, follows vgpu-wgsl import/export declarations, and returns a single plain WGSL string that can be passed to WebGPU. Callers can provide `modules` as an in-memory filesystem or let the resolver read files from disk; relative imports resolve from the importing module, `@/` imports use `rootDir`, and package imports use `packageMap` or package `exports`. With validation enabled, emitted WGSL is checked by the configured validator and failures are reported as structured `VGPU-WGSL-*` diagnostics.
+
+`ResolveOptions` contains the entry path plus optional `rootDir`, `packageMap`, `modules`, and `validate` flag. The output `ResolvedShader` contains `wgsl`, entry-point `cacheKey` values, `reflection`, a `sourceMap`, `diagnostics`, and `ast`. Resolution throws structured errors for missing files, invalid imports, missing exports, duplicate JavaScript-visible names, namespace misuse, mangle collisions, and validator errors.
+
+`WGSLAst` is a lightweight tooling view over the resolved graph. Its `modules` array contains `WGSLModule` records with module path, byte size, stable path hash prefix, imports, and exports; it does not expose parser internals. The AST also carries the same `cacheKey`, diagnostics, and `SourceMap` returned at the top level.
+
+`SourceMap` identifies the generated source list used for diagnostic remapping. It is line-oriented in this release: diagnostics expose authored file and line, while columns may be approximate when a line contains substituted identifiers. Approximate-column diagnostics keep their primary validator code and add `VGPU-WGSL-COL-APPROX` metadata so tooling can detect the limitation without parsing messages.
