@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App, createMockGPUDevice, Device } from "@vgpu/core";
+import { App, createMockGPUDevice, Device, VGPUError } from "@vgpu/core";
 import { UniformPool, type UniformLayout } from "@vgpu/render";
 
 test("allocates a slot with the expected shape", async () => {
@@ -111,6 +111,7 @@ function expectInvalidCode(action: () => void, code: string): void {
   } catch (error) {
     thrown = error;
   }
+  expect(thrown).toBeInstanceOf(VGPUError);
   expect(thrown).toMatchObject({ code });
 }
 
