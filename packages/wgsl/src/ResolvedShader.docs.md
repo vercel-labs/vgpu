@@ -7,17 +7,18 @@
 Public shape includes:
 
 - `kind: "wgsl"` and `wgsl`: the unchanged WGSL source.
-- `source`, `ast`, `sourceMap`: S2 passthrough metadata with empty import and
+- `source`, `ast`, `sourceMap`: passthrough metadata with empty import and
   diagnostics lists.
 - `cacheKey`: deterministic source key for future shader caches.
 - `entryPoints`: names detected from `@vertex`, `@fragment`, and `@compute`
   declarations.
 - `stats`: line count, UTF-8 byte count, and placeholder bind-group count.
 
-Invariants: S2 does not resolve imports, mangle names, or build full reflection.
-Runtime strings containing `import` are rejected before a `ResolvedShader` is
-created. Consumers should treat fields as read-only and pass the object across
-the core seam rather than depending on the placeholder AST internals.
+Invariants: `compile()` does not resolve imports, mangle names, or build full
+reflection. Runtime strings containing `import` are rejected before a
+`ResolvedShader` is created. Consumers should treat fields as read-only and
+pass the object across package boundaries rather than depending on the
+placeholder AST internals.
 
 Example:
 

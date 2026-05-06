@@ -1,6 +1,6 @@
 # RenderPass
 
-`RenderPass` is the S2 command-encoding wrapper for drawing into color
+`RenderPass` is a command-encoding wrapper for drawing into color
 attachments. Construct it with a core `Device` and `RenderPassOptions`, call
 `setPipeline(...)`, issue `draw(...)`, then call `end()` to finish the pass and
 submit the command buffer through `Device.queue`.

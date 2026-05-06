@@ -1,8 +1,8 @@
 # BindGroup
 
-`BindGroup` is an opaque wrapper around `GPUBindGroup`. It exists in S2 so the
-render package already has a stable public place for binding handles, even though
-the hello-triangle tracer bullet does not need resources or layouts.
+`BindGroup` is an opaque wrapper around `GPUBindGroup`. It gives the render
+package a stable public handle for resource bindings, even when the caller
+creates the underlying bind group directly through WebGPU.
 
 Public shape:
 
@@ -12,8 +12,7 @@ Public shape:
   destroy method.
 
 Invariants: `BindGroup` does not create layouts, validate bindings, or own GPU
-resources in S2. Future seams can deepen the module by adding construction
-helpers without changing the handle object used by render passes.
+resources. It is a lightweight handle around an existing `GPUBindGroup`.
 
 Example:
 
