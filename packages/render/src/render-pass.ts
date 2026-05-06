@@ -1,4 +1,4 @@
-import { VGPUError, type Device, type Texture } from "@vgpu/core";
+import { Buffer, VGPUError, type Device, type Texture } from "@vgpu/core";
 
 const textureBrand = Symbol.for("vgpu/Texture");
 
@@ -13,6 +13,15 @@ export interface ColorAttachment {
   readonly storeOp: GPUStoreOp;
   readonly clearValue?: readonly [number, number, number, number];
 }
+
+export interface RenderPassDrawOptions {
+  readonly vertexCount: number;
+  readonly instanceCount?: number;
+  readonly firstVertex?: number;
+  readonly firstInstance?: number;
+}
+
+export type RenderPassDynamicOffsets = readonly GPUBufferDynamicOffset[] | Uint32Array;
 
 export class RenderPass {
   private readonly encoder: GPUCommandEncoder;
@@ -41,8 +50,27 @@ export class RenderPass {
     this.gpu.setPipeline(pipeline);
   }
 
-  draw(vertexCount: number, instanceCount = 1, firstVertex = 0, firstInstance = 0): void {
-    this.gpu.draw(vertexCount, instanceCount, firstVertex, firstInstance);
+  setBindGroup(index: number, group: GPUBindGroup | null, dynamicOffsets?: RenderPassDynamicOffsets): void {
+    this.gpu.setBindGroup(index, group, dynamicOffsets);
+  }
+
+  setVertexBuffer(slot: number, buffer: Buffer | GPUBuffer | null, offset = 0, size?: GPUSize64): void {
+    this.gpu.setVertexBuffer(slot, gpuBuffer(buffer), offset, size);
+  }
+
+  draw(options: RenderPassDrawOptions): void;
+  draw(vertexCount: number, instanceCount?: number, firstVertex?: number, firstInstance?: number): void;
+  draw(optionsOrVertexCount: RenderPassDrawOptions | number, instanceCount = 1, firstVertex = 0, firstInstance = 0): void {
+    if (typeof optionsOrVertexCount === "number") {
+      this.gpu.draw(optionsOrVertexCount, instanceCount, firstVertex, firstInstance);
+      return;
+    }
+    this.gpu.draw(
+      optionsOrVertexCount.vertexCount,
+      optionsOrVertexCount.instanceCount ?? 1,
+      optionsOrVertexCount.firstVertex ?? 0,
+      optionsOrVertexCount.firstInstance ?? 0,
+    );
   }
 
   end(): void {
@@ -65,6 +93,10 @@ function colorAttachment(attachment: ColorAttachment): GPURenderPassColorAttachm
     storeOp: attachment.storeOp,
     clearValue: attachment.clearValue,
   };
+}
+
+function gpuBuffer(buffer: Buffer | GPUBuffer | null): GPUBuffer | null {
+  return buffer instanceof Buffer ? buffer.gpu : buffer;
 }
 
 function isVGPUTexture(view: Texture | GPUTextureView): view is Texture {
