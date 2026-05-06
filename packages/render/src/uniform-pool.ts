@@ -20,8 +20,8 @@ export class UniformPool {
 
   constructor(readonly device: Device, opts: UniformPoolOptions = {}) {
     this.capacityBytes = opts.capacityBytes ?? defaultCapacityBytes;
-    this.minOffsetAlignment = opts.minOffsetAlignment ?? deviceLimit(device, "minUniformBufferOffsetAlignment", defaultMinOffsetAlignment);
-    this.maxUniformBindingSize = opts.maxUniformBindingSize ?? deviceLimit(device, "maxUniformBufferBindingSize", defaultMaxUniformBindingSize);
+    this.minOffsetAlignment = deviceLimit(device, "minUniformBufferOffsetAlignment", defaultMinOffsetAlignment);
+    this.maxUniformBindingSize = deviceLimit(device, "maxUniformBufferBindingSize", defaultMaxUniformBindingSize);
     this.cpuMirror = new ArrayBuffer(this.capacityBytes);
     this.bytes = new Uint8Array(this.cpuMirror);
     this.gpu = device.gpu.createBuffer({ label: "vgpu UniformPool", size: this.capacityBytes, usage: uniformUsage | copyDstUsage });
@@ -42,10 +42,12 @@ export class UniformPool {
   }
 
   push<T>(slot: UniformSlot<T>, value: T): number {
+    this.assertOwnsSlot(slot, "UniformPool.push");
     return this.write(slot.layout.size, slot.stride, (offset) => slot.layout.encode(value, this.cpuMirror, offset));
   }
 
   pushBytes(slot: UniformSlot<unknown>, bytes: ArrayBufferView<ArrayBuffer>): number {
+    this.assertOwnsSlot(slot, "UniformPool.pushBytes");
     if (bytes.byteLength !== slot.layout.size) {
       throw new VGPUError({
         code: "VGPU-CORE-INVALID-USAGE",
@@ -72,6 +74,15 @@ export class UniformPool {
     if (this.isDisposed) return;
     this.isDisposed = true;
     this.gpu.destroy();
+  }
+
+  private assertOwnsSlot(slot: UniformSlot<unknown>, where: string): void {
+    if (slot.pool === this) return;
+    throw new VGPUError({
+      code: "VGPU-CORE-INVALID-USAGE",
+      message: "UniformSlot was allocated by a different UniformPool.",
+      where,
+    });
   }
 
   private write(layoutSize: number, stride: number, encode: (byteOffset: number) => void): number {
@@ -121,12 +132,8 @@ class PoolSlot<T> implements UniformSlot<T> {
   constructor(readonly pool: UniformPool, readonly layout: UniformLayout<T>, readonly stride: number) {
     this.gpu = pool.gpu;
   }
-  push(value: T): number {
-    return this.pool.push(this, value);
-  }
-  pushBytes(bytes: ArrayBufferView<ArrayBuffer>): number {
-    return this.pool.pushBytes(this, bytes);
-  }
+  push(value: T): number { return this.pool.push(this, value); }
+  pushBytes(bytes: ArrayBufferView<ArrayBuffer>): number { return this.pool.pushBytes(this, bytes); }
 }
 
 function roundUp(value: number, alignment: number): number {

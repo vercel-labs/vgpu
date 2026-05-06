@@ -12,10 +12,9 @@ uses for dynamic uniform buffers.
 Options:
 
 - `capacityBytes`: total byte capacity for one frame. Defaults to 4 MiB.
-- `minOffsetAlignment`: byte alignment for returned offsets. Defaults to the
-  device limit when available, otherwise 256 bytes.
-- `maxUniformBindingSize`: largest accepted layout size. Defaults to the device
-  limit when available, otherwise 64 KiB.
+
+Returned offsets use the device's minimum uniform buffer offset alignment, and
+layout sizes are checked against the device's maximum uniform binding size.
 
 ## Layouts and slots
 
@@ -33,7 +32,8 @@ A slot exposes:
 - `gpu`: the backing `GPUBuffer` for low-level code that needs it.
 
 `bindGroup` and `bindGroupLayout` are currently `null`; callers can still use
-the returned offsets and CPU mirror behavior today.
+the returned offsets and CPU mirror behavior today. A slot must be used with the
+pool that allocated it.
 
 ## Frame lifecycle
 

@@ -2,8 +2,6 @@ import type { UniformPool } from "./uniform-pool.ts";
 
 export interface UniformPoolOptions {
   readonly capacityBytes?: number;
-  readonly minOffsetAlignment?: number;
-  readonly maxUniformBindingSize?: number;
 }
 
 export interface UniformLayout<T> {
