@@ -87,7 +87,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("renders hello triangle from p
   const pixels = await target.read();
   expect(maxRedInTopRegion(pixels)).toBeGreaterThan(200);
   // Snapshot asserts the hello-triangle is rendered byte-equal to the committed PNG.
-  // Threshold 0.001 (0.1% pixel diff) per S2 acceptance criteria (issue #21 line 30).
+  // Threshold 0.001 allows a 0.1% pixel diff tolerance for this snapshot.
   // Dawn's OpenGL software backend on node:22-trixie-slim is deterministic across runs.
   await expect(pixels).toMatchImageSnapshot({ testName: "hello-triangle", width: 256, height: 256, threshold: 0.001 });
   device.destroy();
