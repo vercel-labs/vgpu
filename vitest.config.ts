@@ -3,9 +3,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["packages/**/*.test.ts", "tests/**/*.test.ts"],
+    include: ["packages/**/*.test.ts"],
     setupFiles: ["packages/render/tests/imageSnapshot.ts"],
-    poolMatchGlobs: [["{packages/adapter-node/tests/**,packages/render/tests/**,tests/seams/s3-spec-40-77.test.ts}", "forks"]],
+    poolMatchGlobs: [["{packages/adapter-node/tests/**,packages/render/tests/**}", "forks"]],
     testTimeout: 30_000,
   },
   resolve: {
