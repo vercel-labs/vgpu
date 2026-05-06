@@ -62,4 +62,4 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test packages/wgsl/tests/s3-wgsl-runtime-more.test.ts
+      - run: pnpm test packages/wgsl/tests/cache-key.test.ts
