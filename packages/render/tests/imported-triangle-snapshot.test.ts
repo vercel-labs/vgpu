@@ -44,7 +44,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4f {
 `,
 };
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("s3 › renders imported triangle byte-equal to S2 snapshot", async () => {
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("renders imported triangle byte-equal to plain-WGSL snapshot", async () => {
   const { device } = await App.create({ adapter: createNodeAdapter() });
   const target = device.createTexture({ size: [256, 256], format: "rgba8unorm", usage: ["render_attachment", "copy_src"] });
   const resolved = await resolveShader({ entry: "/triangle.wgsl", modules: MODULES, validate: false });
