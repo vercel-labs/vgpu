@@ -38,7 +38,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4f {
 }
 `;
 
-test("s2 › createShader(rawString) accepts plain WGSL without resolver", async () => {
+test("createShader(rawString) accepts plain WGSL without resolver", async () => {
   const adapter = createMockAdapter();
   const { device } = await App.create({ adapter });
   const shader = device.createShader(TRIANGLE_WGSL);
@@ -47,7 +47,7 @@ test("s2 › createShader(rawString) accepts plain WGSL without resolver", async
   device.destroy();
 });
 
-test("s2 › creates render pipeline from plain WGSL on mock adapter", async () => {
+test("creates render pipeline from plain WGSL on mock adapter", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
   const shader = device.createShader(TRIANGLE_WGSL);
 
@@ -62,7 +62,7 @@ test("s2 › creates render pipeline from plain WGSL on mock adapter", async () 
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("s2 › renders hello triangle from plain WGSL to snapshot", async () => {
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("renders hello triangle from plain WGSL to snapshot", async () => {
   const { device } = await App.create({ adapter: createNodeAdapter() });
   const target = device.createTexture({
     size: [256, 256],

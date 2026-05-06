@@ -30,3 +30,13 @@
 @vgpu/render RenderPass packages/render/src/RenderPass.docs.md
 @vgpu/render RenderPassOptions packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
+@vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/runtime ResolvedShader packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/runtime WGSLModule packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/runtime WGSLAst packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/runtime SourceMap packages/wgsl/src/runtime/resolveShader.docs.md
+@vgpu/wgsl/loader-webpack wgslWebpackLoader packages/wgsl/src/loader-webpack/index.docs.md
+@vgpu/wgsl/loader-vite wgslVitePlugin packages/wgsl/src/loader-vite/index.docs.md
+@vgpu/wgsl/loader-vite transformWgsl packages/wgsl/src/loader-vite/index.docs.md
+@vgpu/wgsl/loader-vite ViteLoadResult packages/wgsl/src/loader-vite/index.docs.md

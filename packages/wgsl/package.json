@@ -3,8 +3,18 @@
   "version": "0.0.0",
   "type": "module",
   "sideEffects": false,
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./runtime": { "types": "./dist/runtime/resolveShader.d.ts", "import": "./dist/runtime/resolveShader.js" },
+    "./loader-webpack": { "types": "./dist/loader-webpack/index.d.ts", "import": "./dist/loader-webpack/index.js" },
+    "./loader-vite": { "types": "./dist/loader-vite/index.d.ts", "import": "./dist/loader-vite/index.js" }
+  },
   "files": ["dist", "src/**/*.docs.md"],
   "scripts": { "build": "tsc -b" },
-  "vgpuBundleBudgetGzipBytes": 25600
+  "vgpuExportBundleBudgetsGzipBytes": {
+    ".": 25600,
+    "./runtime": 204800,
+    "./loader-webpack": 204800,
+    "./loader-vite": 204800
+  }
 }
