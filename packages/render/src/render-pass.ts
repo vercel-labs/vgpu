@@ -1,5 +1,4 @@
 import { VGPUError, type Device, type Texture } from "@vgpu/core";
-import type { Pipeline } from "./pipeline.ts";
 
 const textureBrand = Symbol.for("vgpu/Texture");
 
@@ -38,8 +37,8 @@ export class RenderPass {
     return this.passEncoder;
   }
 
-  setPipeline(pipeline: Pipeline): void {
-    this.gpu.setPipeline(pipeline.gpu);
+  setPipeline(pipeline: GPURenderPipeline): void {
+    this.gpu.setPipeline(pipeline);
   }
 
   draw(vertexCount: number, instanceCount = 1, firstVertex = 0, firstInstance = 0): void {

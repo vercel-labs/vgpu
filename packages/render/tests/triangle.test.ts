@@ -58,7 +58,7 @@ test("s2 › creates render pipeline from plain WGSL on mock adapter", async () 
     primitive: { topology: "triangle-list" },
   });
 
-  expect(pipeline.gpu).toBeDefined();
+  expect(pipeline).toBeDefined();
   device.destroy();
 });
 

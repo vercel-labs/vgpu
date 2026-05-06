@@ -25,10 +25,8 @@
 @vgpu/wgsl SourceMap packages/wgsl/src/ResolvedShader.docs.md
 @vgpu/wgsl WGSLAst packages/wgsl/src/ResolvedShader.docs.md
 @vgpu/wgsl WGSLSource packages/wgsl/src/ResolvedShader.docs.md
-@vgpu/render BindGroup packages/render/src/bind-group.docs.md
-@vgpu/render Pipeline packages/render/src/Pipeline.docs.md
-@vgpu/render RenderPipelineOptions packages/render/src/Pipeline.docs.md
-@vgpu/render createRenderPipeline packages/render/src/Pipeline.docs.md
+@vgpu/render RenderPipelineOptions packages/render/src/createRenderPipeline.docs.md
+@vgpu/render createRenderPipeline packages/render/src/createRenderPipeline.docs.md
 @vgpu/render RenderPass packages/render/src/RenderPass.docs.md
 @vgpu/render RenderPassOptions packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
