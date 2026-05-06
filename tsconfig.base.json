@@ -8,6 +8,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "composite": true,
+    "rewriteRelativeImportExtensions": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node", "@webgpu/types"]

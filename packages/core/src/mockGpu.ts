@@ -1,4 +1,4 @@
-import { bufferUsageFlags } from "./gpuConstants.js";
+import { bufferUsageFlags } from "./gpuConstants.ts";
 
 export interface MockGPUBuffer extends GPUBuffer {
   readonly __vgpuMockBytes: Uint8Array;

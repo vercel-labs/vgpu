@@ -1,5 +1,5 @@
-import { mapReadMode } from "./gpuConstants.js";
-import { isMockGPUBuffer } from "./mockGpu.js";
+import { mapReadMode } from "./gpuConstants.ts";
+import { isMockGPUBuffer } from "./mockGpu.ts";
 
 export class Readback {
   constructor(private readonly device: GPUDevice) {}

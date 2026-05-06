@@ -1,4 +1,4 @@
-import type { BufferWriteData } from "./types.js";
+import type { BufferWriteData } from "./types.ts";
 
 export class Queue {
   constructor(readonly gpu: GPUQueue) {}

@@ -1,4 +1,4 @@
-import type { Device } from "./device.js";
+import type { Device } from "./device.ts";
 
 export type BufferUsageName =
   | "map_read"

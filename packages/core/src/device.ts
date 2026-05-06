@@ -1,10 +1,10 @@
-import { Buffer } from "./buffer.js";
-import { bufferUsageFlags } from "./gpuConstants.js";
-import { mockBufferDescriptor } from "./mockGpu.js";
-import { Queue } from "./queue.js";
-import { Readback } from "./readback.js";
-import { ValidationError, type VGPUError } from "./errors.js";
-import type { BufferOptions } from "./types.js";
+import { Buffer } from "./buffer.ts";
+import { bufferUsageFlags } from "./gpuConstants.ts";
+import { mockBufferDescriptor } from "./mockGpu.ts";
+import { Queue } from "./queue.ts";
+import { Readback } from "./readback.ts";
+import { ValidationError, type VGPUError } from "./errors.ts";
+import type { BufferOptions } from "./types.ts";
 
 export class Device {
   readonly queue: Queue;

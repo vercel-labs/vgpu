@@ -1,9 +1,9 @@
-export { App } from "./app.js";
-export { Buffer } from "./buffer.js";
-export { Device } from "./device.js";
-export { Queue } from "./queue.js";
-export { VGPUError, ValidationError } from "./errors.js";
-export { createMockGPUDevice } from "./mockGpu.js";
+export { App } from "./app.ts";
+export { Buffer } from "./buffer.ts";
+export { Device } from "./device.ts";
+export { Queue } from "./queue.ts";
+export { VGPUError, ValidationError } from "./errors.ts";
+export { createMockGPUDevice } from "./mockGpu.ts";
 export type {
   AppCreateOptions,
   AppInstance,
@@ -12,4 +12,4 @@ export type {
   BufferWriteData,
   CreateDeviceOptions,
   VGPUAdapter,
-} from "./types.js";
+} from "./types.ts";

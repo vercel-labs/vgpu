@@ -1,4 +1,4 @@
-import type { BufferUsageName } from "./types.js";
+import type { BufferUsageName } from "./types.ts";
 
 const fallbackUsage: Record<BufferUsageName, number> = {
   map_read: 1,
