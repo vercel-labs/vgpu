@@ -40,3 +40,12 @@ export interface VGPUAdapter {
 
 export type BufferWriteData = ArrayBuffer | ArrayBufferView<ArrayBuffer>;
 
+export type TextureUsageName = "copy_src" | "copy_dst" | "texture_binding" | "storage_binding" | "render_attachment";
+
+export interface TextureOptions {
+  readonly size: readonly [width: number, height: number, depthOrArrayLayers?: number];
+  readonly format: GPUTextureFormat;
+  readonly usage: readonly TextureUsageName[];
+  readonly label?: string;
+}
+

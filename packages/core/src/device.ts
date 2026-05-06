@@ -1,10 +1,13 @@
+import { compile } from "@vgpu/wgsl";
 import { Buffer } from "./buffer.ts";
 import { bufferUsageFlags } from "./gpuConstants.ts";
 import { mockBufferDescriptor } from "./mockGpu.ts";
 import { Queue } from "./queue.ts";
+import { Shader, type ShaderInput } from "./shader.ts";
+import { Texture, toGPUTextureDescriptor } from "./texture.ts";
 import { Readback } from "./readback.ts";
 import { ValidationError, type VGPUError } from "./errors.ts";
-import type { BufferOptions } from "./types.ts";
+import type { BufferOptions, TextureOptions } from "./types.ts";
 
 export class Device {
   readonly queue: Queue;
@@ -15,6 +18,15 @@ export class Device {
   constructor(readonly gpu: GPUDevice, readonly adapterInfo: GPUAdapterInfo | null = null) {
     this.queue = new Queue(gpu.queue);
     this.readback = new Readback(gpu);
+  }
+
+  createShader(input: ShaderInput): Shader {
+    const resolved = typeof input === "string" ? compile(input) : input;
+    return new Shader(this.gpu.createShaderModule({ code: resolved.wgsl }), resolved);
+  }
+
+  createTexture(opts: TextureOptions): Texture {
+    return new Texture(this, this.gpu.createTexture(toGPUTextureDescriptor(opts)), opts);
   }
 
   createBuffer(opts: BufferOptions): Buffer {
