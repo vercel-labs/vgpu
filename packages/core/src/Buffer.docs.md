@@ -1,0 +1,6 @@
+# Buffer
+
+`Buffer` is an opaque wrapper over `GPUBuffer`. Use `write(data, offset?)` to send
+CPU bytes through the device queue and `read(byteLength, offset?)` to copy bytes
+back through the core readback ring. `.gpu` exposes the underlying `GPUBuffer` for
+mechanical WebGPU calls.
