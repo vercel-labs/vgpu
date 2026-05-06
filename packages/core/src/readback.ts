@@ -1,5 +1,8 @@
-import { mapReadMode } from "./gpuConstants.ts";
-import { isMockGPUBuffer } from "./mockGpu.ts";
+import { ValidationError } from "./errors.ts";
+import { bufferUsageFlags, mapReadMode } from "./gpuConstants.ts";
+import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
+
+const stagingUsage = bufferUsageFlags(["copy_dst", "map_read"]);
 
 export class Readback {
   constructor(private readonly device: GPUDevice) {}
@@ -11,7 +14,7 @@ export class Readback {
 
     const staging = this.device.createBuffer({
       size: byteLength,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      usage: stagingUsage,
     });
     const encoder = this.device.createCommandEncoder();
     encoder.copyBufferToBuffer(source, offset, staging, 0, byteLength);
@@ -28,7 +31,7 @@ export class Readback {
     const bytesPerPixel = formatBytesPerPixel(format);
     const bytesPerRow = align(width * bytesPerPixel, 256);
     const byteLength = bytesPerRow * height;
-    const staging = this.device.createBuffer({ size: byteLength, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const staging = this.device.createBuffer({ size: byteLength, usage: stagingUsage });
     const encoder = this.device.createCommandEncoder();
     encoder.copyTextureToBuffer({ texture }, { buffer: staging, bytesPerRow, rowsPerImage: height }, { width, height });
     this.device.queue.submit([encoder.finish()]);
@@ -53,6 +56,10 @@ function align(value: number, alignment: number): number {
 }
 
 function formatBytesPerPixel(format: GPUTextureFormat): number {
-  if (format !== "rgba8unorm") throw new Error(`Texture.read only supports rgba8unorm in S2, got ${format}`);
-  return 4;
+  if (format === "rgba8unorm") return 4;
+  throw new ValidationError({
+    code: "VGPU-CORE-UNSUPPORTED-FORMAT",
+    message: `Texture.read only supports rgba8unorm in S2, got ${format}`,
+    where: "Readback.readTexture",
+  });
 }

@@ -7,6 +7,10 @@ export class Shader {
 
   dispose(): void {}
 
+  get kind(): ResolvedShader["kind"] {
+    return this.resolved.kind;
+  }
+
   get source(): ResolvedShader["source"] {
     return this.resolved.source;
   }

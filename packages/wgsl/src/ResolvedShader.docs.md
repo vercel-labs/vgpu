@@ -1,5 +1,27 @@
 # ResolvedShader
 
-Opaque plain-WGSL shader description shared by `@vgpu/wgsl` and `@vgpu/core`.
-Callers should pass it to `device.createShader(...)` instead of depending on its
-internal fields. S2 carries source, cache, stats, and empty reflection hooks.
+`ResolvedShader` is the plain-WGSL shader description shared by `@vgpu/wgsl` and
+`@vgpu/core`. It is intentionally data-only: `compile(wgsl)` returns it, and
+`device.createShader(resolved)` turns it into a GPU shader module.
+
+Public shape includes:
+
+- `kind: "wgsl"` and `wgsl`: the unchanged WGSL source.
+- `source`, `ast`, `sourceMap`: S2 passthrough metadata with empty import and
+  diagnostics lists.
+- `cacheKey`: deterministic source key for future shader caches.
+- `entryPoints`: names detected from `@vertex`, `@fragment`, and `@compute`
+  declarations.
+- `stats`: line count, UTF-8 byte count, and placeholder bind-group count.
+
+Invariants: S2 does not resolve imports, mangle names, or build full reflection.
+Runtime strings containing `import` are rejected before a `ResolvedShader` is
+created. Consumers should treat fields as read-only and pass the object across
+the core seam rather than depending on the placeholder AST internals.
+
+Example:
+
+```ts
+const resolved = compile(wgslSource);
+const shader = device.createShader(resolved);
+```

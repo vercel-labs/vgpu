@@ -6,5 +6,5 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "src/**/*.docs.md"],
   "scripts": { "build": "tsc -b" },
-  "vgpuBundleBudgetGzipBytes": 30720
+  "vgpuBundleBudgetGzipBytes": 25600
 }

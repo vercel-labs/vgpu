@@ -1,5 +1,8 @@
 import type { ResolvedShader, SourceMap, WGSLAst } from "./types.ts";
 
+// Runtime import errors are native Errors augmented with public structured fields.
+type RuntimeImportError = Error & { code: string; severity: "error"; source: "wgsl" };
+
 export function compile(wgsl: string): ResolvedShader {
   if (/\bimport\b/.test(wgsl)) throw runtimeImportError();
   const sourceMap: SourceMap = { version: 1, mappings: [] };
@@ -26,7 +29,7 @@ export function compile(wgsl: string): ResolvedShader {
 function cacheKey(wgsl: string): Record<string, string> {
   let hash = 0x811c9dc5;
   for (let i = 0; i < wgsl.length; i++) hash = Math.imul(hash ^ wgsl.charCodeAt(i), 0x01000193);
-  return { default: `vgsl-1:${(hash >>> 0).toString(16).padStart(8, "0")}` };
+  return { default: `vgpu-wgsl-1:${(hash >>> 0).toString(16).padStart(8, "0")}` };
 }
 
 function entryPoints(wgsl: string): string[] {
@@ -36,10 +39,11 @@ function entryPoints(wgsl: string): string[] {
   return names;
 }
 
-function runtimeImportError(): Error & { code: string; severity: "error"; source: "wgsl" } {
+function runtimeImportError(): RuntimeImportError {
+  // Structured error cast: Error is extended immediately with the public code/severity/source fields below.
   const error = new Error(
     "Runtime WGSL strings cannot contain import statements. Use a build-time loader or @vgpu/wgsl/runtime.",
-  ) as Error & { code: string; severity: "error"; source: "wgsl" };
+  ) as RuntimeImportError;
   error.name = "VGPUWGSLRuntimeImportError";
   error.code = "VGPU-WGSL-RUNTIME-IMPORT";
   error.severity = "error";

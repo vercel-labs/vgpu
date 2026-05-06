@@ -11,6 +11,7 @@ import type { BufferOptions, TextureOptions } from "./types.ts";
 
 export class Device {
   readonly queue: Queue;
+  /** @internal — use Buffer.read() and Texture.read() instead */
   readonly readback: Readback;
   private readonly scopes: VGPUError[][] = [];
   private destroyed = false;

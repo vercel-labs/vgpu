@@ -1,9 +1,12 @@
+import { createRequire } from "node:module";
 import { expect, test } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
 import { createRenderPipeline, RenderPass } from "@vgpu/render";
 import { compile } from "@vgpu/wgsl";
+
+const require = createRequire(import.meta.url);
 
 const TRIANGLE_WGSL = `
 struct VSOut {
@@ -34,6 +37,15 @@ fn fs_main(in: VSOut) -> @location(0) vec4f {
   return vec4f(in.color, 1.0);
 }
 `;
+
+test("s2 › createShader(rawString) accepts plain WGSL without resolver", async () => {
+  const adapter = createMockAdapter();
+  const { device } = await App.create({ adapter });
+  const shader = device.createShader(TRIANGLE_WGSL);
+  expect(shader).toMatchObject({ kind: "wgsl" });
+  expect(() => require.resolve("@vgpu/wgsl/runtime")).toThrow();
+  device.destroy();
+});
 
 test("s2 › creates render pipeline from plain WGSL on mock adapter", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
@@ -74,7 +86,10 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("s2 › renders hello triangle
 
   const pixels = await target.read();
   expect(maxRedInTopRegion(pixels)).toBeGreaterThan(200);
-  await expect(pixels).toMatchImageSnapshot({ testName: "hello-triangle-256", threshold: 0.01 });
+  // Snapshot asserts the hello-triangle is rendered byte-equal to the committed PNG.
+  // Threshold 0.001 (0.1% pixel diff) per S2 acceptance criteria (issue #21 line 30).
+  // Dawn's OpenGL software backend on node:22-trixie-slim is deterministic across runs.
+  await expect(pixels).toMatchImageSnapshot({ testName: "hello-triangle", width: 256, height: 256, threshold: 0.001 });
   device.destroy();
 });
 

@@ -14,6 +14,7 @@ const fallbackUsage: Record<BufferUsageName, number> = {
 };
 
 export function bufferUsageFlags(usages: readonly BufferUsageName[]): GPUBufferUsageFlags {
+  // WebGPU constants are numeric dictionaries when present; fallback values cover headless/mock runtimes.
   const constants = globalThis.GPUBufferUsage as unknown as Record<string, number> | undefined;
   return usages.reduce((flags, usage) => flags | usageFlag(usage, constants), 0) as GPUBufferUsageFlags;
 }
@@ -27,7 +28,6 @@ export function mapReadMode(): GPUMapModeFlags {
   return (globalThis.GPUMapMode?.READ ?? 1) as GPUMapModeFlags;
 }
 
-
 const fallbackTextureUsage: Record<TextureUsageName, number> = {
   copy_src: 1,
   copy_dst: 2,
@@ -37,6 +37,7 @@ const fallbackTextureUsage: Record<TextureUsageName, number> = {
 };
 
 export function textureUsageFlags(usages: readonly TextureUsageName[]): GPUTextureUsageFlags {
+  // WebGPU constants are numeric dictionaries when present; fallback values cover headless/mock runtimes.
   const constants = globalThis.GPUTextureUsage as unknown as Record<string, number> | undefined;
   return usages.reduce((flags, usage) => flags | textureUsageFlag(usage, constants), 0) as GPUTextureUsageFlags;
 }

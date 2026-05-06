@@ -15,12 +15,6 @@ export class Pipeline {
   dispose(): void {}
 }
 
-export class BindGroup {
-  constructor(readonly gpu: GPUBindGroup) {}
-
-  dispose(): void {}
-}
-
 export function createRenderPipeline(device: Device, opts: RenderPipelineOptions): Pipeline {
   return new Pipeline(device.gpu.createRenderPipeline({
     label: opts.label,

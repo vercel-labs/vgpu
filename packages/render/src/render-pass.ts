@@ -1,5 +1,7 @@
-import type { Device, Texture } from "@vgpu/core";
+import { VGPUError, type Device, type Texture } from "@vgpu/core";
 import type { Pipeline } from "./pipeline.ts";
+
+const textureBrand = Symbol.for("vgpu/Texture");
 
 export interface RenderPassOptions {
   readonly colorAttachments: readonly ColorAttachment[];
@@ -14,16 +16,26 @@ export interface ColorAttachment {
 }
 
 export class RenderPass {
-  readonly gpu: GPURenderPassEncoder;
   private readonly encoder: GPUCommandEncoder;
-  private ended = false;
+  private passEncoder: GPURenderPassEncoder | null;
 
   constructor(private readonly device: Device, opts: RenderPassOptions) {
     this.encoder = device.gpu.createCommandEncoder({ label: opts.label });
-    this.gpu = this.encoder.beginRenderPass({
+    this.passEncoder = this.encoder.beginRenderPass({
       label: opts.label,
       colorAttachments: opts.colorAttachments.map(colorAttachment),
     });
+  }
+
+  get gpu(): GPURenderPassEncoder {
+    if (!this.passEncoder) {
+      throw new VGPUError({
+        code: "VGPU-RENDER-PASS-ENDED",
+        message: "RenderPass.gpu cannot be accessed after end().",
+        where: "RenderPass.gpu",
+      });
+    }
+    return this.passEncoder;
   }
 
   setPipeline(pipeline: Pipeline): void {
@@ -35,10 +47,11 @@ export class RenderPass {
   }
 
   end(): void {
-    if (this.ended) return;
-    this.ended = true;
-    this.gpu.end();
-    this.device.gpu.queue.submit([this.encoder.finish()]);
+    if (!this.passEncoder) return;
+    const pass = this.passEncoder;
+    this.passEncoder = null;
+    pass.end();
+    this.device.queue.gpu.submit([this.encoder.finish()]);
   }
 
   dispose(): void {
@@ -48,13 +61,13 @@ export class RenderPass {
 
 function colorAttachment(attachment: ColorAttachment): GPURenderPassColorAttachment {
   return {
-    view: isTexture(attachment.view) ? attachment.view.createView() : attachment.view,
+    view: isVGPUTexture(attachment.view) ? attachment.view.createView() : attachment.view,
     loadOp: attachment.loadOp,
     storeOp: attachment.storeOp,
     clearValue: attachment.clearValue,
   };
 }
 
-function isTexture(view: Texture | GPUTextureView): view is Texture {
-  return "createView" in view && "gpu" in view;
+function isVGPUTexture(view: Texture | GPUTextureView): view is Texture {
+  return Boolean((view as { readonly [textureBrand]?: true })[textureBrand]);
 }

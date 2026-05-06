@@ -1,4 +1,4 @@
-import { isMockGPUBuffer } from "./mockGpu.ts";
+import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
 import type { Device } from "./device.ts";
 import type { BufferOptions, BufferWriteData } from "./types.ts";
 

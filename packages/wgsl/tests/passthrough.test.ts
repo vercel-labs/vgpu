@@ -8,10 +8,7 @@ test("s2 › compile passes plain WGSL through", () => {
 });
 
 test("s2 › compile rejects runtime imports", () => {
-  expect(() => compile('import { x } from "./x";')).toThrowError(/Runtime WGSL/);
-  try {
-    compile('import { x } from "./x";');
-  } catch (error) {
-    expect(error).toMatchObject({ code: "VGPU-WGSL-RUNTIME-IMPORT" });
-  }
+  const act = () => compile('import { x } from "./x";');
+  expect(act).toThrow(/Runtime WGSL/);
+  expect(act).toThrow(expect.objectContaining({ code: "VGPU-WGSL-RUNTIME-IMPORT" }));
 });

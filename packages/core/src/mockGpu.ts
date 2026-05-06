@@ -1,20 +1,5 @@
 import { bufferUsageFlags } from "./gpuConstants.ts";
-
-export interface MockGPUBuffer extends GPUBuffer {
-  readonly __vgpuMockBytes: Uint8Array;
-}
-
-export interface MockGPUTexture extends GPUTexture {
-  readonly __vgpuMockBytes: Uint8Array;
-}
-
-export function isMockGPUBuffer(buffer: GPUBuffer): buffer is MockGPUBuffer {
-  return "__vgpuMockBytes" in buffer;
-}
-
-export function isMockGPUTexture(texture: GPUTexture): texture is MockGPUTexture {
-  return "__vgpuMockBytes" in texture;
-}
+import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock-gpu-storage.ts";
 
 export function createMockGPUDevice(): GPUDevice {
   return {
@@ -35,6 +20,7 @@ export function createMockGPUDevice(): GPUDevice {
         usage: desc.usage,
         createView: () => ({}) as GPUTextureView,
         destroy() {},
+      // Mock WebGPU texture: only fields touched by core/render tests are implemented.
       } as unknown as MockGPUTexture;
     },
     createShaderModule: () => ({}) as GPUShaderModule,
@@ -43,8 +29,10 @@ export function createMockGPUDevice(): GPUDevice {
       return {
         copyBufferToBuffer() {},
         copyTextureToBuffer() {},
+        // Mock render pass encoder: only pipeline/draw/end are exercised by S2 tests.
         beginRenderPass: () => ({ setPipeline() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
         finish: () => ({}),
+      // Mock command encoder: only copy/render/finish methods used by core are implemented.
       } as unknown as GPUCommandEncoder;
     },
     destroy() {},
@@ -55,6 +43,7 @@ export function createMockGPUDevice(): GPUDevice {
       },
       onSubmittedWorkDone: async () => undefined,
     },
+  // Mock device: shape is intentionally partial but covers every member used by adapters/tests.
   } as unknown as GPUDevice;
 }
 
@@ -74,6 +63,7 @@ function createMockBuffer(desc: GPUBufferDescriptor): MockGPUBuffer {
     getMappedRange: () => bytes.buffer,
     mapAsync: async () => undefined,
     unmap() {},
+  // Mock WebGPU buffer: byte storage plus map/destroy methods are enough for read/write tests.
   } as unknown as MockGPUBuffer;
 }
 

@@ -6,15 +6,13 @@ export { Shader } from "./shader.ts";
 export { Texture } from "./texture.ts";
 export { VGPUError, ValidationError } from "./errors.ts";
 export { createMockGPUDevice } from "./mockGpu.ts";
+export type { AppCreateOptions, AppInstance, VGPUAdapter } from "./app-types.ts";
 export type {
-  AppCreateOptions,
-  AppInstance,
   BufferOptions,
   BufferUsageName,
   BufferWriteData,
   TextureOptions,
   TextureUsageName,
   CreateDeviceOptions,
-  VGPUAdapter,
 } from "./types.ts";
 export type { ShaderInput } from "./shader.ts";

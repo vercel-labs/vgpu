@@ -1,9 +1,12 @@
 import { textureUsageFlags } from "./gpuConstants.ts";
-import { isMockGPUTexture } from "./mockGpu.ts";
+import { isMockGPUTexture } from "./mock-gpu-storage.ts";
 import type { Device } from "./device.ts";
 import type { TextureOptions } from "./types.ts";
 
+const textureBrand = Symbol.for("vgpu/Texture");
+
 export class Texture {
+  readonly [textureBrand] = true;
   private destroyed = false;
 
   constructor(
