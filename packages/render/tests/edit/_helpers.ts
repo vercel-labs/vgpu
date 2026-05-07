@@ -22,10 +22,13 @@ export async function renderEditMesh(device: Device, mesh: Mesh, angle: keyof ty
   return renderInspectFrame({ device, material, vertexBuffer: mesh.vertexBuffer.gpu, vertexCount: mesh.vertexCount, camera: camera(angle), targetFormat: "rgba8unorm-srgb" });
 }
 
-export function highlightMesh(device: Device, em: EditableMesh, faces: ElementSelection): Mesh {
-  const selected = new Set(faces.indices), k = em.gpu.halfEdgeKernel, data: number[] = [];
+export function highlightMesh(device: Device, em: EditableMesh, sel: ElementSelection): Mesh {
+  const selected = new Set(sel.indices), k = em.gpu.halfEdgeKernel, data: number[] = [];
   for (let f = 0; f < k.faceCount; f++) for (let c = 0; c < 3; c++) {
-    const v = k.faceVertices[f * 3 + c] * 3, n = selected.has(f) ? [1, 0, 0] : [k.faceNormals[f * 3], k.faceNormals[f * 3 + 1], k.faceNormals[f * 3 + 2]];
+    const edgeHit = sel.domain === "edge" && k.faceEdges.slice(f * 3, f * 3 + 3).some((e) => selected.has(e));
+    const faceHit = sel.domain === "face" && selected.has(f);
+    const vertHit = sel.domain === "vertex" && k.faceVertices.slice(f * 3, f * 3 + 3).some((v) => selected.has(v));
+    const v = k.faceVertices[f * 3 + c] * 3, n = edgeHit || faceHit || vertHit ? [1, 0, 0] : [k.faceNormals[f * 3], k.faceNormals[f * 3 + 1], k.faceNormals[f * 3 + 2]];
     data.push(k.positions[v], k.positions[v + 1], k.positions[v + 2], n[0], n[1], n[2]);
   }
   const vertices = new Float32Array(data), vertexBuffer = device.createBuffer({ label: "edit-highlight", size: vertices.byteLength, usage: ["vertex", "copy_dst"] });
