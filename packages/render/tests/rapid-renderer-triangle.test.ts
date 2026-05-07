@@ -5,7 +5,7 @@ import { PNG } from "pngjs";
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App, Device } from "@vgpu/core";
-import { createRenderPipeline, RapidRenderer } from "@vgpu/render";
+import { createRenderPipeline, RapidRenderer, type Material } from "@vgpu/render";
 import { compile } from "@vgpu/wgsl";
 
 const TRIANGLE_WGSL = `
@@ -51,7 +51,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(
       primitive: { topology: "triangle-list" },
     });
 
-    await new RapidRenderer(device).draw({ pipeline, target: target.createView(), vertexCount: 3 });
+    await new RapidRenderer(device).draw({ material: materialFor(pipeline), pipeline, target: target.createView(), vertexCount: 3 });
 
     const pixels = await target.read();
     const expected = PNG.sync.read(await readFile(join(process.cwd(), "packages/render/tests/__snapshots__/hello-triangle.png")));
@@ -68,9 +68,9 @@ test("RapidRenderer.draw uses public core Device without raw Dawn assumptions", 
   const device = new Device(recorder.gpu, null);
   const renderer = new RapidRenderer(device);
 
-  await renderer.draw({ pipeline: recorder.pipeline, target: recorder.target, vertexCount: 3 });
+  await renderer.draw({ material: materialFor(recorder.pipeline), pipeline: recorder.pipeline, target: recorder.target, vertexCount: 3 });
 
-  expect(recorder.calls).toEqual(["createCommandEncoder", "beginRenderPass", "setPipeline", "draw", "end", "finish", "submit"]);
+  expect(recorder.calls).toEqual(["createCommandEncoder", "beginRenderPass", "setPipeline", "setBindGroup", "draw", "end", "finish", "submit"]);
   expect(recorder.propertyReads).toEqual(["queue", "createCommandEncoder", "submit"]);
   expect(recorder.colorAttachment()?.view).toBe(recorder.target);
   expect(recorder.colorAttachment()?.clearValue).toEqual([0, 0, 0, 1]);
@@ -95,6 +95,7 @@ function createRecordingDevice(): RecordingDevice {
   const queue = new Proxy({ submit: () => calls.push("submit") }, { get: recordProperty(propertyReads) }) as unknown as GPUQueue;
   const pass = {
     setPipeline: () => calls.push("setPipeline"),
+    setBindGroup: () => calls.push("setBindGroup"),
     draw: () => calls.push("draw"),
     end: () => calls.push("end"),
   } as unknown as GPURenderPassEncoder;
@@ -119,6 +120,10 @@ function createRecordingDevice(): RecordingDevice {
   };
   const gpu = new Proxy(base, { get: recordProperty(propertyReads) }) as unknown as GPUDevice;
   return { gpu, pipeline, target, calls, propertyReads, colorAttachment: () => passDescriptor?.colorAttachments[0] ?? undefined };
+}
+
+function materialFor(pipeline: GPURenderPipeline): Material {
+  return { pipeline, params: { baseColor: [0, 0, 0] as const, metallic: 0, roughness: 0 } } as Material;
 }
 
 function recordProperty(propertyReads: string[]) {

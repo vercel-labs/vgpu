@@ -80,12 +80,16 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("lit cube renders byte-equal t
     target: vec3([0, 0, 0]),
   });
 
+  material.writeUniforms({
+    viewProjection: camera.viewProjectionMatrix,
+    model: rotateY(degToRad(30)),
+    cameraPosition: camera.position,
+    light: { direction: [-1, -1, -1], color: [1, 1, 1], intensity: 1 },
+  });
+
   await new RapidRenderer(device).draw({
     material,
     mesh,
-    transform: rotateY(degToRad(30)),
-    camera,
-    light: { direction: [-1, -1, -1], color: [1, 1, 1], intensity: 1 },
     target: color.createView(),
     depthTarget: depth.createView(),
     clearValue: { r: 0.05, g: 0.05, b: 0.08, a: 1 },

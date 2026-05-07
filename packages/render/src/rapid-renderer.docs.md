@@ -1,18 +1,18 @@
 # RapidRenderer
 
-`RapidRenderer` submits one draw to a target view.
+`RapidRenderer` submits one draw to a target view. The renderer binds a material,
+optionally binds a mesh, then draws either `vertexCount` or `mesh.vertexCount`.
 
 ```ts
-await renderer.draw({ pipeline, target, vertexCount: 3 });
-await renderer.draw({ material, mesh, camera, target, depthTarget });
+material.writeUniforms({ viewProjection, model, cameraPosition, light });
+await renderer.draw({ material, mesh, target, depthTarget });
+await renderer.draw({ material, pipeline, target, vertexCount: 3 });
 ```
 
-Without `material`, `pipeline` and `vertexCount` are required. With `material`,
-`mesh`, `camera`, and `depthTarget` are required; missing values throw
-`VGPU-CORE-INVALID-USAGE`. The material path uploads uniforms, binds them with a
-dynamic offset, sets the mesh vertex buffer, and draws `mesh.vertexCount`.
+`material` is required. `pipeline` is an optional override; otherwise the renderer
+uses `material.pipeline`. Call `material.writeUniforms()` before `draw()` when the
+material has uniforms. The renderer does not write camera, transform, light, or
+material parameters.
 
-`clearValue` defaults to opaque black. `transform` defaults to identity. `light`
-defaults to white direction `[-0.4, -0.7, -0.6]`, intensity `1`; directions are
-normalized and describe photon travel. `renderer.gpu` returns the raw
-`GPUDevice`. `draw()` resolves after command submission.
+`clearValue` defaults to opaque black. `depthTarget` is optional. `renderer.gpu`
+returns the raw `GPUDevice`. `draw()` resolves after command submission.

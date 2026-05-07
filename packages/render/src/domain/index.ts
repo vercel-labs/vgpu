@@ -6,5 +6,5 @@ export { material } from "./material-factory.ts";
 export { perspectiveCamera } from "./perspective-camera.ts";
 export { srgb } from "./srgb.ts";
 export type { Camera, Mat4, Vec3 } from "./camera.ts";
-export type { Material, PbrMaterialSpec } from "./material.ts";
+export type { DirectionalLight, Material, PbrMaterial, PbrMaterialSpec } from "./material.ts";
 export type { MaterialSpec, VertexLayoutKind, WgslUniformType } from "./material-factory.ts";

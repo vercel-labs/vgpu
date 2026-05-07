@@ -29,7 +29,7 @@ const material = pbrMaterial({
 
 `roughness` defaults to `0.5`. Lower values make the simple specular highlight sharper; higher values make it broader.
 
-The shader expects one dynamic uniform binding at group 0, binding 0. Each record is 224 bytes and stores camera, model, light, and material values.
+The shader expects one uniform binding at group 0, binding 0. The record is 224 bytes and stores camera, model, light, and material values. Call `material.writeUniforms({ viewProjection, model, cameraPosition, light })` before drawing. You may also pass `baseColor`, `metallic`, or `roughness` to override the factory values for that upload.
 
 `PbrMaterialSpec` is the input object shape for `pbrMaterial`: it includes `device`, `baseColor`, optional `metallic`, optional `roughness`, and optional `targetFormat`.
 
