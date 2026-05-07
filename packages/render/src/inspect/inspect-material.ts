@@ -10,5 +10,4 @@ export interface InspectMaterial {
 export interface InspectMaterialUniformParams {
   readonly viewProjectionMatrix: Mat4;
   readonly modelMatrix: Mat4;
-  readonly [extra: string]: unknown;
 }

@@ -1,18 +1,29 @@
 # meshToWireframe
 
-`meshToWireframe(mesh, device)` converts a triangle-list `Mesh` into a line-list index buffer with duplicate edges removed by endpoint position.
+`meshToWireframe(mesh, device)` converts a readable triangle-list `Mesh` into a
+line-list index buffer with duplicate edges removed by endpoint position.
 
 ```ts
-import { Mesh } from "@vgpu/render";
 import { meshToWireframe } from "@vgpu/render/inspect";
 
-const mesh = Mesh.box({ device });
-const wireframe = await meshToWireframe(mesh, device);
+const wireframe = await meshToWireframe(readableMesh, device);
 
-// wireframe.vertexBuffer is mesh.vertexBuffer
+// wireframe.vertexBuffer is readableMesh.vertexBuffer
 // wireframe.indexBuffer contains two indices per line segment
 ```
 
-Edges are matched by endpoint positions within `1e-6`, regardless of vertex index. Coplanar triangle diagonals are omitted, so a unit box produces 12 line segments and 24 indices.
+The source mesh's vertex buffer must be created with `GPUBufferUsage.COPY_SRC`
+so `meshToWireframe` can read back vertex positions. If the buffer is not
+readable, the function throws `VGPU-CORE-INVALID-USAGE`; `Mesh.box` currently
+does not satisfy this contract.
 
-The function is asynchronous because general meshes may require GPU readback to inspect vertex positions. The built-in box mesh is reconstructed from its bounding box because its vertex buffer is not created for readback.
+Endpoints are quantized to a `1e-6` grid before comparison. Meshes with distinct
+features below that scale may have edges incorrectly merged, so author debug
+geometry at a larger scale or use a precomputed wireframe for tiny details.
+
+Coplanar triangle diagonals are omitted by comparing triangle face normals, so a
+readable unit-box triangle list produces 12 line segments and 24 indices.
+
+The returned `indexBuffer` is a raw `GPUBuffer`. Callers own its lifetime and
+should call `indexBuffer.destroy()` when done, or rely on `device.destroy()` to
+clean up at teardown.

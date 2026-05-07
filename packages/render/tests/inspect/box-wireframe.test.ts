@@ -5,9 +5,9 @@ import { PNG } from "pngjs";
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
-import { degToRad, Mesh, perspectiveCamera, type Vec3 } from "@vgpu/render";
+import { degToRad, perspectiveCamera, type Vec3 } from "@vgpu/render";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
-import { renderInspectFrame } from "./_helpers.ts";
+import { createReadableBoxMesh, renderInspectFrame } from "./_helpers.ts";
 
 const WIDTH = 256;
 const HEIGHT = 256;
@@ -22,7 +22,7 @@ for (const [angle, { position }] of Object.entries(CAMERAS)) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`wireframe ${angle} matches snapshot`, async () => {
     const { device } = await App.create({ adapter: createNodeAdapter() });
     try {
-      const mesh = Mesh.box({ device, size: 1 });
+      const mesh = createReadableBoxMesh(device, 1);
       const wireframe = await meshToWireframe(mesh, device);
       const material = wireframeMaterial({ device, color: [1, 1, 1], targetFormat: "rgba8unorm-srgb" });
       const camera = perspectiveCamera({

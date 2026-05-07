@@ -1,6 +1,7 @@
 # InspectMaterial
 
-`InspectMaterial` is the low-level material shape used by the inspect sub-export. It contains a pipeline, a group-0 bind group layout, and a typed uniform writer.
+`InspectMaterial` is the low-level material shape used by the inspect sub-export.
+It contains a pipeline, a group-0 bind group layout, and a typed uniform writer.
 
 ```ts
 const uniforms = device.createBuffer({
@@ -14,6 +15,9 @@ material.writeUniforms(uniforms.gpu, 0, {
 });
 ```
 
-`writeUniforms` writes the matrix data and any material-specific values into the buffer. This keeps inspect materials independent from the PBR material path used by `RapidRenderer`.
+`writeUniforms` writes the shared inspect matrices into the buffer. This keeps
+inspect materials independent from the PBR material path used by `RapidRenderer`.
 
-`InspectMaterialUniformParams` always includes `viewProjectionMatrix` and `modelMatrix`. Individual inspect materials may capture defaults or read extra fields as needed.
+`InspectMaterialUniformParams` includes `viewProjectionMatrix` and `modelMatrix`.
+Future inspect materials should extend this interface explicitly if they need
+additional uniform inputs.
