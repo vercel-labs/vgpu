@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
-import type { Mesh, VertexAttributes } from "./mesh.ts";
 import type { Vec3 } from "wgpu-matrix";
+import type { Mesh, VertexAttributes } from "./mesh-types.ts";
 
 export interface FullscreenQuadSpec {
   readonly device: Device;

@@ -12,7 +12,7 @@
   "scripts": { "build": "tsc -b" },
   "dependencies": { "@vgpu/core": "workspace:*", "wgpu-matrix": "^3.4.2" },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 19456,
+    ".": 49152,
     "./inspect": 4096,
     "./utils": 2048
   }

@@ -1,7 +1,8 @@
 import type { Device } from "@vgpu/core";
 import type { Vec3 } from "wgpu-matrix";
 import { invalidUsage } from "../uniform-pool-internals.ts";
-import type { Mesh, VertexAttributes } from "./mesh.ts";
+import { cachedMesh } from "./mesh-cache.ts";
+import type { Mesh, VertexAttributes } from "./mesh-types.ts";
 import { sphereData } from "./sphere-data.ts";
 
 export interface SphereSpec {
@@ -25,38 +26,29 @@ export function sphere(spec: SphereSpec): Mesh {
   const heightSegments = spec.heightSegments ?? 16;
   validate(radius, widthSegments, heightSegments);
 
-  let meshes = cache.get(spec.device);
-  if (!meshes) {
-    meshes = new Map<string, Mesh>();
-    cache.set(spec.device, meshes);
-  }
-
   const key = `${radius}|${widthSegments}|${heightSegments}`;
-  const cached = meshes.get(key);
-  if (cached) return cached;
+  return cachedMesh(cache, spec.device, key, () => {
+    const data = sphereData({ radius, widthSegments, heightSegments });
+    const vertexBuffer = spec.device.createBuffer({ label: `mesh.sphere.vertices.${key}`, size: data.vertices.byteLength, usage: ["vertex", "copy_dst"] });
+    vertexBuffer.write(data.vertices);
+    const indexBuffer = spec.device.createBuffer({ label: `mesh.sphere.indices.${key}`, size: data.indices.byteLength, usage: ["index", "copy_dst"] });
+    indexBuffer.write(data.indices);
 
-  const data = sphereData({ radius, widthSegments, heightSegments });
-  const vertexBuffer = spec.device.createBuffer({ label: `mesh.sphere.vertices.${key}`, size: data.vertices.byteLength, usage: ["vertex", "copy_dst"] });
-  vertexBuffer.write(data.vertices);
-  const indexBuffer = spec.device.createBuffer({ label: `mesh.sphere.indices.${key}`, size: data.indices.byteLength, usage: ["index", "copy_dst"] });
-  indexBuffer.write(data.indices);
-
-  const mesh = Object.freeze({
-    vertexBuffer,
-    vertexCount: data.vertices.length / 8,
-    attributes: ATTRIBUTES,
-    bbox: Object.freeze({
-      min: new Float32Array([-radius, -radius, -radius]) as Vec3,
-      max: new Float32Array([radius, radius, radius]) as Vec3,
-    }),
-    indexBuffer,
-    indexCount: data.indices.length,
-    indexFormat: "uint16" as const,
-    layout: "position-normal-uv" as const,
-    gpu: Object.freeze({ vertexBuffer: vertexBuffer.gpu, indexBuffer: indexBuffer.gpu }),
+    return Object.freeze({
+      vertexBuffer,
+      vertexCount: data.vertices.length / 8,
+      attributes: ATTRIBUTES,
+      bbox: Object.freeze({
+        min: new Float32Array([-radius, -radius, -radius]) as Vec3,
+        max: new Float32Array([radius, radius, radius]) as Vec3,
+      }),
+      indexBuffer,
+      indexCount: data.indices.length,
+      indexFormat: "uint16" as const,
+      layout: "position-normal-uv" as const,
+      gpu: Object.freeze({ vertexBuffer: vertexBuffer.gpu, indexBuffer: indexBuffer.gpu }),
+    });
   });
-  meshes.set(key, mesh);
-  return mesh;
 }
 
 function validate(radius: number, widthSegments: number, heightSegments: number): void {
