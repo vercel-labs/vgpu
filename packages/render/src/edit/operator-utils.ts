@@ -6,7 +6,7 @@ import type { EditableMesh as EditableMeshValue, ElementSelection } from "./type
 export type V = readonly [number, number, number];
 export interface MeshParts { readonly positions: number[]; readonly faces: number[][]; readonly useSmooth: number[]; readonly sharp: Set<string> }
 
-export function requireSelection(sel: ElementSelection, domain: "face" | "edge"): void {
+export function requireSelection(sel: ElementSelection, domain: "vertex" | "face" | "edge"): void {
   if (sel.domain !== domain) throw new MeshEditError({ code: "WRONG_DOMAIN" });
   if (sel.count === 0) throw new MeshEditError({ code: "EMPTY_SELECTION" });
 }
@@ -46,5 +46,20 @@ export function edgeSelectionOfFaces(em: EditableMeshValue, faces: readonly numb
   return selection("edge", out);
 }
 
-function pos(a: Float32Array, v: number): V { const i = v * 3; return [a[i], a[i + 1], a[i + 2]]; }
+export function copyWithoutFaces(em: EditableMeshValue, drop: ReadonlySet<number>): MeshParts {
+  const k = em.gpu.halfEdgeKernel, m: MeshParts = { positions: [], faces: [], useSmooth: [], sharp: new Set() };
+  for (let f = 0; f < em.faceCount; f++) if (!drop.has(f)) addTri(m, p(em, k.faceVertices[f * 3]), p(em, k.faceVertices[f * 3 + 1]), p(em, k.faceVertices[f * 3 + 2]), k.useSmooth[f]);
+  for (let e = 0; e < em.edgeCount; e++) if (k.isSharp[e]) m.sharp.add(key(p(em, k.edgeVertexA[e]), p(em, k.edgeVertexB[e])));
+  return m;
+}
+
+export function addFan(m: MeshParts, verts: readonly V[], smooth: number): number[] {
+  const out: number[] = [], start = m.faces.length;
+  for (let i = 1; i < verts.length - 1; i++) { addTri(m, verts[0], verts[i], verts[i + 1], smooth); out.push(start + i - 1); }
+  return out;
+}
+
+export function range(a: number, b: number): number[] { return Array.from({ length: b - a }, (_, i) => a + i); }
+export function tint(em: EditableMeshValue, faces: readonly number[]): void { const n = em.gpu.halfEdgeKernel.faceNormals; for (const f of faces) n.set([0.577, 0.577, 0.577], f * 3); }
+export function pos(a: Float32Array, v: number): V { const i = v * 3; return [a[i], a[i + 1], a[i + 2]]; }
 function q(v: V): string { return `${Math.fround(v[0])},${Math.fround(v[1])},${Math.fround(v[2])}`; }
