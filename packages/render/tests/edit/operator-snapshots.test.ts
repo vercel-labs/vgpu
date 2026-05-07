@@ -1,12 +1,13 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
-import { bevel, bridge, extrude, fillHole, gridFill, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
+import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "./_helpers.ts";
 import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
+import { octahedron } from "./fixtures/dissolve.ts";
 
-interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection }
+interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection; readonly highlightOn?: "before" | "after" }
 
 const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const top = base.faces.scoreBy((f) => f.center[1]).top();
@@ -36,11 +37,22 @@ const makeConnectivityCases = (): readonly Case[] => {
   ];
 };
 
-for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill"] as const) {
+const makeDissolveCases = (): readonly Case[] => {
+  const vBase = octahedron(), vSel = vBase.vertices.byIndex([0]), v = dissolveVertices(vBase, vSel);
+  const eBase = octahedron(), eSel = eBase.edges.byIndex([edgeBetween(eBase, 0, 1)]), e = dissolveEdges(eBase, eSel);
+  const fBase = octahedron(), fSel = fBase.faces.byIndex([0, 1]), f = dissolveFaces(fBase, fSel);
+  return [
+    { name: "dissolve-vertices", before: vBase, after: v.mesh, highlight: vSel, highlightOn: "before" },
+    { name: "dissolve-edges", before: eBase, after: e.mesh, highlight: eSel, highlightOn: "before" },
+    { name: "dissolve-faces", before: fBase, after: f.mesh, highlight: fSel, highlightOn: "before" },
+  ];
+};
+
+for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill", "dissolve-vertices", "dissolve-edges", "dissolve-faces"] as const) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
     const { device } = await App.create({ adapter: createNodeAdapter() });
     try {
-      const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases()].find((v) => v.name === op)!;
+      const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases(), ...makeDissolveCases()].find((v) => v.name === op)!;
       const before = new Map<string, Uint8Array>(), after = new Map<string, Uint8Array>();
       for (const angle of Object.keys(ANGLES) as (keyof typeof ANGLES)[]) {
         const b = await renderEditMesh(device, c.before.toRenderMesh({ device }), angle), a = await renderEditMesh(device, c.after.toRenderMesh({ device }), angle);
@@ -49,13 +61,21 @@ for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-fac
         await expectEditSnapshot(`${op}-after-${angle}.png`, a);
         expect(sha(b)).not.toBe(sha(a));
       }
-      const hi = await renderEditMesh(device, highlightMesh(device, c.after, c.highlight), "iso");
-      await expectEditSnapshot(`${op}-after-highlight-iso.png`, hi);
-      expect(sha(hi)).not.toBe(sha(after.get("iso")!));
+      const hiBase = c.highlightOn === "before" ? c.before : c.after;
+      const hi = await renderEditMesh(device, highlightMesh(device, hiBase, c.highlight), "iso");
+      const hiName = c.highlightOn === "before" ? `${op}-before-highlight-iso.png` : `${op}-after-highlight-iso.png`;
+      await expectEditSnapshot(hiName, hi);
+      expect(sha(hi)).not.toBe(sha((c.highlightOn === "before" ? before : after).get("iso")!));
       for (const set of [before, after]) {
         const hashes = [...set.values()].map(sha);
         expect(new Set(hashes).size).toBe(hashes.length);
       }
     } finally { device.destroy(); }
   });
+}
+
+function edgeBetween(em: EditableMeshValue, a: number, b: number): number {
+  const k = em.gpu.halfEdgeKernel, lo = Math.min(a, b), hi = Math.max(a, b);
+  for (let e = 0; e < k.edgeCount; e++) if (k.edgeVertexA[e] === lo && k.edgeVertexB[e] === hi) return e;
+  throw new Error("missing edge");
 }
