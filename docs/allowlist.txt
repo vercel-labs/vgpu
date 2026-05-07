@@ -38,7 +38,12 @@
 @vgpu/render UniformSlot packages/render/src/UniformPool.docs.md
 @vgpu/render RapidRenderer packages/render/src/RapidRenderer.docs.md
 @vgpu/render DrawSpec packages/render/src/RapidRenderer.docs.md
+@vgpu/render Camera packages/render/src/domain/camera.docs.md
+@vgpu/render Mat4 packages/render/src/domain/camera.docs.md
+@vgpu/render Vec3 packages/render/src/domain/camera.docs.md
 @vgpu/render degToRad packages/render/src/domain/deg-to-rad.docs.md
+@vgpu/render orthographicCamera packages/render/src/domain/orthographic-camera.docs.md
+@vgpu/render perspectiveCamera packages/render/src/domain/perspective-camera.docs.md
 @vgpu/render srgb packages/render/src/domain/srgb.docs.md
 @vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md

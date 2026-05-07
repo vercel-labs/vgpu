@@ -11,4 +11,5 @@ export type {
   RenderPassDynamicOffsets,
   RenderPassOptions,
 } from "./render-pass.ts";
-export { degToRad, srgb } from "./domain/index.ts";
+export { degToRad, orthographicCamera, perspectiveCamera, srgb } from "./domain/index.ts";
+export type { Camera, Mat4, Vec3 } from "./domain/index.ts";
