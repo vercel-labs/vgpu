@@ -29,6 +29,8 @@ const material = pbrMaterial({
 
 `roughness` defaults to `0.5`. Lower values make the simple specular highlight sharper; higher values make it broader.
 
-The shader expects one dynamic uniform binding at group 0, binding 0. Each record is 224 bytes and stores camera, model, light, and material values. The render target format is `bgra8unorm-srgb`, so the shader writes linear color and the surface format performs sRGB encoding.
+The shader expects one dynamic uniform binding at group 0, binding 0. Each record is 224 bytes and stores camera, model, light, and material values.
 
-Materials are cached per device and parameter set. Calling `pbrMaterial` again with the same device, `baseColor`, `metallic`, and `roughness` returns the same object.
+`targetFormat` (optional, default `'bgra8unorm-srgb'`): the color attachment format the pipeline writes into. Pick `'rgba8unorm-srgb'` on platforms that don't support BGRA-srgb (e.g. some compatibility-mode backends). Both formats apply linear→sRGB encoding on store, so the shader continues to write linear values regardless.
+
+Materials are cached per device and parameter set. Calling `pbrMaterial` again with the same device, `baseColor`, `metallic`, `roughness`, and `targetFormat` returns the same object.

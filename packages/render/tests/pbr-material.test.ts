@@ -59,6 +59,21 @@ test("pbrMaterial defaults metallic=0 and roughness=0.5", async () => {
   device.destroy();
 });
 
+test("pbrMaterial with targetFormat=rgba8unorm-srgb produces a pipeline configured for that format", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
+  const bgra = pbrMaterial({ device, baseColor: [0.5, 0.5, 0.5], targetFormat: "bgra8unorm-srgb" });
+  const rgba = pbrMaterial({ device, baseColor: [0.5, 0.5, 0.5], targetFormat: "rgba8unorm-srgb" });
+  expect(bgra).not.toBe(rgba);
+  expect(createRenderPipeline).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({
+      fragment: expect.objectContaining({ targets: [expect.objectContaining({ format: "rgba8unorm-srgb" })] }),
+    }),
+  );
+  device.destroy();
+});
+
 test("pbrMaterial WGSL source compiles via device.createShader", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
   const createShaderModule = vi.spyOn(device.gpu, "createShaderModule");

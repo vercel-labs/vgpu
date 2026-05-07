@@ -56,10 +56,10 @@ function align(value: number, alignment: number): number {
 }
 
 function formatBytesPerPixel(format: GPUTextureFormat): number {
-  if (format === "rgba8unorm") return 4;
+  if (format === "rgba8unorm" || format === "rgba8unorm-srgb") return 4;
   throw new ValidationError({
     code: "VGPU-CORE-UNSUPPORTED-FORMAT",
-    message: `Texture.read only supports rgba8unorm in S2, got ${format}`,
+    message: `Texture.read does not support format ${format}`,
     where: "Readback.readTexture",
   });
 }
