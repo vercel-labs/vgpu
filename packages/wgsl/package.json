@@ -1,15 +1,32 @@
 {
   "name": "@vgpu/wgsl",
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.0.1",
+  "description": "WGSL shader compilation, runtime resolution, and webpack/vite loaders for vgpu.",
+  "keywords": ["webgpu", "graphics", "rendering", "wgsl", "shader", "webpack-loader", "vite-plugin"],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/wgsl"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
+  "type": "module",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./runtime": { "types": "./dist/runtime/resolveShader.d.ts", "import": "./dist/runtime/resolveShader.js" },
     "./loader-webpack": { "types": "./dist/loader-webpack/index.d.ts", "import": "./dist/loader-webpack/index.js" },
     "./loader-vite": { "types": "./dist/loader-vite/index.d.ts", "import": "./dist/loader-vite/index.js" }
   },
-  "files": ["dist", "src/**/*.docs.md"],
+  "files": ["dist", "src/**/*.docs.md", "README.md", "LICENSE"],
   "scripts": { "build": "tsc -b" },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 25600,

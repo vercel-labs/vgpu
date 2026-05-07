@@ -1,8 +1,25 @@
 {
   "name": "@vgpu/core",
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.0.1",
+  "description": "Core WebGPU runtime primitives (device, buffer, texture, shader, queue) for vgpu.",
+  "keywords": ["webgpu", "graphics", "rendering", "core", "device", "buffer", "shader"],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/core"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -11,7 +28,9 @@
   },
   "files": [
     "dist",
-    "src/**/*.docs.md"
+    "src/**/*.docs.md",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -b"
