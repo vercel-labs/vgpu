@@ -1,11 +1,18 @@
 import type { Device, Shader } from "@vgpu/core";
 import { PBR_SHADER_SOURCE, UNIFORMS_BYTE_SIZE, VERTEX_BUFFER_LAYOUT } from "./pbr-shader.ts";
 
+export interface MaterialParams {
+  readonly baseColor: readonly [number, number, number];
+  readonly metallic: number;
+  readonly roughness: number;
+}
+
 export interface Material {
   readonly pipeline: GPURenderPipeline;
   readonly bindGroupLayout: GPUBindGroupLayout;
   readonly shader: Shader;
   readonly uniformByteSize: number;
+  readonly params: MaterialParams;
 }
 
 export interface PbrMaterialSpec {
@@ -61,7 +68,8 @@ export function pbrMaterial(spec: PbrMaterialSpec): Material {
     depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
   });
 
-  const material = Object.freeze({ pipeline, bindGroupLayout, shader, uniformByteSize: UNIFORMS_BYTE_SIZE });
+  const params = { baseColor: [red, green, blue] as readonly [number, number, number], metallic, roughness };
+  const material = Object.freeze({ pipeline, bindGroupLayout, shader, uniformByteSize: UNIFORMS_BYTE_SIZE, params });
   materials.set(key, material);
   return material;
 }

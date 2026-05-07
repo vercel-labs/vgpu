@@ -38,6 +38,7 @@
 @vgpu/render UniformSlot packages/render/src/UniformPool.docs.md
 @vgpu/render RapidRenderer packages/render/src/RapidRenderer.docs.md
 @vgpu/render DrawSpec packages/render/src/RapidRenderer.docs.md
+@vgpu/render DirectionalLight packages/render/src/RapidRenderer.docs.md
 @vgpu/render Camera packages/render/src/domain/camera.docs.md
 @vgpu/render Mat4 packages/render/src/domain/camera.docs.md
 @vgpu/render Vec3 packages/render/src/domain/camera.docs.md

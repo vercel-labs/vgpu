@@ -11,6 +11,7 @@ test("pbrMaterial produces a valid render pipeline against mock device", async (
   expect(material.bindGroupLayout).toBeTruthy();
   expect(material.shader).toBeInstanceOf(Shader);
   expect(material.uniformByteSize).toBe(224);
+  expect(material.params).toEqual({ baseColor: [0.5, 0.5, 0.5], metallic: 0, roughness: 0.5 });
   device.destroy();
 });
 
