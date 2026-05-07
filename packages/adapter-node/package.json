@@ -1,8 +1,16 @@
 {
   "name": "@vgpu/adapter-node",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Node.js GPU adapter for vgpu, using Dawn-based WebGPU bindings.",
-  "keywords": ["webgpu", "graphics", "rendering", "node", "dawn", "adapter", "server-side"],
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "rendering",
+    "node",
+    "dawn",
+    "adapter",
+    "server-side"
+  ],
   "homepage": "https://github.com/vercel-labs/vgpu#readme",
   "bugs": {
     "url": "https://github.com/vercel-labs/vgpu/issues"
@@ -20,9 +28,24 @@
   },
   "sideEffects": false,
   "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "src/**/*.docs.md", "README.md", "LICENSE"],
-  "scripts": { "build": "tsc -b" },
-  "dependencies": { "@vgpu/core": "workspace:*", "webgpu": "0.4.0" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/**/*.docs.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@vgpu/core": "workspace:*",
+    "webgpu": "0.4.0"
+  },
   "vgpuBundleBudgetGzipBytes": 30720
 }
