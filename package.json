@@ -15,12 +15,11 @@
     "generate-lit-cube-snapshot": "pnpm exec esbuild scripts/generate-lit-cube-snapshot.ts --bundle --platform=node --format=esm --external:pngjs --external:webgpu --outfile=packages/adapter-node/dist/generate-lit-cube-snapshot.mjs && node packages/adapter-node/dist/generate-lit-cube-snapshot.mjs",
     "bundle-check": "node scripts/check-bundle-size.mjs",
     "check-bundle-size": "node scripts/check-bundle-size.mjs",
-    "changeset": "changeset",
-    "changeset:version": "changeset version",
-    "release": "pnpm -r publish --access public --provenance --no-git-checks"
+    "bump:patch": "pnpm -r exec npm version patch --no-git-tag-version",
+    "bump:minor": "pnpm -r exec npm version minor --no-git-tag-version",
+    "bump:major": "pnpm -r exec npm version major --no-git-tag-version"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
     "@types/node": "^22.10.7",
     "@types/pngjs": "^6.0.5",
     "@webgpu/types": "^0.1.69",
