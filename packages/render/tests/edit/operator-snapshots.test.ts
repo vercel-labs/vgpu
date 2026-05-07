@@ -1,13 +1,14 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
-import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
+import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "./_helpers.ts";
 import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
 import { octahedron } from "./fixtures/dissolve.ts";
+import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";
 
-interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection; readonly highlightOn?: "before" | "after" }
+interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces" | "merge-by-distance" | "heal-manifold" | "recompute-normals"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight?: ElementSelection; readonly highlightOn?: "before" | "after" }
 
 const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const top = base.faces.scoreBy((f) => f.center[1]).top();
@@ -48,11 +49,24 @@ const makeDissolveCases = (): readonly Case[] => {
   ];
 };
 
-for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill", "dissolve-vertices", "dissolve-edges", "dissolve-faces"] as const) {
+const makeCleanupCases = (): readonly Case[] => {
+  const mBase = mergeDuplicateTetra(), mSel = mBase.vertices.byIndex([0, 4]), m = mergeByDistance(mBase, mSel, { threshold: 0.3 });
+  const hBase = nonManifoldTetra(), h = healManifold(hBase), hSel = hBase.faces.byIndex([4]);
+  tintFirstFace(m.mesh); tintFirstFace(h.mesh);
+  const rBase = bentSmoothPair(); rBase.gpu.halfEdgeKernel.faceNormals.set([1, 0, 0], 0); const r = recomputeNormals(rBase, { creaseAngle: Math.PI });
+  return [
+    { name: "merge-by-distance", before: mBase, after: m.mesh, highlight: mSel, highlightOn: "before" },
+    { name: "heal-manifold", before: hBase, after: h.mesh, highlight: hSel, highlightOn: "before" },
+    // recomputeNormals is a pure-attribute op with no descendants; this battery intentionally omits a highlight snapshot.
+    { name: "recompute-normals", before: rBase, after: r.mesh },
+  ];
+};
+
+for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill", "dissolve-vertices", "dissolve-edges", "dissolve-faces", "merge-by-distance", "heal-manifold", "recompute-normals"] as const) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
     const { device } = await App.create({ adapter: createNodeAdapter() });
     try {
-      const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases(), ...makeDissolveCases()].find((v) => v.name === op)!;
+      const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases(), ...makeDissolveCases(), ...makeCleanupCases()].find((v) => v.name === op)!;
       const before = new Map<string, Uint8Array>(), after = new Map<string, Uint8Array>();
       for (const angle of Object.keys(ANGLES) as (keyof typeof ANGLES)[]) {
         const b = await renderEditMesh(device, c.before.toRenderMesh({ device }), angle), a = await renderEditMesh(device, c.after.toRenderMesh({ device }), angle);
@@ -61,11 +75,13 @@ for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-fac
         await expectEditSnapshot(`${op}-after-${angle}.png`, a);
         expect(sha(b)).not.toBe(sha(a));
       }
-      const hiBase = c.highlightOn === "before" ? c.before : c.after;
-      const hi = await renderEditMesh(device, highlightMesh(device, hiBase, c.highlight), "iso");
-      const hiName = c.highlightOn === "before" ? `${op}-before-highlight-iso.png` : `${op}-after-highlight-iso.png`;
-      await expectEditSnapshot(hiName, hi);
-      expect(sha(hi)).not.toBe(sha((c.highlightOn === "before" ? before : after).get("iso")!));
+      if (c.highlight) {
+        const hiBase = c.highlightOn === "before" ? c.before : c.after;
+        const hi = await renderEditMesh(device, highlightMesh(device, hiBase, c.highlight), "iso");
+        const hiName = c.highlightOn === "before" ? `${op}-before-highlight-iso.png` : `${op}-after-highlight-iso.png`;
+        await expectEditSnapshot(hiName, hi);
+        expect(sha(hi)).not.toBe(sha((c.highlightOn === "before" ? before : after).get("iso")!));
+      }
       for (const set of [before, after]) {
         const hashes = [...set.values()].map(sha);
         expect(new Set(hashes).size).toBe(hashes.length);
@@ -78,4 +94,8 @@ function edgeBetween(em: EditableMeshValue, a: number, b: number): number {
   const k = em.gpu.halfEdgeKernel, lo = Math.min(a, b), hi = Math.max(a, b);
   for (let e = 0; e < k.edgeCount; e++) if (k.edgeVertexA[e] === lo && k.edgeVertexB[e] === hi) return e;
   throw new Error("missing edge");
+}
+
+function tintFirstFace(em: EditableMeshValue): void {
+  if (em.faceCount) em.gpu.halfEdgeKernel.faceNormals.set([0.577, 0.577, 0.577], 0);
 }
