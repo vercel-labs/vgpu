@@ -45,6 +45,7 @@
 @vgpu/render orthographicCamera packages/render/src/domain/orthographic-camera.docs.md
 @vgpu/render perspectiveCamera packages/render/src/domain/perspective-camera.docs.md
 @vgpu/render srgb packages/render/src/domain/srgb.docs.md
+@vgpu/render Mesh packages/render/src/domain/mesh.docs.md
 @vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolvedShader packages/wgsl/src/runtime/resolveShader.docs.md
