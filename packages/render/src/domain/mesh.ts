@@ -3,12 +3,16 @@ import { capsule as createCapsule } from "./mesh-capsule.ts";
 import { cone as createCone } from "./mesh-cone.ts";
 import { cylinder as createCylinder } from "./mesh-cylinder.ts";
 import { disk as createDisk } from "./mesh-disk.ts";
+import { dodecahedron as createDodecahedron } from "./mesh-dodecahedron.ts";
 import { fullscreenQuad as createFullscreenQuad } from "./mesh-fullscreen-quad.ts";
+import { icosahedron as createIcosahedron } from "./mesh-icosahedron.ts";
 import { icosphere as createIcosphere } from "./mesh-icosphere.ts";
 import { plane as createPlane } from "./mesh-plane.ts";
 import { ring as createRing } from "./mesh-ring.ts";
 import { sphere as createSphere } from "./mesh-sphere.ts";
+import { tetrahedron as createTetrahedron } from "./mesh-tetrahedron.ts";
 import { torus as createTorus } from "./mesh-torus.ts";
+import { octahedron as createOctahedron } from "./mesh-octahedron.ts";
 
 export type { BoxSpec } from "./mesh-box.ts";
 export type { CapsuleSpec } from "./mesh-capsule.ts";
@@ -17,6 +21,7 @@ export type { CylinderSpec } from "./mesh-cylinder.ts";
 export type { DiskSpec } from "./mesh-disk.ts";
 export type { FullscreenQuadSpec } from "./mesh-fullscreen-quad.ts";
 export type { IcosphereSpec } from "./mesh-icosphere.ts";
+export type { PolyhedronSpec } from "./polyhedron-mesh.ts";
 export type { PlaneSpec } from "./mesh-plane.ts";
 export type { RingSpec } from "./mesh-ring.ts";
 export type { SphereSpec } from "./mesh-sphere.ts";
@@ -27,12 +32,16 @@ export { capsule } from "./mesh-capsule.ts";
 export { cone } from "./mesh-cone.ts";
 export { cylinder } from "./mesh-cylinder.ts";
 export { disk } from "./mesh-disk.ts";
+export { dodecahedron } from "./mesh-dodecahedron.ts";
 export { fullscreenQuad } from "./mesh-fullscreen-quad.ts";
+export { icosahedron } from "./mesh-icosahedron.ts";
 export { icosphere } from "./mesh-icosphere.ts";
 export { plane } from "./mesh-plane.ts";
 export { ring } from "./mesh-ring.ts";
 export { sphere } from "./mesh-sphere.ts";
+export { tetrahedron } from "./mesh-tetrahedron.ts";
 export { torus } from "./mesh-torus.ts";
+export { octahedron } from "./mesh-octahedron.ts";
 
 export namespace Mesh {
   export const box = createBox;
@@ -40,10 +49,14 @@ export namespace Mesh {
   export const cone = createCone;
   export const cylinder = createCylinder;
   export const disk = createDisk;
+  export const dodecahedron = createDodecahedron;
   export const fullscreenQuad = createFullscreenQuad;
+  export const icosahedron = createIcosahedron;
   export const icosphere = createIcosphere;
   export const plane = createPlane;
   export const ring = createRing;
   export const sphere = createSphere;
+  export const tetrahedron = createTetrahedron;
   export const torus = createTorus;
+  export const octahedron = createOctahedron;
 }
