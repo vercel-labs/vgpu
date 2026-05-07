@@ -1,0 +1,11 @@
+extrude top face of Mesh.box (1000 iterations)
+capturedAt: 2026-05-07T06:10:46.513Z
+node: v20.20.0
+arch: arm64
+
+toEditable:   20.454ms (17.2%)
+extrude:      90.470ms (76.0%)
+toRenderMesh: 8.041ms (6.8%)
+total:        118.965ms
+
+Method: sample-based wall-clock timing with createMockAdapter; future regressions over 50% should be reviewed.
