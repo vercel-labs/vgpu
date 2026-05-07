@@ -11,5 +11,5 @@ export type {
   RenderPassDynamicOffsets,
   RenderPassOptions,
 } from "./render-pass.ts";
-export { box, capsule, cone, cylinder, degToRad, disk, dodecahedron, fullscreenQuad, icosahedron, icosphere, material, Mesh, octahedron, orthographicCamera, perspectiveCamera, plane, ring, sphere, srgb, tetrahedron, torus } from "./domain/index.ts";
-export type { BoxSpec, Camera, CapsuleSpec, ConeSpec, CylinderSpec, DiskSpec, FullscreenQuadSpec, IcosphereSpec, Material, MaterialSpec, MaterialUniformValue, Mat4, MeshGpu, MeshPrimitive, PlaneSpec, PolyhedronSpec, RingSpec, SphereSpec, TorusSpec, Vec3, VertexAttributes, VertexLayoutKind, WgslUniformType } from "./domain/index.ts";
+export { box, capsule, cone, cylinder, degToRad, disk, dodecahedron, fullscreenQuad, icosahedron, icosphere, material, Mesh, octahedron, orthographicCamera, perspectiveCamera, plane, ring, sampler, sphere, srgb, tetrahedron, torus } from "./domain/index.ts";
+export type { BoxSpec, Camera, CapsuleSpec, ConeSpec, CylinderSpec, DiskSpec, FullscreenQuadSpec, IcosphereSpec, Material, MaterialSamplerSpec, MaterialSpec, MaterialTextureSpec, MaterialUniformValue, Mat4, MeshGpu, MeshPrimitive, PlaneSpec, PolyhedronSpec, RingSpec, Sampler, SamplerSpec, SphereSpec, TextureKind, TextureSpec, TextureValue, TorusSpec, Vec3, VertexAttributes, VertexLayoutKind, WgslUniformType, WriteTextureValues } from "./domain/index.ts";

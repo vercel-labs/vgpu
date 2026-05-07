@@ -27,6 +27,7 @@ export function createMockGPUDevice(): GPUDevice {
     createBindGroupLayout: () => ({}) as GPUBindGroupLayout,
     createPipelineLayout: () => ({}) as GPUPipelineLayout,
     createBindGroup: () => ({}) as GPUBindGroup,
+    createSampler: () => ({}) as GPUSampler,
     createRenderPipeline: () => ({}) as GPURenderPipeline,
     createCommandEncoder() {
       return {

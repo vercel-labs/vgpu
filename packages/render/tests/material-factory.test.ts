@@ -68,6 +68,54 @@ test("writeUniforms correctly serializes f32/vec2f/vec3f/mat4x4f to bytes", asyn
   device.destroy();
 });
 
+test("material injects implicit materialSampler when a texture has no explicit sampler", async () => {
+  const { device } = await testDevice();
+  const mat = material({ device, vertex, fragment, uniforms: {}, textures: { albedo: "texture_2d_f32" }, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
+  expect(mat.samplerBindings.materialSampler).toBe(0);
+  expect(mat.textureBindings.albedo).toBe(1);
+  expect(mat.gpu.defaultSampler).toBeDefined();
+  device.destroy();
+});
+
+test("explicit sampler schema overrides the implicit materialSampler", async () => {
+  const { device } = await testDevice();
+  const mat = material({ device, vertex, fragment, uniforms: {}, textures: { albedo: { kind: "texture_2d_f32", sampler: "albedoSampler" } }, samplers: { albedoSampler: { mag: "nearest", min: "nearest", mip: "nearest" } }, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
+  expect(mat.samplerBindings).toEqual({ albedoSampler: 0 });
+  expect(mat.gpu.defaultSampler).toBeUndefined();
+  device.destroy();
+});
+
+test("material throws early for invalid sampler config and missing sampler refs", async () => {
+  const { device } = await testDevice();
+  expectInvalid(() => material({ device, vertex, fragment, uniforms: {}, textures: { albedo: "texture_2d_f32" }, samplers: { bad: { mag: "cubic" as never } }, vertexLayout: "position-only" }));
+  expectInvalid(() => material({ device, vertex, fragment, uniforms: {}, textures: { albedo: { kind: "texture_2d_f32", sampler: "missing" } }, vertexLayout: "position-only" }));
+  expectInvalid(() => material({ device, vertex, fragment, uniforms: {}, textures: { albedo: "texture_3d_f32" as never }, vertexLayout: "position-only" }));
+  device.destroy();
+});
+
+test("writeTextures validates full texture record", async () => {
+  const { device } = await testDevice();
+  const mat = material({ device, vertex, fragment, uniforms: {}, textures: { albedo: "texture_2d_f32" }, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
+  expectInvalid(() => mat.writeTextures({} as never));
+  expectInvalid(() => mat.writeTextures({ albedo: device.createTexture({ size: [1, 1], format: "rgba8unorm", usage: ["texture_binding"] }), extra: {} as GPUTextureView } as never));
+  device.destroy();
+});
+
+test("material.shader.code exposes the WGSL string", async () => {
+  const { device } = await testDevice();
+  expect(make(device, {}).shader.code).toContain(fragment);
+  device.destroy();
+});
+
+test("empty textures spec preserves no-texture material shape", async () => {
+  const { device } = await testDevice();
+  const mat = material({ device, vertex, fragment, uniforms: {}, textures: {}, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
+  expect(mat.samplerBindings).toEqual({});
+  expect(mat.textureBindings).toEqual({});
+  expect(mat.gpu.defaultSampler).toBeUndefined();
+  device.destroy();
+});
+
 function make(device: Device, uniforms: Record<string, WgslUniformType>): Material {
   return material({ device, vertex, fragment, uniforms, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
 }
