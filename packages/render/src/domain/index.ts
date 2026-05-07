@@ -1,7 +1,7 @@
 export { degToRad } from "./deg-to-rad.ts";
 export { orthographicCamera } from "./orthographic-camera.ts";
 export { Mesh } from "./mesh.ts";
-export { pbrMaterial, UNIFORMS_BYTE_SIZE } from "./material.ts";
+export { pbrMaterial } from "./material.ts";
 export { perspectiveCamera } from "./perspective-camera.ts";
 export { srgb } from "./srgb.ts";
 export type { Camera, Mat4, Vec3 } from "./camera.ts";

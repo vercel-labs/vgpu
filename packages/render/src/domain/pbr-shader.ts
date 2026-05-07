@@ -1,3 +1,12 @@
+export const UNIFORM_OFFSET_VIEW_PROJECTION = 0;
+export const UNIFORM_OFFSET_MODEL = 64;
+export const UNIFORM_OFFSET_CAMERA_POSITION = 128;
+export const UNIFORM_OFFSET_LIGHT_DIRECTION = 144;
+export const UNIFORM_OFFSET_LIGHT_COLOR = 160;
+export const UNIFORM_OFFSET_LIGHT_INTENSITY = 172;
+export const UNIFORM_OFFSET_BASE_COLOR = 192;
+export const UNIFORM_OFFSET_METALLIC = 204;
+export const UNIFORM_OFFSET_ROUGHNESS = 208;
 export const UNIFORMS_BYTE_SIZE = 224;
 
 export const VERTEX_BUFFER_LAYOUT: GPUVertexBufferLayout = Object.freeze({
@@ -67,9 +76,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
   let shininess = mix(128.0, 1.0, uniforms.roughness);
   let specular = f0 * pow(NdotH, shininess);
 
-  let lightCtrib = uniforms.lightColor * uniforms.lightIntensity;
+  let lightContrib = uniforms.lightColor * uniforms.lightIntensity;
   let ambient = uniforms.baseColor * 0.03;
-  let color = ambient + (diffuse + specular) * lightCtrib;
+  let color = ambient + (diffuse + specular) * lightContrib;
   return vec4<f32>(color, 1.0);
 }
 `;

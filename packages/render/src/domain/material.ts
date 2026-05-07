@@ -34,7 +34,6 @@ const cache = new WeakMap<Device, Map<string, Material>>();
 // 144 lightDirection (12 + 4 pad), 160 lightColor (12), 172 lightIntensity (4),
 // 176 explicit pad (12), 192 baseColor (12), 204 metallic (4), 208 roughness (4),
 // 212 trailing pad (12), total 224 bytes.
-export { UNIFORMS_BYTE_SIZE };
 
 export function pbrMaterial(spec: PbrMaterialSpec): Material {
   const metallic = spec.metallic ?? DEFAULT_METALLIC;

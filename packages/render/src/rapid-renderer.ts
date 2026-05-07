@@ -1,5 +1,16 @@
 import type { Device } from "@vgpu/core";
 import { RenderPass } from "./render-pass.ts";
+import {
+  UNIFORM_OFFSET_BASE_COLOR,
+  UNIFORM_OFFSET_CAMERA_POSITION,
+  UNIFORM_OFFSET_LIGHT_COLOR,
+  UNIFORM_OFFSET_LIGHT_DIRECTION,
+  UNIFORM_OFFSET_LIGHT_INTENSITY,
+  UNIFORM_OFFSET_METALLIC,
+  UNIFORM_OFFSET_MODEL,
+  UNIFORM_OFFSET_ROUGHNESS,
+  UNIFORM_OFFSET_VIEW_PROJECTION,
+} from "./domain/pbr-shader.ts";
 import type { Camera, Material, Mat4, Mesh, Vec3 } from "./domain/index.ts";
 import { UniformPool } from "./uniform-pool.ts";
 import { invalidUsage } from "./uniform-pool-internals.ts";
@@ -24,8 +35,15 @@ export interface DirectionalLight {
   readonly intensity: number;
 }
 
-const VIEW_PROJ = 0, MODEL = 16, CAMERA = 32, LIGHT_DIRECTION = 36, LIGHT_COLOR = 40;
-const LIGHT_INTENSITY = 43, BASE_COLOR = 48, METALLIC = 51, ROUGHNESS = 52;
+const VIEW_PROJ = UNIFORM_OFFSET_VIEW_PROJECTION / Float32Array.BYTES_PER_ELEMENT;
+const MODEL = UNIFORM_OFFSET_MODEL / Float32Array.BYTES_PER_ELEMENT;
+const CAMERA = UNIFORM_OFFSET_CAMERA_POSITION / Float32Array.BYTES_PER_ELEMENT;
+const LIGHT_DIRECTION = UNIFORM_OFFSET_LIGHT_DIRECTION / Float32Array.BYTES_PER_ELEMENT;
+const LIGHT_COLOR = UNIFORM_OFFSET_LIGHT_COLOR / Float32Array.BYTES_PER_ELEMENT;
+const LIGHT_INTENSITY = UNIFORM_OFFSET_LIGHT_INTENSITY / Float32Array.BYTES_PER_ELEMENT;
+const BASE_COLOR = UNIFORM_OFFSET_BASE_COLOR / Float32Array.BYTES_PER_ELEMENT;
+const METALLIC = UNIFORM_OFFSET_METALLIC / Float32Array.BYTES_PER_ELEMENT;
+const ROUGHNESS = UNIFORM_OFFSET_ROUGHNESS / Float32Array.BYTES_PER_ELEMENT;
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]) as Mat4;
 const DEFAULT_LIGHT = { direction: [-0.4, -0.7, -0.6], color: [1, 1, 1], intensity: 1 } as DirectionalLight;
 
@@ -71,8 +89,8 @@ export class RapidRenderer {
       depthStencilAttachment: { view: spec.depthTarget, depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" },
     });
     pass.setPipeline(material.pipeline);
-    pass.setBindGroup?.(0, slot.bindGroup, [dynamicOffset]);
-    pass.setVertexBuffer?.(0, spec.mesh.vertexBuffer.gpu);
+    pass.setBindGroup(0, slot.bindGroup, [dynamicOffset]);
+    pass.setVertexBuffer(0, spec.mesh.vertexBuffer.gpu);
     pass.draw(spec.mesh.vertexCount, 1, 0, 0);
     pass.end();
     this.device.queue.gpu.submit([encoder.finish()]);

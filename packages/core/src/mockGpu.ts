@@ -32,8 +32,8 @@ export function createMockGPUDevice(): GPUDevice {
       return {
         copyBufferToBuffer() {},
         copyTextureToBuffer() {},
-        // Mock render pass encoder: only pipeline/draw/end are exercised by these tests.
-        beginRenderPass: () => ({ setPipeline() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
+        // Mock render pass encoder: only binding/pipeline/draw/end methods used by tests are implemented.
+        beginRenderPass: () => ({ setBindGroup() {}, setVertexBuffer() {}, setPipeline() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
         finish: () => ({}),
       // Mock command encoder: only copy/render/finish methods used by core are implemented.
       } as unknown as GPUCommandEncoder;

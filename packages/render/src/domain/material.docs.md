@@ -31,6 +31,8 @@ const material = pbrMaterial({
 
 The shader expects one dynamic uniform binding at group 0, binding 0. Each record is 224 bytes and stores camera, model, light, and material values.
 
+`PbrMaterialSpec` is the input object shape for `pbrMaterial`: it includes `device`, `baseColor`, optional `metallic`, optional `roughness`, and optional `targetFormat`.
+
 `targetFormat` (optional, default `'bgra8unorm-srgb'`): the color attachment format the pipeline writes into. Pick `'rgba8unorm-srgb'` on platforms that don't support BGRA-srgb (e.g. some compatibility-mode backends). Both formats apply linear→sRGB encoding on store, so the shader continues to write linear values regardless.
 
 Materials are cached per device and parameter set. Calling `pbrMaterial` again with the same device, `baseColor`, `metallic`, `roughness`, and `targetFormat` returns the same object.
