@@ -5,7 +5,7 @@ import type { Mesh } from "../domain/mesh.ts";
 /** Render target wrapper for color, depth, and optional MSAA attachments. */
 export interface RenderTarget {
   readonly color: Texture;
-  readonly colors: readonly [Texture];
+  readonly colors: readonly [Texture, ...Texture[]];
   readonly depth?: Texture;
   readonly size: readonly [number, number];
   readonly format: GPUTextureFormat;
@@ -16,9 +16,12 @@ export interface RenderTarget {
 
 /** Raw GPU attachments and pass descriptor fragments owned by a render target. */
 export interface RenderTargetGpu {
+  readonly colorAttachments: readonly GPURenderPassColorAttachment[];
+  /** @deprecated use `colorAttachments[0]`; alias retained for one deprecation cycle. */
   readonly colorAttachment: GPURenderPassColorAttachment;
   readonly depthStencilAttachment?: GPURenderPassDepthStencilAttachment;
   readonly colorTexture: GPUTexture;
+  readonly colorTextures: readonly GPUTexture[];
   readonly resolveTexture?: GPUTexture;
   readonly depthTexture?: GPUTexture;
 }

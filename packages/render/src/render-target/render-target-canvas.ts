@@ -21,7 +21,7 @@ export function renderTargetForCanvas(context: GPUCanvasContext, options: Canvas
   const clearColor = colorDict(options.clearColor);
   const target = {
     get color(): Texture { return canvasTexture(context, options.label); },
-    get colors(): readonly [Texture] { return Object.freeze([this.color]) as readonly [Texture]; },
+    get colors(): readonly [Texture, ...Texture[]] { return Object.freeze([this.color]) as readonly [Texture, ...Texture[]]; },
     get depth(): undefined { return undefined; },
     get size(): readonly [number, number] { return canvasSize(context); },
     get format(): GPUTextureFormat { return canvasFormat(context); },
@@ -29,9 +29,12 @@ export function renderTargetForCanvas(context: GPUCanvasContext, options: Canvas
     get label(): string { return options.label ?? "canvas"; },
     get gpu(): RenderTargetGpu {
       const texture = context.getCurrentTexture();
+      const colorAttachment = { view: texture.createView(), loadOp: "clear" as const, storeOp: "store" as const, clearValue: clearColor };
       return Object.freeze({
-        colorAttachment: { view: texture.createView(), loadOp: "clear" as const, storeOp: "store" as const, clearValue: clearColor },
+        colorAttachments: Object.freeze([colorAttachment]),
+        colorAttachment,
         colorTexture: texture,
+        colorTextures: Object.freeze([texture]),
       });
     },
   } satisfies RenderTarget;
