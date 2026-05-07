@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # Required for npm Trusted Publishing OIDC
 
     steps:
       - name: Checkout release tag
@@ -37,6 +36,7 @@ jobs:
       - name: Run fast tests
         run: pnpm test:fast
 
-
       - name: Publish to npm
-        run: pnpm -r publish --access public --provenance --no-git-checks
+        run: pnpm -r publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
