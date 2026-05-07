@@ -3,7 +3,8 @@ import { selection } from "../selection.ts";
 import { addFan, build, copyWithoutFaces, p, requireSelection, tint } from "../operator-utils.ts";
 import type { EditableMesh, ElementSelection } from "../types.ts";
 
-export interface DissolveFacesResult { readonly mesh: EditableMesh; readonly descendants: { readonly resultFace: ElementSelection }; readonly warnings?: readonly MeshEditWarning[] }
+import { unwrapKernel } from "../kernel-handle.ts";
+export interface DissolveFacesResult { readonly mesh: EditableMesh; readonly resultFace: ElementSelection; readonly warnings?: readonly MeshEditWarning[] }
 
 export function dissolveFaces(em: EditableMesh, faces: ElementSelection): DissolveFacesResult {
   requireSelection(faces, "face");
@@ -18,12 +19,12 @@ export function dissolveFaces(em: EditableMesh, faces: ElementSelection): Dissol
     if (loop.length > 3 || comp.size > 1) warnings.push(new MeshEditWarning("DISSOLVE_FACES_RETRIANGULATED", "Dissolved face region was represented as deterministic triangles by the triangle-only editable mesh."));
   }
   const mesh = build(parts), resultFace = selection("face", Array.from({ length: made }, (_, i) => start + i)); tint(mesh, Array.from({ length: mesh.faceCount }, (_, i) => i));
-  const out = { mesh, descendants: { resultFace } };
+  const out = { mesh, resultFace };
   return warnings.length ? { ...out, warnings } : out;
 }
 
 function components(em: EditableMesh, selected: ReadonlySet<number>): Set<number>[] {
-  const k = em.gpu.halfEdgeKernel, pending = new Set(selected), out: Set<number>[] = [];
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), pending = new Set(selected), out: Set<number>[] = [];
   while (pending.size) {
     const first = pending.values().next().value as number, comp = new Set<number>(), stack = [first]; pending.delete(first);
     while (stack.length) {
@@ -36,7 +37,7 @@ function components(em: EditableMesh, selected: ReadonlySet<number>): Set<number
 }
 
 function boundaryLoop(em: EditableMesh, comp: ReadonlySet<number>): number[] {
-  const k = em.gpu.halfEdgeKernel, adj = new Map<number, number[]>();
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), adj = new Map<number, number[]>();
   for (const f of comp) for (let c = 0; c < 3; c++) {
     const e = k.faceEdges[f * 3 + c], a = k.edgeFaceA[e], b = k.edgeFaceB[e];
     if (comp.has(a) && comp.has(b)) continue;
@@ -62,10 +63,10 @@ function avoidInternalDiagonals(em: EditableMesh, comp: ReadonlySet<number>, loo
 }
 
 function internalEdges(em: EditableMesh, comp: ReadonlySet<number>): Set<string> {
-  const k = em.gpu.halfEdgeKernel, out = new Set<string>();
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), out = new Set<string>();
   for (const f of comp) for (const e of k.faceEdges.slice(f * 3, f * 3 + 3)) if (comp.has(k.edgeFaceA[e]) && comp.has(k.edgeFaceB[e])) out.add(edgeKey(k.edgeVertexA[e], k.edgeVertexB[e]));
   return out;
 }
 function add(adj: Map<number, number[]>, a: number, b: number): void { adj.set(a, [...(adj.get(a) ?? []), b]); }
 function edgeKey(a: number, b: number): string { return a < b ? `${a}:${b}` : `${b}:${a}`; }
-function orSmooth(em: EditableMesh, faces: ReadonlySet<number>): number { const k = em.gpu.halfEdgeKernel; for (const f of faces) if (k.useSmooth[f]) return 1; return 0; }
+function orSmooth(em: EditableMesh, faces: ReadonlySet<number>): number { const k = unwrapKernel(em.gpu.halfEdgeKernel); for (const f of faces) if (k.useSmooth[f]) return 1; return 0; }

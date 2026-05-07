@@ -7,6 +7,7 @@ import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "
 import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
 import { octahedron } from "./fixtures/dissolve.ts";
 import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";
+import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 
 interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces" | "merge-by-distance" | "heal-manifold" | "recompute-normals"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight?: ElementSelection; readonly highlightOn?: "before" | "after" }
 
@@ -19,12 +20,12 @@ const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const sf = subdivideFaces(base, base.faces.all());
   const lc = loopCut(base, base.edges.scoreBy((edge) => Math.abs(edge.direction[1])).top().indices[0]);
   return [
-    { name: "extrude", before: base, after: e.mesh, highlight: e.descendants.capFaces },
-    { name: "bevel", before: base, after: b.mesh, highlight: b.descendants.newFaces },
-    { name: "inset", before: base, after: i.mesh, highlight: i.descendants.insetFaces },
-    { name: "subdivide-edges", before: base, after: se.mesh, highlight: se.descendants.newEdges },
-    { name: "subdivide-faces", before: base, after: sf.mesh, highlight: sf.descendants.newFaces },
-    { name: "loop-cut", before: base, after: lc.mesh, highlight: lc.descendants.insertedLoop },
+    { name: "extrude", before: base, after: e.mesh, highlight: e.capFaces },
+    { name: "bevel", before: base, after: b.mesh, highlight: b.newFaces },
+    { name: "inset", before: base, after: i.mesh, highlight: i.insetFaces },
+    { name: "subdivide-edges", before: base, after: se.mesh, highlight: se.newEdges },
+    { name: "subdivide-faces", before: base, after: sf.mesh, highlight: sf.newFaces },
+    { name: "loop-cut", before: base, after: lc.mesh, highlight: lc.insertedLoop },
   ];
 };
 
@@ -32,9 +33,9 @@ const makeConnectivityCases = (): readonly Case[] => {
   const hole = openCube(), plates = twoPlates();
   const br = bridge(plates, plateLoops(plates)), fh = fillHole(hole, topHoleLoop(hole)), gf = gridFill(hole, topHoleLoop(hole));
   return [
-    { name: "bridge", before: plates, after: br.mesh, highlight: br.descendants.bridgeFaces },
-    { name: "fill-hole", before: hole, after: fh.mesh, highlight: fh.descendants.newFaces },
-    { name: "grid-fill", before: hole, after: gf.mesh, highlight: gf.descendants.newFaces },
+    { name: "bridge", before: plates, after: br.mesh, highlight: br.bridgeFaces },
+    { name: "fill-hole", before: hole, after: fh.mesh, highlight: fh.newFaces },
+    { name: "grid-fill", before: hole, after: gf.mesh, highlight: gf.newFaces },
   ];
 };
 
@@ -50,15 +51,15 @@ const makeDissolveCases = (): readonly Case[] => {
 };
 
 const makeCleanupCases = (): readonly Case[] => {
-  const mBase = mergeDuplicateTetra(), mSel = mBase.vertices.byIndex([0, 4]), m = mergeByDistance(mBase, mSel, { threshold: 0.3 });
+  const mBase = mergeDuplicateTetra(), mSel = mBase.vertices.byIndex([0, 4]), m = mergeByDistance(mBase, { selection: mSel, threshold: 0.3 });
   const hBase = nonManifoldTetra(), h = healManifold(hBase), hSel = hBase.faces.byIndex([4]);
   tintFirstFace(m.mesh); tintFirstFace(h.mesh);
-  const rBase = bentSmoothPair(); rBase.gpu.halfEdgeKernel.faceNormals.set([1, 0, 0], 0); const r = recomputeNormals(rBase, { creaseAngle: Math.PI });
+  const rBase = bentSmoothPair(); unwrapKernel(rBase.gpu.halfEdgeKernel).faceNormals.set([1, 0, 0], 0); const r = recomputeNormals(rBase, { creaseAngle: Math.PI });
   return [
     { name: "merge-by-distance", before: mBase, after: m.mesh, highlight: mSel, highlightOn: "before" },
     { name: "heal-manifold", before: hBase, after: h.mesh, highlight: hSel, highlightOn: "before" },
     // recomputeNormals is a pure-attribute op with no descendants; this battery intentionally omits a highlight snapshot.
-    { name: "recompute-normals", before: rBase, after: r.mesh },
+    { name: "recompute-normals", before: rBase, after: r },
   ];
 };
 
@@ -91,11 +92,11 @@ for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-fac
 }
 
 function edgeBetween(em: EditableMeshValue, a: number, b: number): number {
-  const k = em.gpu.halfEdgeKernel, lo = Math.min(a, b), hi = Math.max(a, b);
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), lo = Math.min(a, b), hi = Math.max(a, b);
   for (let e = 0; e < k.edgeCount; e++) if (k.edgeVertexA[e] === lo && k.edgeVertexB[e] === hi) return e;
   throw new Error("missing edge");
 }
 
 function tintFirstFace(em: EditableMeshValue): void {
-  if (em.faceCount) em.gpu.halfEdgeKernel.faceNormals.set([0.577, 0.577, 0.577], 0);
+  if (em.faceCount) unwrapKernel(em.gpu.halfEdgeKernel).faceNormals.set([0.577, 0.577, 0.577], 0);
 }

@@ -33,5 +33,5 @@ export type { DissolveEdgesOptions, DissolveEdgesResult } from "./operators/diss
 export type { DissolveFacesResult } from "./operators/dissolve-faces.ts";
 export type { MergeByDistanceOptions, MergeByDistanceResult } from "./operators/merge-by-distance.ts";
 export type { HealManifoldReport, HealManifoldResult } from "./operators/heal-manifold.ts";
-export type { RecomputeNormalsOptions, RecomputeNormalsResult } from "./operators/recompute-normals.ts";
-export type { EditableMesh as EditableMeshValue, EdgeView, ElementDomain, ElementSelection, ElementSet, FaceView, ScoredSelection, VertexView } from "./types.ts";
+export type { RecomputeNormalsOptions } from "./operators/recompute-normals.ts";
+export type { EditableMesh as EditableMeshValue, EdgeView, ElementDomain, ElementSelection, ElementSet, FaceView, KernelHandle, ScoredSelection, VertexView } from "./types.ts";

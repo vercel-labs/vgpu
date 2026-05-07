@@ -1,9 +1,10 @@
 import { MeshEditError, fillHole } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { openCube, topHoleLoop } from "./fixtures/connectivity.ts";
+import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
+import { editableSignature } from "./_helpers.ts";
 
 const euler = (em: ReturnType<typeof openCube>) => em.vertexCount - em.edgeCount + em.faceCount;
-const signature = (em: ReturnType<typeof openCube>) => [em.vertexCount, em.edgeCount, em.faceCount, ...Array.from(em.gpu.halfEdgeKernel.positions), ...Array.from(em.gpu.halfEdgeKernel.faceVertices)];
 
 describe("fillHole", () => {
   test("fills an N-gon hole with N-2 triangles and closes the manifold", () => {
@@ -15,14 +16,14 @@ describe("fillHole", () => {
 
   test("returns new face descendants", () => {
     const em = openCube(), result = fillHole(em, topHoleLoop(em));
-    expect(result.descendants.newFaces.domain).toBe("face");
-    expect(result.descendants.newFaces.indices).toEqual([em.faceCount, em.faceCount + 1]);
+    expect(result.newFaces.domain).toBe("face");
+    expect(result.newFaces.indices).toEqual([em.faceCount, em.faceCount + 1]);
   });
 
   test("preserves boundary sharp edges and makes new faces smooth", () => {
-    const em = openCube(), boundary = topHoleLoop(em); for (const e of boundary.indices) em.gpu.halfEdgeKernel.isSharp[e] = 1;
-    const result = fillHole(em, boundary), k = result.mesh.gpu.halfEdgeKernel;
-    expect(result.descendants.newFaces.indices.every((f) => k.useSmooth[f] === 1)).toBe(true);
+    const em = openCube(), boundary = topHoleLoop(em); for (const e of boundary.indices) unwrapKernel(em.gpu.halfEdgeKernel).isSharp[e] = 1;
+    const result = fillHole(em, boundary), k = unwrapKernel(result.mesh.gpu.halfEdgeKernel);
+    expect(result.newFaces.indices.every((f) => k.useSmooth[f] === 1)).toBe(true);
     expect(result.mesh.hardEdges.count).toBeGreaterThanOrEqual(boundary.count);
   });
 
@@ -39,7 +40,6 @@ describe("fillHole", () => {
 
   test("is deterministic for repeated inputs", () => {
     const em = openCube(), sel = topHoleLoop(em), a = fillHole(em, sel), b = fillHole(em, sel);
-    expect(a.descendants).toEqual(b.descendants);
-    expect(signature(a.mesh)).toEqual(signature(b.mesh));
+    expect(editableSignature(a.mesh)).toEqual(editableSignature(b.mesh));
   });
 });
