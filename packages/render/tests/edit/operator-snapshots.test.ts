@@ -3,13 +3,20 @@ import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
 import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
-import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "./_helpers.ts";
+import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, renderEditMeshWireframe, sha } from "./_helpers.ts";
 import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
 import { octahedron } from "./fixtures/dissolve.ts";
 import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 
-interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces" | "merge-by-distance" | "heal-manifold" | "recompute-normals"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight?: ElementSelection; readonly highlightOn?: "before" | "after" }
+interface Case { readonly name: OperatorName; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight?: ElementSelection; readonly highlightOn?: "before" | "after" }
+type OperatorName = "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill" | "dissolve-vertices" | "dissolve-edges" | "dissolve-faces" | "merge-by-distance" | "heal-manifold" | "recompute-normals";
+const WIREFRAME_OPERATORS = new Set<OperatorName>(["subdivide-edges", "subdivide-faces", "loop-cut", "dissolve-vertices", "dissolve-edges", "dissolve-faces", "merge-by-distance"]);
+const WIREFRAME_COLORS: Record<OperatorName, readonly [number, number, number]> = {
+  extrude: [1, 1, 1], bevel: [1, 1, 1], inset: [1, 1, 1], bridge: [1, 1, 1], "fill-hole": [1, 1, 1], "grid-fill": [1, 1, 1], "heal-manifold": [1, 1, 1], "recompute-normals": [1, 1, 1],
+  "subdivide-edges": [1, 1, 1], "subdivide-faces": [0.98, 1, 1], "loop-cut": [1, 0.98, 1],
+  "dissolve-vertices": [1, 1, 0.98], "dissolve-edges": [0.98, 0.98, 1], "dissolve-faces": [1, 0.98, 0.98], "merge-by-distance": [0.99, 1, 0.98],
+};
 
 const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const top = base.faces.scoreBy((f) => f.center[1]).top();
@@ -76,12 +83,32 @@ for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-fac
         await expectEditSnapshot(`${op}-after-${angle}.png`, a);
         expect(sha(b)).not.toBe(sha(a));
       }
+      if (WIREFRAME_OPERATORS.has(op)) {
+        const wireframe = new Map<string, Uint8Array>();
+        for (const angle of Object.keys(ANGLES) as (keyof typeof ANGLES)[]) {
+          const bw = await renderEditMeshWireframe(device, c.before.toRenderMesh({ device }), angle, WIREFRAME_COLORS[op]);
+          const aw = await renderEditMeshWireframe(device, c.after.toRenderMesh({ device }), angle, WIREFRAME_COLORS[op]);
+          wireframe.set(`before-${angle}`, bw); wireframe.set(`after-${angle}`, aw);
+          await expectEditSnapshot(`${op}-before-${angle}-wireframe.png`, bw);
+          await expectEditSnapshot(`${op}-after-${angle}-wireframe.png`, aw);
+          expect(sha(bw)).not.toBe(sha(before.get(angle)!));
+          expect(sha(aw)).not.toBe(sha(after.get(angle)!));
+          expect(sha(bw)).not.toBe(sha(aw));
+        }
+        expect(new Set([...wireframe.values()].map(sha)).size).toBe(wireframe.size);
+      }
       if (c.highlight) {
         const hiBase = c.highlightOn === "before" ? c.before : c.after;
-        const hi = await renderEditMesh(device, highlightMesh(device, hiBase, c.highlight), "iso");
+        const hiMesh = highlightMesh(device, hiBase, c.highlight);
+        const hi = await renderEditMesh(device, hiMesh, "iso");
         const hiName = c.highlightOn === "before" ? `${op}-before-highlight-iso.png` : `${op}-after-highlight-iso.png`;
         await expectEditSnapshot(hiName, hi);
         expect(sha(hi)).not.toBe(sha((c.highlightOn === "before" ? before : after).get("iso")!));
+        if (WIREFRAME_OPERATORS.has(op)) {
+          const hiWireframe = await renderEditMeshWireframe(device, hiMesh, "iso", WIREFRAME_COLORS[op]);
+          await expectEditSnapshot(`${hiName.slice(0, -4)}-wireframe.png`, hiWireframe);
+          expect(sha(hiWireframe)).not.toBe(sha(hi));
+        }
       }
       for (const set of [before, after]) {
         const hashes = [...set.values()].map(sha);

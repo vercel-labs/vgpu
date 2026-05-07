@@ -4,18 +4,52 @@ import { join } from "node:path";
 import { PNG } from "pngjs";
 import { expect } from "vitest";
 import type { Device } from "@vgpu/core";
-import { degToRad, perspectiveCamera, type Mesh, type Vec3 } from "@vgpu/render";
+import { degToRad, perspectiveCamera, type Mat4, type Mesh, type Vec3 } from "@vgpu/render";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import type { EditableMesh, ElementSelection } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 import { renderInspectFrame } from "../inspect/_helpers.ts";
+import { wireframeOverlayMaterial } from "./fixtures/wireframe-overlay-material.ts";
 
 export const SNAPSHOT_DIR = "packages/render/tests/edit/__snapshots__";
 export const ANGLES = { front: [0, 0.5, 3], iso: [2, 2, 3], side: [3, 0.75, 0.25] } as const;
+const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]) as Mat4;
 
 export async function renderEditMesh(device: Device, mesh: Mesh, angle: keyof typeof ANGLES): Promise<Uint8Array> {
   const material = normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
   return renderInspectFrame({ device, material, vertexBuffer: mesh.vertexBuffer.gpu, vertexCount: mesh.vertexCount, camera: camera(angle), targetFormat: "rgba8unorm-srgb" });
+}
+
+export async function renderEditMeshWireframe(device: Device, mesh: Mesh, angle: keyof typeof ANGLES, wireColor: readonly [number, number, number] = [1, 1, 1]): Promise<Uint8Array> {
+  const color = device.createTexture({ size: [256, 256], format: "rgba8unorm-srgb", usage: ["render_attachment", "copy_src"] });
+  const depth = device.createTexture({ size: [256, 256], format: "depth24plus", usage: ["render_attachment"] });
+  const base = normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
+  const overlay = wireframeOverlayMaterial({ device, targetFormat: "rgba8unorm-srgb", color: wireColor });
+  const baseUniform = device.createBuffer({ label: "edit-wireframe.base-uniform", size: base.uniformByteSize, usage: ["uniform", "copy_dst"] });
+  const overlayUniform = device.createBuffer({ label: "edit-wireframe.overlay-uniform", size: overlay.uniformByteSize, usage: ["uniform", "copy_dst"] });
+  try {
+    const cam = camera(angle), modelMatrix = IDENTITY;
+    const baseBindGroup = device.gpu.createBindGroup({ layout: base.bindGroupLayout, entries: [{ binding: 0, resource: { buffer: baseUniform.gpu } }] });
+    const overlayBindGroup = device.gpu.createBindGroup({ layout: overlay.bindGroupLayout, entries: [{ binding: 0, resource: { buffer: overlayUniform.gpu } }] });
+    base.writeUniforms(baseUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjectionMatrix, modelMatrix });
+    overlay.writeUniforms(overlayUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjectionMatrix, modelMatrix });
+
+    const encoder = device.gpu.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{ view: color.createView(), loadOp: "clear", storeOp: "store", clearValue: { r: 0.05, g: 0.05, b: 0.08, a: 1 } }],
+      depthStencilAttachment: { view: depth.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" },
+    });
+    pass.setVertexBuffer(0, mesh.vertexBuffer.gpu);
+    pass.setPipeline(base.pipeline); pass.setBindGroup(0, baseBindGroup); pass.draw(mesh.vertexCount, 1, 0, 0);
+    pass.setPipeline(overlay.pipeline); pass.setBindGroup(0, overlayBindGroup); pass.draw(mesh.vertexCount, 1, 0, 0);
+    pass.end();
+    device.queue.gpu.submit([encoder.finish()]);
+    const png = new PNG({ width: 256, height: 256 });
+    png.data.set(await color.read());
+    return PNG.sync.write(png);
+  } finally {
+    baseUniform.destroy(); overlayUniform.destroy(); depth.destroy(); color.destroy();
+  }
 }
 
 export function highlightMesh(device: Device, em: EditableMesh, sel: ElementSelection): Mesh {
