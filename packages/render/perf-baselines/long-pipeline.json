@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "scenario": "long-pipeline-5ops-100iter",
+  "node": "v20.20.0",
+  "arch": "arm64",
+  "ms": 138.37124999999997,
+  "heapDeltaBytes": 8700472,
+  "capturedAt": "2026-05-07T06:10:31.893Z"
+}

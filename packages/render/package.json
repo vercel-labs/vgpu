@@ -6,16 +6,21 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./inspect": { "types": "./dist/inspect/index.d.ts", "import": "./dist/inspect/index.js" },
-    "./passes": { "types": "./dist/passes/index.d.ts", "import": "./dist/passes/index.js" },
-    "./utils": { "types": "./dist/utils/index.d.ts", "import": "./dist/utils/index.js" }
+    "./utils": { "types": "./dist/utils/index.d.ts", "import": "./dist/utils/index.js" },
+    "./edit": { "types": "./dist/edit/index.d.ts", "import": "./dist/edit/index.js" }
   },
   "files": ["dist", "!dist/tsconfig.tsbuildinfo", "src/**/*.docs.md"],
-  "scripts": { "build": "tsc -b" },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "tsc -b --pretty false",
+    "test": "cd ../.. && vitest run packages/render"
+  },
   "dependencies": { "@vgpu/core": "workspace:*", "wgpu-matrix": "^3.4.2" },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 49152,
     "./inspect": 4096,
-    "./passes": 2048,
-    "./utils": 2048
+    "./utils": 2048,
+    "./edit": 25600
   }
 }
