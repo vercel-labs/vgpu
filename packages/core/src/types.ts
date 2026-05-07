@@ -31,5 +31,7 @@ export interface TextureOptions {
   readonly size: readonly [width: number, height: number, depthOrArrayLayers?: number];
   readonly format: GPUTextureFormat;
   readonly usage: readonly TextureUsageName[];
+  /** Number of samples per pixel. Use 4 for MSAA; default 1. WebGPU spec restricts color render targets to sampleCount 1 or 4. */
+  readonly sampleCount?: 1 | 4;
   readonly label?: string;
 }
