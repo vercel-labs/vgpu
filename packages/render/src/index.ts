@@ -11,5 +11,5 @@ export type {
   RenderPassDynamicOffsets,
   RenderPassOptions,
 } from "./render-pass.ts";
-export { degToRad, Mesh, orthographicCamera, pbrMaterial, perspectiveCamera, srgb } from "./domain/index.ts";
-export type { Camera, Material, Mat4, PbrMaterialSpec, Vec3 } from "./domain/index.ts";
+export { degToRad, material, Mesh, orthographicCamera, pbrMaterial, perspectiveCamera, srgb } from "./domain/index.ts";
+export type { Camera, Material, MaterialSpec, Mat4, PbrMaterialSpec, Vec3, VertexLayoutKind, WgslUniformType } from "./domain/index.ts";

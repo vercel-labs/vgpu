@@ -7,12 +7,25 @@ export interface MaterialParams {
   readonly roughness: number;
 }
 
+export type MaterialUniformValue = number | readonly number[] | Float32Array | Uint32Array | Int32Array;
+
+export interface MaterialGpu {
+  readonly pipeline: GPURenderPipeline;
+  readonly bindGroup?: GPUBindGroup;
+  readonly uniformBuffer?: GPUBuffer;
+}
+
 export interface Material {
   readonly pipeline: GPURenderPipeline;
   readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly bindGroup?: GPUBindGroup;
   readonly shader: Shader;
   readonly uniformByteSize: number;
+  readonly uniformOffsets?: Readonly<Record<string, number>>;
   readonly params: MaterialParams;
+  readonly gpu?: MaterialGpu;
+  readonly writeUniforms?: (values: Record<string, MaterialUniformValue>) => void;
+  readonly dispose?: () => void;
 }
 
 export interface PbrMaterialSpec {
@@ -60,7 +73,8 @@ export function pbrMaterial(spec: PbrMaterialSpec): Material {
   });
 
   const params = { baseColor: [red, green, blue] as readonly [number, number, number], metallic, roughness };
-  const material = Object.freeze({ pipeline, bindGroupLayout, shader, uniformByteSize: UNIFORMS_BYTE_SIZE, params });
+  const gpu = Object.freeze({ pipeline });
+  const material = Object.freeze({ pipeline, bindGroupLayout, shader, uniformByteSize: UNIFORMS_BYTE_SIZE, params, gpu });
   materials.set(key, material);
   return material;
 }
