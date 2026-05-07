@@ -24,13 +24,16 @@ export function createMockGPUDevice(): GPUDevice {
       } as unknown as MockGPUTexture;
     },
     createShaderModule: () => ({}) as GPUShaderModule,
+    createBindGroupLayout: () => ({}) as GPUBindGroupLayout,
+    createPipelineLayout: () => ({}) as GPUPipelineLayout,
+    createBindGroup: () => ({}) as GPUBindGroup,
     createRenderPipeline: () => ({}) as GPURenderPipeline,
     createCommandEncoder() {
       return {
         copyBufferToBuffer() {},
         copyTextureToBuffer() {},
-        // Mock render pass encoder: only pipeline/draw/end are exercised by these tests.
-        beginRenderPass: () => ({ setPipeline() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
+        // Mock render pass encoder: only binding/pipeline/draw/end methods used by tests are implemented.
+        beginRenderPass: () => ({ setBindGroup() {}, setVertexBuffer() {}, setPipeline() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
         finish: () => ({}),
       // Mock command encoder: only copy/render/finish methods used by core are implemented.
       } as unknown as GPUCommandEncoder;
@@ -38,8 +41,8 @@ export function createMockGPUDevice(): GPUDevice {
     destroy() {},
     queue: {
       submit() {},
-      writeBuffer(buffer: GPUBuffer, offset: number, data: BufferSource) {
-        if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data), offset);
+      writeBuffer(buffer: GPUBuffer, offset: number, data: BufferSource, dataOffset = 0, size?: number) {
+        if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data).subarray(dataOffset, size ? dataOffset + size : undefined), offset);
       },
       onSubmittedWorkDone: async () => undefined,
     },

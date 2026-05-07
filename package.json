@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render",
     "test:docker": "docker build --platform linux/arm64 -t vgpu-test:s2 -f infra/test-docker/Dockerfile . && docker run --rm vgpu-test:s2 sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=$!; VGPU_DOCKER_TEST=1 pnpm test; status=$?; kill $xvfb_pid; exit $status'",
+    "generate-lit-cube-snapshot": "pnpm exec esbuild scripts/generate-lit-cube-snapshot.ts --bundle --platform=node --format=esm --external:pngjs --external:webgpu --outfile=packages/adapter-node/dist/generate-lit-cube-snapshot.mjs && node packages/adapter-node/dist/generate-lit-cube-snapshot.mjs",
     "bundle-check": "node scripts/check-bundle-size.mjs"
   },
   "devDependencies": {

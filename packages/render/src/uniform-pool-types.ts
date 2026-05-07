@@ -7,14 +7,16 @@ export interface UniformPoolOptions {
 export interface UniformLayout<T> {
   readonly size: number;
   readonly bindings?: readonly GPUBindGroupLayoutEntry[];
+  /** Optional layout to share with the pipeline that will consume this slot. */
+  readonly bindGroupLayout?: GPUBindGroupLayout;
   encode(value: T, dst: ArrayBuffer, byteOffset: number): void;
 }
 
 export interface UniformSlot<T> {
   readonly pool: UniformPool;
   readonly layout: UniformLayout<T>;
-  readonly bindGroup: GPUBindGroup | null;
-  readonly bindGroupLayout: GPUBindGroupLayout | null;
+  readonly bindGroup: GPUBindGroup;
+  readonly bindGroupLayout: GPUBindGroupLayout;
   readonly gpu: GPUBuffer;
   readonly stride: number;
   push(value: T): number;

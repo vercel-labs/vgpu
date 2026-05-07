@@ -7,7 +7,7 @@ options, and provides deterministic `rgba8unorm` readback for snapshot tests.
 `TextureOptions` contains:
 
 - `size`: `[width, height, depthOrArrayLayers?]`.
-- `format`: currently readback-supported for `"rgba8unorm"`.
+- `format`: currently readback-supported for `"rgba8unorm"` and `"rgba8unorm-srgb"`.
 - `usage`: texture usage names such as `"render_attachment"` and `"copy_src"`.
 - `label`: optional WebGPU label.
 
