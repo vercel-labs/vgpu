@@ -1,25 +1,31 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
-import { bevel, extrude, inset, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
+import { bevel, extrude, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "./_helpers.ts";
 
-interface Case { readonly name: "extrude" | "bevel" | "inset"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection }
+interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection }
 
 const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const top = base.faces.scoreBy((f) => f.center[1]).top();
   const e = extrude(base, top, { distance: 0.35 });
   const b = bevel(base, base.hardEdges, { offset: 0.08 });
   const i = inset(base, top, { thickness: 0.22, depth: 0.04 });
+  const se = subdivideEdges(base, base.edges.all());
+  const sf = subdivideFaces(base, base.faces.all());
+  const lc = loopCut(base, base.edges.scoreBy((edge) => Math.abs(edge.direction[1])).top().indices[0]);
   return [
     { name: "extrude", before: base, after: e.mesh, highlight: e.descendants.capFaces },
     { name: "bevel", before: base, after: b.mesh, highlight: b.descendants.newFaces },
     { name: "inset", before: base, after: i.mesh, highlight: i.descendants.insetFaces },
+    { name: "subdivide-edges", before: base, after: se.mesh, highlight: se.descendants.newEdges },
+    { name: "subdivide-faces", before: base, after: sf.mesh, highlight: sf.descendants.newFaces },
+    { name: "loop-cut", before: base, after: lc.mesh, highlight: lc.descendants.insertedLoop },
   ];
 };
 
-for (const op of ["extrude", "bevel", "inset"] as const) {
+for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut"] as const) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
     const { device } = await App.create({ adapter: createNodeAdapter() });
     try {
