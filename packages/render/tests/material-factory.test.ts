@@ -36,9 +36,9 @@ test("material throws VGPU-CORE-INVALID-USAGE if uniform name shadows 'uniforms'
   device.destroy();
 });
 
-test("material throws VGPU-CORE-INVALID-USAGE if vertex shader fails to parse", async () => {
+test("material throws VGPU-CORE-INVALID-USAGE if shader compilation fails", async () => {
   const { device } = await testDevice();
-  expect(() => material({ device, vertex: "@vertex fn vs_main( {", fragment, uniforms: {}, vertexLayout: "position-only" })).toThrow(/VGPU-CORE-INVALID-USAGE|WGSL error/);
+  expect(() => material({ device, vertex: "import { missing } from './missing.wgsl';", fragment, uniforms: {}, vertexLayout: "position-only" })).toThrow(/VGPU-CORE-INVALID-USAGE|WGSL error/);
   device.destroy();
 });
 

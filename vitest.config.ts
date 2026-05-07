@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["packages/**/*.test.ts"],
-    setupFiles: ["packages/render/tests/imageSnapshot.ts"],
+    setupFiles: ["packages/render/tests/image-snapshot.ts"],
     poolMatchGlobs: [["{packages/adapter-node/tests/**,packages/render/tests/**}", "forks"]],
     testTimeout: 30_000,
   },

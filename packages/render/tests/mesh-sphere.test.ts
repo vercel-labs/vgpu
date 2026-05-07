@@ -50,6 +50,7 @@ test("Mesh.sphere validates params with VGPU-CORE-INVALID-USAGE", async () => {
 
   expectInvalid(() => Mesh.sphere({ device, widthSegments: 2 }));
   expectInvalid(() => Mesh.sphere({ device, radius: 0 }));
+  expectInvalid(() => Mesh.sphere({ device, widthSegments: 256, heightSegments: 256 }), /uint16/);
 
   device.destroy();
 });
@@ -68,7 +69,10 @@ function assertNormalMatchesPosition(vertices: Float32Array, index: number, radi
   expect(nz).toBeCloseTo(pz / radius, 5);
 }
 
-function expectInvalid(fn: () => unknown): void {
+function expectInvalid(fn: () => unknown, message?: RegExp): void {
   try { fn(); throw new Error("Expected VGPU-CORE-INVALID-USAGE"); }
-  catch (error) { expect(error).toMatchObject({ code: "VGPU-CORE-INVALID-USAGE" }); }
+  catch (error) {
+    expect(error).toMatchObject({ code: "VGPU-CORE-INVALID-USAGE" });
+    if (message) expect(error).toMatchObject({ message: expect.stringMatching(message) });
+  }
 }

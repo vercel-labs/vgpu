@@ -41,7 +41,7 @@ export class RapidRenderer {
 
 function bindMesh(pass: GPURenderPassEncoder, mesh: Mesh, vertexCount: number): void {
   pass.setVertexBuffer(0, mesh.gpu?.vertexBuffer ?? mesh.vertexBuffer.gpu);
-  if (mesh.indexBuffer && mesh.indexCount && mesh.indexFormat) {
+  if (mesh.indexBuffer !== undefined && mesh.indexCount !== undefined && mesh.indexFormat !== undefined) {
     pass.setIndexBuffer(mesh.gpu?.indexBuffer ?? mesh.indexBuffer.gpu, mesh.indexFormat);
     pass.drawIndexed(mesh.indexCount, 1, 0, 0, 0);
     return;

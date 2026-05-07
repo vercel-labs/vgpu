@@ -32,7 +32,6 @@ export function material(spec: MaterialSpec): FactoryMaterial {
   validateSchema(spec.uniforms);
   const layout = alignUniforms(spec.uniforms);
   const code = `${header(layout.fields)}\n${spec.vertex}\n${spec.fragment}`;
-  validateWgslShape(code);
   const shader = createShader(spec.device, code);
   const bindGroupLayout = spec.device.gpu.createBindGroupLayout({
     label: "material.bgl",
@@ -114,13 +113,6 @@ function writeField(view: DataView, field: UniformField, value: UniformValue): v
 
 function set(view: DataView, setter: "setFloat32" | "setUint32" | "setInt32", offset: number, value: number): void {
   view[setter](offset, value, true);
-}
-
-function validateWgslShape(code: string): void {
-  for (const [open, close] of [["(", ")"], ["{", "}"], ["[", "]"]] as const) {
-    const delta = [...code].reduce((sum, char) => sum + (char === open ? 1 : char === close ? -1 : 0), 0);
-    if (delta !== 0) throw invalidUsage("material", `WGSL error: unbalanced '${open}${close}' delimiters.`);
-  }
 }
 
 function messageOf(error: unknown): string {
