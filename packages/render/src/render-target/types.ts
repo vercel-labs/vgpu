@@ -73,7 +73,7 @@ export interface PassSpec {
   readonly mesh: Mesh;
   readonly target: PassTarget;
   readonly depthTarget?: Texture | GPUTextureView;
-  readonly clearColor?: ClearColor;
+  readonly clearColor?: ClearColor | readonly (ClearColor | undefined)[];
   readonly colorLoadOp?: "clear" | "load";
   readonly depthLoadOp?: "clear" | "load";
   readonly depthClearValue?: number;

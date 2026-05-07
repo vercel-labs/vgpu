@@ -1,7 +1,7 @@
 import { ValidationError, type Device, type Texture } from "@vgpu/core";
 import type { Material } from "../domain/material.ts";
 import type { Mesh } from "../domain/mesh.ts";
-import type { PassSpec, PassTarget, RenderTarget } from "../render-target/types.ts";
+import type { ClearColor, PassSpec, PassTarget, RenderTarget } from "../render-target/types.ts";
 
 const DEFAULT_CLEAR_COLOR = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 
@@ -46,13 +46,16 @@ export function pass(spec: PassSpec): void {
 function colorAttachmentsFor(target: PassTarget, spec: PassSpec): readonly GPURenderPassColorAttachment[] {
   const loadOp = spec.colorLoadOp ?? "clear";
   if (isRenderTarget(target)) {
-    return target.gpu.colorAttachments.map((source) => {
+    if (target.gpu.colorAttachments.length > 1 && target.sampleCount !== 1) throw invalidUsage("MRT pass targets do not support MSAA in v2.");
+    const clearColors = clearColorsForRenderTarget(target, spec.clearColor);
+    return target.gpu.colorAttachments.map((source, index) => {
       const attachment = { ...source };
       attachment.loadOp = spec.colorLoadOp ?? attachment.loadOp;
-      attachment.clearValue = spec.clearColor ? colorDict(spec.clearColor) : attachment.clearValue;
+      attachment.clearValue = clearColors?.[index] === undefined ? attachment.clearValue : colorDict(clearColors[index]);
       return attachment;
     });
   }
+  if (isPerAttachmentClear(spec.clearColor)) throw invalidUsage("per-attachment clearColor requires a multi-color RenderTarget target.");
   if (isTexture(target)) return [{ view: target.createView(), loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) }];
   if (isTextureView(target)) return [{ view: target, loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) }];
   throw invalidTarget();
@@ -102,7 +105,20 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function colorDict(color: PassSpec["clearColor"]): GPUColorDict {
+function clearColorsForRenderTarget(target: RenderTarget, color: PassSpec["clearColor"]): readonly (ClearColor | undefined)[] | undefined {
+  if (color === undefined) return undefined;
+  if (!isPerAttachmentClear(color)) return target.gpu.colorAttachments.map(() => color);
+  if (color.length !== target.gpu.colorAttachments.length) {
+    throw invalidUsage(`pass() clearColor array length ${color.length} must match RenderTarget color attachment count ${target.gpu.colorAttachments.length}.`);
+  }
+  return color;
+}
+
+function isPerAttachmentClear(color: PassSpec["clearColor"]): color is readonly (ClearColor | undefined)[] {
+  return Array.isArray(color) && typeof color[0] !== "number";
+}
+
+function colorDict(color: ClearColor | undefined): GPUColorDict {
   if (!color) return DEFAULT_CLEAR_COLOR;
   if (Array.isArray(color)) return { r: color[0], g: color[1], b: color[2], a: color[3] };
   return color as GPUColorDict;
