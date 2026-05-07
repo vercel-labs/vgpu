@@ -39,3 +39,45 @@ pass.setVertexBuffer(0, vertices);
 pass.draw({ vertexCount: 3 });
 pass.end();
 ```
+
+## Multiple render targets
+
+`@vgpu/render/passes` supports offscreen MRT through `renderTargetMulti()` or the
+`renderTarget({ colors })` overload. Each color attachment declares its own
+format, optional label, and default clear color; depth is shared and MSAA remains
+single-color only in this release.
+
+```ts
+const gbuffer = await renderTargetMulti({
+  device,
+  size: [1024, 768],
+  colors: [
+    { format: "rgba8unorm", label: "albedo" },
+    { format: "rgba8unorm", label: "normal", clearColor: [0.5, 0.5, 1, 1] },
+  ],
+  depth: true,
+});
+
+pass({ mesh, material: gbufferMaterial, target: gbuffer });
+pass({
+  mesh: fullscreenQuad,
+  material: compositeMaterial(gbuffer.colors[0], gbuffer.colors[1]),
+  target: finalColor,
+});
+```
+
+`pass().clearColor` accepts either a scalar color, which broadcasts to every MRT
+attachment, or an array whose length matches `target.colors.length`. Scalar
+`colorLoadOp`, `depthLoadOp`, and `depthClearValue` are also broadcast/shared.
+
+```ts
+pass({
+  mesh,
+  material: pickingMaterial,
+  target: pickingTarget,
+  clearColor: [
+    [0, 0, 0, 1], // visible color
+    [0, 0, 0, 1], // entity-id buffer, packed into rgba8unorm for snapshots
+  ],
+});
+```
