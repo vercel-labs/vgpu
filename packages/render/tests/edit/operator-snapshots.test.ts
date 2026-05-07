@@ -1,11 +1,12 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
-import { bevel, extrude, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
+import { bevel, bridge, extrude, fillHole, gridFill, inset, loopCut, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, sha } from "./_helpers.ts";
+import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
 
-interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection }
+interface Case { readonly name: "extrude" | "bevel" | "inset" | "subdivide-edges" | "subdivide-faces" | "loop-cut" | "bridge" | "fill-hole" | "grid-fill"; readonly before: EditableMeshValue; readonly after: EditableMeshValue; readonly highlight: ElementSelection }
 
 const makeCases = (base: EditableMeshValue): readonly Case[] => {
   const top = base.faces.scoreBy((f) => f.center[1]).top();
@@ -25,11 +26,21 @@ const makeCases = (base: EditableMeshValue): readonly Case[] => {
   ];
 };
 
-for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut"] as const) {
+const makeConnectivityCases = (): readonly Case[] => {
+  const hole = openCube(), plates = twoPlates();
+  const br = bridge(plates, plateLoops(plates)), fh = fillHole(hole, topHoleLoop(hole)), gf = gridFill(hole, topHoleLoop(hole));
+  return [
+    { name: "bridge", before: plates, after: br.mesh, highlight: br.descendants.bridgeFaces },
+    { name: "fill-hole", before: hole, after: fh.mesh, highlight: fh.descendants.newFaces },
+    { name: "grid-fill", before: hole, after: gf.mesh, highlight: gf.descendants.newFaces },
+  ];
+};
+
+for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill"] as const) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
     const { device } = await App.create({ adapter: createNodeAdapter() });
     try {
-      const c = makeCases(toEditable(Mesh.box({ device, size: 1 }))).find((v) => v.name === op)!;
+      const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases()].find((v) => v.name === op)!;
       const before = new Map<string, Uint8Array>(), after = new Map<string, Uint8Array>();
       for (const angle of Object.keys(ANGLES) as (keyof typeof ANGLES)[]) {
         const b = await renderEditMesh(device, c.before.toRenderMesh({ device }), angle), a = await renderEditMesh(device, c.after.toRenderMesh({ device }), angle);
