@@ -132,10 +132,6 @@ Trusted Publishing is already configured on npm for each `@vgpu/*` package with:
 
 If you ever add a new `@vgpu/*` package, publish it manually once, then add the same Trusted Publisher entry pointing at `release.yml`.
 
-### Bootstrap publish
-
-v0.0.1 was published manually for each of the 5 packages because Trusted Publishing requires a package to exist before it can be configured. This is a one-time bootstrap; v0.0.2+ are published automatically from the release workflow.
-
 ## License
 
 MIT — see [LICENSE](./LICENSE).
