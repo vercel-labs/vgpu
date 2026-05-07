@@ -36,6 +36,7 @@ async function bundledGzipSize(entryPoint) {
     format: "esm",
     platform: "neutral",
     external: ["node:*", "webgpu", "@vgpu/*"],
+    mainFields: ["module", "main"],
     write: false,
     minify: true,
     mainFields: ["module", "main"],

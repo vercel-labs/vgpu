@@ -68,3 +68,10 @@
 @vgpu/render/inspect WireframeMesh packages/render/src/inspect/mesh-to-wireframe.docs.md
 @vgpu/render/inspect InspectMaterial packages/render/src/inspect/inspect-material.docs.md
 @vgpu/render/inspect InspectMaterialUniformParams packages/render/src/inspect/inspect-material.docs.md
+@vgpu/render/utils canvasMouseTracker packages/render/src/utils/canvas-mouse-tracker.docs.md
+@vgpu/render/utils CanvasMouseTrackerSpec packages/render/src/utils/canvas-mouse-tracker.docs.md
+@vgpu/render/utils CanvasMouseTracker packages/render/src/utils/canvas-mouse-tracker.docs.md
+@vgpu/render/utils frameClock packages/render/src/utils/frame-clock.docs.md
+@vgpu/render/utils FrameClock packages/render/src/utils/frame-clock.docs.md
+@vgpu/render/utils canvasResolution packages/render/src/utils/canvas-resolution.docs.md
+@vgpu/render/utils CanvasResolution packages/render/src/utils/canvas-resolution.docs.md
