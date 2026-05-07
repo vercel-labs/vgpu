@@ -61,14 +61,18 @@ export async function renderTarget(spec: RenderTargetSpec): Promise<RenderTarget
     depthStoreOp: "store" as const,
     depthClearValue: 1,
   } : undefined;
+  const colorAttachments = Object.freeze([colorAttachment]);
+  const colorTextures = Object.freeze([color.gpu]);
   const gpu: RenderTargetGpu = Object.freeze({
+    colorAttachments,
     colorAttachment,
     depthStencilAttachment,
     colorTexture: color.gpu,
+    colorTextures,
     resolveTexture: resolve?.gpu,
     depthTexture: depth?.gpu,
   });
-  const colors = Object.freeze([sampleableColor]) as readonly [Texture];
+  const colors = Object.freeze([sampleableColor]) as readonly [Texture, ...Texture[]];
   return Object.freeze({ color: sampleableColor, colors, depth, size, format, sampleCount, label: spec.label, gpu });
 }
 

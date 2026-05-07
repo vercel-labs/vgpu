@@ -18,11 +18,11 @@ type DeviceCarrier = { readonly device?: Device };
 /** Records and optionally submits one material+mesh draw into a pass target. */
 export function pass(spec: PassSpec): void {
   void spec.bindings;
-  const colorAttachment = colorAttachmentFor(spec.target, spec);
+  const colorAttachments = colorAttachmentsFor(spec.target, spec);
   const depthStencilAttachment = depthAttachmentFor(spec.target, spec);
   const device = spec.encoder ? undefined : deviceFrom(spec.mesh);
   const encoder = spec.encoder ?? (device as Device).gpu.createCommandEncoder();
-  const renderPass = encoder.beginRenderPass({ colorAttachments: [colorAttachment], depthStencilAttachment });
+  const renderPass = encoder.beginRenderPass({ colorAttachments, depthStencilAttachment });
 
   if (spec.viewport) renderPass.setViewport(spec.viewport[0], spec.viewport[1], spec.viewport[2], spec.viewport[3], 0, 1);
   if (spec.scissor) renderPass.setScissorRect(spec.scissor[0], spec.scissor[1], spec.scissor[2], spec.scissor[3]);
@@ -43,20 +43,18 @@ export function pass(spec: PassSpec): void {
   if (device) device.queue.gpu.submit([encoder.finish()]);
 }
 
-function colorAttachmentFor(target: PassTarget, spec: PassSpec): GPURenderPassColorAttachment {
+function colorAttachmentsFor(target: PassTarget, spec: PassSpec): readonly GPURenderPassColorAttachment[] {
   const loadOp = spec.colorLoadOp ?? "clear";
   if (isRenderTarget(target)) {
-    const attachment = { ...target.gpu.colorAttachment };
-    attachment.loadOp = spec.colorLoadOp ?? attachment.loadOp;
-    attachment.clearValue = spec.clearColor ? colorDict(spec.clearColor) : attachment.clearValue;
-    return attachment;
+    return target.gpu.colorAttachments.map((source) => {
+      const attachment = { ...source };
+      attachment.loadOp = spec.colorLoadOp ?? attachment.loadOp;
+      attachment.clearValue = spec.clearColor ? colorDict(spec.clearColor) : attachment.clearValue;
+      return attachment;
+    });
   }
-  if (isTexture(target)) {
-    return { view: target.createView(), loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) };
-  }
-  if (isTextureView(target)) {
-    return { view: target, loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) };
-  }
+  if (isTexture(target)) return [{ view: target.createView(), loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) }];
+  if (isTextureView(target)) return [{ view: target, loadOp, storeOp: "store", clearValue: colorDict(spec.clearColor) }];
   throw invalidTarget();
 }
 
@@ -89,7 +87,7 @@ function deviceFrom(mesh: Mesh): Device {
 
 function isRenderTarget(value: unknown): value is RenderTarget {
   const gpu = (value as { gpu?: unknown } | undefined)?.gpu;
-  return isObject(gpu) && "colorAttachment" in gpu;
+  return isObject(gpu) && "colorAttachments" in gpu;
 }
 
 function isTexture(value: unknown): value is Texture {
