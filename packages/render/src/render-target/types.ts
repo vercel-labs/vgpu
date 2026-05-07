@@ -50,5 +50,11 @@ export interface PassSpec {
   readonly viewport?: readonly [number, number, number, number];
   readonly scissor?: readonly [number, number, number, number];
   readonly encoder?: GPUCommandEncoder;
+  /**
+   * Reserved for v2: when `material()` gains texture/sampler bindings, this
+   * field will accept a typed binding map. Today it is intentionally typed
+   * `never[]`, so the field shape exists without accepting any value. Forward-
+   * compatibility only — do not pass anything here in v1.
+   */
   readonly bindings?: never[];
 }
