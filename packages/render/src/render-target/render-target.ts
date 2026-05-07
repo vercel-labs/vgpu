@@ -1,6 +1,7 @@
 import { ValidationError } from "@vgpu/core";
 import type { Texture } from "@vgpu/core";
-import type { RenderTarget, RenderTargetGpu, RenderTargetSpec } from "./types.ts";
+import { renderTargetMulti } from "./render-target-multi.ts";
+import type { ColorAttachmentSpec, RenderTarget, RenderTargetGpu, RenderTargetMultiSpec, RenderTargetN, RenderTargetSpec } from "./types.ts";
 
 const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
 const DEFAULT_CLEAR_COLOR = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
@@ -18,7 +19,10 @@ const COLOR_RENDERABLE_FORMATS = new Set<GPUTextureFormat>([
  * multisample attachment and `${label}.color.resolve` for the exposed sampleable
  * `.color` texture. Depth uses `${label}.depth`.
  */
-export async function renderTarget(spec: RenderTargetSpec): Promise<RenderTarget> {
+export function renderTarget(spec: RenderTargetSpec): Promise<RenderTarget>;
+export function renderTarget<const Specs extends readonly ColorAttachmentSpec[]>(spec: RenderTargetMultiSpec<Specs>): Promise<RenderTargetN<Specs>>;
+export async function renderTarget(spec: RenderTargetSpec | RenderTargetMultiSpec): Promise<RenderTarget> {
+  if ("colors" in spec) return renderTargetMulti(spec) as Promise<RenderTarget>;
   validateSpec(spec);
   const format = spec.format ?? DEFAULT_FORMAT;
   const depthFormat = spec.depth === true ? "depth24plus" : spec.depth || undefined;
