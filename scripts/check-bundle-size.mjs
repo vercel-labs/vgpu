@@ -38,6 +38,7 @@ async function bundledGzipSize(entryPoint) {
     external: ["node:*", "webgpu", "@vgpu/*"],
     write: false,
     minify: true,
+    mainFields: ["module", "main"],
   });
   return gzipBytes(result.outputFiles[0].contents);
 }

@@ -17,6 +17,7 @@ export default defineConfig({
       { find: "@vgpu/adapter-node", replacement: resolve("packages/adapter-node/src/index.ts") },
       { find: "@vgpu/adapter-mock", replacement: resolve("packages/adapter-mock/src/index.ts") },
       { find: "@vgpu/wgsl", replacement: resolve("packages/wgsl/src/index.ts") },
+      { find: "@vgpu/render/inspect", replacement: resolve("packages/render/src/inspect/index.ts") },
       { find: "@vgpu/render", replacement: resolve("packages/render/src/index.ts") },
     ],
   },
