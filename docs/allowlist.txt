@@ -60,3 +60,11 @@
 @vgpu/wgsl/loader-vite wgslVitePlugin packages/wgsl/src/loader-vite/index.docs.md
 @vgpu/wgsl/loader-vite transformWgsl packages/wgsl/src/loader-vite/index.docs.md
 @vgpu/wgsl/loader-vite ViteLoadResult packages/wgsl/src/loader-vite/index.docs.md
+@vgpu/render/inspect wireframeMaterial packages/render/src/inspect/wireframe-material.docs.md
+@vgpu/render/inspect WireframeMaterialSpec packages/render/src/inspect/wireframe-material.docs.md
+@vgpu/render/inspect normalDebugMaterial packages/render/src/inspect/normal-debug-material.docs.md
+@vgpu/render/inspect NormalDebugMaterialSpec packages/render/src/inspect/normal-debug-material.docs.md
+@vgpu/render/inspect meshToWireframe packages/render/src/inspect/mesh-to-wireframe.docs.md
+@vgpu/render/inspect WireframeMesh packages/render/src/inspect/mesh-to-wireframe.docs.md
+@vgpu/render/inspect InspectMaterial packages/render/src/inspect/inspect-material.docs.md
+@vgpu/render/inspect InspectMaterialUniformParams packages/render/src/inspect/inspect-material.docs.md
