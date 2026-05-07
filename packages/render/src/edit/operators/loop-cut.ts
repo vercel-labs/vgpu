@@ -5,17 +5,18 @@ import { edgeVerts, p } from "../operator-utils.ts";
 import type { EditableMesh, ElementSelection } from "../types.ts";
 import { subdivideEdges } from "./subdivide-edges.ts";
 
+import { unwrapKernel } from "../kernel-handle.ts";
 export interface LoopCutOptions { readonly cuts?: number; readonly slide?: number }
-export interface LoopCutResult { readonly mesh: EditableMesh; readonly descendants: { readonly insertedLoop: ElementSelection }; readonly warnings?: readonly MeshEditWarning[] }
+export interface LoopCutResult { readonly mesh: EditableMesh; readonly insertedLoop: ElementSelection; readonly warnings?: readonly MeshEditWarning[] }
 
 export function loopCut(em: EditableMesh, seedEdge: number, opts: LoopCutOptions = {}): LoopCutResult {
   if (seedEdge < 0 || seedEdge >= em.edgeCount) throw new MeshEditError({ code: "EMPTY_SELECTION" });
   const loop = selection("edge", parallelRing(em, seedEdge), true);
   const result = subdivideEdges(em, loop, { cuts: opts.cuts ?? 1 });
-  for (const e of result.descendants.newEdges.indices) result.mesh.gpu.halfEdgeKernel.isSharp[e] = 0;
-  const insertedLoop = selection("edge", result.descendants.newEdges.indices, true);
+  for (const e of result.newEdges.indices) unwrapKernel(result.mesh.gpu.halfEdgeKernel).isSharp[e] = 0;
+  const insertedLoop = selection("edge", result.newEdges.indices, true);
   const warnings = loop.count <= 1 ? [new MeshEditWarning("LOOP_CUT_AMBIGUOUS_CONTINUATION", "Loop cut could not find an unambiguous continuation; only the seed edge was cut.", { domain: "edge", index: seedEdge })] : undefined;
-  return warnings ? { mesh: result.mesh, descendants: { insertedLoop }, warnings } : { mesh: result.mesh, descendants: { insertedLoop } };
+  return warnings ? { mesh: result.mesh, insertedLoop, warnings } : { mesh: result.mesh, insertedLoop };
 }
 
 function parallelRing(em: EditableMesh, seed: number): number[] {

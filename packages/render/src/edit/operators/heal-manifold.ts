@@ -3,11 +3,12 @@ import { EditableMesh } from "../editable-mesh.ts";
 import { p, sub, cross, type V } from "../operator-utils.ts";
 import type { EditableMesh as EditableMeshValue } from "../types.ts";
 
+import { unwrapKernel } from "../kernel-handle.ts";
 export interface HealManifoldReport { readonly nonManifoldEdgesFixed: number; readonly nonManifoldVerticesFixed: number; readonly holesFixed: number; readonly duplicateFacesRemoved: number }
-export interface HealManifoldResult { readonly mesh: EditableMeshValue; readonly descendants: { readonly report: HealManifoldReport }; readonly warnings?: readonly MeshEditWarning[] }
+export interface HealManifoldResult { readonly mesh: EditableMeshValue; readonly report: HealManifoldReport; readonly warnings?: readonly MeshEditWarning[] }
 
 export function healManifold(em: EditableMeshValue): HealManifoldResult {
-  const k = em.gpu.halfEdgeKernel, positions = Array.from(k.positions), indices: number[] = [], smooth: number[] = [], edgeUse = new Map<string, number>(), seenFaces = new Set<string>();
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), positions = Array.from(k.positions), indices: number[] = [], smooth: number[] = [], edgeUse = new Map<string, number>(), seenFaces = new Set<string>();
   let nonManifoldEdgesFixed = 0, duplicateFacesRemoved = 0, degenerate = 0;
   for (let f = 0; f < em.faceCount; f++) {
     const tri = Array.from(k.faceVertices.slice(f * 3, f * 3 + 3));
@@ -24,19 +25,19 @@ export function healManifold(em: EditableMeshValue): HealManifoldResult {
   if (degenerate) warnings.push(new MeshEditWarning("DEGENERATE_FACE_DROPPED", `${degenerate} zero-area face(s) were removed while healing manifold topology.`));
   if (!mesh.isManifold || hasOverusedEdges(mesh)) warnings.push(new MeshEditWarning("HEAL_NON_MANIFOLD_RESIDUE", "Some non-manifold residue remains after deterministic healManifold cleanup."));
   const report = { nonManifoldEdgesFixed, nonManifoldVerticesFixed: 0, holesFixed: 0, duplicateFacesRemoved };
-  const out = { mesh, descendants: { report } };
+  const out = { mesh, report };
   return warnings.length ? { ...out, warnings } : out;
 }
 
 function preserveSharp(oldMesh: EditableMeshValue, mesh: EditableMeshValue): void {
-  const oldSharp = new Set<string>(), ok = oldMesh.gpu.halfEdgeKernel, nk = mesh.gpu.halfEdgeKernel;
+  const oldSharp = new Set<string>(), ok = unwrapKernel(oldMesh.gpu.halfEdgeKernel), nk = unwrapKernel(mesh.gpu.halfEdgeKernel);
   for (let e = 0; e < oldMesh.edgeCount; e++) if (ok.isSharp[e]) oldSharp.add(posKey(p(oldMesh, ok.edgeVertexA[e]), p(oldMesh, ok.edgeVertexB[e])));
   nk.isSharp.fill(0);
   for (let e = 0; e < mesh.edgeCount; e++) if (oldSharp.has(posKey(p(mesh, nk.edgeVertexA[e]), p(mesh, nk.edgeVertexB[e])))) nk.isSharp[e] = 1;
 }
 
 function hasOverusedEdges(em: EditableMeshValue): boolean {
-  const counts = new Map<string, number>(), k = em.gpu.halfEdgeKernel;
+  const counts = new Map<string, number>(), k = unwrapKernel(em.gpu.halfEdgeKernel);
   for (let f = 0; f < em.faceCount; f++) for (const e of triEdges(Array.from(k.faceVertices.slice(f * 3, f * 3 + 3)))) counts.set(e, (counts.get(e) ?? 0) + 1);
   return [...counts.values()].some((v) => v !== 2);
 }

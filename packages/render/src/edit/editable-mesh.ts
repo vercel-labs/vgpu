@@ -7,9 +7,10 @@ import { selection } from "./selection.ts";
 import type { EditableMesh as EditableMeshValue, FromArraysOptions } from "./types.ts";
 import type { HalfEdgeKernel } from "./half-edge-kernel.ts";
 
+import { unwrapKernel, wrapKernel } from "./kernel-handle.ts";
 export const EditableMesh = {
   fromArrays(opts: FromArraysOptions): EditableMeshValue { return wrap(buildKernel(opts), opts); },
-  toRenderMesh(em: EditableMeshValue, opts: { readonly device: Device }) { return bakeRenderMesh(em.gpu.halfEdgeKernel, opts.device); },
+  toRenderMesh(em: EditableMeshValue, opts: { readonly device: Device }) { return bakeRenderMesh(unwrapKernel(em.gpu.halfEdgeKernel), opts.device); },
 };
 
 export function wrap(k: HalfEdgeKernel, opts: FromArraysOptions): EditableMeshValue {
@@ -18,7 +19,7 @@ export function wrap(k: HalfEdgeKernel, opts: FromArraysOptions): EditableMeshVa
     vertexCount: k.vertexCount, edgeCount: k.edgeCount, faceCount: k.faceCount, bounds: bounds(k.positions),
     vertices: makeElementSet(k, "vertex"), edges: makeElementSet(k, "edge"), faces: makeElementSet(k, "face"),
     isManifold: Array.from(k.edgeFaceB).every((f) => f >= 0), hasUVs: !!opts.uvs, hasNormals: !!opts.normals, hasVertexColors: !!opts.colors,
-    hardEdges: hard, gpu: Object.freeze({ halfEdgeKernel: k }),
+    hardEdges: hard, gpu: Object.freeze({ halfEdgeKernel: wrapKernel(k) }),
     toRenderMesh(renderOpts) { return bakeRenderMesh(k, renderOpts.device); },
   };
   return Object.freeze(em);

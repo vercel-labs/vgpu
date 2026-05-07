@@ -1,9 +1,10 @@
 import { MeshEditError, bridge } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { plateLoops, twoPlates } from "./fixtures/connectivity.ts";
+import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
+import { editableSignature } from "./_helpers.ts";
 
 const euler = (em: ReturnType<typeof twoPlates>) => em.vertexCount - em.edgeCount + em.faceCount;
-const signature = (em: ReturnType<typeof twoPlates>) => [em.vertexCount, em.edgeCount, em.faceCount, ...Array.from(em.gpu.halfEdgeKernel.positions), ...Array.from(em.gpu.halfEdgeKernel.faceVertices)];
 
 describe("bridge", () => {
   test("bridges two ordered loops and preserves closed-manifold Euler characteristic", () => {
@@ -15,16 +16,16 @@ describe("bridge", () => {
 
   test("returns bridge face descendants and chosen twist", () => {
     const em = twoPlates(), result = bridge(em, plateLoops(em));
-    expect(result.descendants.bridgeFaces.domain).toBe("face");
-    expect(result.descendants.bridgeFaces.indices).toEqual([em.faceCount, em.faceCount + 1, em.faceCount + 2, em.faceCount + 3, em.faceCount + 4, em.faceCount + 5, em.faceCount + 6, em.faceCount + 7]);
+    expect(result.bridgeFaces.domain).toBe("face");
+    expect(result.bridgeFaces.indices).toEqual([em.faceCount, em.faceCount + 1, em.faceCount + 2, em.faceCount + 3, em.faceCount + 4, em.faceCount + 5, em.faceCount + 6, em.faceCount + 7]);
     expect(result.chosenTwist).toBe(0);
   });
 
   test("keeps bridge edges smooth and new faces smooth", () => {
-    const em = twoPlates(), sel = plateLoops(em); for (const e of sel.indices) em.gpu.halfEdgeKernel.isSharp[e] = 1;
-    const result = bridge(em, sel), k = result.mesh.gpu.halfEdgeKernel;
-    expect(result.descendants.bridgeFaces.indices.every((f) => k.useSmooth[f] === 1)).toBe(true);
-    expect(result.descendants.bridgeFaces.indices.some((f) => k.faceEdges.slice(f * 3, f * 3 + 3).some((e) => k.isSharp[e] === 0))).toBe(true);
+    const em = twoPlates(), sel = plateLoops(em); for (const e of sel.indices) unwrapKernel(em.gpu.halfEdgeKernel).isSharp[e] = 1;
+    const result = bridge(em, sel), k = unwrapKernel(result.mesh.gpu.halfEdgeKernel);
+    expect(result.bridgeFaces.indices.every((f) => k.useSmooth[f] === 1)).toBe(true);
+    expect(result.bridgeFaces.indices.some((f) => k.faceEdges.slice(f * 3, f * 3 + 3).some((e) => k.isSharp[e] === 0))).toBe(true);
   });
 
   test("empty selection throws EMPTY_SELECTION", () => {
@@ -41,8 +42,7 @@ describe("bridge", () => {
 
   test("is deterministic for repeated inputs", () => {
     const em = twoPlates(), sel = plateLoops(em), a = bridge(em, sel), b = bridge(em, sel);
-    expect(a.descendants).toEqual(b.descendants);
     expect(a.chosenTwist).toBe(b.chosenTwist);
-    expect(signature(a.mesh)).toEqual(signature(b.mesh));
+    expect(editableSignature(a.mesh)).toEqual(editableSignature(b.mesh));
   });
 });

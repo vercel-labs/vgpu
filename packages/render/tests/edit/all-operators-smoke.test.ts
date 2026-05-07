@@ -34,7 +34,7 @@ function run(name: typeof ops[number], box: EditableMeshValue): EditableMeshValu
   if (name === "dissolveVertices") { const em = octahedron(); return dissolveVertices(em, em.vertices.byIndex([0])).mesh; }
   if (name === "dissolveEdges") { const em = octahedron(); return dissolveEdges(em, em.edges.byIndex([0])).mesh; }
   if (name === "dissolveFaces") { const em = octahedron(); return dissolveFaces(em, em.faces.byIndex([0, 1])).mesh; }
-  if (name === "mergeByDistance") { const em = mergeDuplicateTetra(); return mergeByDistance(em, em.vertices.byIndex([0, 4]), { threshold: 0.3 }).mesh; }
+  if (name === "mergeByDistance") { const em = mergeDuplicateTetra(); return mergeByDistance(em, { selection: em.vertices.byIndex([0, 4]), threshold: 0.3 }).mesh; }
   if (name === "healManifold") return healManifold(nonManifoldTetra()).mesh;
-  return recomputeNormals(bentSmoothPair()).mesh;
+  return recomputeNormals(bentSmoothPair());
 }

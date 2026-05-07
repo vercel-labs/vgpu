@@ -1,4 +1,5 @@
 import { EditableMesh, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
+import { unwrapKernel } from "../../../src/edit/kernel-handle.ts";
 
 export function openCube(): EditableMeshValue {
   const p = [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1];
@@ -13,7 +14,7 @@ export function twoPlates(): EditableMeshValue {
 }
 
 export function loopByVertices(em: EditableMeshValue, verts: readonly number[]): ElementSelection {
-  const k = em.gpu.halfEdgeKernel, out: number[] = [];
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), out: number[] = [];
   for (let i = 0; i < verts.length; i++) out.push(edgeBetween(em, verts[i], verts[(i + 1) % verts.length]));
   return Object.freeze({ domain: "edge", indices: Object.freeze(out), count: out.length, ordered: true }) as ElementSelection;
 }
@@ -25,7 +26,7 @@ export function plateLoops(em: EditableMeshValue): ElementSelection {
 }
 
 function edgeBetween(em: EditableMeshValue, a: number, b: number): number {
-  const k = em.gpu.halfEdgeKernel, lo = Math.min(a, b), hi = Math.max(a, b);
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), lo = Math.min(a, b), hi = Math.max(a, b);
   for (let e = 0; e < k.edgeCount; e++) if (k.edgeVertexA[e] === lo && k.edgeVertexB[e] === hi) return e;
   throw new Error(`missing edge ${a}:${b}`);
 }

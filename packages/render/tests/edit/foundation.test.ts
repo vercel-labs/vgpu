@@ -3,6 +3,7 @@ import { App } from "@vgpu/core";
 import { Mesh } from "@vgpu/render";
 import { EditableMesh, MeshEditWarning, toEditable, toEditableWithDiagnostics } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
+import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 
 const tri = (positions: number[], indices: number[]) => EditableMesh.fromArrays({ positions: new Float32Array(positions), indices: new Uint32Array(indices) });
 
@@ -28,12 +29,12 @@ describe("editable mesh foundation", () => {
     const em = toEditable(box);
     expect(em.edgeCount).toBe(18);
     expect(em.hardEdges.count).toBe(12);
-    expect(Array.from(em.gpu.halfEdgeKernel.useSmooth)).toEqual(new Array(12).fill(1));
+    expect(Array.from(unwrapKernel(em.gpu.halfEdgeKernel).useSmooth)).toEqual(new Array(12).fill(1));
     const baked = em.toRenderMesh({ device });
     expect(new Uint8Array(await baked.vertexBuffer.read(baked.vertexBuffer.options.size))).toEqual(new Uint8Array(await box.vertexBuffer.read(box.vertexBuffer.options.size)));
     const again = toEditable(baked);
     expect(again.hardEdges.indices).toEqual(em.hardEdges.indices);
-    expect(Array.from(again.gpu.halfEdgeKernel.useSmooth)).toEqual(Array.from(em.gpu.halfEdgeKernel.useSmooth));
+    expect(Array.from(unwrapKernel(again.gpu.halfEdgeKernel).useSmooth)).toEqual(Array.from(unwrapKernel(em.gpu.halfEdgeKernel).useSmooth));
     device.destroy();
   });
 
@@ -61,7 +62,7 @@ describe("editable mesh foundation", () => {
     const again = toEditable(em.toRenderMesh({ device }));
     expect(again.vertexCount).toBe(3);
     expect(again.faceCount).toBe(1);
-    expect(Array.from(again.gpu.halfEdgeKernel.faceVertices)).toEqual([0, 1, 2]);
+    expect(Array.from(unwrapKernel(again.gpu.halfEdgeKernel).faceVertices)).toEqual([0, 1, 2]);
     device.destroy();
   });
 

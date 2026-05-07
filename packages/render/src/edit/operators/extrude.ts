@@ -3,13 +3,14 @@ import { selection } from "../selection.ts";
 import { add, addQuad, addTri, build, center, faceVerts, key, normal, p, requireSelection, type MeshParts, type V } from "../operator-utils.ts";
 import type { EditableMesh, ElementSelection } from "../types.ts";
 
+import { unwrapKernel } from "../kernel-handle.ts";
 export interface ExtrudeOptions { readonly distance: number; readonly inset?: number; readonly direction?: V; readonly mode?: "region" | "individual" }
-export interface ExtrudeResult { readonly mesh: EditableMesh; readonly descendants: { readonly sideFaces: ElementSelection; readonly capFaces: ElementSelection; readonly sideEdges: ElementSelection; readonly capRing: ElementSelection }; readonly warnings?: readonly MeshEditWarning[] }
+export interface ExtrudeResult { readonly mesh: EditableMesh; readonly sideFaces: ElementSelection; readonly capFaces: ElementSelection; readonly boundaryEdges: ElementSelection; readonly warnings?: readonly MeshEditWarning[] }
 
 export function extrude(em: EditableMesh, faces: ElementSelection, opts: ExtrudeOptions): ExtrudeResult {
   requireSelection(faces, "face");
   const selected = new Set(faces.indices), parts: MeshParts = { positions: [], faces: [], useSmooth: [], sharp: new Set() };
-  const side: number[] = [], cap: number[] = [], source = em.gpu.halfEdgeKernel;
+  const side: number[] = [], cap: number[] = [], source = unwrapKernel(em.gpu.halfEdgeKernel);
   for (let f = 0; f < em.faceCount; f++) if (!selected.has(f)) {
     const v = faceVerts(em, f).map((i) => p(em, i));
     addTri(parts, v[0], v[1], v[2], source.useSmooth[f]);
@@ -25,7 +26,7 @@ export function extrude(em: EditableMesh, faces: ElementSelection, opts: Extrude
     }
   }
   const mesh = build(parts), sideFaces = selection("face", side), capFaces = selection("face", cap);
-  return { mesh, descendants: { sideFaces, capFaces, sideEdges: edgeSelection(mesh, sideFaces), capRing: edgeSelection(mesh, capFaces) } };
+  return { mesh, sideFaces, capFaces, boundaryEdges: edgeSelection(mesh, capFaces) };
 }
 
 function inset(v: V, c: V, d: number): V { return d === 0 ? v : [v[0] + (c[0] - v[0]) * d, v[1] + (c[1] - v[1]) * d, v[2] + (c[2] - v[2]) * d]; }

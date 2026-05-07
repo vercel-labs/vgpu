@@ -1,11 +1,12 @@
 import { EditableMesh } from "@vgpu/render/edit";
+import { unwrapKernel } from "../../../src/edit/kernel-handle.ts";
 
 export function mergeDuplicateTetra() {
   const em = EditableMesh.fromArrays({
     positions: new Float32Array([1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1.25, 1, 1]),
     indices: new Uint32Array([0, 1, 2, 0, 3, 1, 4, 2, 3, 1, 3, 2]),
   });
-  em.gpu.halfEdgeKernel.isSharp[edgeBetween(em, 4, 2)] = 1;
+  unwrapKernel(em.gpu.halfEdgeKernel).isSharp[edgeBetween(em, 4, 2)] = 1;
   return em;
 }
 
@@ -30,7 +31,7 @@ export function emptyMesh() {
 }
 
 export function edgeBetween(em: ReturnType<typeof EditableMesh.fromArrays>, a: number, b: number): number {
-  const k = em.gpu.halfEdgeKernel, lo = Math.min(a, b), hi = Math.max(a, b);
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), lo = Math.min(a, b), hi = Math.max(a, b);
   for (let e = 0; e < k.edgeCount; e++) if (k.edgeVertexA[e] === lo && k.edgeVertexB[e] === hi) return e;
   throw new Error("missing edge");
 }

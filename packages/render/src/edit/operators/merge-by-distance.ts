@@ -1,19 +1,20 @@
 import { MeshEditWarning } from "../warnings.ts";
 import { EditableMesh } from "../editable-mesh.ts";
+import { unwrapKernel } from "../kernel-handle.ts";
 import { requireSelection, p, normal, type V } from "../operator-utils.ts";
 import type { EditableMesh as EditableMeshValue, ElementSelection } from "../types.ts";
 
-export interface MergeByDistanceOptions { readonly threshold?: number; readonly key?: "position" | "full-vertex" }
-export interface MergeByDistanceResult { readonly mesh: EditableMeshValue; readonly descendants: { readonly mergeMap: ReadonlyMap<number, number>; readonly weldedCount: number }; readonly warnings?: readonly MeshEditWarning[] }
+export interface MergeByDistanceOptions { readonly threshold?: number; readonly selection?: ElementSelection; readonly key?: "position" | "full-vertex" }
+export interface MergeByDistanceResult { readonly mesh: EditableMeshValue; readonly mergeMap: ReadonlyMap<number, number>; readonly weldedCount: number; readonly warnings?: readonly MeshEditWarning[] }
 
-export function mergeByDistance(em: EditableMeshValue, vertices: ElementSelection, opts: MergeByDistanceOptions = {}): MergeByDistanceResult {
-  requireSelection(vertices, "vertex");
+export function mergeByDistance(em: EditableMeshValue, opts: MergeByDistanceOptions = {}): MergeByDistanceResult {
+  const vertices = opts.selection ?? em.vertices.all(); requireSelection(vertices, "vertex");
   const threshold = opts.threshold ?? 1e-4, clusters = clusterVertices(em, vertices.indices, threshold), oldToSurvivor = new Map<number, number>();
   for (let v = 0; v < em.vertexCount; v++) oldToSurvivor.set(v, v);
   for (const c of clusters) for (const v of c) oldToSurvivor.set(v, c[0]);
   const used = usedSurvivors(em, oldToSurvivor), survivorToNew = new Map<number, number>(), positions: number[] = [];
   for (const s of used) { survivorToNew.set(s, positions.length / 3); positions.push(...p(em, s)); }
-  const k = em.gpu.halfEdgeKernel, indices: number[] = [], smooth: number[] = [], warnings: MeshEditWarning[] = [];
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), indices: number[] = [], smooth: number[] = [], warnings: MeshEditWarning[] = [];
   let degenerate = 0;
   for (let f = 0; f < em.faceCount; f++) {
     const tri = Array.from(k.faceVertices.slice(f * 3, f * 3 + 3), (v) => survivorToNew.get(oldToSurvivor.get(v)!)!);
@@ -26,7 +27,7 @@ export function mergeByDistance(em: EditableMeshValue, vertices: ElementSelectio
   applySharpOr(em, mesh, oldToSurvivor, survivorToNew);
   const mergeMap = new Map<number, number>();
   for (let v = 0; v < em.vertexCount; v++) mergeMap.set(v, survivorToNew.get(oldToSurvivor.get(v)!) ?? -1);
-  const out = { mesh, descendants: { mergeMap, weldedCount: em.vertexCount - used.length } };
+  const out = { mesh, mergeMap, weldedCount: em.vertexCount - used.length };
   return warnings.length ? { ...out, warnings } : out;
 }
 
@@ -41,18 +42,18 @@ function clusterVertices(em: EditableMeshValue, selected: readonly number[], thr
 }
 
 function usedSurvivors(em: EditableMeshValue, map: ReadonlyMap<number, number>): number[] {
-  const used = new Set<number>(), k = em.gpu.halfEdgeKernel;
+  const used = new Set<number>(), k = unwrapKernel(em.gpu.halfEdgeKernel);
   for (let i = 0; i < k.faceVertices.length; i++) used.add(map.get(k.faceVertices[i])!);
   return [...used].sort((a, b) => a - b);
 }
 
 function applySharpOr(em: EditableMeshValue, mesh: EditableMeshValue, oldToSurvivor: ReadonlyMap<number, number>, survivorToNew: ReadonlyMap<number, number>): void {
-  const sharp = new Set<string>(), k = em.gpu.halfEdgeKernel;
+  const sharp = new Set<string>(), k = unwrapKernel(em.gpu.halfEdgeKernel);
   for (let e = 0; e < em.edgeCount; e++) if (k.isSharp[e]) {
     const a = survivorToNew.get(oldToSurvivor.get(k.edgeVertexA[e])!)!, b = survivorToNew.get(oldToSurvivor.get(k.edgeVertexB[e])!)!;
     if (a !== b) sharp.add(edgeKey(a, b));
   }
-  const nk = mesh.gpu.halfEdgeKernel; nk.isSharp.fill(0);
+  const nk = unwrapKernel(mesh.gpu.halfEdgeKernel); nk.isSharp.fill(0);
   for (let e = 0; e < mesh.edgeCount; e++) if (sharp.has(edgeKey(nk.edgeVertexA[e], nk.edgeVertexB[e]))) nk.isSharp[e] = 1;
 }
 

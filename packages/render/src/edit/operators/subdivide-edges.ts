@@ -2,12 +2,13 @@ import { selection } from "../selection.ts";
 import { addTri, build, edgeVerts, faceVerts, key, p, requireSelection, type MeshParts, type V } from "../operator-utils.ts";
 import type { EditableMesh, ElementSelection } from "../types.ts";
 
+import { unwrapKernel } from "../kernel-handle.ts";
 export interface SubdivideEdgesOptions { readonly cuts?: number }
-export interface SubdivideEdgesResult { readonly mesh: EditableMesh; readonly descendants: { readonly newVertices: ElementSelection; readonly newEdges: ElementSelection } }
+export interface SubdivideEdgesResult { readonly mesh: EditableMesh; readonly newVertices: ElementSelection; readonly newEdges: ElementSelection }
 
 export function subdivideEdges(em: EditableMesh, edges: ElementSelection, opts: SubdivideEdgesOptions = {}): SubdivideEdgesResult {
   requireSelection(edges, "edge");
-  const cuts = Math.max(1, Math.floor(opts.cuts ?? 1)), selected = new Set(edges.indices), k = em.gpu.halfEdgeKernel;
+  const cuts = Math.max(1, Math.floor(opts.cuts ?? 1)), selected = new Set(edges.indices), k = unwrapKernel(em.gpu.halfEdgeKernel);
   const parts: MeshParts = { positions: [], faces: [], useSmooth: [], sharp: new Set() }, newVertexKeys = new Set<string>(), childKeys = new Set<string>();
   const points = new Map<number, V[]>();
   for (const e of selected) {
@@ -20,11 +21,11 @@ export function subdivideEdges(em: EditableMesh, edges: ElementSelection, opts: 
   copyUnselectedSharp(em, selected, parts);
   const mesh = build(parts), newVertices = verticesByKeys(mesh, newVertexKeys), newEdges = edgesByKeys(mesh, childKeys);
   tintFaces(mesh, facesOfEdges(mesh, newEdges.indices));
-  return { mesh, descendants: { newVertices, newEdges } };
+  return { mesh, newVertices, newEdges };
 }
 
 function emitFace(em: EditableMesh, f: number, selected: Set<number>, points: Map<number, V[]>, parts: MeshParts): void {
-  const k = em.gpu.halfEdgeKernel, verts = faceVerts(em, f).map((i) => p(em, i)), edges = Array.from(k.faceEdges.slice(f * 3, f * 3 + 3)), picked = edges.map((e) => selected.has(e));
+  const k = unwrapKernel(em.gpu.halfEdgeKernel), verts = faceVerts(em, f).map((i) => p(em, i)), edges = Array.from(k.faceEdges.slice(f * 3, f * 3 + 3)), picked = edges.map((e) => selected.has(e));
   const n = picked.filter(Boolean).length, smooth = k.useSmooth[f];
   if (n === 0) { addTri(parts, verts[0], verts[1], verts[2], smooth); return; }
   if (n === 1) { const i = picked.findIndex(Boolean), ps = oriented(points.get(edges[i])!, verts[i], verts[(i + 1) % 3]), o = verts[(i + 2) % 3]; for (let j = 0; j < ps.length - 1; j++) addTri(parts, o, ps[j], ps[j + 1], smooth); return; }
@@ -41,9 +42,9 @@ function emitTwoCut(verts: V[], edges: number[], picked: boolean[], points: Map<
 
 function oriented(ps: V[], a: V, b: V): V[] { return key(ps[0], a) === key(a, a) && key(ps[ps.length - 1], b) === key(b, b) ? ps : [...ps].reverse(); }
 function lerp(a: V, b: V, t: number): V { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-function copyUnselectedSharp(em: EditableMesh, selected: Set<number>, parts: MeshParts): void { const k = em.gpu.halfEdgeKernel; for (let e = 0; e < k.edgeCount; e++) if (!selected.has(e) && k.isSharp[e]) parts.sharp.add(key(p(em, k.edgeVertexA[e]), p(em, k.edgeVertexB[e]))); }
-function verticesByKeys(em: EditableMesh, keys: Set<string>): ElementSelection { const out: number[] = [], a = em.gpu.halfEdgeKernel.positions; for (let v = 0; v < em.vertexCount; v++) if (keys.has(key(pos(a, v), pos(a, v)))) out.push(v); return selection("vertex", out); }
-function edgesByKeys(em: EditableMesh, keys: Set<string>): ElementSelection { const out: number[] = [], k = em.gpu.halfEdgeKernel; for (let e = 0; e < em.edgeCount; e++) if (keys.has(key(pos(k.positions, k.edgeVertexA[e]), pos(k.positions, k.edgeVertexB[e])))) out.push(e); return selection("edge", out); }
-function facesOfEdges(em: EditableMesh, edges: readonly number[]): number[] { const k = em.gpu.halfEdgeKernel, out = new Set<number>(); for (const e of edges) { if (k.edgeFaceA[e] >= 0) out.add(k.edgeFaceA[e]); if (k.edgeFaceB[e] >= 0) out.add(k.edgeFaceB[e]); } return [...out]; }
-function tintFaces(em: EditableMesh, faces: readonly number[]): void { const n = em.gpu.halfEdgeKernel.faceNormals; for (const f of faces) n.set([0.577, 0.577, 0.577], f * 3); }
+function copyUnselectedSharp(em: EditableMesh, selected: Set<number>, parts: MeshParts): void { const k = unwrapKernel(em.gpu.halfEdgeKernel); for (let e = 0; e < k.edgeCount; e++) if (!selected.has(e) && k.isSharp[e]) parts.sharp.add(key(p(em, k.edgeVertexA[e]), p(em, k.edgeVertexB[e]))); }
+function verticesByKeys(em: EditableMesh, keys: Set<string>): ElementSelection { const out: number[] = [], a = unwrapKernel(em.gpu.halfEdgeKernel).positions; for (let v = 0; v < em.vertexCount; v++) if (keys.has(key(pos(a, v), pos(a, v)))) out.push(v); return selection("vertex", out); }
+function edgesByKeys(em: EditableMesh, keys: Set<string>): ElementSelection { const out: number[] = [], k = unwrapKernel(em.gpu.halfEdgeKernel); for (let e = 0; e < em.edgeCount; e++) if (keys.has(key(pos(k.positions, k.edgeVertexA[e]), pos(k.positions, k.edgeVertexB[e])))) out.push(e); return selection("edge", out); }
+function facesOfEdges(em: EditableMesh, edges: readonly number[]): number[] { const k = unwrapKernel(em.gpu.halfEdgeKernel), out = new Set<number>(); for (const e of edges) { if (k.edgeFaceA[e] >= 0) out.add(k.edgeFaceA[e]); if (k.edgeFaceB[e] >= 0) out.add(k.edgeFaceB[e]); } return [...out]; }
+function tintFaces(em: EditableMesh, faces: readonly number[]): void { const n = unwrapKernel(em.gpu.halfEdgeKernel).faceNormals; for (const f of faces) n.set([0.577, 0.577, 0.577], f * 3); }
 function pos(a: Float32Array, v: number): V { const i = v * 3; return [a[i], a[i + 1], a[i + 2]]; }
