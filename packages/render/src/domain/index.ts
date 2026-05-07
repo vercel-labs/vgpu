@@ -1,8 +1,14 @@
 export { degToRad } from "./deg-to-rad.ts";
 export { orthographicCamera } from "./orthographic-camera.ts";
 export { Mesh } from "./mesh.ts";
-export { pbrMaterial } from "./material.ts";
+export { fullscreenQuad } from "./mesh-fullscreen-quad.ts";
+export { sphere } from "./mesh-sphere.ts";
+export { material } from "./material-factory.ts";
 export { perspectiveCamera } from "./perspective-camera.ts";
 export { srgb } from "./srgb.ts";
 export type { Camera, Mat4, Vec3 } from "./camera.ts";
-export type { Material, PbrMaterialSpec } from "./material.ts";
+export type { Material, MaterialUniformValue } from "./material.ts";
+export type { MaterialSpec, VertexLayoutKind, WgslUniformType } from "./material-factory.ts";
+export type { BoxSpec, Mesh as MeshPrimitive, MeshGpu, VertexAttributes } from "./mesh.ts";
+export type { FullscreenQuadSpec } from "./mesh-fullscreen-quad.ts";
+export type { SphereSpec } from "./mesh-sphere.ts";

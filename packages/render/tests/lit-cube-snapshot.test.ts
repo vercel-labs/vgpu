@@ -9,13 +9,13 @@ import {
   degToRad,
   Mesh,
   orthographicCamera,
-  pbrMaterial,
   perspectiveCamera,
   RapidRenderer,
   srgb,
   type Mat4,
   type Vec3,
 } from "@vgpu/render";
+import { litMaterial } from "./fixtures/lit-material/index.ts";
 
 const WIDTH = 256;
 const HEIGHT = 256;
@@ -70,7 +70,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("lit cube renders byte-equal t
   const depth = device.createTexture({ size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
 
   const mesh = Mesh.box({ device, size: 1 });
-  const material = pbrMaterial({ device, baseColor: srgb(0xcc8844), targetFormat: FORMAT });
+  const material = litMaterial({ device, baseColor: srgb(0xcc8844), targetFormat: FORMAT });
   const camera = perspectiveCamera({
     fovYRadians: degToRad(45),
     aspect: 1,
@@ -80,12 +80,16 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("lit cube renders byte-equal t
     target: vec3([0, 0, 0]),
   });
 
+  material.writeUniforms({
+    viewProjection: camera.viewProjectionMatrix,
+    model: rotateY(degToRad(30)),
+    cameraPosition: camera.position,
+    light: { direction: [-1, -1, -1], color: [1, 1, 1], intensity: 1 },
+  });
+
   await new RapidRenderer(device).draw({
     material,
     mesh,
-    transform: rotateY(degToRad(30)),
-    camera,
-    light: { direction: [-1, -1, -1], color: [1, 1, 1], intensity: 1 },
     target: color.createView(),
     depthTarget: depth.createView(),
     clearValue: { r: 0.05, g: 0.05, b: 0.08, a: 1 },

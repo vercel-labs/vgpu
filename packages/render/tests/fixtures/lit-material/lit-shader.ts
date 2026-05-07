@@ -7,7 +7,7 @@ export const UNIFORM_OFFSET_LIGHT_INTENSITY = 172;
 export const UNIFORM_OFFSET_BASE_COLOR = 192;
 export const UNIFORM_OFFSET_METALLIC = 204;
 export const UNIFORM_OFFSET_ROUGHNESS = 208;
-export const UNIFORMS_BYTE_SIZE = 224;
+export const litUniformsByteSize = 224;
 
 export const VERTEX_BUFFER_LAYOUT: GPUVertexBufferLayout = Object.freeze({
   arrayStride: 24,
@@ -17,7 +17,7 @@ export const VERTEX_BUFFER_LAYOUT: GPUVertexBufferLayout = Object.freeze({
   ]),
 });
 
-export const PBR_SHADER_SOURCE = /* wgsl */ `
+export const LIT_SHADER_SOURCE = /* wgsl */ `
 struct Uniforms {
   viewProjectionMatrix: mat4x4<f32>,
   modelMatrix: mat4x4<f32>,
@@ -69,7 +69,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
   // Lambertian diffuse, attenuated by (1 - metallic) so metals lose diffuse.
   let diffuse = uniforms.baseColor * (1.0 - uniforms.metallic) * NdotL;
 
-  // Simple Blinn-Phong-style specular as a stand-in for full PBR specular.
+  // Simple Blinn-Phong-style specular term.
   // Specular tint: dielectrics use a fixed white-ish F0; metals use baseColor.
   let f0 = mix(vec3<f32>(0.04), uniforms.baseColor, uniforms.metallic);
   // Roughness -> exponent: rougher = lower exponent. Map [0,1] -> [128, 1].

@@ -4,28 +4,16 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./inspect": {
-      "types": "./dist/inspect/index.d.ts",
-      "import": "./dist/inspect/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./inspect": { "types": "./dist/inspect/index.d.ts", "import": "./dist/inspect/index.js" },
+    "./utils": { "types": "./dist/utils/index.d.ts", "import": "./dist/utils/index.js" }
   },
-  "files": [
-    "dist",
-    "src/**/*.docs.md"
-  ],
-  "scripts": {
-    "build": "tsc -b"
-  },
-  "dependencies": {
-    "@vgpu/core": "workspace:*",
-    "wgpu-matrix": "^3.4.2"
-  },
+  "files": ["dist", "!dist/tsconfig.tsbuildinfo", "src/**/*.docs.md"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": { "@vgpu/core": "workspace:*", "wgpu-matrix": "^3.4.2" },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 19456,
-    "./inspect": 4096
+    "./inspect": 4096,
+    "./utils": 2048
   }
 }

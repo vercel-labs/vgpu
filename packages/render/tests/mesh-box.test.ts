@@ -16,6 +16,8 @@ test("Mesh.box returns a 36-vertex mesh with correct bbox", async () => {
     normal: { offset: 12, format: "float32x3" },
   });
   expect(unit.vertexBuffer).toBeInstanceOf(Buffer);
+  expect(unit.layout).toBe("position-normal");
+  expect(unit.gpu).toEqual({ vertexBuffer: unit.vertexBuffer.gpu });
 
   const sized = Mesh.box({ device, size: 2 });
   expect(Array.from(sized.bbox.min)).toEqual([-1, -1, -1]);

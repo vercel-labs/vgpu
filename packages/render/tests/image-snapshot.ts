@@ -10,6 +10,7 @@ interface ImageSnapshotOptions {
   readonly width: number;
   readonly height: number;
   readonly threshold: number;
+  readonly snapshotDir?: string;
 }
 
 expect.extend({
@@ -18,7 +19,7 @@ expect.extend({
     if (received.length !== expectedLength) {
       return { pass: false, message: () => `expected ${expectedLength} RGBA8 bytes, got ${received.length}` };
     }
-    const dir = join(process.cwd(), "packages/render/tests/__snapshots__");
+    const dir = join(process.cwd(), options.snapshotDir ?? "packages/render/tests/__snapshots__");
     const expectedPath = join(dir, `${options.testName}.png`);
     await mkdir(dir, { recursive: true });
     if (!existsSync(expectedPath)) {
