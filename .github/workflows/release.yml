@@ -37,8 +37,6 @@ jobs:
       - name: Run fast tests
         run: pnpm test:fast
 
-      - name: Ensure npm >= 11.5.1 for Trusted Publishing
-        run: npm install -g npm@latest
 
       - name: Publish to npm
         run: pnpm -r publish --access public --provenance --no-git-checks
