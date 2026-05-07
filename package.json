@@ -14,9 +14,13 @@
     "test:docker": "docker build --platform linux/arm64 -t vgpu-test:s2 -f infra/test-docker/Dockerfile . && docker run --rm -v $(pwd)/packages/render/tests/__snapshots__:/workspace/packages/render/tests/__snapshots__ -v $(pwd)/packages/render/tests/inspect/__snapshots__:/workspace/packages/render/tests/inspect/__snapshots__ -v $(pwd)/packages/render/tests/poc/__snapshots__:/workspace/packages/render/tests/poc/__snapshots__ -v $(pwd)/packages/render/tests/primitives/__snapshots__:/workspace/packages/render/tests/primitives/__snapshots__ -e VGPU_WRITE_SNAPSHOTS=${VGPU_WRITE_SNAPSHOTS:-} vgpu-test:s2 sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=$!; VGPU_DOCKER_TEST=1 pnpm test; status=$?; kill $xvfb_pid; exit $status'",
     "generate-lit-cube-snapshot": "pnpm exec esbuild scripts/generate-lit-cube-snapshot.ts --bundle --platform=node --format=esm --external:pngjs --external:webgpu --outfile=packages/adapter-node/dist/generate-lit-cube-snapshot.mjs && node packages/adapter-node/dist/generate-lit-cube-snapshot.mjs",
     "bundle-check": "node scripts/check-bundle-size.mjs",
-    "check-bundle-size": "node scripts/check-bundle-size.mjs"
+    "check-bundle-size": "node scripts/check-bundle-size.mjs",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "release": "pnpm -r publish --access public --provenance --no-git-checks"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^22.10.7",
     "@types/pngjs": "^6.0.5",
     "@webgpu/types": "^0.1.69",
