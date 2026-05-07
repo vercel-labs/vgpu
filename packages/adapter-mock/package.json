@@ -1,10 +1,27 @@
 {
   "name": "@vgpu/adapter-mock",
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.0.1",
+  "description": "Mock GPU adapter for testing vgpu code without real WebGPU hardware.",
+  "keywords": ["webgpu", "graphics", "rendering", "mock", "testing", "adapter"],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/adapter-mock"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
+  "type": "module",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "src/**/*.docs.md"],
+  "files": ["dist", "src/**/*.docs.md", "README.md", "LICENSE"],
   "scripts": { "build": "tsc -b" },
   "dependencies": { "@vgpu/core": "workspace:*" },
   "vgpuBundleBudgetGzipBytes": 20480
