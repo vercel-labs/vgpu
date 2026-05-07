@@ -1,11 +1,20 @@
 import type { Buffer, Device } from "@vgpu/core";
 import type { Vec3 } from "wgpu-matrix";
+import { fullscreenQuad as createFullscreenQuad } from "./mesh-fullscreen-quad.ts";
+import { sphere as createSphere } from "./mesh-sphere.ts";
+import type { VertexLayoutKind } from "./material-factory.ts";
 
 export interface VertexAttributes {
   /** Bytes per vertex. */
   readonly stride: number;
   readonly position: { readonly offset: number; readonly format: "float32x3" };
-  readonly normal: { readonly offset: number; readonly format: "float32x3" };
+  readonly normal?: { readonly offset: number; readonly format: "float32x3" };
+  readonly uv?: { readonly offset: number; readonly format: "float32x2" };
+}
+
+export interface MeshGpu {
+  readonly vertexBuffer: GPUBuffer;
+  readonly indexBuffer?: GPUBuffer;
 }
 
 export interface Mesh {
@@ -13,6 +22,11 @@ export interface Mesh {
   readonly vertexCount: number;
   readonly attributes: VertexAttributes;
   readonly bbox: { readonly min: Vec3; readonly max: Vec3 };
+  readonly indexBuffer?: Buffer;
+  readonly indexCount?: number;
+  readonly indexFormat?: "uint16" | "uint32";
+  readonly layout?: VertexLayoutKind;
+  readonly gpu?: MeshGpu;
 }
 
 export interface BoxSpec {
@@ -31,6 +45,9 @@ const ATTRIBUTES: VertexAttributes = Object.freeze({
 const cache = new WeakMap<Device, Map<number, Mesh>>();
 
 export namespace Mesh {
+  export const fullscreenQuad = createFullscreenQuad;
+  export const sphere = createSphere;
+
   export function box(spec: BoxSpec): Mesh {
     const size = spec.size ?? 1;
     let meshes = cache.get(spec.device);
@@ -59,6 +76,8 @@ export namespace Mesh {
         min: new Float32Array([-h, -h, -h]) as Vec3,
         max: new Float32Array([h, h, h]) as Vec3,
       }),
+      layout: "position-normal" as const,
+      gpu: Object.freeze({ vertexBuffer: vertexBuffer.gpu }),
     });
     meshes.set(size, mesh);
     return mesh;

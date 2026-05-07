@@ -40,15 +40,13 @@ export class RapidRenderer {
 }
 
 function bindMesh(pass: GPURenderPassEncoder, mesh: Mesh, vertexCount: number): void {
-  pass.setVertexBuffer(0, mesh.vertexBuffer.gpu);
-  const indexed = mesh as Mesh & { readonly indexBuffer?: { readonly gpu?: GPUBuffer } | GPUBuffer; readonly indexCount?: number; readonly indexFormat?: GPUIndexFormat };
-  if (!indexed.indexBuffer) { pass.draw(vertexCount, 1, 0, 0); return; }
-  pass.setIndexBuffer(gpuBuffer(indexed.indexBuffer), indexed.indexFormat ?? "uint16");
-  pass.drawIndexed(indexed.indexCount ?? vertexCount, 1, 0, 0, 0);
-}
-
-function gpuBuffer(buffer: { readonly gpu?: GPUBuffer } | GPUBuffer): GPUBuffer {
-  return "gpu" in buffer && buffer.gpu ? buffer.gpu : buffer as GPUBuffer;
+  pass.setVertexBuffer(0, mesh.gpu?.vertexBuffer ?? mesh.vertexBuffer.gpu);
+  if (mesh.indexBuffer && mesh.indexCount && mesh.indexFormat) {
+    pass.setIndexBuffer(mesh.gpu?.indexBuffer ?? mesh.indexBuffer.gpu, mesh.indexFormat);
+    pass.drawIndexed(mesh.indexCount, 1, 0, 0, 0);
+    return;
+  }
+  pass.draw(vertexCount, 1, 0, 0);
 }
 
 function colorTuple(color: GPUColor | undefined): readonly [number, number, number, number] {
