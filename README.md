@@ -95,6 +95,47 @@ device.destroy();
   - examples gallery
   - full typedoc site
 
+## Releasing
+
+Releases are triggered by **GitHub Releases** — no bot commits or version-package PRs required.
+
+### Steps
+
+1. **Bump versions** across all 5 packages:
+   ```bash
+   pnpm bump:patch    # 0.0.1 → 0.0.2
+   # or
+   pnpm bump:minor    # 0.0.1 → 0.1.0
+   pnpm bump:major    # 0.0.1 → 1.0.0
+   ```
+2. **Commit + push** the version bumps to `main` (via PR if branch protection requires).
+3. **Create a GitHub Release** at https://github.com/vercel-labs/vgpu/releases/new
+   - **Tag**: e.g. `v0.0.2` (target: `main`)
+   - **Title**: e.g. `v0.0.2 — short summary`
+   - **Notes**: describe what changed; you can use **Generate release notes** to draft from merged PRs since the last release
+   - Click **Publish release**
+4. The `Release` workflow will:
+   - Check out the tag
+   - Install dependencies
+   - Build all packages
+   - Run fast tests
+   - Publish all 5 packages to npm via Trusted Publishing with provenance attestation
+
+The first auto-published version after the manual bootstrap will show a **Provenance** badge on each package's npm page proving it was built and signed by GitHub Actions.
+
+### Trusted Publishing setup
+
+Trusted Publishing is already configured on npm for each `@vgpu/*` package with:
+- Repository: `vercel-labs/vgpu`
+- Workflow filename: `release.yml`
+- Environment: none
+
+If you ever add a new `@vgpu/*` package, publish it manually once, then add the same Trusted Publisher entry pointing at `release.yml`.
+
+### Bootstrap publish
+
+v0.0.1 was published manually for each of the 5 packages because Trusted Publishing requires a package to exist before it can be configured. This is a one-time bootstrap; v0.0.2+ are published automatically from the release workflow.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
