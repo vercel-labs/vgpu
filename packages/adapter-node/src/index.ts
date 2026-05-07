@@ -1,16 +1,19 @@
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { Device, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
 
 type WebGPUModule = { create(options: string[]): GPU; globals: Record<string, unknown> };
 type NodeAdapterFlags = { readonly backendFlags?: readonly string[] };
 type RequestDeviceOptions = CreateDeviceOptions & NodeAdapterFlags & { readonly backend?: "opengl" | "webgpu" };
-
 type DawnAdapterOptions = GPURequestAdapterOptions & { readonly featureLevel?: "compatibility" };
+type BinaryLoadErrorOptions = { readonly detectedGlibcVersion?: string | null };
 
 const require = createRequire(import.meta.url);
+const dawnMinimumGlibcVersion = "2.38";
 let dawnGPU: GPU | null = null;
 let dawnFlagsUsed: readonly string[] | null = null;
 let loadedWebGPU: WebGPUModule | null = null;
+let hostGlibcVersion: string | null | undefined;
 
 export function createNodeAdapter(): VGPUAdapter {
   return { requestDevice };
@@ -56,13 +59,7 @@ async function loadWebGPU(): Promise<WebGPUModule> {
       loadedWebGPU = (await import("webgpu")) as WebGPUModule;
       return loadedWebGPU;
     } catch (importCause) {
-      throw new VGPUError({
-        code: "VGPU-ADAPTER-NODE-BINARY-LOAD",
-        message: "@vgpu/adapter-node could not load the Dawn WebGPU native binary.",
-        fix: "Run inside the pinned vgpu Docker image with Node 22, Debian trixie, and the OpenGL software stack.",
-        where: "createNodeAdapter",
-        cause: importCause ?? cause,
-      });
+      throw formatBinaryLoadError(importCause ?? cause, { detectedGlibcVersion: getHostGlibcVersion() });
     }
   }
 }
@@ -84,4 +81,43 @@ function adapterOptions(opts: RequestDeviceOptions): DawnAdapterOptions {
 
 function flagsEqual(a: readonly string[], b: readonly string[] | null): boolean {
   return b !== null && a.length === b.length && a.every((flag, index) => flag === b[index]);
+}
+
+export function formatBinaryLoadError(cause: unknown, options: BinaryLoadErrorOptions = {}): VGPUError {
+  const detectedGlibcVersion = options.detectedGlibcVersion ?? null;
+  if (process.platform === "linux" && isGlibcLoadFailure(cause)) {
+    const versionLine = detectedGlibcVersion
+      ? `This host reports GLIBC ${detectedGlibcVersion}.`
+      : "This host reports GLIBC older than 2.38.";
+    return new VGPUError({
+      code: "VGPU-ADAPTER-NODE-BINARY-LOAD",
+      message: `@vgpu/adapter-node requires GLIBC ${dawnMinimumGlibcVersion} or newer to load the Dawn WebGPU native binary. ${versionLine}`,
+      fix: "Use Docker instead: `pnpm test:docker`, or upgrade your host GLIBC to a compatible version.",
+      where: "createNodeAdapter",
+      cause,
+    });
+  }
+  return new VGPUError({
+    code: "VGPU-ADAPTER-NODE-BINARY-LOAD",
+    message: "@vgpu/adapter-node could not load the Dawn WebGPU native binary.",
+    fix: "Run inside the pinned vgpu Docker image with Node 22, Debian trixie, and the OpenGL software stack.",
+    where: "createNodeAdapter",
+    cause,
+  });
+}
+
+function isGlibcLoadFailure(cause: unknown): boolean {
+  return /GLIBC_\d+\.\d+/.test(String(cause));
+}
+
+function getHostGlibcVersion(): string | null {
+  if (process.platform !== "linux") return null;
+  if (hostGlibcVersion !== undefined) return hostGlibcVersion;
+  try {
+    const output = execFileSync("ldd", ["--version"], { encoding: "utf8" });
+    hostGlibcVersion = output.match(/(\d+\.\d+)/)?.[1] ?? null;
+  } catch {
+    hostGlibcVersion = null;
+  }
+  return hostGlibcVersion;
 }
