@@ -29,11 +29,7 @@ const DEFAULT_ROUGHNESS = 0.5;
 const DEFAULT_TARGET_FORMAT = "bgra8unorm-srgb";
 const cache = new WeakMap<Device, Map<string, Material>>();
 
-// Uniforms byte layout:
-// 0 viewProjectionMatrix (64), 64 modelMatrix (64), 128 cameraPosition (12 + 4 pad),
-// 144 lightDirection (12 + 4 pad), 160 lightColor (12), 172 lightIntensity (4),
-// 176 explicit pad (12), 192 baseColor (12), 204 metallic (4), 208 roughness (4),
-// 212 trailing pad (12), total 224 bytes.
+// Uniform byte layout is defined in ./pbr-shader.ts (see UNIFORM_OFFSET_*).
 
 export function pbrMaterial(spec: PbrMaterialSpec): Material {
   const metallic = spec.metallic ?? DEFAULT_METALLIC;
