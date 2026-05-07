@@ -38,7 +38,6 @@
 @vgpu/render UniformSlot packages/render/src/uniform-pool.docs.md
 @vgpu/render RapidRenderer packages/render/src/rapid-renderer.docs.md
 @vgpu/render DrawSpec packages/render/src/rapid-renderer.docs.md
-@vgpu/render DirectionalLight packages/render/src/rapid-renderer.docs.md
 @vgpu/render Camera packages/render/src/domain/camera.docs.md
 @vgpu/render Mat4 packages/render/src/domain/camera.docs.md
 @vgpu/render Vec3 packages/render/src/domain/camera.docs.md
@@ -48,8 +47,7 @@
 @vgpu/render srgb packages/render/src/domain/srgb.docs.md
 @vgpu/render Mesh packages/render/src/domain/mesh.docs.md
 @vgpu/render Material packages/render/src/domain/material.docs.md
-@vgpu/render PbrMaterialSpec packages/render/src/domain/material.docs.md
-@vgpu/render pbrMaterial packages/render/src/domain/material.docs.md
+@vgpu/render MaterialUniformValue packages/render/src/domain/material.docs.md
 @vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolvedShader packages/wgsl/src/runtime/resolveShader.docs.md

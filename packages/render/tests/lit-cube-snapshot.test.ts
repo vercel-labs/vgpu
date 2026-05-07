@@ -9,13 +9,13 @@ import {
   degToRad,
   Mesh,
   orthographicCamera,
-  pbrMaterial,
   perspectiveCamera,
   RapidRenderer,
   srgb,
   type Mat4,
   type Vec3,
 } from "@vgpu/render";
+import { litMaterial } from "./fixtures/lit-material/index.ts";
 
 const WIDTH = 256;
 const HEIGHT = 256;
@@ -70,7 +70,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("lit cube renders byte-equal t
   const depth = device.createTexture({ size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
 
   const mesh = Mesh.box({ device, size: 1 });
-  const material = pbrMaterial({ device, baseColor: srgb(0xcc8844), targetFormat: FORMAT });
+  const material = litMaterial({ device, baseColor: srgb(0xcc8844), targetFormat: FORMAT });
   const camera = perspectiveCamera({
     fovYRadians: degToRad(45),
     aspect: 1,

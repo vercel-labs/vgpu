@@ -11,5 +11,5 @@ export type {
   RenderPassDynamicOffsets,
   RenderPassOptions,
 } from "./render-pass.ts";
-export { degToRad, fullscreenQuad, material, Mesh, orthographicCamera, pbrMaterial, perspectiveCamera, sphere, srgb } from "./domain/index.ts";
-export type { BoxSpec, Camera, DirectionalLight, FullscreenQuadSpec, Material, MaterialSpec, Mat4, MeshGpu, MeshPrimitive, PbrMaterial, PbrMaterialSpec, SphereSpec, Vec3, VertexAttributes, VertexLayoutKind, WgslUniformType } from "./domain/index.ts";
+export { degToRad, fullscreenQuad, material, Mesh, orthographicCamera, perspectiveCamera, sphere, srgb } from "./domain/index.ts";
+export type { BoxSpec, Camera, FullscreenQuadSpec, Material, MaterialSpec, MaterialUniformValue, Mat4, MeshGpu, MeshPrimitive, SphereSpec, Vec3, VertexAttributes, VertexLayoutKind, WgslUniformType } from "./domain/index.ts";

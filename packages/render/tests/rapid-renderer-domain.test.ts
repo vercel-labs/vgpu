@@ -2,11 +2,12 @@ import { expect, test, vi } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
 import { App } from "@vgpu/core";
 import { mat4 } from "wgpu-matrix";
-import { degToRad, Mesh, pbrMaterial, perspectiveCamera, RapidRenderer } from "@vgpu/render";
+import { degToRad, Mesh, perspectiveCamera, RapidRenderer } from "@vgpu/render";
+import { litMaterial } from "./fixtures/lit-material/index.ts";
 
 const LIGHT_DIRECTION_OFFSET = 144;
 
-test("pbrMaterial.writeUniforms uploads bytes with normalized light direction", async () => {
+test("litMaterial.writeUniforms uploads bytes with normalized light direction", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
   const { material, camera } = makeDomainDraw(device);
   const writeBuffer = vi.spyOn(device.gpu.queue, "writeBuffer");
@@ -24,7 +25,7 @@ test("pbrMaterial.writeUniforms uploads bytes with normalized light direction", 
   device.destroy();
 });
 
-test("pbrMaterial.writeUniforms rejects missing and unknown uniforms", async () => {
+test("litMaterial.writeUniforms rejects missing and unknown uniforms", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
   const { material, camera } = makeDomainDraw(device);
   const values = {
@@ -68,7 +69,7 @@ test("draw can use vertexCount without a mesh", async () => {
 function makeDomainDraw(device: Awaited<ReturnType<typeof App.create>>["device"]) {
   return {
     renderer: new RapidRenderer(device),
-    material: pbrMaterial({ device, baseColor: [0.5, 0.5, 0.5] }),
+    material: litMaterial({ device, baseColor: [0.5, 0.5, 0.5] }),
     mesh: Mesh.box({ device, size: 1 }),
     camera: perspectiveCamera({ fovYRadians: degToRad(45), aspect: 1, near: 0.1, far: 100, position: [0, 0, 5], target: [0, 0, 0] }),
     target: textureView(device, "bgra8unorm-srgb"),
