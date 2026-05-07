@@ -1,8 +1,16 @@
 {
   "name": "@vgpu/core",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Core WebGPU runtime primitives (device, buffer, texture, shader, queue) for vgpu.",
-  "keywords": ["webgpu", "graphics", "rendering", "core", "device", "buffer", "shader"],
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "rendering",
+    "core",
+    "device",
+    "buffer",
+    "shader"
+  ],
   "homepage": "https://github.com/vercel-labs/vgpu#readme",
   "bugs": {
     "url": "https://github.com/vercel-labs/vgpu/issues"
