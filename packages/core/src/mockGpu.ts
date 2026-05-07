@@ -41,8 +41,8 @@ export function createMockGPUDevice(): GPUDevice {
     destroy() {},
     queue: {
       submit() {},
-      writeBuffer(buffer: GPUBuffer, offset: number, data: BufferSource) {
-        if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data), offset);
+      writeBuffer(buffer: GPUBuffer, offset: number, data: BufferSource, dataOffset = 0, size?: number) {
+        if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data).subarray(dataOffset, size ? dataOffset + size : undefined), offset);
       },
       onSubmittedWorkDone: async () => undefined,
     },

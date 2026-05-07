@@ -1,11 +1,17 @@
 import { VGPUError, type Device } from "@vgpu/core";
+import {
+  copyDstUsage,
+  defaultCapacityBytes,
+  defaultMaxUniformBindingSize,
+  defaultMinOffsetAlignment,
+  deviceLimit,
+  invalidUsage,
+  roundUp,
+  shaderVisibility,
+  uniformUsage,
+  viewBytes,
+} from "./uniform-pool-internals.ts";
 import type { UniformLayout, UniformPoolOptions, UniformSlot } from "./uniform-pool-types.ts";
-
-const defaultCapacityBytes = 4 * 1024 * 1024;
-const defaultMinOffsetAlignment = 256;
-const defaultMaxUniformBindingSize = 64 * 1024;
-const uniformUsage = 64;
-const copyDstUsage = 8;
 
 export class UniformPool {
   readonly minOffsetAlignment: number;
@@ -15,7 +21,7 @@ export class UniformPool {
   readonly gpu: GPUBuffer;
   private readonly bytes: Uint8Array;
   private head = 0;
-  private flushed = false;
+  private hasUnflushedPushes = false;
   private isDisposed = false;
 
   constructor(readonly device: Device, opts: UniformPoolOptions = {}) {
@@ -27,13 +33,8 @@ export class UniformPool {
     this.gpu = device.gpu.createBuffer({ label: "vgpu UniformPool", size: this.capacityBytes, usage: uniformUsage | copyDstUsage });
   }
 
-  get usedBytes(): number {
-    return this.head;
-  }
-
-  get disposed(): boolean {
-    return this.isDisposed;
-  }
+  get usedBytes(): number { return this.head; }
+  get disposed(): boolean { return this.isDisposed; }
 
   alloc<T>(layout: UniformLayout<T>): UniformSlot<T> {
     this.assertUsable("UniformPool.alloc");
@@ -49,11 +50,7 @@ export class UniformPool {
   pushBytes(slot: UniformSlot<unknown>, bytes: ArrayBufferView<ArrayBuffer>): number {
     this.assertOwnsSlot(slot, "UniformPool.pushBytes");
     if (bytes.byteLength !== slot.layout.size) {
-      throw new VGPUError({
-        code: "VGPU-CORE-INVALID-USAGE",
-        message: `Uniform bytes must match layout size ${slot.layout.size}.`,
-        where: "UniformSlot.pushBytes",
-      });
+      throw invalidUsage("UniformSlot.pushBytes", `Uniform bytes must match layout size ${slot.layout.size}.`);
     }
     return this.write(slot.layout.size, slot.stride, (offset) => this.bytes.set(viewBytes(bytes), offset));
   }
@@ -61,13 +58,19 @@ export class UniformPool {
   beginFrame(_frameIndex: number): void {
     this.assertUsable("UniformPool.beginFrame");
     this.head = 0;
-    this.flushed = false;
+    this.hasUnflushedPushes = false;
   }
 
   endFrame(): void {
     this.assertUsable("UniformPool.endFrame");
-    // TODO(uniform-pool): GPU upload wires up when first real consumer lands
-    this.flushed = true;
+    if (this.hasUnflushedPushes) this.device.gpu.queue.writeBuffer(this.gpu, 0, this.cpuMirror, 0, this.head);
+    this.hasUnflushedPushes = false;
+  }
+
+  assertReadyForSubmit(where: string): void {
+    this.assertUsable(where);
+    if (!this.hasUnflushedPushes) return;
+    throw invalidUsage(where, "UniformPool has unflushed pushes; call endFrame() before submitting.");
   }
 
   dispose(): void {
@@ -78,11 +81,7 @@ export class UniformPool {
 
   private assertOwnsSlot(slot: UniformSlot<unknown>, where: string): void {
     if (slot.pool === this) return;
-    throw new VGPUError({
-      code: "VGPU-CORE-INVALID-USAGE",
-      message: "UniformSlot was allocated by a different UniformPool.",
-      where,
-    });
+    throw invalidUsage(where, "UniformSlot was allocated by a different UniformPool.");
   }
 
   private write(layoutSize: number, stride: number, encode: (byteOffset: number) => void): number {
@@ -91,17 +90,11 @@ export class UniformPool {
     const offset = this.head;
     encode(offset);
     this.head += stride;
+    this.hasUnflushedPushes = true;
     return offset;
   }
 
   private assertCanPush(layoutSize: number, stride: number): void {
-    if (this.flushed) {
-      throw new VGPUError({
-        code: "VGPU-CORE-UNIFORM-POOL-PUSH-AFTER-FLUSH",
-        message: "Call UniformPool.beginFrame() before pushing more uniform data after endFrame().",
-        where: "UniformSlot.push",
-      });
-    }
     if (this.head + stride <= this.capacityBytes) return;
     throw new VGPUError({
       code: "VGPU-UNIFORM-POOL-OVERFLOW",
@@ -121,30 +114,28 @@ export class UniformPool {
 
   private assertUsable(where: string): void {
     if (!this.isDisposed) return;
-    throw new VGPUError({ code: "VGPU-CORE-INVALID-USAGE", message: "UniformPool has been disposed.", where });
+    throw invalidUsage(where, "UniformPool has been disposed.");
   }
 }
 
 class PoolSlot<T> implements UniformSlot<T> {
-  readonly bindGroup: GPUBindGroup | null = null;
-  readonly bindGroupLayout: GPUBindGroupLayout | null = null;
+  readonly bindGroup: GPUBindGroup;
+  readonly bindGroupLayout: GPUBindGroupLayout;
   readonly gpu: GPUBuffer;
+
   constructor(readonly pool: UniformPool, readonly layout: UniformLayout<T>, readonly stride: number) {
     this.gpu = pool.gpu;
+    this.bindGroupLayout = layout.bindGroupLayout ?? pool.device.gpu.createBindGroupLayout({
+      label: "UniformPool.slot.bgl",
+      entries: layout.bindings ?? [{ binding: 0, visibility: shaderVisibility(), buffer: { type: "uniform", hasDynamicOffset: true, minBindingSize: layout.size } }],
+    });
+    this.bindGroup = pool.device.gpu.createBindGroup({
+      label: "UniformPool.slot.bg",
+      layout: this.bindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: this.gpu, offset: 0, size: stride } }],
+    });
   }
+
   push(value: T): number { return this.pool.push(this, value); }
   pushBytes(bytes: ArrayBufferView<ArrayBuffer>): number { return this.pool.pushBytes(this, bytes); }
-}
-
-function roundUp(value: number, alignment: number): number {
-  return Math.ceil(value / alignment) * alignment;
-}
-
-function deviceLimit(device: Device, key: keyof GPUSupportedLimits, fallback: number): number {
-  const limits = (device.gpu as GPUDevice & { readonly limits?: Partial<Record<keyof GPUSupportedLimits, number>> }).limits;
-  return limits?.[key] ?? fallback;
-}
-
-function viewBytes(view: ArrayBufferView<ArrayBuffer>): Uint8Array {
-  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 }
