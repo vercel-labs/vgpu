@@ -15,6 +15,10 @@ export class Shader {
     return this.resolved.source;
   }
 
+  get code(): string {
+    return this.resolved.wgsl;
+  }
+
   get entryPoints(): ResolvedShader["entryPoints"] {
     return this.resolved.entryPoints;
   }
