@@ -5,6 +5,7 @@ import { editableSignature } from "./_helpers.ts";
 
 const tri = (positions: number[], indices: number[]) => EditableMesh.fromArrays({ positions: new Float32Array(positions), indices: new Uint32Array(indices) });
 const tetra = () => tri([1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1], [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+const cube = () => tri([-0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, -0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5, 0.5], [1, 2, 6, 1, 6, 5, 4, 7, 3, 4, 3, 0, 3, 7, 6, 3, 6, 2, 4, 0, 1, 4, 1, 5, 4, 5, 6, 4, 6, 7, 1, 0, 3, 1, 3, 2]);
 const euler = (em: ReturnType<typeof tetra>) => em.vertexCount - em.edgeCount + em.faceCount;
 
 describe("subdivideEdges", () => {
@@ -19,6 +20,38 @@ describe("subdivideEdges", () => {
     const em = tetra(), result = subdivideEdges(em, em.edges.all(), { cuts: 1 });
     expect(result.newVertices.count).toBe(em.edgeCount);
     expect(result.newEdges.count).toBe(em.edgeCount * 2);
+  });
+
+  test("two cuts on all tetrahedron edges creates a regular three-way split", () => {
+    const em = tetra(), result = subdivideEdges(em, em.edges.all(), { cuts: 2 });
+    expect(result.mesh.vertexCount).toBe(20);
+    expect(result.mesh.edgeCount).toBe(54);
+    expect(result.mesh.faceCount).toBe(36);
+    expect(result.newVertices.count).toBe(12);
+    expect(result.newEdges.count).toBe(18);
+    expect(euler(result.mesh)).toBe(2);
+  });
+
+  test("two cuts on one tetrahedron edge only subdivides incident faces", () => {
+    const em = tetra(), result = subdivideEdges(em, em.edges.byIndex([0]), { cuts: 2 });
+    expect(result.mesh.vertexCount).toBe(6);
+    expect(result.mesh.faceCount).toBe(8);
+    expect(result.newVertices.count).toBe(2);
+    expect(result.newEdges.count).toBe(3);
+  });
+
+  test("three cuts on all cube edges follows the triangular grid formula", () => {
+    const em = cube(), result = subdivideEdges(em, em.edges.all(), { cuts: 3 });
+    expect(result.mesh.vertexCount).toBe(98);
+    expect(result.mesh.edgeCount).toBe(288);
+    expect(result.mesh.faceCount).toBe(192);
+    expect(euler(result.mesh)).toBe(2);
+  });
+
+  test("zero cuts clamps to the one-cut behavior", () => {
+    const em = tetra(), result = subdivideEdges(em, em.edges.all(), { cuts: 0 });
+    expect(result.newVertices.count).toBe(em.edgeCount);
+    expect(result.mesh.faceCount).toBe(16);
   });
 
   test("returns deterministic descendant selections", () => {

@@ -29,17 +29,38 @@ function emitFace(em: EditableMesh, f: number, selected: Set<number>, points: Ma
   const n = picked.filter(Boolean).length, smooth = k.useSmooth[f];
   if (n === 0) { addTri(parts, verts[0], verts[1], verts[2], smooth); return; }
   if (n === 1) { const i = picked.findIndex(Boolean), ps = oriented(points.get(edges[i])!, verts[i], verts[(i + 1) % 3]), o = verts[(i + 2) % 3]; for (let j = 0; j < ps.length - 1; j++) addTri(parts, o, ps[j], ps[j + 1], smooth); return; }
-  if (n === 2 && (points.get(edges[picked.findIndex(Boolean)])?.length ?? 0) === 3) { emitTwoCut(verts, edges, picked, points, parts, smooth); return; }
-  if (n === 3 && (points.get(edges[0])?.length ?? 0) === 3) { const m = edges.map((e, i) => oriented(points.get(e)!, verts[i], verts[(i + 1) % 3])[1]); addTri(parts, verts[0], m[0], m[2], smooth); addTri(parts, m[0], verts[1], m[1], smooth); addTri(parts, m[2], m[1], verts[2], smooth); addTri(parts, m[0], m[1], m[2], smooth); return; }
-  addTri(parts, verts[0], verts[1], verts[2], smooth);
+  if (n === 2) { emitTwoCut(verts, edges, picked, points, parts, smooth); return; }
+  emitThreeCut(verts, edges, points, parts, smooth);
 }
 
 function emitTwoCut(verts: V[], edges: number[], picked: boolean[], points: Map<number, V[]>, parts: MeshParts, smooth: number): void {
-  const u = picked.findIndex((v, i) => !v && picked[(i + 1) % 3] && picked[(i + 2) % 3]), a = verts[u], s = verts[(u + 2) % 3], b = verts[(u + 1) % 3];
-  const ms = oriented(points.get(edges[(u + 1) % 3])!, b, s)[1], ma = oriented(points.get(edges[(u + 2) % 3])!, s, a)[1];
-  addTri(parts, ma, s, ms, smooth); addTri(parts, a, ma, b, smooth); addTri(parts, ma, ms, b, smooth);
+  const u = picked.findIndex((v, i) => !v && picked[(i + 1) % 3] && picked[(i + 2) % 3]), apex = verts[(u + 2) % 3];
+  const left = oriented(points.get(edges[(u + 2) % 3])!, apex, verts[u]), right = oriented(points.get(edges[(u + 1) % 3])!, apex, verts[(u + 1) % 3]);
+  for (let i = 0; i < left.length - 1; i++) {
+    if (i === 0) addTri(parts, apex, right[1], left[1], smooth);
+    else { addTri(parts, left[i], right[i], right[i + 1], smooth); addTri(parts, left[i], right[i + 1], left[i + 1], smooth); }
+  }
 }
 
+function emitThreeCut(verts: V[], edges: number[], points: Map<number, V[]>, parts: MeshParts, smooth: number): void {
+  const e01 = oriented(points.get(edges[0])!, verts[0], verts[1]), e12 = oriented(points.get(edges[1])!, verts[1], verts[2]), e02 = oriented(points.get(edges[2])!, verts[0], verts[2]);
+  const s = e01.length - 1, grid = new Map<string, V>();
+  for (let j = 0; j <= s; j++) for (let i = 0; i <= s - j; i++) grid.set(`${i}:${j}`, boundary(i, j, s, e01, e12, e02, verts));
+  for (let j = 0; j < s; j++) for (let i = 0; i < s - j; i++) {
+    addTri(parts, at(grid, i, j), at(grid, i + 1, j), at(grid, i, j + 1), smooth);
+    if (i < s - j - 1) addTri(parts, at(grid, i + 1, j), at(grid, i + 1, j + 1), at(grid, i, j + 1), smooth);
+  }
+}
+
+function boundary(i: number, j: number, s: number, e01: V[], e12: V[], e02: V[], v: V[]): V {
+  if (j === 0) return e01[i];
+  if (i === 0) return e02[j];
+  if (i + j === s) return e12[j];
+  const a = (s - i - j) / s, b = i / s, c = j / s;
+  return [v[0][0] * a + v[1][0] * b + v[2][0] * c, v[0][1] * a + v[1][1] * b + v[2][1] * c, v[0][2] * a + v[1][2] * b + v[2][2] * c];
+}
+
+function at(grid: Map<string, V>, i: number, j: number): V { return grid.get(`${i}:${j}`)!; }
 function oriented(ps: V[], a: V, b: V): V[] { return key(ps[0], a) === key(a, a) && key(ps[ps.length - 1], b) === key(b, b) ? ps : [...ps].reverse(); }
 function lerp(a: V, b: V, t: number): V { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 function copyUnselectedSharp(em: EditableMesh, selected: Set<number>, parts: MeshParts): void { const k = unwrapKernel(em.gpu.halfEdgeKernel); for (let e = 0; e < k.edgeCount; e++) if (!selected.has(e) && k.isSharp[e]) parts.sharp.add(key(p(em, k.edgeVertexA[e]), p(em, k.edgeVertexB[e]))); }
