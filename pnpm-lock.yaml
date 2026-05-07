@@ -59,6 +59,9 @@ importers:
       '@vgpu/core':
         specifier: workspace:*
         version: link:../core
+      wgpu-matrix:
+        specifier: ^3.4.2
+        version: 3.4.2
 
   packages/wgsl: {}
 
@@ -564,6 +567,9 @@ packages:
   webgpu@0.4.0:
     resolution: {integrity: sha512-F5pimn3Aoi0zWjuRdiVs5TnrUwSzD2lESBohsIUsqyitWkGRQlXU2fhV6ycXlQTa1bvAf3sjqiUpBEpmSQ5ptA==}
 
+  wgpu-matrix@3.4.2:
+    resolution: {integrity: sha512-IfZFbG7olEYBD76VCZy2TzqM57GKy3LT++AZh37tMHPPByO6R2h61zXGBZFNPi2IzxNivNi8y5dvze5PjaczjA==}
+
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -975,6 +981,8 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  wgpu-matrix@3.4.2: {}
 
   why-is-node-running@2.3.0:
     dependencies:

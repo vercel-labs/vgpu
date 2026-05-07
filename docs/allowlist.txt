@@ -38,6 +38,8 @@
 @vgpu/render UniformSlot packages/render/src/UniformPool.docs.md
 @vgpu/render RapidRenderer packages/render/src/RapidRenderer.docs.md
 @vgpu/render DrawSpec packages/render/src/RapidRenderer.docs.md
+@vgpu/render degToRad packages/render/src/domain/deg-to-rad.docs.md
+@vgpu/render srgb packages/render/src/domain/srgb.docs.md
 @vgpu/wgsl/runtime resolveShader packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolveOptions packages/wgsl/src/runtime/resolveShader.docs.md
 @vgpu/wgsl/runtime ResolvedShader packages/wgsl/src/runtime/resolveShader.docs.md

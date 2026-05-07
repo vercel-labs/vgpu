@@ -11,3 +11,4 @@ export type {
   RenderPassDynamicOffsets,
   RenderPassOptions,
 } from "./render-pass.ts";
+export { degToRad, srgb } from "./domain/index.ts";

@@ -6,6 +6,6 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "src/**/*.docs.md"],
   "scripts": { "build": "tsc -b" },
-  "dependencies": { "@vgpu/core": "workspace:*" },
+  "dependencies": { "@vgpu/core": "workspace:*", "wgpu-matrix": "^3.4.2" },
   "vgpuBundleBudgetGzipBytes": 40960
 }
