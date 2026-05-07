@@ -46,5 +46,6 @@ export function toGPUTextureDescriptor(opts: TextureOptions): GPUTextureDescript
     size: { width: opts.size[0], height: opts.size[1], depthOrArrayLayers: opts.size[2] ?? 1 },
     format: opts.format,
     usage: textureUsageFlags(opts.usage),
+    sampleCount: opts.sampleCount,
   };
 }
