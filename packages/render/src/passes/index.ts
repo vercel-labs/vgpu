@@ -1,3 +1,5 @@
+export { renderTarget } from "../render-target/render-target.ts";
+export { renderTargetForCanvas } from "../render-target/render-target-canvas.ts";
 export type {
   PassSpec,
   PassTarget,

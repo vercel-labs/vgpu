@@ -15,6 +15,12 @@ export class Texture {
     readonly options: TextureOptions,
   ) {}
 
+  get size(): TextureOptions["size"] { return this.options.size; }
+  get format(): GPUTextureFormat { return this.options.format; }
+  get usage(): TextureOptions["usage"] { return this.options.usage; }
+  get sampleCount(): 1 | 4 { return this.options.sampleCount ?? 1; }
+  get label(): string | undefined { return this.options.label; }
+
   createView(desc?: GPUTextureViewDescriptor): GPUTextureView {
     return this.gpu.createView(desc);
   }

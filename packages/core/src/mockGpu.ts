@@ -14,7 +14,7 @@ export function createMockGPUDevice(): GPUDevice {
         height: size.height,
         depthOrArrayLayers: size.depthOrArrayLayers,
         mipLevelCount: 1,
-        sampleCount: 1,
+        sampleCount: desc.sampleCount ?? 1,
         dimension: "2d",
         format: desc.format,
         usage: desc.usage,
