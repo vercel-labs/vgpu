@@ -16,8 +16,8 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("MRT color plus rgba8unorm ent
     { format: FORMAT, label: "picking.color", clearColor: [0, 0, 0, 1] },
     { format: FORMAT, label: "picking.entity-id", clearColor: [0, 0, 0, 1] },
   ] });
-  pass({ mesh: leftMesh, material: entityMaterial(device, [1, .1, .05], 1), target: picking, scissor: [0, 0, W / 2, H] });
-  pass({ mesh: rightMesh, material: entityMaterial(device, [.05, .25, 1], 2), target: picking, colorLoadOp: "load", scissor: [W / 2, 0, W / 2, H] });
+  pass({ mesh: leftMesh, material: entityMaterial(device, [1, .1, .05], 64), target: picking, scissor: [0, 0, W / 2, H] });
+  pass({ mesh: rightMesh, material: entityMaterial(device, [.05, .25, 1], 192), target: picking, colorLoadOp: "load", scissor: [W / 2, 0, W / 2, H] });
   await snapshot(device, leftMesh, copyMaterial(device, picking.colors[0]), "render-target-mrt-picking-color");
   await snapshot(device, leftMesh, copyMaterial(device, picking.colors[1]), "render-target-mrt-picking-entity-id");
   picking.colors.forEach((t) => t.destroy());
