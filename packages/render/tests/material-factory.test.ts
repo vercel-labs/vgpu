@@ -107,18 +107,33 @@ test("material.shader.code exposes the WGSL string", async () => {
   device.destroy();
 });
 
-test("empty textures spec preserves no-texture material shape", async () => {
+test("empty textures spec preserves no-texture material shape and WGSL byte-for-byte", async () => {
   const { device } = await testDevice();
   const mat = material({ device, vertex, fragment, uniforms: {}, textures: {}, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
   expect(mat.samplerBindings).toEqual({});
   expect(mat.textureBindings).toEqual({});
   expect(mat.gpu.defaultSampler).toBeUndefined();
+  expect(mat.shader.code).toBe(`\n${vertex}\n${fragment}`);
   device.destroy();
 });
 
-function make(device: Device, uniforms: Record<string, WgslUniformType>): Material {
-  return material({ device, vertex, fragment, uniforms, vertexLayout: "position-only", targetFormat: "rgba8unorm" });
-}
+test("material emits WGSL declarations for texture kinds and samplers", async () => {
+  const { device } = await testDevice();
+  const cases = [
+    ["implicit materialSampler", { albedo: "texture_2d_f32" }, undefined, `@group(0) @binding(1) var albedo: texture_2d<f32>;\n@group(0) @binding(0) var materialSampler: sampler;`],
+    ["explicit user sampler", { albedo: { kind: "texture_2d_f32", sampler: "albedoSampler" } }, { albedoSampler: "nearest-clamp" }, `@group(0) @binding(1) var albedo: texture_2d<f32>;\n@group(0) @binding(0) var albedoSampler: sampler;`],
+    ["cube texture", { envMap: "texture_cube_f32" }, undefined, `@group(0) @binding(1) var envMap: texture_cube<f32>;\n@group(0) @binding(0) var materialSampler: sampler;`],
+    ["2D array texture", { tiles: "texture_2d_array_f32" }, undefined, `@group(0) @binding(1) var tiles: texture_2d_array<f32>;\n@group(0) @binding(0) var materialSampler: sampler;`],
+    ["mixed textures", { albedo: "texture_2d_f32", normal: { kind: "texture_2d_f32", sampler: "nearestSampler" }, envMap: "texture_cube_f32" }, { nearestSampler: "nearest-clamp" }, `@group(0) @binding(2) var albedo: texture_2d<f32>;\n@group(0) @binding(0) var materialSampler: sampler;\n@group(0) @binding(3) var normal: texture_2d<f32>;\n@group(0) @binding(1) var nearestSampler: sampler;\n@group(0) @binding(4) var envMap: texture_cube<f32>;`],
+  ] as const;
+  for (const [name, textures, samplers, declarations] of cases) {
+    const mat = material({ device, vertex, fragment, uniforms: {}, textures, samplers, vertexLayout: "position-only", targetFormat: "rgba8unorm", autoDeclarations: true });
+    expect(mat.shader.code, name).toBe(`${declarations}\n\n${vertex}\n${fragment}`);
+  }
+  device.destroy();
+});
+
+function make(device: Device, uniforms: Record<string, WgslUniformType>): Material { return material({ device, vertex, fragment, uniforms, vertexLayout: "position-only", targetFormat: "rgba8unorm" }); }
 
 function testDevice(): Promise<{ readonly device: Device }> {
   return App.create({ adapter: adapter() });

@@ -1,6 +1,23 @@
 ## Unreleased
 
 ### Minor
+- @vgpu/render: BREAKING CHANGE (pre-1.0): `material()` no longer auto-prepends texture/sampler WGSL declarations by default. `wgslDeclarations(textures, textureBindings, samplerBindings, group?)` is also exported for lower-level declaration generation. Binding allocation order is now documented as uniforms → samplers → textures, each in insertion order.
+
+  Migration paths:
+  1. Add `autoDeclarations: true` to keep the previous PR #63 draft behavior:
+     ```ts
+     material({ ..., textures, samplers, autoDeclarations: true });
+     ```
+  2. Write declarations explicitly in shader source:
+     ```wgsl
+     @group(0) @binding(0) var materialSampler: sampler;
+     @group(0) @binding(1) var albedo: texture_2d<f32>;
+     ```
+  3. Let the library compute declarations and prepend them manually:
+     ```ts
+     const decls = getMaterialDeclarations(spec);
+     const mat = material({ ...spec, fragment: `${decls}\n${fragment}` });
+     ```
 - @vgpu/wgsl: Add `deps` field to `resolveShader` result; add `onDependency` callback option to `transformWgsl`. Foundation for HMR / watch-mode support in webpack/vite loaders (PR2).
 
 ## 0.0.1 — 2026-05-07

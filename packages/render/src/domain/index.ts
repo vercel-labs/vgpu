@@ -16,6 +16,7 @@ export { sphere } from "./mesh-sphere.ts";
 export { tetrahedron } from "./mesh-tetrahedron.ts";
 export { torus } from "./mesh-torus.ts";
 export { octahedron } from "./mesh-octahedron.ts";
+export { getMaterialDeclarations, wgslDeclarations } from "./material-bindings.ts";
 export { material } from "./material-factory.ts";
 export { sampler } from "./material-sampler.ts";
 export { perspectiveCamera } from "./perspective-camera.ts";
