@@ -21,7 +21,11 @@ RUN mkdir -p /tmp/xdg-runtime && chmod 700 /tmp/xdg-runtime
 WORKDIR /workspace
 COPY . .
 RUN corepack enable
-RUN pnpm install --frozen-lockfile
+RUN pnpm config set network-timeout 120000 \
+ && pnpm config set fetch-retries 5 \
+ && pnpm config set fetch-retry-mintimeout 10000 \
+ && pnpm config set fetch-retry-maxtimeout 60000 \
+ && pnpm install --frozen-lockfile
 RUN pnpm typecheck
 RUN Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & \
     xvfb_pid=$!; \

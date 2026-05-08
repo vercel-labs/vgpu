@@ -4,12 +4,15 @@ import { Device, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@
 
 type WebGPUModule = { create(options: string[]): GPU; globals: Record<string, unknown> };
 type NodeAdapterFlags = { readonly backendFlags?: readonly string[] };
-type RequestDeviceOptions = CreateDeviceOptions & NodeAdapterFlags & { readonly backend?: "opengl" | "webgpu" };
+type NodeAdapterRetryOptions = { readonly adapterRequestRetryCount?: number; readonly adapterRequestRetryBaseDelayMs?: number };
+type RequestDeviceOptions = CreateDeviceOptions & NodeAdapterFlags & NodeAdapterRetryOptions & { readonly backend?: "opengl" | "webgpu" };
 type DawnAdapterOptions = GPURequestAdapterOptions & { readonly featureLevel?: "compatibility" };
 type BinaryLoadErrorOptions = { readonly detectedGlibcVersion?: string | null };
 
 const require = createRequire(import.meta.url);
 const dawnMinimumGlibcVersion = "2.38";
+const defaultAdapterRequestRetryCount = 3;
+const defaultAdapterRequestRetryBaseDelayMs = 100;
 let dawnGPU: GPU | null = null;
 let dawnFlagsUsed: readonly string[] | null = null;
 let loadedWebGPU: WebGPUModule | null = null;
@@ -26,11 +29,41 @@ export async function createNodeDevice(opts?: RequestDeviceOptions): Promise<Dev
 async function requestDevice(opts: RequestDeviceOptions = {}): Promise<Device> {
   const webgpu = await loadWebGPU();
   Object.assign(globalThis, webgpu.globals);
-  const adapter = await getDawnGPU(opts, webgpu).requestAdapter(adapterOptions(opts) as GPURequestAdapterOptions);
-  if (!adapter) throw new Error("No WebGPU adapter available for @vgpu/adapter-node.");
+  const adapter = await requestAdapterWithRetry(getDawnGPU(opts, webgpu), adapterOptions(opts) as GPURequestAdapterOptions, opts);
   const device = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
   if (opts.label) device.label = opts.label;
   return new Device(device, adapter.info ?? null);
+}
+
+async function requestAdapterWithRetry(gpu: GPU, options: GPURequestAdapterOptions, retryOptions: NodeAdapterRetryOptions): Promise<GPUAdapter> {
+  let lastError: unknown = new Error("requestAdapter returned null");
+  const maxAttempts = Math.max(1, retryOptions.adapterRequestRetryCount ?? defaultAdapterRequestRetryCount);
+  const baseDelayMs = Math.max(0, retryOptions.adapterRequestRetryBaseDelayMs ?? defaultAdapterRequestRetryBaseDelayMs);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const adapter = await gpu.requestAdapter(options);
+      if (adapter) return adapter;
+      lastError = new Error("requestAdapter returned null");
+    } catch (error) {
+      if (!shouldRetryAdapterRequestError(error)) throw error;
+      lastError = error;
+    }
+
+    if (attempt < maxAttempts) {
+      await sleep(baseDelayMs * 3 ** (attempt - 1));
+    }
+  }
+
+  throw new Error(`No WebGPU adapter available for @vgpu/adapter-node after ${maxAttempts} attempts: ${String(lastError)}`);
+}
+
+function shouldRetryAdapterRequestError(error: unknown): boolean {
+  return !/AbortError/i.test(String(error));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getDawnGPU(opts: RequestDeviceOptions, webgpu: WebGPUModule): GPU {
