@@ -26,7 +26,9 @@ export interface RenderTargetGpu {
   readonly depthTexture?: GPUTexture;
 }
 
-/** Options for creating a render target. */
+export type ClearColor = GPUColorDict | readonly [number, number, number, number];
+
+/** Options for creating a single-color render target. */
 export interface RenderTargetSpec {
   readonly device: Device;
   readonly size: readonly [number, number];
@@ -34,8 +36,33 @@ export interface RenderTargetSpec {
   readonly depth?: boolean | GPUTextureFormat;
   readonly msaa?: boolean | 4;
   readonly label?: string;
-  readonly clearColor?: GPUColorDict | readonly [number, number, number, number];
+  readonly clearColor?: ClearColor;
 }
+
+/** Per-attachment options for creating a multi-color render target. */
+export interface ColorAttachmentSpec {
+  readonly format: GPUTextureFormat;
+  readonly clearColor?: ClearColor;
+  readonly label?: string;
+}
+
+/** Options for creating a multi-color render target. */
+export interface RenderTargetMultiSpec<Specs extends readonly ColorAttachmentSpec[] = readonly ColorAttachmentSpec[]> {
+  readonly device: Device;
+  readonly size: readonly [number, number];
+  readonly colors: readonly [...Specs];
+  readonly depth?: boolean | GPUTextureFormat;
+  readonly label?: string;
+}
+
+/** RenderTarget narrowed to the tuple length of a RenderTargetMultiSpec. */
+export type RenderTargetN<Specs extends readonly ColorAttachmentSpec[]> =
+  Omit<RenderTarget, "colors" | "format"> & {
+    readonly colors: { readonly [K in keyof Specs]: Texture };
+    readonly format: Specs extends readonly [infer First extends ColorAttachmentSpec, ...ColorAttachmentSpec[]]
+      ? First["format"]
+      : GPUTextureFormat;
+  };
 
 /** Supported color target inputs for pass(). */
 export type PassTarget = RenderTarget | Texture | GPUTextureView;
@@ -46,7 +73,7 @@ export interface PassSpec {
   readonly mesh: Mesh;
   readonly target: PassTarget;
   readonly depthTarget?: Texture | GPUTextureView;
-  readonly clearColor?: GPUColorDict | readonly [number, number, number, number];
+  readonly clearColor?: ClearColor | readonly (ClearColor | undefined)[];
   readonly colorLoadOp?: "clear" | "load";
   readonly depthLoadOp?: "clear" | "load";
   readonly depthClearValue?: number;
