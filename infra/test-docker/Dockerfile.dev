@@ -1,4 +1,5 @@
 FROM node:22-trixie-slim
+LABEL vgpu-test=1
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     DEBIAN_FRONTEND=noninteractive \
