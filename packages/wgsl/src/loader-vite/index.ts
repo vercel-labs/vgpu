@@ -2,10 +2,15 @@ import { resolveShader } from "../runtime/resolveShader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
 export interface ViteLoadResult { readonly code: string; readonly map: null }
+export interface TransformWgslOptions { readonly source: string; readonly id: string; readonly onDependency?: (absPath: string) => void }
 
-export async function transformWgsl(source: string, id: string): Promise<ViteLoadResult> {
-  if (!hasTopLevelImport(source)) return { code: `export default ${JSON.stringify(source)};`, map: null };
-  const resolved = await resolveShader({ entry: id, validate: false });
+export function transformWgsl(source: string, id: string): Promise<ViteLoadResult>;
+export function transformWgsl(opts: TransformWgslOptions): Promise<ViteLoadResult>;
+export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions, id?: string): Promise<ViteLoadResult> {
+  const opts = typeof sourceOrOpts === "string" ? { source: sourceOrOpts, id: id ?? "<vite>" } : sourceOrOpts;
+  if (!hasTopLevelImport(opts.source)) return { code: `export default ${JSON.stringify(opts.source)};`, map: null };
+  const resolved = await resolveShader({ entry: opts.id, validate: false });
+  for (const dep of resolved.deps) opts.onDependency?.(dep);
   return { code: `export default ${JSON.stringify(resolved.wgsl)};`, map: null };
 }
 
