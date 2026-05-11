@@ -15,7 +15,7 @@ export interface ResolveOptions { readonly entry: string; readonly rootDir?: str
 export interface WGSLModule { readonly path: string; readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[]; readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[]; readonly bytes: number; readonly hash8: string }
 export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
-export interface ResolvedShader { readonly wgsl: string; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
+export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
 
 const scanCache = new Map<string, MangleModule>();
 const resolveCache = new Map<string, ResolvedShader>();
@@ -29,6 +29,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const entry = canonicalEntry(opts.entry, opts);
   loadGraph(entry, opts, loaded, [], diagnostics);
   const modules = [...loaded.values()];
+  const deps = [...loaded.keys()].sort();
   assertNoMangleCollisions(modules.map((module) => module.path));
   assertNoJsVisibleDuplicates(modules);
   const exportsByPath = buildExports(modules);
@@ -39,7 +40,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   if (opts.validate !== false) await validateWGSL(wgsl);
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
-  const resolved = { wgsl, cacheKey, ast, sourceMap: map, diagnostics, reflection };
+  const resolved = { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
   remember(resolveCache, key, resolved);
   return resolved;
 }

@@ -1,3 +1,8 @@
+## Unreleased
+
+### Minor
+- @vgpu/wgsl: Add `deps` field to `resolveShader` result; add `onDependency` callback option to `transformWgsl`. Foundation for HMR / watch-mode support in webpack/vite loaders (PR2).
+
 ## 0.0.1 — 2026-05-07
 
 First public preview. API will shift before 0.1.0.
