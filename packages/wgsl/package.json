@@ -55,6 +55,10 @@
   "scripts": {
     "build": "tsc -b"
   },
+  "devDependencies": {
+    "vite": "^5.4.21",
+    "webpack": "^5.97.1"
+  },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 25600,
     "./runtime": 204800,
