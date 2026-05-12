@@ -60,6 +60,8 @@ jobs:
             kill $xvfb_pid
             exit $status
           '
+      - name: Prune labeled Docker test images
+        run: docker image prune -f --filter "label=vgpu-test=1"
 
   wgsl-cachekey-determinism:
     name: wgsl-cachekey-determinism (${{ matrix.os }})
