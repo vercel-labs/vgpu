@@ -23,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^22.10.7",
     "@types/pngjs": "^6.0.5",
+    "@vgpu/wgsl": "workspace:^",
     "@webgpu/types": "^0.1.69",
     "esbuild": "^0.21.5",
     "pixelmatch": "^7.2.0",
