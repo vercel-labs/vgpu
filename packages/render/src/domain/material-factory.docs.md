@@ -32,6 +32,34 @@ struct Uniforms {
 
 Your shader reads fields as `uniforms.fieldName`. Provide `vs_main` and `fs_main` entry points.
 
+Texture and sampler declarations are not injected by default. If your material
+uses `textures` / `samplers`, either write the `@group/@binding var` lines in
+your WGSL source, prepend `getMaterialDeclarations(spec)` yourself, or pass
+`autoDeclarations: true` to keep the generated declarations hidden in the
+runtime shader string. Enabling `autoDeclarations: true` while also writing the
+same declarations manually will fail shader compilation with a WGSL redeclare
+error.
+
+Binding allocation order is a public contract: uniforms first, then samplers,
+then textures, each in insertion order. Binding 0 is the uniform buffer when
+`uniforms` has fields; otherwise samplers start at 0. When a texture needs the
+implicit `materialSampler`, that sampler is allocated before explicit sampler
+keys. Texture declarations produced by `getMaterialDeclarations()` and
+`wgslDeclarations()` never include the `Uniforms` struct.
+
+```ts
+const spec = {
+  device,
+  vertex,
+  fragment,
+  uniforms: {},
+  textures: { albedo: "texture_2d_f32" },
+  vertexLayout: "position-uv",
+} as const;
+const declarations = getMaterialDeclarations(spec);
+const mat = material({ ...spec, fragment: `${declarations}\n${fragment}` });
+```
+
 ## Example
 
 ```ts

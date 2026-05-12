@@ -2,6 +2,7 @@ import type { Device } from "@vgpu/core";
 import { invalidUsage, shaderVisibility } from "../uniform-pool-internals.ts";
 import type { Material, MaterialGpu } from "./material.ts";
 import { alignUniforms, isWgslUniformType, wgslType, type UniformField, type WgslUniformType } from "./wgsl-alignment.ts";
+import { wgslDeclarations } from "./material-bindings.ts";
 import { materialTextureState } from "./material-textures.ts";
 import type { MaterialSamplerSpec, MaterialTextureSpec, WriteTextureValues } from "./material-textures-schema.ts";
 import { vertexBufferLayout } from "./vertex-layout.ts";
@@ -26,6 +27,13 @@ export interface MaterialSpec<
   readonly vertexLayout: VertexLayoutKind;
   readonly targetFormat?: GPUTextureFormat;
   readonly depthFormat?: GPUTextureFormat | null;
+  /**
+   * When `true`, `material()` prepends generated texture/sampler WGSL declarations.
+   * Defaults to `false`; write declarations manually or prepend `getMaterialDeclarations(spec)`.
+   * The `Uniforms` struct is still injected whenever `uniforms` is non-empty.
+   * @default false
+   */
+  readonly autoDeclarations?: boolean;
 }
 
 export interface FactoryMaterial<
@@ -52,7 +60,9 @@ export function material<
   validateSchema(spec.uniforms);
   const layout = alignUniforms(spec.uniforms);
   const textures = materialTextureState(spec.device, spec.textures, spec.samplers, layout.byteSize === 0 ? 0 : 1);
-  const code = `${header(layout.fields)}\n${spec.vertex}\n${spec.fragment}`;
+  const combinedWgsl = `${header(layout.fields)}\n${spec.vertex}\n${spec.fragment}`;
+  const textureWgsl = spec.autoDeclarations === true ? wgslDeclarations(spec.textures, textures.textureBindings, textures.samplerBindings) : "";
+  const code = textureWgsl === "" ? combinedWgsl : `${textureWgsl}\n${combinedWgsl}`;
   const shader = createShader(spec.device, code);
   const bindGroupLayout = spec.device.gpu.createBindGroupLayout({
     label: "material.bgl",
