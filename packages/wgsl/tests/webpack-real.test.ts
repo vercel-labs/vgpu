@@ -27,30 +27,36 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
     expect(bundle).toContain("return _vgsl_");
   });
 
-  it.todo("triggers re-compile when a transitively imported .wgsl changes (addDependency wiring)");
+  it("triggers re-compile when a transitively imported .wgsl changes (addDependency wiring)", async () => {
+    const { entryJs, outDir, helperWgsl } = await writeFixture();
+    const stats = await runWebpack({
+      mode: "development",
+      target: "node",
+      entry: entryJs,
+      output: { path: outDir, filename: "bundle.cjs", libraryTarget: "commonjs2" },
+      module: { rules: [{ test: /\.wgsl$/, loader: resolveWebpackLoader() }] },
+      optimization: { minimize: false },
+    });
+
+    expect(stats.compilation.fileDependencies.has(helperWgsl)).toBe(true);
+  });
 });
 
-async function writeFixture(): Promise<{ entryJs: string; outDir: string }> {
+async function writeFixture(): Promise<{ entryJs: string; outDir: string; helperWgsl: string }> {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-webpack-"));
   const outDir = join(dir, "dist");
+  const helperWgsl = join(dir, "helper.wgsl");
   await mkdir(outDir, { recursive: true });
-  await writeFile(join(dir, "helper.wgsl"), "export fn helper_color() -> vec4f { return vec4f(0.1, 0.2, 0.3, 1.0); }");
+  await writeFile(helperWgsl, "export fn helper_color() -> vec4f { return vec4f(0.1, 0.2, 0.3, 1.0); }");
   await writeFile(join(dir, "entry.wgsl"), `import { helper_color } from "./helper.wgsl";
 fn main_color() -> vec4f { return helper_color(); }`);
   await writeFile(join(dir, "entry.js"), `import shader from "./entry.wgsl";
 export default shader;`);
-  return { entryJs: join(dir, "entry.js"), outDir };
+  return { entryJs: join(dir, "entry.js"), outDir, helperWgsl };
 }
 
 function resolveWebpackLoader(): string {
-  try {
-    return require.resolve("@vgpu/wgsl/loader-webpack");
-  } catch {
-    // The package exposes an ESM-only `import` condition, so `require.resolve` cannot
-    // see this subpath from Vitest's ESM tests. Fall back to the built loader while
-    // still exercising the same code exported by `@vgpu/wgsl/loader-webpack`.
-    return join(process.cwd(), "packages/wgsl/dist/loader-webpack/index.js");
-  }
+  return require.resolve("@vgpu/wgsl/loader-webpack");
 }
 
 function runWebpack(config: Configuration): Promise<Stats> {

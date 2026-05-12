@@ -19,6 +19,7 @@
      const mat = material({ ...spec, fragment: `${decls}\n${fragment}` });
      ```
 - @vgpu/wgsl: Add `deps` field to `resolveShader` result; add `onDependency` callback option to `transformWgsl`. Foundation for HMR / watch-mode support in webpack/vite loaders (PR2).
+- @vgpu/wgsl: Production-grade loader plumbing: webpack now tracks transitively-imported `.wgsl` files via `addDependency`, Vite/Rollup via `addWatchFile`, and CJS configs can `require.resolve('@vgpu/wgsl/loader-webpack')` / `require.resolve('@vgpu/wgsl/loader-vite')` through new `default` export conditions.
 
 ## 0.0.1 — 2026-05-07
 

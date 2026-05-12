@@ -39,11 +39,13 @@
     },
     "./loader-webpack": {
       "types": "./dist/loader-webpack/index.d.ts",
-      "import": "./dist/loader-webpack/index.js"
+      "import": "./dist/loader-webpack/index.js",
+      "default": "./dist/loader-webpack/index.js"
     },
     "./loader-vite": {
       "types": "./dist/loader-vite/index.d.ts",
-      "import": "./dist/loader-vite/index.js"
+      "import": "./dist/loader-vite/index.js",
+      "default": "./dist/loader-vite/index.js"
     }
   },
   "files": [
