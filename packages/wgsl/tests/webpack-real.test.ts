@@ -40,6 +40,28 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
 
     expect(stats.compilation.fileDependencies.has(helperWgsl)).toBe(true);
   });
+
+  it("emits fresh bundled WGSL when a transitive import changes between builds", async () => {
+    const { entryJs, outDir, helperWgsl } = await writeFixture();
+    const config: Configuration = {
+      mode: "development",
+      target: "node",
+      entry: entryJs,
+      output: { path: outDir, filename: "bundle.cjs", libraryTarget: "commonjs2" },
+      module: { rules: [{ test: /\.wgsl$/, loader: resolveWebpackLoader() }] },
+      optimization: { minimize: false },
+    };
+
+    await runWebpack(config);
+    const first = await readFile(join(outDir, "bundle.cjs"), "utf8");
+    await writeFile(helperWgsl, "export fn helper_color() -> vec4f { return vec4f(0.9, 0.8, 0.7, 1.0); }");
+    await runWebpack(config);
+    const second = await readFile(join(outDir, "bundle.cjs"), "utf8");
+
+    expect(first).toContain("0.1, 0.2, 0.3, 1.0");
+    expect(second).not.toBe(first);
+    expect(second).toContain("0.9, 0.8, 0.7, 1.0");
+  });
 });
 
 async function writeFixture(): Promise<{ entryJs: string; outDir: string; helperWgsl: string }> {
