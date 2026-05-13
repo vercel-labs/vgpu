@@ -1,4 +1,4 @@
-## Unreleased
+## 0.0.3 — 2026-05-13
 
 ### Minor
 - @vgpu/render: BREAKING CHANGE (pre-1.0): `material()` no longer auto-prepends texture/sampler WGSL declarations by default. `wgslDeclarations(textures, textureBindings, samplerBindings, group?)` is also exported for lower-level declaration generation. Binding allocation order is now documented as uniforms → samplers → textures, each in insertion order.
