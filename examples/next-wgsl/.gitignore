@@ -1,0 +1,4 @@
+.next/
+node_modules/
+*.log
+tsconfig.tsbuildinfo

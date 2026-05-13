@@ -83,3 +83,46 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test packages/wgsl/tests/cache-key.test.ts
+
+  wgsl-turbopack-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @vgpu/wgsl build
+      - name: next build (turbopack)
+        run: pnpm --filter @vgpu/example-next-wgsl exec next build --turbopack
+      - name: assert WGSL content in Turbopack output
+        run: grep -R "helper_color" examples/next-wgsl/.next/server examples/next-wgsl/.next/static
+      - name: next dev HMR smoke (turbopack)
+        run: |
+          set -euo pipefail
+          HELPER=examples/next-wgsl/app/helper.wgsl
+          ORIGINAL=$(cat "$HELPER")
+          cleanup() {
+            printf '%s\n' "$ORIGINAL" > "$HELPER"
+            if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+              kill "$SERVER_PID" 2>/dev/null || true
+              wait "$SERVER_PID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          pnpm --filter @vgpu/example-next-wgsl exec next dev --turbopack -p 3100 > /tmp/next-wgsl-dev.log 2>&1 &
+          SERVER_PID=$!
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:3100/ > /tmp/wgsl-before.html; do sleep 1; done'
+          grep -q "0.1, 0.2, 0.3" /tmp/wgsl-before.html
+          cat > "$HELPER" <<'EOF'
+          export fn helper_color() -> vec4f { return vec4f(0.9, 0.8, 0.7, 1.0); }
+          EOF
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:3100/ > /tmp/wgsl-after.html && grep -q "0.9, 0.8, 0.7" /tmp/wgsl-after.html; do sleep 1; done'
+          tail -30 /tmp/next-wgsl-dev.log
