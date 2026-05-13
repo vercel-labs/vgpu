@@ -26,7 +26,7 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
   return { code: `export default ${JSON.stringify(resolved.wgsl)};`, map: null };
 }
 
-export default function wgslVitePlugin(): { readonly name: string; readonly transform: (this: VitePluginContext, source: string, id: string) => Promise<ViteLoadResult | null> } {
+export function wgslVitePlugin(): { readonly name: string; readonly transform: (this: VitePluginContext, source: string, id: string) => Promise<ViteLoadResult | null> } {
   return {
     name: "@vgpu/wgsl",
     async transform(source, id) {
@@ -39,3 +39,5 @@ export default function wgslVitePlugin(): { readonly name: string; readonly tran
     },
   };
 }
+
+export default wgslVitePlugin;

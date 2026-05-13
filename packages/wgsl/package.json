@@ -46,6 +46,10 @@
       "types": "./dist/loader-vite/index.d.ts",
       "import": "./dist/loader-vite/index.js",
       "default": "./dist/loader-vite/index.js"
+    },
+    "./wgsl-types": {
+      "types": "./dist/wgsl-types.d.ts",
+      "default": "./dist/wgsl-types.d.ts"
     }
   },
   "files": [
@@ -55,7 +59,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b && node -e \"require('fs').copyFileSync('src/wgsl-types.d.ts', 'dist/wgsl-types.d.ts')\""
   },
   "devDependencies": {
     "vite": "^5.4.21",
