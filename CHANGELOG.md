@@ -20,6 +20,7 @@
      ```
 - @vgpu/wgsl: Add `deps` field to `resolveShader` result; add `onDependency` callback option to `transformWgsl`. Foundation for HMR / watch-mode support in webpack/vite loaders (PR2).
 - @vgpu/wgsl: Production-grade loader plumbing: webpack now tracks transitively-imported `.wgsl` files via `addDependency`, Vite/Rollup via `addWatchFile`, and CJS configs can `require.resolve('@vgpu/wgsl/loader-webpack')` / `require.resolve('@vgpu/wgsl/loader-vite')` through new `default` export conditions.
+- @vgpu/wgsl: Add `examples/next-wgsl/`, a private Next.js Turbopack dogfood app plus CI smoke job for the webpack-compatible WGSL loader.
 - @vgpu/wgsl: Runtime: production HMR correctness — resolver uses async file reads + removes stale-result entry-level cache.
   - `resolveShader` now reads `.wgsl` source via async `fs/promises.readFile`. Turbopack's webpack-loader bridge tracks transitive `.wgsl` reads via this path; sync reads previously bypassed interception.
   - `resolveShader` no longer caches resolved results across calls. Existing dependency-registration wiring (`addDependency` in webpack, `addWatchFile` in vite, async-fs interception in Turbopack) now actually triggers fresh resolution on file changes. Direct-runtime hot-loop callers should memoize at their call site if performance becomes a concern (the per-file `scanCache` is still active).
