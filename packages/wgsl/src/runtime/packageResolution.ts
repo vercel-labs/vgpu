@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { wgslError, wgslWarning } from "./errors.ts";
 import type { Diagnostic } from "./diagnosticTypes.ts";
@@ -15,10 +16,10 @@ export function resolveImport(spec: string, from: string, opts: PackageResolveOp
   return packageImport(spec, from, diagnostics);
 }
 
-export function readModule(path: string, opts: PackageResolveOptions): string {
+export async function readModule(path: string, opts: PackageResolveOptions): Promise<string> {
   const text = opts.modules?.[path];
   if (text !== undefined) return text;
-  if (existsSync(path)) return readFileSync(path, "utf8");
+  if (existsSync(path)) return await readFile(path, "utf8");
   throw wgslError("VGPU-WGSL-RES-NOTFOUND", `WGSL module ${path} was not found`);
 }
 

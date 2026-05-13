@@ -18,16 +18,12 @@ export interface SourceMap { readonly version: 3; readonly sources: readonly str
 export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
 
 const scanCache = new Map<string, MangleModule>();
-const resolveCache = new Map<string, ResolvedShader>();
 
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
-  const key = JSON.stringify({ entry: opts.entry, rootDir: opts.rootDir, packageMap: opts.packageMap, modules: opts.modules });
-  const cached = resolveCache.get(key);
-  if (cached) return cached;
   const loaded = new Map<string, MangleModule>();
   const diagnostics: DiagnosticList[number][] = [];
   const entry = canonicalEntry(opts.entry, opts);
-  loadGraph(entry, opts, loaded, [], diagnostics);
+  await loadGraph(entry, opts, loaded, [], diagnostics);
   const modules = [...loaded.values()];
   const deps = [...loaded.keys()].sort();
   assertNoMangleCollisions(modules.map((module) => module.path));
@@ -40,21 +36,19 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   if (opts.validate !== false) await validateWGSL(wgsl);
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
-  const resolved = { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
-  remember(resolveCache, key, resolved);
-  return resolved;
+  return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
 }
 
-function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string, MangleModule>, stack: string[], diagnostics: DiagnosticList[number][]): void {
+async function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string, MangleModule>, stack: string[], diagnostics: DiagnosticList[number][]): Promise<void> {
   if (stack.includes(path)) throw wgslError("VGPU-WGSL-IMP-SELF", `Import cycle: ${[...stack, path].join(" -> ")}`);
   if (loaded.has(path)) return;
-  const source = readModule(path, opts);
+  const source = await readModule(path, opts);
   const cacheKey = `${path}:${source}`;
   let module = scanCache.get(cacheKey);
   if (!module) { const tokens = scan(source); module = { path, source, tokens, parsed: parseModule(tokens) }; remember(scanCache, cacheKey, module); }
   loaded.set(path, module);
   stack.push(path);
-  for (const imp of module.parsed.imports) loadGraph(resolvePath(imp.from, path, opts, diagnostics), opts, loaded, stack, diagnostics);
+  for (const imp of module.parsed.imports) await loadGraph(resolvePath(imp.from, path, opts, diagnostics), opts, loaded, stack, diagnostics);
   stack.pop();
 }
 

@@ -18,3 +18,19 @@ test("transformWgsl calls onDependency for transitive shader dependencies", asyn
   expect(onDependency.mock.calls.map(([dep]) => dep)).toEqual([imported]);
   expect(onDependency).not.toHaveBeenCalledWith(entry);
 });
+
+test("transformWgsl re-reads a mutated transitive .wgsl file on the second transform", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-transform-fresh-"));
+  const entry = join(dir, "main.wgsl");
+  const imported = join(dir, "imported.wgsl");
+  const source = "import { imported_color } from './imported.wgsl'; fn main_color() -> vec4f { return imported_color(); }";
+  await writeFile(entry, source);
+  await writeFile(imported, "export fn imported_color() -> vec4f { return vec4f(0.1, 0.2, 0.3, 1.0); }");
+
+  const first = await transformWgsl({ source, id: entry });
+  await writeFile(imported, "export fn imported_color() -> vec4f { return vec4f(0.9, 0.8, 0.7, 1.0); }");
+  const second = await transformWgsl({ source, id: entry });
+
+  expect(second.code).not.toBe(first.code);
+  expect(second.code).toContain("0.9, 0.8, 0.7, 1.0");
+});
