@@ -37,6 +37,21 @@ fn fs_main() -> @location(0) vec4f {
   expect(resolved.wgsl).toContain("fn fs_main(");
   expect(resolved.cacheKey.fs_main).toMatch(/^vgsl-1:[0-9a-f]{32}$/);
 });
+test("imported entry-point names are preserved", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `import { shade } from "./fragment.wgsl";
+fn helper() { shade(); }`,
+      "/fragment.wgsl": `export fn shade() {}
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toContain("fn fs_main(");
+  expect(resolved.wgsl).not.toMatch(/_vgsl_[0-9a-f]{8}__fs_main/);
+});
 test("namespace value error", async () => {
   await expect(resolveShader({ entry: "/main.wgsl", validate: false, modules: {
     "/main.wgsl": `import * as palette from "./palette.wgsl";

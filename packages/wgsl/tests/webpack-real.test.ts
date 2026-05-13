@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import webpack, { type Configuration, type Stats } from "webpack";
 import { describe, expect, it } from "vitest";
 
@@ -22,9 +22,25 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
     });
 
     const bundle = await readFile(join(outDir, bundleName), "utf8");
-    expect(bundle).toContain("helper_color");
-    expect(bundle).toContain("main_color");
-    expect(bundle).toContain("return _vgsl_");
+    expectBundleContainsResolvedWgsl(bundle);
+  });
+
+  it("resolves the loader via bare string 'package-name/loader-path'", async () => {
+    const { dir, entryJs, outDir } = await writeFixture();
+    await installWorkspacePackage(dir);
+    const bundleName = "bundle.cjs";
+
+    await runWebpack({
+      mode: "development",
+      target: "node",
+      context: dir,
+      entry: entryJs,
+      output: { path: outDir, filename: bundleName, libraryTarget: "commonjs2" },
+      module: { rules: [{ test: /\.wgsl$/, loader: "@vgpu/wgsl/loader-webpack" }] },
+      optimization: { minimize: false },
+    });
+
+    expectBundleContainsResolvedWgsl(await readFile(join(outDir, bundleName), "utf8"));
   });
 
   it("triggers re-compile when a transitively imported .wgsl changes (addDependency wiring)", async () => {
@@ -64,7 +80,7 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
   });
 });
 
-async function writeFixture(): Promise<{ entryJs: string; outDir: string; helperWgsl: string }> {
+async function writeFixture(): Promise<{ dir: string; entryJs: string; outDir: string; helperWgsl: string }> {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-webpack-"));
   const outDir = join(dir, "dist");
   const helperWgsl = join(dir, "helper.wgsl");
@@ -74,11 +90,23 @@ async function writeFixture(): Promise<{ entryJs: string; outDir: string; helper
 fn main_color() -> vec4f { return helper_color(); }`);
   await writeFile(join(dir, "entry.js"), `import shader from "./entry.wgsl";
 export default shader;`);
-  return { entryJs: join(dir, "entry.js"), outDir, helperWgsl };
+  return { dir, entryJs: join(dir, "entry.js"), outDir, helperWgsl };
+}
+
+async function installWorkspacePackage(dir: string): Promise<void> {
+  const scopeDir = join(dir, "node_modules", "@vgpu");
+  await mkdir(scopeDir, { recursive: true });
+  await symlink(resolve("packages/wgsl"), join(scopeDir, "wgsl"), "dir");
 }
 
 function resolveWebpackLoader(): string {
   return require.resolve("@vgpu/wgsl/loader-webpack");
+}
+
+function expectBundleContainsResolvedWgsl(bundle: string): void {
+  expect(bundle).toContain("helper_color");
+  expect(bundle).toContain("main_color");
+  expect(bundle).toContain("return _vgsl_");
 }
 
 function runWebpack(config: Configuration): Promise<Stats> {
