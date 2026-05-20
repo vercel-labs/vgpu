@@ -58,12 +58,14 @@ module.exports = {
       {
         test: /\.wgsl$/,
         loader: require.resolve("@vgpu/wgsl/loader-webpack"),
-        options: {},
+        options: { minify: true },
       },
     ],
   },
 };
 ```
+
+`minify` defaults to `false`; set it to `true` to strip comments and unnecessary whitespace from emitted WGSL.
 
 ### Vite 5+
 
@@ -72,6 +74,8 @@ import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
 
 export default { plugins: [wgslVitePlugin()] };
 ```
+
+Pass `wgslVitePlugin({ minify: true })` to strip comments and unnecessary whitespace from emitted WGSL.
 
 ### Next.js / Turbopack (Next >= 15.5)
 
@@ -103,7 +107,7 @@ const config: NextConfig = {
   turbopack: {
     rules: {
       "*.wgsl": {
-        loaders: [{ loader: "@vgpu/wgsl/loader-webpack", options: {} }],
+        loaders: [{ loader: "@vgpu/wgsl/loader-webpack", options: { minify: true } }],
         as: "*.js",
       },
     },
@@ -169,6 +173,24 @@ const fragment = resolved.reflection.entryPoints.find((entry) => entry.stage ===
 | `reflection.featuresRequired` | Feature names from `enable ...;` directives. |
 
 Workgroup sizes, binding access types, and struct layouts are not yet exposed.
+
+## Minify option
+
+`resolveShader`, `@vgpu/wgsl/loader-webpack`, `@vgpu/wgsl/loader-vite`, and `transformWgsl` default to `minify: false`, preserving previous output. Set `minify: true` to strip comments and unnecessary whitespace from leaf shaders and resolved import graphs:
+
+```ts
+import { transformWgsl, wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+import { resolveShader } from "@vgpu/wgsl/runtime";
+
+const resolved = await resolveShader({ entry: "./shader.wgsl", minify: true });
+const vite = wgslVitePlugin({ minify: true });
+const transformed = await transformWgsl(source, "/shader.wgsl", { minify: true });
+void resolved;
+void vite;
+void transformed;
+```
+
+The minifier only removes comments and whitespace. It does not rename identifiers: entry point names, uniform/resource names, override names, and other JavaScript-visible WGSL names remain stable. Existing import flattening and collision-avoidance mangling is unchanged. When validation is enabled, `resolveShader()` validates the unminified emitted WGSL before minifying the returned output so diagnostics still map to authored modules.
 
 ## HMR behavior
 

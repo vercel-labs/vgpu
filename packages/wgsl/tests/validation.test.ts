@@ -8,3 +8,12 @@ test.skipIf(!validation)("validation handles emitted fallback", async () => awai
 test("validate false skips validation", async () => await expect(resolveShader({ entry: "/a.wgsl", modules: { "/a.wgsl": "fn bad( {" }, validate: false })).resolves.toHaveProperty("wgsl"));
 test.skipIf(!validation)("approximate diagnostic tagged", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { f } from './f.wgsl'; fn main(){ let x: u32 = f(); }", "/f.wgsl": "export fn f() -> f32 { return 1.0; }" } })).rejects.toMatchObject({ code: "VGPU-WGSL-NAGA-UNKNOWN", columnPrecise: false, relatedDiagnostics: [expect.objectContaining({ code: "VGPU-WGSL-COL-APPROX" })] }));
 test.skipIf(!validation)("precise diagnostic before substitution", async () => { try { await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){ let x: u32 = 1.0; }" } }); throw new Error("expected validation failure"); } catch (error) { expect(error).toMatchObject({ code: "VGPU-WGSL-NAGA-UNKNOWN", range: { file: "m.wgsl" }, columnPrecise: true }); expect(JSON.stringify(error)).not.toContain("VGPU-WGSL-COL-APPROX"); } });
+test.skipIf(!validation)("minified resolve validates emitted shader before minifying return output", async () => {
+  try {
+    await resolveShader({ entry: "/m.wgsl", minify: true, modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){ let x: u32 = 1.0; }" } });
+    throw new Error("expected validation failure");
+  } catch (error) {
+    expect(error).toMatchObject({ code: "VGPU-WGSL-NAGA-UNKNOWN", range: { file: "m.wgsl" }, columnPrecise: true });
+    expect(JSON.stringify(error)).not.toContain("VGPU-WGSL-COL-APPROX");
+  }
+});

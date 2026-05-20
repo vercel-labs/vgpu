@@ -4,6 +4,7 @@ import { cacheKeys } from "./cacheKey.ts";
 import type { DiagnosticList } from "./diagnosticTypes.ts";
 import { remember } from "./lru.ts";
 import { assertNoMangleCollisions, emitModule, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
+import { minifyWgsl } from "./minify.ts";
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./packageResolution.ts";
 import { parseModule, type ImportDecl } from "./parser.ts";
 import { reflect, type Reflection } from "./reflect.ts";
@@ -11,7 +12,7 @@ import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
-export interface ResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string>; readonly validate?: boolean }
+export interface ResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string>; readonly validate?: boolean; readonly minify?: boolean }
 export interface WGSLModule { readonly path: string; readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[]; readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[]; readonly bytes: number; readonly hash8: string }
 export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
@@ -30,10 +31,11 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   assertNoJsVisibleDuplicates(modules);
   const exportsByPath = buildExports(modules);
   const pathOf = (from: string, imp: ImportDecl) => resolvePath(imp.from, from, opts, diagnostics);
-  const wgsl = modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n");
+  const emittedWgsl = modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n");
   const reflection = reflect(modules);
   const map = sourceMap(modules);
-  if (opts.validate !== false) await validateWGSL(wgsl);
+  if (opts.validate !== false) await validateWGSL(emittedWgsl);
+  const wgsl = opts.minify === true ? minifyWgsl(emittedWgsl) : emittedWgsl;
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
   return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
