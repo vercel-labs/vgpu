@@ -1,9 +1,12 @@
-import { minifyWgsl } from "../runtime/minify.ts";
+import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
 import { resolveShader } from "../runtime/resolveShader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
 export interface ViteLoadResult { readonly code: string; readonly map: null }
-export interface WgslVitePluginOptions { readonly minify?: boolean }
+export interface WgslVitePluginOptions {
+  /** See `MinifyOption`: `true` is whitespace plus safe identifier shortening; object form defaults to whitespace-only. */
+  readonly minify?: MinifyOption;
+}
 export interface TransformWgslOptions extends WgslVitePluginOptions { readonly source: string; readonly id: string; readonly onDependency?: (absPath: string) => void }
 type VitePluginContext = { addWatchFile(fileName: string): void };
 
@@ -22,12 +25,11 @@ export function transformWgsl(source: string, id: string, options?: WgslVitePlug
 export function transformWgsl(opts: TransformWgslOptions): Promise<ViteLoadResult>;
 export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions, id?: string, options: WgslVitePluginOptions = {}): Promise<ViteLoadResult> {
   const opts = typeof sourceOrOpts === "string" ? { ...options, source: sourceOrOpts, id: id ?? "<vite>" } : sourceOrOpts;
-  const minify = opts.minify === true;
   if (!hasTopLevelImport(opts.source)) {
-    const wgsl = minify ? minifyWgsl(opts.source) : opts.source;
+    const wgsl = applyMinifyWgsl(opts.source, opts.minify);
     return { code: `export default ${JSON.stringify(wgsl)};`, map: null };
   }
-  const resolved = await resolveShader({ entry: opts.id, validate: false, minify });
+  const resolved = await resolveShader({ entry: opts.id, validate: false, minify: opts.minify });
   for (const dep of resolved.deps) if (dep !== opts.id) opts.onDependency?.(dep);
   return { code: `export default ${JSON.stringify(resolved.wgsl)};`, map: null };
 }

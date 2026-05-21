@@ -1,80 +1,56 @@
-import { wgslError } from "./errors.ts";
+import { wgslError, type VGPUError } from "./errors.ts";
+import { scan } from "./scanner.ts";
+import { applyIdentifierMinifyWgsl } from "./identifierMinify.ts";
+import { printWgslTokens, type TokenPrinterOptions } from "./tokenPrinter.ts";
 
-const operatorChars = new Set("+-*/%=&|^!<>:.");
+export type MinifyWgslOptions = TokenPrinterOptions;
+/**
+ * WGSL minifier controls.
+ *
+ * Object form defaults to `{ whitespace: true, identifiers: "none" }`.
+ * `identifiers: "safe"` may shorten function-local let/var/const, function
+ * parameters, for-init locals, and safe resolver-generated private helpers only.
+ */
+export interface MinifyOptions {
+  /** Strip comments and unnecessary whitespace. Defaults to `true` in object form. */
+  readonly whitespace?: boolean;
+  /** Identifier mode. Defaults to `"none"`; `"safe"` is conservative and AST/scope-aware. */
+  readonly identifiers?: "none" | "safe";
+}
+/** `true` is `{ whitespace: true, identifiers: "safe" }`; `false` disables minification. */
+export type MinifyOption = boolean | MinifyOptions;
+export interface NormalizedMinifyOptions { readonly whitespace: boolean; readonly identifiers: "none" | "safe" }
 
-export function minifyWgsl(source: string): string {
-  let out = "";
-  let pendingSpace = false;
-  let last = "";
+const defaultMinifyOptions: NormalizedMinifyOptions = { whitespace: false, identifiers: "none" };
 
-  for (let i = 0; i < source.length;) {
-    const char = source[i]!;
-    const next = source[i + 1];
-
-    if (isWhitespace(char)) {
-      pendingSpace = true;
-      i++;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      pendingSpace = true;
-      i += 2;
-      while (i < source.length && source[i] !== "\n" && source[i] !== "\r") i++;
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      pendingSpace = true;
-      i = skipBlockComment(source, i);
-      continue;
-    }
-
-    if (pendingSpace && needsSpace(last, char)) {
-      out += " ";
-      last = " ";
-    }
-    out += char;
-    last = char;
-    pendingSpace = false;
-    i++;
+export function normalizeMinifyOption(option: MinifyOption | undefined): NormalizedMinifyOptions {
+  if (option === undefined || option === false) return defaultMinifyOptions;
+  if (option === true) return { whitespace: true, identifiers: "safe" };
+  const identifiers = option.identifiers ?? "none";
+  if (identifiers !== "none" && identifiers !== "safe") {
+    throw wgslError("VGPU-WGSL-MINIFY-IDENTIFIERS", `Unknown WGSL minify identifiers mode: ${String(identifiers)}`);
   }
-
-  return out.trim();
+  return { whitespace: option.whitespace ?? true, identifiers };
 }
 
-function skipBlockComment(source: string, start: number): number {
-  let depth = 0;
-  for (let i = start; i < source.length;) {
-    if (source[i] === "/" && source[i + 1] === "*") {
-      depth++;
-      i += 2;
-      continue;
+export function applyMinifyWgsl(source: string, option: MinifyOption | undefined): string {
+  const minify = normalizeMinifyOption(option);
+  if (minify.identifiers === "safe") return applyIdentifierMinifyWgsl(source, { whitespace: minify.whitespace }).wgsl;
+  if (minify.whitespace) return minifyWgsl(source);
+  return source;
+}
+
+export function minifyWgsl(source: string, options: MinifyWgslOptions = {}): string {
+  try {
+    return printWgslTokens(scan(source), options);
+  } catch (error) {
+    if (isWgslError(error) && error.code === "VGPU-WGSL-LEX-UNTERM-COMMENT") {
+      throw wgslError("VGPU-WGSL-MINIFY-BLOCK", "Unterminated WGSL block comment", error.line, error.column);
     }
-    if (source[i] === "*" && source[i + 1] === "/") {
-      depth--;
-      i += 2;
-      if (depth === 0) return i;
-      continue;
-    }
-    i++;
+    throw error;
   }
-  throw wgslError("VGPU-WGSL-MINIFY-BLOCK", "Unterminated WGSL block comment");
 }
 
-function needsSpace(previous: string, current: string): boolean {
-  if (!previous) return false;
-  if (previous === " ") return false;
-  if (isWord(previous) && isWord(current)) return true;
-  if ((previous === "e" || previous === "E" || previous === "p" || previous === "P") && (current === "+" || current === "-")) return true;
-  if ((isWord(previous) || previous === ")" || previous === "]" || previous === ">") && current === "@") return true;
-  if ((previous === ")" || previous === "]" || previous === ">") && isWord(current)) return true;
-  if (isDigit(previous) && current === ".") return true;
-  if (previous === "." && isDigit(current)) return true;
-  if (operatorChars.has(previous) && operatorChars.has(current)) return true;
-  return false;
+function isWgslError(error: unknown): error is VGPUError {
+  return typeof error === "object" && error !== null && "code" in error && "line" in error && "column" in error;
 }
-
-function isWhitespace(char: string): boolean { return /\s/.test(char); }
-function isWord(char: string): boolean { return /[A-Za-z0-9_]/.test(char); }
-function isDigit(char: string): boolean { return /[0-9]/.test(char); }

@@ -51,8 +51,9 @@ describe("wgslVitePlugin (real vite 5)", () => {
       .map((chunk) => chunk.code)
       .join("\n");
 
-    expect(code).toContain("helper_color");
-    expect(code).toContain("return _vgsl_");
+    expect(code).not.toContain("helper_color");
+    expect(code).toContain("return b();");
+    expect(code).toContain("fn a()-> vec4f");
     expect(code).not.toContain("helper comment");
     expect(code).not.toContain("entry comment");
   });

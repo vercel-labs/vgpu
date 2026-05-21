@@ -34,11 +34,19 @@ test("leaf loader path is byte-for-byte unchanged when minify is false", async (
   expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl" }, source) ?? "")).toBe(source);
 });
 
-test("leaf loader path compacts comments and whitespace when minify is true", async () => {
+test("leaf loader path compacts comments whitespace and safe locals when minify is true", async () => {
   const source = "// leading comment\n@compute @workgroup_size(1) fn main() {\n  /* keep names stable */ var value = 1u;\n}\n";
-  const expected = "@compute @workgroup_size(1) fn main(){var value=1u;}";
+  const expected = "@compute @workgroup_size(1) fn main(){var a=1u;}";
   expect(defaultExport(await transformWgsl(source, "/x.wgsl", { minify: true }))).toBe(expected);
   expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify: true }) }, source) ?? "")).toBe(expected);
+});
+
+test("leaf loader path supports object-form whitespace-only minify", async () => {
+  const source = "// leading comment\n@compute @workgroup_size(1) fn main() {\n  /* keep names stable */ var value = 1u;\n}\n";
+  const expected = "@compute @workgroup_size(1) fn main(){var value=1u;}";
+  const minify = { identifiers: "none" } as const;
+  expect(defaultExport(await transformWgsl(source, "/x.wgsl", { minify }))).toBe(expected);
+  expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify }) }, source) ?? "")).toBe(expected);
 });
 
 test("loader comment-only import passes through", async () => expect((await transformWgsl("// import { x } from 'y'", "/x.wgsl")).code).toContain("// import"));
@@ -51,17 +59,40 @@ test("loaders resolve top-level import", async () => {
   expect(code).toContain("_vgsl_");
 });
 
+test("loaders resolve imports after top-level diagnostic directives", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
+  const entry = join(dir, "main.wgsl");
+  await writeFile(entry, "diagnostic(off, derivative_uniformity);\nimport { x } from './x.wgsl';\nfn main(){x();}");
+  await writeFile(join(dir, "x.wgsl"), "export fn x(){}");
+  expect(defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry))).toContain("_vgsl_");
+  expect(defaultExport(await webpack(entry, await readFile(entry, "utf8")))).toContain("_vgsl_");
+});
+
 test("loaders compact resolved import graphs when minify is true", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
   const entry = join(dir, "main.wgsl");
   await writeFile(entry, "import { helper } from './helper.wgsl';\n// entry comment\nfn main(){ helper(); }\n");
   await writeFile(join(dir, "helper.wgsl"), "// helper comment\nexport fn helper(){ }\n");
   const viteWgsl = defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify: true }));
+  expect(viteWgsl).toBe("fn a(){b();}fn b(){}");
+  expect(viteWgsl).not.toContain("//");
+  expect(viteWgsl).not.toContain("\n");
+  const webpackWgsl = defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify: true }));
+  expect(webpackWgsl).toBe(viteWgsl);
+});
+
+test("loaders compact resolved import graphs with object-form minify", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
+  const entry = join(dir, "main.wgsl");
+  await writeFile(entry, "import { helper } from './helper.wgsl';\n// entry comment\nfn main(){ helper(); }\n");
+  await writeFile(join(dir, "helper.wgsl"), "// helper comment\nexport fn helper(){ }\n");
+  const minify = { whitespace: true, identifiers: "none" } as const;
+  const viteWgsl = defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify }));
   expect(viteWgsl).toContain("fn _vgsl_");
   expect(viteWgsl).toContain("__main(){_vgsl_");
   expect(viteWgsl).not.toContain("//");
   expect(viteWgsl).not.toContain("\n");
-  const webpackWgsl = defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify: true }));
+  const webpackWgsl = defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify }));
   expect(webpackWgsl).toBe(viteWgsl);
 });
 
@@ -82,6 +113,6 @@ function defaultExport(codeOrResult: string | { readonly code: string }): string
   return JSON.parse(code.replace(/^export default /, "").replace(/;$/, "")) as string;
 }
 
-async function webpack(resourcePath: string, source: string, options: { readonly minify?: boolean } = {}) {
+async function webpack(resourcePath: string, source: string, options: { readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" } } = {}) {
   return new Promise<string>((resolve, reject) => wgslWebpackLoader.call({ resourcePath, getOptions: () => options, async: () => (error, result) => error ? reject(error) : resolve(result ?? "") }, source));
 }

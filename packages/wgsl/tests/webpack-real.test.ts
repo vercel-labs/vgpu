@@ -57,8 +57,9 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
     });
 
     const bundle = await readFile(join(outDir, bundleName), "utf8");
-    expect(bundle).toContain("helper_color");
-    expect(bundle).toContain("return _vgsl_");
+    expect(bundle).not.toContain("helper_color");
+    expect(bundle).toContain("return b();");
+    expect(bundle).toContain("fn a()-> vec4f");
     expect(bundle).not.toContain("helper comment");
     expect(bundle).not.toContain("entry comment");
   });

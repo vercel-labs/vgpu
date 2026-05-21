@@ -1,9 +1,12 @@
 import { wgslError } from "../runtime/errors.ts";
-import { minifyWgsl } from "../runtime/minify.ts";
+import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
 import { resolveShader } from "../runtime/resolveShader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
-export interface WgslWebpackLoaderOptions { readonly minify?: boolean }
+export interface WgslWebpackLoaderOptions {
+  /** See `MinifyOption`: `true` is whitespace plus safe identifier shortening; object form defaults to whitespace-only. */
+  readonly minify?: MinifyOption;
+}
 type LoaderContext = {
   resourcePath?: string;
   async?: () => (error: Error | null, result?: string) => void;
@@ -13,14 +16,13 @@ type LoaderContext = {
 
 export default function wgslWebpackLoader(this: LoaderContext, source: string): string | void {
   const options = readOptions(this);
-  const minify = options.minify === true;
   if (!hasTopLevelImport(source)) {
-    const wgsl = minify ? minifyWgsl(source) : source;
+    const wgsl = applyMinifyWgsl(source, options.minify);
     return `export default ${JSON.stringify(wgsl)};`;
   }
   const done = this.async?.();
   const run = async () => {
-    const resolved = await resolveShader({ entry: this.resourcePath ?? "<webpack>", validate: false, minify });
+    const resolved = await resolveShader({ entry: this.resourcePath ?? "<webpack>", validate: false, minify: options.minify });
     // Webpack loader API: https://webpack.js.org/api/loaders/#thisadddependency
     // Invalidate this loader's output when any transitively-imported .wgsl file changes.
     for (const dep of resolved.deps) if (dep !== this.resourcePath) this.addDependency?.(dep);
@@ -32,6 +34,6 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
 
 function readOptions(context: LoaderContext): WgslWebpackLoaderOptions {
   const raw = context.getOptions?.();
-  if (raw && typeof raw === "object" && "minify" in raw) return { minify: (raw as { minify?: unknown }).minify === true };
+  if (raw && typeof raw === "object" && "minify" in raw) return { minify: (raw as { minify?: MinifyOption }).minify };
   return {};
 }
