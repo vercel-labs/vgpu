@@ -4,6 +4,21 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { transformWgsl } from "@vgpu/wgsl/loader-vite";
 
+test("transformWgsl preserves signed exponent literals when minifying leaf shaders", async () => {
+  for (const minify of [true, { identifiers: "none" as const }, { identifiers: "safe" as const }]) {
+    const result = await transformWgsl({
+      source: "fn repro() -> bool { return 1e-8 > 0.0 && 0x1p+8 > 0.0; }",
+      id: "/tmp/repro.wgsl",
+      minify,
+    });
+
+    expect(result.code).toContain("1e-8");
+    expect(result.code).toContain("0x1p+8");
+    expect(result.code).not.toContain("1e -8");
+    expect(result.code).not.toContain("0x1p +8");
+  }
+});
+
 test("transformWgsl calls onDependency for transitive shader dependencies", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
   const entry = join(dir, "main.wgsl");

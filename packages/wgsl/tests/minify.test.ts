@@ -44,6 +44,22 @@ test("minify preserves hex-float exponent token boundaries across comments and w
   expect(minified).toBe("let hp=0x1p +3;let hn=0x1.8P -2;");
 });
 
+test("minify preserves signed decimal exponent literals", () => {
+  const source = "fn repro() -> bool { return 1e-8 > 0.0 && 1e+8 > 0.0 && 1E-8 > 0.0 && 1E+8 > 0.0 && 1.0e-8 > 0.0 && 1.0e+8 > 0.0 && 1.e-8 > 0.0; }";
+  const expected = "fn repro()-> bool{return 1e-8>0.0&&1e+8>0.0&&1E-8>0.0&&1E+8>0.0&&1.0e-8>0.0&&1.0e+8>0.0&&1.e-8>0.0;}";
+  expect(minifyWgsl(source)).toBe(expected);
+  expect(applyMinifyWgsl(source, { identifiers: "none" })).toBe(expected);
+  expect(applyMinifyWgsl(source, { identifiers: "safe" })).toBe(expected);
+});
+
+test("minify preserves signed hex exponent literals", () => {
+  const source = "fn repro() -> bool { return 0x1p-8 > 0.0 && 0x1p+8 > 0.0 && 0x1P-8 > 0.0 && 0x1P+8 > 0.0 && 0x1.8p-2 > 0.0; }";
+  const expected = "fn repro()-> bool{return 0x1p-8>0.0&&0x1p+8>0.0&&0x1P-8>0.0&&0x1P+8>0.0&&0x1.8p-2>0.0;}";
+  expect(minifyWgsl(source)).toBe(expected);
+  expect(applyMinifyWgsl(source, { identifiers: "none" })).toBe(expected);
+  expect(applyMinifyWgsl(source, { identifiers: "safe" })).toBe(expected);
+});
+
 test("minify preserves token boundaries around attributes templates and operators", () => {
   const minified = minifyWgsl("@compute /* comment */ @workgroup_size(1) fn main(){ var p: ptr<function, array<vec4<f32>, 4> >; let y = x - -z; if (a & & b) {} }");
   expect(minified).toContain("@compute @workgroup_size(1) fn main()");
