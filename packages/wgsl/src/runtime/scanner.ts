@@ -1,4 +1,5 @@
 import { wgslError } from "./errors.ts";
+import { WGSL_KEYWORDS } from "./wgslIdentifiers.ts";
 
 export type TokenKind = "ident" | "keyword" | "string" | "lineComment" | "blockComment" | "punct" | "number";
 
@@ -10,11 +11,6 @@ export interface Token {
   readonly line: number;
   readonly column: number;
 }
-
-const keywords = new Set([
-  "import", "export", "from", "as", "fn", "struct", "const", "alias", "var", "override", "let", "enable",
-  "requires", "return", "if", "else", "for", "while", "loop", "switch", "case", "default", "break", "continue",
-]);
 
 export function scan(source: string): Token[] {
   const tokens: Token[] = [];
@@ -36,10 +32,18 @@ export function scan(source: string): Token[] {
       push("lineComment", start, i, atLine, atColumn); continue;
     }
     if (ch === "/" && source[i + 1] === "*") {
-      step(); step();
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) step();
-      if (i >= source.length) throw wgslError("VGPU-WGSL-LEX-UNTERM-COMMENT", "Unterminated block comment", atLine, atColumn);
-      step(); step(); push("blockComment", start, i, atLine, atColumn); continue;
+      let depth = 0;
+      while (i < source.length) {
+        if (source[i] === "/" && source[i + 1] === "*") { depth++; step(); step(); continue; }
+        if (source[i] === "*" && source[i + 1] === "/") {
+          depth--; step(); step();
+          if (depth === 0) { push("blockComment", start, i, atLine, atColumn); break; }
+          continue;
+        }
+        step();
+      }
+      if (depth !== 0) throw wgslError("VGPU-WGSL-LEX-UNTERM-COMMENT", "Unterminated block comment", atLine, atColumn);
+      continue;
     }
     if (ch === '"' || ch === "'") {
       const quote = ch;
@@ -55,7 +59,7 @@ export function scan(source: string): Token[] {
     if (/[A-Za-z_]/.test(ch)) {
       while (i < source.length && /[A-Za-z0-9_]/.test(source[i]!)) step();
       const text = source.slice(start, i);
-      push(keywords.has(text) ? "keyword" : "ident", start, i, atLine, atColumn); continue;
+      push(WGSL_KEYWORDS.has(text) ? "keyword" : "ident", start, i, atLine, atColumn); continue;
     }
     if (/[0-9]/.test(ch)) {
       while (i < source.length && /[A-Za-z0-9_.]/.test(source[i]!)) step();
@@ -67,11 +71,30 @@ export function scan(source: string): Token[] {
 }
 
 export function hasTopLevelImport(source: string): boolean {
-  for (const token of scan(source)) {
+  const tokens = scan(source);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
     if (token.kind === "lineComment" || token.kind === "blockComment") continue;
-    if (token.kind === "keyword" && (token.text === "enable" || token.text === "requires")) continue;
+    if (token.kind === "keyword" && isTopLevelDirectiveKeyword(token.text)) {
+      i = skipDirective(tokens, i);
+      continue;
+    }
     return token.kind === "keyword" && token.text === "import";
   }
   return false;
+}
+
+const topLevelDirectiveKeywords = new Set(["enable", "requires", "diagnostic"]);
+
+function isTopLevelDirectiveKeyword(text: string): boolean {
+  return topLevelDirectiveKeywords.has(text);
+}
+
+function skipDirective(tokens: readonly Token[], start: number): number {
+  for (let i = start + 1; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token.kind === "punct" && token.text === ";") return i;
+  }
+  return tokens.length;
 }
 

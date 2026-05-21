@@ -58,12 +58,14 @@ module.exports = {
       {
         test: /\.wgsl$/,
         loader: require.resolve("@vgpu/wgsl/loader-webpack"),
-        options: {},
+        options: { minify: true },
       },
     ],
   },
 };
 ```
+
+`minify` defaults to `false`; set it to `true` for the production preset: strip comments/whitespace and safely shorten supported private identifiers. Use `{ minify: { whitespace: true } }` for whitespace-only output.
 
 ### Vite 5+
 
@@ -72,6 +74,8 @@ import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
 
 export default { plugins: [wgslVitePlugin()] };
 ```
+
+Pass `wgslVitePlugin({ minify: true })` for the production preset: strip comments/whitespace and safely shorten supported private identifiers. Use `{ minify: { whitespace: true } }` for whitespace-only output.
 
 ### Next.js / Turbopack (Next >= 15.5)
 
@@ -103,7 +107,7 @@ const config: NextConfig = {
   turbopack: {
     rules: {
       "*.wgsl": {
-        loaders: [{ loader: "@vgpu/wgsl/loader-webpack", options: {} }],
+        loaders: [{ loader: "@vgpu/wgsl/loader-webpack", options: { minify: true } }],
         as: "*.js",
       },
     },
@@ -169,6 +173,33 @@ const fragment = resolved.reflection.entryPoints.find((entry) => entry.stage ===
 | `reflection.featuresRequired` | Feature names from `enable ...;` directives. |
 
 Workgroup sizes, binding access types, and struct layouts are not yet exposed.
+
+## Minify option
+
+`resolveShader`, `@vgpu/wgsl/loader-webpack`, `@vgpu/wgsl/loader-vite`, and `transformWgsl` accept `minify?: boolean | { whitespace?: boolean; identifiers?: "none" | "safe" }`. The default is `false`, preserving previous output.
+
+- `minify: true` is the production preset: `{ whitespace: true, identifiers: "safe" }`.
+- Object form defaults to whitespace minification on and identifier renaming off: `{ whitespace: true, identifiers: "none" }`.
+- Use `{ minify: { whitespace: true } }` for whitespace-only output.
+- Use `{ minify: { identifiers: "safe" } }` for whitespace plus safe identifier shortening.
+
+```ts
+import { transformWgsl, wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+import { resolveShader } from "@vgpu/wgsl/runtime";
+
+const resolved = await resolveShader({ entry: "./shader.wgsl", minify: true });
+const vite = wgslVitePlugin({ minify: { identifiers: "safe" } });
+const transformed = await transformWgsl(source, "/shader.wgsl", { minify: { whitespace: true } });
+void resolved;
+void vite;
+void transformed;
+```
+
+`identifiers: "safe"` is AST/scope-aware and intentionally narrow in this release. It can shorten function-local `let`/`var`/`const`, function parameters, `for`-initializer locals, and resolver-generated private helper functions named like `_vgsl_<hash>__name` when analysis proves they are safe. If the analyzer is unsure, it conservatively preserves names instead of renaming them. The feature has no runtime dependency.
+
+The minifier never renames entry points; resources/bindings/uniform/storage/texture/sampler declarations; overrides or override references; struct/type names; struct fields; import/export/reflection-visible names; attributes, builtins, or WGSL predeclared names. Existing import flattening and collision-avoidance mangling is unchanged.
+
+When validation is enabled, `resolveShader()` validates the unminified emitted WGSL first so diagnostics map to authored modules. If identifier minification is enabled, it also validates the final minified WGSL. Source maps for compact output and struct-field renaming are deferred.
 
 ## HMR behavior
 
