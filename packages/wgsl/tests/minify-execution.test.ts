@@ -239,6 +239,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
   });
 });
 
+test.skipIf(!dockerTest)("minified signed exponent literals match baseline execution", async () => {
+  const modules = {
+    "/main.wgsl": `struct Out { values: array<u32, 2> }
+@group(0) @binding(0) var<storage, read_write> out: Out;
+
+@compute @workgroup_size(1)
+fn main() {
+  let decimal_positive = 1e-8 > 0.0;
+  let hex_positive = 0x1p-8 > 0.0;
+  out.values[0] = select(0u, 1u, decimal_positive);
+  out.values[1] = select(0u, 1u, hex_positive);
+}`,
+  };
+
+  await expectSameExecution({ modules, outputU32Length: 2 }, [1, 1], ({ minified }) => {
+    expect(minified).toContain("1e-8");
+    expect(minified).toContain("0x1p-8");
+    expect(minified).not.toContain("1e -8");
+    expect(minified).not.toContain("0x1p -8");
+  });
+});
+
 test.skipIf(!dockerTest)("minified override constants match baseline execution", async () => {
   const modules = {
     "/main.wgsl": `override SCALE: u32 = 1u;

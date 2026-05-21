@@ -62,7 +62,14 @@ export function scan(source: string): Token[] {
       push(WGSL_KEYWORDS.has(text) ? "keyword" : "ident", start, i, atLine, atColumn); continue;
     }
     if (/[0-9]/.test(ch)) {
-      while (i < source.length && /[A-Za-z0-9_.]/.test(source[i]!)) step();
+      while (i < source.length) {
+        const current = source[i]!;
+        if (/[A-Za-z0-9_.]/.test(current)) { step(); continue; }
+        if ((current === "+" || current === "-") && isExponentMarker(source[i - 1]) && /[0-9]/.test(source[i + 1] ?? "")) {
+          step(); continue;
+        }
+        break;
+      }
       push("number", start, i, atLine, atColumn); continue;
     }
     step(); push("punct", start, i, atLine, atColumn);
@@ -85,6 +92,10 @@ export function hasTopLevelImport(source: string): boolean {
 }
 
 const topLevelDirectiveKeywords = new Set(["enable", "requires", "diagnostic"]);
+
+function isExponentMarker(char: string | undefined): boolean {
+  return char === "e" || char === "E" || char === "p" || char === "P";
+}
 
 function isTopLevelDirectiveKeyword(text: string): boolean {
   return topLevelDirectiveKeywords.has(text);

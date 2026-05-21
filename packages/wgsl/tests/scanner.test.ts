@@ -11,6 +11,16 @@ test("scanner emits comments atomically", () => {
   expect(tokens.map((token) => token.text)).toContain("color");
 });
 
+test("scanner keeps signed decimal exponents in one number token", () => {
+  expect(scan("let x = 1e-8 + 1E+8 + 1.0e-8 + 1.e+8;").filter((token) => token.kind === "number").map((token) => token.text))
+    .toEqual(["1e-8", "1E+8", "1.0e-8", "1.e+8"]);
+});
+
+test("scanner keeps signed hex exponents in one number token", () => {
+  expect(scan("let x = 0x1p-8 + 0x1p+8 + 0x1P-8 + 0x1P+8 + 0x1.8p-2;").filter((token) => token.kind === "number").map((token) => token.text))
+    .toEqual(["0x1p-8", "0x1p+8", "0x1P-8", "0x1P+8", "0x1.8p-2"]);
+});
+
 test("hasTopLevelImport skips top-level WGSL directives before imports", () => {
   expect(hasTopLevelImport("enable f16;\nrequires readonly_and_readwrite_storage_textures;\nimport { helper } from './helper.wgsl';")).toBe(true);
   expect(hasTopLevelImport("diagnostic(off, derivative_uniformity);\nimport { helper } from './helper.wgsl';")).toBe(true);
