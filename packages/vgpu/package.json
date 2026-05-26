@@ -1,7 +1,7 @@
 {
   "name": "vgpu",
   "version": "0.0.5",
-  "description": "Official VGPU CLI placeholder for future docs, doctor, and WGSL utilities.",
+  "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
     "webgpu",
     "graphics",
@@ -31,7 +31,13 @@
   },
   "files": [
     "bin",
+    "lib",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "scripts": {
+    "generate:docs": "node lib/docs/generate/cli.js",
+    "prepack": "node lib/docs/generate/cli.js",
+    "test": "cd ../.. && vitest run packages/vgpu"
+  }
 }
