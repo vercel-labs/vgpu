@@ -1,0 +1,31 @@
+{
+  "name": "vgpu",
+  "version": "0.0.5",
+  "description": "Docs CLI for vgpu packages.",
+  "keywords": ["webgpu", "vgpu", "docs", "cli"],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": { "url": "https://github.com/vercel-labs/vgpu/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/vgpu"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "bin": { "vgpu": "./dist/cli.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "generate:docs": "pnpm exec esbuild src/docs/generate/cli.ts --bundle --platform=node --format=esm --outfile=dist/generate-docs-manifest.mjs && node dist/generate-docs-manifest.mjs",
+    "build": "pnpm run generate:docs && tsc -b",
+    "prepack": "pnpm run build"
+  }
+}
