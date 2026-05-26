@@ -1,0 +1,37 @@
+{
+  "name": "vgpu",
+  "version": "0.0.5",
+  "description": "Official VGPU CLI placeholder for future docs, doctor, and WGSL utilities.",
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "rendering",
+    "cli",
+    "wgsl",
+    "vgpu"
+  ],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/vgpu"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "vgpu": "./bin/vgpu.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ]
+}
