@@ -8,8 +8,6 @@ import { resolveShader } from "@vgpu/wgsl/runtime";
 
 const dockerTest = process.env.VGPU_DOCKER_TEST === "1";
 
-const EPSILON = 1e-6;
-
 interface ScalarCase {
   readonly name: string;
   readonly actual: number;
@@ -20,6 +18,18 @@ interface Vec2Case {
   readonly name: string;
   readonly actual: readonly [number, number];
   readonly expected: readonly [number, number];
+}
+
+interface Vec3Case {
+  readonly name: string;
+  readonly actual: readonly [number, number, number];
+  readonly expected: readonly [number, number, number];
+}
+
+interface Vec4Case {
+  readonly name: string;
+  readonly actual: readonly [number, number, number, number];
+  readonly expected: readonly [number, number, number, number];
 }
 
 describe("CPU reference math catalog", () => {
@@ -42,14 +52,28 @@ describe("CPU reference math catalog", () => {
   });
 
   test("vector helpers define safe normalize and rotation behavior", () => {
-    const cases: readonly Vec2Case[] = [
+    const vec2Cases: readonly Vec2Case[] = [
       { name: "safeNormalize2 non-zero", actual: safeNormalize2Ref([3, 4], [1, 0]), expected: [0.6, 0.8] },
       { name: "safeNormalize2 zero fallback", actual: safeNormalize2Ref([0, 0], [1, 0]), expected: [1, 0] },
       { name: "rotate2d quarter turn", actual: rotate2dRef([1, 0], Math.PI / 2), expected: [0, 1] },
     ];
+    const vec3Cases: readonly Vec3Case[] = [
+      { name: "safeNormalize3 non-zero", actual: safeNormalize3Ref([2, 0, 0], [0, 1, 0]), expected: [1, 0, 0] },
+      { name: "safeNormalize3 zero fallback", actual: safeNormalize3Ref([0, 0, 0], [0, 1, 0]), expected: [0, 1, 0] },
+    ];
+    const vec4Cases: readonly Vec4Case[] = [
+      { name: "safeNormalize4 non-zero", actual: safeNormalize4Ref([0, 0, 0, 5], [0, 0, 1, 0]), expected: [0, 0, 0, 1] },
+      { name: "safeNormalize4 zero fallback", actual: safeNormalize4Ref([0, 0, 0, 0], [0, 0, 1, 0]), expected: [0, 0, 1, 0] },
+    ];
 
-    for (const { name, actual, expected } of cases) {
+    for (const { name, actual, expected } of vec2Cases) {
       expectVec2Close(actual, expected, name);
+    }
+    for (const { name, actual, expected } of vec3Cases) {
+      expectVec3Close(actual, expected, name);
+    }
+    for (const { name, actual, expected } of vec4Cases) {
+      expectVec4Close(actual, expected, name);
     }
   });
 });
@@ -148,6 +172,20 @@ function safeNormalize2Ref(value: readonly [number, number], fallback: readonly 
   return [value[0] * invLength, value[1] * invLength];
 }
 
+function safeNormalize3Ref(value: readonly [number, number, number], fallback: readonly [number, number, number]): [number, number, number] {
+  const lengthSq = value[0] * value[0] + value[1] * value[1] + value[2] * value[2];
+  if (lengthSq <= 0) return [fallback[0], fallback[1], fallback[2]];
+  const invLength = 1 / Math.sqrt(lengthSq);
+  return [value[0] * invLength, value[1] * invLength, value[2] * invLength];
+}
+
+function safeNormalize4Ref(value: readonly [number, number, number, number], fallback: readonly [number, number, number, number]): [number, number, number, number] {
+  const lengthSq = value[0] * value[0] + value[1] * value[1] + value[2] * value[2] + value[3] * value[3];
+  if (lengthSq <= 0) return [fallback[0], fallback[1], fallback[2], fallback[3]];
+  const invLength = 1 / Math.sqrt(lengthSq);
+  return [value[0] * invLength, value[1] * invLength, value[2] * invLength, value[3] * invLength];
+}
+
 function rotate2dRef(value: readonly [number, number], radians: number): [number, number] {
   const c = Math.cos(radians);
   const s = Math.sin(radians);
@@ -157,6 +195,19 @@ function rotate2dRef(value: readonly [number, number], radians: number): [number
 function expectVec2Close(actual: readonly [number, number], expected: readonly [number, number], name: string): void {
   expect.soft(actual[0], `${name}.x`).toBeCloseTo(expected[0], 6);
   expect.soft(actual[1], `${name}.y`).toBeCloseTo(expected[1], 6);
+}
+
+function expectVec3Close(actual: readonly [number, number, number], expected: readonly [number, number, number], name: string): void {
+  expect.soft(actual[0], `${name}.x`).toBeCloseTo(expected[0], 6);
+  expect.soft(actual[1], `${name}.y`).toBeCloseTo(expected[1], 6);
+  expect.soft(actual[2], `${name}.z`).toBeCloseTo(expected[2], 6);
+}
+
+function expectVec4Close(actual: readonly [number, number, number, number], expected: readonly [number, number, number, number], name: string): void {
+  expect.soft(actual[0], `${name}.x`).toBeCloseTo(expected[0], 6);
+  expect.soft(actual[1], `${name}.y`).toBeCloseTo(expected[1], 6);
+  expect.soft(actual[2], `${name}.z`).toBeCloseTo(expected[2], 6);
+  expect.soft(actual[3], `${name}.w`).toBeCloseTo(expected[3], 6);
 }
 
 async function runMathCompute(): Promise<Float32Array> {

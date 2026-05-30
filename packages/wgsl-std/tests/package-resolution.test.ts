@@ -49,8 +49,9 @@ fn main() -> f32 {
   const compact = first.wgsl.replace(/\s+/gu, "");
   expect(compact).toMatch(/^fna\(\)->f32\{returnb\(1\.5\);\}/u);
   expect(compact).toContain("returnclamp(");
-  expect(compact).toContain("returnnormalize(");
-  expect(compact).toContain("returnvec2f(");
+  expect(compact).not.toContain("normalize(");
+  expect(compact).not.toContain("vec2f(");
+  expect(compact).not.toMatch(/inverseLerp|remap|safeNormalize|rotate2d/u);
 });
 
 async function workspaceFixture(): Promise<string> {
