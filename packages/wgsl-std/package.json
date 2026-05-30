@@ -1,0 +1,42 @@
+{
+  "name": "@vgpu/wgsl-std",
+  "version": "0.0.5",
+  "description": "Pure WGSL utility snippets for vgpu shaders.",
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "rendering",
+    "wgsl",
+    "shader",
+    "utilities"
+  ],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/wgsl-std"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    "./math": "./src/math/index.wgsl",
+    "./color": "./src/color/index.wgsl",
+    "./sampling": "./src/sampling/index.wgsl",
+    "./constants": "./src/constants/index.wgsl"
+  },
+  "files": [
+    "src/**/*.wgsl",
+    "src/**/*.docs.md",
+    "README.md",
+    "LICENSE"
+  ]
+}
