@@ -8,9 +8,9 @@ test("math and color package subpaths resolve through package exports", async ()
   const dir = await workspaceFixture();
   const entry = join(dir, "app", "main.wgsl");
   await writeFile(entry, `import { saturate } from "@vgpu/wgsl-std/math";
-import { identityVec3f } from "@vgpu/wgsl-std/color";
-fn main() -> vec3f {
-  return identityVec3f(vec3f(saturate(1.5)));
+import { luminance } from "@vgpu/wgsl-std/color";
+fn main() -> f32 {
+  return luminance(vec3f(saturate(1.5)));
 }`);
 
   const result = await resolveShader({ entry, validate: false });
@@ -20,7 +20,7 @@ fn main() -> vec3f {
   expect(result.wgsl).toContain("node_modules/@vgpu/wgsl-std/src/math/index.wgsl");
   expect(result.wgsl).toContain("node_modules/@vgpu/wgsl-std/src/color/index.wgsl");
   expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__saturate\(value: f32\) -> f32/);
-  expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__identityVec3f\(value: vec3f\) -> vec3f/);
+  expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__luminance\(value: vec3f\) -> f32/);
 });
 
 test("wgsl-std has no root WGSL export", async () => {
