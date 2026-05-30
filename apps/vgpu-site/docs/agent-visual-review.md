@@ -9,7 +9,7 @@ This app is a standalone Next 15 landing page at `apps/vgpu-site`. Keep all site
 - Tailwind CSS v4.
 - `tw-blocks` v4 is compatible and used through CSS imports: `@import "tailwindcss"; @import "tw-blocks";`.
 - App-local Storybook uses `@storybook/react-vite`; `@storybook/nextjs` 8 hit a Next 15 webpack-builder failure during validation.
-- Uses the public `geist` package for Geist Sans, Geist Mono, and Geist Pixel Square font variables.
+- Uses checked-in Geist Sans, Geist Mono, and Geist Pixel Square WOFF2 files under `public/fonts` with the included OFL license, avoiding `next/font`/Pages Router build coupling in this app-router-only site.
 - No private `@vercel/*` packages.
 
 ## Design tokens and rules
