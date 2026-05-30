@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",

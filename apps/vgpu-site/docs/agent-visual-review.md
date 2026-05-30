@@ -4,7 +4,7 @@ This app is a standalone Next 15 landing page at `apps/vgpu-site`. Keep all site
 
 ## Stack
 
-- Next 15 App Router with Turbopack.
+- Next 15 App Router. Production builds use stable webpack (`next build`) because `next build --turbopack` intermittently raises an app-router-only `/_document` PageNotFoundError in clean QA runs.
 - React 18.
 - Tailwind CSS v4.
 - `tw-blocks` v4 is compatible and used through CSS imports: `@import "tailwindcss"; @import "tw-blocks";`.
