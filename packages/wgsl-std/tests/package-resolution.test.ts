@@ -4,23 +4,28 @@ import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 
-test("math and color package subpaths resolve through package exports", async () => {
+test("math, color, and sampling package subpaths resolve through package exports", async () => {
   const dir = await workspaceFixture();
   const entry = join(dir, "app", "main.wgsl");
   await writeFile(entry, `import { saturate } from "@vgpu/wgsl-std/math";
 import { luminance } from "@vgpu/wgsl-std/color";
+import { hammersley2d } from "@vgpu/wgsl-std/sampling";
 fn main() -> f32 {
-  return luminance(vec3f(saturate(1.5)));
+  let sample = hammersley2d(1u, 8u);
+  return luminance(vec3f(saturate(1.5))) + sample.x + sample.y;
 }`);
 
   const result = await resolveShader({ entry, validate: false });
 
   expect(result.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/math/index.wgsl"))).toBe(true);
   expect(result.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/color/index.wgsl"))).toBe(true);
+  expect(result.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/sampling/index.wgsl"))).toBe(true);
   expect(result.wgsl).toContain("node_modules/@vgpu/wgsl-std/src/math/index.wgsl");
   expect(result.wgsl).toContain("node_modules/@vgpu/wgsl-std/src/color/index.wgsl");
+  expect(result.wgsl).toContain("node_modules/@vgpu/wgsl-std/src/sampling/index.wgsl");
   expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__saturate\(value: f32\) -> f32/);
   expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__luminance\(value: vec3f\) -> f32/);
+  expect(result.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__hammersley2d\(index: u32, count: u32\) -> vec2f/);
 });
 
 test("wgsl-std has no root WGSL export", async () => {

@@ -19,6 +19,7 @@ test("exported wgsl-std snippets stay pure declaration modules", async () => {
   expect(files.map((file) => relative(packageRoot, file).replace(/\\/gu, "/")).sort()).toEqual([
     "src/color/index.wgsl",
     "src/math/index.wgsl",
+    "src/sampling/index.wgsl",
   ]);
 
   for (const file of files) {
