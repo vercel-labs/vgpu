@@ -17,6 +17,16 @@ another Node 22 host based on Debian trixie, Ubuntu 24.04+, or equivalent GLIBC
 
 For headless/software rendering, match the Docker environment variables
 `LIBGL_ALWAYS_SOFTWARE=1`, `DISPLAY=:99`, and
-`XDG_RUNTIME_DIR=/tmp/xdg-runtime`. `VGPU_DAWN_FLAGS` may be set to
-space-separated Dawn flags, such as `VGPU_DAWN_FLAGS=backend=opengl`, and
-replaces the adapter's default backend flag selection.
+`XDG_RUNTIME_DIR=/tmp/xdg-runtime`. The pinned Docker image uses Node 22 on
+Debian trixie with Mesa/EGL/GL and Xvfb for the OpenGL software stack, which is
+the recommended baseline for CI and visual snapshot agents. `VGPU_DAWN_FLAGS`
+may be set to space-separated Dawn flags, such as
+`VGPU_DAWN_FLAGS=backend=opengl`, and replaces the adapter's default backend flag
+selection.
+
+For agentic headless snapshot tests, pair this adapter with an explicit
+offscreen `rgba8unorm` render target that includes `"copy_src"`, submit the
+render commands, `await device.queue.flush()`, then read pixels through
+`Texture.read()`. Keep PNG encoding and pixel comparison in project test tooling
+(such as `pngjs`, `pixelmatch`, or existing snapshots), not in the VGPU API. See
+`createNodeDevice` for a full native-before/VGPU-after guide.
