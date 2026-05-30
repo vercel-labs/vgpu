@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22 (the workspace engine is `>=22 <23`)
 - pnpm
 
 ## Making changes
