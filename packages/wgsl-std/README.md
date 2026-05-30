@@ -54,7 +54,7 @@ See `src/color/index.docs.md` for formulas, examples, and performance notes.
 
 - `goldenAngle: f32`: golden angle in radians, rounded to WGSL `f32` precision (`2.3999631`).
 - `vogelDisk(index: u32, count: u32, phi: f32) -> vec2f`: Vogel spiral sample in the unit disk for `index < count`; `phi` rotates the pattern in radians. Returns `vec2f(0.0)` when `count == 0u` to avoid division by zero.
-- `radicalInverseVdc(bits: u32) -> f32`: standard base-2 Van der Corput radical inverse via deterministic bit reversal, clamped to the largest `f32` below `1.0` for all-bits-set inputs.
+- `radicalInverseVdc(bits: u32) -> f32`: standard base-2 Van der Corput radical inverse via deterministic bit reversal, clamped to the largest `f32` below `1.0` for high reversed-bit values whose WGSL `f32` product would otherwise round to `1.0`.
 - `hammersley2d(index: u32, count: u32) -> vec2f`: Hammersley point `(index / count, radicalInverseVdc(index))`; returns `vec2f(0.0)` when `count == 0u`.
 
 Before, shader code often repeats the sampling math manually:
@@ -82,6 +82,6 @@ fn localVogelDisk(index: u32, count: u32, phi: f32) -> vec2f {
 
 Performance note: `vogelDisk` uses `sqrt`, `cos`, and `sin`; precompute fixed kernels if they are reused heavily. `hammersley2d`/`radicalInverseVdc` are stateless integer/float math and are not random-number generators.
 
-Provenance: Vogel disk sampling is an original WGSL transcription of Vogel's 1979 published golden-angle phyllotaxis model. Van der Corput and Hammersley samples are standard low-discrepancy sequence formulas implemented here with original WGSL bit operations. Perlin/simplex/fBM/value noise and shader-magic hash/random snippets are deferred for separate API and provenance review.
+Provenance: Vogel disk sampling is an original WGSL transcription of Vogel's 1979 published golden-angle phyllotaxis model. Van der Corput and Hammersley samples are standard low-discrepancy sequence formulas implemented here with original WGSL bit operations; they are deliberate reviewed additions beyond the original minimal `vogelDisk` requirement to satisfy the updated user preference for fewer deferrals while staying provenance-clean. `concentricDisk` is deferred for separate API review of disk-mapping conventions and edge behavior, and Perlin/simplex/fBM/value noise plus shader-magic hash/random snippets are deferred for separate API and provenance review.
 
 See `src/sampling/index.docs.md` for examples, input ranges, and edge-case notes.

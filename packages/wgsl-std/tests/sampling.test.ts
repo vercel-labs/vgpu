@@ -73,7 +73,9 @@ describe("CPU reference sampling catalog", () => {
       { name: "5", actual: radicalInverseVdcRef(5), expected: 0.625 },
       { name: "6", actual: radicalInverseVdcRef(6), expected: 0.375 },
       { name: "7", actual: radicalInverseVdcRef(7), expected: 0.875 },
+      { name: "high reversed value clamps to largest f32 below 1", actual: radicalInverseVdcRef(0x0fffffff), expected: 0.99999994 },
       { name: "max clamps to largest f32 below 1", actual: radicalInverseVdcRef(0xffffffff), expected: 0.99999994 },
+      { name: "near-max input follows bit reversal", actual: radicalInverseVdcRef(0xfffffff0), expected: 0.062499999767169356 },
     ];
 
     for (const { name, actual, expected } of cases) {
