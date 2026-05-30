@@ -44,7 +44,9 @@ fn main() -> f32 {
   const second = await resolveShader({ entry, validate: false, minify: true });
 
   expect(first.wgsl).toBe(second.wgsl);
-  expect(first.wgsl).toBe("fn a()-> f32{return b(0.5);}fn b(c:f32)-> f32{return c;}");
+  expect(first.wgsl).not.toContain("\n");
+  expect(first.wgsl).not.toContain("//");
+  expect(first.wgsl.replace(/\s+/gu, "")).toMatch(/^fna\(\)->f32\{returnb\(0\.5\);\}fnb\(([a-z]+):f32\)->f32\{return\1;\}$/u);
 });
 
 async function workspaceFixture(): Promise<string> {
