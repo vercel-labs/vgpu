@@ -8,6 +8,7 @@ This package intentionally ships raw `.wgsl` modules instead of JavaScript wrapp
 import { saturate, remap, safeNormalize3, rotate2d } from "@vgpu/wgsl-std/math";
 import { srgbToLinear3, linearToSrgb3, luminance, applyExposure } from "@vgpu/wgsl-std/color";
 import { vogelDisk, hammersley2d } from "@vgpu/wgsl-std/sampling";
+import { pi, tau, goldenAngle } from "@vgpu/wgsl-std/constants";
 ```
 
 There is no root WGSL export. Subpath exports resolve to physical WGSL files:
@@ -15,8 +16,26 @@ There is no root WGSL export. Subpath exports resolve to physical WGSL files:
 - `@vgpu/wgsl-std/math` -> `src/math/index.wgsl`
 - `@vgpu/wgsl-std/color` -> `src/color/index.wgsl`
 - `@vgpu/wgsl-std/sampling` -> `src/sampling/index.wgsl`
+- `@vgpu/wgsl-std/constants` -> `src/constants/index.wgsl`
 
 WGSL snippets in this package must stay pure declaration modules: functions, constants, structs, and aliases only. They must not introduce hidden bindings, resource variables, overrides, or entry points.
+
+## Constants
+
+`@vgpu/wgsl-std/constants` includes common math constants as plain WGSL `const` declarations:
+
+- `pi: f32`: π.
+- `tau: f32`: 2π.
+- `halfPi: f32`: π / 2.
+- `quarterPi: f32`: π / 4.
+- `invPi: f32`: 1 / π.
+- `invTau: f32`: 1 / 2π.
+- `goldenRatio: f32`: φ.
+- `goldenAngle: f32`: golden angle in radians.
+
+The constants module is intentionally small so importing it does not add much WGSL text. Declaration-level dead-code elimination for larger WGSL utility modules is tracked in [#98](https://github.com/vercel-labs/vgpu/issues/98). `goldenAngle` remains available from `@vgpu/wgsl-std/sampling` for sampling-only shaders.
+
+See `src/constants/index.docs.md` for examples and precision notes.
 
 ## Math utilities
 
