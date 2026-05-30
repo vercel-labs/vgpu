@@ -1,3 +1,5 @@
+import { GeistMono, GeistSans } from "geist/font";
+import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
@@ -15,7 +17,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${GeistPixelSquare.variable}`}>
       <body>{children}</body>
     </html>
   );
