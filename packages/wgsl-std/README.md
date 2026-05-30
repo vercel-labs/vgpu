@@ -6,7 +6,7 @@ This package intentionally ships raw `.wgsl` modules instead of JavaScript wrapp
 
 ```wgsl
 import { saturate, remap, safeNormalize3, rotate2d } from "@vgpu/wgsl-std/math";
-import { identityVec3f } from "@vgpu/wgsl-std/color";
+import { srgbToLinear3, linearToSrgb3, luminance, applyExposure } from "@vgpu/wgsl-std/color";
 ```
 
 There is no root WGSL export. Subpath exports resolve to physical WGSL files:
@@ -29,4 +29,19 @@ WGSL snippets in this package must stay pure declaration modules: functions, con
 
 See `src/math/index.docs.md` for examples and edge-case notes.
 
-The color module currently contains only the scaffold identity helper; the reviewed color utility catalog is planned for a later slice.
+## Color utilities
+
+`@vgpu/wgsl-std/color` includes non-PBR color helpers:
+
+- `srgbToLinear(value: f32) -> f32`: standard IEC/sRGB decode transfer for one channel.
+- `srgbToLinear3(color: vec3f) -> vec3f`: decode RGB channels from sRGB to linear light.
+- `srgbToLinear4(color: vec4f) -> vec4f`: decode RGB channels and preserve alpha.
+- `linearToSrgb(value: f32) -> f32`: standard IEC/sRGB encode transfer for one channel.
+- `linearToSrgb3(color: vec3f) -> vec3f`: encode RGB channels from linear light to sRGB.
+- `linearToSrgb4(color: vec4f) -> vec4f`: encode RGB channels and preserve alpha.
+- `luminance(color: vec3f) -> f32`: relative luminance using Rec.709/sRGB coefficients `(0.2126, 0.7152, 0.0722)`. Pass linear-light color.
+- `applyExposure(color: vec3f, exposure: f32) -> vec3f`: multiply by `exp2(exposure)`, where exposure is measured in stops/EV.
+
+WGSL has no user-defined generics, so vector transfer helpers use `3`/`4` suffixes while scalar transfer helpers keep the base names. Color transfer helpers expect normal `[0.0, 1.0]` color-channel inputs but do not clamp; clamp explicitly with `@vgpu/wgsl-std/math` when desired. The color module intentionally defers PBR helpers and tonemappers (ACES/Hable/Filament/Reinhard) so applications choose their own display transform.
+
+See `src/color/index.docs.md` for formulas, examples, and performance notes.
