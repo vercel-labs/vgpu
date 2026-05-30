@@ -1,8 +1,8 @@
 # @vgpu/render
 
-> 0.0.1 — early preview
+> 0.0.5 — early preview
 
-`@vgpu/render` is the small rendering layer on top of `@vgpu/core`. It currently focuses on two public building blocks: creating a render pipeline from a vgpu shader wrapper, and issuing a render pass against a texture or texture view. The package is intentionally narrow in 0.0.1 and leaves higher-level scene helpers for later releases.
+`@vgpu/render` is the small rendering layer on top of `@vgpu/core`. It focuses on explicit WebGPU-style control: create pipelines, encode standalone render passes, or build one frame command encoder with multiple user-ordered passes.
 
 ## Install
 
@@ -15,13 +15,20 @@ pnpm add @vgpu/render
 ### Runtime
 - `createRenderPipeline`
 - `RenderPass`
+- `beginFrame` / `Frame`
+- `createRenderBundle` / `RenderBundleRecorder`
 
 ### Types
 - `RenderPipelineOptions`
 - `ColorAttachment`
+- `DepthStencilAttachment`
 - `RenderPassOptions`
+- `RenderPassDrawOptions`
+- `RenderPassDynamicOffsets`
+- `FrameOptions`
+- `RenderBundleOptions`
 
-## Usage
+## Standalone pass
 
 ```ts
 import { App } from "@vgpu/core";
@@ -47,8 +54,68 @@ const pass = new RenderPass(device, {
 });
 pass.setPipeline(pipeline);
 pass.draw(3);
-pass.end();
+pass.end(); // finishes and submits this one-shot pass
 ```
+
+## Explicit multipass frame
+
+Render bundles are setup-time reusable draw packets, not hidden passes or a render graph:
+
+```ts
+import { beginFrame, createRenderBundle } from "@vgpu/render";
+
+const bundle = createRenderBundle(device, {
+  label: "hero.light-sources.bundle",
+  colorFormats: ["rgba8unorm"],
+  depthStencilFormat: "depth24plus",
+  sampleCount: 1,
+  record(bundle) {
+    bundle.setPipeline(lightPipeline);
+    bundle.setBindGroup(0, lightBindGroup);
+    bundle.draw(lightVertexCount);
+  },
+});
+```
+
+Native WebGPU multipass code uses one command encoder, explicit pass begin/end calls, then one finish/submit:
+
+```ts
+const encoder = device.gpu.createCommandEncoder({ label: "hero.frame" });
+
+const lightPass = encoder.beginRenderPass(lightPassDescriptor);
+lightPass.executeBundles([bundle]);
+lightPass.end();
+
+encoder.writeTimestamp(querySet, 0);
+encoder.copyBufferToBuffer(srcBuffer, 0, dstBuffer, 0, byteLength);
+
+const compositePass = encoder.beginRenderPass(compositePassDescriptor);
+compositePass.setPipeline(compositePipeline);
+compositePass.setBindGroup(0, compositeBindGroup);
+compositePass.draw(3);
+compositePass.end();
+
+device.queue.gpu.submit([encoder.finish()]);
+```
+
+With VGPU `Frame`, the lifecycle is the same but pass end and final submission are harder to get wrong:
+
+```ts
+const frame = beginFrame(device, { label: "hero.frame" });
+frame.renderPass(lightPassDescriptor, (pass) => {
+  pass.executeBundles([bundle]);
+});
+frame.gpu.writeTimestamp(querySet, 0);
+frame.copyBufferToBuffer(srcBuffer, dstBuffer, byteLength);
+frame.renderPass(compositePassDescriptor, (pass) => {
+  pass.setPipeline(compositePipeline);
+  pass.setBindGroup(0, compositeBindGroup);
+  pass.draw(3);
+});
+frame.submit(); // finishes once and submits once
+```
+
+`Frame` preserves authored ordering and exposes its raw `GPUCommandEncoder` as `frame.gpu` for advanced commands. Direct raw encoder calls follow WebGPU behavior; VGPU helper methods guard use after `submit()` with `VGPU-FRAME-SUBMITTED`.
 
 ## License
 
