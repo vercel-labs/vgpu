@@ -1,0 +1,35 @@
+{
+  "name": "@vgpu/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbo",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "artifacts": "playwright test -c playwright.artifacts.config.ts"
+  },
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*",
+    "next": "^15.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.1.13",
+    "tw-blocks": "^4.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/react": "^8.6.14",
+    "@storybook/react-vite": "^8.6.14",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^22.10.7",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "storybook": "^8.6.14",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}

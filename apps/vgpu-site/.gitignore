@@ -1,0 +1,6 @@
+.next/
+out/
+storybook-static/
+playwright-report/
+test-results/
+*.tsbuildinfo
