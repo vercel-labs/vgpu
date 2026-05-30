@@ -16,6 +16,16 @@
 @vgpu/core VGPUError packages/core/src/VGPUError.docs.md
 @vgpu/core ValidationError packages/core/src/VGPUError.docs.md
 @vgpu/core VGPUAdapter packages/core/src/VGPUAdapter.docs.md
+@vgpu/core bind packages/core/src/bind.docs.md
+@vgpu/core createBindGroupLayout packages/core/src/bind.docs.md
+@vgpu/core createPipelineLayout packages/core/src/bind.docs.md
+@vgpu/core createBindGroup packages/core/src/bind.docs.md
+@vgpu/core createSampler packages/core/src/bind.docs.md
+@vgpu/core BindVisibility packages/core/src/bind.docs.md
+@vgpu/core CreateBindGroupLayoutOptions packages/core/src/bind.docs.md
+@vgpu/core CreatePipelineLayoutOptions packages/core/src/bind.docs.md
+@vgpu/core CreateBindGroupOptions packages/core/src/bind.docs.md
+@vgpu/core DeviceLike packages/core/src/bind.docs.md
 @vgpu/core createMockGPUDevice packages/core/src/createMockGPUDevice.docs.md
 @vgpu/adapter-mock createMockAdapter packages/adapter-mock/src/createMockAdapter.docs.md
 @vgpu/adapter-node createNodeAdapter packages/adapter-node/src/createNodeAdapter.docs.md
