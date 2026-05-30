@@ -29,7 +29,8 @@
   "type": "module",
   "exports": {
     "./math": "./src/math/index.wgsl",
-    "./color": "./src/color/index.wgsl"
+    "./color": "./src/color/index.wgsl",
+    "./sampling": "./src/sampling/index.wgsl"
   },
   "files": [
     "src/**/*.wgsl",
