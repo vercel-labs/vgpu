@@ -5,6 +5,7 @@ export { Queue } from "./queue.ts";
 export { Shader } from "./shader.ts";
 export { Texture } from "./texture.ts";
 export { VGPUError, ValidationError } from "./errors.ts";
+export { bind, createBindGroup, createBindGroupLayout, createPipelineLayout, createSampler } from "./bind.ts";
 export { createMockGPUDevice } from "./mockGpu.ts";
 export type { AppCreateOptions, AppInstance, VGPUAdapter } from "./app-types.ts";
 export type {
@@ -15,4 +16,5 @@ export type {
   TextureUsageName,
   CreateDeviceOptions,
 } from "./types.ts";
+export type { BindVisibility, CreateBindGroupLayoutOptions, CreateBindGroupOptions, CreatePipelineLayoutOptions, DeviceLike } from "./bind.ts";
 export type { ShaderInput } from "./shader.ts";

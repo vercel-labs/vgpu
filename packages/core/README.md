@@ -23,6 +23,11 @@ pnpm add @vgpu/core
 - `ValidationError`
 
 ### Functions
+- `bind`
+- `createBindGroupLayout`
+- `createPipelineLayout`
+- `createBindGroup`
+- `createSampler`
 - `createMockGPUDevice`
 
 ### Types
@@ -35,6 +40,11 @@ pnpm add @vgpu/core
 - `TextureOptions`
 - `TextureUsageName`
 - `CreateDeviceOptions`
+- `BindVisibility`
+- `CreateBindGroupLayoutOptions`
+- `CreatePipelineLayoutOptions`
+- `CreateBindGroupOptions`
+- `DeviceLike`
 - `ShaderInput`
 
 ## Usage
@@ -54,6 +64,21 @@ buffer.write(data);
 const copy = new Float32Array(await buffer.read(data.byteLength));
 device.destroy();
 ```
+
+Explicit binding helpers keep layout control in user code without WGSL reflection or
+`layout: "auto"`:
+
+```ts
+import { bind, createBindGroupLayout } from "@vgpu/core";
+
+const sceneLayout = createBindGroupLayout(device, {
+  entries: [bind.uniform(0, "vertex|fragment")],
+});
+```
+
+The `.gpu` property is an unmanaged raw WebGPU escape hatch for APIs that VGPU
+does not wrap yet. Prefer wrapper lifecycle methods (`buffer.destroy()`,
+`texture.destroy()`, `device.destroy()`) instead of destroying `.gpu` directly.
 
 ## License
 
