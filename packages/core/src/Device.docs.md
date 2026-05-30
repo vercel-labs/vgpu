@@ -4,3 +4,31 @@
 owns the queue wrapper, captures structured validation errors through error scopes,
 and exposes the raw WebGPU object via `.gpu` for mechanical escape-hatch use.
 Use `destroy()` or `dispose()` for teardown.
+
+## Capabilities
+
+`device.limits` and `device.features` are transparent accessors for the underlying
+WebGPU device capabilities. They do not negotiate, normalize, or polyfill support;
+use them to inspect limits and gate optional paths without reaching through `.gpu`.
+
+Native WebGPU:
+
+```ts
+const max = device.gpu.limits.maxTextureDimension2D;
+const hasTimestamps = device.gpu.features.has("timestamp-query");
+```
+
+VGPU:
+
+```ts
+const max = device.limits.maxTextureDimension2D;
+const hasTimestamps = device.features.has("timestamp-query");
+```
+
+Gate optional behavior with the same setlike feature checks that WebGPU exposes:
+
+```ts
+if (device.features.has("timestamp-query")) {
+  // create timestamp query resources for this device
+}
+```

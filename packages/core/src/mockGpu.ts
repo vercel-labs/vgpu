@@ -3,6 +3,8 @@ import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock
 
 export function createMockGPUDevice(): GPUDevice {
   return {
+    limits: createMockSupportedLimits(),
+    features: createMockSupportedFeatures(),
     createBuffer: createMockBuffer,
     createTexture(desc: GPUTextureDescriptor): MockGPUTexture {
       const size = textureSize(desc.size);
@@ -53,6 +55,47 @@ export function createMockGPUDevice(): GPUDevice {
 
 export function mockBufferDescriptor(size: number): GPUBufferDescriptor {
   return { size, usage: bufferUsageFlags(["copy_src", "copy_dst"]) };
+}
+
+function createMockSupportedLimits(): GPUSupportedLimits {
+  return {
+    maxTextureDimension1D: 8192,
+    maxTextureDimension2D: 8192,
+    maxTextureDimension3D: 2048,
+    maxTextureArrayLayers: 256,
+    maxBindGroups: 4,
+    maxBindGroupsPlusVertexBuffers: 24,
+    maxBindingsPerBindGroup: 1000,
+    maxDynamicUniformBuffersPerPipelineLayout: 8,
+    maxDynamicStorageBuffersPerPipelineLayout: 4,
+    maxSampledTexturesPerShaderStage: 16,
+    maxSamplersPerShaderStage: 16,
+    maxStorageBuffersPerShaderStage: 8,
+    maxStorageTexturesPerShaderStage: 4,
+    maxUniformBuffersPerShaderStage: 12,
+    maxUniformBufferBindingSize: 65536,
+    maxStorageBufferBindingSize: 134217728,
+    minUniformBufferOffsetAlignment: 256,
+    minStorageBufferOffsetAlignment: 256,
+    maxVertexBuffers: 8,
+    maxBufferSize: 268435456,
+    maxVertexAttributes: 16,
+    maxVertexBufferArrayStride: 2048,
+    maxInterStageShaderComponents: 60,
+    maxInterStageShaderVariables: 16,
+    maxColorAttachments: 8,
+    maxColorAttachmentBytesPerSample: 32,
+    maxComputeWorkgroupStorageSize: 16384,
+    maxComputeInvocationsPerWorkgroup: 256,
+    maxComputeWorkgroupSizeX: 256,
+    maxComputeWorkgroupSizeY: 256,
+    maxComputeWorkgroupSizeZ: 64,
+    maxComputeWorkgroupsPerDimension: 65535,
+  } as unknown as GPUSupportedLimits;
+}
+
+function createMockSupportedFeatures(): GPUSupportedFeatures {
+  return new Set<GPUFeatureName>() as unknown as GPUSupportedFeatures;
 }
 
 function createMockBuffer(desc: GPUBufferDescriptor): MockGPUBuffer {
