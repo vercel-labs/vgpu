@@ -73,3 +73,4 @@
 @vgpu/render/utils FrameClock packages/render/src/utils/frame-clock.docs.md
 @vgpu/render/utils canvasResolution packages/render/src/utils/canvas-resolution.docs.md
 @vgpu/render/utils CanvasResolution packages/render/src/utils/canvas-resolution.docs.md
+@vgpu/render/passes renderTargetForCanvas packages/render/src/render-target/render-target-canvas.docs.md
