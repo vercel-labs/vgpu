@@ -1,432 +1,411 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import type { DotMapResult } from "@/lib/get-dot-map";
 
-const WORD = "vgpu";
 const CELL_PITCH = 38;
+const LINES = ["vgpu"];
 
-type Particle = {
+type DotPosition = {
   readonly x: number;
   readonly y: number;
-  readonly size: number;
-  readonly alpha: number;
-  readonly delay: number;
+  readonly id: string;
   readonly isNoise: boolean;
-  readonly morph: number;
 };
 
-type GpuResources = {
-  readonly device: GPUDevice;
-  readonly context: GPUCanvasContext;
-  readonly pipeline: GPURenderPipeline;
-  readonly quadBuffer: GPUBuffer;
-  readonly uniformBuffer: GPUBuffer;
-  readonly instanceBuffer: GPUBuffer;
-  readonly bindGroup: GPUBindGroup;
-  readonly format: GPUTextureFormat;
-};
-
-const SHADER = /* wgsl */ `
-struct Uniforms {
-  width: f32,
-  height: f32,
-  _pad0: f32,
-  _pad1: f32,
-};
-
-struct VertexIn {
-  @location(0) quad: vec2f,
-  @location(1) center: vec2f,
-  @location(2) size: f32,
-  @location(3) opacity: f32,
-  @location(4) morph: f32,
-};
-
-struct VertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) uv: vec2f,
-  @location(1) @interpolate(flat) opacity: f32,
-  @location(2) @interpolate(flat) morph: f32,
-};
-
-@group(0) @binding(0) var<uniform> u: Uniforms;
-
-@vertex
-fn vs_main(input: VertexIn) -> VertexOut {
-  let pixel = input.center + input.quad * input.size;
-  var out: VertexOut;
-  out.position = vec4f((pixel.x / u.width) * 2.0 - 1.0, 1.0 - (pixel.y / u.height) * 2.0, 0.0, 1.0);
-  out.uv = input.quad;
-  out.opacity = input.opacity;
-  out.morph = input.morph;
-  return out;
-}
-
-@fragment
-fn fs_main(input: VertexOut) -> @location(0) vec4f {
-  let p = input.uv;
-  let m = input.morph;
-  var d: f32;
-  if (m < 0.28) {
-    d = max(abs(p.x), abs(p.y)) - 0.68;
-  } else if (m < 0.56) {
-    d = length(p) - 0.68;
-  } else if (m < 0.78) {
-    d = max(abs(p.x) - 0.72, abs(p.y) - 0.22);
-  } else {
-    let q = vec2f(abs(p.x), p.y + 0.18);
-    d = max(q.x * 0.8660254 + q.y * 0.5, -q.y) - 0.5;
+function generateNoiseDots(realDots: DotPosition[], cellSizePx: number, noiseCount: number): DotPosition[] {
+  const directions: Array<[number, number]> = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      directions.push([dx, dy]);
+    }
   }
-  let alpha = smoothstep(0.16, -0.16, d) * input.opacity;
-  if (alpha < 0.01) { discard; }
-  let tone = 0.72 + smoothstep(0.55, 1.0, input.opacity) * 0.28;
-  return vec4f(vec3f(tone), alpha);
-}
-`;
 
-const QUAD = new Float32Array([
-  -1, -1,
-  1, -1,
-  -1, 1,
-  -1, 1,
-  1, -1,
-  1, 1,
-]);
+  const keyFor = (x: number, y: number) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
+  const realDotSet = new Set(realDots.map((dot) => keyFor(dot.x, dot.y)));
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
+  const shuffled = [...realDots];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+  }
 
-function easeOutCubic(value: number) {
-  return 1 - Math.pow(1 - clamp(value, 0, 1), 3);
-}
+  const noiseDots: DotPosition[] = [];
+  const noiseSet = new Set<string>();
 
-function deterministicNoise(index: number, salt: number) {
-  const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
-  return value - Math.floor(value);
-}
+  for (const borderDot of shuffled) {
+    const dirs = [...directions];
+    for (let i = dirs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [dirs[i], dirs[j]] = [dirs[j]!, dirs[i]!];
+    }
 
-function buildParticlesFromGlyphs(dotMapResult: DotMapResult, measureWidth: number, measureHeight: number): Particle[] {
-  const { dotMap, ascent, descent } = dotMapResult;
-  const glyphs = WORD.split(" ").join("").split("").map((char) => dotMap[char]).filter(Boolean);
-  const advance = glyphs.reduce((sum, glyph) => sum + glyph.advance, 0);
-  const pxPerUnit = measureWidth / Math.max(advance, 1);
-  const fontHeight = (ascent - descent) * pxPerUnit;
-  const topPad = (measureHeight - fontHeight) / 2;
-  const real: Particle[] = [];
-  let penX = 0;
+    for (const [dx, dy] of dirs) {
+      const x = borderDot.x + dx * cellSizePx;
+      const y = borderDot.y + dy * cellSizePx;
+      const key = keyFor(x, y);
 
-  for (const char of WORD) {
-    const glyph = dotMap[char];
-    if (!glyph) continue;
-    for (const [col, row] of glyph.dots) {
-      const x = penX + (col * CELL_PITCH + CELL_PITCH / 2) * pxPerUnit;
-      const y = topPad + (ascent - (row * CELL_PITCH + CELL_PITCH / 2)) * pxPerUnit;
-      const centerDistance = Math.hypot(x - measureWidth / 2, y - measureHeight / 2);
-      real.push({
+      if (realDotSet.has(key) || noiseSet.has(key)) continue;
+
+      noiseSet.add(key);
+      noiseDots.push({
         x,
         y,
-        size: 8.5 * pxPerUnit,
-        alpha: 1,
-        delay: centerDistance / Math.max(measureWidth, measureHeight),
-        isNoise: false,
-        morph: 0.08,
+        id: `noise-${noiseDots.length}`,
+        isNoise: true,
       });
+
+      if (noiseDots.length >= noiseCount) return noiseDots;
+      break;
     }
-    penX += glyph.advance * pxPerUnit;
   }
 
-  const cellSize = CELL_PITCH * pxPerUnit;
-  const realKeys = new Set(real.map((dot) => `${Math.round(dot.x / cellSize)},${Math.round(dot.y / cellSize)}`));
-  const particles = [...real];
-  const noiseTarget = Math.floor(real.length * 1.25);
-  for (let index = 0; index < noiseTarget; index++) {
-    const source = real[index % real.length];
-    if (!source) continue;
-    const angle = deterministicNoise(index, 1) * Math.PI * 2;
-    const radius = cellSize * (1.1 + deterministicNoise(index, 2) * 3.6);
-    const x = source.x + Math.cos(angle) * radius;
-    const y = source.y + Math.sin(angle) * radius;
-    const key = `${Math.round(x / cellSize)},${Math.round(y / cellSize)}`;
-    if (realKeys.has(key)) continue;
-    particles.push({
-      x,
-      y,
-      size: (5 + deterministicNoise(index, 3) * 7) * pxPerUnit,
-      alpha: 0.16 + deterministicNoise(index, 4) * 0.26,
-      delay: deterministicNoise(index, 5) * 0.8,
-      isNoise: true,
-      morph: 0.34 + deterministicNoise(index, 6) * 0.62,
-    });
-  }
-
-  return particles;
+  return noiseDots;
 }
 
-async function createGpuResources(canvas: HTMLCanvasElement, capacity: number): Promise<GpuResources | null> {
-  if (!("gpu" in navigator)) return null;
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) return null;
-  const device = await adapter.requestDevice();
-  const context = canvas.getContext("webgpu");
-  if (!context) return null;
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  context.configure({ device, format, alphaMode: "premultiplied" });
+function colorSteps(baseColor: string) {
+  const br = Number.parseInt(baseColor.slice(1, 3), 16);
+  const bg = Number.parseInt(baseColor.slice(3, 5), 16);
+  const bb = Number.parseInt(baseColor.slice(5, 7), 16);
+  const toHex = (r: number, g: number, b: number) =>
+    `#${[r, g, b].map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
 
-  const quadBuffer = device.createBuffer({ size: QUAD.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-  device.queue.writeBuffer(quadBuffer, 0, QUAD);
-  const uniformBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  const instanceBuffer = device.createBuffer({
-    size: capacity * 5 * Float32Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  });
-  const shader = device.createShaderModule({ code: SHADER });
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }],
-  });
-  const pipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
-    vertex: {
-      module: shader,
-      entryPoint: "vs_main",
-      buffers: [
-        { arrayStride: 8, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }] },
-        {
-          arrayStride: 20,
-          stepMode: "instance",
-          attributes: [
-            { shaderLocation: 1, offset: 0, format: "float32x2" },
-            { shaderLocation: 2, offset: 8, format: "float32" },
-            { shaderLocation: 3, offset: 12, format: "float32" },
-            { shaderLocation: 4, offset: 16, format: "float32" },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: shader,
-      entryPoint: "fs_main",
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: "src-alpha", dstFactor: "one" },
-          alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" },
-        },
-      }],
-    },
-    primitive: { topology: "triangle-list" },
-  });
-  const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
-  });
-  return { device, context, pipeline, quadBuffer, uniformBuffer, instanceBuffer, bindGroup, format };
+  return [
+    baseColor,
+    toHex(br + ((255 - br) * 1) / 3, bg + ((255 - bg) * 1) / 3, bb + ((255 - bb) * 1) / 3),
+    toHex(br + ((255 - br) * 2) / 3, bg + ((255 - bg) * 2) / 3, bb + ((255 - bb) * 2) / 3),
+    "#ffffff",
+  ];
+}
+
+function setDotShape(el: SVGSVGElement, current: number, steps: readonly string[]) {
+  let shape: string;
+  let stepIndex: number;
+  if (current < 0.25) {
+    shape = "square";
+    stepIndex = 0;
+  } else if (current < 0.5) {
+    shape = "circle";
+    stepIndex = 1;
+  } else if (current < 0.75) {
+    shape = "dash";
+    stepIndex = 2;
+  } else {
+    shape = "triangle";
+    stepIndex = 3;
+  }
+  el.dataset.shape = shape;
+  el.style.setProperty("--dot-color", steps[stepIndex] ?? steps[0] ?? "#878787");
 }
 
 export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
-  const gpuCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fallbackCanvasRef = useRef<HTMLCanvasElement>(null);
-  const shellRef = useRef<HTMLDivElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
-  const mouseRef = useRef({ x: -9999, y: -9999, active: false });
-  const startRef = useRef(0);
-  const gpuRef = useRef<GpuResources | null>(null);
-  const particlesRef = useRef<Particle[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const dotSvgRefs = useRef<(SVGSVGElement | null)[]>([]);
+  const noiseDotSvgRefs = useRef<(SVGSVGElement | null)[]>([]);
 
-  const maximumParticles = useMemo(() => 768, []);
+  const [dotPositions, setDotPositions] = useState<DotPosition[]>([]);
+  const [noiseDots, setNoiseDots] = useState<DotPosition[]>([]);
+
+  const morphValuesRef = useRef<Float32Array>(new Float32Array(0));
+  const noiseMorphValuesRef = useRef<Float32Array>(new Float32Array(0));
+  const mousePosRef = useRef({ x: -9999, y: -9999 });
+  const isMouseMovingRef = useRef(false);
+  const mouseStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const paramsRef = useRef({
+    hoverRadius: 62,
+    dotColor: "#878787",
+    chargeSpeed: 7.5,
+    dischargeSpeed: 0.5,
+    activeWhenMoving: true,
+  });
+
+  const measure = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (typeof document !== "undefined" && "fonts" in document) {
+      await document.fonts.ready;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const computed = window.getComputedStyle(textLayerRef.current ?? container);
+    const measuredFontSize = Number.parseFloat(computed.fontSize) || 120;
+    const pxPerUnit = measuredFontSize / dotMap.unitsPerEm;
+    const contentHeight = (dotMap.ascent + Math.abs(dotMap.descent)) * pxPerUnit;
+    const lineBoxHeight = measuredFontSize * 1;
+    const contentTop = (lineBoxHeight - contentHeight) / 2;
+    const nextDots: DotPosition[] = [];
+
+    LINES.forEach((line, lineIndex) => {
+      const lineEl = lineRefs.current[lineIndex];
+      const textNode = Array.from(lineEl?.childNodes ?? []).find((node) => node.nodeType === Node.TEXT_NODE);
+
+      if (!lineEl || !textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+      const range = document.createRange();
+
+      line.split("").forEach((char, charIndex) => {
+        if (char === " ") return;
+        const glyph = dotMap.dotMap[char];
+        if (!glyph) return;
+
+        range.setStart(textNode, charIndex);
+        range.setEnd(textNode, charIndex + 1);
+        const charRect = range.getBoundingClientRect();
+
+        for (let di = 0; di < glyph.dots.length; di++) {
+          const [col, row] = glyph.dots[di] ?? [0, 0];
+          const unitX = col * CELL_PITCH + CELL_PITCH / 2;
+          const unitY = row * CELL_PITCH + CELL_PITCH / 2;
+          const screenX = charRect.left + unitX * pxPerUnit - containerRect.left;
+          const screenY = charRect.top + contentTop + (dotMap.ascent - unitY) * pxPerUnit - containerRect.top;
+
+          nextDots.push({
+            x: screenX,
+            y: screenY,
+            id: `${lineIndex}-${charIndex}-${di}`,
+            isNoise: false,
+          });
+        }
+      });
+
+      range.detach();
+    });
+
+    setDotPositions(nextDots);
+    const cellSizePx = CELL_PITCH * pxPerUnit;
+    const noiseCount = Math.floor(nextDots.length * 0.6);
+    setNoiseDots(generateNoiseDots(nextDots, cellSizePx, noiseCount));
+  }, [dotMap]);
 
   useEffect(() => {
-    startRef.current = performance.now();
-  }, []);
-
-  useEffect(() => {
-    const gpuCanvasElement = gpuCanvasRef.current;
-    const fallbackCanvasElement = fallbackCanvasRef.current;
-    const shellElement = shellRef.current;
-    const measureElement = measureRef.current;
-    if (!gpuCanvasElement || !fallbackCanvasElement || !shellElement || !measureElement) return;
-    const gpuCanvas: HTMLCanvasElement = gpuCanvasElement;
-    const fallbackCanvas: HTMLCanvasElement = fallbackCanvasElement;
-    const shell: HTMLDivElement = shellElement;
-    const measure: HTMLDivElement = measureElement;
-
-    let animationFrame = 0;
-    let disposed = false;
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let reducedMotion = motionQuery.matches;
-    const context2d = fallbackCanvas.getContext("2d", { alpha: true });
-
-    const resize = () => {
-      const rect = shell.getBoundingClientRect();
-      const measureRect = measure.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      for (const canvas of [gpuCanvas, fallbackCanvas]) {
-        canvas.width = Math.max(1, Math.round(rect.width * dpr));
-        canvas.height = Math.max(1, Math.round(rect.height * dpr));
-        canvas.style.width = `${rect.width}px`;
-        canvas.style.height = `${rect.height}px`;
-      }
-      context2d?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const gpu = gpuRef.current;
-      if (gpu) gpu.context.configure({ device: gpu.device, format: gpu.format, alphaMode: "premultiplied" });
-      particlesRef.current = buildParticlesFromGlyphs(dotMap, measureRect.width, measureRect.height).slice(0, maximumParticles);
-      if (reducedMotion) render(performance.now());
+    let cancelled = false;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const runMeasure = () => {
+      if (!cancelled) void measure();
     };
 
-    function frameData(now: number) {
-      const shellRect = shell.getBoundingClientRect();
-      const measureRect = measure.getBoundingClientRect();
-      if (particlesRef.current.length === 0) {
-        particlesRef.current = buildParticlesFromGlyphs(dotMap, measureRect.width, measureRect.height).slice(0, maximumParticles);
+    const waitForFontsAndMeasure = async () => {
+      if (typeof document !== "undefined" && "fonts" in document) {
+        await document.fonts.ready;
       }
-      const particles = particlesRef.current;
-      const elapsed = reducedMotion ? 2 : (now - startRef.current) / 1000;
-      const reveal = reducedMotion ? 1 : easeOutCubic(elapsed / 0.72);
-      const burst = reducedMotion ? 0 : Math.max(0, Math.sin(elapsed * 0.55) - 0.78) * 2.8;
-      const originX = measureRect.left - shellRect.left;
-      const originY = measureRect.top - shellRect.top;
-      const data = new Float32Array(particles.length * 5);
+      requestAnimationFrame(runMeasure);
+      setTimeout(runMeasure, 150);
+    };
 
-      for (let index = 0; index < particles.length; index++) {
-        const particle = particles[index];
-        const baseX = originX + particle.x;
-        const baseY = originY + particle.y;
-        const dx = baseX - mouseRef.current.x;
-        const dy = baseY - mouseRef.current.y;
-        const distance = Math.max(1, Math.hypot(dx, dy));
-        const hover = !reducedMotion && mouseRef.current.active ? clamp(1 - distance / (particle.isNoise ? 180 : 140), 0, 1) : 0;
-        const intro = (1 - easeOutCubic((reveal - particle.delay * 0.42) / 0.58)) * (particle.isNoise ? 54 : 36);
-        const drift = reducedMotion ? 0 : Math.sin(now / 780 + index * 0.91) * (particle.isNoise ? 7 : 1.8);
-        const charge = hover * (particle.isNoise ? 32 : 20) + burst * (particle.isNoise ? 22 : 10);
-        data[index * 5] = clamp(baseX + (dx / distance) * charge + drift, 8, shellRect.width - 8);
-        data[index * 5 + 1] = clamp(baseY + (dy / distance) * charge - intro + drift * 0.35, 8, shellRect.height - 8);
-        data[index * 5 + 2] = particle.size * (1 + hover * 0.32 + burst * 0.18);
-        data[index * 5 + 3] = clamp(particle.alpha * easeOutCubic((reveal - particle.delay * 0.28) / 0.72) * (1 + hover * 1.7 + burst * 0.45), 0, 1);
-        data[index * 5 + 4] = particle.morph;
-      }
-
-      return { data, count: particles.length, width: shellRect.width, height: shellRect.height };
-    }
-
-    function drawFallback(now: number) {
-      if (!context2d) return;
-      fallbackCanvas.style.opacity = "1";
-      const { data, count, width, height } = frameData(now);
-      context2d.clearRect(0, 0, width, height);
-      const glow = context2d.createRadialGradient(width / 2, height * 0.31, 0, width / 2, height * 0.31, Math.max(width, height) * 0.48);
-      glow.addColorStop(0, "rgba(255,255,255,0.13)");
-      glow.addColorStop(0.45, "rgba(255,255,255,0.04)");
-      glow.addColorStop(1, "rgba(255,255,255,0)");
-      context2d.fillStyle = glow;
-      context2d.fillRect(0, 0, width, height);
-      for (let index = 0; index < count; index++) {
-        const x = data[index * 5];
-        const y = data[index * 5 + 1];
-        const size = data[index * 5 + 2];
-        const opacity = data[index * 5 + 3];
-        context2d.shadowColor = `rgba(255,255,255,${opacity * 0.42})`;
-        context2d.shadowBlur = 16 + opacity * 18;
-        context2d.fillStyle = `rgba(245,245,242,${opacity})`;
-        context2d.beginPath();
-        context2d.roundRect(x - size / 2, y - size / 2, size, size, Math.min(3, size / 3));
-        context2d.fill();
-      }
-      context2d.shadowBlur = 0;
-    }
-
-    function drawGpu(now: number) {
-      const gpu = gpuRef.current;
-      if (!gpu) return false;
-      const { data, count, width, height } = frameData(now);
-      fallbackCanvas.style.opacity = "0";
-      gpu.device.queue.writeBuffer(gpu.uniformBuffer, 0, new Float32Array([width, height, 0, 0]));
-      gpu.device.queue.writeBuffer(gpu.instanceBuffer, 0, data);
-      const encoder = gpu.device.createCommandEncoder();
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: gpu.context.getCurrentTexture().createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        }],
-      });
-      pass.setPipeline(gpu.pipeline);
-      pass.setBindGroup(0, gpu.bindGroup);
-      pass.setVertexBuffer(0, gpu.quadBuffer);
-      pass.setVertexBuffer(1, gpu.instanceBuffer);
-      pass.draw(6, count);
-      pass.end();
-      gpu.device.queue.submit([encoder.finish()]);
-      return true;
-    }
-
-    function render(now: number) {
-      try {
-        if (!drawGpu(now)) drawFallback(now);
-      } catch {
-        gpuRef.current = null;
-        drawFallback(now);
-      }
-      if (!reducedMotion) animationFrame = requestAnimationFrame(render);
-    }
-
-    function updateReducedMotion(event: MediaQueryListEvent) {
-      reducedMotion = event.matches;
-      cancelAnimationFrame(animationFrame);
-      if (reducedMotion) render(performance.now());
-      else {
-        startRef.current = performance.now();
-        animationFrame = requestAnimationFrame(render);
-      }
-    }
-
-    async function boot() {
-      try {
-        gpuRef.current = await createGpuResources(gpuCanvas, maximumParticles);
-      } catch {
-        gpuRef.current = null;
-      }
-      if (disposed) return;
-      resize();
-      render(performance.now());
-    }
-
-    const observer = new ResizeObserver(resize);
-    observer.observe(shell);
-    observer.observe(measure);
-    motionQuery.addEventListener("change", updateReducedMotion);
-    void boot();
+    void waitForFontsAndMeasure();
+    const fallback = setTimeout(runMeasure, 500);
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(runMeasure, 150);
+    };
+    const observer = new ResizeObserver(handleResize);
+    if (containerRef.current) observer.observe(containerRef.current);
 
     return () => {
-      disposed = true;
+      cancelled = true;
+      clearTimeout(fallback);
+      if (resizeTimer) clearTimeout(resizeTimer);
       observer.disconnect();
-      motionQuery.removeEventListener("change", updateReducedMotion);
-      cancelAnimationFrame(animationFrame);
     };
-  }, [dotMap, maximumParticles]);
+  }, [measure]);
+
+  useEffect(() => {
+    if (morphValuesRef.current.length !== dotPositions.length) {
+      morphValuesRef.current = new Float32Array(dotPositions.length);
+    }
+  }, [dotPositions.length]);
+
+  useEffect(() => {
+    if (noiseMorphValuesRef.current.length !== noiseDots.length) {
+      noiseMorphValuesRef.current = new Float32Array(noiseDots.length);
+    }
+  }, [noiseDots.length]);
+
+  useEffect(() => {
+    if (dotPositions.length === 0) return;
+
+    let rafId = 0;
+    let lastTime = performance.now();
+
+    const loop = (now: number) => {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      const mx = mousePosRef.current.x;
+      const my = mousePosRef.current.y;
+      const radius = paramsRef.current.hoverRadius;
+      const chargeSpeed = paramsRef.current.chargeSpeed;
+      const dischargeSpeed = paramsRef.current.dischargeSpeed;
+      const steps = colorSteps(paramsRef.current.dotColor);
+      const forceDischarge = !paramsRef.current.activeWhenMoving && !isMouseMovingRef.current;
+
+      const svgs = dotSvgRefs.current;
+      const morphValues = morphValuesRef.current;
+      for (let i = 0; i < svgs.length; i++) {
+        const el = svgs[i];
+        if (!el) continue;
+
+        const dx = Number.parseFloat(el.style.left) + 2 - mx;
+        const dy = Number.parseFloat(el.style.top) + 2 - my;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const target = forceDischarge ? 0 : 1 - Math.min(dist / radius, 1);
+
+        let current = morphValues[i] ?? 0;
+        if (target > current) {
+          current = Math.min(current + chargeSpeed * dt, target);
+        } else if (target < current) {
+          current = Math.max(current - dischargeSpeed * dt, target);
+        }
+        morphValues[i] = current;
+        setDotShape(el, current, steps);
+      }
+
+      const noiseSvgs = noiseDotSvgRefs.current;
+      const noiseMorphValues = noiseMorphValuesRef.current;
+      for (let i = 0; i < noiseSvgs.length; i++) {
+        const el = noiseSvgs[i];
+        if (!el) continue;
+
+        const dx = Number.parseFloat(el.style.left) + 2 - mx;
+        const dy = Number.parseFloat(el.style.top) + 2 - my;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const target = forceDischarge ? 0 : 1 - Math.min(dist / radius, 1);
+
+        let current = noiseMorphValues[i] ?? 0;
+        if (target > current) {
+          current = Math.min(current + chargeSpeed * dt, target);
+        } else if (target < current) {
+          current = Math.max(current - dischargeSpeed * dt, target);
+        }
+        noiseMorphValues[i] = current;
+        el.style.opacity = current >= 0.75 ? "1" : "0";
+        setDotShape(el, current, steps);
+      }
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [dotPositions.length, noiseDots.length]);
+
+  const setDotRef = useCallback((el: SVGSVGElement | null, index: number) => {
+    dotSvgRefs.current[index] = el;
+  }, []);
+
+  const setNoiseDotRef = useCallback((el: SVGSVGElement | null, index: number) => {
+    noiseDotSvgRefs.current[index] = el;
+  }, []);
+
+  const handleMouseMove = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    mousePosRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+
+    if (!paramsRef.current.activeWhenMoving) {
+      isMouseMovingRef.current = true;
+      if (mouseStopTimerRef.current) clearTimeout(mouseStopTimerRef.current);
+      mouseStopTimerRef.current = setTimeout(() => {
+        isMouseMovingRef.current = false;
+      }, 100);
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    mousePosRef.current = { x: -9999, y: -9999 };
+  }, []);
+
+  const dotStyle = (dot: DotPosition): CSSProperties => ({
+    position: "absolute",
+    left: dot.x - 2,
+    top: dot.y - 2,
+    "--dot-color": paramsRef.current.dotColor,
+  } as CSSProperties);
 
   return (
-    <div
-      ref={shellRef}
-      className="pointer-events-auto absolute inset-0 overflow-hidden"
-      aria-hidden="true"
-      onMouseMove={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        mouseRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top, active: true };
-      }}
-      onMouseLeave={() => {
-        mouseRef.current = { x: -9999, y: -9999, active: false };
-      }}
-    >
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
       <div
-        ref={measureRef}
-        className="pointer-events-none absolute left-1/2 top-[31%] -translate-x-1/2 -translate-y-1/2 select-none font-pixel text-[clamp(7rem,18vw,13.125rem)] leading-none tracking-[-0.04em] opacity-0"
+        ref={containerRef}
+        className="pointer-events-auto absolute left-1/2 top-[31%] -translate-x-1/2 -translate-y-1/2"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       >
-        {WORD}
+        <style>{`
+          .dot .square, .dot circle, .dot .dash, .dot polygon {
+            opacity: 0;
+            fill: var(--dot-color, #878787);
+          }
+          .dot[data-shape="square"] .square { opacity: 1; }
+          .dot[data-shape="circle"] circle { opacity: 1; }
+          .dot[data-shape="dash"] .dash { opacity: 1; }
+          .dot[data-shape="triangle"] polygon { opacity: 1; }
+        `}</style>
+
+        <div
+          ref={textLayerRef}
+          className="select-none text-center font-pixel text-[clamp(8rem,22vw,18rem)] leading-[0.87] tracking-[-0.03em] text-white/15 opacity-0 transition-opacity duration-150"
+        >
+          {LINES.map((line, lineIndex) => (
+            <div
+              key={line}
+              ref={(el) => {
+                lineRefs.current[lineIndex] = el;
+              }}
+              className="block whitespace-pre"
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+
+        <div className="pointer-events-none absolute inset-0">
+          {dotPositions.map((dot, index) => (
+            <svg
+              key={dot.id}
+              ref={(el) => setDotRef(el, index)}
+              className="dot"
+              data-shape="square"
+              width="4"
+              height="4"
+              viewBox="0 0 4 4"
+              style={dotStyle(dot)}
+            >
+              <rect className="square" x="0.25" y="0.25" width="3.5" height="3.5" />
+              <circle cx="2" cy="2" r="1.75" />
+              <rect className="dash" x="0.25" y="1.4" width="3.5" height="1.2" />
+              <polygon points="2,0.1 3.8,3.5 0.2,3.5" />
+            </svg>
+          ))}
+        </div>
+
+        <div className="pointer-events-none absolute inset-0">
+          {noiseDots.map((dot, index) => (
+            <svg
+              key={dot.id}
+              ref={(el) => setNoiseDotRef(el, index)}
+              className="dot noise-dot"
+              data-shape="square"
+              width="4"
+              height="4"
+              viewBox="0 0 4 4"
+              style={{ ...dotStyle(dot), opacity: 0 }}
+            >
+              <rect className="square" x="0.25" y="0.25" width="3.5" height="3.5" />
+              <circle cx="2" cy="2" r="1.75" />
+              <rect className="dash" x="0.25" y="1.4" width="3.5" height="1.2" />
+              <polygon points="2,0.1 3.8,3.5 0.2,3.5" />
+            </svg>
+          ))}
+        </div>
       </div>
-      <canvas ref={gpuCanvasRef} className="absolute inset-0" />
-      <canvas ref={fallbackCanvasRef} className="absolute inset-0" />
     </div>
   );
 }
