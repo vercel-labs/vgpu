@@ -1,3 +1,5 @@
+import { Box, Braces, Cpu, FileImage, Globe, Layers3, Monitor, Server, Ship, Sparkles } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { HeroPostFx } from "./hero-post-fx";
 import { PromptCopy } from "./prompt-copy";
 import { vgpuDotMap } from "./vgpu-dot-map";
@@ -30,33 +32,40 @@ const pillars = [
   {
     title: "Typed GPU setup",
     body: "Keep buffers, textures, and bind groups named and readable so agents can safely edit the render path.",
-    icon: "layout",
+    icon: Layers3,
   },
   {
     title: "Browser rendering",
     body: "Use VGPU helpers around the same WebGPU objects your app ships to customers.",
-    icon: "browser",
+    icon: Monitor,
   },
   {
     title: "Node.js snapshots",
     body: "Render deterministic images in headless runs so CI and agents can review visual changes.",
-    icon: "node",
+    icon: Server,
   },
   {
     title: "WGSL utilities",
     body: "Small shader modules and docs keep GPU code approachable for humans and coding agents.",
-    icon: "shader",
+    icon: Braces,
   },
   {
     title: "Native escape hatch",
     body: "Drop to GPUDevice, encoders, passes, and textures whenever the abstraction stops helping.",
-    icon: "native",
+    icon: Cpu,
   },
   {
     title: "Artifact-first review",
     body: "Commit screenshots and snapshots that explain what changed without requiring a live GPU session.",
-    icon: "artifact",
+    icon: FileImage,
   },
+] as const;
+
+const runtimes = [
+  { label: "Browser", detail: "interactive GPU UI", icon: Globe },
+  { label: "Next.js", detail: "product routes", icon: Sparkles },
+  { label: "Node", detail: "headless snapshots", icon: Server },
+  { label: "Docker", detail: "CI verification", icon: Ship },
 ] as const;
 
 function Arrow() {
@@ -65,46 +74,51 @@ function Arrow() {
 
 function VercelMark() {
   return (
-    <svg aria-hidden="true" className="size-tab-3 text-foreground" viewBox="0 0 100 100" fill="currentColor">
+    <svg aria-hidden="true" className="size-4 text-foreground" viewBox="0 0 100 100" fill="currentColor">
       <path d="M50 10 95 90H5L50 10Z" />
     </svg>
   );
 }
 
-function FeatureIcon({ type }: { readonly type: (typeof pillars)[number]["icon"] }) {
-  const path = {
-    layout: "M18 24h44v18H18zM18 50h20v26H18zM46 50h16v26H46z",
-    browser: "M14 22h72v56H14zM14 34h72M25 28h2M35 28h2M45 28h2",
-    node: "M50 12 82 30v40L50 88 18 70V30zM34 39v22M50 34v32M66 39v22",
-    shader: "M18 70c20-42 44 42 64 0M22 30h56M30 46h40",
-    native: "M22 22h56v56H22zM34 34h32v32H34zM43 12v14M57 12v14M43 74v14M57 74v14M12 43h14M12 57h14M74 43h14M74 57h14",
-    artifact: "M24 16h38l14 14v54H24zM62 16v14h14M34 46h32M34 60h24M34 74h30",
-  }[type];
+function Eyebrow({ children }: { readonly children: string }) {
+  return <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{children}</p>;
+}
 
+function SectionHeader({ eyebrow, title, body, centered = false }: { readonly eyebrow: string; readonly title: string; readonly body?: string; readonly centered?: boolean }) {
   return (
-    <div className="grid size-block-1.5 place-items-center rounded-tab-3 border border-white/10 bg-white/[0.035] transition group-hover:border-white/30 group-hover:bg-white/[0.07]" aria-hidden="true">
-      <svg className="size-tab-8 text-foreground/80" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-        <path d={path} />
-      </svg>
+    <div className={centered ? "mx-auto max-w-3xl text-center" : "max-w-3xl"}>
+      <Eyebrow>{eyebrow}</Eyebrow>
+      <h2 className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-4xl">
+        {title}
+      </h2>
+      {body ? <p className="mt-5 text-pretty text-base leading-8 text-muted-foreground md:text-lg">{body}</p> : null}
+    </div>
+  );
+}
+
+function IconSurface({ icon: Icon }: { readonly icon: LucideIcon }) {
+  return (
+    <div className="grid size-11 place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-foreground/80 transition group-hover:border-white/20 group-hover:bg-white/[0.065]" aria-hidden="true">
+      <Icon className="size-5" strokeWidth={1.8} />
     </div>
   );
 }
 
 export function Header() {
   return (
-    <header className="absolute inset-x-0 top-0 z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-tab-5 py-tab-4 text-[0.875rem] text-muted-foreground md:px-tab-8">
-      <span className="pointer-events-none absolute inset-x-tab-5 bottom-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent md:inset-x-tab-8" aria-hidden="true" />
-      <a href="#top" className="flex items-center gap-tab-2 text-foreground" aria-label="VGPU home">
+    <header className="absolute inset-x-0 top-0 z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 text-sm text-muted-foreground md:px-8">
+      <span className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent md:inset-x-8" aria-hidden="true" />
+      <a href="#top" className="flex items-center gap-2.5 text-foreground" aria-label="VGPU home">
         <VercelMark />
         <span className="font-medium tracking-tight">VGPU</span>
       </a>
-      <nav className="hidden items-center gap-tab-6 md:flex" aria-label="Primary navigation">
+      <nav className="hidden items-center gap-7 md:flex" aria-label="Primary navigation">
         <a className="transition hover:text-foreground" href="#features">Features</a>
         <a className="transition hover:text-foreground" href="#workflow">Workflow</a>
         <a className="transition hover:text-foreground" href="/llms.txt">Docs</a>
       </nav>
       <a
-        className="rounded-tab-2 border border-border px-tab-3 py-tab-1.5 text-[0.875rem] text-foreground transition hover:border-foreground"
+        className="inline-flex h-9 items-center rounded-full border border-border bg-background/45 px-4 font-medium text-foreground shadow-sm shadow-black/30 backdrop-blur transition hover:border-white/35 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-foreground/30"
         href="https://github.com/vercel-labs/vgpu"
       >
         GitHub
@@ -115,23 +129,26 @@ export function Header() {
 
 export function HeroSection() {
   return (
-    <section id="top" className="relative isolate min-h-[820px] overflow-hidden border-b border-border">
+    <section id="top" className="relative isolate min-h-[var(--hero-min-height)] overflow-hidden border-b border-border/80">
       <VgpuPixelHero dotMap={vgpuDotMap} />
       <HeroPostFx />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-background to-transparent" aria-hidden="true" />
-      <div className="pointer-events-none relative z-10 mx-auto flex min-h-[820px] w-full max-w-7xl flex-col items-center justify-center px-tab-5 pb-block-2 pt-[22rem] text-center md:px-tab-8 md:pt-[24rem]">
-        <h1 className="max-w-2xl text-balance text-[1.375rem] font-medium leading-[1.18] tracking-[-0.03em] text-foreground md:text-[1.75rem] lg:text-[2rem]">
-          <span className="sr-only">VGPU: </span>
-          The WebGPU framework for agents
-        </h1>
-        <p className="mt-tab-4 max-w-2xl text-pretty font-mono text-[1rem] leading-7 text-muted-foreground md:text-[1.0625rem]">
-          VGPU gives coding agents clear GPU building blocks, runnable docs, and image artifacts so they can create and review graphics work with you.
-        </p>
-        <div className="pointer-events-auto mt-tab-7 flex flex-col items-center gap-tab-3">
-          <a className="inline-flex h-block-2 items-center justify-center gap-tab-2 rounded-tab-2 bg-foreground px-tab-7 text-[0.9375rem] font-medium text-[#050505] transition hover:bg-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/40" href="https://github.com/vercel-labs/vgpu">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-background via-background/75 to-transparent" aria-hidden="true" />
+      <div className="pointer-events-none relative z-10 mx-auto flex min-h-[var(--hero-min-height)] w-full max-w-7xl flex-col items-center justify-center px-5 pb-20 pt-[calc(var(--hero-content-offset)-1rem)] text-center md:px-8 md:pt-[var(--hero-content-offset)]">
+        <div className="max-w-3xl">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">GPU primitives for agentic workflows</p>
+          <h1 className="mt-4 text-balance text-2xl font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-3xl">
+            <span className="sr-only">VGPU: </span>
+            The WebGPU framework for agents
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-pretty text-base leading-7 text-muted-foreground">
+            VGPU gives coding agents clear GPU building blocks, runnable docs, and image artifacts so they can create and review graphics work with you.
+          </p>
+        </div>
+        <div className="pointer-events-auto mt-7 flex flex-col items-center gap-3">
+          <a className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-foreground px-6 text-sm font-medium text-background shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_16px_48px_rgba(255,255,255,0.12)] transition hover:bg-foreground/90 focus:outline-none focus:ring-2 focus:ring-foreground/40" href="https://github.com/vercel-labs/vgpu">
             Get Started <Arrow />
           </a>
-          <a className="text-[0.9375rem] font-medium text-foreground/85 underline-offset-4 transition hover:text-foreground hover:underline" href="/llms.txt">
+          <a className="text-sm font-medium text-foreground/80 underline-offset-4 transition hover:text-foreground hover:underline" href="/llms.txt">
             Read docs
           </a>
         </div>
@@ -144,48 +161,49 @@ export function HeroSection() {
 function Token({ kind, value }: { readonly kind: string; readonly value: string }) {
   const color =
     kind === "kw"
-      ? "text-[#c4b5fd]"
+      ? "text-[#d8b4fe]"
       : kind === "fn"
         ? "text-[#93c5fd]"
         : kind === "str"
           ? "text-[#86efac]"
           : kind === "num"
-            ? "text-[#fbbf24]"
-            : "text-[#d4d4d8]";
+            ? "text-[#fde68a]"
+            : "text-[#e4e4e7]";
   return <span className={color}>{value}</span>;
 }
 
 function CodePanel({ title, eyebrow, code }: { readonly title: string; readonly eyebrow: string; readonly code: readonly (readonly [string, string])[] }) {
   return (
-    <article className="overflow-hidden rounded-site border border-border bg-muted/70 shadow-2xl shadow-black/40">
-      <div className="flex items-center justify-between border-b border-border px-tab-4 py-tab-3">
+    <article className="overflow-hidden rounded-2xl border border-border-strong bg-card shadow-2xl shadow-black/45 ring-1 ring-white/[0.03]">
+      <div className="flex items-start justify-between gap-6 border-b border-border bg-white/[0.025] px-5 py-4">
         <div>
-          <p className="text-[0.875rem] uppercase tracking-[0.24em] text-muted-foreground">{eyebrow}</p>
-          <h3 className="mt-tab-1 text-balance text-[0.9375rem] font-medium text-foreground">{title}</h3>
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{eyebrow}</p>
+          <h3 className="mt-2 text-balance text-base font-medium text-foreground">{title}</h3>
         </div>
-        <div className="flex gap-tab-1.5" aria-hidden="true">
-          <span className="size-tab-2 rounded-full bg-[#3f3f46]" />
-          <span className="size-tab-2 rounded-full bg-[#71717a]" />
-          <span className="size-tab-2 rounded-full bg-[#f4f4f5]" />
+        <div className="mt-1 flex gap-1.5" aria-hidden="true">
+          <span className="size-2.5 rounded-full bg-[#3f3f46]" />
+          <span className="size-2.5 rounded-full bg-[#71717a]" />
+          <span className="size-2.5 rounded-full bg-[#f4f4f5]" />
         </div>
       </div>
-      <pre className="min-h-[360px] overflow-x-auto p-tab-4 text-left font-mono text-[0.875rem] leading-6"><code>{code.map(([kind, value], index) => <Token key={`${kind}-${index}`} kind={kind} value={value} />)}</code></pre>
+      <pre className="min-h-[360px] overflow-x-auto p-5 text-left font-mono text-sm leading-6 [tab-size:2]"><code>{code.map(([kind, value], index) => <Token key={`${kind}-${index}`} kind={kind} value={value} />)}</code></pre>
     </article>
   );
 }
 
 export function ComparisonSection() {
   return (
-    <section id="workflow-code" className="border-b border-border px-tab-5 py-block-3 md:px-tab-8">
+    <section id="workflow-code" className="relative border-b border-border/80 px-5 py-[var(--section-y)] md:px-8 md:py-[calc(var(--section-y)+2rem)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden="true" />
       <div className="mx-auto max-w-7xl">
-        <div className="mb-tab-8 max-w-3xl">
-          <p className="text-[0.875rem] uppercase tracking-[0.24em] text-muted-foreground">WebGPU code paths</p>
-          <h2 className="mt-tab-3 text-balance text-[2.25rem] font-semibold leading-tight tracking-[-0.04em] md:text-[3.5rem]">Less ceremony, same escape hatch.</h2>
-          <p className="mt-tab-4 text-pretty text-[1.0625rem] leading-8 text-muted-foreground">VGPU keeps the real GPU objects visible, then gives agents compact helpers around the code they repeat every frame.</p>
-        </div>
-        <div className="grid gap-tab-4 lg:grid-cols-2">
-          <CodePanel eyebrow="Native WebGPU" title="Manual descriptors and pass wiring" code={nativeLines} />
+        <SectionHeader
+          eyebrow="WebGPU code paths"
+          title="Designed to ship faster and securely"
+          body="VGPU keeps the real GPU objects visible, then gives agents compact helpers around the code they repeat every frame."
+        />
+        <div className="mt-10 grid gap-4 lg:grid-cols-2">
           <CodePanel eyebrow="VGPU" title="Typed helpers around the same GPU objects" code={vgpuLines} />
+          <CodePanel eyebrow="Native WebGPU" title="Manual descriptors and pass wiring" code={nativeLines} />
         </div>
       </div>
     </section>
@@ -194,21 +212,18 @@ export function ComparisonSection() {
 
 export function FeaturePillarsSection() {
   return (
-    <section id="features" className="border-b border-border px-tab-5 py-block-3 md:px-tab-8">
+    <section id="features" className="relative border-b border-border/80 px-5 py-[var(--section-y)] md:px-8 md:py-[calc(var(--section-y)+2rem)]">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col justify-between gap-tab-6 md:flex-row md:items-end">
-          <div className="max-w-2xl">
-            <p className="text-[0.875rem] uppercase tracking-[0.24em] text-muted-foreground">Feature pillars</p>
-            <h2 className="mt-tab-3 text-balance text-[2.25rem] font-semibold leading-tight tracking-[-0.04em] md:text-[3.5rem]">Small primitives that cover the GPU loop.</h2>
-          </div>
-          <p className="max-w-md text-pretty text-[1rem] leading-7 text-muted-foreground">Each primitive is designed for inspection first: readable labels, explicit resources, and native WebGPU access when the abstraction stops helping.</p>
+        <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
+          <SectionHeader eyebrow="Feature pillars" title="Small primitives that cover the GPU loop." />
+          <p className="max-w-md text-pretty text-base leading-8 text-muted-foreground">Each primitive is designed for inspection first: readable labels, explicit resources, and native WebGPU access when the abstraction stops helping.</p>
         </div>
-        <div className="mt-tab-8 grid gap-tab-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {pillars.map((pillar) => (
-            <article key={pillar.title} className="group min-h-block-5 rounded-site border border-border bg-muted/45 p-tab-5 transition hover:border-[#52525b] hover:bg-muted/70 hover:shadow-2xl hover:shadow-white/[0.035]">
-              <FeatureIcon type={pillar.icon} />
-              <h3 className="mt-tab-8 text-balance text-[1.25rem] font-semibold tracking-[-0.02em]">{pillar.title}</h3>
-              <p className="mt-tab-3 text-pretty text-[0.9375rem] leading-7 text-muted-foreground">{pillar.body}</p>
+            <article key={pillar.title} className="group min-h-64 rounded-2xl border border-border-strong bg-card p-6 shadow-sm shadow-black/20 ring-1 ring-white/[0.02] transition hover:border-white/20 hover:bg-card-hover">
+              <IconSurface icon={pillar.icon} />
+              <h3 className="mt-8 text-balance text-xl font-semibold tracking-[-0.02em] text-foreground">{pillar.title}</h3>
+              <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">{pillar.body}</p>
             </article>
           ))}
         </div>
@@ -217,58 +232,50 @@ export function FeaturePillarsSection() {
   );
 }
 
-const runtimes = [
-  { label: "Browser", detail: "interactive GPU UI", position: "left-[7%] top-[18%]", icon: "browser" },
-  { label: "Next.js", detail: "product routes", position: "right-[8%] top-[16%]", icon: "next" },
-  { label: "Node", detail: "headless snapshots", position: "left-[10%] bottom-[16%]", icon: "node" },
-  { label: "Docker", detail: "CI verification", position: "right-[9%] bottom-[18%]", icon: "docker" },
-] as const;
-
-function RuntimeGlyph({ icon }: { readonly icon: (typeof runtimes)[number]["icon"] }) {
-  const paths = {
-    browser: "M16 24h68v50H16zM16 36h68M27 30h2M37 30h2M47 30h2",
-    next: "M24 76V24l36 52V24M72 24v52",
-    node: "M50 14 80 31v38L50 86 20 69V31zM38 42v18M50 36v28M62 42v18",
-    docker: "M18 54h54l8-12 8 12h-8c0 19-14 30-34 30H30c-8 0-12-6-12-14zM30 34h10v10H30zM42 34h10v10H42zM54 34h10v10H54zM42 22h10v10H42z",
-  }[icon];
-
-  return (
-    <svg aria-hidden="true" className="size-tab-8 text-foreground/80" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-      <path d={paths} />
-    </svg>
-  );
+function RuntimeGlyph({ icon: Icon }: { readonly icon: LucideIcon }) {
+  return <Icon className="size-5 text-foreground/80" strokeWidth={1.8} aria-hidden="true" />;
 }
 
 export function WorkflowSection() {
   return (
-    <section id="workflow" className="px-tab-5 py-block-3 md:px-tab-8">
-      <div className="mx-auto grid max-w-7xl gap-tab-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
-        <div>
-          <p className="text-[0.875rem] uppercase tracking-[0.24em] text-muted-foreground">Works anywhere</p>
-          <h2 className="mt-tab-3 text-balance text-[2.25rem] font-semibold leading-tight tracking-[-0.04em] md:text-[3.5rem]">One GPU story across every runtime.</h2>
-          <p className="mt-tab-4 text-pretty text-[1.0625rem] leading-8 text-muted-foreground">VGPU keeps the render path portable: design in the browser, ship through Next.js, verify in Node, and preserve artifacts in Docker-backed CI.</p>
-        </div>
-        <div className="relative min-h-[460px] overflow-hidden rounded-site border border-border bg-muted/30 p-tab-5">
-          <div className="absolute left-1/2 top-1/2 h-px w-[72%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/30 to-transparent" aria-hidden="true" />
-          <div className="absolute left-1/2 top-1/2 h-[72%] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/30 to-transparent" aria-hidden="true" />
-          <div className="absolute left-1/2 top-1/2 h-[62%] w-px -translate-x-1/2 -translate-y-1/2 rotate-45 bg-gradient-to-b from-transparent via-white/20 to-transparent" aria-hidden="true" />
-          <div className="absolute left-1/2 top-1/2 h-[62%] w-px -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-gradient-to-b from-transparent via-white/20 to-transparent" aria-hidden="true" />
+    <section id="workflow" className="px-5 py-[var(--section-y)] md:px-8 md:py-[calc(var(--section-y)+2rem)]">
+      <div className="mx-auto max-w-7xl">
+        <SectionHeader
+          centered
+          eyebrow="Works anywhere"
+          title="One GPU story across every runtime."
+          body="Design in the browser, ship through Next.js, verify in Node, and preserve artifacts in Docker-backed CI."
+        />
+        <div className="relative mx-auto mt-12 min-h-[520px] max-w-5xl overflow-hidden rounded-3xl border border-border-strong bg-card p-5 shadow-2xl shadow-black/30 ring-1 ring-white/[0.02] md:min-h-[560px]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.08),transparent_18rem)]" aria-hidden="true" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-px w-[72%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent" aria-hidden="true" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[62%] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/25 to-transparent" aria-hidden="true" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[48%] w-px -translate-x-1/2 -translate-y-1/2 rotate-45 bg-gradient-to-b from-transparent via-white/18 to-transparent" aria-hidden="true" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[48%] w-px -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-gradient-to-b from-transparent via-white/18 to-transparent" aria-hidden="true" />
 
-          <div className="absolute left-1/2 top-1/2 grid size-block-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-background shadow-2xl shadow-black/50">
-            <span className="font-pixel text-[2.25rem] tracking-[-0.06em] text-foreground">vgpu</span>
+          <div className="absolute left-1/2 top-1/2 grid size-40 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.32),rgba(255,255,255,0.08)_34%,rgba(8,8,8,0.98)_72%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_24px_70px_rgba(0,0,0,0.7)] md:size-48">
+            <Box className="absolute size-16 text-white/10" strokeWidth={1.4} aria-hidden="true" />
+            <span className="font-pixel text-3xl tracking-[-0.06em] text-foreground md:text-4xl">vgpu</span>
           </div>
 
-          {runtimes.map((runtime) => (
-            <article key={runtime.label} className={`absolute ${runtime.position} w-[11.5rem] rounded-site border border-border bg-background/90 p-tab-4 shadow-xl shadow-black/30 backdrop-blur`}>
-              <div className="flex items-center gap-tab-3">
-                <RuntimeGlyph icon={runtime.icon} />
-                <div>
-                  <h3 className="text-[1rem] font-medium text-foreground">{runtime.label}</h3>
-                  <p className="mt-tab-1 text-pretty text-[0.875rem] leading-5 text-muted-foreground">{runtime.detail}</p>
+          <div className="relative z-10 grid min-h-[480px] gap-4 md:min-h-[520px] md:grid-cols-2 md:grid-rows-2">
+            {runtimes.map((runtime, index) => (
+              <article
+                key={runtime.label}
+                className={`flex items-center rounded-2xl border border-border bg-background/75 p-4 shadow-xl shadow-black/30 backdrop-blur transition hover:border-white/20 hover:bg-card-hover ${index % 2 === 0 ? "md:justify-self-start" : "md:justify-self-end"} ${index < 2 ? "md:self-start" : "md:self-end"} md:w-64`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="grid size-11 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.035]">
+                    <RuntimeGlyph icon={runtime.icon} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-medium text-foreground">{runtime.label}</h3>
+                    <p className="mt-1 text-pretty text-sm leading-5 text-muted-foreground">{runtime.detail}</p>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))}
+          </div>
         </div>
       </div>
     </section>

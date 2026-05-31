@@ -31,8 +31,18 @@
   --muted: #111111;
   --muted-foreground: #a1a1aa;
   --accent: #ffffff;
-  --border: #262626;
-  --radius: 14px;
+  --card: #0c0c0c;
+  --card-hover: #131313;
+  --border: #1f1f1f;
+  --border-strong: #2e2e2e;
+  --radius: 16px;
+  --hero-min-height: 760px;
+  --hero-content-offset: 23rem;
+  --hero-wordmark-top: 27%;
+  --hero-wordmark-scale: 1;
+  --hero-dot-color: #a1a1aa;
+  --section-y: 6rem;
+  --surface-alpha: 1;
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-pixel: "Geist Pixel Square", "Geist Mono", "SFMono-Regular", Consolas, monospace;
@@ -44,7 +54,10 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-card: color-mix(in srgb, var(--card) calc(var(--surface-alpha) * 100%), var(--background));
+  --color-card-hover: var(--card-hover);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --radius-site: var(--radius);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -65,11 +78,14 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.12), transparent 34rem),
-    linear-gradient(180deg, #080808 0%, #050505 36rem);
+    radial-gradient(circle at 50% -12rem, rgba(255, 255, 255, 0.15), transparent 38rem),
+    radial-gradient(circle at 50% 24rem, rgba(255, 255, 255, 0.045), transparent 32rem),
+    linear-gradient(180deg, #080808 0%, #050505 42rem, #030303 100%);
   color: var(--foreground);
   font-family: var(--font-sans);
   text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis-weight: none;
 }
 
 a {
@@ -83,7 +99,8 @@ a {
 
 .code-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 32px 32px;
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at center, black, transparent 72%);
 }

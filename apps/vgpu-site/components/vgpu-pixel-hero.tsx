@@ -118,7 +118,7 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
 
   const paramsRef = useRef({
     hoverRadius: 62,
-    dotColor: "#878787",
+    dotColor: "#a1a1aa",
     chargeSpeed: 7.5,
     dischargeSpeed: 0.5,
     activeWhenMoving: true,
@@ -239,10 +239,11 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
 
       const mx = mousePosRef.current.x;
       const my = mousePosRef.current.y;
-      const radius = paramsRef.current.hoverRadius;
+      const radius = paramsRef.current.hoverRadius * 1.3;
       const chargeSpeed = paramsRef.current.chargeSpeed;
       const dischargeSpeed = paramsRef.current.dischargeSpeed;
-      const steps = colorSteps(paramsRef.current.dotColor);
+      const computedDotColor = getComputedStyle(document.documentElement).getPropertyValue("--hero-dot-color").trim();
+      const steps = colorSteps(computedDotColor || paramsRef.current.dotColor);
       const forceDischarge = !paramsRef.current.activeWhenMoving && !isMouseMovingRef.current;
 
       const svgs = dotSvgRefs.current;
@@ -327,14 +328,14 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
     position: "absolute",
     left: dot.x - 2,
     top: dot.y - 2,
-    "--dot-color": paramsRef.current.dotColor,
+    "--dot-color": "var(--hero-dot-color)",
   } as CSSProperties);
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
       <div
         ref={containerRef}
-        className="pointer-events-auto absolute left-1/2 top-[31%] -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-auto absolute left-1/2 top-[var(--hero-wordmark-top)] scale-[var(--hero-wordmark-scale)] -translate-x-1/2 -translate-y-1/2"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
