@@ -1,0 +1,39 @@
+# vgpu - webgpu for agents
+
+VGPU is a WebGPU helper framework for products, visual systems, and coding agents.
+It keeps native WebGPU objects visible while providing typed helpers, WGSL utilities,
+headless snapshots, and deterministic image artifacts for review.
+
+## Start here
+
+Suggested agent command:
+
+```bash
+npx vgpu docs
+```
+
+Use the docs command first, then inspect examples and package READMEs before editing GPU code.
+Prefer small, typed VGPU helpers when they clarify buffers, textures, layouts, frames,
+and snapshots. Keep the native WebGPU escape hatch available for performance-critical paths.
+
+## Site routes
+
+- `/` — VGPU landing page and high-level product story.
+- `/preview` — app-local component preview for agents when Storybook is not running.
+- `/llms.txt` — this agent guide.
+
+## Repository pointers
+
+- `packages/core` — WebGPU runtime primitives.
+- `packages/wgsl` — WGSL resolution and loader utilities.
+- `packages/wgsl-std` — reusable WGSL snippets.
+- `packages/render/tests/poc` — headless rendering and snapshot examples.
+- `apps/vgpu-site/docs/agent-visual-review.md` — visual review rules and artifact commands.
+
+## Agent instructions
+
+1. Run `npx vgpu docs` or read the local package docs before changing shader/render code.
+2. Prefer deterministic examples and committed artifacts over one-off screenshots.
+3. For UI changes in this site, regenerate `apps/vgpu-site/artifacts/vgpu-site/landing-desktop.png`
+   and `apps/vgpu-site/artifacts/vgpu-site/landing-mobile.png`.
+4. Keep Agentation as local feedback tooling only; production builds should not depend on it.

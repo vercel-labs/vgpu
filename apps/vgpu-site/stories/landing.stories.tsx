@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import {
   ComparisonSection,
-  DocsCtaSection,
-  EscapeHatchSection,
   FeaturePillarsSection,
-  Footer,
   Header,
   HeroSection,
   LandingPage,
@@ -41,19 +38,6 @@ export const Workflow: Story = {
   render: () => <WorkflowSection />,
 };
 
-export const EscapeHatch: Story = {
-  render: () => <EscapeHatchSection />,
-};
-
-export const DocsCta: Story = {
-  render: () => <DocsCtaSection />,
-};
-
-export const NavigationAndFooter: Story = {
-  render: () => (
-    <>
-      <Header />
-      <Footer />
-    </>
-  ),
+export const Navigation: Story = {
+  render: () => <Header />,
 };

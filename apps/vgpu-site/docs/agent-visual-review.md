@@ -1,49 +1,28 @@
-# VGPU Site Agent Guide
+# VGPU site visual review guide
 
-This app is a standalone Next 15 landing page at `apps/vgpu-site`. Keep all site work inside this app and do not touch the abandoned dirty `front` worktree.
+Use this guide when reviewing or modifying `apps/vgpu-site`.
 
-## Stack
-
-- Next 15 App Router. Production builds use stable webpack (`next build`) because `next build --turbopack` intermittently raises an app-router-only `/_document` PageNotFoundError in clean QA runs.
-- React 18.
-- Tailwind CSS v4.
-- `tw-blocks` v4 is compatible and used through CSS imports: `@import "tailwindcss"; @import "tw-blocks";`.
-- App-local Storybook uses `@storybook/react-vite`; `@storybook/nextjs` 8 hit a Next 15 webpack-builder failure during validation.
-- Uses checked-in Geist Sans, Geist Mono, and Geist Pixel Square WOFF2 files under `public/fonts` with the included OFL license, avoiding `next/font`/Pages Router build coupling in this app-router-only site.
-- No private `@vercel/*` packages.
-
-## Design tokens and rules
-
-Tokens live in `app/globals.css`:
-
-- `--background`: near-black page surface.
-- `--foreground`: high-contrast white text.
-- `--muted`: card/panel surface.
-- `--muted-foreground`: secondary copy.
-- `--accent`: sparse white accent.
-- `--border`: crisp low-contrast borders.
-- `--radius`: default rounded panel radius.
-- `--font-sans` / `--font-mono`: Geist Sans and Geist Mono, with system fallbacks.
-- `--font-pixel`: Geist Pixel Square for small decorative footer lettering.
-
-Rules:
+## Design rules
 
 1. Monochrome first; use gradients only as depth, not decoration.
 2. Prefer borders, spacing, and type hierarchy over color.
 3. Use `tw-blocks` utilities for layout rhythm: `tab-*` for fine spacing and `block-*` for structural sizes.
-4. Keep components server-renderable unless browser state is required.
-5. Keep all GPU output represented by static/code/headless artifacts; do not require live WebGPU for screenshots.
-6. The hero pixel `vgpu` treatment is an original static 7x7 coordinate map for the letters v/g/p/u, rendered as a single visible canvas wordmark. It is inspired by bitmap sampling workflows and Geist Pixel style but does not copy generated coordinates or code from external repositories.
-7. The accessible hero message remains real text in Geist Mono; decorative pixel/shader treatments must be `aria-hidden`.
-8. The hero wordmark renders directly over the code-grid/glow background. Do not add a card, pill, border, or backdrop around it.
-9. The hero uses a client-side interactive pixel renderer inspired by `vercel-labs/pixel-hero-experiment/app/(experiments)/webgpu-chat`: large Geist Pixel measurement text, 80px-style canvas overscan, center-out reveal, hover charge, input focus burst, and submit dissolve. The reference repository did not include a visible root license in the inspected snapshot, so this app adapts the interaction/layout concepts with local code rather than copying the upstream WebGPU renderer.
-10. The accessible hero message remains the small secondary H1; the decorative `vgpu` pixel canvas/text layer must stay `aria-hidden`.
+4. Keep production sections server-renderable unless browser state is required.
+5. Typography uses rem-based font sizes only; do not add font sizes below `0.75rem`.
+6. The hero pixel `vgpu` treatment is derived from the local Geist Pixel Square font dot map and rendered through a fullscreen client canvas. A hidden measurement element determines where the letters sit; it is not visible.
+7. The hero follows the `pixel-hero-experiment/app/(experiments)/webgpu-chat` architecture more closely than the earlier static pass: server/generated dot map, fullscreen canvas, measurement-only text, real glyph dots, deterministic noise dots, center-out reveal, hover charge, subtle bloom/glow, and reduced-motion static rendering. The client attempts raw WebGPU first and falls back to deterministic Canvas 2D for browsers/headless screenshot environments without WebGPU.
+8. The hero wordmark stands alone over the page background. Do not add a code grid, card, pill, border, or backdrop around it.
+9. The accessible hero message remains real text. Decorative pixel/shader treatments must be `aria-hidden`.
+10. Agentation is local feedback tooling only. Production builds must not import/evaluate the `agentation` package even when `NEXT_PUBLIC_AGENTATION_ENABLED=1` is present.
 
 ## Agentation feedback toolbar
 
 Agentation is installed from the official `agentation` package as a development dependency. Official docs: https://www.agentation.com/install.
 
-The toolbar is mounted near the app root through `components/agentation-toolbar.tsx`, but it is disabled by default and only renders when the public feature flag is enabled:
+The toolbar is mounted near the app root through `components/agentation-toolbar.tsx`, but it is dev-only and only renders when both conditions are true:
+
+- `process.env.NODE_ENV === "development"`
+- `NEXT_PUBLIC_AGENTATION_ENABLED === "1"`
 
 ```bash
 pnpm --filter @vgpu/site dev:feedback
@@ -60,6 +39,10 @@ pnpm exec next dev --turbo --port 3000
 
 No browser API key or token is documented by Agentation. By default the widget stores annotations locally and lets reviewers copy structured markdown. The package is desktop-only per the official docs and is best treated as internal/dev feedback tooling. Its npm package declares `PolyForm-Shield-1.0.0`; obtain legal approval before using it in redistributed/commercial product builds.
 
+## Agent docs
+
+The site serves an agent guide at `/llms.txt` from `public/llms.txt`. Keep it concise and aligned with the page title: `vgpu - webgpu for agents`.
+
 ## Storybook commands
 
 From the repo root:
@@ -75,14 +58,16 @@ If Storybook is not running, use the app-local preview route:
 
 ```bash
 pnpm --filter @vgpu/site dev
-open http://127.0.0.1:3000/preview
+open http://localhost:3000/preview
 ```
 
-## PNG visual artifact commands
+## PNG artifact commands
 
-Generate stable desktop and mobile PNGs:
+From repo root:
 
 ```bash
+pnpm --filter @vgpu/site build
+pnpm --filter @vgpu/site start
 pnpm --filter @vgpu/site artifacts
 ```
 
@@ -91,24 +76,14 @@ Artifacts are written to stable paths:
 - `apps/vgpu-site/artifacts/vgpu-site/landing-desktop.png`
 - `apps/vgpu-site/artifacts/vgpu-site/landing-mobile.png`
 
-The Playwright config starts the local Next dev server on port `3100` and captures the landing page with animations disabled.
+## VGPU shader validation
 
-## VGPU Docker shader validation
+The repo also includes a deterministic VGPU/headless snapshot for the site pixel concept:
 
-The browser site stays static and does not require live WebGPU. The decorative hero/footer pixel treatment is mirrored by a deterministic WGSL snapshot test in the repository render package:
+- test: `packages/render/tests/poc/site-ascii-shader.test.ts`
+- artifact: `packages/render/tests/poc/__snapshots__/site-ascii-shader.png`
 
-- Test: `packages/render/tests/poc/site-ascii-shader.test.ts`
-- Snapshot artifact: `packages/render/tests/poc/__snapshots__/site-ascii-shader.png`
-
-Use the pinned Docker path so the Dawn/WebGPU native adapter runs in the repo-standard Node 22 + Debian trixie + Mesa/Xvfb environment:
-
-```bash
-VGPU_WRITE_SNAPSHOTS=1 pnpm test:docker # write/update snapshots through the repo-standard full Docker suite
-pnpm test:docker                        # validate snapshots through the repo-standard full Docker suite
-pnpm test:docker:cleanup                # optional cleanup
-```
-
-For a targeted site-only shader check after the image has been built, use the same Docker image and mounted snapshot directory:
+Targeted Docker validation:
 
 ```bash
 docker run --rm --label vgpu-test=1 \
@@ -117,33 +92,13 @@ docker run --rm --label vgpu-test=1 \
   sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=$!; VGPU_DOCKER_TEST=1 pnpm exec vitest run packages/render/tests/poc/site-ascii-shader.test.ts; status=$?; kill $xvfb_pid; exit $status'
 ```
 
-The test freezes viewport, shader inputs, and lettering coordinates; it does not depend on browser WebGPU or Playwright screenshots.
+## Review protocol
 
-## Visual review protocol
-
-1. Generate artifacts with `pnpm --filter @vgpu/site artifacts`.
-2. Open both PNGs.
-3. Check desktop and mobile for:
-   - readable hero and CTA hierarchy,
-   - no horizontal overflow,
-   - clear code comparison panels,
-   - feature cards with enough contrast,
-   - footer and CTA visible at the end of the page.
-4. If layout changes, regenerate PNGs and re-review before reporting.
-
-## Performance and accessibility rules
-
-- Keep the page static and server-rendered.
-- Avoid heavy client-side JavaScript and animation libraries.
-- Use semantic landmarks (`header`, `main`, `section`, `footer`) and descriptive link text.
-- Preserve visible focus states from browser defaults or add explicit high-contrast focus styles when introducing custom controls.
-- Maintain high color contrast for text and controls.
-- Do not import live WebGPU modules into landing sections unless there is a static fallback for artifact generation.
-
-## What not to do
-
-- Do not touch `front` or any non-VGPU repository.
-- Do not add private packages.
-- Do not depend on a package named `@vgpu/wgsl-std`; this checkout does not expose one. Mention WGSL std utilities textually unless a package export exists later.
-- Do not make Playwright screenshots depend on GPU availability.
-- Do not commit transient `.next`, Storybook build output, or Playwright report directories.
+1. Inspect desktop and mobile artifacts at full size.
+2. Verify the hero has one visible fullscreen pixel wordmark, no ghost text, no code grid, no pill/card/backdrop, and no horizontal overflow.
+3. Confirm the H1 reads `The WebGPU framework for agents` and remains visually secondary to the hero wordmark.
+4. Confirm the prompt helper exposes `npx vgpu docs` and that `/llms.txt` is served.
+5. Confirm headings use `text-balance`, paragraphs use `text-pretty`, and no typography is below `0.75rem`.
+6. Confirm feature cards have icons and subtle hover lighting without nondeterministic screenshot effects.
+7. Confirm the footer, old docs CTA section, old escape-hatch card, old hero input, and old comparison-focused hero CTA are absent.
+8. Confirm production builds pass both normally and with Agentation env vars enabled.

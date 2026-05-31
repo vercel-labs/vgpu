@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VGPU — WebGPU primitives for products and agents",
+  title: "vgpu - webgpu for agents",
   description:
-    "A standalone landing page for VGPU: typed WebGPU helpers, headless snapshots, and a native escape hatch.",
+    "VGPU is a WebGPU framework for agents: typed helpers, runnable docs, and visual artifacts.",
 };
 
 export const viewport: Viewport = {
