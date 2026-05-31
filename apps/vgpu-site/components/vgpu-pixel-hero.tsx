@@ -7,6 +7,12 @@ import { publishHeroFxState } from "./hero-fx-state";
 
 const CELL_PITCH = 38;
 const LINES = ["vgpu"];
+const HERO_FX_MAX_DOTS = 768;
+
+function getWordmarkScale() {
+  const scale = cssNumber(getComputedStyle(document.documentElement).getPropertyValue("--hero-wordmark-scale"), 1);
+  return scale > 0 ? scale : 1;
+}
 
 type DotPosition = {
   readonly x: number;
@@ -141,6 +147,7 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
     const containerRect = container.getBoundingClientRect();
     const computed = window.getComputedStyle(textLayerRef.current ?? container);
     const measuredFontSize = Number.parseFloat(computed.fontSize) || 120;
+    const wordmarkScale = getWordmarkScale();
     const pxPerUnit = measuredFontSize / dotMap.unitsPerEm;
     const contentHeight = (dotMap.ascent + Math.abs(dotMap.descent)) * pxPerUnit;
     const lineBoxHeight = measuredFontSize * 1;
@@ -163,13 +170,15 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
         range.setStart(textNode, charIndex);
         range.setEnd(textNode, charIndex + 1);
         const charRect = range.getBoundingClientRect();
+        const glyphLeft = (charRect.left - containerRect.left) / wordmarkScale;
+        const glyphTop = (charRect.top - containerRect.top) / wordmarkScale;
 
         for (let di = 0; di < glyph.dots.length; di++) {
           const [col, row] = glyph.dots[di] ?? [0, 0];
           const unitX = col * CELL_PITCH + CELL_PITCH / 2;
           const unitY = row * CELL_PITCH + CELL_PITCH / 2;
-          const screenX = charRect.left + unitX * pxPerUnit - containerRect.left;
-          const screenY = charRect.top + contentTop + (dotMap.ascent - unitY) * pxPerUnit - containerRect.top;
+          const screenX = glyphLeft + unitX * pxPerUnit;
+          const screenY = glyphTop + contentTop + (dotMap.ascent - unitY) * pxPerUnit;
 
           nextDots.push({
             x: screenX,
@@ -185,7 +194,8 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
 
     setDotPositions(nextDots);
     const cellSizePx = CELL_PITCH * pxPerUnit;
-    const noiseCount = Math.floor(nextDots.length * 0.6);
+    const availableNoiseSlots = Math.max(0, HERO_FX_MAX_DOTS - nextDots.length);
+    const noiseCount = Math.min(Math.floor(nextDots.length * 0.6), availableNoiseSlots);
     setNoiseDots(generateNoiseDots(nextDots, cellSizePx, noiseCount));
   }, [dotMap]);
 
@@ -210,16 +220,28 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(runMeasure, 150);
     };
-    const observer = new ResizeObserver(handleResize);
-    if (containerRef.current) observer.observe(containerRef.current);
+    const resizeObserver = new ResizeObserver(handleResize);
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+
+    const mutationObserver = new MutationObserver(handleResize);
+    mutationObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
 
     return () => {
       cancelled = true;
       clearTimeout(fallback);
       if (resizeTimer) clearTimeout(resizeTimer);
-      observer.disconnect();
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
     };
   }, [measure]);
+
+  useEffect(() => {
+    if (dotPositions.length > HERO_FX_MAX_DOTS && process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[VgpuPixelHero] ${dotPositions.length} real dots exceed the shader cap of ${HERO_FX_MAX_DOTS}; trailing dots will be skipped by HeroPostFx.`,
+      );
+    }
+  }, [dotPositions.length]);
 
   useEffect(() => {
     if (morphValuesRef.current.length !== dotPositions.length) {
@@ -245,7 +267,7 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
 
       const mx = mousePosRef.current.x;
       const my = mousePosRef.current.y;
-      const scale = cssNumber(getComputedStyle(document.documentElement).getPropertyValue("--hero-wordmark-scale"), 1);
+      const scale = getWordmarkScale();
       const radius = paramsRef.current.hoverRadius * 1.3 * Math.max(1, 1 / Math.max(scale, 0.35));
       const chargeSpeed = paramsRef.current.chargeSpeed;
       const dischargeSpeed = paramsRef.current.dischargeSpeed;
@@ -324,7 +346,8 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
-      mousePosRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const scale = getWordmarkScale();
+      mousePosRef.current = { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale };
 
       if (!paramsRef.current.activeWhenMoving) {
         isMouseMovingRef.current = true;
