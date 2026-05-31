@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbo",
-    "dev:feedback": "NEXT_PUBLIC_AGENTATION_ENABLED=1 next dev --turbo --hostname 127.0.0.1 --port 3000",
+    "dev:feedback": "NEXT_PUBLIC_AGENTATION_ENABLED=1 next dev --turbo --port 3000",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",

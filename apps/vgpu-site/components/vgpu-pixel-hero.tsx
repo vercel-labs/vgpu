@@ -135,6 +135,8 @@ export function VgpuPixelHero({
     if (!canvas || !shell) return;
 
     let animationFrame = 0;
+    let reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) return;
 
@@ -150,6 +152,9 @@ export function VgpuPixelHero({
       canvasElement.style.width = `${rect.width}px`;
       canvasElement.style.height = `${rect.height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (reducedMotion) {
+        render(performance.now());
+      }
     }
 
     function render(now: number) {
@@ -163,8 +168,8 @@ export function VgpuPixelHero({
       const scaledDotSize = metrics.dotSize * scale;
       const originX = (width - scaledWordWidth) / 2;
       const originY = (height - scaledWordHeight) / 2;
-      const phase = phaseRef.current;
-      const elapsed = (now - phaseStartRef.current) / 1000;
+      const phase = reducedMotion ? "hover" : phaseRef.current;
+      const elapsed = reducedMotion ? 2 : (now - phaseStartRef.current) / 1000;
       const dissolve = phase === "dissolve" ? easeOutCubic(elapsed / 0.9) : 0;
       const burst = phase === "burst" ? 1 - easeOutCubic(elapsed / 0.85) : 0;
 
@@ -178,18 +183,18 @@ export function VgpuPixelHero({
       ctx.fillRect(0, 0, width, height);
 
       for (const dot of dots) {
-        const baseProgress = easeOutCubic((elapsed - dot.delay * 0.85) / 0.9);
+        const baseProgress = reducedMotion ? 1 : easeOutCubic((elapsed - dot.delay * 0.85) / 0.9);
         const dx = originX + dot.x * scale - mouseRef.current.x;
         const dy = originY + dot.y * scale - mouseRef.current.y;
         const distance = Math.hypot(dx, dy);
-        const hoverForce = mouseRef.current.active ? clamp(1 - distance / 92, 0, 1) : 0;
+        const hoverForce = !reducedMotion && mouseRef.current.active ? clamp(1 - distance / 92, 0, 1) : 0;
         const centerX = dot.x - wordWidth / 2;
         const centerY = dot.y - wordHeight / 2;
         const angle = Math.atan2(centerY, centerX);
         const dissolveDistance = dissolve * 110;
-        const burstDistance = burst * 24;
+        const burstDistance = reducedMotion ? 0 : burst * 24;
         const hoverDistance = hoverForce * 16;
-        const jitter = Math.sin(now / 180 + dot.x * 0.06 + dot.y * 0.04) * hoverForce * 2.4;
+        const jitter = reducedMotion ? 0 : Math.sin(now / 180 + dot.x * 0.06 + dot.y * 0.04) * hoverForce * 2.4;
         const x = originX + dot.x * scale + Math.cos(angle) * dissolveDistance + (dx / Math.max(distance, 1)) * hoverDistance + jitter;
         const y = originY + dot.y * scale + Math.sin(angle) * dissolveDistance + (dy / Math.max(distance, 1)) * hoverDistance + burstDistance * Math.sin(dot.x * 0.04);
         const opacity = clamp(baseProgress * (1 - dissolve * 0.88), 0, 1);
@@ -202,19 +207,39 @@ export function VgpuPixelHero({
       }
 
       ctx.shadowBlur = 0;
-      animationFrame = requestAnimationFrame(render);
+      if (!reducedMotion) {
+        animationFrame = requestAnimationFrame(render);
+      }
     }
 
+    function updateReducedMotion(event: MediaQueryListEvent) {
+      reducedMotion = event.matches;
+      cancelAnimationFrame(animationFrame);
+      if (reducedMotion) {
+        render(performance.now());
+      } else {
+        setPhase("reveal");
+        animationFrame = requestAnimationFrame(render);
+      }
+    }
+
+    reducedMotion = motionQuery.matches;
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(shell);
-    animationFrame = requestAnimationFrame(render);
+    motionQuery.addEventListener("change", updateReducedMotion);
+    if (reducedMotion) {
+      render(performance.now());
+    } else {
+      animationFrame = requestAnimationFrame(render);
+    }
 
     return () => {
       observer.disconnect();
+      motionQuery.removeEventListener("change", updateReducedMotion);
       cancelAnimationFrame(animationFrame);
     };
-  }, [dotModel, metrics.dotSize]);
+  }, [dotModel, metrics.dotSize, setPhase]);
 
   return (
     <div className="flex w-full flex-col items-center gap-tab-8">
@@ -234,9 +259,6 @@ export function VgpuPixelHero({
           mouseRef.current = { x: -9999, y: -9999, active: false };
         }}
       >
-        <div className="absolute inset-0 grid place-items-center font-pixel text-[86px] leading-none tracking-[-0.03em] text-foreground/[0.06] md:text-[128px] lg:text-[148px]">
-          vgpu
-        </div>
         <canvas ref={canvasRef} className="absolute inset-0" />
       </div>
 
