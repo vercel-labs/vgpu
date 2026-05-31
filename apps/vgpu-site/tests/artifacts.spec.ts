@@ -15,7 +15,7 @@ test("writes stable landing page PNG artifact", async ({ page }, testInfo) => {
     `,
   });
   await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.getByRole("heading", { name: /Ship GPU interfaces/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Ship VGPU interfaces/i })).toBeVisible();
   await expect(page.getByText("Native WebGPU vs VGPU")).toBeVisible();
 
   const fileName = testInfo.project.name === "mobile" ? "landing-mobile.png" : "landing-desktop.png";

@@ -1,3 +1,5 @@
+import { VgpuPixelHero } from "./vgpu-pixel-hero";
+
 const nativeCode = `const bindGroupLayout = device.createBindGroupLayout({
   entries: [
     { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
@@ -49,79 +51,8 @@ const pillars = [
   },
 ] as const;
 
-const pixelLetters = {
-  v: [
-    [0, 0], [6, 0],
-    [0, 1], [6, 1],
-    [1, 2], [5, 2],
-    [1, 3], [5, 3],
-    [2, 4], [4, 4],
-    [2, 5], [4, 5],
-    [3, 6],
-  ],
-  g: [
-    [1, 0], [2, 0], [3, 0], [4, 0],
-    [0, 1], [5, 1],
-    [0, 2],
-    [0, 3], [3, 3], [4, 3], [5, 3],
-    [0, 4], [5, 4],
-    [1, 5], [2, 5], [3, 5], [5, 5],
-    [4, 6], [5, 6],
-  ],
-  p: [
-    [0, 0], [1, 0], [2, 0], [3, 0],
-    [0, 1], [4, 1],
-    [0, 2], [4, 2],
-    [0, 3], [1, 3], [2, 3], [3, 3],
-    [0, 4],
-    [0, 5],
-    [0, 6],
-  ],
-  u: [
-    [0, 0], [5, 0],
-    [0, 1], [5, 1],
-    [0, 2], [5, 2],
-    [0, 3], [5, 3],
-    [0, 4], [5, 4],
-    [0, 5], [5, 5],
-    [1, 6], [2, 6], [3, 6], [4, 6],
-  ],
-} satisfies Record<string, readonly (readonly [number, number])[]>;
-
 function Arrow() {
   return <span aria-hidden="true">→</span>;
-}
-
-function PixelLetter({ letter }: { readonly letter: keyof typeof pixelLetters }) {
-  return (
-    <span className="grid grid-cols-7 grid-rows-7 gap-[4px] md:gap-[6px]" aria-hidden="true">
-      {Array.from({ length: 49 }, (_, index) => {
-        const col = index % 7;
-        const row = Math.floor(index / 7);
-        const filled = pixelLetters[letter].some(([x, y]) => x === col && y === row);
-        return (
-          <span
-            key={`${letter}-${col}-${row}`}
-            className={filled ? "size-[7px] rounded-[2px] bg-foreground shadow-[0_0_18px_rgba(255,255,255,0.18)] md:size-[11px]" : "size-[7px] md:size-[11px]"}
-          />
-        );
-      })}
-    </span>
-  );
-}
-
-function PixelWordmark() {
-  return (
-    <div className="relative mb-tab-7" aria-hidden="true">
-      <div className="absolute -inset-tab-6 rounded-full bg-foreground/5 blur-3xl" />
-      <div className="relative flex items-end justify-center gap-[10px] rounded-[28px] border border-border bg-background/45 px-tab-5 py-tab-5 shadow-2xl shadow-black/40 backdrop-blur md:gap-[16px] md:px-tab-8 md:py-tab-6">
-        <PixelLetter letter="v" />
-        <PixelLetter letter="g" />
-        <PixelLetter letter="p" />
-        <PixelLetter letter="u" />
-      </div>
-    </div>
-  );
 }
 
 export function Header() {
@@ -154,18 +85,16 @@ export function HeroSection() {
     <section id="top" className="relative overflow-hidden border-b border-border">
       <div className="code-grid absolute inset-0 opacity-60" aria-hidden="true" />
       <div className="absolute left-1/2 top-0 h-px w-[80vw] -translate-x-1/2 bg-gradient-to-r from-transparent via-foreground to-transparent opacity-60" aria-hidden="true" />
-      <div className="relative mx-auto flex min-h-[720px] w-full max-w-7xl flex-col items-center justify-center px-tab-5 py-block-2 text-center md:px-tab-8">
-        <p className="mb-tab-4 rounded-full border border-border bg-background/70 px-tab-3 py-tab-1.5 text-[12px] text-muted-foreground backdrop-blur">
-          WebGPU primitives for product teams and coding agents
-        </p>
-        <PixelWordmark />
-        <h1 aria-label="VGPU: Ship GPU interfaces without hiding the metal." className="max-w-3xl text-balance font-mono text-[34px] font-semibold leading-[1.02] tracking-[-0.05em] text-foreground md:text-[56px] lg:text-[68px]">
-          Ship GPU interfaces without hiding the metal.
+      <div className="relative mx-auto flex min-h-[720px] w-full max-w-7xl flex-col items-center justify-center gap-tab-7 px-tab-5 py-block-2 text-center md:min-h-[780px] md:px-tab-8">
+        <VgpuPixelHero />
+        <h1 className="max-w-xl text-balance font-mono text-[16px] font-medium leading-[1.25] tracking-[-0.02em] text-foreground md:text-[20px] lg:text-[22px]">
+          <span className="sr-only">VGPU: </span>
+          Ship VGPU interfaces without hiding the metal.
         </h1>
-        <p className="mt-tab-5 max-w-2xl text-balance text-[17px] leading-8 text-muted-foreground md:text-[19px]">
+        <p className="max-w-xl text-balance text-[14px] leading-6 text-muted-foreground md:text-[15px]">
           VGPU turns verbose WebGPU setup into typed, inspectable building blocks for layouts, frames, textures, device capabilities, WGSL modules, and headless visual snapshots.
         </p>
-        <div className="mt-tab-7 flex flex-col gap-tab-3 sm:flex-row">
+        <div className="flex flex-col gap-tab-3 sm:flex-row">
           <a className="inline-flex h-block-1.5 items-center justify-center gap-tab-2 rounded-tab-2 bg-foreground px-tab-5 text-[12px] font-medium text-[#050505] transition hover:bg-muted-foreground" href="#docs">
             Get started <Arrow />
           </a>

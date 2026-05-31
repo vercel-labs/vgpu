@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbo",
+    "dev:feedback": "NEXT_PUBLIC_AGENTATION_ENABLED=1 next dev --turbo --hostname 127.0.0.1 --port 3000",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "artifacts": "playwright test -c playwright.artifacts.config.ts"
@@ -28,6 +29,7 @@
     "@types/node": "^22.10.7",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "agentation": "^3.0.2",
     "storybook": "^8.6.14",
     "typescript": "^5.7.3",
     "vite": "^6.0.0"

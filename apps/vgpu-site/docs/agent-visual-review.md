@@ -35,6 +35,30 @@ Rules:
 5. Keep all GPU output represented by static/code/headless artifacts; do not require live WebGPU for screenshots.
 6. The hero pixel `vgpu` treatment is an original static 7x7 coordinate map for the letters v/g/p/u, rendered with CSS spans. It is inspired by bitmap sampling workflows and Geist Pixel style but does not copy generated coordinates or code from external repositories.
 7. The accessible hero message remains real text in Geist Mono; decorative pixel/shader treatments must be `aria-hidden`.
+8. The hero wordmark renders directly over the code-grid/glow background. Do not add a card, pill, border, or backdrop around it.
+9. The hero uses a client-side interactive pixel renderer inspired by `vercel-labs/pixel-hero-experiment/app/(experiments)/webgpu-chat`: large Geist Pixel measurement text, 80px-style canvas overscan, center-out reveal, hover charge, input focus burst, and submit dissolve. The reference repository did not include a visible root license in the inspected snapshot, so this app adapts the interaction/layout concepts with local code rather than copying the upstream WebGPU renderer.
+10. The accessible hero message remains the small secondary H1; the decorative `vgpu` pixel canvas/text layer must stay `aria-hidden`.
+
+## Agentation feedback toolbar
+
+Agentation is installed from the official `agentation` package as a development dependency. Official docs: https://www.agentation.com/install.
+
+The toolbar is mounted near the app root through `components/agentation-toolbar.tsx`, but it is disabled by default and only renders when the public feature flag is enabled:
+
+```bash
+pnpm --filter @vgpu/site dev:feedback
+```
+
+Optional local MCP sync can be wired with Agentation's documented local endpoint:
+
+```bash
+cd apps/vgpu-site
+NEXT_PUBLIC_AGENTATION_ENABLED=1 \
+NEXT_PUBLIC_AGENTATION_ENDPOINT=http://localhost:4747 \
+pnpm exec next dev --turbo --hostname 127.0.0.1 --port 3000
+```
+
+No browser API key or token is documented by Agentation. By default the widget stores annotations locally and lets reviewers copy structured markdown. The package is desktop-only per the official docs and is best treated as internal/dev feedback tooling. Its npm package declares `PolyForm-Shield-1.0.0`; obtain legal approval before using it in redistributed/commercial product builds.
 
 ## Storybook commands
 
