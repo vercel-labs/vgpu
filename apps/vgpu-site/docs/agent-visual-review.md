@@ -8,11 +8,11 @@ Use this guide when reviewing or modifying `apps/vgpu-site`.
 2. Prefer borders, spacing, and type hierarchy over color.
 3. Use `tw-blocks` utilities for layout rhythm: `tab-*` for fine spacing and `block-*` for structural sizes.
 4. Keep production sections server-renderable unless browser state is required.
-5. Typography uses rem-based font sizes only; do not add visible font sizes below `0.875rem` (14px).
+5. Typography uses rem-based font sizes where practical. General readable body text should stay at or above `0.875rem` (14px); restrained all-caps labels may use 12px when explicitly useful.
 6. The hero pixel `vgpu` treatment is derived from the local Geist Pixel Square font dot map and rendered with the `/particle-noise` pure DOM/SVG approach. A hidden measurement text layer determines the letter positions; it is not visible.
 7. The core hero renderer intentionally matches `pixel-hero-experiment/app/(experiments)/particle-noise`: absolute 4×4 SVG dots, adjacent noise dots, Range API measurement, shape toggling via `data-shape`, and direct DOM mutation in `requestAnimationFrame`. Keep the particle behavior limited to the reference shape-swap/charge-discharge model.
 8. Hover QA: moving over the dot wordmark should morph nearby dots from square to circle, dash, then triangle; adjacent noise dots should appear only at the final threshold. The site uses `activeWhenMoving: true` for responsive review feedback while preserving the reference thresholds, speeds, dot geometry, and binary noise visibility.
-9. Bloom/RGB treatment is a separate pointer-events-none `HeroPostFx` WebGPU canvas sibling. It must stay subtle and must not replace, intercept, or restructure the DOM/SVG particle-noise renderer. If WebGPU is unavailable it gracefully no-ops.
+9. Bloom/RGB treatment is a pointer-events-none `HeroPostFx` WebGPU canvas sibling, but the effect must be shader-driven from a live mirrored copy of the DOM/SVG dot geometry (`components/hero-fx-state.ts`). Do not fake bloom/RGB with CSS filters, canvas-2D `shadowBlur`, or a hardcoded ellipse that drifts from the wordmark. The shader mirror must stay subtle and must not replace, intercept, or restructure the DOM/SVG particle-noise renderer. If WebGPU is unavailable it gracefully no-ops.
 10. The hero wordmark stands alone over the page background. Do not add a code grid, card, pill, border, or backdrop around it.
 11. The accessible hero message remains real text. Decorative pixel treatments and post effects must be `aria-hidden`.
 12. Agentation is local feedback tooling only. Production builds must not import/evaluate the `agentation` package even when `NEXT_PUBLIC_AGENTATION_ENABLED=1` is present.

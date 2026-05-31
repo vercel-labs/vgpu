@@ -1,7 +1,8 @@
-import { Box, Braces, Cpu, FileImage, Globe, Layers3, Monitor, Server, Ship, Sparkles } from "lucide-react";
+import { Braces, Cpu, FileImage, Globe, Layers3, Monitor, Server, Ship, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { HeroPostFx } from "./hero-post-fx";
 import { PromptCopy } from "./prompt-copy";
+import { WorkflowCanvas } from "./workflow-canvas";
 import { vgpuDotMap } from "./vgpu-dot-map";
 import { VgpuPixelHero } from "./vgpu-pixel-hero";
 
@@ -84,14 +85,14 @@ function Eyebrow({ children }: { readonly children: string }) {
   return <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{children}</p>;
 }
 
-function SectionHeader({ eyebrow, title, body, centered = false }: { readonly eyebrow: string; readonly title: string; readonly body?: string; readonly centered?: boolean }) {
+function SectionHeader({ eyebrow, title, body, centered = false }: { readonly eyebrow?: string; readonly title: string; readonly body?: string; readonly centered?: boolean }) {
   return (
     <div className={centered ? "mx-auto max-w-3xl text-center" : "max-w-3xl"}>
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-4xl">
+      {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
+      <h2 className={`${eyebrow ? "mt-4" : ""} text-balance text-3xl font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-4xl`}>
         {title}
       </h2>
-      {body ? <p className="mt-5 text-pretty text-base leading-8 text-muted-foreground md:text-lg">{body}</p> : null}
+      {body ? <p className="mt-5 text-balance text-base leading-8 text-muted-foreground md:text-lg">{body}</p> : null}
     </div>
   );
 }
@@ -242,27 +243,20 @@ export function WorkflowSection() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           centered
-          eyebrow="Works anywhere"
-          title="One GPU story across every runtime."
+          title="runs anywhere"
           body="Design in the browser, ship through Next.js, verify in Node, and preserve artifacts in Docker-backed CI."
         />
         <div className="relative mx-auto mt-12 min-h-[520px] max-w-5xl overflow-hidden rounded-3xl border border-border-strong bg-card p-5 shadow-2xl shadow-black/30 ring-1 ring-white/[0.02] md:min-h-[560px]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.08),transparent_18rem)]" aria-hidden="true" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-px w-[72%] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent" aria-hidden="true" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[62%] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/25 to-transparent" aria-hidden="true" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[48%] w-px -translate-x-1/2 -translate-y-1/2 rotate-45 bg-gradient-to-b from-transparent via-white/18 to-transparent" aria-hidden="true" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[48%] w-px -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-gradient-to-b from-transparent via-white/18 to-transparent" aria-hidden="true" />
-
-          <div className="absolute left-1/2 top-1/2 grid size-40 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.32),rgba(255,255,255,0.08)_34%,rgba(8,8,8,0.98)_72%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_24px_70px_rgba(0,0,0,0.7)] md:size-48">
-            <Box className="absolute size-16 text-white/10" strokeWidth={1.4} aria-hidden="true" />
-            <span className="font-pixel text-3xl tracking-[-0.06em] text-foreground md:text-4xl">vgpu</span>
+          <WorkflowCanvas />
+          <div className="absolute left-1/2 top-1/2 z-10 grid size-36 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-transparent md:size-44">
+            <span className="font-pixel text-2xl tracking-[-0.06em] text-foreground drop-shadow-[0_0_18px_rgba(255,255,255,0.28)] md:text-3xl">vgpu</span>
           </div>
 
-          <div className="relative z-10 grid min-h-[480px] gap-4 md:min-h-[520px] md:grid-cols-2 md:grid-rows-2">
+          <div className="relative z-20 grid min-h-[480px] gap-4 md:min-h-[520px] md:grid-cols-2 md:grid-rows-2">
             {runtimes.map((runtime, index) => (
               <article
                 key={runtime.label}
-                className={`flex items-center rounded-2xl border border-border bg-background/75 p-4 shadow-xl shadow-black/30 backdrop-blur transition hover:border-white/20 hover:bg-card-hover ${index % 2 === 0 ? "md:justify-self-start" : "md:justify-self-end"} ${index < 2 ? "md:self-start" : "md:self-end"} md:w-64`}
+                className={`flex items-center rounded-2xl border border-white/10 bg-background/70 p-4 shadow-xl shadow-black/30 backdrop-blur-md transition hover:border-white/20 hover:bg-card-hover ${index % 2 === 0 ? "md:justify-self-start" : "md:justify-self-end"} ${index < 2 ? "md:self-start" : "md:self-end"} md:w-64`}
               >
                 <div className="flex items-center gap-3">
                   <div className="grid size-11 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.035]">

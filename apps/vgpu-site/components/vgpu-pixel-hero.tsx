@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import type { CSSProperties } from "react";
 import type { DotMapResult } from "@/lib/get-dot-map";
+import { publishHeroFxState } from "./hero-fx-state";
 
 const CELL_PITCH = 38;
 const LINES = ["vgpu"];
@@ -63,6 +64,11 @@ function generateNoiseDots(realDots: DotPosition[], cellSizePx: number, noiseCou
   }
 
   return noiseDots;
+}
+
+function cssNumber(value: string, fallback: number) {
+  const parsed = Number.parseFloat(value.trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function colorSteps(baseColor: string) {
@@ -239,12 +245,14 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
 
       const mx = mousePosRef.current.x;
       const my = mousePosRef.current.y;
-      const radius = paramsRef.current.hoverRadius * 1.3;
+      const scale = cssNumber(getComputedStyle(document.documentElement).getPropertyValue("--hero-wordmark-scale"), 1);
+      const radius = paramsRef.current.hoverRadius * 1.3 * Math.max(1, 1 / Math.max(scale, 0.35));
       const chargeSpeed = paramsRef.current.chargeSpeed;
       const dischargeSpeed = paramsRef.current.dischargeSpeed;
       const computedDotColor = getComputedStyle(document.documentElement).getPropertyValue("--hero-dot-color").trim();
       const steps = colorSteps(computedDotColor || paramsRef.current.dotColor);
       const forceDischarge = !paramsRef.current.activeWhenMoving && !isMouseMovingRef.current;
+      const fxDots: Array<{ x: number; y: number; morph: number; visible: number }> = [];
 
       const svgs = dotSvgRefs.current;
       const morphValues = morphValuesRef.current;
@@ -265,6 +273,8 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
         }
         morphValues[i] = current;
         setDotShape(el, current, steps);
+        const rect = el.getBoundingClientRect();
+        fxDots.push({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, morph: current, visible: 1 });
       }
 
       const noiseSvgs = noiseDotSvgRefs.current;
@@ -285,10 +295,14 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
           current = Math.max(current - dischargeSpeed * dt, target);
         }
         noiseMorphValues[i] = current;
-        el.style.opacity = current >= 0.75 ? "1" : "0";
+        const visible = current >= 0.75 ? 1 : 0;
+        el.style.opacity = String(visible);
         setDotShape(el, current, steps);
+        const rect = el.getBoundingClientRect();
+        fxDots.push({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, morph: current, visible });
       }
 
+      publishHeroFxState({ dots: fxDots, color: computedDotColor || paramsRef.current.dotColor });
       rafId = requestAnimationFrame(loop);
     };
 
@@ -304,24 +318,35 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
     noiseDotSvgRefs.current[index] = el;
   }, []);
 
-  const handleMouseMove = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    const container = containerRef.current;
-    if (!container) return;
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
 
-    const rect = container.getBoundingClientRect();
-    mousePosRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const rect = container.getBoundingClientRect();
+      mousePosRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
 
-    if (!paramsRef.current.activeWhenMoving) {
-      isMouseMovingRef.current = true;
+      if (!paramsRef.current.activeWhenMoving) {
+        isMouseMovingRef.current = true;
+        if (mouseStopTimerRef.current) clearTimeout(mouseStopTimerRef.current);
+        mouseStopTimerRef.current = setTimeout(() => {
+          isMouseMovingRef.current = false;
+        }, 100);
+      }
+    };
+
+    const handlePointerLeave = () => {
+      mousePosRef.current = { x: -9999, y: -9999 };
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
       if (mouseStopTimerRef.current) clearTimeout(mouseStopTimerRef.current);
-      mouseStopTimerRef.current = setTimeout(() => {
-        isMouseMovingRef.current = false;
-      }, 100);
-    }
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    mousePosRef.current = { x: -9999, y: -9999 };
+    };
   }, []);
 
   const dotStyle = (dot: DotPosition): CSSProperties => ({
@@ -335,14 +360,15 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
       <div
         ref={containerRef}
-        className="pointer-events-auto absolute left-1/2 top-[var(--hero-wordmark-top)] scale-[var(--hero-wordmark-scale)] -translate-x-1/2 -translate-y-1/2"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        className="pointer-events-none absolute left-1/2 top-[var(--hero-wordmark-top)] scale-[var(--hero-wordmark-scale)] -translate-x-1/2 -translate-y-1/2"
       >
         <style>{`
-          .dot .square, .dot circle, .dot .dash, .dot polygon {
+          .dot .particle {
             opacity: 0;
             fill: var(--dot-color, #878787);
+            transform: scale(var(--hero-particle-occupancy, 0.875));
+            transform-box: view-box;
+            transform-origin: 2px 2px;
           }
           .dot[data-shape="square"] .square { opacity: 1; }
           .dot[data-shape="circle"] circle { opacity: 1; }
@@ -379,10 +405,10 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
               viewBox="0 0 4 4"
               style={dotStyle(dot)}
             >
-              <rect className="square" x="0.25" y="0.25" width="3.5" height="3.5" />
-              <circle cx="2" cy="2" r="1.75" />
-              <rect className="dash" x="0.25" y="1.4" width="3.5" height="1.2" />
-              <polygon points="2,0.1 3.8,3.5 0.2,3.5" />
+              <rect className="particle square" x="0" y="0" width="4" height="4" />
+              <circle className="particle" cx="2" cy="2" r="2" />
+              <rect className="particle dash" x="0" y="1.3" width="4" height="1.4" />
+              <polygon className="particle" points="2,0 4,4 0,4" />
             </svg>
           ))}
         </div>
@@ -399,10 +425,10 @@ export function VgpuPixelHero({ dotMap }: { readonly dotMap: DotMapResult }) {
               viewBox="0 0 4 4"
               style={{ ...dotStyle(dot), opacity: 0 }}
             >
-              <rect className="square" x="0.25" y="0.25" width="3.5" height="3.5" />
-              <circle cx="2" cy="2" r="1.75" />
-              <rect className="dash" x="0.25" y="1.4" width="3.5" height="1.2" />
-              <polygon points="2,0.1 3.8,3.5 0.2,3.5" />
+              <rect className="particle square" x="0" y="0" width="4" height="4" />
+              <circle className="particle" cx="2" cy="2" r="2" />
+              <rect className="particle dash" x="0" y="1.3" width="4" height="1.4" />
+              <polygon className="particle" points="2,0 4,4 0,4" />
             </svg>
           ))}
         </div>

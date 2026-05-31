@@ -39,7 +39,11 @@
   --hero-min-height: 760px;
   --hero-content-offset: 23rem;
   --hero-wordmark-top: 27%;
-  --hero-wordmark-scale: 1;
+  --hero-wordmark-scale: 0.4;
+  --hero-particle-occupancy: 0.875;
+  --hero-bloom-intensity: 1.15;
+  --hero-bloom-threshold: 0.18;
+  --hero-rgb-shift: 2.5;
   --hero-dot-color: #a1a1aa;
   --section-y: 6rem;
   --surface-alpha: 1;

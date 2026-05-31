@@ -6,7 +6,11 @@ const defaults = {
   heroMinHeight: 760,
   heroContentOffset: 23,
   heroWordmarkTop: 27,
-  heroWordmarkScale: 1,
+  heroWordmarkScale: 0.4,
+  heroParticleOccupancy: 0.875,
+  heroBloomIntensity: 1.15,
+  heroBloomThreshold: 0.18,
+  heroRgbShift: 2.5,
   heroDotColor: "#a1a1aa",
   sectionY: 6,
   card: "#0c0c0c",
@@ -43,6 +47,10 @@ const cssVars: Record<keyof TuningValues, string> = {
   heroContentOffset: "--hero-content-offset",
   heroWordmarkTop: "--hero-wordmark-top",
   heroWordmarkScale: "--hero-wordmark-scale",
+  heroParticleOccupancy: "--hero-particle-occupancy",
+  heroBloomIntensity: "--hero-bloom-intensity",
+  heroBloomThreshold: "--hero-bloom-threshold",
+  heroRgbShift: "--hero-rgb-shift",
   heroDotColor: "--hero-dot-color",
   sectionY: "--section-y",
   card: "--card",
@@ -121,7 +129,11 @@ export function DesignTuner({ enabled }: { readonly enabled: boolean }) {
       hero.add(values, "heroMinHeight", 680, 860, 10).name("min height px").onChange(apply);
       hero.add(values, "heroContentOffset", 17, 24, 0.25).name("content offset rem").onChange(apply);
       hero.add(values, "heroWordmarkTop", 24, 34, 0.25).name("wordmark top %").onChange(apply);
-      hero.add(values, "heroWordmarkScale", 0.85, 1.18, 0.01).name("wordmark scale").onChange(apply);
+      hero.add(values, "heroWordmarkScale", 0.35, 1.18, 0.01).name("wordmark scale").onChange(apply);
+      hero.add(values, "heroParticleOccupancy", 0.55, 1, 0.005).name("particle occupancy").onChange(apply);
+      hero.add(values, "heroBloomIntensity", 0, 2.5, 0.01).name("shader bloom").onChange(apply);
+      hero.add(values, "heroBloomThreshold", 0.04, 0.42, 0.01).name("bloom threshold").onChange(apply);
+      hero.add(values, "heroRgbShift", 0, 8, 0.1).name("shader RGB shift").onChange(apply);
       hero.addColor(values, "heroDotColor").name("dot color").onChange(apply);
 
       const layout = gui.addFolder("Layout");
