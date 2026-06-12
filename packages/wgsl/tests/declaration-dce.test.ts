@@ -163,6 +163,23 @@ fn unusedHelper() {}
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
 });
 
+test("top-level const_assert references are DCE roots", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `const keep: bool = true;
+const_assert keep;
+fn unusedHelper() {}
+@compute @workgroup_size(1) fn main() {}`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(/const _vgsl_[0-9a-f]{8}__keep: bool = true;/);
+  expect(resolved.wgsl).toMatch(/const_assert _vgsl_[0-9a-f]{8}__keep;/);
+  expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
+});
+
 test("namespace imports retain only referenced members", async () => {
   const resolved = await resolveShader({
     entry: "/main.wgsl",

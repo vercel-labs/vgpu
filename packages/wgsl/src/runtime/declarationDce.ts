@@ -34,10 +34,15 @@ export function eliminateDeadDeclarations(source: string): string {
 
   const live = new Set<string>();
   const stack: Declaration[] = [];
-  for (const declaration of declarations) {
-    if (!declaration.preserve) continue;
+  const markLive = (declaration: Declaration): void => {
+    if (live.has(declaration.name)) return;
     live.add(declaration.name);
     stack.push(declaration);
+  };
+  for (const declaration of declarations) if (declaration.preserve) markLive(declaration);
+  for (const reference of collectTopLevelDirectiveReferences(tokens)) {
+    const declaration = byName.get(reference);
+    if (declaration) markLive(declaration);
   }
 
   while (stack.length) {
@@ -190,6 +195,35 @@ function collectReferences(tokens: readonly Token[], start: number, end: number,
     references.push(token.text);
   }
   return references;
+}
+
+function collectTopLevelDirectiveReferences(tokens: readonly Token[]): string[] {
+  // `enable` and `diagnostic` directives do not name user declarations, but
+  // `const_assert` contains a const-expression that can reference module-scope
+  // constants/types. Keep those references as roots because the directive text
+  // itself survives declaration slicing.
+  const references: string[] = [];
+  let depth = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token.text === "{") { depth++; continue; }
+    if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
+    if (depth !== 0 || token.text !== "const_assert") continue;
+    const end = findStatementEnd(tokens, i);
+    if (end === undefined) continue;
+    for (let j = i + 1; j < end; j++) {
+      if (tokens[j]!.kind !== "ident") continue;
+      if (tokens[j - 1]?.text === "@" || tokens[j - 1]?.text === ".") continue;
+      references.push(tokens[j]!.text);
+    }
+    i = end;
+  }
+  return references;
+}
+
+function findStatementEnd(tokens: readonly Token[], start: number): number | undefined {
+  for (let i = start + 1; i < tokens.length; i++) if (tokens[i]!.text === ";") return i;
+  return undefined;
 }
 
 function findNextText(tokens: readonly Token[], start: number, text: string): number | undefined {
