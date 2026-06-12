@@ -88,6 +88,25 @@ test("forwards omitted entry points as undefined for WebGPU inference", async ()
   device.destroy();
 });
 
+test("throws VGPUError when shader module is missing", () => {
+  const device = makeDevice();
+
+  try {
+    createRenderPipeline(device, {
+      vertex: { entry: "vs" },
+      fragment: { entry: "fs", targets: [{ format: "rgba8unorm" }] },
+    });
+    expect.fail("expected missing shader to throw");
+  } catch (error) {
+    expect(error).toBeInstanceOf(VGPUError);
+    expect(error).toMatchObject({
+      code: "VGPU-RENDER-PIPELINE-MISSING-SHADER",
+      where: "createRenderPipeline.vertex",
+    });
+  }
+  device.destroy();
+});
+
 test("does not cache hidden render pipelines", async () => {
   const device = makeDevice();
   const shader = makeShader(device);
