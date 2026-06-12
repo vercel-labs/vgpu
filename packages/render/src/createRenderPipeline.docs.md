@@ -1,34 +1,94 @@
-# createRenderPipeline
+# createRenderPipeline / createRenderPipelineAsync
 
-Creates a GPU render pipeline from a vgpu `Shader` plus vertex and fragment
-entry points. Returns a raw `GPURenderPipeline` with no wrapper.
+Creates a GPU render pipeline from descriptor-like VGPU options. Both helpers
+return a raw `GPURenderPipeline` with no wrapper so the result can be passed
+directly to native WebGPU, `RenderPass.setPipeline()`, or render-bundle recording.
 
-## Signature
+## Signatures
 
-`createRenderPipeline(device: Device, opts: RenderPipelineOptions): GPURenderPipeline`
+```ts
+createRenderPipeline(device: Device, opts: RenderPipelineOptions): GPURenderPipeline
+createRenderPipelineAsync(device: Device, opts: RenderPipelineOptions): Promise<GPURenderPipeline>
+```
+
+`createRenderPipelineAsync` calls `GPUDevice.createRenderPipelineAsync()` when it
+exists. If the implementation does not expose the async API, the default
+compatibility policy is `fallback: "sync"`, which emits a once-only diagnostic and
+calls `createRenderPipeline()` instead. Performance-critical warmup can pass
+`fallback: "throw"` to receive a structured `VGPUError` with code
+`VGPU-RENDER-PIPELINE-ASYNC-UNAVAILABLE` instead of accidentally blocking.
+
+VGPU does not cache pipelines: one helper call equals one WebGPU device call.
+Keep pipeline caches explicit and owned by the caller.
 
 ## Options
 
-- `shader`: the `Shader` whose compiled GPU module will back both stages.
-- `vertex.entry`: the vertex shader entry-point name.
-- `fragment.entry`: the fragment shader entry-point name.
-- `fragment.targets`: the color target formats and blend/write settings.
-- `primitive`: optional WebGPU primitive state such as topology or culling.
-- `layout`: optional pipeline layout, or `"auto"` to let WebGPU derive one.
+- `shader`: optional shared `Shader` or raw `GPUShaderModule` used by stages that
+  do not provide their own module.
+- `vertex`: vertex stage options.
+  - `shader` / `module`: optional per-stage `Shader` or raw `GPUShaderModule`.
+  - `entry` / `entryPoint`: vertex entry-point name.
+  - `buffers`: optional vertex buffer layouts and attributes.
+  - `constants`: optional pipeline constants.
+- `fragment`: optional fragment stage options.
+  - `shader` / `module`: optional per-stage `Shader` or raw `GPUShaderModule`.
+  - `entry` / `entryPoint`: fragment entry-point name.
+  - `targets`: color target formats plus blend and write-mask state.
+  - `constants`: optional pipeline constants.
+- `primitive`: optional WebGPU primitive state.
+- `depthStencil`: optional depth/stencil state.
+- `multisample`: optional multisample state.
+- `layout`: explicit `GPUPipelineLayout`, or `"auto"`. Defaults to `"auto"`.
 - `label`: optional debug label forwarded to WebGPU.
+- `fallback`: async-only fallback policy, `"sync"` or `"throw"`.
 
-## Example
+## Examples
+
+Shared VGPU `Shader` module:
 
 ```ts
-const pipeline = createRenderPipeline(device, {
+const pipeline = await createRenderPipelineAsync(device, {
+  label: "hero.pipeline",
+  fallback: "throw",
   shader,
-  vertex: { entry: "vs_main" },
-  fragment: { entry: "fs_main", targets: [{ format: "rgba8unorm" }] },
-  primitive: { topology: "triangle-list" },
+  layout: explicitPipelineLayout,
+  vertex: {
+    entry: "vs_main",
+    buffers: [{
+      arrayStride: 16,
+      attributes: [{ shaderLocation: 0, offset: 0, format: "float32x4" }],
+    }],
+  },
+  fragment: {
+    entry: "fs_main",
+    targets: [{
+      format,
+      blend: {
+        color: { operation: "add", srcFactor: "one", dstFactor: "one-minus-src-alpha" },
+        alpha: { operation: "add", srcFactor: "one", dstFactor: "one-minus-src-alpha" },
+      },
+      writeMask: 0xf,
+    }],
+  },
+  primitive: { topology: "triangle-list", cullMode: "back" },
+  depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
+  multisample: { count: 4 },
 });
 ```
 
-## Notes
+Raw shader modules and per-stage constants:
 
-The returned `GPURenderPipeline` can be used directly with WebGPU APIs or
-passed to `RenderPass.setPipeline`.
+```ts
+const pipeline = createRenderPipeline(device, {
+  layout: "auto",
+  vertex: { module: vertexModule, entryPoint: "vs", constants: { scale: 2 } },
+  fragment: { module: fragmentModule, entryPoint: "fs", targets: [{ format }] },
+});
+```
+
+## Raw escape hatch
+
+`Shader.gpu` is an intentional advanced escape hatch to the underlying
+`GPUShaderModule`. It is part of VGPU's public API surface and should be treated
+as semver-protected, but direct native WebGPU usage remains responsible for
+native WebGPU validation and lifecycle rules.

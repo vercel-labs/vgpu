@@ -35,7 +35,10 @@ device.queue.gpu.submit([encoder.finish()]);
 ## With VGPU Frame
 
 `Frame` keeps that same lifecycle: one encoder, explicit pass order, finish once,
-submit once.
+submit once. This one-encoder/one-submit contract is intentional for homepage-style
+multipass renderers: setup and warmup should create pipelines, buffers, bind
+groups, and bundles up front; the per-frame path should only encode commands and
+submit the finished command buffer.
 
 ```ts
 const frame = beginFrame(device, { label: "hero.frame" });
@@ -64,8 +67,9 @@ the only submission point.
 
 The raw command encoder is available as `frame.gpu` for WebGPU operations that
 are intentionally not wrapped, such as `writeTimestamp()` or `resolveQuerySet()`.
-Direct raw encoder calls follow native WebGPU behavior; VGPU only guards its own
-helper methods after `submit()`.
+This is an advanced, semver-protected public escape hatch. Direct raw encoder
+calls follow native WebGPU behavior; VGPU only guards its own helper methods
+after `submit()`.
 
 `copyBufferToBuffer(source, destination, size, sourceOffset?, destinationOffset?)`
 is a small typed helper that accepts either core `Buffer` instances or raw

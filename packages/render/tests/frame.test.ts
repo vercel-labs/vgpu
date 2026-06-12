@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App, type Device } from "@vgpu/core";
-import { beginFrame } from "@vgpu/render";
+import { App, getMockGPUDeviceInstrumentation, type Device, type Shader } from "@vgpu/core";
+import { beginFrame, createRenderBundle, createRenderPipeline } from "@vgpu/render";
 
 interface RecordedRenderPass {
   readonly setPipeline: ReturnType<typeof vi.fn>;
@@ -75,6 +75,73 @@ test("copyBufferToBuffer unwraps buffers and writes to the frame encoder", async
   frame.copyBufferToBuffer(src, dst, 8, 4, 2);
 
   expect(commandEncoder.copyBufferToBuffer).toHaveBeenCalledWith(src.gpu, 4, dst.gpu, 2, 8);
+  device.destroy();
+});
+
+test("homepage-grade frame keeps setup resources out of the per-frame hot path", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const shader = { gpu: device.gpu.createShaderModule({ label: "hero.shader", code: "" }) } as Shader;
+  const pipeline = createRenderPipeline(device, {
+    label: "hero.pipeline",
+    shader,
+    vertex: { entry: "vs_main" },
+    fragment: { entry: "fs_main", targets: [{ format: "rgba8unorm" }] },
+  });
+  const buffers = Array.from({ length: 2 }, (_, index) => device.createBuffer({ label: `hero.buffer.${index}`, size: 16, usage: ["vertex"] }));
+  const bindGroups = Array.from({ length: 2 }, (_, index) => device.gpu.createBindGroup({ label: `hero.bindGroup.${index}`, layout: {} as GPUBindGroupLayout, entries: [] }));
+  const bundles = Array.from({ length: 5 }, (_, index) => createRenderBundle(device, {
+    label: `hero.bundle.${index}`,
+    colorFormats: ["rgba8unorm"],
+    record(bundle) {
+      bundle.setPipeline(pipeline);
+      bundle.setBindGroup(0, bindGroups[index % bindGroups.length] ?? null);
+      bundle.setVertexBuffer(0, buffers[index % buffers.length]?.gpu ?? null);
+      bundle.draw(3);
+    },
+  }));
+  const setupCounts = { ...getMockGPUDeviceInstrumentation(device.gpu).calls };
+  const passEncoders: RecordedRenderPass[] = [];
+  const commandEncoder = {
+    beginRenderPass: vi.fn(() => {
+      const passEncoder: RecordedRenderPass = {
+        setPipeline: vi.fn(),
+        setBindGroup: vi.fn(),
+        setVertexBuffer: vi.fn(),
+        executeBundles: vi.fn(),
+        draw: vi.fn(),
+        end: vi.fn(),
+      };
+      passEncoders.push(passEncoder);
+      return passEncoder as unknown as GPURenderPassEncoder;
+    }),
+    copyBufferToBuffer: vi.fn(),
+    finish: vi.fn(() => "hero-command-buffer" as unknown as GPUCommandBuffer),
+  } as unknown as GPUCommandEncoder & { readonly beginRenderPass: ReturnType<typeof vi.fn>; readonly copyBufferToBuffer: ReturnType<typeof vi.fn>; readonly finish: ReturnType<typeof vi.fn> };
+  device.gpu.createCommandEncoder = vi.fn(() => commandEncoder);
+  const submit = vi.fn();
+  device.queue.gpu.submit = submit;
+
+  const frame = beginFrame(device, { label: "hero.frame" });
+  frame.renderPass({ label: "light", colorAttachments: [colorAttachment()] }, (pass) => pass.executeBundles([bundles[0]!, bundles[1]!]));
+  frame.gpu.copyBufferToBuffer(buffers[0]!.gpu, 0, buffers[1]!.gpu, 0, 16);
+  frame.renderPass({ label: "scene", colorAttachments: [colorAttachment()] }, (pass) => pass.executeBundles([bundles[2]!, bundles[3]!]));
+  frame.renderPass({ label: "composite", colorAttachments: [colorAttachment()] }, (pass) => pass.executeBundles([bundles[4]!]));
+  frame.submit();
+
+  const frameCounts = getMockGPUDeviceInstrumentation(device.gpu).calls;
+  expect(device.gpu.createCommandEncoder).toHaveBeenCalledTimes(1);
+  expect(commandEncoder.beginRenderPass).toHaveBeenCalledTimes(3);
+  const executedBundleCount = passEncoders.reduce((count, pass) => {
+    const [executedBundles] = pass.executeBundles.mock.calls[0] ?? [];
+    return count + ((executedBundles as GPURenderBundle[] | undefined)?.length ?? 0);
+  }, 0);
+  expect(executedBundleCount).toBe(5);
+  expect(commandEncoder.copyBufferToBuffer).toHaveBeenCalledWith(buffers[0]!.gpu, 0, buffers[1]!.gpu, 0, 16);
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(frameCounts.createRenderPipeline).toBe(setupCounts.createRenderPipeline);
+  expect(frameCounts.createBuffer).toBe(setupCounts.createBuffer);
+  expect(frameCounts.createBindGroup).toBe(setupCounts.createBindGroup);
+  expect(frameCounts.createRenderBundleEncoder).toBe(setupCounts.createRenderBundleEncoder);
   device.destroy();
 });
 

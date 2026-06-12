@@ -1,6 +1,6 @@
 export { beginFrame, Frame } from "./frame.ts";
 export { createRenderBundle, RenderBundleRecorder } from "./render-bundle.ts";
-export { createRenderPipeline } from "./pipeline.ts";
+export { createRenderPipeline, createRenderPipelineAsync } from "./pipeline.ts";
 export { RenderPass } from "./render-pass.ts";
 export { RapidRenderer } from "./rapid-renderer.ts";
 export { UniformPool } from "./uniform-pool.ts";

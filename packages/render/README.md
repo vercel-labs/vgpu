@@ -13,7 +13,7 @@ pnpm add @vgpu/render
 ## Exports
 
 ### Runtime
-- `createRenderPipeline`
+- `createRenderPipeline` / `createRenderPipelineAsync`
 - `RenderPass`
 - `beginFrame` / `Frame`
 - `createRenderBundle` / `RenderBundleRecorder`
@@ -116,6 +116,10 @@ frame.submit(); // finishes once and submits once
 ```
 
 `Frame` preserves authored ordering and exposes its raw `GPUCommandEncoder` as `frame.gpu` for advanced commands. Direct raw encoder calls follow WebGPU behavior; VGPU helper methods guard use after `submit()` with `VGPU-FRAME-SUBMITTED`.
+
+For homepage-grade hot paths, create pipelines (sync or async), buffers, bind groups, and render bundles during setup/warmup or resize, then keep per-frame code to command encoding and one queue submit. `createRenderPipelineAsync()` defaults to `fallback: "sync"` with a once-only diagnostic when native async creation is unavailable; use `fallback: "throw"` if warmup must fail rather than block.
+
+Raw `.gpu` properties such as `device.gpu`, `queue.gpu`, `buffer.gpu`, `texture.gpu`, `shader.gpu`, `frame.gpu`, and `RenderBundleRecorder.gpu` are intentional advanced escape hatches to native WebGPU objects and are treated as semver-protected public API. Native WebGPU validation and lifecycle rules still apply when using them directly.
 
 ## License
 
