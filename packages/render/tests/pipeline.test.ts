@@ -1,14 +1,17 @@
 import { expect, test, vi } from "vitest";
 import { Device, VGPUError, createMockGPUDevice, getMockGPUDeviceInstrumentation, type Shader } from "@vgpu/core";
 import { createRenderPipeline, createRenderPipelineAsync } from "@vgpu/render";
+import { __resetCreateRenderPipelineAsyncFallbackWarningForTests } from "../src/pipeline.ts";
 
 function makeDevice(): Device {
   return new Device(createMockGPUDevice(), null);
 }
 
-function makeShader(device: Device, label = "shader"): Shader {
-  const module = device.gpu.createShaderModule({ label, code: "" });
-  return { gpu: module } as Shader;
+function makeShader(device: Device, _label = "shader"): Shader {
+  return device.createShader(`
+@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(); }
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(); }
+`);
 }
 
 test("createRenderPipeline and createRenderPipelineAsync build parity descriptors", async () => {
@@ -69,6 +72,22 @@ test("accepts raw GPUShaderModule and per-stage Shader modules with constants", 
   device.destroy();
 });
 
+test("forwards omitted entry points as undefined for WebGPU inference", async () => {
+  const device = makeDevice();
+  const shader = makeShader(device);
+
+  createRenderPipeline(device, {
+    shader,
+    vertex: {},
+    fragment: { targets: [{ format: "rgba8unorm" }] },
+  });
+
+  const [descriptor] = getMockGPUDeviceInstrumentation(device.gpu).createRenderPipelineDescriptors;
+  expect(descriptor.vertex.entryPoint).toBeUndefined();
+  expect(descriptor.fragment?.entryPoint).toBeUndefined();
+  device.destroy();
+});
+
 test("does not cache hidden render pipelines", async () => {
   const device = makeDevice();
   const shader = makeShader(device);
@@ -86,6 +105,7 @@ test("does not cache hidden render pipelines", async () => {
 });
 
 test("createRenderPipelineAsync falls back to sync once with a diagnostic by default", async () => {
+  __resetCreateRenderPipelineAsyncFallbackWarningForTests();
   const gpu = createMockGPUDevice();
   (gpu as { createRenderPipelineAsync?: GPUDevice["createRenderPipelineAsync"] }).createRenderPipelineAsync = undefined;
   const device = new Device(gpu, null);

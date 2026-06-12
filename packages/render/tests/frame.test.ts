@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App, getMockGPUDeviceInstrumentation, type Device, type Shader } from "@vgpu/core";
+import { App, getMockGPUDeviceInstrumentation, type Device } from "@vgpu/core";
 import { beginFrame, createRenderBundle, createRenderPipeline } from "@vgpu/render";
 
 interface RecordedRenderPass {
@@ -80,7 +80,10 @@ test("copyBufferToBuffer unwraps buffers and writes to the frame encoder", async
 
 test("homepage-grade frame keeps setup resources out of the per-frame hot path", async () => {
   const { device } = await App.create({ adapter: createMockAdapter() });
-  const shader = { gpu: device.gpu.createShaderModule({ label: "hero.shader", code: "" }) } as Shader;
+  const shader = device.createShader(`
+@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(); }
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(); }
+`);
   const pipeline = createRenderPipeline(device, {
     label: "hero.pipeline",
     shader,
@@ -136,6 +139,7 @@ test("homepage-grade frame keeps setup resources out of the per-frame hot path",
     return count + ((executedBundles as GPURenderBundle[] | undefined)?.length ?? 0);
   }, 0);
   expect(executedBundleCount).toBe(5);
+  expect(commandEncoder.copyBufferToBuffer).toHaveBeenCalledTimes(1);
   expect(commandEncoder.copyBufferToBuffer).toHaveBeenCalledWith(buffers[0]!.gpu, 0, buffers[1]!.gpu, 0, 16);
   expect(submit).toHaveBeenCalledTimes(1);
   expect(frameCounts.createRenderPipeline).toBe(setupCounts.createRenderPipeline);

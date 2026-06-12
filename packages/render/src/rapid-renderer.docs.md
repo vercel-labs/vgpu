@@ -24,5 +24,9 @@ semver-protected public escape hatch. `draw()` resolves after command submission
 homepage hot-path work. For performance-critical renderers, keep pipeline,
 buffer, bind-group, and render-bundle creation in setup/warmup code. Similarly,
 `material().writeUniforms()` writes CPU-side uniform data for later upload and
-should be scheduled deliberately, and runtime `resolveShader()`/shader creation
-belongs outside animation-frame loops unless the shader source really changed.
+should be scheduled deliberately.
+
+Do not resolve shaders, compile shaders, or rebuild pipelines inside the animation
+frame path. If shader source truly changes dynamically, resolve the shader and
+create the replacement pipeline outside the frame loop, then stage or
+double-buffer the swap so a completed pipeline is installed at a frame boundary.

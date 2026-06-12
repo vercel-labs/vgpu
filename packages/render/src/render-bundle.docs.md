@@ -37,10 +37,10 @@ methods for `setPipeline`, `setBindGroup`, `setVertexBuffer`, and `draw`. The ra
 underlying `GPURenderBundleEncoder`.
 
 Create bundles during setup or resize, not in the per-frame hot path. A bundle is
-compatible with the attachment formats, depth/stencil format, sample count, and
-read-only flags it was recorded with. If a resize changes target format/sample
-state or other bundle-compatible state, rebuild the affected bundles before the
-next frame.
+compatible with the `colorFormats`, `depthStencilFormat`, `sampleCount`,
+`depthReadOnly`, and `stencilReadOnly` values it was recorded with. If resize or
+render-target reconfiguration changes any of those bundle-compatible fields,
+re-record the affected bundles before the next frame.
 
 VGPU preserves explicit pipeline, layout, and bind-group control. Bundle helpers
 never infer layouts and do not switch to `layout: "auto"` for performance.

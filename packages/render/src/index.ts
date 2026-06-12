@@ -6,7 +6,14 @@ export { RapidRenderer } from "./rapid-renderer.ts";
 export { UniformPool } from "./uniform-pool.ts";
 export type { FrameOptions, FrameRenderPassCallback } from "./frame.ts";
 export type { RenderBundleOptions } from "./render-bundle.ts";
-export type { RenderPipelineOptions } from "./pipeline.ts";
+export type {
+  RenderPipelineAsyncFallback,
+  RenderPipelineFragmentOptions,
+  RenderPipelineOptions,
+  RenderPipelineShaderInput,
+  RenderPipelineStageOptions,
+  RenderPipelineVertexOptions,
+} from "./pipeline.ts";
 export type { DrawSpec } from "./rapid-renderer.ts";
 export type { UniformLayout, UniformPoolOptions, UniformSlot } from "./uniform-pool-types.ts";
 export type {
