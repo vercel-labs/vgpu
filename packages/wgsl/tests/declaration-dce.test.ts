@@ -6,6 +6,7 @@ import { resolveShader } from "@vgpu/wgsl/runtime";
 const helperPattern = (name: string) => new RegExp(`fn _vgsl_[0-9a-f]{8}__${name}\\b`);
 const constPattern = (name: string) => new RegExp(`const _vgsl_[0-9a-f]{8}__${name}\\b`);
 const structPattern = (name: string) => new RegExp(`struct _vgsl_[0-9a-f]{8}__${name}\\b`);
+const privateVarPattern = (name: string) => new RegExp(`var<private> _vgsl_[0-9a-f]{8}__${name}\\b`);
 
 test("unused imported @vgpu/wgsl-std declarations are removed", async () => {
   const colorStd = readFileSync(join(process.cwd(), "packages/wgsl-std/src/color/index.wgsl"), "utf8");
@@ -107,6 +108,92 @@ fn unusedHelper() {}`,
   expect(resolved.wgsl).toContain("override WorkgroupSize");
   expect(resolved.wgsl).toMatch(structPattern("Buffer"));
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
+});
+
+test("module-scope private variables are pruned unless reachable", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `var<private> livePrivate: f32 = 1.0;
+var<private> deadPrivate: f32 = 2.0;
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(livePrivate); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(privateVarPattern("livePrivate"));
+  expect(resolved.wgsl).not.toMatch(privateVarPattern("deadPrivate"));
+});
+
+test("multiple entry points are preserved as DCE roots", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `struct VertexOut { @builtin(position) position: vec4f, @location(0) color: vec4f }
+fn fragmentColor() -> vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }
+fn unusedHelper() -> vec4f { return vec4f(0.0); }
+@vertex fn vs_main() -> VertexOut { return VertexOut(vec4f(0.0), vec4f(1.0)); }
+@fragment fn fs_main(@location(0) color: vec4f) -> @location(0) vec4f { return color * fragmentColor(); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toContain("fn vs_main(");
+  expect(resolved.wgsl).toContain("fn fs_main(");
+  expect(resolved.wgsl).toMatch(helperPattern("fragmentColor"));
+  expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
+});
+
+test("top-level non-declaration directives survive DCE", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `enable f16;
+diagnostic(off, derivative_uniformity);
+const_assert true;
+fn unusedHelper() {}
+@compute @workgroup_size(1) fn main() {}`,
+    },
+  });
+
+  expect(resolved.wgsl).toContain("enable f16;");
+  expect(resolved.wgsl).toContain("diagnostic(off, derivative_uniformity);");
+  expect(resolved.wgsl).toContain("const_assert true;");
+  expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
+});
+
+test("namespace imports retain only referenced members", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `import * as std from "./std.wgsl";
+@fragment fn fs_main() -> @location(0) vec4f { return std.usedColor(); }`,
+      "/std.wgsl": `export fn usedColor() -> vec4f { return vec4f(1.0); }
+export fn unusedColor() -> vec4f { return vec4f(0.0); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(helperPattern("usedColor"));
+  expect(resolved.wgsl).not.toMatch(helperPattern("unusedColor"));
+});
+
+test("struct field names do not retain same-named dead helpers after resolver mangling", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `struct Payload { sameName: f32 }
+fn sameName() -> f32 { return 1.0; }
+@fragment fn fs_main() -> @location(0) vec4f { let payload = Payload(1.0); return vec4f(payload.sameName); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(structPattern("Payload"));
+  expect(resolved.wgsl).toContain("sameName: f32");
+  expect(resolved.wgsl).toContain("payload.sameName");
+  expect(resolved.wgsl).not.toMatch(helperPattern("sameName"));
 });
 
 test("declaration DCE runs before minify and keeps used imports", async () => {
