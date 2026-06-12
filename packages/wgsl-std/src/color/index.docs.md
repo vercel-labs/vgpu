@@ -39,7 +39,7 @@ linearToSrgb(c) = 12.92 * c                         when c <= 0.0031308
                 = 1.055 * c ^ (1 / 2.4) - 0.055     otherwise
 ```
 
-The expected input and output range is `[0.0, 1.0]` for color channels. These helpers do **not** clamp inputs or outputs; callers that need display-range saturation should import `saturate` or `clamp01` from `@vgpu/wgsl-std/math` explicitly.
+The expected input and output range is `[0.0, 1.0]` for color channels. These helpers do **not** clamp inputs or outputs; callers that need display-range saturation should import `saturate` or `clamp01` from `@vgpu/wgsl-std/math` explicitly. The formulas are mathematically standard; replacing an artistic or tuned approximation with these helpers can still change the look of a shader and should be reviewed visually.
 
 ## Luminance
 
