@@ -9,7 +9,7 @@ Agentic-first WebGPU library. Run the same code on Node (Dawn), the web (browser
 | Package | What it is |
 | --- | --- |
 | [`@vgpu/core`](./packages/core/README.md) | Core runtime primitives for devices, buffers, textures, shaders, queues, and app bootstrapping. |
-| [`@vgpu/render`](./packages/render/README.md) | Minimal render-pipeline and render-pass helpers built on top of `@vgpu/core`. |
+| [`@vgpu/render`](./packages/render/README.md) | Minimal render-pipeline, `Frame`, render-bundle, and `RapidRenderer` helpers; `RapidRenderer` is for simple draws/examples, not production multipass or bundle-heavy hot paths. |
 | [`@vgpu/wgsl`](./packages/wgsl/README.md) | WGSL compile helpers plus runtime resolution and webpack/vite integration points. |
 | [`@vgpu/wgsl-std`](./packages/wgsl-std/README.md) | Standard WGSL utility modules for math, color, and sampling helpers. |
 | [`@vgpu/adapter-mock`](./packages/adapter-mock/README.md) | Mock adapter for tests and local validation without real GPU hardware. |

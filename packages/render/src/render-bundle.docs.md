@@ -32,7 +32,15 @@ Options mirror the required parts of `GPURenderBundleEncoderDescriptor`:
 `colorFormats`, optional `depthStencilFormat`, optional `sampleCount`, and the
 optional depth/stencil read-only flags. The `record` callback receives a
 `RenderBundleRecorder` wrapper with `gpu` escape-hatch access plus convenience
-methods for `setPipeline`, `setBindGroup`, `setVertexBuffer`, and `draw`.
+methods for `setPipeline`, `setBindGroup`, `setVertexBuffer`, and `draw`. The raw
+`bundle.gpu` recorder is an advanced, semver-protected public escape hatch to the
+underlying `GPURenderBundleEncoder`.
+
+Create bundles during setup or resize, not in the per-frame hot path. A bundle is
+compatible with the `colorFormats`, `depthStencilFormat`, `sampleCount`,
+`depthReadOnly`, and `stencilReadOnly` values it was recorded with. If resize or
+render-target reconfiguration changes any of those bundle-compatible fields,
+re-record the affected bundles before the next frame.
 
 VGPU preserves explicit pipeline, layout, and bind-group control. Bundle helpers
 never infer layouts and do not switch to `layout: "auto"` for performance.

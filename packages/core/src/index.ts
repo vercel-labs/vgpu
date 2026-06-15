@@ -6,7 +6,8 @@ export { Shader } from "./shader.ts";
 export { Texture } from "./texture.ts";
 export { VGPUError, ValidationError } from "./errors.ts";
 export { bind, createBindGroup, createBindGroupLayout, createPipelineLayout, createSampler } from "./bind.ts";
-export { createMockGPUDevice } from "./mockGpu.ts";
+export { createMockGPUDevice, getMockGPUDeviceInstrumentation } from "./mockGpu.ts";
+export type { MockGPUDeviceInstrumentation } from "./mockGpu.ts";
 export type { AppCreateOptions, AppInstance, VGPUAdapter } from "./app-types.ts";
 export type {
   BufferOptions,
