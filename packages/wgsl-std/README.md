@@ -43,7 +43,7 @@ See `src/constants/index.docs.md` for examples and precision notes.
 
 - `saturate(value: f32) -> f32`: clamp to `[0.0, 1.0]`.
 - `clamp01(value: f32) -> f32`: alias for `saturate`.
-- `inverseLerp(from: f32, to: f32, value: f32) -> f32`: unclamped inverse lerp; returns `0.0` when `from == to`.
+- `inverseLerp(rangeStart: f32, rangeEnd: f32, value: f32) -> f32`: unclamped inverse lerp; returns `0.0` when `rangeStart == rangeEnd`.
 - `remap(inMin: f32, inMax: f32, outMin: f32, outMax: f32, value: f32) -> f32`: unclamped range remap; returns `outMin` when the input range is zero-length.
 - `safeNormalize2/3/4(value, fallback)`: normalize non-zero vectors and return `fallback` for zero-length vectors. WGSL has no user-defined generic overloads, so dimensions are explicit in v1.
 - `rotate2d(value: vec2f, radians: f32) -> vec2f`: counter-clockwise 2D rotation by radians.
