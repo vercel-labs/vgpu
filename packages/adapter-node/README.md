@@ -1,6 +1,6 @@
 # @vgpu/adapter-node
 
-> 0.0.5 — early preview
+> 0.0.6 — early preview
 
 `@vgpu/adapter-node` connects vgpu to Node.js runtimes through the `webgpu` package's Dawn native prebuild. It exposes both a reusable adapter for `App.create()` and a convenience helper that creates a `Device` directly, making it the package to use for server-side rendering, CI image generation, and serverless deployments. This package depends on `webgpu@0.4.0`, and the release target includes linux-arm64 prebuilt support.
 

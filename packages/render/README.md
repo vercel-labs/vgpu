@@ -1,8 +1,8 @@
 # @vgpu/render
 
-> 0.0.1 — early preview
+> 0.0.6 — early preview
 
-`@vgpu/render` is the small rendering layer on top of `@vgpu/core`. It currently focuses on two public building blocks: creating a render pipeline from a vgpu shader wrapper, and issuing a render pass against a texture or texture view. The package is intentionally narrow in 0.0.1 and leaves higher-level scene helpers for later releases.
+`@vgpu/render` is the small rendering layer on top of `@vgpu/core`. It currently focuses on two public building blocks: creating a render pipeline from a vgpu shader wrapper, and issuing a render pass against a texture or texture view. The package is intentionally narrow in 0.0.6 and leaves higher-level scene helpers for later releases.
 
 ## Install
 

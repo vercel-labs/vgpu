@@ -1,8 +1,8 @@
 # vgpu
 
-> ⚠️ **0.0.1 — early preview. API will shift before 0.1.0.**
+> ⚠️ **0.0.6 — early preview. API will shift before 0.1.0.**
 
-Agentic-first WebGPU library. Run the same code on Node (Dawn), the web (browser WebGPU), and serverless platforms with linux-arm64 prebuilts. vgpu keeps the surface area small in 0.0.1: core device and resource primitives, a thin render layer, WGSL tooling, and adapters for real Node runtimes or deterministic tests.
+Agentic-first WebGPU library. Run the same code on Node (Dawn), the web (browser WebGPU), and serverless platforms with linux-arm64 prebuilts. vgpu keeps the surface area small in 0.0.6: core device and resource primitives, a thin render layer, WGSL tooling, and adapters for real Node runtimes or deterministic tests.
 
 ## Packages
 
@@ -80,7 +80,7 @@ device.destroy();
 
 ## Capability matrix
 
-- ✅ **In 0.0.1**
+- ✅ **In 0.0.6**
   - device / buffer / texture / shader primitives
   - render pipeline + render pass
   - WGSL compile + loaders for webpack and vite
