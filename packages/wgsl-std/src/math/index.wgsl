@@ -6,12 +6,12 @@ export fn clamp01(value: f32) -> f32 {
   return saturate(value);
 }
 
-export fn inverseLerp(from: f32, to: f32, value: f32) -> f32 {
-  let denominator = to - from;
+export fn inverseLerp(start: f32, end: f32, value: f32) -> f32 {
+  let denominator = end - start;
   if (denominator == 0.0) {
     return 0.0;
   }
-  return (value - from) / denominator;
+  return (value - start) / denominator;
 }
 
 export fn remap(inMin: f32, inMax: f32, outMin: f32, outMax: f32, value: f32) -> f32 {

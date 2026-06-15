@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -213,6 +213,7 @@ function expectVec4Close(actual: readonly [number, number, number, number], expe
 async function runMathCompute(): Promise<Float32Array> {
   const outputLength = 12;
   const outputSize = outputLength * Float32Array.BYTES_PER_ELEMENT;
+  const mathPath = resolve("packages/wgsl-std/src/math/index.wgsl");
   const modules = {
     "/main.wgsl": `import { saturate, inverseLerp, remap, safeNormalize2, rotate2d } from "@vgpu/wgsl-std/math";
 struct Out { values: array<f32, ${outputLength}> }
@@ -235,8 +236,9 @@ fn main() {
   out.values[10] = r.x;
   out.values[11] = r.y;
 }`,
+    [mathPath]: await readFile(mathPath, "utf8"),
   };
-  const shader = await resolveShader({ entry: "/main.wgsl", modules, packageMap: { "@vgpu/wgsl-std/math": resolve("packages/wgsl-std/src/math/index.wgsl") }, validate: false });
+  const shader = await resolveShader({ entry: "/main.wgsl", modules, packageMap: { "@vgpu/wgsl-std/math": mathPath }, validate: false });
 
   const { device } = await App.create({ adapter: createNodeAdapter() });
   const gpu = device.gpu;
