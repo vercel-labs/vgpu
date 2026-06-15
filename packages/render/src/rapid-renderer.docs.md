@@ -15,4 +15,18 @@ material has uniforms. The renderer does not write camera, transform, light, or
 material parameters.
 
 `clearValue` defaults to opaque black. `depthTarget` is optional. `renderer.gpu`
-returns the raw `GPUDevice`. `draw()` resolves after command submission.
+returns the raw `GPUDevice`. Like other `.gpu` fields, this is an advanced,
+semver-protected public escape hatch. `draw()` resolves after command submission.
+
+## Hot-path caveats
+
+`RapidRenderer` is optimized for examples and simple draws, not for hiding all
+homepage hot-path work. For performance-critical renderers, keep pipeline,
+buffer, bind-group, and render-bundle creation in setup/warmup code. Similarly,
+`material().writeUniforms()` writes CPU-side uniform data for later upload and
+should be scheduled deliberately.
+
+Do not resolve shaders, compile shaders, or rebuild pipelines inside the animation
+frame path. If shader source truly changes dynamically, resolve the shader and
+create the replacement pipeline outside the frame loop, then stage or
+double-buffer the swap so a completed pipeline is installed at a frame boundary.

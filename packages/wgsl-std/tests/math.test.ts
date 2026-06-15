@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -237,13 +236,9 @@ fn main() {
   out.values[10] = r.x;
   out.values[11] = r.y;
 }`,
+    [mathPath]: await readFile(mathPath, "utf8"),
   };
-  const shader = await resolveShader({
-    entry: "/main.wgsl",
-    modules: { ...modules, [mathPath]: readFileSync(mathPath, "utf8") },
-    packageMap: { "@vgpu/wgsl-std/math": mathPath },
-    validate: false,
-  });
+  const shader = await resolveShader({ entry: "/main.wgsl", modules, packageMap: { "@vgpu/wgsl-std/math": mathPath }, validate: false });
 
   const { device } = await App.create({ adapter: createNodeAdapter() });
   const gpu = device.gpu;
