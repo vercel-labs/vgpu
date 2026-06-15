@@ -8,6 +8,7 @@ import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./min
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./packageResolution.ts";
 import { parseModule, type ImportDecl } from "./parser.ts";
 import { reflect, type Reflection } from "./reflect.ts";
+import { eliminateDeadDeclarations } from "./declarationDce.ts";
 import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
@@ -44,7 +45,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   assertNoJsVisibleDuplicates(modules);
   const exportsByPath = buildExports(modules);
   const pathOf = (from: string, imp: ImportDecl) => resolvePath(imp.from, from, opts, diagnostics);
-  const emittedWgsl = modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n");
+  const emittedWgsl = eliminateDeadDeclarations(modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n"));
   const reflection = reflect(modules);
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);

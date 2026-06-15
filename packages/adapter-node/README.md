@@ -52,8 +52,80 @@ const texture = device.createTexture({
 });
 
 const bytes = await texture.read();
+texture.destroy();
 device.destroy();
 ```
+
+## Agentic headless snapshot testing
+
+For snapshot agents, render a deterministic, named scene into an explicit
+offscreen texture and hand the readback bytes to your project's PNG or pixel-diff
+tooling. VGPU does not ship an image-diff framework and does not automate browser
+screenshots.
+
+```ts
+import { createNodeDevice } from "@vgpu/adapter-node";
+
+const width = 256;
+const height = 256;
+const format: GPUTextureFormat = "rgba8unorm";
+const snapshotName = "hero-triangle";
+
+const device = await createNodeDevice({ label: `snapshot.${snapshotName}.device` });
+
+try {
+  const target = device.createTexture({
+    label: `snapshot.${snapshotName}.target`,
+    size: [width, height],
+    format,
+    usage: ["render_attachment", "copy_src"],
+  });
+
+  // Render a deterministic frame into `target` using fixed scene inputs:
+  // camera, time, seed, viewport, and fixture data.
+  const encoder = device.gpu.createCommandEncoder({ label: `snapshot.${snapshotName}.frame` });
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: target.createView(),
+      clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      loadOp: "clear",
+      storeOp: "store",
+    }],
+  });
+  // pass.setPipeline(pipeline);
+  // pass.draw(...);
+  pass.end();
+
+  device.queue.gpu.submit([encoder.finish()]);
+  await device.queue.flush();
+
+  const rgba = await target.read();
+  // Encode/compare `rgba` with external tools such as pngjs/pixelmatch
+  // or your repository's existing snapshot harness.
+
+  target.destroy();
+} finally {
+  device.destroy();
+}
+```
+
+Native WebGPU readback requires creating a `COPY_SRC` texture, copying to a
+`MAP_READ` buffer with 256-byte row alignment, waiting for submitted work, and
+removing row padding. `Texture.read()` wraps that boilerplate for VGPU textures.
+For resource teardown, prefer wrapper methods such as `texture.destroy()`,
+`buffer.destroy()`, and `device.destroy()`; use `texture.gpu.destroy()` or
+`buffer.gpu.destroy()` only as a deliberate raw WebGPU escape hatch.
+
+Troubleshooting checklist for snapshot tests:
+
+- Use a `Texture.read()`-supported format; prefer `rgba8unorm` for snapshots.
+- Include `"copy_src"` on the target usage alongside `"render_attachment"`.
+- Submit commands and `await device.queue.flush()` before `await target.read()`.
+- Freeze scene inputs and include names in labels/snapshot filenames.
+- Run GLIBC or headless rendering failures in the pinned Docker environment.
+
+See `createNodeDevice` docs for the full native-before/VGPU-after workflow,
+including a PNG/pixel-diff harness sketch and the relation to #81, #82, and #83.
 
 ## Troubleshooting native Dawn binary loading
 

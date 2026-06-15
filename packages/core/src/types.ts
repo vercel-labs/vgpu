@@ -31,7 +31,13 @@ export interface TextureOptions {
   readonly size: readonly [width: number, height: number, depthOrArrayLayers?: number];
   readonly format: GPUTextureFormat;
   readonly usage: readonly TextureUsageName[];
+  /** Number of mip levels. Defaults to 1 when omitted, matching WebGPU. */
+  readonly mipLevelCount?: number;
   /** Number of samples per pixel. Use 4 for MSAA; default 1. WebGPU spec restricts color render targets to sampleCount 1 or 4. */
   readonly sampleCount?: 1 | 4;
+  /** Texture dimensionality. Defaults to "2d" when omitted, matching WebGPU. */
+  readonly dimension?: GPUTextureDimension;
+  /** Additional view formats allowed for texture view creation. Defaults to none when omitted, matching WebGPU. */
+  readonly viewFormats?: readonly GPUTextureFormat[];
   readonly label?: string;
 }

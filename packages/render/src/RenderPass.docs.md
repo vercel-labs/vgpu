@@ -5,9 +5,11 @@ attachments. Construct it with a core `Device` and `RenderPassOptions`, encode
 render commands, then call `end()` to finish the pass and submit the command
 buffer through `Device.queue`.
 
-`RenderPassOptions` contains `colorAttachments` and an optional `label`.
-`ColorAttachment.view` accepts either a core `Texture` or a raw
-`GPUTextureView`; `loadOp`, `storeOp`, and `clearValue` are forwarded to WebGPU.
+`RenderPassOptions` contains `colorAttachments`, optional
+`depthStencilAttachment`, and an optional `label`. `ColorAttachment.view` and
+`DepthStencilAttachment.view` accept either a core `Texture` or a raw
+`GPUTextureView`; load/store operations and clear values are forwarded to
+WebGPU.
 
 Commands mirror the WebGPU render pass encoder:
 
@@ -15,6 +17,7 @@ Commands mirror the WebGPU render pass encoder:
 - `setBindGroup(index, group, dynamicOffsets?)` binds a raw `GPUBindGroup`.
 - `setVertexBuffer(slot, buffer, offset?, size?)` binds a core `Buffer` or raw
   `GPUBuffer` for vertex input.
+- `executeBundles(bundles)` executes setup-time `GPURenderBundle`s in the pass.
 - `draw({ vertexCount, instanceCount?, firstVertex?, firstInstance? })` issues a
   non-indexed draw. The numeric WebGPU-style `draw(vertexCount, ...)` call is
   also accepted.

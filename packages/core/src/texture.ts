@@ -18,7 +18,10 @@ export class Texture {
   get size(): TextureOptions["size"] { return this.options.size; }
   get format(): GPUTextureFormat { return this.options.format; }
   get usage(): TextureOptions["usage"] { return this.options.usage; }
+  get mipLevelCount(): number { return this.options.mipLevelCount ?? 1; }
   get sampleCount(): 1 | 4 { return this.options.sampleCount ?? 1; }
+  get dimension(): GPUTextureDimension { return this.options.dimension ?? "2d"; }
+  get viewFormats(): readonly GPUTextureFormat[] { return this.options.viewFormats ?? []; }
   get label(): string | undefined { return this.options.label; }
 
   createView(desc?: GPUTextureViewDescriptor): GPUTextureView {
@@ -47,11 +50,15 @@ export class Texture {
 }
 
 export function toGPUTextureDescriptor(opts: TextureOptions): GPUTextureDescriptor {
-  return {
+  const desc: GPUTextureDescriptor = {
     label: opts.label,
     size: { width: opts.size[0], height: opts.size[1], depthOrArrayLayers: opts.size[2] ?? 1 },
     format: opts.format,
     usage: textureUsageFlags(opts.usage),
-    sampleCount: opts.sampleCount,
   };
+  if (opts.mipLevelCount !== undefined) desc.mipLevelCount = opts.mipLevelCount;
+  if (opts.sampleCount !== undefined) desc.sampleCount = opts.sampleCount;
+  if (opts.dimension !== undefined) desc.dimension = opts.dimension;
+  if (opts.viewFormats !== undefined) desc.viewFormats = [...opts.viewFormats];
+  return desc;
 }

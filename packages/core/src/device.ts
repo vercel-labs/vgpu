@@ -21,6 +21,14 @@ export class Device {
     this.readback = new Readback(gpu);
   }
 
+  get limits(): GPUSupportedLimits {
+    return this.gpu.limits;
+  }
+
+  get features(): GPUSupportedFeatures {
+    return this.gpu.features;
+  }
+
   createShader(input: ShaderInput): Shader {
     const resolved = typeof input === "string" ? compile(input) : input;
     return new Shader(this.gpu.createShaderModule({ code: resolved.wgsl }), resolved);

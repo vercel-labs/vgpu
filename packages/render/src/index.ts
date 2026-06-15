@@ -1,12 +1,24 @@
-export { createRenderPipeline } from "./pipeline.ts";
+export { beginFrame, Frame } from "./frame.ts";
+export { createRenderBundle, RenderBundleRecorder } from "./render-bundle.ts";
+export { createRenderPipeline, createRenderPipelineAsync } from "./pipeline.ts";
 export { RenderPass } from "./render-pass.ts";
 export { RapidRenderer } from "./rapid-renderer.ts";
 export { UniformPool } from "./uniform-pool.ts";
-export type { RenderPipelineOptions } from "./pipeline.ts";
+export type { FrameOptions, FrameRenderPassCallback } from "./frame.ts";
+export type { RenderBundleOptions } from "./render-bundle.ts";
+export type {
+  RenderPipelineAsyncFallback,
+  RenderPipelineFragmentOptions,
+  RenderPipelineOptions,
+  RenderPipelineShaderInput,
+  RenderPipelineStageOptions,
+  RenderPipelineVertexOptions,
+} from "./pipeline.ts";
 export type { DrawSpec } from "./rapid-renderer.ts";
 export type { UniformLayout, UniformPoolOptions, UniformSlot } from "./uniform-pool-types.ts";
 export type {
   ColorAttachment,
+  DepthStencilAttachment,
   RenderPassDrawOptions,
   RenderPassDynamicOffsets,
   RenderPassOptions,

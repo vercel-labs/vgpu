@@ -7,6 +7,7 @@ interface RecordedRenderPass {
   readonly setPipeline: ReturnType<typeof vi.fn>;
   readonly setBindGroup: ReturnType<typeof vi.fn>;
   readonly setVertexBuffer: ReturnType<typeof vi.fn>;
+  readonly executeBundles: ReturnType<typeof vi.fn>;
   readonly draw: ReturnType<typeof vi.fn>;
   readonly end: ReturnType<typeof vi.fn>;
 }
@@ -58,21 +59,53 @@ test("prevents encoding after end", async () => {
   device.destroy();
 });
 
-async function createRenderPassFixture(): Promise<{ readonly device: Device; readonly passEncoder: RecordedRenderPass }> {
+test("end keeps one-shot auto-submit behavior", async () => {
+  const { commandEncoder, device, submit } = await createRenderPassFixture();
+  const pass = new RenderPass(device, { colorAttachments: [colorAttachment()] });
+
+  pass.end();
+  pass.end();
+
+  expect(commandEncoder.finish).toHaveBeenCalledTimes(1);
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(submit).toHaveBeenCalledWith(["render-pass-command-buffer"]);
+  device.destroy();
+});
+
+test("executes render bundles", async () => {
+  const { device, passEncoder } = await createRenderPassFixture();
+  const bundle = {} as GPURenderBundle;
+  const pass = new RenderPass(device, { colorAttachments: [colorAttachment()] });
+
+  pass.executeBundles([bundle]);
+
+  expect(passEncoder.executeBundles).toHaveBeenCalledWith([bundle]);
+  device.destroy();
+});
+
+async function createRenderPassFixture(): Promise<{
+  readonly commandEncoder: { readonly beginRenderPass: ReturnType<typeof vi.fn>; readonly finish: ReturnType<typeof vi.fn> };
+  readonly device: Device;
+  readonly passEncoder: RecordedRenderPass;
+  readonly submit: ReturnType<typeof vi.fn>;
+}> {
   const { device } = await App.create({ adapter: createMockAdapter() });
   const passEncoder: RecordedRenderPass = {
     setPipeline: vi.fn(),
     setBindGroup: vi.fn(),
     setVertexBuffer: vi.fn(),
+    executeBundles: vi.fn(),
     draw: vi.fn(),
     end: vi.fn(),
   };
   const commandEncoder = {
     beginRenderPass: vi.fn(() => passEncoder as unknown as GPURenderPassEncoder),
-    finish: vi.fn(() => ({} as GPUCommandBuffer)),
+    finish: vi.fn(() => "render-pass-command-buffer" as unknown as GPUCommandBuffer),
   };
   device.gpu.createCommandEncoder = vi.fn(() => commandEncoder as unknown as GPUCommandEncoder);
-  return { device, passEncoder };
+  const submit = vi.fn();
+  device.queue.gpu.submit = submit;
+  return { commandEncoder, device, passEncoder, submit };
 }
 
 function colorAttachment(): GPURenderPassColorAttachment {
