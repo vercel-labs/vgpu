@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout release tag
@@ -36,7 +37,8 @@ jobs:
       - name: Run fast tests
         run: pnpm test:fast
 
+      - name: Upgrade npm for OIDC publishing
+        run: npm install -g npm@^11.5.1
+
       - name: Publish to npm
         run: pnpm -r publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
