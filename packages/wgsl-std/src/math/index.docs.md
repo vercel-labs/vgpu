@@ -25,11 +25,11 @@ Clamps a scalar `f32` to `[0.0, 1.0]` using WGSL `clamp`.
 
 Alias for `saturate`. Use whichever name is clearer at the call site.
 
-### `inverseLerp(from: f32, to: f32, value: f32) -> f32`
+### `inverseLerp(rangeStart: f32, rangeEnd: f32, value: f32) -> f32`
 
-Returns `(value - from) / (to - from)` without clamping the result. Values outside the input range produce values outside `[0.0, 1.0]`.
+Returns `(value - rangeStart) / (rangeEnd - rangeStart)` without clamping the result. Values outside the input range produce values outside `[0.0, 1.0]`.
 
-If `from == to`, the input range has no length and the helper returns `0.0` deterministically instead of dividing by zero.
+If `rangeStart == rangeEnd`, the input range has no length and the helper returns `0.0` deterministically instead of dividing by zero.
 
 ### `remap(inMin: f32, inMax: f32, outMin: f32, outMax: f32, value: f32) -> f32`
 

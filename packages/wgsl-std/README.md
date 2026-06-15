@@ -33,7 +33,7 @@ WGSL snippets in this package must stay pure declaration modules: functions, con
 - `goldenRatio: f32`: φ.
 - `goldenAngle: f32`: golden angle in radians.
 
-The constants module is intentionally small so importing it does not add much WGSL text. Declaration-level dead-code elimination for larger WGSL utility modules is tracked in [#98](https://github.com/vercel-labs/vgpu/issues/98). `goldenAngle` remains available from `@vgpu/wgsl-std/sampling` for sampling-only shaders.
+The constants module is intentionally small so importing it does not add much WGSL text. `resolveShader()` also performs conservative declaration-level dead-code elimination, so unused declarations from larger WGSL utility modules are pruned from shaders with entry points before minification. `goldenAngle` remains available from `@vgpu/wgsl-std/sampling` for sampling-only shaders.
 
 See `src/constants/index.docs.md` for examples and precision notes.
 
@@ -43,7 +43,7 @@ See `src/constants/index.docs.md` for examples and precision notes.
 
 - `saturate(value: f32) -> f32`: clamp to `[0.0, 1.0]`.
 - `clamp01(value: f32) -> f32`: alias for `saturate`.
-- `inverseLerp(from: f32, to: f32, value: f32) -> f32`: unclamped inverse lerp; returns `0.0` when `from == to`.
+- `inverseLerp(rangeStart: f32, rangeEnd: f32, value: f32) -> f32`: unclamped inverse lerp; returns `0.0` when `rangeStart == rangeEnd`.
 - `remap(inMin: f32, inMax: f32, outMin: f32, outMax: f32, value: f32) -> f32`: unclamped range remap; returns `outMin` when the input range is zero-length.
 - `safeNormalize2/3/4(value, fallback)`: normalize non-zero vectors and return `fallback` for zero-length vectors. WGSL has no user-defined generic overloads, so dimensions are explicit in v1.
 - `rotate2d(value: vec2f, radians: f32) -> vec2f`: counter-clockwise 2D rotation by radians.
@@ -63,7 +63,7 @@ See `src/math/index.docs.md` for examples and edge-case notes.
 - `luminance(color: vec3f) -> f32`: relative luminance using Rec.709/sRGB coefficients `(0.2126, 0.7152, 0.0722)`. Pass linear-light color.
 - `applyExposure(color: vec3f, exposure: f32) -> vec3f`: multiply by `exp2(exposure)`, where exposure is measured in stops/EV.
 
-WGSL has no user-defined generics, so vector transfer helpers use `3`/`4` suffixes while scalar transfer helpers keep the base names. Color transfer helpers expect normal `[0.0, 1.0]` color-channel inputs but do not clamp; clamp explicitly with `@vgpu/wgsl-std/math` when desired. The color module intentionally defers PBR helpers and tonemappers (ACES/Hable/Filament/Reinhard) so applications choose their own display transform.
+WGSL has no user-defined generics, so vector transfer helpers use `3`/`4` suffixes while scalar transfer helpers keep the base names. Color transfer helpers expect normal `[0.0, 1.0]` color-channel inputs but do not clamp; clamp explicitly with `@vgpu/wgsl-std/math` when desired. The transfer and luminance formulas are mathematically standard and useful for physically meaningful conversions, but they may not match artistic/tuned approximations in an existing shader without deliberate visual review. The color module intentionally defers PBR helpers and tonemappers (ACES/Hable/Filament/Reinhard) so applications choose their own display transform.
 
 See `src/color/index.docs.md` for formulas, examples, and performance notes.
 
