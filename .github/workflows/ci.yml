@@ -137,3 +137,27 @@ jobs:
           print(text[max(0, idx - 120):idx + 160] if idx >= 0 else text[:280])
           PY
           tail -30 /tmp/next-wgsl-dev.log
+
+  docs-generated:
+    # Guards that the committed docs manifest + generated skill are in sync with their sources
+    # (co-located *.docs.md, docs/topics, docs/allowlist.txt). The generator is dependency-free
+    # (pure Node), so no install/build is needed.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Regenerate docs manifest + skill
+        run: node packages/vgpu/lib/docs/generate/cli.js
+      - name: Fail if the generated manifest/skill are out of date
+        run: |
+          changed=$(git status --porcelain -- skills/vgpu packages/vgpu/lib/generated/docs-manifest.generated.js)
+          if [ -n "$changed" ]; then
+            echo "::error::Generated docs are out of date. Run 'pnpm -F vgpu generate:docs' and commit skills/vgpu and packages/vgpu/lib/generated/docs-manifest.generated.js."
+            echo "$changed"
+            git diff -- skills/vgpu packages/vgpu/lib/generated/docs-manifest.generated.js
+            exit 1
+          fi
+          echo "Generated docs manifest + skill are up to date."
