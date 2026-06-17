@@ -37,6 +37,8 @@
 @vgpu/wgsl WGSLSource packages/wgsl/src/ResolvedShader.docs.md
 @vgpu/render RenderPipelineOptions packages/render/src/createRenderPipeline.docs.md
 @vgpu/render createRenderPipeline packages/render/src/createRenderPipeline.docs.md
+@vgpu/render createRenderPipelineFromDescriptor packages/render/src/createRenderPipeline.docs.md
+@vgpu/render createRenderPipelineFromDescriptorAsync packages/render/src/createRenderPipeline.docs.md
 @vgpu/render Frame packages/render/src/Frame.docs.md
 @vgpu/render beginFrame packages/render/src/Frame.docs.md
 @vgpu/render FrameOptions packages/render/src/Frame.docs.md
@@ -50,6 +52,8 @@
 @vgpu/render RenderPassDynamicOffsets packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
 @vgpu/render DepthStencilAttachment packages/render/src/RenderPass.docs.md
+@vgpu/render Uniform packages/render/src/uniform.docs.md
+@vgpu/render UniformOptions packages/render/src/uniform.docs.md
 @vgpu/render UniformPool packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformPoolOptions packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformLayout packages/render/src/uniform-pool.docs.md

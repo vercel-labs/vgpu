@@ -12,10 +12,18 @@ optimization easy later.
 
 - **Encode with `Frame`** (`beginFrame` → `frame.renderPass(...)` → `frame.submit()`), not a
   hand-rolled encoder. Each pass is then a named, separable unit.
-- **Uniforms via `UniformPool`**, not ad-hoc `Float32Array` + `writeBuffer`. Pushing a value to a
-  uniform later (pattern 2) is then a one-liner, not a packing rewrite.
+- **Pick the uniform path by uniform count.** For a single stable uniform buffer you rewrite per
+  frame and change-gate yourself (the typical full-screen-pass case), use the lightweight `Uniform`
+  helper (`new Uniform(device, { size }).write(bytes)`), or a plain `Float32Array` + `buffer.write`
+  when you hand-gate uploads. `UniformPool` is only for **many** per-draw uniforms — it's a
+  dynamic-offset ring allocator that re-uploads every frame, which defeats change-gating. Don't reach
+  for it for one stable buffer. Either way, pushing a value to a uniform later (pattern 2) stays a
+  one-liner, not a packing rewrite.
 - **Resolve/compile shaders and build pipelines at setup**, never per frame (`resolveShader` is for
   setup/build/test; swap pipelines at frame boundaries).
+- **Build pipelines via `createRenderPipeline` / `createRenderPipelineAsync`** for the async→sync
+  fallback. Both also accept a raw `GPURenderPipelineDescriptor`, so if you already have one, pass it
+  through — don't reshape it into `RenderPipelineOptions` just to get the fallback.
 - **Read back with `Texture.read()`** for baselines and golden comparisons.
 
 ## Keep bakeable work in its own pass

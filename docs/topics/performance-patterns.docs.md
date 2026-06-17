@@ -35,8 +35,10 @@ let lab = rgb_to_oklab(cfg.edgeColor); // same for all pixels
 let lab = cfg.edgeColorOklab;
 ```
 
-Pack the precomputed value with the same uniform path you already use (e.g. a `UniformPool` slot).
-Reuse spare lanes of an existing uniform before adding new ones.
+Pack the precomputed value into the same uniform buffer you already write each frame (the `Uniform`
+helper or a hand-gated `Float32Array` + `buffer.write` for a single stable buffer; a `UniformPool`
+slot only if you already have many per-draw uniforms). Reuse spare lanes of an existing uniform
+before adding new ones.
 
 ## 3. Hoist loop invariants + use incremental updates — per-sample → per-pixel ★★
 

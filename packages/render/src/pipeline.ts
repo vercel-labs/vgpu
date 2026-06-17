@@ -47,13 +47,49 @@ export function createRenderPipeline(device: Device, opts: RenderPipelineOptions
 }
 
 export async function createRenderPipelineAsync(device: Device, opts: RenderPipelineOptions): Promise<GPURenderPipeline> {
-  const descriptor = toRenderPipelineDescriptor(opts);
+  return createPipelineAsync(device, toRenderPipelineDescriptor(opts), opts.fallback);
+}
+
+/**
+ * Create a render pipeline from a raw, hand-built `GPURenderPipelineDescriptor`.
+ *
+ * @remarks
+ * Use this when you already own a native descriptor and only want VGPU's
+ * `Device` wrapper to forward it — no `RenderPipelineOptions` reshape. The
+ * descriptor is passed through unchanged.
+ */
+export function createRenderPipelineFromDescriptor(device: Device, descriptor: GPURenderPipelineDescriptor): GPURenderPipeline {
+  return device.gpu.createRenderPipeline(descriptor);
+}
+
+/**
+ * Async variant of {@link createRenderPipelineFromDescriptor} with the same
+ * async→sync compatibility fallback as {@link createRenderPipelineAsync}.
+ *
+ * @remarks
+ * The descriptor is forwarded unchanged. When `GPUDevice.createRenderPipelineAsync`
+ * is unavailable, the default `fallback: "sync"` emits a once-only diagnostic and
+ * calls the synchronous path; pass `fallback: "throw"` for a structured `VGPUError`.
+ */
+export async function createRenderPipelineFromDescriptorAsync(
+  device: Device,
+  descriptor: GPURenderPipelineDescriptor,
+  fallback?: RenderPipelineAsyncFallback,
+): Promise<GPURenderPipeline> {
+  return createPipelineAsync(device, descriptor, fallback);
+}
+
+async function createPipelineAsync(
+  device: Device,
+  descriptor: GPURenderPipelineDescriptor,
+  fallback: RenderPipelineAsyncFallback | undefined,
+): Promise<GPURenderPipeline> {
   const createAsync = device.gpu.createRenderPipelineAsync;
   if (typeof createAsync === "function") {
     return createAsync.call(device.gpu, descriptor);
   }
 
-  if ((opts.fallback ?? "sync") === "throw") {
+  if ((fallback ?? "sync") === "throw") {
     throw new VGPUError({
       code: "VGPU-RENDER-PIPELINE-ASYNC-UNAVAILABLE",
       message: "GPUDevice.createRenderPipelineAsync is unavailable on this WebGPU implementation.",

@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { Device, VGPUError, createMockGPUDevice, getMockGPUDeviceInstrumentation, type Shader } from "@vgpu/core";
-import { createRenderPipeline, createRenderPipelineAsync } from "@vgpu/render";
+import { createRenderPipeline, createRenderPipelineAsync, createRenderPipelineFromDescriptor, createRenderPipelineFromDescriptorAsync } from "@vgpu/render";
 import { __resetCreateRenderPipelineAsyncFallbackWarningForTests } from "../src/pipeline.ts";
 
 function makeDevice(): Device {
@@ -140,6 +140,87 @@ test("createRenderPipelineAsync falls back to sync once with a diagnostic by def
   expect(warn).toHaveBeenCalledTimes(1);
   expect(warn.mock.calls[0]?.[0]).toContain("createRenderPipelineAsync");
   warn.mockRestore();
+  device.destroy();
+});
+
+test("createRenderPipelineFromDescriptor forwards the raw descriptor unchanged", () => {
+  const device = makeDevice();
+  const shader = makeShader(device);
+  const descriptor: GPURenderPipelineDescriptor = {
+    label: "raw.pipeline",
+    layout: "auto",
+    vertex: { module: shader.gpu, entryPoint: "vs_main" },
+    fragment: { module: shader.gpu, entryPoint: "fs_main", targets: [{ format: "rgba8unorm" }] },
+    primitive: { topology: "triangle-list" },
+  };
+
+  createRenderPipelineFromDescriptor(device, descriptor);
+
+  const mock = getMockGPUDeviceInstrumentation(device.gpu);
+  expect(mock.calls.createRenderPipeline).toBe(1);
+  expect(mock.createRenderPipelineDescriptors[0]).toBe(descriptor);
+  device.destroy();
+});
+
+test("createRenderPipelineFromDescriptorAsync forwards the raw descriptor to the async path", async () => {
+  const device = makeDevice();
+  const shader = makeShader(device);
+  const descriptor: GPURenderPipelineDescriptor = {
+    label: "raw.async.pipeline",
+    layout: "auto",
+    vertex: { module: shader.gpu, entryPoint: "vs_main" },
+    fragment: { module: shader.gpu, entryPoint: "fs_main", targets: [{ format: "rgba8unorm" }] },
+  };
+
+  await createRenderPipelineFromDescriptorAsync(device, descriptor);
+
+  const mock = getMockGPUDeviceInstrumentation(device.gpu);
+  expect(mock.calls.createRenderPipelineAsync).toBe(1);
+  expect(mock.calls.createRenderPipeline).toBe(0);
+  expect(mock.createRenderPipelineAsyncDescriptors[0]).toBe(descriptor);
+  device.destroy();
+});
+
+test("createRenderPipelineFromDescriptorAsync falls back to sync once with a diagnostic by default", async () => {
+  __resetCreateRenderPipelineAsyncFallbackWarningForTests();
+  const gpu = createMockGPUDevice();
+  (gpu as { createRenderPipelineAsync?: GPUDevice["createRenderPipelineAsync"] }).createRenderPipelineAsync = undefined;
+  const device = new Device(gpu, null);
+  const shader = makeShader(device);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const descriptor: GPURenderPipelineDescriptor = {
+    layout: "auto",
+    vertex: { module: shader.gpu, entryPoint: "vs_main" },
+    fragment: { module: shader.gpu, entryPoint: "fs_main", targets: [{ format: "rgba8unorm" }] },
+  };
+
+  await createRenderPipelineFromDescriptorAsync(device, descriptor);
+
+  const mock = getMockGPUDeviceInstrumentation(device.gpu);
+  expect(mock.calls.createRenderPipeline).toBe(1);
+  expect(mock.calls.createRenderPipelineAsync).toBe(0);
+  expect(warn).toHaveBeenCalledTimes(1);
+  warn.mockRestore();
+  device.destroy();
+});
+
+test("createRenderPipelineFromDescriptorAsync throws VGPUError when async is unavailable and fallback is throw", async () => {
+  const gpu = createMockGPUDevice();
+  (gpu as { createRenderPipelineAsync?: GPUDevice["createRenderPipelineAsync"] }).createRenderPipelineAsync = undefined;
+  const device = new Device(gpu, null);
+  const shader = makeShader(device);
+  const descriptor: GPURenderPipelineDescriptor = {
+    layout: "auto",
+    vertex: { module: shader.gpu, entryPoint: "vs_main" },
+    fragment: { module: shader.gpu, entryPoint: "fs_main", targets: [{ format: "rgba8unorm" }] },
+  };
+
+  await expect(createRenderPipelineFromDescriptorAsync(device, descriptor, "throw")).rejects.toMatchObject({
+    name: "VGPUError",
+    code: "VGPU-RENDER-PIPELINE-ASYNC-UNAVAILABLE",
+    where: "createRenderPipelineAsync",
+  });
+  expect(getMockGPUDeviceInstrumentation(device.gpu).calls.createRenderPipeline).toBe(0);
   device.destroy();
 });
 

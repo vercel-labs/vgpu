@@ -9,6 +9,8 @@ directly to native WebGPU, `RenderPass.setPipeline()`, or render-bundle recordin
 ```ts
 createRenderPipeline(device: Device, opts: RenderPipelineOptions): GPURenderPipeline
 createRenderPipelineAsync(device: Device, opts: RenderPipelineOptions): Promise<GPURenderPipeline>
+createRenderPipelineFromDescriptor(device: Device, descriptor: GPURenderPipelineDescriptor): GPURenderPipeline
+createRenderPipelineFromDescriptorAsync(device: Device, descriptor: GPURenderPipelineDescriptor, fallback?: RenderPipelineAsyncFallback): Promise<GPURenderPipeline>
 ```
 
 `createRenderPipelineAsync` calls `GPUDevice.createRenderPipelineAsync()` when it
@@ -17,6 +19,24 @@ compatibility policy is `fallback: "sync"`, which emits a once-only diagnostic a
 calls `createRenderPipeline()` instead. Performance-critical warmup can pass
 `fallback: "throw"` to receive a structured `VGPUError` with code
 `VGPU-RENDER-PIPELINE-ASYNC-UNAVAILABLE` instead of accidentally blocking.
+
+## Raw descriptor entrypoints
+
+If you already have a hand-built `GPURenderPipelineDescriptor`, pass it straight
+through — do not reshape it into `RenderPipelineOptions` just to get the
+async→sync fallback:
+
+- `createRenderPipelineFromDescriptor(device, descriptor)` forwards the descriptor
+  to `GPUDevice.createRenderPipeline()` unchanged.
+- `createRenderPipelineFromDescriptorAsync(device, descriptor, fallback?)` forwards
+  it to `GPUDevice.createRenderPipelineAsync()` with the exact same compatibility
+  fallback as `createRenderPipelineAsync` (default `"sync"`, or `"throw"` for a
+  structured `VGPUError`).
+
+The descriptor is forwarded verbatim, so native WebGPU validation and lifecycle
+rules remain the caller's responsibility. These are explicit, separately named
+exports rather than an overload so a `RenderPipelineOptions` caller can never be
+misread as passing a raw descriptor.
 
 VGPU does not cache pipelines: one helper call equals one WebGPU device call.
 Keep pipeline caches explicit and owned by the caller.
@@ -84,6 +104,20 @@ const pipeline = createRenderPipeline(device, {
   vertex: { module: vertexModule, entryPoint: "vs", constants: { scale: 2 } },
   fragment: { module: fragmentModule, entryPoint: "fs", targets: [{ format }] },
 });
+```
+
+Existing raw `GPURenderPipelineDescriptor`, only wanting the async fallback:
+
+```ts
+const descriptor: GPURenderPipelineDescriptor = {
+  label: "hero.pipeline",
+  layout: pipelineLayout,
+  vertex: { module: shaderModule, entryPoint: "vs_main", buffers },
+  fragment: { module: shaderModule, entryPoint: "fs_main", targets: [{ format }] },
+  primitive: { topology: "triangle-list" },
+};
+
+const pipeline = await createRenderPipelineFromDescriptorAsync(device, descriptor, "throw");
 ```
 
 ## Raw escape hatch
