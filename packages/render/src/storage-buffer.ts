@@ -13,10 +13,11 @@ export interface StorageBufferOptions {
    */
   readonly access?: "read" | "read-write";
   /**
-   * Shader stages that access binding 0. Defaults depend on {@link StorageBufferOptions.access}:
-   * `"read"` → `VERTEX | FRAGMENT`, `"read-write"` → `FRAGMENT | COMPUTE`. A writable storage
-   * buffer is never visible to the vertex stage — WebGPU forbids it — so the `"read-write"`
-   * default omits `VERTEX`. Ignored when {@link StorageBufferOptions.bindGroupLayout} is provided.
+   * Shader stages that access binding 0. Defaults to `FRAGMENT | COMPUTE` for both access modes —
+   * no `VERTEX`. Read-write storage is forbidden in the vertex stage; read-only storage is allowed
+   * there but `maxStorageBuffersInVertexStage` is 0 on many adapters (software/CI Vulkan, some
+   * mobile GPUs), so vertex-stage storage is opt-in: pass `visibility` explicitly and raise that
+   * limit via `requiredLimits`. Ignored when {@link StorageBufferOptions.bindGroupLayout} is provided.
    */
   readonly visibility?: GPUShaderStageFlags;
   /**
@@ -26,9 +27,13 @@ export interface StorageBufferOptions {
   readonly bindGroupLayout?: GPUBindGroupLayout;
 }
 
-const readVisibility = ((globalThis.GPUShaderStage?.VERTEX ?? 1) | (globalThis.GPUShaderStage?.FRAGMENT ?? 2)) as GPUShaderStageFlags;
-// Writable storage is illegal in the vertex stage, so default to FRAGMENT | COMPUTE (not VERTEX).
-const readWriteVisibility = ((globalThis.GPUShaderStage?.FRAGMENT ?? 2) | (globalThis.GPUShaderStage?.COMPUTE ?? 4)) as GPUShaderStageFlags;
+// Both access modes default to FRAGMENT | COMPUTE (no VERTEX):
+// - read-write storage is ILLEGAL in the vertex stage (WebGPU forbids it).
+// - read-only storage IS legal in vertex, but maxStorageBuffersInVertexStage is 0 on many adapters
+//   (software/CI Vulkan, some mobile GPUs), so a VERTEX-visible default would silently invalidate
+//   the layout there (the draw no-ops). Vertex-stage read-only storage is opt-in: pass `visibility`
+//   explicitly AND raise the limit via requiredLimits when requesting the device.
+const defaultVisibility = ((globalThis.GPUShaderStage?.FRAGMENT ?? 2) | (globalThis.GPUShaderStage?.COMPUTE ?? 4)) as GPUShaderStageFlags;
 
 /**
  * A single stable storage buffer for one render (or compute) pass, rewritten as needed.
@@ -45,12 +50,13 @@ const readWriteVisibility = ((globalThis.GPUShaderStage?.FRAGMENT ?? 2) | (globa
  * dynamic-offset ring allocator for many small per-draw uniforms — there is no dynamic offset
  * and the bind group never moves.
  *
- * `access` controls both the layout entry type and the default visibility:
- * - `"read"` (default) → `var<storage, read>`, layout type `"read-only-storage"`,
- *   default visibility `VERTEX | FRAGMENT`.
- * - `"read-write"` → `var<storage, read_write>`, layout type `"storage"`, default
- *   visibility `FRAGMENT | COMPUTE`. WebGPU forbids writable storage buffers in the vertex
- *   stage, so `VERTEX` is intentionally excluded from the default; do not add it.
+ * `access` controls the layout entry type; both modes default to `FRAGMENT | COMPUTE` visibility:
+ * - `"read"` (default) → `var<storage, read>`, layout type `"read-only-storage"`.
+ * - `"read-write"` → `var<storage, read_write>`, layout type `"storage"`.
+ * Neither default includes `VERTEX`: read-write storage is forbidden in the vertex stage, and
+ * read-only storage — though legal there — needs `maxStorageBuffersInVertexStage > 0`, which is 0
+ * on many adapters (software/CI Vulkan, some mobile GPUs). For vertex-stage read-only storage, pass
+ * `visibility: VERTEX | …` explicitly and raise the limit via `requiredLimits`; do not rely on the default.
  *
  * @example
  * ```ts
@@ -75,7 +81,7 @@ export class StorageBuffer {
     this.size = opts.size;
     this.access = opts.access ?? "read";
     this.buffer = device.createBuffer({ size: opts.size, usage: ["storage", "copy_dst"], label: opts.label });
-    const visibility = opts.visibility ?? (this.access === "read-write" ? readWriteVisibility : readVisibility);
+    const visibility = opts.visibility ?? defaultVisibility;
     const entry = this.access === "read-write"
       ? bind.storage(0, visibility, { minBindingSize: opts.size })
       : bind.readonlyStorage(0, visibility, { minBindingSize: opts.size });

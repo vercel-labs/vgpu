@@ -27,17 +27,20 @@ dynamic-offset ring allocator: every slot binding is marked
 
 ## `access`: read vs read-write
 
-`access` controls both the bind group layout entry type and the default
-visibility:
+`access` controls the bind group layout entry type. Both modes default to
+`FRAGMENT | COMPUTE` visibility:
 
 - `"read"` (default) → WGSL `var<storage, read>`, layout type
-  `"read-only-storage"`, default visibility `VERTEX | FRAGMENT`.
-- `"read-write"` → WGSL `var<storage, read_write>`, layout type `"storage"`,
-  default visibility `FRAGMENT | COMPUTE`.
+  `"read-only-storage"`.
+- `"read-write"` → WGSL `var<storage, read_write>`, layout type `"storage"`.
 
-> WebGPU forbids writable storage buffers in the **vertex** stage. The
-> `"read-write"` default visibility omits `VERTEX` for this reason — do not add
-> it back, or pipeline creation will fail validation.
+> Neither default includes `VERTEX`. Read-write storage is forbidden in the
+> vertex stage outright. Read-only storage is _allowed_ in the vertex stage, but
+> `maxStorageBuffersInVertexStage` is **0** on many adapters (software/CI Vulkan,
+> some mobile GPUs) — a `VERTEX`-visible default silently invalidates the layout
+> there and the draw no-ops. For vertex-stage read-only storage, pass
+> `visibility: VERTEX | …` explicitly **and** raise `maxStorageBuffersInVertexStage`
+> via `requiredLimits` when requesting the device.
 
 ## Constructor
 
@@ -57,7 +60,7 @@ new StorageBuffer(device, {
 - `access`: `"read"` (default, read-only storage) or `"read-write"` (writable
   storage). Selects the layout entry type and the default visibility.
 - `visibility`: shader stages that access binding 0. Defaults to
-  `VERTEX | FRAGMENT` for `"read"` and `FRAGMENT | COMPUTE` for `"read-write"`.
+  `FRAGMENT | COMPUTE` for both access modes (no `VERTEX` — see the note above).
   Ignored when `bindGroupLayout` is provided.
 - `bindGroupLayout`: reuse a pipeline-owned bind group layout instead of creating
   one. Its binding 0 must be a storage buffer compatible with `size` and

@@ -7,6 +7,8 @@ const copyDstUsage = 8;
 // GPUShaderStage globals are absent under the mock device, so visibility falls back to
 // the helper's literals: VERTEX=1, FRAGMENT=2, COMPUTE=4.
 const vertexFlag = 1;
+const fragmentFlag = 2;
+const computeFlag = 4;
 
 function makeDevice(): Device {
   return new Device(createMockGPUDevice(), null);
@@ -77,7 +79,10 @@ test("read-write default visibility excludes the vertex stage", () => {
   device.destroy();
 });
 
-test("read default visibility includes the vertex stage", () => {
+test("read default visibility is FRAGMENT | COMPUTE and excludes the vertex stage", () => {
+  // Read-only storage IS legal in the vertex stage, but maxStorageBuffersInVertexStage is 0 on
+  // many adapters (software/CI Vulkan), so the default must not request VERTEX — that would
+  // silently invalidate the layout there. Vertex-stage storage is opt-in via explicit visibility.
   const device = makeDevice();
   const createBindGroupLayout = vi.spyOn(device.gpu, "createBindGroupLayout");
 
@@ -85,7 +90,20 @@ test("read default visibility includes the vertex stage", () => {
 
   const [{ entries }] = createBindGroupLayout.mock.calls[0];
   const [entry] = [...entries];
-  expect(entry.visibility & vertexFlag).toBe(vertexFlag);
+  expect(entry.visibility & vertexFlag).toBe(0);
+  expect(entry.visibility).toBe(fragmentFlag | computeFlag);
+  device.destroy();
+});
+
+test("explicit visibility overrides the read default (vertex-stage opt-in)", () => {
+  const device = makeDevice();
+  const createBindGroupLayout = vi.spyOn(device.gpu, "createBindGroupLayout");
+
+  new StorageBuffer(device, { size: 64, visibility: vertexFlag | fragmentFlag });
+
+  const [{ entries }] = createBindGroupLayout.mock.calls[0];
+  const [entry] = [...entries];
+  expect(entry.visibility).toBe(vertexFlag | fragmentFlag);
   device.destroy();
 });
 

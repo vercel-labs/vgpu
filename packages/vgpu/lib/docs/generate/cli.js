@@ -10,7 +10,8 @@ const root = resolve(here, "../../../../..");
 const allowlistPath = resolve(root, "docs/allowlist.txt");
 const topicsDir = resolve(root, "docs/topics");
 const manifestOut = resolve(root, "packages/vgpu/lib/generated/docs-manifest.generated.js");
-const skillDir = resolve(root, "docs/skill");
+// Root-level skills/ dir (skills-repo convention): <repo>/skills/vgpu.
+const skillDir = resolve(root, "skills/vgpu");
 
 // Guide docs (conceptual topics) are auto-discovered from docs/topics — no allowlist entry needed.
 const guides = existsSync(topicsDir)
