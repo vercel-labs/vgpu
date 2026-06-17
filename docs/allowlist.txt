@@ -92,3 +92,8 @@
 @vgpu/render/utils canvasResolution packages/render/src/utils/canvas-resolution.docs.md
 @vgpu/render/utils CanvasResolution packages/render/src/utils/canvas-resolution.docs.md
 @vgpu/render/passes renderTargetForCanvas packages/render/src/render-target/render-target-canvas.docs.md
+@vgpu/render/perf gpuFrameTime packages/render/src/perf/perf.docs.md
+@vgpu/render/perf GpuFrameTimeOptions packages/render/src/perf/perf.docs.md
+@vgpu/render/perf GpuFrameTimeResult packages/render/src/perf/perf.docs.md
+@vgpu/render/perf pixelDiff packages/render/src/perf/perf.docs.md
+@vgpu/render/perf PixelDiffResult packages/render/src/perf/perf.docs.md

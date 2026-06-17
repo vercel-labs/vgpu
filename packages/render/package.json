@@ -47,6 +47,10 @@
     "./passes": {
       "types": "./dist/passes/index.d.ts",
       "import": "./dist/passes/index.js"
+    },
+    "./perf": {
+      "types": "./dist/perf/index.d.ts",
+      "import": "./dist/perf/index.js"
     }
   },
   "files": [
@@ -71,6 +75,7 @@
     "./inspect": 4096,
     "./utils": 2048,
     "./edit": 25600,
-    "./passes": 3584
+    "./passes": 3584,
+    "./perf": 3072
   }
 }
