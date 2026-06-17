@@ -52,6 +52,8 @@
 @vgpu/render RenderPassDynamicOffsets packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
 @vgpu/render DepthStencilAttachment packages/render/src/RenderPass.docs.md
+@vgpu/render StorageBuffer packages/render/src/storage-buffer.docs.md
+@vgpu/render StorageBufferOptions packages/render/src/storage-buffer.docs.md
 @vgpu/render Uniform packages/render/src/uniform.docs.md
 @vgpu/render UniformOptions packages/render/src/uniform.docs.md
 @vgpu/render UniformPool packages/render/src/uniform-pool.docs.md

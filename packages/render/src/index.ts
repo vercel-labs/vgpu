@@ -3,6 +3,7 @@ export { createRenderBundle, RenderBundleRecorder } from "./render-bundle.ts";
 export { createRenderPipeline, createRenderPipelineAsync, createRenderPipelineFromDescriptor, createRenderPipelineFromDescriptorAsync } from "./pipeline.ts";
 export { RenderPass } from "./render-pass.ts";
 export { RapidRenderer } from "./rapid-renderer.ts";
+export { StorageBuffer } from "./storage-buffer.ts";
 export { Uniform } from "./uniform.ts";
 export { UniformPool } from "./uniform-pool.ts";
 export type { FrameOptions, FrameRenderPassCallback } from "./frame.ts";
@@ -16,6 +17,7 @@ export type {
   RenderPipelineVertexOptions,
 } from "./pipeline.ts";
 export type { DrawSpec } from "./rapid-renderer.ts";
+export type { StorageBufferOptions } from "./storage-buffer.ts";
 export type { UniformOptions } from "./uniform.ts";
 export type { UniformLayout, UniformPoolOptions, UniformSlot } from "./uniform-pool-types.ts";
 export type {

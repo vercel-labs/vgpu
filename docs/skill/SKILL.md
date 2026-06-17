@@ -29,12 +29,12 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-103 symbols across 12 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
+105 symbols across 12 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
 
 - `@vgpu/adapter-mock` — createMockAdapter
 - `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
 - `@vgpu/core` — App, AppCreateOptions, AppInstance, bind, BindVisibility, Buffer, BufferOptions, BufferUsageName, BufferWriteData, createBindGroup, createBindGroupLayout, CreateBindGroupLayoutOptions, CreateBindGroupOptions, CreateDeviceOptions, createMockGPUDevice, createPipelineLayout, CreatePipelineLayoutOptions, createSampler, Device, DeviceLike, Queue, Shader, ShaderInput, Texture, TextureOptions, TextureUsageName, ValidationError, VGPUAdapter, VGPUError
-- `@vgpu/render` — beginFrame, Camera, ColorAttachment, createRenderBundle, createRenderPipeline, createRenderPipelineFromDescriptor, createRenderPipelineFromDescriptorAsync, degToRad, DepthStencilAttachment, DrawSpec, Frame, FrameOptions, FrameRenderPassCallback, Mat4, Material, MaterialUniformValue, Mesh, orthographicCamera, perspectiveCamera, RapidRenderer, RenderBundleOptions, RenderBundleRecorder, RenderPass, RenderPassDrawOptions, RenderPassDynamicOffsets, RenderPassOptions, RenderPipelineOptions, srgb, Uniform, UniformLayout, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, Vec3
+- `@vgpu/render` — beginFrame, Camera, ColorAttachment, createRenderBundle, createRenderPipeline, createRenderPipelineFromDescriptor, createRenderPipelineFromDescriptorAsync, degToRad, DepthStencilAttachment, DrawSpec, Frame, FrameOptions, FrameRenderPassCallback, Mat4, Material, MaterialUniformValue, Mesh, orthographicCamera, perspectiveCamera, RapidRenderer, RenderBundleOptions, RenderBundleRecorder, RenderPass, RenderPassDrawOptions, RenderPassDynamicOffsets, RenderPassOptions, RenderPipelineOptions, srgb, StorageBuffer, StorageBufferOptions, Uniform, UniformLayout, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, Vec3
 - `@vgpu/render/inspect` — InspectMaterial, InspectMaterialUniformParams, meshToWireframe, normalDebugMaterial, NormalDebugMaterialSpec, wireframeMaterial, WireframeMaterialSpec, WireframeMesh
 - `@vgpu/render/passes` — renderTargetForCanvas
 - `@vgpu/render/perf` — gpuFrameTime, GpuFrameTimeOptions, GpuFrameTimeResult, pixelDiff, PixelDiffResult
