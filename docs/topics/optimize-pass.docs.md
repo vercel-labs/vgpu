@@ -1,0 +1,40 @@
+# The optimize pass
+
+A procedure to run **once the look is locked**, to clean up and speed up shader/render code without
+changing what's on screen. Don't run it mid-iteration (you'll pivot). It is the disciplined form of
+Tiers 1–2 in the [performance model](./performance-model.docs.md).
+
+## Procedure
+
+1. **Lock + baseline.** Confirm the visual is final. Capture a reference render and a baseline
+   timing — see [measuring](./measuring.docs.md):
+   ```ts
+   const before = await target.read();                 // reference pixels
+   const baseline = await gpuFrameTime(device, encodeFrame);
+   ```
+2. **Walk the [catalog](./performance-patterns.docs.md) biggest-first.** Bake → hoist-to-uniform →
+   loop-invariant → dead/masked → early-out → branch → cheaper-ops. The early patterns dwarf the
+   late ones; don't start with `pow`→`sqrt`.
+3. **One change at a time.** Apply a single optimization.
+4. **Measure it.** Re-render and diff; re-time:
+   ```ts
+   const after = await target.read();
+   const { maxByte } = await pixelDiff(before, after);  // 0 = bit-exact; ≤~2 = imperceptible
+   const now = await gpuFrameTime(device, encodeFrame);
+   ```
+   Keep it only if `maxByte` is within tolerance **and** the timing improved. Otherwise revert.
+5. **Mirror to twins.** If the shader has a fallback twin (e.g. a WebGL/GLSL port, or a second
+   uniform packer), apply the identical change there and re-check parity. Diverging twins render
+   differently on different devices — a silent bug.
+6. **Repeat** from step 3 until the remaining patterns are low-value or high-risk for this shader.
+
+## Rules
+
+- **Measure, don't assume.** Most of these changes are numerically-equivalent-not-identical. "Looks
+  fine" is not a measurement; a `pixelDiff` is.
+- **Render targets vary.** If the shader runs at multiple resolutions, DPRs, or themes, measure each
+  — an opt can be exact at one size and shift at another.
+- **Keep GUI/debug toggles.** Gate default-off work behind a branch (pattern 6); don't delete the
+  toggle.
+- **Stop at diminishing returns.** Log what you deliberately left (e.g. "constant-folds the driver
+  already does", "visible at glow edges") so the next pass doesn't re-litigate it.

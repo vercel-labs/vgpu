@@ -1,0 +1,56 @@
+# Measuring
+
+How to verify a shader optimization before keeping it: confirm it's still correct (`pixelDiff`) and
+actually faster (`gpuFrameTime`). Both ship in `@vgpu/render/perf`. **Tooling only — never call them
+on a live animation-frame path.**
+
+## pixelDiff — did the output change?
+
+```ts
+import { pixelDiff } from "@vgpu/render/perf";
+
+const before = await target.read();   // baseline (Texture.read() → rgba8 bytes)
+applyOptimization();
+const after = await target.read();
+const { maxByte, changedFraction } = await pixelDiff(before, after);
+```
+
+Accepts two `Texture`s (reads them back) or two `Uint8Array`s. Interpret `maxByte` (max per-channel
+delta, 0–255):
+
+| maxByte | meaning |
+| --- | --- |
+| 0 | bit-exact — output is identical |
+| 1–2 | imperceptible — driver-rounding floor (typical for reordered float math) |
+| more | real visual change — only keep behind a quality tier, or revert |
+
+A tiny `changedFraction` with `maxByte` ≤ 2 is the signature of a safe optimization. A *large*
+`changedFraction` means a systematic shift (likely a bug), even if `maxByte` is small.
+
+## gpuFrameTime — is it faster?
+
+```ts
+import { gpuFrameTime } from "@vgpu/render/perf";
+
+const { medianMs, method } = await gpuFrameTime(device, (frame, i) => {
+  // record the SAME passes you run in production, onto the provided Frame
+  frame.renderPass(scenePass, (pass) => drawScene(pass, i));
+  frame.renderPass(floorPass, (pass) => drawFloor(pass, i));
+});
+```
+
+Returns `{ medianMs, meanMs, minMs, p95Ms, samples, method }`. It owns warmup + the loop + timing;
+you only encode. `method` is `"timestamp-query"` (GPU-only, when the device feature exists) or
+`"wall-clock"` (`queue.flush`, the robust fallback — what headless browsers get). The `i` argument
+lets you advance animation so the bench exercises per-frame work.
+
+Compare medians before vs after. For absolute numbers prefer a real-GPU device (`@vgpu/adapter-node`
+Dawn, or a browser); CPU/software backends only give relative signal.
+
+## Discipline
+
+- Measure **every** non-bit-exact change. Many "obvious" optimizations are imperceptible-but-not-free
+  — and a few are silent correctness bugs that only `pixelDiff` catches.
+- Measure each render configuration the shader actually ships in (resolution, DPR, theme).
+- A baseline captured from the current committed code is the reference; diff against it, not against
+  intuition.

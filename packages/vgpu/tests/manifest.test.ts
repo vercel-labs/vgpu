@@ -29,3 +29,27 @@ test("fails on missing allowlisted docs", () => {
     read: () => "",
   })).toThrow("Missing docs file: packages/core/src/Missing.docs.md");
 });
+
+test("includes guide docs as a first-class kind", () => {
+  const manifest = createManifest("@vgpu/core Buffer packages/core/src/Buffer.docs.md", {
+    exists: () => true,
+    read: (path) => `content for ${path}`,
+    guides: ["docs/topics/performance-model.docs.md"],
+  });
+
+  expect(manifest.records.find((record) => record.kind === "guide")).toEqual({
+    package: "guides",
+    symbol: "performance-model",
+    repoPath: "docs/topics/performance-model.docs.md",
+    virtualPath: "/guides/performance-model.docs.md",
+    kind: "guide",
+    content: "content for docs/topics/performance-model.docs.md",
+  });
+  expect(manifest.records.find((record) => record.symbol === "Buffer")?.kind).toBe("api");
+});
+
+test("fails on a missing guide doc", () => {
+  expect(() => createManifest("", { exists: () => false, read: () => "", guides: ["docs/topics/nope.docs.md"] })).toThrow(
+    "Missing docs file: docs/topics/nope.docs.md",
+  );
+});

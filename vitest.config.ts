@@ -21,6 +21,7 @@ export default defineConfig({
       { find: "@vgpu/render/passes", replacement: resolve("packages/render/src/passes/index.ts") },
       { find: "@vgpu/render/utils", replacement: resolve("packages/render/src/utils/index.ts") },
       { find: "@vgpu/render/edit", replacement: resolve("packages/render/src/edit/index.ts") },
+      { find: "@vgpu/render/perf", replacement: resolve("packages/render/src/perf/index.ts") },
       { find: "@vgpu/render", replacement: resolve("packages/render/src/index.ts") },
     ],
   },

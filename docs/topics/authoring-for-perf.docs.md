@@ -1,0 +1,58 @@
+# Authoring for performance
+
+Tier-0 habits: how to write a shader during iteration so the later [optimize pass](./optimize-pass.docs.md)
+is mechanical instead of archaeological. These cost nothing up front and are painful to retrofit —
+unlike Tier 1–2 work, do them from v1. They do **not** slow iteration; they're about *structure and
+legibility*, not premature micro-optimization.
+
+## Use the idiomatic primitives
+
+They make change-frequency explicit and keep the hot path clean — which is exactly what makes
+optimization easy later.
+
+- **Encode with `Frame`** (`beginFrame` → `frame.renderPass(...)` → `frame.submit()`), not a
+  hand-rolled encoder. Each pass is then a named, separable unit.
+- **Pick the uniform path by uniform count.** For a single stable uniform buffer you rewrite per
+  frame and change-gate yourself (the typical full-screen-pass case), use the lightweight `Uniform`
+  helper (`new Uniform(device, { size }).write(bytes)`), or a plain `Float32Array` + `buffer.write`
+  when you hand-gate uploads. `UniformPool` is only for **many** per-draw uniforms — it's a
+  dynamic-offset ring allocator that re-uploads every frame, which defeats change-gating. Don't reach
+  for it for one stable buffer. Either way, pushing a value to a uniform later (pattern 2) stays a
+  one-liner, not a packing rewrite.
+- **Resolve/compile shaders and build pipelines at setup**, never per frame (`resolveShader` is for
+  setup/build/test; swap pipelines at frame boundaries).
+- **Build pipelines via `createRenderPipeline` / `createRenderPipelineAsync`** for the async→sync
+  fallback. Already holding a raw `GPURenderPipelineDescriptor`? Use
+  `createRenderPipelineFromDescriptor` / `createRenderPipelineFromDescriptorAsync` to forward it
+  unchanged (the async variant keeps the same async→sync fallback) — don't reshape it into
+  `RenderPipelineOptions`.
+- **Read back with `Texture.read()`** for baselines and golden comparisons.
+
+## Keep bakeable work in its own pass
+
+If part of the scene is time-invariant (geometry, an SDF, a static mask), author it as its **own
+named `renderPass`** from the start. Baking it later (pattern 1, the biggest win) becomes "stop
+re-encoding this pass," not "untangle it from the per-frame pass." Don't interleave time-invariant
+and animated work in one pass.
+
+## Make change-frequency legible
+
+The expensive part of optimizing is discovering *what changes when*. Leave that signal in the code:
+
+- Comment non-obvious values with their frequency: `// uniform-invariant`, `// per-frame`,
+  `// per-pixel`. The optimize pass then just hoists what's marked.
+- Name CPU-side helpers by what they depend on, so a `uniform-only` helper is obviously a hoist
+  candidate.
+- Keep a fragment's per-pixel inputs (`@builtin(position)`, varyings) visibly separate from its
+  uniform inputs.
+
+## Don't pre-pessimize
+
+Avoiding *obvious* waste isn't premature optimization:
+
+- Don't compute a uniform-only value per pixel even in v1 (pattern 2) — it's never the right call.
+- Don't `select()` over an expensive branch you mean to skip (pattern 6).
+- Don't recompute a loop invariant inside the loop (pattern 3).
+
+Everything beyond that — baking, restructuring, cheaper-op swaps — waits for the
+[optimize pass](./optimize-pass.docs.md).

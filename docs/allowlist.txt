@@ -37,6 +37,8 @@
 @vgpu/wgsl WGSLSource packages/wgsl/src/ResolvedShader.docs.md
 @vgpu/render RenderPipelineOptions packages/render/src/createRenderPipeline.docs.md
 @vgpu/render createRenderPipeline packages/render/src/createRenderPipeline.docs.md
+@vgpu/render createRenderPipelineFromDescriptor packages/render/src/createRenderPipeline.docs.md
+@vgpu/render createRenderPipelineFromDescriptorAsync packages/render/src/createRenderPipeline.docs.md
 @vgpu/render Frame packages/render/src/Frame.docs.md
 @vgpu/render beginFrame packages/render/src/Frame.docs.md
 @vgpu/render FrameOptions packages/render/src/Frame.docs.md
@@ -50,6 +52,10 @@
 @vgpu/render RenderPassDynamicOffsets packages/render/src/RenderPass.docs.md
 @vgpu/render ColorAttachment packages/render/src/RenderPass.docs.md
 @vgpu/render DepthStencilAttachment packages/render/src/RenderPass.docs.md
+@vgpu/render StorageBuffer packages/render/src/storage-buffer.docs.md
+@vgpu/render StorageBufferOptions packages/render/src/storage-buffer.docs.md
+@vgpu/render Uniform packages/render/src/uniform.docs.md
+@vgpu/render UniformOptions packages/render/src/uniform.docs.md
 @vgpu/render UniformPool packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformPoolOptions packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformLayout packages/render/src/uniform-pool.docs.md
@@ -92,3 +98,8 @@
 @vgpu/render/utils canvasResolution packages/render/src/utils/canvas-resolution.docs.md
 @vgpu/render/utils CanvasResolution packages/render/src/utils/canvas-resolution.docs.md
 @vgpu/render/passes renderTargetForCanvas packages/render/src/render-target/render-target-canvas.docs.md
+@vgpu/render/perf gpuFrameTime packages/render/src/perf/perf.docs.md
+@vgpu/render/perf GpuFrameTimeOptions packages/render/src/perf/perf.docs.md
+@vgpu/render/perf GpuFrameTimeResult packages/render/src/perf/perf.docs.md
+@vgpu/render/perf pixelDiff packages/render/src/perf/perf.docs.md
+@vgpu/render/perf PixelDiffResult packages/render/src/perf/perf.docs.md

@@ -13,16 +13,45 @@ export function virtualPathFor(entry) {
   return `/${entry.package}/${entry.repoPath.split("/").at(-1)}`;
 }
 
+// Guide docs are conceptual topics (not tied to an exported symbol). They live under the synthetic
+// "guides" package; the symbol is the file slug so `vgpu docs cat <slug>` resolves.
+export function guideEntryFor(repoPath) {
+  const file = repoPath.split("/").at(-1);
+  return { package: "guides", symbol: file.replace(/\.docs\.md$/u, ""), repoPath };
+}
+
+export function guideVirtualPathFor(repoPath) {
+  return `/guides/${repoPath.split("/").at(-1)}`;
+}
+
+/**
+ * Builds the docs manifest from the allowlist (per-symbol API docs) and an optional list of guide
+ * doc paths (conceptual topics under docs/topics). Every record carries a `kind` ("api" | "guide").
+ */
 export function createManifest(allowlistText, options = {}) {
   const read = options.read ?? ((path) => readFileSync(path, "utf8"));
   const exists = options.exists ?? (() => true);
-  const records = parseAllowlist(allowlistText).map((entry) => {
-    if (!exists(entry.repoPath)) throw new Error(`Missing docs file: ${entry.repoPath}`);
-    const content = read(entry.repoPath).replace(/\r\n/gu, "\n");
-    return { ...entry, virtualPath: virtualPathFor(entry), content };
-  });
-  records.sort(compareRecord);
-  return { schemaVersion: MANIFEST_VERSION, generatedFrom: "docs/allowlist.txt", records };
+  const load = (repoPath) => {
+    if (!exists(repoPath)) throw new Error(`Missing docs file: ${repoPath}`);
+    return read(repoPath).replace(/\r\n/gu, "\n");
+  };
+
+  const apiRecords = parseAllowlist(allowlistText).map((entry) => ({
+    ...entry,
+    kind: "api",
+    virtualPath: virtualPathFor(entry),
+    content: load(entry.repoPath),
+  }));
+
+  const guideRecords = (options.guides ?? []).map((repoPath) => ({
+    ...guideEntryFor(repoPath),
+    kind: "guide",
+    virtualPath: guideVirtualPathFor(repoPath),
+    content: load(repoPath),
+  }));
+
+  const records = [...apiRecords, ...guideRecords].sort(compareRecord);
+  return { schemaVersion: MANIFEST_VERSION, generatedFrom: "docs/allowlist.txt + docs/topics", records };
 }
 
 export function serializeManifest(manifest) {
