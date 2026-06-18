@@ -22,8 +22,10 @@ optimization easy later.
 - **Resolve/compile shaders and build pipelines at setup**, never per frame (`resolveShader` is for
   setup/build/test; swap pipelines at frame boundaries).
 - **Build pipelines via `createRenderPipeline` / `createRenderPipelineAsync`** for the async→sync
-  fallback. Both also accept a raw `GPURenderPipelineDescriptor`, so if you already have one, pass it
-  through — don't reshape it into `RenderPipelineOptions` just to get the fallback.
+  fallback. Already holding a raw `GPURenderPipelineDescriptor`? Use
+  `createRenderPipelineFromDescriptor` / `createRenderPipelineFromDescriptorAsync` to forward it
+  unchanged (the async variant keeps the same async→sync fallback) — don't reshape it into
+  `RenderPipelineOptions`.
 - **Read back with `Texture.read()`** for baselines and golden comparisons.
 
 ## Keep bakeable work in its own pass

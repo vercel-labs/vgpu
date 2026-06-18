@@ -218,7 +218,7 @@ test("createRenderPipelineFromDescriptorAsync throws VGPUError when async is una
   await expect(createRenderPipelineFromDescriptorAsync(device, descriptor, "throw")).rejects.toMatchObject({
     name: "VGPUError",
     code: "VGPU-RENDER-PIPELINE-ASYNC-UNAVAILABLE",
-    where: "createRenderPipelineAsync",
+    where: "createRenderPipelineFromDescriptorAsync",
   });
   expect(getMockGPUDeviceInstrumentation(device.gpu).calls.createRenderPipeline).toBe(0);
   device.destroy();
