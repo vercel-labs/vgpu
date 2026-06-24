@@ -72,6 +72,10 @@ export class RenderPass {
   }
 
   setBindGroup(index: number, group: GPUBindGroup | null, dynamicOffsets?: RenderPassDynamicOffsets): void {
+    if (dynamicOffsets === undefined) {
+      this.gpu.setBindGroup(index, group);
+      return;
+    }
     this.gpu.setBindGroup(index, group, dynamicOffsets);
   }
 
