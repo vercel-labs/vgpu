@@ -23,6 +23,18 @@ test("sets bind group at index", async () => {
   device.destroy();
 });
 
+test("omits dynamic offsets when none are provided", async () => {
+  const { device, passEncoder } = await createRenderPassFixture();
+  const bindGroup = {} as GPUBindGroup;
+  const pass = new RenderPass(device, { colorAttachments: [colorAttachment()] });
+
+  pass.setBindGroup(0, bindGroup);
+
+  expect(passEncoder.setBindGroup).toHaveBeenCalledWith(0, bindGroup);
+  expect(passEncoder.setBindGroup).not.toHaveBeenCalledWith(0, bindGroup, undefined);
+  device.destroy();
+});
+
 test("sets vertex buffer at slot", async () => {
   const { device, passEncoder } = await createRenderPassFixture();
   const vertexBuffer = {} as GPUBuffer;
