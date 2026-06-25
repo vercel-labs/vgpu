@@ -22,6 +22,7 @@ npx vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performanc
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.
 
 - **authoring-for-perf** — Tier-0 habits: how to write a shader during iteration so the later optimize pass is mechanical instead of archaeological.  `references/guides/authoring-for-perf.docs.md`
+- **browser-testing** — Reliable Playwright WebGPU runs in VGPU rely on the SwiftShader Vulkan stack inside a virtual X11 server.  `references/guides/browser-testing.docs.md`
 - **measuring** — How to verify a shader optimization before keeping it: confirm it's still correct (pixelDiff) and actually faster (gpuFrameTime).  `references/guides/measuring.docs.md`
 - **optimize-pass** — A procedure to run once the look is locked, to clean up and speed up shader/render code without changing what's on screen.  `references/guides/optimize-pass.docs.md`
 - **performance-model** — The mental model for making vgpu render code fast.  `references/guides/performance-model.docs.md`
