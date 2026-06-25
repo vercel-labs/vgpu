@@ -10,6 +10,8 @@ Commands:
   symbols                    List indexed symbols
   help                       Show this help
 
+Start here: vgpu docs cat getting-started.md
+
 Examples:
   vgpu docs ls
   vgpu docs ls /@vgpu/core

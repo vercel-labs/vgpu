@@ -860,6 +860,14 @@ export const docsManifest = {
     },
     {
       "package": "guides",
+      "symbol": "getting-started",
+      "repoPath": "docs/topics/getting-started.docs.md",
+      "kind": "guide",
+      "virtualPath": "/guides/getting-started.docs.md",
+      "content": "# Getting started\n\nUse this router when you arrive through `npx vgpu docs` and need the right document, not a full\ntutorial. The canonical guide symbol is `getting-started`.\n\n## First commands\n\n```sh\nvgpu docs ls\nvgpu docs ls /guides\nvgpu docs cat getting-started.md\nvgpu docs find render\nvgpu docs grep -i readback\n```\n\n## Goal → command\n\n| Goal | Open this first |\n| --- | --- |\n| Learn the docs CLI | `vgpu docs help` |\n| See packages and guide files | `vgpu docs ls` then `vgpu docs ls /guides` |\n| Build an app and core resources | `vgpu docs cat App`, then `vgpu docs cat Buffer` or `vgpu docs cat Texture` |\n| Bind primitives into layouts/groups | `vgpu docs cat bind` |\n| Render frames and passes | `vgpu docs cat Frame`, then `vgpu docs cat RenderPass` |\n| Render to a canvas target | `vgpu docs cat renderTargetForCanvas` |\n| Compile plain WGSL strings | `vgpu docs cat compile` |\n| Resolve WGSL imports/modules | `vgpu docs cat resolveShader` |\n| Use bundler WGSL imports | `vgpu docs cat wgslVitePlugin` or `vgpu docs cat wgslWebpackLoader` |\n| Understand performance priorities | `vgpu docs cat performance-model` |\n| Apply optimization patterns | `vgpu docs cat authoring-for-perf`, then `vgpu docs cat optimize-pass` |\n| Measure GPU time or pixel changes | `vgpu docs cat measuring` |\n| Run browser WebGPU tests | `vgpu docs cat browser-testing` |\n| Use native Node adapter/readback | `vgpu docs cat createNodeDevice` |\n\n## If unsure\n\nStart broad, then narrow by symbol or content:\n\n```sh\nvgpu docs find shader\nvgpu docs find adapter\nvgpu docs grep -i \"readback\"\nvgpu docs grep -i --package @vgpu/wgsl \"import\"\n```\n\nUse `find` when you know a symbol/path fragment. Use `grep` when you know a phrase from an error,\nAPI option, or concept. After choosing a result, open exactly one doc with `vgpu docs cat <symbol>`\nor inspect its virtual filename with `vgpu docs path <symbol>`.\n"
+    },
+    {
+      "package": "guides",
       "symbol": "measuring",
       "repoPath": "docs/topics/measuring.docs.md",
       "kind": "guide",
