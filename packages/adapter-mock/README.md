@@ -1,6 +1,6 @@
 # @vgpu/adapter-mock
 
-> 0.0.6 — early preview
+> 0.0.7 — early preview
 
 `@vgpu/adapter-mock` provides a `VGPUAdapter` implementation for tests, snapshots, and development workflows where you want the vgpu API surface without a real GPU backend. It pairs well with `App.create()` from `@vgpu/core` and supports the same high-level device, buffer, and texture flows used in fast unit tests across the repository.
 

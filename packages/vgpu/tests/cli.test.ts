@@ -10,7 +10,7 @@ function success(args) {
 
 test("preserves root help, version, and placeholders", () => {
   expect(success(["--help"])).toContain("vgpu docs --help");
-  expect(success(["--version"])).toMatch(/^0\.0\.6\n$/u);
+  expect(success(["--version"])).toMatch(/^0\.0\.7\n$/u);
   expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
   expect(runCli(["wgsl"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
 });
