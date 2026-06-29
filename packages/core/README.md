@@ -1,8 +1,8 @@
 # @vgpu/core
 
-> 0.0.6 — early preview
+> 0.0.7 — early preview
 
-`@vgpu/core` is the runtime foundation for vgpu. It gives you a small wrapper layer around WebGPU devices, queues, buffers, textures, and shader modules, plus an `App.create()` entry point that asks an adapter for a device and returns a compact app instance. In 0.0.6 the goal is portability and a minimal public surface, not a fully opinionated engine.
+`@vgpu/core` is the runtime foundation for vgpu. It gives you a small wrapper layer around WebGPU devices, queues, buffers, textures, and shader modules, plus an `App.create()` entry point that asks an adapter for a device and returns a compact app instance. In 0.0.7 the goal is portability and a minimal public surface, not a fully opinionated engine.
 
 ## Install
 
