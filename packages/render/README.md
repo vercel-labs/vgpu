@@ -1,6 +1,6 @@
 # @vgpu/render
 
-> 0.0.7 — early preview
+> 0.0.8 — early preview
 
 `@vgpu/render` is the small rendering layer on top of `@vgpu/core`. It focuses on explicit WebGPU-style control: create pipelines, encode standalone render passes, or build one frame command encoder with multiple user-ordered passes.
 
