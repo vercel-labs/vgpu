@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { runCli } from "../bin/vgpu.js";
+
+const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 function success(args) {
   const result = runCli(args);
@@ -10,7 +13,7 @@ function success(args) {
 
 test("preserves root help, version, and placeholders", () => {
   expect(success(["--help"])).toContain("vgpu docs --help");
-  expect(success(["--version"])).toMatch(/^0\.0\.7\n$/u);
+  expect(success(["--version"])).toBe(`${packageVersion}\n`);
   expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
   expect(runCli(["wgsl"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
 });
