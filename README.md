@@ -1,8 +1,8 @@
 # vgpu
 
-> ⚠️ **0.0.7 — early preview. API will shift before 0.1.0.**
+> ⚠️ **0.1.0 — early preview. API remains unstable before 1.0.**
 
-Agentic-first WebGPU library. Run the same code on Node (Dawn), the web (browser WebGPU), and serverless platforms with linux-arm64 prebuilts. vgpu keeps the surface area small in 0.0.7: core device and resource primitives, a thin render layer, WGSL tooling, and adapters for real Node runtimes or deterministic tests.
+Agentic-first WebGPU library. Run the same code on Node (Dawn), the web (browser WebGPU), and serverless platforms with linux-arm64 prebuilts. vgpu keeps the surface area small in 0.1.0: core device and resource primitives, a thin render layer, WGSL tooling, and adapters for real Node runtimes or deterministic tests.
 
 ## Packages
 
@@ -81,12 +81,12 @@ device.destroy();
 
 ## Capability matrix
 
-- ✅ **In 0.0.7**
+- ✅ **In 0.1.0**
   - device / buffer / texture / shader primitives
   - render pipeline + render pass
   - WGSL compile + loaders for webpack and vite
   - node and mock adapters
-- 🚧 **Coming in 0.1.0**
+- 🚧 **Coming next**
   - MRT (multiple render targets)
   - texture sampling helpers
   - post-process passes
@@ -102,7 +102,7 @@ Releases are triggered by **GitHub Releases** — no bot commits or version-pack
 
 ### Steps
 
-1. **Bump versions** across all 5 packages:
+1. **Bump versions** across all published packages:
    ```bash
    pnpm bump:patch    # 0.0.1 → 0.0.2
    # or
@@ -120,7 +120,7 @@ Releases are triggered by **GitHub Releases** — no bot commits or version-pack
    - Install dependencies
    - Build all packages
    - Run fast tests
-   - Publish all 5 packages to npm via Trusted Publishing with provenance attestation
+   - Publish all packages to npm via Trusted Publishing with provenance attestation
 
 The first auto-published version after the manual bootstrap will show a **Provenance** badge on each package's npm page proving it was built and signed by GitHub Actions.
 

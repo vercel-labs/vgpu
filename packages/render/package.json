@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/render",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "description": "Render pipeline + render pass abstractions for vgpu.",
   "keywords": [
     "webgpu",
