@@ -16,14 +16,35 @@ test("preserves root help, version, and placeholders", () => {
 });
 
 test("supports docs help and path listing", () => {
-  expect(success(["docs", "help"])).toContain("Usage: vgpu docs <command>");
+  const help = success(["docs", "help"]);
+  expect(help).toContain("Usage: vgpu docs <command>");
+  expect(help).toContain("Start here: vgpu docs cat getting-started.md");
   expect(success(["docs", "ls"])).toContain("/@vgpu/core");
   expect(success(["docs", "ls", "/@vgpu/core"])).toContain("Buffer.docs.md");
+  expect(success(["docs", "ls", "/guides"])).toContain("getting-started.docs.md");
 });
 
 test("cats docs by path and unique symbol", () => {
   expect(success(["docs", "cat", "/@vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
   expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
+});
+
+test("cats getting-started guide from forgiving guide names", () => {
+  const acceptedForms = [
+    "getting-started",
+    "getting-started.md",
+    "getting-started.docs.md",
+    "/guides/getting-started.docs.md",
+    "/guides/getting-started.md",
+    "guides/getting-started.docs.md",
+    "guides/getting-started.md",
+  ];
+
+  for (const form of acceptedForms) {
+    const output = success(["docs", "cat", form]);
+    expect(output).toContain("# Getting started");
+    expect(output).toContain("vgpu docs cat browser-testing");
+  }
 });
 
 test("greps content with case and package options", () => {
@@ -37,6 +58,17 @@ test("finds symbols and resolves paths", () => {
   expect(success(["docs", "find", "Buffer"])).toContain("Buffer\t@vgpu/core");
   expect(success(["docs", "path", "Buffer"])).toBe("/@vgpu/core/Buffer.docs.md\n");
   expect(success(["docs", "path", "/@vgpu/core/Buffer.docs.md"])).toBe("/@vgpu/core/Buffer.docs.md\n");
+  expect(success(["docs", "path", "getting-started"])).toBe("/guides/getting-started.docs.md\n");
+  expect(success(["docs", "path", "getting-started.md"])).toBe("/guides/getting-started.docs.md\n");
+  expect(success(["docs", "path", "/guides/performance-model.docs.md"])).toBe("/guides/performance-model.docs.md\n");
+});
+
+test("keeps existing guide and API docs forms working", () => {
+  expect(success(["docs", "cat", "browser-testing"])).toContain("# Browser testing with Playwright WebGPU");
+  expect(success(["docs", "cat", "performance-model"])).toContain("# Performance model");
+  expect(success(["docs", "cat", "/guides/performance-model.docs.md"])).toContain("# Performance model");
+  expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
+  expect(success(["docs", "cat", "/@vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
 });
 
 test("returns nonzero for missing and unknown docs commands", () => {

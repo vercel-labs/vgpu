@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { expect, test } from "vitest";
+import { buildIndex } from "../lib/docs/index.js";
+import { resolveDocsTarget } from "../lib/docs/commands/resolve.js";
 import { createManifest, parseAllowlist, serializeManifest, virtualPathFor } from "../lib/docs/generate/manifest.js";
+import { docsManifest } from "../lib/generated/docs-manifest.generated.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
+const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
 
 test("parses allowlist entries and maps virtual paths", () => {
   const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/Buffer.docs.md\n");
@@ -52,4 +56,28 @@ test("fails on a missing guide doc", () => {
   expect(() => createManifest("", { exists: () => false, read: () => "", guides: ["docs/topics/nope.docs.md"] })).toThrow(
     "Missing docs file: docs/topics/nope.docs.md",
   );
+});
+
+test("manifest includes getting-started as a guide", () => {
+  expect(docsManifest.records.find((record) => record.symbol === "getting-started")).toMatchObject({
+    package: "guides",
+    symbol: "getting-started",
+    repoPath: "docs/topics/getting-started.docs.md",
+    virtualPath: "/guides/getting-started.docs.md",
+    kind: "guide",
+  });
+});
+
+test("getting-started cat references resolve against the docs index", () => {
+  const index = buildIndex(docsManifest);
+  const refs = [...gettingStartedSource.matchAll(/vgpu docs cat\s+([^\s`|]+)/gu)]
+    .map((match) => match[1])
+    .filter((token) => !token.startsWith("<"));
+
+  expect(refs.length).toBeGreaterThan(0);
+  for (const ref of refs) {
+    const { resolved } = resolveDocsTarget(index, ref);
+    expect(resolved, ref).toBeDefined();
+    expect(Array.isArray(resolved), ref).toBe(false);
+  }
 });
