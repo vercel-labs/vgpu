@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/wgsl",
-  "version": "0.1.0",
+  "version": "0.0.8",
   "description": "WGSL shader compilation, runtime resolution, and webpack/vite loaders for vgpu.",
   "keywords": [
     "webgpu",
