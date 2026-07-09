@@ -68,6 +68,75 @@ test("creates explicit pipeline layout and sampler descriptors", () => {
   expect(calls.sampler).toEqual({ label: "linear", magFilter: "linear", minFilter: "linear" });
 });
 
+test("expands createSampler filter and wrap sugar before calling WebGPU", () => {
+  const { gpu, calls } = createCaptureDevice();
+
+  createSampler(gpu, { label: "sugar", filter: "linear", wrap: "mirror" });
+
+  expect(calls.sampler).toEqual({
+    label: "sugar",
+    magFilter: "linear",
+    minFilter: "linear",
+    addressModeU: "mirror-repeat",
+    addressModeV: "mirror-repeat",
+    addressModeW: "mirror-repeat",
+  });
+});
+
+test("lets raw sampler fields override createSampler sugar per key", () => {
+  const { gpu, calls } = createCaptureDevice();
+
+  createSampler(gpu, {
+    filter: "linear",
+    wrap: "clamp",
+    magFilter: "nearest",
+    addressModeV: "repeat",
+  });
+
+  expect(calls.sampler).toEqual({
+    magFilter: "nearest",
+    minFilter: "linear",
+    addressModeU: "clamp-to-edge",
+    addressModeV: "repeat",
+    addressModeW: "clamp-to-edge",
+  });
+});
+
+test("does not set mipmapFilter or compare when expanding createSampler sugar", () => {
+  const { gpu, calls } = createCaptureDevice();
+
+  createSampler(gpu, { filter: "linear", wrap: "repeat", compare: "less-equal" });
+
+  expect(calls.sampler).toEqual({
+    magFilter: "linear",
+    minFilter: "linear",
+    addressModeU: "repeat",
+    addressModeV: "repeat",
+    addressModeW: "repeat",
+    compare: "less-equal",
+  });
+  expect(calls.sampler).not.toHaveProperty("mipmapFilter");
+});
+
+test("throws when createSampler filter sugar leaves anisotropic filtering invalid", () => {
+  const { gpu } = createCaptureDevice();
+
+  expect(() => createSampler(gpu, { filter: "linear", maxAnisotropy: 16 })).toThrow(ValidationError);
+});
+
+test("allows explicit trilinear anisotropic createSampler descriptors with filter sugar", () => {
+  const { gpu, calls } = createCaptureDevice();
+
+  createSampler(gpu, { filter: "linear", mipmapFilter: "linear", maxAnisotropy: 16 });
+
+  expect(calls.sampler).toEqual({
+    magFilter: "linear",
+    minFilter: "linear",
+    mipmapFilter: "linear",
+    maxAnisotropy: 16,
+  });
+});
+
 test("creates bind groups only when an explicit layout is provided", () => {
   const { gpu, calls } = createCaptureDevice();
   const layout = {} as GPUBindGroupLayout;

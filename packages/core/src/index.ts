@@ -17,5 +17,12 @@ export type {
   TextureUsageName,
   CreateDeviceOptions,
 } from "./types.ts";
-export type { BindVisibility, CreateBindGroupLayoutOptions, CreateBindGroupOptions, CreatePipelineLayoutOptions, DeviceLike } from "./bind.ts";
+export type {
+  BindVisibility,
+  CreateBindGroupLayoutOptions,
+  CreateBindGroupOptions,
+  CreatePipelineLayoutOptions,
+  DeviceLike,
+  SamplerDescriptorWithSugar,
+} from "./bind.ts";
 export type { ShaderInput } from "./shader.ts";

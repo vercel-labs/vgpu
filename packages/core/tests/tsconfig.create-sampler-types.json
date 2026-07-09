@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "baseUrl": "../../..",
+    "paths": {
+      "@vgpu/wgsl": ["packages/wgsl/src/index.ts"]
+    }
+  },
+  "include": [
+    "../src/**/*.ts",
+    "../../wgsl/src/**/*.ts",
+    "create-sampler-types.ts"
+  ]
+}
