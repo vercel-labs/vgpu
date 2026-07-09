@@ -9,14 +9,21 @@ import { Readback } from "./readback.ts";
 import { ValidationError, type VGPUError } from "./errors.ts";
 import type { BufferOptions, TextureOptions } from "./types.ts";
 
+export interface DeviceOptions {
+  /** True when the adapter requested WebGPU featureLevel "compatibility". */
+  readonly isCompatibilityMode?: boolean;
+}
+
 export class Device {
   readonly queue: Queue;
   /** @internal — use Buffer.read() and Texture.read() instead */
   readonly readback: Readback;
+  readonly isCompatibilityMode: boolean;
   private readonly scopes: VGPUError[][] = [];
   private destroyed = false;
 
-  constructor(readonly gpu: GPUDevice, readonly adapterInfo: GPUAdapterInfo | null = null) {
+  constructor(readonly gpu: GPUDevice, readonly adapterInfo: GPUAdapterInfo | null = null, opts: DeviceOptions = {}) {
+    this.isCompatibilityMode = opts.isCompatibilityMode ?? false;
     this.queue = new Queue(gpu.queue);
     this.readback = new Readback(gpu);
   }

@@ -13,6 +13,13 @@ Use `destroy()` or `dispose()` for teardown.
 WebGPU device capabilities. They do not negotiate, normalize, or polyfill support;
 use them to inspect limits and gate optional paths without reaching through `.gpu`.
 
+`device.isCompatibilityMode` is `true` when the adapter requested WebGPU
+`featureLevel: "compatibility"`; otherwise it defaults to `false`. Use it to
+choose explicit compatibility-sensitive resource and shader variants together,
+such as passing the same boolean to `cubeView(texture, { compat })` and your WGSL
+binding selector. `cubeView` does not auto-detect compatibility mode because the
+view dimension and shader binding type must stay in lockstep.
+
 Native WebGPU:
 
 ```ts

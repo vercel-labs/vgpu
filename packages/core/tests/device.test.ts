@@ -33,3 +33,10 @@ test("mock GPU device exposes stable limits and setlike features", () => {
   expect(device.features.size).toBe(0);
   expect(device.features.has("timestamp-query")).toBe(false);
 });
+
+test("Device.isCompatibilityMode defaults false and can be set by adapters", () => {
+  const gpu = createMockGPUDevice();
+
+  expect(new Device(gpu).isCompatibilityMode).toBe(false);
+  expect(new Device(gpu, null, { isCompatibilityMode: true }).isCompatibilityMode).toBe(true);
+});

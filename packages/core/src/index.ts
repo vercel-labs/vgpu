@@ -1,10 +1,13 @@
 export { App } from "./app.ts";
 export { Buffer } from "./buffer.ts";
 export { Device } from "./device.ts";
+export type { DeviceOptions } from "./device.ts";
 export { Queue } from "./queue.ts";
 export { Shader } from "./shader.ts";
 export { Texture } from "./texture.ts";
 export { pingPong } from "./ping-pong.ts";
+export { cubeView, layerView } from "./texture-view.ts";
+export type { CubeViewOptions, LayerViewOptions } from "./texture-view.ts";
 export { VGPUError, ValidationError } from "./errors.ts";
 export { bind, createBindGroup, createBindGroupLayout, createPipelineLayout, createSampler } from "./bind.ts";
 export { createMockGPUDevice, getMockGPUDeviceInstrumentation } from "./mockGpu.ts";
