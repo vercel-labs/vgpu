@@ -100,7 +100,7 @@ This is useful for bloom extraction. `softKnee` is clamped to at least `0.000001
 - Vector transfer helpers call the scalar helper per RGB channel. This keeps behavior identical for scalar and vector paths and avoids hidden approximation tables.
 - `luminance` is a single dot product; `applyExposure` is a scalar `exp2` and vector multiply.
 - `tonemapAces` is component-wise arithmetic plus a clamp; `tonemapReinhard` adds one luminance dot product.
-- `luminanceThreshold` uses one luminance dot product and one `smoothstep`.
+- `luminanceThreshold` uses one luminance dot product and a direct Hermite evaluation.
 
 ## Deferred helpers
 
