@@ -1,7 +1,7 @@
 import type { Device } from "@vgpu/core";
 import { invalidUsage, shaderVisibility } from "../uniform-pool-internals.ts";
 import type { Material, MaterialGpu } from "./material.ts";
-import { alignUniforms, isWgslUniformType, wgslType, type UniformField, type WgslUniformType } from "./wgsl-alignment.ts";
+import { alignUniforms, isWgslUniformType, wgslType, writeUniformField, type UniformField, type WgslUniformType } from "./wgsl-alignment.ts";
 import { wgslDeclarations } from "./material-bindings.ts";
 import { materialTextureState } from "./material-textures.ts";
 import type { MaterialSamplerSpec, MaterialTextureSpec, WriteTextureValues } from "./material-textures-schema.ts";
@@ -137,13 +137,7 @@ function writeUniforms(device: Device, buffer: GPUBuffer, fields: readonly Unifo
 }
 
 function writeField(view: DataView, field: UniformField, value: UniformValue): void {
-  const data = typeof value === "number" ? [value] : Array.from(value);
-  const setter = field.type === "u32" || field.type.endsWith("u") ? "setUint32" : field.type === "i32" || field.type.endsWith("i") ? "setInt32" : "setFloat32";
-  const needed = field.type === "mat3x3f" ? 9 : field.type === "mat4x4f" ? 16 : field.size / 4;
-  if (data.length < needed) throw invalidUsage("material.writeUniforms", `Uniform '${field.name}' needs ${needed} value(s).`);
-  if (field.type === "mat3x3f") { for (let column = 0; column < 3; column++) for (let row = 0; row < 3; row++) set(view, setter, field.offset + column * 16 + row * 4, data[column * 3 + row]!); return; }
-  for (let index = 0; index < needed; index++) set(view, setter, field.offset + index * 4, data[index]!);
+  writeUniformField(view, field, value, { where: "material.writeUniforms" });
 }
 
-function set(view: DataView, setter: "setFloat32" | "setUint32" | "setInt32", offset: number, value: number): void { view[setter](offset, value, true); }
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : String(error); }

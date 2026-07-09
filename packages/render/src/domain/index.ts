@@ -24,6 +24,7 @@ export { srgb } from "./srgb.ts";
 export type { Camera, Mat4, Vec3 } from "./camera.ts";
 export type { Material, MaterialUniformValue } from "./material.ts";
 export type { MaterialSamplerSpec, MaterialSpec, MaterialTextureSpec, SamplerSpec, TextureKind, TextureSpec, TextureValue, VertexLayoutKind, WgslUniformType, WriteTextureValues } from "./material-factory.ts";
+export type { UniformLayoutInfo } from "./wgsl-alignment.ts";
 export type { Sampler } from "./material-sampler.ts";
 export type { BoxSpec } from "./mesh-box.ts";
 export type { CapsuleSpec } from "./mesh-capsule.ts";

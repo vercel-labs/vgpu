@@ -165,8 +165,8 @@ function unwrapBindingResource(value: unknown): GPUBindingResource {
   if (value instanceof Buffer) return { buffer: value.gpu };
   if (value instanceof Texture) return value.createView();
   if (isVGPUTextureLike(value)) return value.createView();
-  if (isGPUBufferBinding(value)) return value as GPUBufferBinding;
   if (isVGPUBufferLike(value)) return { buffer: value.gpu };
+  if (isGPUBufferBinding(value)) return value as GPUBufferBinding;
   if (isRawGPUBuffer(value)) return { buffer: value as GPUBuffer };
   return value as GPUBindingResource;
 }
