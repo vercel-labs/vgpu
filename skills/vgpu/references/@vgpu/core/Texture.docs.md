@@ -22,18 +22,63 @@ deterministic snapshots unless a test specifically covers sRGB behavior.
 Invariants: `read()` only supports the documented readback formats above and
 throws structured `VGPU-CORE-UNSUPPORTED-FORMAT` for unsupported formats.
 `createView(...)` forwards to the raw texture. `destroy()` is idempotent; after
-destroy, `read()` throws because the texture is no longer alive. Prefer
-`texture.destroy()` over `texture.gpu.destroy()` for VGPU-owned textures; `.gpu`
-remains available as the raw WebGPU escape hatch for native interop.
+destroy, `read()`, `view`, and `resize(...)` throw because the texture is no
+longer alive. Prefer `texture.destroy()` over `texture.gpu.destroy()` for
+VGPU-owned textures; `.gpu` remains available as the raw WebGPU escape hatch for
+native interop.
+
+## Default view
+
+`texture.view` lazily calls `texture.createView()` with no descriptor and caches
+that default `GPUTextureView`. Use it for color, depth, and storage textures when
+the default WebGPU view is the view you would otherwise create repeatedly.
+
+The cached view is invalidated by `texture.resize(...)` and `texture.destroy()`.
+Descriptor-specific views still use `texture.createView(descriptor)` and are not
+cached.
+
+## Resize
+
+`texture.resize(size): boolean` reallocates the underlying `GPUTexture` at a new
+extent while keeping the `Texture` wrapper stable.
+
+Signature:
+
+```ts
+texture.resize(size: readonly [number, number] | readonly [number, number, number]): boolean;
+```
+
+Contract:
+
+- Returns `false` and does nothing when the extent is unchanged.
+- Returns `true` when a new `GPUTexture` is allocated; contents are not
+  preserved.
+- Preserves descriptor fields other than extent: `format`, `usage`,
+  `dimension`, `mipLevelCount`, `sampleCount`, `viewFormats`, and `label`.
+- A 2-tuple `[width, height]` preserves the existing `depthOrArrayLayers`; a
+  3-tuple `[width, height, depthOrArrayLayers]` overrides it.
+- Destroys the old `GPUTexture` and updates `texture.gpu` to a new object;
+  consumers can use `texture.gpu` identity as a cache key/version signal.
+- Invalidates the cached `texture.view`, so the next read returns a view of the
+  new GPU texture.
+- Throws `ValidationError` if the texture is destroyed or wraps an externally
+  owned GPU texture such as a canvas swapchain texture from `renderTargetForCanvas`.
 
 Example:
 
 ```ts
 const target = device.createTexture({
-  size: [256, 256],
+  size: [1, 1],
   format: "rgba8unorm",
-  usage: ["render_attachment", "copy_src"],
+  usage: ["render_attachment", "texture_binding", "copy_src"],
 });
+
+if (target.resize([canvas.width, canvas.height])) {
+  // Contents were lost; re-seed or rebuild derived objects if needed.
+}
+
+pass({ colorAttachments: [{ view: target.view, loadOp: "clear", storeOp: "store" }] });
+const bindGroup = cache.get(target.gpu) ?? makeBindGroup(target.view);
 const pixels = await target.read();
 ```
 
