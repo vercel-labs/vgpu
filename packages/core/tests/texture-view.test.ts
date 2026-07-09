@@ -6,7 +6,7 @@ function createRecordingDevice(): { device: Device; viewDescriptors: GPUTextureV
   const device = new Device({
     createTexture(desc: GPUTextureDescriptor): GPUTexture {
       const size = textureSize(desc.size);
-      return createRecordingTexture(viewDescriptors, size.depthOrArrayLayers);
+      return createRecordingTexture(viewDescriptors, size.depthOrArrayLayers, desc.dimension ?? "2d");
     },
     queue: { submit() {}, onSubmittedWorkDone: async () => undefined },
     destroy() {},
@@ -14,9 +14,14 @@ function createRecordingDevice(): { device: Device; viewDescriptors: GPUTextureV
   return { device, viewDescriptors };
 }
 
-function createRecordingTexture(viewDescriptors: GPUTextureViewDescriptor[], depthOrArrayLayers: number): GPUTexture {
+function createRecordingTexture(
+  viewDescriptors: GPUTextureViewDescriptor[],
+  depthOrArrayLayers: number,
+  dimension: GPUTextureDimension = "2d",
+): GPUTexture {
   return {
     depthOrArrayLayers,
+    dimension,
     createView(desc?: GPUTextureViewDescriptor): GPUTextureView {
       viewDescriptors.push(desc ?? {});
       return { descriptor: desc } as unknown as GPUTextureView;
@@ -56,6 +61,27 @@ test("cubeView throws ValidationError unless the texture has exactly six array l
   expect(() => cubeView(texture, { compat: false })).toThrow("exactly 6 array layers");
 });
 
+test("cubeView throws ValidationError for non-2d textures even when depth is six", () => {
+  const { device } = createRecordingDevice();
+  const texture3d = device.createTexture({
+    size: [16, 16, 6],
+    dimension: "3d",
+    format: "rgba8unorm",
+    usage: ["texture_binding"],
+  });
+  const texture1d = device.createTexture({
+    size: [16, 1, 1],
+    dimension: "1d",
+    format: "rgba8unorm",
+    usage: ["texture_binding"],
+  });
+
+  expect(() => cubeView(texture3d, { compat: false })).toThrowError(ValidationError);
+  expect(() => cubeView(texture3d, { compat: false })).toThrow('dimension "2d"');
+  expect(() => cubeView(texture1d, { compat: false })).toThrowError(ValidationError);
+  expect(() => cubeView(texture1d, { compat: false })).toThrow('dimension "2d"');
+});
+
 test("cubeView throws ValidationError unless compat is explicit", () => {
   const { device } = createRecordingDevice();
   const texture = device.createTexture({ size: [16, 16, 6], format: "rgba8unorm", usage: ["texture_binding"] });
@@ -91,4 +117,37 @@ test("layerView creates a single-layer 2d view and pins mipLevel when provided",
       aspect: "all",
     },
   ]);
+});
+
+test("layerView throws ValidationError for non-2d textures", () => {
+  const { device } = createRecordingDevice();
+  const texture3d = device.createTexture({
+    size: [16, 16, 6],
+    dimension: "3d",
+    format: "rgba8unorm",
+    usage: ["render_attachment"],
+  });
+  const texture1d = device.createTexture({
+    size: [16, 1, 1],
+    dimension: "1d",
+    format: "rgba8unorm",
+    usage: ["render_attachment"],
+  });
+
+  expect(() => layerView(texture3d, 0)).toThrowError(ValidationError);
+  expect(() => layerView(texture3d, 0)).toThrow('dimension "2d"');
+  expect(() => layerView(texture1d, 0)).toThrowError(ValidationError);
+  expect(() => layerView(texture1d, 0)).toThrow('dimension "2d"');
+});
+
+test("view helpers validate raw GPUTexture dimensions", () => {
+  const viewDescriptors: GPUTextureViewDescriptor[] = [];
+  const texture3d = createRecordingTexture(viewDescriptors, 6, "3d");
+  const texture1d = createRecordingTexture(viewDescriptors, 1, "1d");
+
+  expect(() => cubeView(texture3d, { compat: false })).toThrowError(ValidationError);
+  expect(() => cubeView(texture3d, { compat: false })).toThrow('dimension "2d"');
+  expect(() => layerView(texture1d, 0)).toThrowError(ValidationError);
+  expect(() => layerView(texture1d, 0)).toThrow('dimension "2d"');
+  expect(viewDescriptors).toEqual([]);
 });

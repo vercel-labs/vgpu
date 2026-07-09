@@ -29,6 +29,8 @@ export function cubeView(texture: TextureLike, opts: CubeViewOptions): GPUTextur
     });
   }
 
+  assertTextureDimension2D(texture, "cubeView");
+
   const layers = arrayLayerCount(texture);
   if (layers !== 6) {
     throw new ValidationError({
@@ -47,6 +49,8 @@ export function cubeView(texture: TextureLike, opts: CubeViewOptions): GPUTextur
 }
 
 export function layerView(texture: TextureLike, layer: number, opts: LayerViewOptions = {}): GPUTextureView {
+  assertTextureDimension2D(texture, "layerView");
+
   return gpuTexture(texture).createView({
     ...(opts.label === undefined ? {} : { label: opts.label }),
     dimension: "2d",
@@ -62,7 +66,23 @@ function gpuTexture(texture: TextureLike): GPUTexture {
   return texture instanceof Texture ? texture.gpu : texture;
 }
 
+function assertTextureDimension2D(texture: TextureLike, where: "cubeView" | "layerView"): void {
+  const dimension = textureDimension(texture);
+  if (dimension !== "2d") {
+    throw new ValidationError({
+      code: "VGPU-CORE-INVALID-USAGE",
+      message: `${where} requires a texture with dimension "2d"; received ${dimension}.`,
+      where,
+    });
+  }
+}
+
 function arrayLayerCount(texture: TextureLike): number {
   if (texture instanceof Texture) return texture.size[2] ?? 1;
   return texture.depthOrArrayLayers;
+}
+
+function textureDimension(texture: TextureLike): GPUTextureDimension {
+  if (texture instanceof Texture) return texture.dimension;
+  return texture.dimension;
 }
