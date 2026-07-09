@@ -87,10 +87,12 @@ color / (1.0 + luminance(color))
 `luminanceThreshold(color, threshold, softKnee)` applies a soft bright-pass gate driven by `luminance(color)`:
 
 ```text
-color * smoothstep(threshold, threshold + max(softKnee, 0.000001), luminance(color))
+let knee = max(softKnee, 0.000001)
+let t = clamp((luminance(color) - threshold) / knee, 0.0, 1.0)
+color * (t * t * (3.0 - 2.0 * t))
 ```
 
-This is useful for bloom extraction. `softKnee` is clamped to at least `0.000001` before calling `smoothstep`, avoiding WGSL undefined behavior when the smoothstep edges would otherwise be equal or inverted. A `softKnee` of `0.0` therefore behaves like a hard edge at `threshold`; positive values spread the transition over that luminance interval. The helper does not clamp the input color.
+This is useful for bloom extraction. `softKnee` is clamped to at least `0.000001`, then the smoothstep Hermite curve is evaluated directly instead of calling WGSL `smoothstep`. That avoids undefined behavior from equal or inverted smoothstep edges even for large HDR thresholds where `threshold + epsilon` would round back to `threshold`. A `softKnee` of `0.0` therefore behaves like a hard edge at `threshold`; positive values spread the transition over that luminance interval. The helper does not clamp the input color.
 
 ## Performance notes
 

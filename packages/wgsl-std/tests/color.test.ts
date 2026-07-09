@@ -92,6 +92,8 @@ describe("CPU reference color catalog", () => {
     expectVec3Close(luminanceThresholdRef([0.18, 0.5, 1], 0.25, 0.5), [0.07285049149705795, 0.20236247638071653, 0.40472495276143305], "soft threshold");
     expectVec3Close(luminanceThresholdRef([0.1, 0.1, 0.1], 0.25, 0.08), [0, 0, 0], "below threshold");
     expectVec3Close(luminanceThresholdRef([0.3, 0.3, 0.3], 0.25, 0), [0.3, 0.3, 0.3], "zero knee above threshold");
+    expectVec3Close(luminanceThresholdRef([40, 40, 40], 32, 0), [40, 40, 40], "large zero knee above threshold");
+    expectVec3Close(luminanceThresholdRef([16, 16, 16], 32, 0), [0, 0, 0], "large zero knee below threshold");
   });
 });
 
@@ -213,14 +215,11 @@ function tonemapReinhardRef(value: readonly [number, number, number]): [number, 
 
 function luminanceThresholdRef(value: readonly [number, number, number], threshold: number, softKnee: number): [number, number, number] {
   const knee = Math.max(softKnee, 0.000001);
-  const weight = smoothstepRef(threshold, threshold + knee, luminanceRef(value));
+  const t = Math.min(Math.max((luminanceRef(value) - threshold) / knee, 0), 1);
+  const weight = t * t * (3 - 2 * t);
   return [value[0] * weight, value[1] * weight, value[2] * weight];
 }
 
-function smoothstepRef(edge0: number, edge1: number, value: number): number {
-  const t = Math.min(Math.max((value - edge0) / (edge1 - edge0), 0), 1);
-  return t * t * (3 - 2 * t);
-}
 
 function expectVec3Close(actual: readonly [number, number, number], expected: readonly [number, number, number], name: string): void {
   expect.soft(actual[0], `${name}.x`).toBeCloseTo(expected[0], 6);

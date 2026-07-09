@@ -51,5 +51,7 @@ export fn tonemapReinhard(value: vec3f) -> vec3f {
 
 export fn luminanceThreshold(value: vec3f, threshold: f32, softKnee: f32) -> vec3f {
   let knee = max(softKnee, 0.000001);
-  return value * smoothstep(threshold, threshold + knee, luminance(value));
+  let t = clamp((luminance(value) - threshold) / knee, 0.0, 1.0);
+  let weight = t * t * (3.0 - 2.0 * t);
+  return value * weight;
 }
