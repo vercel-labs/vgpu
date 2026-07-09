@@ -80,12 +80,26 @@ test("renderTargetForCanvas .color texture cannot be resized", () => {
   expect(() => target.color.resize([32, 18])).toThrow("externally owned");
 });
 
-function gpuTexture(label: string): GPUTexture {
+test("renderTargetForCanvas .color destroy does not destroy the canvas texture", () => {
+  let destroyCalls = 0;
+  const target = renderTargetForCanvas(canvasContext([gpuTexture("canvas", () => { destroyCalls += 1; })]), { label: "screen" });
+  const color = target.color;
+
+  expect(color.view).toMatchObject({ label: "canvas.view" });
+  color.destroy();
+
+  expect(destroyCalls).toBe(0);
+  expect(() => color.view).toThrowError(ValidationError);
+  expect(() => color.view).toThrow("Texture is destroyed");
+  expect(() => color.resize([32, 18])).toThrow("Texture is destroyed");
+});
+
+function gpuTexture(label: string, onDestroy: () => void = () => {}): GPUTexture {
   return {
     label,
     sampleCount: 1,
     createView: () => ({ label: `${label}.view` }) as GPUTextureView,
-    destroy() {},
+    destroy: onDestroy,
   } as GPUTexture;
 }
 

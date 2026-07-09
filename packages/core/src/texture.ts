@@ -82,6 +82,7 @@ export class Texture {
     if (this.destroyed) return;
     this.destroyed = true;
     this.defaultView = null;
+    if (this.ownership === "external") return;
     if (!isMockGPUTexture(this.gpu)) this.gpu.destroy();
   }
 
