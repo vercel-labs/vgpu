@@ -1,0 +1,42 @@
+{
+  "name": "docs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^14.2.23",
+    "@vgpu/adapter-mock": "workspace:*",
+    "@vgpu/adapter-node": "workspace:*",
+    "@vgpu/core": "workspace:*",
+    "@vgpu/render": "workspace:*",
+    "@vgpu/wgsl": "workspace:*",
+    "@vgpu/wgsl-std": "workspace:*",
+    "geist": "^1.5.1",
+    "lucide-react": "^0.468.0",
+    "next": "^14.2.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.3",
+    "remark-gfm": "^4.0.0",
+    "shiki": "^3.21.0",
+    "vgpu": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.10.7",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@webgpu/types": "^0.1.69",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}

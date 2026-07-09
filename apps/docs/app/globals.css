@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Geist Design System Colors */
+    --background: #000000;
+    --background-secondary: #0a0a0a;   /* gray-1 */
+    --background-tertiary: #111111;    /* gray-2 */
+    
+    --foreground: #eeeeee;             /* gray-12 */
+    --foreground-secondary: #b4b4b4;   /* gray-11 */
+    --foreground-muted: #606060;       /* gray-9 */
+    
+    --border: #222222;                 /* gray-4 */
+    --border-hover: #2a2a2a;           /* gray-5 */
+    
+    --accent-blue: #0070f3;            /* blue-9 */
+    --accent-blue-hover: #3b9eff;      /* blue-10 */
+    --accent-green: #46a758;           /* green-9 */
+    --accent-amber: #ffc53d;           /* amber-9 */
+    --accent-red: #e5484d;             /* red-9 */
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+  }
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(0, 112, 243, 0.3);
+}
+
+/* Shiki code block styling */
+.shiki-code-block pre {
+  margin: 0;
+  padding: 1rem;
+  background: #0d1117 !important;
+  overflow-x: auto;
+}
+
+.shiki-code-block code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.shiki-code-block.line-numbers code {
+  counter-reset: line;
+}
+
+.shiki-code-block.line-numbers code .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: #484f58;
+}
+
+/* Code block styling from rehype-pretty-code */
+pre {
+  @apply text-[13px] leading-[1.7];
+}
+
+pre > code {
+  display: grid;
+  counter-reset: line;
+}
+
+pre > code > [data-line] {
+  @apply px-4;
+}
+
+pre [data-line-numbers] > [data-line]::before {
+  counter-increment: line;
+  content: counter(line);
+  @apply inline-block w-6 mr-4 text-right text-neutral-600;
+}
+
+/* Line highlighting */
+pre [data-line].highlighted {
+  @apply bg-blue-500/10 border-l-2 border-blue-500;
+}
+
+/* Word highlighting */
+pre [data-highlighted-chars] {
+  @apply bg-blue-500/20 rounded px-1 py-0.5;
+}
+
+/* Code block themes - integrate with rehype-pretty-code */
+[data-rehype-pretty-code-figure] {
+  @apply my-4;
+}
+
+[data-rehype-pretty-code-figure] pre {
+  @apply rounded-lg border border-neutral-800 bg-[#0d1117] p-0 overflow-x-auto;
+}
+
+[data-rehype-pretty-code-figure] pre > code {
+  @apply py-4;
+}
+
+[data-rehype-pretty-code-figure] [data-line] {
+  @apply px-4;
+}
+
+/* Title for code blocks */
+[data-rehype-pretty-code-title] {
+  @apply text-sm text-neutral-400 font-mono px-4 py-2.5 bg-[#161b22] border border-neutral-800 border-b-0 rounded-t-lg;
+}
+
+[data-rehype-pretty-code-title] + pre {
+  @apply rounded-t-none;
+}
+
+/* Caption below code blocks */
+[data-rehype-pretty-code-caption] {
+  @apply text-xs text-neutral-500 mt-2;
+}
+
+/* Focus styles */
+:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-black;
+}
+
+/* Transitions */
+* {
+  @apply transition-colors duration-150;
+}
+
+/* Content spacing */
+.prose-content > * + * {
+  @apply mt-4;
+}
+
+.prose-content > h2 + * {
+  @apply mt-4;
+}
+
+.prose-content > h3 + * {
+  @apply mt-3;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-200;
+}
+
+.card-hover:hover {
+  @apply border-neutral-700 bg-neutral-900/50;
+}
+
+/* Link animations */
+.link-animated {
+  @apply relative;
+}
+
+.link-animated::after {
+  content: '';
+  @apply absolute left-0 bottom-0 w-0 h-px bg-current transition-all duration-200;
+}
+
+.link-animated:hover::after {
+  @apply w-full;
+}
