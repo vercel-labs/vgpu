@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+import { App, ValidationError } from "@vgpu/core";
 import { renderTarget, renderTargetMulti } from "@vgpu/render/passes";
 
 async function device() {
@@ -37,6 +37,23 @@ test("renderTargetMulti propagates per-attachment labels and clearColor", async 
   expect(target.colors[1]?.label).toBe("normal");
   expect(target.gpu.colorAttachments[0]?.clearValue).toEqual({ r: 1, g: 0, b: 0, a: 1 });
   expect(target.gpu.colorAttachments[1]?.clearValue).toEqual({ r: 0, g: 1, b: 0, a: 1 });
+  d.destroy();
+});
+
+
+test("renderTargetMulti-owned color and depth textures cannot be resized", async () => {
+  const d = await device();
+  const target = await renderTargetMulti({
+    device: d,
+    size: [8, 4],
+    colors: [{ format: "rgba8unorm" }, { format: "rgba16float" }],
+    depth: true,
+  });
+
+  expect(() => target.colors[0]?.resize([16, 8])).toThrowError(ValidationError);
+  expect(() => target.colors[0]?.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.colors[1]?.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.depth?.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
   d.destroy();
 });
 

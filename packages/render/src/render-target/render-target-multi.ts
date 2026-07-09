@@ -1,5 +1,6 @@
 import { ValidationError, type Texture } from "@vgpu/core";
 import type { ColorAttachmentSpec, RenderTargetGpu, RenderTargetMultiSpec, RenderTargetN } from "./types.ts";
+import { markTextureCapturedByRenderTarget } from "./texture-resize-lock.ts";
 
 const DEFAULT_CLEAR_COLOR = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 const COLOR_RENDERABLE_FORMATS = new Set<GPUTextureFormat>([
@@ -30,6 +31,9 @@ export async function renderTargetMulti<const Specs extends readonly ColorAttach
     sampleCount: 1,
     label: childLabel(spec.label, "depth"),
   }) : undefined;
+  for (const color of colors) markTextureCapturedByRenderTarget(color);
+  markTextureCapturedByRenderTarget(depth);
+
   const colorAttachments = Object.freeze(colors.map((color, index) => ({
     view: color.createView(),
     loadOp: "clear" as const,

@@ -5,6 +5,7 @@ import type { Device } from "./device.ts";
 import type { TextureOptions } from "./types.ts";
 
 const textureBrand = Symbol.for("vgpu/Texture");
+const textureResizeLock = Symbol.for("vgpu/Texture/resizeLock");
 
 type TextureOwnership = "owned" | "external";
 
@@ -13,6 +14,7 @@ export class Texture {
   private currentGpu: GPUTexture;
   private currentOptions: TextureOptions;
   private defaultView: GPUTextureView | null = null;
+  private resizeLock: string | undefined;
   private destroyed = false;
 
   constructor(
@@ -23,6 +25,9 @@ export class Texture {
   ) {
     this.currentGpu = gpu;
     this.currentOptions = options;
+    Object.defineProperty(this, textureResizeLock, {
+      value: (reason: string) => { this.resizeLock = reason; },
+    });
   }
 
   get gpu(): GPUTexture { return this.currentGpu; }
@@ -52,6 +57,13 @@ export class Texture {
       throw new ValidationError({
         code: "VGPU-CORE-EXTERNAL-TEXTURE",
         message: "Texture wraps an externally owned GPUTexture and cannot be resized.",
+        where: "Texture.resize",
+      });
+    }
+    if (this.resizeLock) {
+      throw new ValidationError({
+        code: "VGPU-CORE-TEXTURE-RESIZE-LOCKED",
+        message: this.resizeLock,
         where: "Texture.resize",
       });
     }

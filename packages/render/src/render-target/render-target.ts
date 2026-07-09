@@ -1,6 +1,7 @@
 import { ValidationError } from "@vgpu/core";
 import type { Texture } from "@vgpu/core";
 import { renderTargetMulti } from "./render-target-multi.ts";
+import { markTextureCapturedByRenderTarget } from "./texture-resize-lock.ts";
 import type { ColorAttachmentSpec, RenderTarget, RenderTargetGpu, RenderTargetMultiSpec, RenderTargetN, RenderTargetSpec } from "./types.ts";
 
 const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
@@ -51,6 +52,10 @@ export async function renderTarget(spec: RenderTargetSpec | RenderTargetMultiSpe
     sampleCount,
     label: childLabel(spec.label, "depth"),
   }) : undefined;
+  markTextureCapturedByRenderTarget(color);
+  markTextureCapturedByRenderTarget(resolve);
+  markTextureCapturedByRenderTarget(depth);
+
   const sampleableColor = resolve ?? color;
   const colorAttachment: GPURenderPassColorAttachment = {
     view: color.createView(),

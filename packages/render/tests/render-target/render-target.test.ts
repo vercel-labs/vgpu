@@ -55,6 +55,28 @@ test("renderTarget label \"scene\" propagates to attachment textures", async () 
   device.destroy();
 });
 
+
+test("renderTarget-owned color and depth textures cannot be resized", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const target = await renderTarget({ device, size: [8, 4], depth: true });
+
+  expect(() => target.color.resize([16, 8])).toThrowError(ValidationError);
+  expect(() => target.color.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.colors[0].resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.depth?.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  device.destroy();
+});
+
+test("renderTarget-owned MSAA resolve texture cannot be resized", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const target = await renderTarget({ device, size: [8, 4], msaa: true });
+
+  expect(target.color.gpu).toBe(target.gpu.resolveTexture);
+  expect(() => target.color.resize([16, 8])).toThrowError(ValidationError);
+  expect(() => target.color.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  device.destroy();
+});
+
 test("renderTargetForCanvas .color resolves to current texture view per access", () => {
   const first = gpuTexture("first");
   const second = gpuTexture("second");

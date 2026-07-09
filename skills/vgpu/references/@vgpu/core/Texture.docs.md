@@ -63,6 +63,9 @@ Contract:
   new GPU texture.
 - Throws `ValidationError` if the texture is destroyed or wraps an externally
   owned GPU texture such as a canvas swapchain texture from `renderTargetForCanvas`.
+- Throws `ValidationError` when the texture is captured by a `renderTarget()`
+  snapshot. Recreate the render target instead of resizing its textures;
+  resizable render targets are planned as a later additive API.
 
 Example:
 
