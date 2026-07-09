@@ -63,6 +63,22 @@ export interface SamplerDescriptorWithSugar extends GPUSamplerDescriptor {
   readonly wrap?: "clamp" | "repeat" | "mirror";
 }
 
+/**
+ * Creates a WebGPU sampler from a raw `GPUSamplerDescriptor` plus vgpu sampler sugar.
+ *
+ * `filter` expands to `magFilter` and `minFilter` only; it does not set
+ * `mipmapFilter`. `wrap` expands to `addressModeU`, `addressModeV`, and
+ * `addressModeW` using vgpu shorthand values (`"clamp"`, `"repeat"`, `"mirror"`).
+ *
+ * Sugar expands first, then explicit raw WebGPU fields win per key. For example,
+ * `{ filter: "linear", magFilter: "nearest" }` keeps `magFilter: "nearest"`
+ * while using `minFilter: "linear"`; raw address mode fields similarly override
+ * individual `wrap` axes. The sugar keys are stripped before calling WebGPU.
+ *
+ * Throws `ValidationError` when `filter` sugar is used with `maxAnisotropy > 1`
+ * and the resulting descriptor does not explicitly set `magFilter`, `minFilter`,
+ * and `mipmapFilter` to `"linear"`.
+ */
 export function createSampler(device: DeviceLike, descriptor: SamplerDescriptorWithSugar = {}): GPUSampler {
   return unwrapDevice(device).createSampler(expandSamplerDescriptor(descriptor));
 }
