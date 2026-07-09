@@ -191,12 +191,15 @@ test("pingPong destroy tears down both current halves and is idempotent", () => 
   const textures = pingPong(device, { size: [1, 1], format: "rgba8unorm", usage: ["copy_src"] });
   const buffers = pingPong(device, { size: 64, usage: ["copy_src"] });
 
+  const disposeTextures = textures[Symbol.dispose];
+  const disposeBuffers = buffers[Symbol.dispose];
+
   textures.destroy();
   textures.destroy();
-  textures[Symbol.dispose]();
+  disposeTextures();
   buffers.destroy();
   buffers.destroy();
-  buffers[Symbol.dispose]();
+  disposeBuffers();
 
   expect(counts.texture).toBe(2);
   expect(counts.buffer).toBe(2);

@@ -58,8 +58,10 @@ function reactionDiffusion(device: Device, width: number, height: number) {
     format: "rgba16float",
     usage: ["texture_binding", "storage_binding", "copy_dst"],
   });
+  seedTexture(state.read);
 
-  if (state.resize([width, height])) {
+  const nextSize = [width * 2, height * 2] as const;
+  if (state.resize(nextSize)) {
     seedTexture(state.read);
   }
 
@@ -80,13 +82,16 @@ function reactionDiffusion(device: Device, width: number, height: number) {
 import { pingPong, type Device } from "@vgpu/core";
 
 function boids(device: Device, count: number) {
+  const stride = 32;
   const particles = pingPong(device, {
     label: "boids",
-    size: count * 32,
+    size: count * stride,
     usage: ["storage", "vertex", "copy_dst"],
   });
+  seedParticles(particles.read);
 
-  if (particles.resize(count * 32)) {
+  const nextCount = count * 2;
+  if (particles.resize(nextCount * stride)) {
     seedParticles(particles.read);
   }
 

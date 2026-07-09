@@ -24,6 +24,7 @@ export interface BufferPingPong extends PingPongCore<Buffer> {
 
 export function pingPong(device: Device, opts: TextureOptions): TexturePingPong;
 export function pingPong(device: Device, opts: BufferOptions): BufferPingPong;
+export function pingPong(device: Device, opts: TextureOptions | BufferOptions): TexturePingPong | BufferPingPong;
 export function pingPong(device: Device, opts: TextureOptions | BufferOptions): TexturePingPong | BufferPingPong {
   if (isBufferOptions(opts)) return createBufferPingPong(device, opts);
   return createTexturePingPong(device, opts);
@@ -39,6 +40,13 @@ function createTexturePingPong(device: Device, opts: TextureOptions): TexturePin
   let destroyed = false;
   let ping = device.createTexture(textureOptions(opts, size, "ping"));
   let pong = device.createTexture(textureOptions(opts, size, "pong"));
+
+  const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    ping.destroy();
+    pong.destroy();
+  };
 
   return {
     get read() { return readIsPing ? ping : pong; },
@@ -57,13 +65,8 @@ function createTexturePingPong(device: Device, opts: TextureOptions): TexturePin
       readIsPing = true;
       return true;
     },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      ping.destroy();
-      pong.destroy();
-    },
-    [Symbol.dispose]() { this.destroy(); },
+    destroy,
+    [Symbol.dispose]: destroy,
   };
 }
 
@@ -73,6 +76,13 @@ function createBufferPingPong(device: Device, opts: BufferOptions): BufferPingPo
   let destroyed = false;
   let ping = device.createBuffer(bufferOptions(opts, size, "ping"));
   let pong = device.createBuffer(bufferOptions(opts, size, "pong"));
+
+  const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    ping.destroy();
+    pong.destroy();
+  };
 
   return {
     get read() { return readIsPing ? ping : pong; },
@@ -91,13 +101,8 @@ function createBufferPingPong(device: Device, opts: BufferOptions): BufferPingPo
       readIsPing = true;
       return true;
     },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      ping.destroy();
-      pong.destroy();
-    },
-    [Symbol.dispose]() { this.destroy(); },
+    destroy,
+    [Symbol.dispose]: destroy,
   };
 }
 
