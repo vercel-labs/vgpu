@@ -21,6 +21,7 @@
 @vgpu/core createPipelineLayout packages/core/src/bind.docs.md
 @vgpu/core createBindGroup packages/core/src/bind.docs.md
 @vgpu/core createSampler packages/core/src/bind.docs.md
+@vgpu/core SamplerDescriptorWithSugar packages/core/src/bind.docs.md
 @vgpu/core BindVisibility packages/core/src/bind.docs.md
 @vgpu/core CreateBindGroupLayoutOptions packages/core/src/bind.docs.md
 @vgpu/core CreatePipelineLayoutOptions packages/core/src/bind.docs.md

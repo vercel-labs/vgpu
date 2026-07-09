@@ -41,8 +41,82 @@ export function createBindGroup(device: DeviceLike, opts: CreateBindGroupOptions
   return unwrapDevice(device).createBindGroup({ label: opts.label, layout: opts.layout, entries: [...opts.entries] });
 }
 
-export function createSampler(device: DeviceLike, descriptor: GPUSamplerDescriptor = {}): GPUSampler {
-  return unwrapDevice(device).createSampler(descriptor);
+export interface SamplerDescriptorWithSugar extends GPUSamplerDescriptor {
+  /**
+   * Expands to `magFilter` and `minFilter`, but not `mipmapFilter`.
+   * Explicit raw `magFilter`/`minFilter` fields take precedence over this expansion.
+   *
+   * WebGPU requires `magFilter`, `minFilter`, and `mipmapFilter` to all be `"linear"`
+   * when `maxAnisotropy > 1`. Because this sugar does not set `mipmapFilter`,
+   * `{ filter: "linear", maxAnisotropy: 16 }` throws a `ValidationError`; spell
+   * trilinear anisotropic sampling explicitly as
+   * `{ filter: "linear", mipmapFilter: "linear", maxAnisotropy: 16 }`.
+   */
+  readonly filter?: "linear" | "nearest";
+  /**
+   * Expands to `addressModeU`, `addressModeV`, and `addressModeW`.
+   * Explicit raw address mode fields take precedence over this expansion.
+   *
+   * Values map as: `"clamp"` → `"clamp-to-edge"`, `"repeat"` → `"repeat"`,
+   * and `"mirror"` → `"mirror-repeat"`.
+   */
+  readonly wrap?: "clamp" | "repeat" | "mirror";
+}
+
+/**
+ * Creates a WebGPU sampler from a raw `GPUSamplerDescriptor` plus vgpu sampler sugar.
+ *
+ * `filter` expands to `magFilter` and `minFilter` only; it does not set
+ * `mipmapFilter`. `wrap` expands to `addressModeU`, `addressModeV`, and
+ * `addressModeW` using vgpu shorthand values (`"clamp"`, `"repeat"`, `"mirror"`).
+ *
+ * Sugar expands first, then explicit raw WebGPU fields win per key. For example,
+ * `{ filter: "linear", magFilter: "nearest" }` keeps `magFilter: "nearest"`
+ * while using `minFilter: "linear"`; raw address mode fields similarly override
+ * individual `wrap` axes. The sugar keys are stripped before calling WebGPU.
+ *
+ * Throws `ValidationError` when `filter` sugar is used with `maxAnisotropy > 1`
+ * and the resulting descriptor does not explicitly set `magFilter`, `minFilter`,
+ * and `mipmapFilter` to `"linear"`.
+ */
+export function createSampler(device: DeviceLike, descriptor: SamplerDescriptorWithSugar = {}): GPUSampler {
+  return unwrapDevice(device).createSampler(expandSamplerDescriptor(descriptor));
+}
+
+const samplerWrapModes = {
+  clamp: "clamp-to-edge",
+  repeat: "repeat",
+  mirror: "mirror-repeat",
+} as const satisfies Record<NonNullable<SamplerDescriptorWithSugar["wrap"]>, GPUAddressMode>;
+
+function expandSamplerDescriptor(descriptor: SamplerDescriptorWithSugar): GPUSamplerDescriptor {
+  const { filter, wrap, ...raw } = descriptor;
+  const expanded: GPUSamplerDescriptor = {
+    ...(filter ? { magFilter: filter, minFilter: filter } : {}),
+    ...(wrap
+      ? {
+          addressModeU: samplerWrapModes[wrap],
+          addressModeV: samplerWrapModes[wrap],
+          addressModeW: samplerWrapModes[wrap],
+        }
+      : {}),
+    ...raw,
+  };
+
+  if (filter !== undefined && expanded.maxAnisotropy !== undefined && expanded.maxAnisotropy > 1 && !samplerDescriptorHasAllLinearFilters(expanded)) {
+    throw new ValidationError({
+      code: "VGPU-CORE-SAMPLER-ANISOTROPY-FILTERS",
+      message:
+        'createSampler requires magFilter, minFilter, and mipmapFilter to all be "linear" when maxAnisotropy > 1. The filter sugar only sets magFilter and minFilter; add mipmapFilter: "linear" explicitly for anisotropic sampling.',
+      where: "createSampler",
+    });
+  }
+
+  return expanded;
+}
+
+function samplerDescriptorHasAllLinearFilters(descriptor: GPUSamplerDescriptor): boolean {
+  return descriptor.magFilter === "linear" && descriptor.minFilter === "linear" && descriptor.mipmapFilter === "linear";
 }
 
 export const bind = {
