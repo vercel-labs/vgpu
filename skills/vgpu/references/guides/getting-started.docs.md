@@ -41,6 +41,7 @@ when a table below gives an exact path.
 | Queue writes/submission | `/@vgpu/core/Queue.docs.md` | Writing buffers/textures and submitting work. |
 | Buffers | `/@vgpu/core/Buffer.docs.md` | Buffer creation, usage names, and writes. |
 | Textures/readback surfaces | `/@vgpu/core/Texture.docs.md` | Texture creation, usage names, and reads. |
+| Cubemap and layer views | `/@vgpu/core/texture-view.docs.md` | `cubeView`, `layerView`, and compatibility-mode view dimensions. |
 | Shaders | `/@vgpu/core/Shader.docs.md` | Passing WGSL/compiled shader inputs into core. |
 | Bind groups/layouts/samplers | `/@vgpu/core/bind.docs.md` | `bind`, bind group layouts, pipeline layouts, samplers. |
 | Validation errors | `/@vgpu/core/VGPUError.docs.md` | Error shape/codes for VGPU validation failures. |

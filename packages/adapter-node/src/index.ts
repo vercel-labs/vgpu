@@ -29,10 +29,11 @@ export async function createNodeDevice(opts?: RequestDeviceOptions): Promise<Dev
 async function requestDevice(opts: RequestDeviceOptions = {}): Promise<Device> {
   const webgpu = await loadWebGPU();
   Object.assign(globalThis, webgpu.globals);
-  const adapter = await requestAdapterWithRetry(getDawnGPU(opts, webgpu), adapterOptions(opts) as GPURequestAdapterOptions, opts);
+  const options = adapterOptions(opts);
+  const adapter = await requestAdapterWithRetry(getDawnGPU(opts, webgpu), options as GPURequestAdapterOptions, opts);
   const device = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
   if (opts.label) device.label = opts.label;
-  return new Device(device, adapter.info ?? null);
+  return new Device(device, adapter.info ?? null, { isCompatibilityMode: options.featureLevel === "compatibility" });
 }
 
 async function requestAdapterWithRetry(gpu: GPU, options: GPURequestAdapterOptions, retryOptions: NodeAdapterRetryOptions): Promise<GPUAdapter> {
