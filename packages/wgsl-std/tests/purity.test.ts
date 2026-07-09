@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 
 const packageRoot = resolve("packages/wgsl-std");
 const sourceRoot = join(packageRoot, "src");
-const allowedTopLevelDeclaration = /^(export\s+)?(fn|const|struct|alias)\b/u;
+const allowedTopLevelDeclaration = /^(import\s+|export\s+)?(fn|const|struct|alias)\b|^(import|from)\s+/u;
 const forbiddenModulePatterns: readonly { readonly pattern: RegExp; readonly label: string }[] = [
   { pattern: /@\s*binding\b/u, label: "resource binding attributes" },
   { pattern: /@\s*group\b/u, label: "resource group attributes" },
@@ -19,7 +19,10 @@ test("exported wgsl-std snippets stay pure declaration modules", async () => {
   expect(files.map((file) => relative(packageRoot, file).replace(/\\/gu, "/")).sort()).toEqual([
     "src/color/index.wgsl",
     "src/constants/index.wgsl",
+    "src/fullscreen/index.wgsl",
+    "src/hash/index.wgsl",
     "src/math/index.wgsl",
+    "src/noise/index.wgsl",
     "src/sampling/index.wgsl",
   ]);
 
@@ -94,6 +97,7 @@ function topLevelDeclarations(source: string): string[] {
     if (char === "}") depth -= 1;
     if (depth === 0 && (char === ";" || char === "}")) {
       const declaration = source.slice(start, index + 1).trim();
+      if (declaration.startsWith("import ") && char === "}") continue;
       if (declaration) declarations.push(declaration);
       start = index + 1;
     }

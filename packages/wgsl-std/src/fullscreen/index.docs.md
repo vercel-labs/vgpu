@@ -1,0 +1,47 @@
+# @vgpu/wgsl-std/fullscreen
+
+Pure WGSL fullscreen-triangle helpers for `@vgpu/wgsl` imports. The module contains declarations only: no bindings, overrides, hidden state, or entry points.
+
+```wgsl
+import { fullscreenTriangleClip, fullscreenTriangleUv } from "@vgpu/wgsl-std/fullscreen";
+
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
+  var out: VertexOutput;
+  out.position = fullscreenTriangleClip(index);
+  out.uv = fullscreenTriangleUv(out.position.xy);
+  return out;
+}
+```
+
+## API
+
+- `fullscreenTriangleClip(index: u32) -> vec4f`
+- `fullscreenTriangleUv(clipXy: vec2f) -> vec2f`
+
+## Clip positions
+
+`fullscreenTriangleClip(index)` maps vertex indices `0..2` to a single oversized triangle that covers the full clip-space viewport:
+
+```text
+0 -> vec4f(-1.0, -3.0, 0.0, 1.0)
+1 -> vec4f(-1.0,  1.0, 0.0, 1.0)
+2 -> vec4f( 3.0,  1.0, 0.0, 1.0)
+```
+
+Draw it with three vertices and no vertex buffer. The helper is deliberately position-only so shaders can define their own vertex output structs and varying locations.
+
+## UV mapping
+
+`fullscreenTriangleUv(clipXy)` converts clip-space XY to texture UVs with a Y flip:
+
+```text
+clipXy * vec2f(0.5, -0.5) + vec2f(0.5)
+```
+
+This maps the clip-space top-left corner `(-1.0, 1.0)` to UV `(0.0, 0.0)`, matching the top-left origin convention used when sampling render targets in fullscreen passes.
