@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { highlightCode } from '@/lib/shiki';
 import { CopyButton } from './CopyButton';
 
@@ -43,14 +44,16 @@ export async function CodeViewer({ files, activeFile }: CodeViewerProps) {
           {files.map((file) => {
             const isActive = file.name === selected.name;
             return (
-              <div
+              <Link
                 key={file.name}
-                className={`px-4 py-2.5 text-sm border-r border-gray-4 whitespace-nowrap ${
+                href={`?file=${encodeURIComponent(file.name)}`}
+                scroll={false}
+                className={`px-4 py-2.5 text-sm border-r border-gray-4 whitespace-nowrap transition-colors hover:text-gray-12 ${
                   isActive ? 'bg-[#0a0a0a] text-gray-12' : 'text-gray-9'
                 }`}
               >
                 {file.name}
-              </div>
+              </Link>
             );
           })}
         </div>
