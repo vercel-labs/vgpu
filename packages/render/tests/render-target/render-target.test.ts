@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+import { App, ValidationError } from "@vgpu/core";
 import { renderTarget, renderTargetForCanvas } from "@vgpu/render/passes";
 
 test("renderTarget creates color-only target with correct format", async () => {
@@ -71,6 +71,13 @@ test("renderTargetForCanvas .color resolves to current texture view per access",
   expect(colorA.gpu).not.toBe(colorB.gpu);
   expect(gpuA.colorAttachment.view).toMatchObject({ label: "first.view" });
   expect(gpuB.colorAttachment.view).toMatchObject({ label: "second.view" });
+});
+
+test("renderTargetForCanvas .color texture cannot be resized", () => {
+  const target = renderTargetForCanvas(canvasContext([gpuTexture("canvas")]), { label: "screen" });
+
+  expect(() => target.color.resize([32, 18])).toThrowError(ValidationError);
+  expect(() => target.color.resize([32, 18])).toThrow("externally owned");
 });
 
 function gpuTexture(label: string): GPUTexture {
