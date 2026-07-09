@@ -48,7 +48,7 @@ function canvasTexture(context: GPUCanvasContext, label: string | undefined): Te
     format: canvasFormat(context),
     usage: ["render_attachment"],
     label: label ? `${label}.color` : "canvas.color",
-  });
+  }, "external");
 }
 
 function canvasSize(context: GPUCanvasContext): readonly [number, number] {

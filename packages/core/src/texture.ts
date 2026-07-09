@@ -1,20 +1,37 @@
+import { ValidationError } from "./errors.ts";
 import { textureUsageFlags } from "./gpuConstants.ts";
 import { isMockGPUTexture } from "./mock-gpu-storage.ts";
 import type { Device } from "./device.ts";
 import type { TextureOptions } from "./types.ts";
 
 const textureBrand = Symbol.for("vgpu/Texture");
+const textureResizeLock = Symbol.for("vgpu/Texture/resizeLock");
+
+type TextureOwnership = "owned" | "external";
 
 export class Texture {
   readonly [textureBrand] = true;
+  private currentGpu: GPUTexture;
+  private currentOptions: TextureOptions;
+  private defaultView: GPUTextureView | null = null;
+  private resizeLock: string | undefined;
   private destroyed = false;
 
   constructor(
     private readonly device: Device,
-    readonly gpu: GPUTexture,
-    readonly options: TextureOptions,
-  ) {}
+    gpu: GPUTexture,
+    options: TextureOptions,
+    private readonly ownership: TextureOwnership = "owned",
+  ) {
+    this.currentGpu = gpu;
+    this.currentOptions = options;
+    Object.defineProperty(this, textureResizeLock, {
+      value: (reason: string) => { this.resizeLock = reason; },
+    });
+  }
 
+  get gpu(): GPUTexture { return this.currentGpu; }
+  get options(): TextureOptions { return this.currentOptions; }
   get size(): TextureOptions["size"] { return this.options.size; }
   get format(): GPUTextureFormat { return this.options.format; }
   get usage(): TextureOptions["usage"] { return this.options.usage; }
@@ -24,8 +41,47 @@ export class Texture {
   get viewFormats(): readonly GPUTextureFormat[] { return this.options.viewFormats ?? []; }
   get label(): string | undefined { return this.options.label; }
 
+  get view(): GPUTextureView {
+    this.assertAlive();
+    this.defaultView ??= this.createView();
+    return this.defaultView;
+  }
+
   createView(desc?: GPUTextureViewDescriptor): GPUTextureView {
     return this.gpu.createView(desc);
+  }
+
+  resize(size: readonly [number, number] | readonly [number, number, number]): boolean {
+    this.assertAlive();
+    if (this.ownership === "external") {
+      throw new ValidationError({
+        code: "VGPU-CORE-EXTERNAL-TEXTURE",
+        message: "Texture wraps an externally owned GPUTexture and cannot be resized.",
+        where: "Texture.resize",
+      });
+    }
+    if (this.resizeLock) {
+      throw new ValidationError({
+        code: "VGPU-CORE-TEXTURE-RESIZE-LOCKED",
+        message: this.resizeLock,
+        where: "Texture.resize",
+      });
+    }
+
+    const currentDepth = this.options.size[2] ?? 1;
+    const nextDepth = size[2] ?? currentDepth;
+    if (this.options.size[0] === size[0] && this.options.size[1] === size[1] && currentDepth === nextDepth) return false;
+
+    const nextSize: TextureOptions["size"] = size[2] === undefined && this.options.size[2] === undefined
+      ? [size[0], size[1]]
+      : [size[0], size[1], nextDepth];
+    const nextOptions: TextureOptions = { ...this.options, size: nextSize };
+    const oldGpu = this.gpu;
+    this.currentGpu = this.device.gpu.createTexture(toGPUTextureDescriptor(nextOptions));
+    this.currentOptions = nextOptions;
+    this.defaultView = null;
+    oldGpu.destroy();
+    return true;
   }
 
   async read(): Promise<Uint8Array> {
@@ -37,6 +93,8 @@ export class Texture {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.defaultView = null;
+    if (this.ownership === "external") return;
     if (!isMockGPUTexture(this.gpu)) this.gpu.destroy();
   }
 
@@ -45,7 +103,7 @@ export class Texture {
   }
 
   private assertAlive(): void {
-    if (this.destroyed) throw new Error("Texture is destroyed");
+    if (this.destroyed) throw new ValidationError({ code: "VGPU-CORE-TEXTURE-DESTROYED", message: "Texture is destroyed", where: "Texture" });
   }
 }
 

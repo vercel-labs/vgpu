@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+import { App, ValidationError } from "@vgpu/core";
 import { renderTarget, renderTargetForCanvas } from "@vgpu/render/passes";
 
 test("renderTarget creates color-only target with correct format", async () => {
@@ -55,6 +55,28 @@ test("renderTarget label \"scene\" propagates to attachment textures", async () 
   device.destroy();
 });
 
+
+test("renderTarget-owned color and depth textures cannot be resized", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const target = await renderTarget({ device, size: [8, 4], depth: true });
+
+  expect(() => target.color.resize([16, 8])).toThrowError(ValidationError);
+  expect(() => target.color.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.colors[0].resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  expect(() => target.depth?.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  device.destroy();
+});
+
+test("renderTarget-owned MSAA resolve texture cannot be resized", async () => {
+  const { device } = await App.create({ adapter: createMockAdapter() });
+  const target = await renderTarget({ device, size: [8, 4], msaa: true });
+
+  expect(target.color.gpu).toBe(target.gpu.resolveTexture);
+  expect(() => target.color.resize([16, 8])).toThrowError(ValidationError);
+  expect(() => target.color.resize([16, 8])).toThrow("captured by a renderTarget() snapshot");
+  device.destroy();
+});
+
 test("renderTargetForCanvas .color resolves to current texture view per access", () => {
   const first = gpuTexture("first");
   const second = gpuTexture("second");
@@ -73,12 +95,33 @@ test("renderTargetForCanvas .color resolves to current texture view per access",
   expect(gpuB.colorAttachment.view).toMatchObject({ label: "second.view" });
 });
 
-function gpuTexture(label: string): GPUTexture {
+test("renderTargetForCanvas .color texture cannot be resized", () => {
+  const target = renderTargetForCanvas(canvasContext([gpuTexture("canvas")]), { label: "screen" });
+
+  expect(() => target.color.resize([32, 18])).toThrowError(ValidationError);
+  expect(() => target.color.resize([32, 18])).toThrow("externally owned");
+});
+
+test("renderTargetForCanvas .color destroy does not destroy the canvas texture", () => {
+  let destroyCalls = 0;
+  const target = renderTargetForCanvas(canvasContext([gpuTexture("canvas", () => { destroyCalls += 1; })]), { label: "screen" });
+  const color = target.color;
+
+  expect(color.view).toMatchObject({ label: "canvas.view" });
+  color.destroy();
+
+  expect(destroyCalls).toBe(0);
+  expect(() => color.view).toThrowError(ValidationError);
+  expect(() => color.view).toThrow("Texture is destroyed");
+  expect(() => color.resize([32, 18])).toThrow("Texture is destroyed");
+});
+
+function gpuTexture(label: string, onDestroy: () => void = () => {}): GPUTexture {
   return {
     label,
     sampleCount: 1,
     createView: () => ({ label: `${label}.view` }) as GPUTextureView,
-    destroy() {},
+    destroy: onDestroy,
   } as GPUTexture;
 }
 
