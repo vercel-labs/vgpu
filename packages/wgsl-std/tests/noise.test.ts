@@ -43,9 +43,9 @@ describe("CPU reference noise catalog", () => {
 
   test("voronoi3d returns F1/F2 distances and winning integer cell", () => {
     const cases: readonly Voronoi3Case[] = [
-      { name: "inside origin", actual: voronoi3dRef([0.25, 0.75, 0.5]), expected: { f1: 0.448009701028377, f2: 0.5783339390362492, cell: [0, 0, 0] } },
-      { name: "animated z slice", actual: voronoi3dRef([4.2, -1.25, 8.5]), expected: { f1: 0.23850722426799975, f2: 0.642129455976069, cell: [4, -2, 8] } },
-      { name: "neighbor winner", actual: voronoi3dRef([12.25, 34.75, 56.5]), expected: { f1: 0.5943787449168494, f2: 0.6394007665656413, cell: [12, 34, 56] } },
+      { name: "inside origin", actual: voronoi3dRef([0.25, 0.75, 0.5]), expected: { f1: 0.4480027402212402, f2: 0.5783371011214562, cell: [0, 0, 0] } },
+      { name: "animated z slice", actual: voronoi3dRef([4.2, -1.25, 8.5]), expected: { f1: 0.23850126667146912, f2: 0.6421127391636843, cell: [4, -2, 8] } },
+      { name: "neighbor winner", actual: voronoi3dRef([12.25, 34.75, 56.5]), expected: { f1: 0.5943762206456527, f2: 0.6393953677971502, cell: [12, 34, 56] } },
     ];
 
     for (const { name, actual, expected } of cases) expectVoronoi3(actual, expected, name);
@@ -181,6 +181,9 @@ function pcg3dRef(value: readonly [number, number, number]): [number, number, nu
   x = (x + Math.imul(y, z)) >>> 0;
   y = (y + Math.imul(z, x)) >>> 0;
   z = (z + Math.imul(x, y)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  y = (y ^ (y >>> 16)) >>> 0;
+  z = (z ^ (z >>> 16)) >>> 0;
   return [x, y, z];
 }
 

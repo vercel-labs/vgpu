@@ -82,17 +82,17 @@ The helper is an approximation to the ACES look, not a full ACES color pipeline.
 color / (1.0 + luminance(color))
 ```
 
-Both tonemap helpers expect linear-light HDR color values. Callers should apply display encoding such as `linearToSrgb3` after tonemapping when writing to an sRGB target that expects encoded values.
+`tonemapReinhard` does not clamp its result; saturated HDR inputs can still produce individual channels above `1.0`. Clamp explicitly if your output target requires display-range values. Both tonemap helpers expect linear-light HDR color values. Callers should apply display encoding such as `linearToSrgb3` after tonemapping when writing to an sRGB target that expects encoded values.
 
 ## Luminance threshold
 
 `luminanceThreshold(color, threshold, softKnee)` applies a soft bright-pass gate driven by `luminance(color)`:
 
 ```text
-color * smoothstep(threshold, threshold + softKnee, luminance(color))
+color * smoothstep(threshold, threshold + max(softKnee, 0.000001), luminance(color))
 ```
 
-This is useful for bloom extraction. A `softKnee` of `0.0` gives a hard smoothstep edge at `threshold`; positive values spread the transition over that luminance interval. The helper does not clamp the input color.
+This is useful for bloom extraction. `softKnee` is clamped to at least `0.000001` before calling `smoothstep`, avoiding WGSL undefined behavior when the smoothstep edges would otherwise be equal or inverted. A `softKnee` of `0.0` therefore behaves like a hard edge at `threshold`; positive values spread the transition over that luminance interval. The helper does not clamp the input color.
 
 ## Performance notes
 

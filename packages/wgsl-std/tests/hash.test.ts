@@ -45,9 +45,9 @@ describe("CPU reference hash catalog", () => {
       { name: "pcg2d signed bitcast", actual: pcg2dRef([0xffffffff, 2]), expected: [69867811, 3975126717] },
     ];
     const vec3Cases: readonly Vec3uCase[] = [
-      { name: "pcg3d zero", actual: pcg3dRef([0, 0, 0]), expected: [2611992518, 2833812075, 1058359340] },
-      { name: "pcg3d lattice", actual: pcg3dRef([12, 34, 56]), expected: [2329835909, 1935877321, 3960515917] },
-      { name: "pcg3d signed bitcast", actual: pcg3dRef([0xffffffff, 2, 0xfffffffd]), expected: [2548084657, 4228833283, 1087731307] },
+      { name: "pcg3d zero", actual: pcg3dRef([0, 0, 0]), expected: [2611956841, 2833785475, 1058371385] },
+      { name: "pcg3d lattice", actual: pcg3dRef([12, 34, 56]), expected: [2329867099, 1935890346, 3960488285] },
+      { name: "pcg3d signed bitcast", actual: pcg3dRef([0xffffffff, 2, 0xfffffffd]), expected: [2548054097, 4228783117, 1087715006] },
     ];
 
     for (const { name, actual, expected } of vec2Cases) expectVec2u(actual, expected, name);
@@ -73,7 +73,7 @@ describe("CPU reference hash catalog", () => {
     expect(hash1Ref(-0)).not.toBe(hash1Ref(0));
     expect(hash1Ref(1)).toBeCloseTo(0.8841683268547058, 12);
     expectVec2Close(hash2Ref([0.25, -0.5]), [0.5884251594543457, 0.24299609661102295], "hash2");
-    expectVec3Close(hash3Ref([0.25, -0.5, 8]), [0.6728017330169678, 0.2099313735961914, 0.46813148260116577], "hash3");
+    expectVec3Close(hash3Ref([0.25, -0.5, 8]), [0.6727914810180664, 0.2099326252937317, 0.4681243896484375], "hash3");
   });
 });
 
@@ -162,6 +162,9 @@ function pcg3dRef(value: readonly [number, number, number]): [number, number, nu
   x = (x + Math.imul(y, z)) >>> 0;
   y = (y + Math.imul(z, x)) >>> 0;
   z = (z + Math.imul(x, y)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  y = (y ^ (y >>> 16)) >>> 0;
+  z = (z ^ (z >>> 16)) >>> 0;
   return [x, y, z];
 }
 

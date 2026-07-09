@@ -91,6 +91,7 @@ describe("CPU reference color catalog", () => {
     expectVec3Close(tonemapReinhardRef([0.18, 0.5, 1]), [0.12261012432666607, 0.3405836786851835, 0.681167357370367], "reinhard");
     expectVec3Close(luminanceThresholdRef([0.18, 0.5, 1], 0.25, 0.5), [0.07285049149705795, 0.20236247638071653, 0.40472495276143305], "soft threshold");
     expectVec3Close(luminanceThresholdRef([0.1, 0.1, 0.1], 0.25, 0.08), [0, 0, 0], "below threshold");
+    expectVec3Close(luminanceThresholdRef([0.3, 0.3, 0.3], 0.25, 0), [0.3, 0.3, 0.3], "zero knee above threshold");
   });
 });
 
@@ -211,7 +212,8 @@ function tonemapReinhardRef(value: readonly [number, number, number]): [number, 
 }
 
 function luminanceThresholdRef(value: readonly [number, number, number], threshold: number, softKnee: number): [number, number, number] {
-  const weight = smoothstepRef(threshold, threshold + softKnee, luminanceRef(value));
+  const knee = Math.max(softKnee, 0.000001);
+  const weight = smoothstepRef(threshold, threshold + knee, luminanceRef(value));
   return [value[0] * weight, value[1] * weight, value[2] * weight];
 }
 

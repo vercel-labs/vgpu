@@ -1,3 +1,4 @@
+// Wellons lowbias32: https://github.com/skeeto/hash-prospector
 export fn hashU32(value: u32) -> u32 {
   var hashed = value;
   hashed = (hashed ^ (hashed >> 16u)) * 0x7feb352du;
@@ -7,6 +8,7 @@ export fn hashU32(value: u32) -> u32 {
 }
 
 export fn pcg2d(value: vec2u) -> vec2u {
+  // 2D multi-output variant cross-mixes with the LCG multiplier instead of pcg3d's y*z pattern.
   var hashed = value * 1664525u + 1013904223u;
   hashed.x = hashed.x + hashed.y * 1664525u;
   hashed.y = hashed.y + hashed.x * 1664525u;
@@ -26,6 +28,7 @@ export fn pcg3d(value: vec3u) -> vec3u {
   hashed.x = hashed.x + hashed.y * hashed.z;
   hashed.y = hashed.y + hashed.z * hashed.x;
   hashed.z = hashed.z + hashed.x * hashed.y;
+  hashed = hashed ^ (hashed >> vec3u(16u));
   return hashed;
 }
 
