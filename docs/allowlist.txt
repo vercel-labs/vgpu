@@ -28,6 +28,10 @@
 @vgpu/core CreateBindGroupOptions packages/core/src/bind.docs.md
 @vgpu/core DeviceLike packages/core/src/bind.docs.md
 @vgpu/core createMockGPUDevice packages/core/src/createMockGPUDevice.docs.md
+@vgpu/core pingPong packages/core/src/ping-pong.docs.md
+@vgpu/core PingPongCore packages/core/src/ping-pong.docs.md
+@vgpu/core TexturePingPong packages/core/src/ping-pong.docs.md
+@vgpu/core BufferPingPong packages/core/src/ping-pong.docs.md
 @vgpu/adapter-mock createMockAdapter packages/adapter-mock/src/createMockAdapter.docs.md
 @vgpu/adapter-node createNodeAdapter packages/adapter-node/src/createNodeAdapter.docs.md
 @vgpu/adapter-node createNodeDevice packages/adapter-node/src/createNodeDevice.docs.md
