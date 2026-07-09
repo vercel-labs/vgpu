@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -b && node -e \"require('fs').copyFileSync('packages/wgsl/src/wgsl-types.d.ts', 'packages/wgsl/dist/wgsl-types.d.ts')\"",
     "typecheck": "tsc -b && pnpm run typecheck:fixtures",
-    "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json",
+    "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json",
     "test": "vitest run",
     "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render",
     "test:docker": "bash infra/test-docker/run.sh",
