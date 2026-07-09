@@ -62,8 +62,9 @@ params.write({ viewProj, cameraPos: eye });
 params.write({ time: performance.now() / 1000 }); // viewProj/cameraPos persist
 ```
 
-Scalars must be numbers. Vector and matrix fields accept arrays or `Float32Array`;
-`write()` checks the exact runtime length. For example, `vec3f` must receive
+Scalars must be numbers. Vector and matrix fields accept arrays, `Float32Array`,
+`Uint32Array`, or `Int32Array`; `write()` checks the exact runtime length. For
+example, `vec3f` must receive
 exactly three values and `mat3x3f` must receive exactly nine values. `mat3x3f`
 values are expanded into WGSL's 16-byte column stride, so the padding cannot drift
 from the generated layout.

@@ -76,7 +76,7 @@ test("writes integer vectors, mat3x3f column padding, and mat4x4f contiguously",
 
   uniform.write({
     flag: 7,
-    normal: [-1, -2, -3],
+    normal: new Int32Array([-1, -2, -3]),
     basis: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     transform: Array.from({ length: 16 }, (_, i) => i + 10),
   });
@@ -86,6 +86,17 @@ test("writes integer vectors, mat3x3f column padding, and mat4x4f contiguously",
   expect([view.getInt32(16, true), view.getInt32(20, true), view.getInt32(24, true)]).toEqual([-1, -2, -3]);
   expect(Array.from(new Float32Array(view.buffer.slice(32, 80)))).toEqual([1, 2, 3, 0, 4, 5, 6, 0, 7, 8, 9, 0]);
   expect(Array.from(new Float32Array(view.buffer.slice(80, 144)))).toEqual(Array.from({ length: 16 }, (_, i) => i + 10));
+  device.destroy();
+});
+
+test("writes Uint32Array vector inputs", async () => {
+  const device = makeDevice();
+  const uniform = new StructuredUniform(device, { schema: { flags: "vec4u" } });
+
+  uniform.write({ flags: new Uint32Array([1, 2, 3, 4]) });
+
+  const view = new DataView(await uniform.buffer.read(uniform.byteSize));
+  expect([0, 4, 8, 12].map((offset) => view.getUint32(offset, true))).toEqual([1, 2, 3, 4]);
   device.destroy();
 });
 
@@ -142,6 +153,18 @@ test("supports string-array visibility values", () => {
   void uniform.bindGroupLayout;
 
   expect(createBindGroupLayout.mock.calls[0]?.[0].entries[0]?.visibility).toBe(4);
+  device.destroy();
+});
+
+test("bind group getters reject access after destroy", () => {
+  const device = makeDevice();
+  const uniform = new StructuredUniform(device, { schema: { time: "f32" } });
+
+  void uniform.bindGroup;
+  uniform.destroy();
+
+  expectInvalid(() => uniform.bindGroupLayout);
+  expectInvalid(() => uniform.bindGroup);
   device.destroy();
 });
 

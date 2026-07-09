@@ -11,7 +11,7 @@ import {
 } from "./domain/wgsl-alignment.ts";
 
 export type ScalarUniformType = "f32" | "u32" | "i32";
-export type VectorUniformInput = readonly number[] | Float32Array;
+export type VectorUniformInput = readonly number[] | Float32Array | Uint32Array | Int32Array;
 export type UniformValues<S extends Record<string, WgslUniformType>> = {
   [K in keyof S]: S[K] extends ScalarUniformType ? number : VectorUniformInput;
 };
@@ -58,6 +58,7 @@ export class StructuredUniform<S extends Record<string, WgslUniformType>> {
   }
 
   get bindGroupLayout(): GPUBindGroupLayout {
+    this.assertAlive("StructuredUniform.bindGroupLayout");
     this.lazyBindGroupLayout ??= createBindGroupLayout(this.device, {
       label: this.label ? `${this.label}.bgl` : undefined,
       entries: [bind.uniform(0, this.visibility ?? ["vertex", "fragment"], { minBindingSize: this.byteSize })],
@@ -66,6 +67,7 @@ export class StructuredUniform<S extends Record<string, WgslUniformType>> {
   }
 
   get bindGroup(): GPUBindGroup {
+    this.assertAlive("StructuredUniform.bindGroup");
     this.lazyBindGroup ??= createBindGroup(this.device, {
       label: this.label ? `${this.label}.bg` : undefined,
       layout: this.bindGroupLayout,
@@ -83,7 +85,7 @@ export class StructuredUniform<S extends Record<string, WgslUniformType>> {
         throw invalidUsage("StructuredUniform.write", `Uniform '${field.name}' must be a number.`);
       }
       if (!isScalarUniformType(field.type) && !isVectorUniformInput(value)) {
-        throw invalidUsage("StructuredUniform.write", `Uniform '${field.name}' must be an array or Float32Array.`);
+        throw invalidUsage("StructuredUniform.write", `Uniform '${field.name}' must be an array, Float32Array, Uint32Array, or Int32Array.`);
       }
       writeUniformField(this.view, field, value, { exactLength: true, where: "StructuredUniform.write" });
     }
@@ -120,7 +122,7 @@ function isScalarUniformType(type: WgslUniformType): type is ScalarUniformType {
 }
 
 function isVectorUniformInput(value: unknown): value is VectorUniformInput {
-  return Array.isArray(value) || value instanceof Float32Array;
+  return Array.isArray(value) || value instanceof Float32Array || value instanceof Uint32Array || value instanceof Int32Array;
 }
 
 function validateSchema(schema: Record<string, unknown>): void {
