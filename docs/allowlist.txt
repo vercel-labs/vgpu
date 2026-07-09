@@ -66,6 +66,12 @@
 @vgpu/render StorageBufferOptions packages/render/src/storage-buffer.docs.md
 @vgpu/render Uniform packages/render/src/uniform.docs.md
 @vgpu/render UniformOptions packages/render/src/uniform.docs.md
+@vgpu/render StructuredUniform packages/render/src/structured-uniform.docs.md
+@vgpu/render StructuredUniformOptions packages/render/src/structured-uniform.docs.md
+@vgpu/render UniformValues packages/render/src/structured-uniform.docs.md
+@vgpu/render ScalarUniformType packages/render/src/structured-uniform.docs.md
+@vgpu/render VectorUniformInput packages/render/src/structured-uniform.docs.md
+@vgpu/render UniformLayoutInfo packages/render/src/structured-uniform.docs.md
 @vgpu/render UniformPool packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformPoolOptions packages/render/src/uniform-pool.docs.md
 @vgpu/render UniformLayout packages/render/src/uniform-pool.docs.md
