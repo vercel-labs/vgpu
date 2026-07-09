@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/ingest-examples.mjs",
     "dev": "next dev --port 3001",
+    "prebuild": "node scripts/ingest-examples.mjs",
     "build": "next build",
     "start": "next start --port 3001",
     "typecheck": "tsc --noEmit"
