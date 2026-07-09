@@ -1,3 +1,4 @@
 public/dist
 .next
 .turbo
+*.tsbuildinfo
