@@ -4,15 +4,16 @@ import { MarkdownContent } from '@/components/MarkdownContent';
 import { getGuideRecord, guideRecords, sourceHref, symbolToSlug, titleForRecord } from '@/lib/manifest';
 
 interface GuidePageProps {
-  params: { guide: string };
+  params: Promise<{ guide: string }>;
 }
 
 export function generateStaticParams() {
   return guideRecords.map((record) => ({ guide: symbolToSlug(record.symbol) }));
 }
 
-export function generateMetadata({ params }: GuidePageProps) {
-  const record = getGuideRecord(params.guide);
+export async function generateMetadata({ params }: GuidePageProps) {
+  const { guide } = await params;
+  const record = getGuideRecord(guide);
   if (!record) return {};
   return {
     title: titleForRecord(record),
@@ -20,8 +21,9 @@ export function generateMetadata({ params }: GuidePageProps) {
   };
 }
 
-export default function GuidePage({ params }: GuidePageProps) {
-  const record = getGuideRecord(params.guide);
+export default async function GuidePage({ params }: GuidePageProps) {
+  const { guide } = await params;
+  const record = getGuideRecord(guide);
   if (!record) notFound();
 
   return (

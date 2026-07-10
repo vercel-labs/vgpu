@@ -13,7 +13,7 @@ import {
 } from '@/lib/manifest';
 
 interface SymbolPageProps {
-  params: { package: string; symbol: string };
+  params: Promise<{ package: string; symbol: string }>;
 }
 
 export function generateStaticParams() {
@@ -23,8 +23,9 @@ export function generateStaticParams() {
   }));
 }
 
-export function generateMetadata({ params }: SymbolPageProps) {
-  const record = getRecord(params.package, params.symbol);
+export async function generateMetadata({ params }: SymbolPageProps) {
+  const { package: packageSlug, symbol } = await params;
+  const record = getRecord(packageSlug, symbol);
   if (!record || record.kind !== 'api') return {};
   return {
     title: `${record.symbol} - ${record.package}`,
@@ -32,11 +33,12 @@ export function generateMetadata({ params }: SymbolPageProps) {
   };
 }
 
-export default function SymbolPage({ params }: SymbolPageProps) {
-  const record = getRecord(params.package, params.symbol);
+export default async function SymbolPage({ params }: SymbolPageProps) {
+  const { package: packageSlug, symbol } = await params;
+  const record = getRecord(packageSlug, symbol);
   if (!record || record.kind !== 'api') notFound();
 
-  const group = getPackageGroup(params.package);
+  const group = getPackageGroup(packageSlug);
   const packageLabel = group?.title ?? record.package;
 
   return (

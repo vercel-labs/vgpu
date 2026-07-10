@@ -8,7 +8,7 @@ import {
 } from '@/lib/manifest';
 
 interface PackagePageProps {
-  params: { package: string };
+  params: Promise<{ package: string }>;
 }
 
 export function generateStaticParams() {
@@ -17,8 +17,9 @@ export function generateStaticParams() {
     .map((group) => ({ package: group.packageSlug }));
 }
 
-export function generateMetadata({ params }: PackagePageProps) {
-  const group = getPackageGroup(params.package);
+export async function generateMetadata({ params }: PackagePageProps) {
+  const { package: packageSlug } = await params;
+  const group = getPackageGroup(packageSlug);
   if (!group || group.packageName === 'guides') return {};
   return {
     title: `${group.title} reference`,
@@ -26,8 +27,9 @@ export function generateMetadata({ params }: PackagePageProps) {
   };
 }
 
-export default function PackagePage({ params }: PackagePageProps) {
-  const group = getPackageGroup(params.package);
+export default async function PackagePage({ params }: PackagePageProps) {
+  const { package: packageSlug } = await params;
+  const group = getPackageGroup(packageSlug);
   if (!group || group.packageName === 'guides') notFound();
 
   return (

@@ -5,19 +5,19 @@ import { ExamplePreview } from '@/components/ExamplePreview';
 import { examples, getExample } from '@/lib/examples-registry';
 
 interface ExampleDetailPageProps {
-  params: { slug: string };
-  searchParams?: { file?: string };
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ file?: string }>;
 }
 
 export function generateStaticParams() {
   return examples.map((example) => ({ slug: example.meta.slug }));
 }
 
-export default function ExampleDetailPage({ params, searchParams }: ExampleDetailPageProps) {
-  const example = getExample(params.slug);
+export default async function ExampleDetailPage({ params, searchParams }: ExampleDetailPageProps) {
+  const { slug } = await params;
+  const { file: activeFile } = (await searchParams) ?? {};
+  const example = getExample(slug);
   if (!example) notFound();
-
-  const activeFile = searchParams?.file;
 
   return (
     <div className="px-6 py-8 lg:px-8 xl:px-12">

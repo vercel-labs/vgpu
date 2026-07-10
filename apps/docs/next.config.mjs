@@ -17,6 +17,14 @@ const nextConfig = {
     '@vgpu/adapter-mock',
     '@vgpu/adapter-node',
   ],
+  turbopack: {
+    rules: {
+      '*.wgsl': {
+        loaders: ['@vgpu/wgsl/loader-webpack'],
+        as: '*.js',
+      },
+    },
+  },
   webpack(config) {
     config.module.rules.push({
       test: /\.wgsl$/,
