@@ -24,15 +24,21 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const DevInstrumentation =
+    process.env.NODE_ENV === 'development'
+      ? (await import('@/components/DevInstrumentation')).DevInstrumentation
+      : null;
+
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="bg-black text-gray-12 font-sans antialiased">
         {children}
+        {DevInstrumentation ? <DevInstrumentation /> : null}
       </body>
     </html>
   );
