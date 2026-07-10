@@ -84,24 +84,36 @@ describe("CPU reference color catalog", () => {
     expectVec3Close(applyExposureRef([0.18, 0.5, 1], 1), [0.36, 1, 2], "exposure +1 stop");
     expectVec3Close(applyExposureRef([0.18, 0.5, 1], -2), [0.045, 0.125, 0.25], "exposure -2 stops");
   });
+
+  test("tonemap and luminance threshold helpers follow documented formulas", () => {
+    expectVec3Close(tonemapAcesRef([0, 0.18, 1]), [0, 0.2668989203894968, 0.8037974683544302], "aces");
+    expectVec3Close(tonemapAcesRef([16, 4, 2]), [1, 0.9734171097148379, 0.914855072463768], "aces clamp");
+    expectVec3Close(tonemapReinhardRef([0.18, 0.5, 1]), [0.12261012432666607, 0.3405836786851835, 0.681167357370367], "reinhard");
+    expectVec3Close(luminanceThresholdRef([0.18, 0.5, 1], 0.25, 0.5), [0.07285049149705795, 0.20236247638071653, 0.40472495276143305], "soft threshold");
+    expectVec3Close(luminanceThresholdRef([0.1, 0.1, 0.1], 0.25, 0.08), [0, 0, 0], "below threshold");
+    expectVec3Close(luminanceThresholdRef([0.3, 0.3, 0.3], 0.25, 0), [0.3, 0.3, 0.3], "zero knee above threshold");
+    expectVec3Close(luminanceThresholdRef([40, 40, 40], 32, 0), [40, 40, 40], "large zero knee above threshold");
+    expectVec3Close(luminanceThresholdRef([16, 16, 16], 32, 0), [0, 0, 0], "large zero knee below threshold");
+  });
 });
 
 test("color helpers resolve from @vgpu/wgsl-std/color and produce valid declarations", async () => {
   const dir = await workspaceFixture();
   const entry = join(dir, "app", "main.wgsl");
-  await writeFile(entry, `import { srgbToLinear, srgbToLinear3, srgbToLinear4, linearToSrgb, linearToSrgb3, linearToSrgb4, luminance, applyExposure } from "@vgpu/wgsl-std/color";
+  await writeFile(entry, `import { srgbToLinear, srgbToLinear3, srgbToLinear4, linearToSrgb, linearToSrgb3, linearToSrgb4, luminance, applyExposure, tonemapAces, tonemapReinhard, luminanceThreshold } from "@vgpu/wgsl-std/color";
 fn main() -> vec4f {
   let c = srgbToLinear3(vec3f(0.5, 0.25, 1.0));
   let a = srgbToLinear4(vec4f(0.5, 0.25, 1.0, 0.75)).a;
-  let encoded = linearToSrgb3(applyExposure(c, 1.0));
-  let scalar = srgbToLinear(0.5) + linearToSrgb(0.18) + luminance(c) + linearToSrgb4(vec4f(c, a)).a;
+  let encoded = linearToSrgb3(tonemapAces(applyExposure(c, 1.0)));
+  let thresholded = luminanceThreshold(tonemapReinhard(c), 0.25, 0.08);
+  let scalar = srgbToLinear(0.5) + linearToSrgb(0.18) + luminance(c) + linearToSrgb4(vec4f(c, a)).a + thresholded.r;
   return vec4f(encoded, scalar);
 }`);
 
   const result = await resolveShader({ entry, validate: false });
 
   expect(result.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/color/index.wgsl"))).toBe(true);
-  for (const name of ["srgbToLinear", "srgbToLinear3", "srgbToLinear4", "linearToSrgb", "linearToSrgb3", "linearToSrgb4", "luminance", "applyExposure"]) {
+  for (const name of ["srgbToLinear", "srgbToLinear3", "srgbToLinear4", "linearToSrgb", "linearToSrgb3", "linearToSrgb4", "luminance", "applyExposure", "tonemapAces", "tonemapReinhard", "luminanceThreshold"]) {
     expect.soft(result.wgsl, name).toMatch(new RegExp(`fn _vgsl_[0-9a-f]{8}__${name}\\(`, "u"));
   }
   expect(result.wgsl).not.toContain("identityVec3f");
@@ -191,6 +203,23 @@ function applyExposureRef(value: readonly [number, number, number], exposure: nu
   const scale = Math.pow(2, exposure);
   return [value[0] * scale, value[1] * scale, value[2] * scale];
 }
+
+function tonemapAcesRef(value: readonly [number, number, number]): [number, number, number] {
+  return value.map((component) => Math.min(Math.max((component * (2.51 * component + 0.03)) / (component * (2.43 * component + 0.59) + 0.14), 0), 1)) as [number, number, number];
+}
+
+function tonemapReinhardRef(value: readonly [number, number, number]): [number, number, number] {
+  const scale = 1 + luminanceRef(value);
+  return [value[0] / scale, value[1] / scale, value[2] / scale];
+}
+
+function luminanceThresholdRef(value: readonly [number, number, number], threshold: number, softKnee: number): [number, number, number] {
+  const knee = Math.max(softKnee, 0.000001);
+  const t = Math.min(Math.max((luminanceRef(value) - threshold) / knee, 0), 1);
+  const weight = t * t * (3 - 2 * t);
+  return [value[0] * weight, value[1] * weight, value[2] * weight];
+}
+
 
 function expectVec3Close(actual: readonly [number, number, number], expected: readonly [number, number, number], name: string): void {
   expect.soft(actual[0], `${name}.x`).toBeCloseTo(expected[0], 6);

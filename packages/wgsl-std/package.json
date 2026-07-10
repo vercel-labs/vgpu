@@ -31,7 +31,10 @@
     "./math": "./src/math/index.wgsl",
     "./color": "./src/color/index.wgsl",
     "./sampling": "./src/sampling/index.wgsl",
-    "./constants": "./src/constants/index.wgsl"
+    "./constants": "./src/constants/index.wgsl",
+    "./hash": "./src/hash/index.wgsl",
+    "./noise": "./src/noise/index.wgsl",
+    "./fullscreen": "./src/fullscreen/index.wgsl"
   },
   "files": [
     "src/**/*.wgsl",

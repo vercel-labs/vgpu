@@ -31,7 +31,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-121 symbols across 12 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
+139 symbols across 16 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
 
 - `@vgpu/adapter-mock` — createMockAdapter
 - `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
@@ -42,6 +42,10 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - `@vgpu/render/perf` — gpuFrameTime, GpuFrameTimeOptions, GpuFrameTimeResult, pixelDiff, PixelDiffResult
 - `@vgpu/render/utils` — canvasMouseTracker, CanvasMouseTracker, CanvasMouseTrackerSpec, canvasResolution, CanvasResolution, frameClock, FrameClock
 - `@vgpu/wgsl` — compile, ResolvedShader, SourceMap, WGSLAst, WGSLSource
+- `@vgpu/wgsl-std/color` — applyExposure, luminance, luminanceThreshold, tonemapAces, tonemapReinhard
+- `@vgpu/wgsl-std/fullscreen` — fullscreenTriangleClip, fullscreenTriangleUv
+- `@vgpu/wgsl-std/hash` — hash1, hash2, hash3, hashU32, pcg2d, pcg3d, unitFloat
+- `@vgpu/wgsl-std/noise` — voronoi2d, voronoi3d, VoronoiSample2, VoronoiSample3
 - `@vgpu/wgsl/loader-vite` — transformWgsl, ViteLoadResult, wgslVitePlugin
 - `@vgpu/wgsl/loader-webpack` — wgslWebpackLoader
 - `@vgpu/wgsl/runtime` — ResolvedShader, ResolveOptions, resolveShader, SourceMap, WGSLAst, WGSLModule
