@@ -14,8 +14,8 @@ export struct VoronoiSample3 {
 
 export fn voronoi2d(position: vec2f) -> VoronoiSample2 {
   let baseCell = vec2i(floor(position));
-  var nearestDistance = 3.4028235e38;
-  var secondDistance = 3.4028235e38;
+  var nearestDistance = 1.0e20;
+  var secondDistance = 1.0e20;
   var nearestCell = baseCell;
 
   for (var y = -1; y <= 1; y = y + 1) {
@@ -40,8 +40,8 @@ export fn voronoi2d(position: vec2f) -> VoronoiSample2 {
 
 export fn voronoi3d(position: vec3f) -> VoronoiSample3 {
   let baseCell = vec3i(floor(position));
-  var nearestDistance = 3.4028235e38;
-  var secondDistance = 3.4028235e38;
+  var nearestDistance = 1.0e20;
+  var secondDistance = 1.0e20;
   var nearestCell = baseCell;
 
   for (var z = -1; z <= 1; z = z + 1) {
