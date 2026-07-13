@@ -1,7 +1,7 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { claimedGroupValidationDone, pushClaimedGroupValidationScope, discardLastClaimedGroupValidationScope, type ClaimedGroupValidationContext } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popClaimedGroupValidationScopes, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
@@ -112,18 +112,54 @@ export class Draw {
     return layout;
   }
 
+  /**
+   * Encodes and submits this draw as a one-shot render pass.
+   *
+   * Await the returned promise when using raw claimed bind groups: native
+   * validation failures are reported asynchronously as `VGPU-R4-GROUP-VALIDATION`.
+   * Ignoring the promise can surface those failures as unhandled rejections.
+   */
   draw(opts: DrawCallOptions = {}): Promise<void> {
     const target = opts.target ?? this.defaultTarget;
     if (!target) throw unsupportedError(`${this.label}.draw`, "Draw.draw() one-shot requiere opts.target cuando gpu.screen no existe; usá gpu.frame.pass({ target }, p => p.draw(draw)).");
     const encoder = this.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
-    try {
-      this.encode(pass, target, opts, (context) => pushClaimedGroupValidationScope(this.device, context));
-    } finally {
-      pass.end();
+    const validations: ClaimedGroupValidationResult[] = [];
+    try { this.encode(pass, target, opts, (context) => pushClaimedGroupValidationScope(this.device, context)); }
+    catch (error) {
+      discardClaimedGroupValidationResults(validations);
+      discardClaimedGroupValidationScopes(this.device);
+      try { pass.end(); } catch { /* ignore cleanup failure after encode failure */ }
+      throw error;
     }
-    this.device.gpu.queue.submit([encoder.finish()]);
-    return claimedGroupValidationDone(this.device);
+    try { pass.end(); }
+    catch (error) {
+      const scopes = popClaimedGroupValidationScopes(this.device);
+      discardClaimedGroupValidationResults(validations);
+      discardClaimedGroupValidationResults(scopes);
+      const context = scopes[0]?.context;
+      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
+      throw error;
+    }
+    let commandBuffer: GPUCommandBuffer;
+    try { commandBuffer = encoder.finish(); }
+    catch (error) {
+      const scopes = popClaimedGroupValidationScopes(this.device);
+      discardClaimedGroupValidationResults(validations);
+      discardClaimedGroupValidationResults(scopes);
+      const context = scopes[0]?.context;
+      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
+      throw error;
+    }
+    validations.push(...popClaimedGroupValidationScopes(this.device));
+    try { this.device.gpu.queue.submit([commandBuffer]); }
+    catch (error) {
+      const context = validations[0]?.context;
+      discardClaimedGroupValidationResults(validations);
+      if (context) return Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      throw error;
+    }
+    return claimedGroupValidationDone(this.device, validations);
   }
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {

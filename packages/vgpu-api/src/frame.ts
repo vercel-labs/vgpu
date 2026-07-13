@@ -1,10 +1,10 @@
 import type { Device } from "@vgpu/core";
-import { claimedGroupValidationDone, discardClaimedGroupValidationScopes, pushClaimedGroupValidationScope } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popClaimedGroupValidationScopes, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { Draw, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
-import { missingScreenError } from "./errors.ts";
+import { claimedGroupNativeValidationError, missingScreenError } from "./errors.ts";
 
 export interface FramePassOptions {
   readonly target?: Target;
@@ -15,9 +15,16 @@ export interface FrameLoopHandle { stop(): void }
 export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
-  /** Resolves after submit-time validation scopes used for raw claimed bind groups have been checked. */
+  /**
+   * Resolves after submit-time validation for raw claimed bind groups has been checked.
+   *
+   * Consume this promise when encoding raw claimed bind groups; otherwise native
+   * validation failures may surface as unhandled promise rejections. Metadata-backed
+   * claims bypass this path and add no validation-scope work.
+   */
   done: Promise<void> = Promise.resolve();
   private readonly encoder: GPUCommandEncoder;
+  private readonly validations: ClaimedGroupValidationResult[] = [];
   private submitted = false;
   constructor(private readonly device: Device, private readonly defaultTarget?: Target) {
     this.encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
@@ -29,16 +36,48 @@ export class Frame {
     const encoder = this.encoder.beginRenderPass(target.renderPassDescriptor(opts.clear));
     try { cb(new FramePass(this.device, encoder, target)); }
     catch (error) {
+      discardClaimedGroupValidationResults(this.validations);
+      this.validations.length = 0;
       discardClaimedGroupValidationScopes(this.device);
+      try { encoder.end(); } catch { /* ignore cleanup failure after encode failure */ }
       throw error;
-    } finally { encoder.end(); }
+    }
+    try { encoder.end(); }
+    catch (error) {
+      const scopes = popClaimedGroupValidationScopes(this.device);
+      discardClaimedGroupValidationResults(this.validations);
+      discardClaimedGroupValidationResults(scopes);
+      this.validations.length = 0;
+      const context = scopes[0]?.context;
+      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
+      throw error;
+    }
   }
 
   submit(): void {
     if (this.submitted) return;
     this.submitted = true;
-    this.device.gpu.queue.submit([this.encoder.finish()]);
-    this.done = claimedGroupValidationDone(this.device);
+    let commandBuffer: GPUCommandBuffer;
+    try { commandBuffer = this.encoder.finish(); }
+    catch (error) {
+      const scopes = popClaimedGroupValidationScopes(this.device);
+      this.validations.push(...scopes);
+      const context = this.validations[0]?.context;
+      discardClaimedGroupValidationResults(this.validations);
+      if (!context) throw error;
+      this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      return;
+    }
+    this.validations.push(...popClaimedGroupValidationScopes(this.device));
+    try { this.device.gpu.queue.submit([commandBuffer]); }
+    catch (error) {
+      const context = this.validations[0]?.context;
+      discardClaimedGroupValidationResults(this.validations);
+      if (!context) throw error;
+      this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      return;
+    }
+    this.done = claimedGroupValidationDone(this.device, this.validations);
   }
 }
 

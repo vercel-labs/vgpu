@@ -55,6 +55,62 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   gpu.dispose();
 });
 
+test("R4 raw claim validation stays attributed when frames overlap", async () => {
+  const gpu = await init({ size: [4, 4] });
+  const target = gpu.target({ size: [4, 4] });
+  const popResolvers: ((error: GPUError | null) => void)[] = [];
+  const gpuDevice = gpu.device.gpu as GPUDevice & {
+    pushErrorScope(filter: GPUErrorFilter): void;
+    popErrorScope(): Promise<GPUError | null>;
+  };
+  gpuDevice.pushErrorScope = vi.fn();
+  gpuDevice.popErrorScope = vi.fn(() => new Promise<GPUError | null>((resolve) => popResolvers.push(resolve)));
+
+  const cubeA = rawClaimedDraw(gpu, "cubeA");
+  const cubeB = rawClaimedDraw(gpu, "cubeB");
+
+  const frameA = gpu.frame((f) => f.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } })));
+  expect(popResolvers).toHaveLength(1);
+  const frameB = gpu.frame((f) => f.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } })));
+  expect(popResolvers).toHaveLength(2);
+
+  const expectA = expect(frameA.done).rejects.toMatchObject({
+    code: "VGPU-R4-GROUP-VALIDATION",
+    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
+    where: "cubeA.draw",
+  });
+  const expectB = expect(frameB.done).rejects.toMatchObject({
+    code: "VGPU-R4-GROUP-VALIDATION",
+    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
+    where: "cubeB.draw",
+  });
+
+  popResolvers[1]!({ message: "second frame validation" } as GPUError);
+  popResolvers[0]!({ message: "first frame validation" } as GPUError);
+
+  await expectA;
+  await expectB;
+
+  gpu.dispose();
+});
+
+function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
+  const cube = gpu.draw({ shader: OBJECTS, label, set: { globals: { tint: 1 } } });
+  const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: 64 });
+  const rawLayout = gpu.device.gpu.createBindGroupLayout({
+    label: `${label}.raw-static-layout`,
+    entries: [{ binding: 0, visibility: 2, buffer: { type: "uniform", hasDynamicOffset: false, minBindingSize: 4 } }],
+  });
+  const rawBindGroup = gpu.device.gpu.createBindGroup({
+    label: `${label}.raw-static-bind-group`,
+    layout: rawLayout,
+    entries: [{ binding: 0, resource: { buffer: rawBuffer, offset: 0, size: 4 } }],
+  });
+  cube.layout(1, { dynamicOffsets: true });
+  cube.group(1, rawBindGroup);
+  return cube;
+}
+
 test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", async () => {
   const gpu = await init({ size: [4, 4] });
   const target = gpu.target({ size: [4, 4] });
