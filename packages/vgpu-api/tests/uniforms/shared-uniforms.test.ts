@@ -26,6 +26,14 @@ struct BlurGlobals { time: vec2f, mouse: vec2f }
 }
 `;
 
+const PADDED_WGSL = `
+struct Globals { time: f32, @align(16) mouse: vec2f }
+@group(0) @binding(0) var<uniform> globals: Globals;
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(globals.time, globals.mouse, 1.0);
+}
+`;
+
 const OVERRIDE_NAME_WGSL = `
 struct Globals { time: f32, mouse: vec2f }
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -66,7 +74,20 @@ describe("gpu.uniforms() shared uniforms", () => {
 
     expect(() => gpu.pass(BLUR_BAD_WGSL, { label: "BLUR_WGSL", set: { globals } })).toThrowError(
       "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de WAVE_WGSL);\n" +
-        "  BLUR_WGSL declara { time: vec2f, mouse: vec2f } — alineá los structs o usá dos uniforms distintos.",
+        "  BLUR_WGSL declara { time: vec2f, ... } — alineá los structs o usá dos uniforms distintos.",
+    );
+    gpu.dispose();
+  });
+
+  test("rejects same named members when reflected byte layout differs", async () => {
+    const gpu = await init({ size: [4, 4] });
+    const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
+
+    gpu.pass(PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
+
+    expect(() => gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } })).toThrowError(
+      "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de PADDED_WGSL);\n" +
+        "  WAVE_WGSL declara { time: f32, ... } — alineá los structs o usá dos uniforms distintos.",
     );
     gpu.dispose();
   });
@@ -85,6 +106,8 @@ describe("gpu.uniforms() shared uniforms", () => {
         pass.draw(blur);
       });
     });
+    const bindGroupsAfterFirstFrame = mock.calls.createBindGroup;
+
     globals.set({ time: 2, mouse: [3, 4] });
     gpu.frame((frame) => {
       frame.pass({ target }, (pass) => {
@@ -96,7 +119,8 @@ describe("gpu.uniforms() shared uniforms", () => {
     const resource = wave.drawImpl.setCore.bindingState("globals")?.resource as GPUBufferBinding;
     expect(resource.buffer).toBe((blur.drawImpl.setCore.bindingState("globals")?.resource as GPUBufferBinding).buffer);
     expect(mock.calls.createBuffer).toBe(1);
-    expect(mock.calls.createBindGroup).toBe(2);
+    expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame);
+    expect(bindGroupsAfterFirstFrame).toBe(2);
     expect("__vgpuMockBytes" in resource.buffer).toBe(true);
     const bytes = resource.buffer.__vgpuMockBytes;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
