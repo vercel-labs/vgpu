@@ -1,13 +1,32 @@
-# vgpu
+# @vgpu/cli
 
-Official VGPU CLI.
+Official VGPU CLI package. It installs the `vgpu` command-line binary for docs,
+doctor, and WGSL utilities.
+
+## Install / run
 
 ```sh
-npx vgpu --help
-npx vgpu docs ls
-npx vgpu docs cat /@vgpu/core/Buffer.docs.md
-npx vgpu docs grep -i --package @vgpu/wgsl minify
+pnpm add -D @vgpu/cli
+pnpm exec vgpu --help
+pnpm exec vgpu docs ls
+pnpm exec vgpu docs cat /@vgpu/core/Buffer.docs.md
+pnpm exec vgpu docs grep -i --package @vgpu/wgsl minify
 ```
+
+You can also run the binary directly through a package runner:
+
+```sh
+pnpm dlx @vgpu/cli --help
+npx --package @vgpu/cli vgpu --help
+```
+
+## Package and binary names
+
+- Package name: `@vgpu/cli`
+- Binary name: `vgpu`
+
+The bare package name `vgpu` is reserved for the public runtime API package.
+This package only owns the CLI binary.
 
 ## Commands
 
