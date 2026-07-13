@@ -34,7 +34,8 @@
     "./constants": "./src/constants/index.wgsl",
     "./hash": "./src/hash/index.wgsl",
     "./noise": "./src/noise/index.wgsl",
-    "./fullscreen": "./src/fullscreen/index.wgsl"
+    "./fullscreen": "./src/fullscreen/index.wgsl",
+    "./light": "./src/light/index.wgsl"
   },
   "files": [
     "src/**/*.wgsl",
