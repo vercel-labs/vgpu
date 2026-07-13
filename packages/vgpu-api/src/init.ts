@@ -1,19 +1,7 @@
-import type { VGPUAdapter } from "@vgpu/core";
+export { createGpu, type AdapterFactory, type Gpu, type InitOptions } from "./gpu.ts";
 
-export interface InitOptions {
-  readonly adapter?: VGPUAdapter;
-}
+import { createGpu, type AdapterFactory, type InitOptions } from "./gpu.ts";
 
-export interface Gpu {
-  readonly adapter?: VGPUAdapter;
-}
-
-export type AdapterFactory = () => VGPUAdapter;
-
-export function notImplementedInit(_options: InitOptions = {}): never {
-  throw new Error("not implemented");
-}
-
-export function initWithAdapter(_entry: "browser" | "node" | "mock", _adapterFactory?: AdapterFactory): never {
-  throw new Error("not implemented");
+export function initWithAdapter(entry: "browser" | "node" | "mock", adapterFactory?: AdapterFactory, options?: InitOptions) {
+  return createGpu(entry, options, {}, adapterFactory);
 }

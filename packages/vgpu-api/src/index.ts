@@ -1,11 +1,22 @@
-import { notImplementedInit, type InitOptions } from "./init.ts";
+import { createGpu, type InitOptions } from "./init.ts";
 
 export type { Gpu, InitOptions } from "./init.ts";
+export { Draw } from "./draw.ts";
+export type { DrawOptions, DrawCallOptions, MeshLike, BundleBackReference, BundleBackReferenceRegistry } from "./draw.ts";
+export { Frame, FramePass, FrameRunner } from "./frame.ts";
+export type { FramePassOptions, FrameLoopHandle } from "./frame.ts";
+export { Pass } from "./pass.ts";
+export type { PassOptions } from "./pass.ts";
+export { OffscreenTarget, ScreenTarget } from "./target.ts";
+export type { Target, TargetOptions } from "./target.ts";
+export { VGPUError } from "./errors.ts";
 export type { AppCreateOptions, AppInstance, Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
 export type { RenderTarget, RenderTargetSpec } from "@vgpu/render/passes";
 export type { ResolvedShader, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
-/** Browser entrypoint. Phase 2 wires this to navigator.gpu; Phase 0 keeps a throwing stub. */
-export function init(options?: InitOptions): never {
-  return notImplementedInit(options);
+/** Browser entrypoint. */
+export function init(canvas: HTMLCanvasElement | OffscreenCanvas, options?: InitOptions): ReturnType<typeof createGpu>;
+export function init(options?: InitOptions): ReturnType<typeof createGpu>;
+export function init(canvasOrOptions?: HTMLCanvasElement | OffscreenCanvas | InitOptions, options?: InitOptions): ReturnType<typeof createGpu> {
+  return createGpu("browser", canvasOrOptions, options);
 }
