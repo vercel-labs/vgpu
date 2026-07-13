@@ -33,7 +33,7 @@ export interface SetCore {
   set(values: SetBag): readonly BindingIdentityChange[];
   claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
   layout(group: number): GPUBindGroupLayout;
-  bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimed?: boolean }[];
+  bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
   bindingState(name: string): BindingState | undefined;
 }
 
@@ -128,13 +128,13 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     return bgl;
   }
 
-  function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimed?: boolean }[] {
+  function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[] {
     return groups.map(bindGroupFor);
   }
 
-  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimed?: boolean } {
+  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
-    if (claimed) return { group, bindGroup: claimed, offsets: [], claimed: true };
+    if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
     const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
     const entries = bindGroupEntries(groupBindings);
     const identities = identitiesFor(groupBindings);
@@ -144,6 +144,10 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       entries,
     }));
     return { group, bindGroup, offsets: [] };
+  }
+
+  function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {
+    return bindGroupMetadataFor(bindGroup) ? undefined : { label: options.label, group };
   }
 
   function bindGroupEntries(groupBindings: readonly BindingInfo[]): GPUBindGroupEntry[] {

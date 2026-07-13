@@ -1,4 +1,5 @@
 import type { Device } from "@vgpu/core";
+import { claimedGroupValidationDone, discardClaimedGroupValidationScopes, pushClaimedGroupValidationScope } from "./claim-validation.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { Draw, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
@@ -14,6 +15,8 @@ export interface FrameLoopHandle { stop(): void }
 export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
+  /** Resolves after submit-time validation scopes used for raw claimed bind groups have been checked. */
+  done: Promise<void> = Promise.resolve();
   private readonly encoder: GPUCommandEncoder;
   private submitted = false;
   constructor(private readonly device: Device, private readonly defaultTarget?: Target) {
@@ -24,21 +27,25 @@ export class Frame {
     const target = opts.target ?? this.defaultTarget;
     if (!target) throw missingScreenError();
     const encoder = this.encoder.beginRenderPass(target.renderPassDescriptor(opts.clear));
-    try { cb(new FramePass(encoder, target)); }
-    finally { encoder.end(); }
+    try { cb(new FramePass(this.device, encoder, target)); }
+    catch (error) {
+      discardClaimedGroupValidationScopes(this.device);
+      throw error;
+    } finally { encoder.end(); }
   }
 
   submit(): void {
     if (this.submitted) return;
     this.submitted = true;
     this.device.gpu.queue.submit([this.encoder.finish()]);
+    this.done = claimedGroupValidationDone(this.device);
   }
 }
 
 export class FramePass {
-  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target) {}
+  constructor(private readonly device: Device, private readonly encoder: GPURenderPassEncoder, readonly target: Target) {}
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    drawable.encode(this.encoder, this.target, opts);
+    drawable.encode(this.encoder, this.target, opts, (context) => pushClaimedGroupValidationScope(this.device, context));
   }
   bundles(...bundles: readonly Bundle[]): void {
     replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));

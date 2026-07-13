@@ -1,6 +1,7 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
+import { claimedGroupValidationDone, pushClaimedGroupValidationScope, discardLastClaimedGroupValidationScope, type ClaimedGroupValidationContext } from "./claim-validation.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
@@ -31,7 +32,7 @@ export interface MeshLike {
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
 }
 
-type BindGroupBinding = { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimed?: boolean };
+type BindGroupBinding = { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: ClaimedGroupValidationContext };
 
 export type BundleStaleEvent =
   | ({ readonly kind: "binding-identity"; readonly drawLabel: string } & BindingIdentityChange)
@@ -111,28 +112,37 @@ export class Draw {
     return layout;
   }
 
-  draw(opts: DrawCallOptions = {}): void {
+  draw(opts: DrawCallOptions = {}): Promise<void> {
     const target = opts.target ?? this.defaultTarget;
     if (!target) throw unsupportedError(`${this.label}.draw`, "Draw.draw() one-shot requiere opts.target cuando gpu.screen no existe; usá gpu.frame.pass({ target }, p => p.draw(draw)).");
     const encoder = this.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
-    this.encode(pass, target, opts);
-    pass.end();
+    try {
+      this.encode(pass, target, opts, (context) => pushClaimedGroupValidationScope(this.device, context));
+    } finally {
+      pass.end();
+    }
     this.device.gpu.queue.submit([encoder.finish()]);
+    return claimedGroupValidationDone(this.device);
   }
 
-  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}): void {
+  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {
     pass.setPipeline(this.pipelineFor(target));
-    for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts);
+    for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
     this.encodeMesh(pass);
   }
 
-  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions): void {
+  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {
     const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
+    if (!binding.claimValidation || !claimValidation) {
+      pass.setBindGroup(binding.group, binding.bindGroup, offsets);
+      return;
+    }
+    claimValidation(binding.claimValidation);
     try { pass.setBindGroup(binding.group, binding.bindGroup, offsets); }
     catch (error) {
-      if (binding.claimed) throw claimedGroupNativeValidationError(this.label, binding.group, error);
-      throw error;
+      discardLastClaimedGroupValidationScope(this.device);
+      throw claimedGroupNativeValidationError(binding.claimValidation.label, binding.claimValidation.group, error);
     }
   }
 

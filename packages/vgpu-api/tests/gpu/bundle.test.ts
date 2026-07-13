@@ -67,6 +67,36 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     }
   });
 
+  test("R4 wraps native async validation for raw claimed bind groups without metadata", async () => {
+    const gpu = await init({ size: [4, 4] });
+    try {
+      const cube = gpu.draw({ shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
+      const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
+      const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: GPUBufferUsage.UNIFORM });
+      const rawLayout = gpu.device.gpu.createBindGroupLayout({
+        label: "raw.static-layout",
+        entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform", hasDynamicOffset: false, minBindingSize: 4 } }],
+      });
+      const rawBindGroup = gpu.device.gpu.createBindGroup({
+        label: "raw.static-bind-group",
+        layout: rawLayout,
+        entries: [{ binding: 0, resource: { buffer: rawBuffer, offset: 0, size: 4 } }],
+      });
+
+      cube.layout(1, { dynamicOffsets: true });
+      cube.group(1, rawBindGroup);
+      const frame = gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(cube, { offsets: { 1: [0] } })));
+
+      await expect(frame.done).rejects.toMatchObject({
+        code: "VGPU-R4-GROUP-VALIDATION",
+        message: expect.stringContaining("grupo 1 reclamado en draw 'cube'"),
+        where: "cube.draw",
+      });
+    } finally {
+      gpu.dispose();
+    }
+  });
+
   test("§10 UniformPool dynamic offsets can draw 1000 pushed objects and sample selected offsets", async () => {
     const gpu = await init({ size: [4, 4] });
     try {
