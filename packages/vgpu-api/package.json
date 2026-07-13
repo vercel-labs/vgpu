@@ -1,0 +1,78 @@
+{
+  "name": "vgpu",
+  "version": "0.0.8",
+  "description": "Public VGPU API entrypoint scaffold for browser, Node, mock, scene, and client typing surfaces.",
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "rendering",
+    "vgpu"
+  ],
+  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "bugs": {
+    "url": "https://github.com/vercel-labs/vgpu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/vgpu-api"
+  },
+  "license": "MIT",
+  "author": "Matias Gonzalez <matiasngf@hotmail.com>",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js",
+      "default": "./dist/node.js"
+    },
+    "./mock": {
+      "types": "./dist/mock.d.ts",
+      "import": "./dist/mock.js",
+      "default": "./dist/mock.js"
+    },
+    "./scene": {
+      "types": "./dist/scene.d.ts",
+      "import": "./dist/scene.js",
+      "default": "./dist/scene.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "cd ../.. && vitest run packages/vgpu-api"
+  },
+  "dependencies": {
+    "@vgpu/adapter-mock": "workspace:*",
+    "@vgpu/adapter-node": "workspace:*",
+    "@vgpu/core": "workspace:*",
+    "@vgpu/render": "workspace:*",
+    "@vgpu/wgsl": "workspace:*"
+  },
+  "vgpuExportBundleBudgetsGzipBytes": {
+    ".": 4096,
+    "./node": 4096,
+    "./mock": 4096,
+    "./scene": 1024,
+    "./client": 1024
+  }
+}

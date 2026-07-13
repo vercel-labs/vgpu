@@ -14,6 +14,9 @@ importers:
       '@types/pngjs':
         specifier: ^6.0.5
         version: 6.0.5
+      '@vgpu/cli':
+        specifier: workspace:*
+        version: link:packages/vgpu
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
@@ -29,6 +32,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+      vgpu:
+        specifier: workspace:*
+        version: link:packages/vgpu-api
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
@@ -50,6 +56,9 @@ importers:
       '@vgpu/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
+      '@vgpu/cli':
+        specifier: workspace:*
+        version: link:../../packages/vgpu
       '@vgpu/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -86,9 +95,6 @@ importers:
       shiki:
         specifier: ^3.21.0
         version: 3.23.0
-      vgpu:
-        specifier: workspace:*
-        version: link:../../packages/vgpu
     devDependencies:
       '@types/mdx':
         specifier: ^2.0.13
@@ -174,6 +180,24 @@ importers:
         version: 3.4.2
 
   packages/vgpu: {}
+
+  packages/vgpu-api:
+    dependencies:
+      '@vgpu/adapter-mock':
+        specifier: workspace:*
+        version: link:../adapter-mock
+      '@vgpu/adapter-node':
+        specifier: workspace:*
+        version: link:../adapter-node
+      '@vgpu/core':
+        specifier: workspace:*
+        version: link:../core
+      '@vgpu/render':
+        specifier: workspace:*
+        version: link:../render
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
 
   packages/wgsl:
     devDependencies:

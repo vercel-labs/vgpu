@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo" },
+  "references": [
+    { "path": "../core" },
+    { "path": "../adapter-mock" },
+    { "path": "../adapter-node" },
+    { "path": "../render" },
+    { "path": "../wgsl" }
+  ],
+  "include": ["src/**/*.ts"]
+}
