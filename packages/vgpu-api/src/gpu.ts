@@ -7,6 +7,9 @@ import { Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
+import { ComputePipeline } from "./compute.ts";
+import { createStorageBuffer } from "./storage.ts";
+import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
@@ -103,10 +106,10 @@ class RingGpu implements Gpu {
     return () => { callbacks.delete(cb); };
   }
   dispose(): void { this.cache.dispose(); this.device.dispose(); }
-  compute(_source: string, _opts?: ComputeOptions): never { throw lanePlaceholder("gpu.compute", "fase 3 Lane C"); }
-  storage(_bytes: number, _access: StorageAccess = "read-write"): never { throw lanePlaceholder("gpu.storage", "fase 3 Lane C"); }
-  pingPong(_width: number, _height: number, _opts?: TargetOptions): never { throw lanePlaceholder("gpu.pingPong", "fase 3 Lane C"); }
-  pingPongStorage(_bytes: number): never { throw lanePlaceholder("gpu.pingPongStorage", "fase 3 Lane C"); }
+  compute(source: string, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, source, opts, this.cache); }
+  storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
+  pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
+  pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
   uniforms<T extends Record<string, unknown>>(_values: T): never { throw lanePlaceholder("gpu.uniforms", "fase 3 Lane E"); }
   bundle(_opts: BundleOptions, _cb: (recorder: BundleRecorder) => void): never { throw lanePlaceholder("gpu.bundle", "fase 3 Lane D"); }
 
