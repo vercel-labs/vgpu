@@ -7,6 +7,7 @@ import { Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
+import { createSharedUniforms } from "./uniforms.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
@@ -107,7 +108,7 @@ class RingGpu implements Gpu {
   storage(_bytes: number, _access: StorageAccess = "read-write"): never { throw lanePlaceholder("gpu.storage", "fase 3 Lane C"); }
   pingPong(_width: number, _height: number, _opts?: TargetOptions): never { throw lanePlaceholder("gpu.pingPong", "fase 3 Lane C"); }
   pingPongStorage(_bytes: number): never { throw lanePlaceholder("gpu.pingPongStorage", "fase 3 Lane C"); }
-  uniforms<T extends Record<string, unknown>>(_values: T): never { throw lanePlaceholder("gpu.uniforms", "fase 3 Lane E"); }
+  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
   bundle(_opts: BundleOptions, _cb: (recorder: BundleRecorder) => void): never { throw lanePlaceholder("gpu.bundle", "fase 3 Lane D"); }
 
   private advanceFrameState(): void {
