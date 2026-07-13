@@ -1,7 +1,6 @@
 import type { Device } from "@vgpu/core";
-import type { Reflection } from "@vgpu/wgsl/runtime";
+import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { reflectWgslForRing1 } from "./reflect-local.ts";
 import { bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
@@ -33,6 +32,7 @@ export interface BundleBackReference {
   markStale(reason: string): void;
 }
 
+/** Bundle back-reference hook frozen for Lane D; set()/group() mark registered bundles stale. */
 export interface BundleBackReferenceRegistry {
   add(bundle: BundleBackReference): void;
   delete(bundle: BundleBackReference): void;
@@ -55,7 +55,7 @@ export class Draw {
 
   constructor(readonly device: Device, readonly source: string, readonly opts: DrawOptions, private readonly cache: BindGroupCache = createBindGroupCache(), private readonly defaultTarget?: Target) {
     this.label = opts.label ?? "draw";
-    this.reflection = reflectWgslForRing1(source);
+    this.reflection = reflectSource(source, `${this.label}.wgsl`);
     this.bindGroupLayouts = bindGroupLayoutsForReflection(device, this.label, this.reflection);
     this.pipelineLayout = pipelineLayoutFor(device, this.bindGroupLayouts);
     this.shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });

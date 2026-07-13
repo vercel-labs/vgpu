@@ -157,22 +157,32 @@ Bindings and override constants are likewise exposed by their shader-visible nam
 ## Reflection API
 
 ```ts
-import { resolveShader } from "@vgpu/wgsl/runtime";
+import { reflectSource, resolveShader } from "@vgpu/wgsl/runtime";
 
 const resolved = await resolveShader({ entry: "./shader.wgsl" });
 const fragment = resolved.reflection.entryPoints.find((entry) => entry.stage === "fragment");
+
+// Synchronous single-source reflection for ring-1/runtime WGSL strings.
+// Use resolveShader() for import graphs.
+const reflection = reflectSource(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+  @fragment fn main() -> @location(0) vec4f { return vec4f(params.time); }
+`);
 ```
 
-`resolveShader()` returns `{ wgsl, deps, cacheKey, ast, sourceMap, diagnostics, reflection }`. Reflection currently exposes:
+`resolveShader()` returns `{ wgsl, deps, cacheKey, ast, sourceMap, diagnostics, reflection }`. `reflectSource(wgsl, path?)` returns the same frozen `ReflectionFacade` shape for a single raw WGSL string without resolving imports; if the source contains WGSL imports it throws and points callers to `resolveShader()`.
+
+Reflection currently exposes:
 
 | Field | Description |
 | --- | --- |
-| `reflection.entryPoints` | `{ name, mangledName, stage }` for `@vertex`, `@fragment`, and `@compute` functions. |
-| `reflection.bindings` | `{ group, binding, name }` for discovered resource bindings. |
+| `reflection.entryPoints` | `{ name, mangledName, stage, workgroupSize? }` for `@vertex`, `@fragment`, and `@compute` functions. |
+| `reflection.bindings` | `{ group, binding, name, type, kind, addressSpace?, access?, struct?, layout?, bindingLayout? }` for discovered resources, including BGL-precise layouts. |
 | `reflection.overrides` | `{ name, mangledName, defaultValue? }` for override constants. |
 | `reflection.featuresRequired` | Feature names from `enable ...;` directives. |
-
-Workgroup sizes, binding access types, and struct layouts are not yet exposed.
+| `reflection.structs` / `reflection.aliases` | Reflected host-visible type declarations with original and mangled names. |
+| `reflection.hostShareableLayouts` | Naga-standard host-shareable layouts for uniform/storage resources. |
 
 ## Minify option
 

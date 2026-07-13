@@ -28,7 +28,10 @@ engine used by downstream lanes.
   `{ offsets }`, `.targets?`, and internal `.__recordedIn` bundle back-reference
   registry for Lane D staleness tracking
 - `Target`: `.size`, `.texelSize`, `.color`, `.colors[]`, `.depth`, `.resize()`,
-  `.read()`, `.gpu`
+  `.read()`, `.gpu`, `.sampleCount`; `msaa: true | 4` creates real 4x MSAA
+  attachments and resolves into sampleable `.color` / `.colors[]` textures for
+  multisample-capable color formats. Unsupported MSAA formats throw a `VGPUError`
+  with a fix-it instead of silently degrading.
 - `Frame`: `.pass({ target, clear }, cb)` with one encoder / N passes / one submit
 - Bind-group cache API: `getOrCreate(drawId, group, identityTuple, factory)` with
   eviction by resource identity destroy hooks

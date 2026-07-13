@@ -19,6 +19,7 @@ export interface InitOptions {
   readonly label?: string;
 }
 
+/** Ring-1 facade shared by browser, node, and mock entrypoints. */
 export interface Gpu {
   readonly device: Device;
   readonly gpu: GPUDevice;

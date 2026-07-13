@@ -35,6 +35,19 @@ export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly
 
 const scanCache = new Map<string, MangleModule>();
 
+/**
+ * Reflects one raw WGSL string through the same scanner/parser/ReflectionFacade path as resolveShader().
+ * This intentionally rejects WGSL import graphs; use resolveShader() when imports must be loaded/mangled.
+ */
+export function reflectSource(wgsl: string, path = "<runtime>"): Reflection {
+  const tokens = scan(wgsl);
+  const parsed = parseModule(tokens);
+  if (parsed.imports.length > 0) {
+    throw wgslError("VGPU-WGSL-REFLECT-SOURCE-IMPORT", "reflectSource() accepts a single raw WGSL string; use resolveShader() for WGSL import graphs.");
+  }
+  return reflect([{ path, source: wgsl, tokens, parsed }]);
+}
+
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
   const loaded = new Map<string, MangleModule>();
   const diagnostics: DiagnosticList[number][] = [];

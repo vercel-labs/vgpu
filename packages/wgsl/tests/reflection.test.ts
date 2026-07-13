@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { resolveShader } from "@vgpu/wgsl/runtime";
+import { reflectSource, resolveShader } from "@vgpu/wgsl/runtime";
 
 test("reflection extracts bindings", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@group(1) @binding(2) var<storage> data: array<u32>;" }, validate: false })).reflection.bindings[0]).toMatchObject({ group: 1, binding: 2, name: "data", kind: "buffer", addressSpace: "storage" }));
 test("reflection reports compute entry", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(2,3,4) fn main(){}" }, validate: false })).reflection.entryPoints[0]).toMatchObject({ stage: "compute", name: "main", workgroupSize: [2, 3, 4] }));
@@ -130,4 +130,28 @@ test("reflection classifies texture bindings for exact BGL entries", async () =>
     { kind: "texture", texture: { sampleType: "unfilterable-float", viewDimension: "cube", multisampled: false } },
     { kind: "storageTexture", storageTexture: { access: "read-write", format: "rgba16float", viewDimension: "3d" } },
   ]);
+});
+
+
+test("reflectSource reflects raw WGSL strings through the frozen ReflectionFacade", () => {
+  const reflection = reflectSource(`
+    struct Params { time: f32, values: array<f32, 3> }
+    @group(0) @binding(0) var<uniform> params: Params;
+    @group(0) @binding(1) var tex: texture_2d<f32>;
+    @fragment fn main() -> @location(0) vec4f { return vec4f(params.time); }
+  `);
+  expect(reflection.entryPoints[0]).toMatchObject({ name: "main", stage: "fragment" });
+  expect(reflection.bindings[0]).toMatchObject({ name: "params", kind: "buffer", bindingLayout: { kind: "buffer" } });
+  expect(reflection.bindings[0]?.layout).toMatchObject({ layoutMode: "naga-standard", size: 32 });
+  expect(reflection.bindings[1]).toMatchObject({ name: "tex", kind: "texture", bindingLayout: { kind: "texture" } });
+});
+
+test("reflectSource rejects import graphs and points callers to resolveShader", () => {
+  expect(() => reflectSource(`import { color } from "./palette.wgsl";`)).toThrowError(/resolveShader/);
+  try {
+    reflectSource(`import { color } from "./palette.wgsl";`);
+    throw new Error("expected reflectSource to reject imports");
+  } catch (error) {
+    expect(error).toMatchObject({ code: "VGPU-WGSL-REFLECT-SOURCE-IMPORT" });
+  }
 });

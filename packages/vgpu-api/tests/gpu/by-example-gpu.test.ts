@@ -45,17 +45,29 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   test("by-example §7 first half renders HDR target and post pass", async () => {
     const gpu = await init({ size: [8, 8] });
     try {
-      const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "scene" });
+      expect(() => gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/msaa: true/);
+      const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
+      expect(scene.sampleCount).toBe(1);
+      const msaaScene = gpu.target({ size: [8, 8], format: "rgba8unorm", depth: true, msaa: true, label: "msaaScene" });
+      expect(msaaScene.sampleCount).toBe(4);
+      expect(msaaScene.color.sampleCount).toBe(1);
+      expect(msaaScene.depth?.sampleCount).toBe(4);
       const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
       const solid = gpu.pass(SOLID, { label: "solid" });
       const post = gpu.pass(POST, { label: "post" });
       gpu.frame((frame) => {
+        frame.pass({ target: msaaScene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: output }, (p) => {
           post.set({ src: scene.color, texel: scene.texelSize });
           p.draw(post);
         });
       });
+      const msaaPixels = await msaaScene.read();
+      const msaaPixel = [...msaaPixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
+      expect(msaaPixel[1]).toBeGreaterThan(100);
+      expect(msaaPixel[2]).toBeGreaterThan(150);
+
       const pixels = await output.read();
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(pixel[1]).toBeGreaterThan(100);
