@@ -179,7 +179,14 @@ importers:
         specifier: ^3.4.2
         version: 3.4.2
 
-  packages/vgpu: {}
+  packages/vgpu:
+    dependencies:
+      pixelmatch:
+        specifier: ^7.2.0
+        version: 7.2.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
 
   packages/vgpu-api:
     dependencies:
