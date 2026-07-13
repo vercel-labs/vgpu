@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, lane/h-ci]
+    branches: [main, feat/vgpu-rewrite]
   pull_request:
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts
 
   docker-gpu:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -57,27 +57,28 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -w typecheck
+      - name: Build Docker GPU image
+        run: docker build -t vgpu-test-dev:ci -f infra/test-docker/Dockerfile.dev .
       - name: Run Dawn GPU validation in Docker
         run: |
-          docker run --rm --platform linux/arm64 \
+          docker run --rm \
             -v "$PWD:/workspace" \
-            -v /home/user/vgpu:/home/user/vgpu:ro \
             -w /workspace \
             -e VGPU_DOCKER_TEST=1 \
-            vgpu-test-dev:spike \
+            vgpu-test-dev:ci \
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm exec vitest run packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/vgpu-api/tests/gpu; \
+              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/vgpu-api/tests/gpu; \
               s=$?; kill $xp; exit $s'
       - name: Run pixel snapshot CLI in Docker
         run: |
-          docker run --rm --platform linux/arm64 \
+          docker run --rm \
             -v "$PWD:/workspace" \
-            -v /home/user/vgpu:/home/user/vgpu:ro \
             -w /workspace \
             -e VGPU_DOCKER_TEST=1 \
-            vgpu-test-dev:spike \
+            -e CI=true \
+            vgpu-test-dev:ci \
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter @vgpu/cli exec vgpu snapshot; \
+              pnpm --filter @vgpu/cli exec vgpu snapshot --ci; \
               s=$?; kill $xp; exit $s'
 
   wgsl-cachekey-determinism:
