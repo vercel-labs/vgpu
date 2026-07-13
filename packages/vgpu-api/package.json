@@ -47,12 +47,13 @@
       "default": "./dist/scene.js"
     },
     "./client": {
-      "types": "./dist/client.d.ts",
+      "types": "./client.d.ts",
       "import": "./dist/client.js",
       "default": "./dist/client.js"
     }
   },
   "files": [
+    "client.d.ts",
     "dist",
     "README.md",
     "LICENSE"
