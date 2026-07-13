@@ -5,7 +5,8 @@ import { resolveShader } from "@vgpu/wgsl/runtime";
 import { writeLayoutValue } from "./reflection-test-utils.ts";
 
 const GPU_BUFFER_USAGE = { MAP_READ: 1, COPY_DST: 8, COPY_SRC: 4, UNIFORM: 64, STORAGE: 128 } as const;
-const GPU_SHADER_STAGE = { COMPUTE: 4 } as const;
+const GPU_TEXTURE_USAGE = { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, RENDER_ATTACHMENT: 16 } as const;
+const GPU_SHADER_STAGE = { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 } as const;
 const GPU_MAP_MODE = { READ: 1 } as const;
 
 type GpuCase = {
@@ -76,3 +77,80 @@ async function runGpuCase(item: GpuCase): Promise<void> {
     device.destroy();
   }
 }
+
+
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("texture reflection BGL classification validates depth + MRT sampling on GPU", async () => {
+  const source = `
+    @group(0) @binding(0) var hdr: texture_2d<f32>;
+    @group(0) @binding(1) var depthTex: texture_depth_2d;
+
+    struct VertexOut { @builtin(position) position: vec4f }
+    struct FragOut { @location(0) color0: vec4f, @location(1) color1: vec4f }
+
+    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOut {
+      var positions = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+      var out: VertexOut;
+      out.position = vec4f(positions[vi], 0.0, 1.0);
+      return out;
+    }
+
+    @fragment fn fs_main() -> FragOut {
+      let c = textureLoad(hdr, vec2i(0, 0), 0);
+      var out: FragOut;
+      out.color0 = vec4f(c.r, 0.75, 0.0, 1.0);
+      out.color1 = vec4f(c.g, 0.0, 0.0, 1.0);
+      return out;
+    }
+  `;
+  const reflected = await resolveShader({ entry: "/texture-classification.wgsl", validate: true, modules: { "/texture-classification.wgsl": source } });
+  expect(reflected.reflection.bindings.map((binding) => binding.bindingLayout)).toEqual([
+    { kind: "texture", texture: { sampleType: "unfilterable-float", viewDimension: "2d", multisampled: false } },
+    { kind: "texture", texture: { sampleType: "depth", viewDimension: "2d", multisampled: false } },
+  ]);
+
+  const { device } = await App.create({ adapter: createNodeAdapter() });
+  try {
+    const hdr = device.gpu.createTexture({ size: [1, 1], format: "rgba32float", usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST });
+    device.gpu.queue.writeTexture({ texture: hdr }, new Float32Array([0.25, 0.5, 0, 1]), { bytesPerRow: 16 }, [1, 1]);
+    const depth = device.gpu.createTexture({ size: [1, 1], format: "depth24plus", usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.RENDER_ATTACHMENT });
+    const out0 = device.gpu.createTexture({ size: [1, 1], format: "rgba8unorm", usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.COPY_SRC });
+    const out1 = device.gpu.createTexture({ size: [1, 1], format: "rgba8unorm", usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.COPY_SRC });
+    const read0 = device.gpu.createBuffer({ size: 256, usage: GPU_BUFFER_USAGE.MAP_READ | GPU_BUFFER_USAGE.COPY_DST });
+    const read1 = device.gpu.createBuffer({ size: 256, usage: GPU_BUFFER_USAGE.MAP_READ | GPU_BUFFER_USAGE.COPY_DST });
+    const module = device.gpu.createShaderModule({ code: reflected.wgsl });
+    const bindGroupLayout = device.gpu.createBindGroupLayout({ entries: reflected.reflection.bindings.map((binding) => ({ binding: binding.binding, visibility: GPU_SHADER_STAGE.FRAGMENT, texture: binding.bindingLayout?.kind === "texture" ? binding.bindingLayout.texture : undefined })) });
+    const bindGroup = device.gpu.createBindGroup({ layout: bindGroupLayout, entries: [
+      { binding: 0, resource: hdr.createView() },
+      { binding: 1, resource: depth.createView() },
+    ] });
+    const pipeline = device.gpu.createRenderPipeline({
+      layout: device.gpu.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      vertex: { module, entryPoint: "vs_main" },
+      fragment: { module, entryPoint: "fs_main", targets: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] },
+      primitive: { topology: "triangle-list" },
+    });
+    const encoder = device.gpu.createCommandEncoder();
+    const clear = encoder.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: depth.createView(), depthLoadOp: "clear", depthStoreOp: "store", depthClearValue: 0.75 } });
+    clear.end();
+    const pass = encoder.beginRenderPass({ colorAttachments: [
+      { view: out0.createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] },
+      { view: out1.createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] },
+    ] });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+    encoder.copyTextureToBuffer({ texture: out0 }, { buffer: read0, bytesPerRow: 256 }, [1, 1]);
+    encoder.copyTextureToBuffer({ texture: out1 }, { buffer: read1, bytesPerRow: 256 }, [1, 1]);
+    device.gpu.queue.submit([encoder.finish()]);
+    await Promise.all([read0.mapAsync(GPU_MAP_MODE.READ), read1.mapAsync(GPU_MAP_MODE.READ)]);
+    const pixel0 = new Uint8Array(read0.getMappedRange().slice(0, 4));
+    const pixel1 = new Uint8Array(read1.getMappedRange().slice(0, 4));
+    read0.unmap();
+    read1.unmap();
+    expect([...pixel0]).toEqual([64, 191, 0, 255]);
+    expect([...pixel1]).toEqual([128, 0, 0, 255]);
+  } finally {
+    device.destroy();
+  }
+});

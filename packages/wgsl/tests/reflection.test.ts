@@ -78,3 +78,56 @@ test("runtime-sized arrays are reported for storage layouts", async () => {
   expect(shader.reflection.bindings[0]).toMatchObject({ access: "read_write" });
   expect(shader.reflection.bindings[0]?.layout).toMatchObject({ runtimeSized: true, stride: 16, size: undefined });
 });
+
+
+test("reflection rejects non-literal array lengths with canonical fix-it", async () => {
+  await expect(resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
+    override COUNT: u32 = 4u;
+    struct Params { values: array<f32, COUNT> }
+    @group(0) @binding(0) var<uniform> params: Params;
+  ` } })).rejects.toThrow("literal length required for auto layout; use draw.group(n, bg) manual binding");
+});
+
+test("reflection entry detection does not use regex to classify later non-entry functions", async () => {
+  const shader = await resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
+    @compute @workgroup_size(1) fn main() {}
+    fn helper() {}
+  ` } });
+  expect(shader.reflection.entryPoints).toEqual([expect.objectContaining({ name: "main", mangledName: "main", stage: "compute" })]);
+});
+
+test("reflection rejects namespace-imported type references with fix-it", async () => {
+  await expect(resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/types.wgsl": "export struct Params { value: f32 }",
+      "/main.wgsl": `
+        import * as Types from "./types.wgsl";
+        @group(0) @binding(0) var<uniform> params: Types.Params;
+      `,
+    },
+  })).rejects.toThrow("type 'Types.Params' is a namespace-member import; use a named import or manual @group(1+) binding");
+});
+
+test("reflection rejects bool in host-shareable layout with canonical fix-it", async () => {
+  await expect(resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
+    struct Params { enabled: bool }
+    @group(0) @binding(0) var<uniform> params: Params;
+  ` } })).rejects.toThrow("VGPUError: `bool` no es host-shareable en uniform/storage. Fix: usá `u32` (0 | 1) → struct Params { enabled: u32 }");
+});
+
+test("reflection classifies texture bindings for exact BGL entries", async () => {
+  const shader = await resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
+    @group(0) @binding(0) var hdr: texture_2d<f32>;
+    @group(0) @binding(1) var depth: texture_depth_2d;
+    @group(0) @binding(2) var cubeTex: texture_cube<f32>;
+    @group(0) @binding(3) var volume: texture_storage_3d<rgba16float, read_write>;
+  ` } });
+  expect(shader.reflection.bindings.map((binding) => binding.bindingLayout)).toEqual([
+    { kind: "texture", texture: { sampleType: "unfilterable-float", viewDimension: "2d", multisampled: false } },
+    { kind: "texture", texture: { sampleType: "depth", viewDimension: "2d", multisampled: false } },
+    { kind: "texture", texture: { sampleType: "unfilterable-float", viewDimension: "cube", multisampled: false } },
+    { kind: "storageTexture", storageTexture: { access: "read-write", format: "rgba16float", viewDimension: "3d" } },
+  ]);
+});

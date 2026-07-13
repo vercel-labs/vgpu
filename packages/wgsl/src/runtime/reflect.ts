@@ -2,6 +2,11 @@ import { mangle, type MangleModule } from "./mangler.ts";
 import type { ImportDecl } from "./parser.ts";
 import type { Token } from "./scanner.ts";
 import { wgslError } from "./errors.ts";
+import { arrayLengthError, boolHostShareableError, namespaceTypeError, unknownTypeError, unsupportedTypeError } from "./diagnostics.ts";
+
+export type ReflectionFacade = Reflection;
+export type LayoutMode = "naga-standard";
+export const DEFAULT_LAYOUT_MODE: LayoutMode = "naga-standard";
 
 export interface Reflection {
   readonly bindings: readonly BindingInfo[];
@@ -28,6 +33,7 @@ export interface BindingInfo {
   readonly access?: AccessMode;
   readonly struct?: StructInfo;
   readonly layout?: HostShareableLayout;
+  readonly bindingLayout?: ReflectedBindingLayout;
 }
 export interface EntryPointInfo {
   readonly name: string;
@@ -47,13 +53,22 @@ export interface StructMemberInfo {
 }
 
 export type ScalarKind = "f32" | "f16" | "i32" | "u32" | "bool";
-export type TextureDimension = "1d" | "2d" | "2d_array" | "3d" | "cube" | "cube_array" | "multisampled_2d" | "depth_2d" | "depth_2d_array" | "depth_cube" | "depth_cube_array";
+export type TextureDimension = "1d" | "2d" | "2d_array" | "3d" | "cube" | "cube_array" | "multisampled_2d" | "depth_2d" | "depth_2d_array" | "depth_cube" | "depth_cube_array" | "depth_multisampled_2d";
+export type TextureSampleType = "float" | "unfilterable-float" | "depth" | "sint" | "uint";
+export type TextureViewDimension = "1d" | "2d" | "2d-array" | "cube" | "cube-array" | "3d";
+export type StorageTextureAccess = "write-only" | "read-only" | "read-write";
+export type ReflectedBindingLayout =
+  | { readonly kind: "buffer"; readonly buffer: { readonly type: "uniform" | "storage" | "read-only-storage"; readonly hasDynamicOffset: false; readonly minBindingSize?: number } }
+  | { readonly kind: "sampler"; readonly sampler: { readonly type: "filtering" | "non-filtering" | "comparison" } }
+  | { readonly kind: "texture"; readonly texture: { readonly sampleType: TextureSampleType; readonly viewDimension: TextureViewDimension; readonly multisampled: boolean } }
+  | { readonly kind: "storageTexture"; readonly storageTexture: { readonly access: StorageTextureAccess; readonly format: string; readonly viewDimension: TextureViewDimension } }
+  | { readonly kind: "externalTexture"; readonly externalTexture: Record<string, never> };
 export type WGSLType =
   | { readonly kind: "scalar"; readonly name: ScalarKind }
   | { readonly kind: "atomic"; readonly element: WGSLType }
   | { readonly kind: "vector"; readonly width: 2 | 3 | 4; readonly element: WGSLType }
   | { readonly kind: "matrix"; readonly columns: 2 | 3 | 4; readonly rows: 2 | 3 | 4; readonly element: WGSLType }
-  | { readonly kind: "array"; readonly element: WGSLType; readonly count?: number }
+  | { readonly kind: "array"; readonly element: WGSLType; readonly count?: number; readonly countExpression?: string }
   | { readonly kind: "ptr"; readonly addressSpace: string; readonly element: WGSLType; readonly access?: string }
   | { readonly kind: "sampler"; readonly comparison: boolean }
   | { readonly kind: "texture"; readonly textureKind: string; readonly dimension?: TextureDimension; readonly sampleType?: WGSLType; readonly texelFormat?: string; readonly access?: AccessMode }
@@ -63,6 +78,7 @@ export interface HostShareableLayout {
   readonly name: string;
   readonly mangledName: string;
   readonly addressSpace: "uniform" | "storage";
+  readonly layoutMode: LayoutMode;
   readonly type: WGSLType;
   readonly align: number;
   readonly size?: number;
@@ -100,7 +116,7 @@ type VarDecl = {
   readonly access?: AccessMode;
   readonly type: WGSLType;
 };
-type SymbolTarget = { readonly path: string; readonly name: string; readonly mangledName: string; readonly kind: "struct" | "alias" };
+type SymbolTarget = { readonly path: string; readonly name: string; readonly mangledName: string; readonly kind: "struct" | "alias" | "namespace" };
 type ModuleSymbols = ReadonlyMap<string, SymbolTarget>;
 type Registry = { readonly structs: ReadonlyMap<string, StructInfo>; readonly aliases: ReadonlyMap<string, AliasInfo>; readonly byMangled: ReadonlyMap<string, StructInfo | AliasInfo> };
 
@@ -133,6 +149,7 @@ export function reflect(modules: readonly MangleModule[]): Reflection {
         access: variable.access,
         struct: type.kind === "identifier" ? registry.structs.get(type.mangledName ?? type.name) : undefined,
         layout,
+        bindingLayout: reflectedBindingLayout(kind, variable.addressSpace, variable.access, type, layout),
       });
     }
   }
@@ -153,32 +170,34 @@ export function layoutOf(type: WGSLType, addressSpace: "uniform" | "storage", na
   switch (resolved.kind) {
     case "scalar": {
       const size = scalarSize(resolved.name);
-      return { name, mangledName, addressSpace, type: resolved, align: size, size };
+      if (resolved.name === "bool") throw boolHostShareableError();
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align: size, size };
     }
     case "atomic": {
-      return { name, mangledName, addressSpace, type: resolved, align: 4, size: 4 };
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align: 4, size: 4 };
     }
     case "vector": {
       const element = layoutOf(resolved.element, addressSpace, name, mangledName, registry);
       const scalar = element.size ?? 4;
       const align = resolved.width === 2 ? scalar * 2 : scalar * 4;
-      return { name, mangledName, addressSpace, type: resolved, align, size: scalar * resolved.width };
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align, size: scalar * resolved.width };
     }
     case "matrix": {
       const column: WGSLType = { kind: "vector", width: resolved.rows, element: resolved.element };
       const columnLayout = layoutOf(column, addressSpace, `${name}[]`, `${mangledName}[]`, registry);
       const stride = roundUp(columnLayout.align, columnLayout.size ?? 0);
-      return { name, mangledName, addressSpace, type: resolved, align: columnLayout.align, size: stride * resolved.columns, stride, element: columnLayout };
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align: columnLayout.align, size: stride * resolved.columns, stride, element: columnLayout };
     }
     case "array": {
+      if (resolved.countExpression !== undefined && !isLiteralArrayCount(resolved.countExpression)) throw arrayLengthError();
       const element = layoutOf(resolved.element, addressSpace, `${name}[]`, `${mangledName}[]`, registry);
       const stride = roundUp(requiredAlign(resolved.element, addressSpace, registry), element.size ?? 0);
-      return { name, mangledName, addressSpace, type: resolved, align: requiredAlign(resolved, addressSpace, registry), size: resolved.count === undefined ? undefined : stride * resolved.count, stride, element, runtimeSized: resolved.count === undefined };
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align: requiredAlign(resolved, addressSpace, registry), size: resolved.count === undefined ? undefined : stride * resolved.count, stride, element, runtimeSized: resolved.count === undefined };
     }
     case "identifier": {
-      if (!registry) throw wgslError("VGPU-WGSL-REFLECT-UNKNOWN-TYPE", `Cannot compute layout for unknown type ${resolved.name}`);
+      if (!registry) throw unknownTypeError(resolved.name, "<unknown>");
       const struct = registry.structs.get(resolved.mangledName ?? resolved.name);
-      if (!struct) throw wgslError("VGPU-WGSL-REFLECT-UNKNOWN-TYPE", `Cannot compute layout for unknown type ${resolved.name}`);
+      if (!struct) throw unknownTypeError(resolved.name, "<unknown>");
       const members: LayoutMember[] = [];
       let offset = 0;
       let maxAlign = 1;
@@ -194,10 +213,10 @@ export function layoutOf(type: WGSLType, addressSpace: "uniform" | "storage", na
         maxAlign = Math.max(maxAlign, align);
       }
       const align = addressSpace === "uniform" ? roundUp(16, maxAlign) : maxAlign;
-      return { name, mangledName, addressSpace, type: resolved, align, size: roundUp(align, offset), members };
+      return { name, mangledName, addressSpace, layoutMode: DEFAULT_LAYOUT_MODE, type: resolved, align, size: roundUp(align, offset), members };
     }
     default:
-      throw wgslError("VGPU-WGSL-REFLECT-NON-HOST-SHAREABLE", `Type ${typeName(resolved)} is not host-shareable`);
+      throw unsupportedTypeError(typeName(resolved));
   }
 }
 
@@ -210,17 +229,17 @@ function requiredAlign(type: WGSLType, addressSpace: "uniform" | "storage", regi
 function naturalAlign(type: WGSLType, addressSpace: "uniform" | "storage", registry?: Registry): number {
   const resolved = registry ? unwrapAlias(type, registry) : type;
   switch (resolved.kind) {
-    case "scalar": return scalarSize(resolved.name);
+    case "scalar": if (resolved.name === "bool") throw boolHostShareableError(); return scalarSize(resolved.name);
     case "atomic": return 4;
     case "vector": return resolved.width === 2 ? naturalAlign(resolved.element, addressSpace, registry) * 2 : naturalAlign(resolved.element, addressSpace, registry) * 4;
     case "matrix": return naturalAlign({ kind: "vector", width: resolved.rows, element: resolved.element }, addressSpace, registry);
     case "array": return requiredAlign(resolved.element, addressSpace, registry);
     case "identifier": {
       const struct = registry?.structs.get(resolved.mangledName ?? resolved.name);
-      if (!struct) throw wgslError("VGPU-WGSL-REFLECT-UNKNOWN-TYPE", `Cannot compute alignment for unknown type ${resolved.name}`);
+      if (!struct) throw unknownTypeError(resolved.name, "<unknown>");
       return Math.max(1, ...struct.members.map((member) => Math.max(requiredAlign(member.type, addressSpace, registry), member.align ?? 1)));
     }
-    default: throw wgslError("VGPU-WGSL-REFLECT-NON-HOST-SHAREABLE", `Type ${typeName(resolved)} is not host-shareable`);
+    default: throw unsupportedTypeError(typeName(resolved));
   }
 }
 
@@ -330,7 +349,11 @@ function parseType(tokens: readonly Token[]): WGSLType {
   if (trimmed[1]?.text === "<") {
     const head = trimmed[0]!.text;
     const inner = splitGeneric(trimmed.slice(2, -1));
-    if (head === "array") return { kind: "array", element: parseType(inner[0] ?? []), count: inner[1] ? Number(inner[1].map((t) => t.text).join("")) : undefined };
+    if (head === "array") {
+      const countExpression = inner[1]?.map((t) => t.text).join("");
+      const count = countExpression === undefined ? undefined : literalArrayCount(countExpression);
+      return { kind: "array", element: parseType(inner[0] ?? []), count, countExpression };
+    }
     if (head === "atomic") return { kind: "atomic", element: parseType(inner[0] ?? []) };
     if (head === "vec2" || head === "vec3" || head === "vec4") return { kind: "vector", width: Number(head.slice(3)) as 2 | 3 | 4, element: parseType(inner[0] ?? []) };
     if (/^mat[234]x[234]$/.test(head)) return { kind: "matrix", columns: Number(head[3]) as 2 | 3 | 4, rows: Number(head[5]) as 2 | 3 | 4, element: parseType(inner[0] ?? []) };
@@ -367,7 +390,7 @@ function addImportedSymbols(module: MangleModule, imp: ImportDecl, map: Map<stri
   const targetPath = resolveImportPath(imp.from, module.path, modules);
   const exports = byPath.get(targetPath);
   for (const binding of imp.bindings) {
-    if (binding.namespace) continue;
+    if (binding.namespace) { map.set(binding.local, { path: targetPath, name: binding.local, mangledName: binding.local, kind: "namespace" }); continue; }
     const target = exports?.get(binding.imported);
     if (target) map.set(binding.local, target);
   }
@@ -394,8 +417,16 @@ function buildRegistry(parsed: readonly ParsedDecls[], symbols: ReadonlyMap<stri
 function resolveType(type: WGSLType, path: string, symbols: ReadonlyMap<string, ModuleSymbols>, registry: Registry): WGSLType {
   switch (type.kind) {
     case "identifier": {
+      const dot = type.name.indexOf(".");
+      if (dot > 0) {
+        const ns = type.name.slice(0, dot);
+        const target = symbols.get(path)?.get(ns);
+        if (target?.kind === "namespace") throw namespaceTypeError(type.name, path);
+      }
       const target = symbols.get(path)?.get(type.name);
-      return target ? { kind: "identifier", name: target.name, mangledName: target.mangledName } : type;
+      if (target?.kind === "namespace") throw namespaceTypeError(type.name, path);
+      if (!target) throw unknownTypeError(type.name, path);
+      return { kind: "identifier", name: target.name, mangledName: target.mangledName };
     }
     case "array": return { ...type, element: resolveType(type.element, path, symbols, registry) };
     case "atomic": return { ...type, element: resolveType(type.element, path, symbols, registry) };
@@ -431,6 +462,49 @@ function bindingKind(type: WGSLType, addressSpace?: AddressSpace): BindingKind {
   if (type.kind === "sampler") return "sampler";
   if (type.kind === "texture") return type.textureKind === "texture_external" ? "externalTexture" : "texture";
   return "unknown";
+}
+
+
+function reflectedBindingLayout(kind: BindingKind, addressSpace: AddressSpace | undefined, access: AccessMode | undefined, type: WGSLType, layout: HostShareableLayout | undefined): ReflectedBindingLayout | undefined {
+  if (kind === "buffer") {
+    const bufferType = addressSpace === "uniform" ? "uniform" : access === "read" ? "read-only-storage" : "storage";
+    return { kind: "buffer", buffer: { type: bufferType, hasDynamicOffset: false, minBindingSize: layout?.size } };
+  }
+  if (type.kind === "sampler") return { kind: "sampler", sampler: { type: type.comparison ? "comparison" : "filtering" } };
+  if (type.kind !== "texture") return undefined;
+  if (type.textureKind === "texture_external") return { kind: "externalTexture", externalTexture: {} };
+  if (type.textureKind.startsWith("texture_storage_")) {
+    return { kind: "storageTexture", storageTexture: { access: storageTextureAccess(type.access), format: type.texelFormat ?? "rgba8unorm", viewDimension: textureViewDimension(type.dimension) } };
+  }
+  return { kind: "texture", texture: { sampleType: textureSampleType(type), viewDimension: textureViewDimension(type.dimension), multisampled: type.dimension === "multisampled_2d" || type.dimension === "depth_multisampled_2d" } };
+}
+
+function textureSampleType(type: Extract<WGSLType, { readonly kind: "texture" }>): TextureSampleType {
+  if (type.textureKind.startsWith("texture_depth_")) return "depth";
+  const sample = type.sampleType;
+  if (sample?.kind === "scalar" && sample.name === "i32") return "sint";
+  if (sample?.kind === "scalar" && sample.name === "u32") return "uint";
+  return "unfilterable-float";
+}
+
+function textureViewDimension(dimension: TextureDimension | undefined): TextureViewDimension {
+  switch (dimension) {
+    case "1d": return "1d";
+    case "2d_array":
+    case "depth_2d_array": return "2d-array";
+    case "cube":
+    case "depth_cube": return "cube";
+    case "cube_array":
+    case "depth_cube_array": return "cube-array";
+    case "3d": return "3d";
+    default: return "2d";
+  }
+}
+
+function storageTextureAccess(access: AccessMode | undefined): StorageTextureAccess {
+  if (access === "read") return "read-only";
+  if (access === "read_write") return "read-write";
+  return "write-only";
 }
 
 function parseVarTemplate(tokens: readonly Token[], i: number): { addressSpace?: AddressSpace; access?: AccessMode; after: number } {
@@ -496,9 +570,14 @@ function trim(tokens: readonly Token[]): readonly Token[] {
 }
 
 function mangledDeclName(module: MangleModule, name: string, kind: string): string {
-  return kind === "override" || entryRegex(module.source, name) ? name : mangle(module.path, name);
+  return kind === "override" ? name : mangle(module.path, name);
 }
-function entryRegex(source: string, name: string): boolean { return new RegExp(`@(vertex|fragment|compute)[\\s\\S]*?fn\\s+${name}\\b`).test(source); }
+function literalArrayCount(text: string | undefined): number | undefined {
+  if (text === undefined) return undefined;
+  if (!isLiteralArrayCount(text)) return undefined;
+  return Number(text.replace(/[ui]$/, ""));
+}
+function isLiteralArrayCount(text: string): boolean { return /^(0|[1-9][0-9]*)([ui])?$/.test(text); }
 function expectIdent(token: Token | undefined): string { if (token?.kind !== "ident" && token?.kind !== "keyword") throw wgslError("VGPU-WGSL-REFLECT-PARSE", "Expected identifier", token?.line, token?.column); return token.text; }
 function findNext(tokens: readonly Token[], start: number, text: string): number { for (let i = start; i < tokens.length; i++) if (tokens[i]!.text === text) return i; throw wgslError("VGPU-WGSL-REFLECT-PARSE", `Expected ${text}`, tokens[start]?.line, tokens[start]?.column); }
 function findToken(tokens: readonly Token[], start: number, end: number, text: string): number | undefined { for (let i = start; i < end; i++) if (tokens[i]!.text === text) return i; return undefined; }

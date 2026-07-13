@@ -13,6 +13,7 @@ import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
+export type { BindingInfo, BindingKind, EntryPointInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export interface ResolveOptions {
   readonly entry: string;
@@ -98,4 +99,18 @@ function assertNoJsVisibleDuplicates(modules: readonly MangleModule[]): void {
   }
 }
 function duplicate(map: Map<string, string>, name: string, path: string, code: string): void { const previous = map.get(name); if (previous) throw wgslError(code, `${name} appears in ${previous} and ${path}`); map.set(name, path); }
-function entryKind(module: MangleModule, name: string, kind: string): string { return module.source.match(new RegExp(`@(vertex|fragment|compute)[\\s\\S]*?fn\\s+${name}\\b`)) ? "entry" : kind; }
+function entryKind(module: MangleModule, name: string, kind: string): string { return isEntryPoint(module, name) ? "entry" : kind; }
+function isEntryPoint(module: MangleModule, name: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < module.tokens.length; i++) {
+    const token = module.tokens[i]!;
+    if (token.text === "{") { depth++; continue; }
+    if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
+    if (depth > 0) continue;
+    if (token.text !== "fn" || module.tokens[i + 1]?.text !== name) continue;
+    for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
+      if (module.tokens[j]?.text === "@" && ["vertex", "fragment", "compute"].includes(module.tokens[j + 1]?.text ?? "")) return true;
+    }
+  }
+  return false;
+}

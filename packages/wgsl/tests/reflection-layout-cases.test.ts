@@ -122,3 +122,11 @@ describe("WGSL host-shareable layout reference cases", () => {
     });
   }
 });
+
+
+test("layout records explicit Dawn/Naga standard layout mode", async () => {
+  const shader = await resolveShader({ entry: "/case.wgsl", validate: false, modules: { "/case.wgsl": "struct Params { values: array<f32, 3> }\n@group(0) @binding(0) var<uniform> params: Params;" } });
+  const layout = shader.reflection.bindings[0]?.layout;
+  expect(layout).toMatchObject({ layoutMode: "naga-standard", align: 16, size: 16 });
+  expect(layout?.members?.[0]?.layout).toMatchObject({ layoutMode: "naga-standard", stride: 4, size: 12 });
+});
