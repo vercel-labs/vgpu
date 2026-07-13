@@ -1,6 +1,6 @@
 import { type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/runtime";
-import type { BindGroupCache, BindGroupIdentityPart } from "./bind-cache.ts";
+import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
@@ -18,10 +18,19 @@ export interface SetCoreOptions {
   readonly cache: BindGroupCache;
 }
 
+export interface BindingIdentityChange {
+  readonly group: number;
+  readonly binding: number;
+  readonly bindingName: string;
+  readonly bindingKind: string;
+  readonly previousIdentity?: string;
+  readonly newIdentity: string;
+}
+
 /** Ring-1 set() engine: latches ownership, validates completeness, and returns cached bind groups. */
 export interface SetCore {
   readonly groups: readonly number[];
-  set(values: SetBag): void;
+  set(values: SetBag): readonly BindingIdentityChange[];
   claimGroup(group: number, bindGroup: GPUBindGroup): void;
   layout(group: number): GPUBindGroupLayout;
   bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }[];
@@ -47,88 +56,58 @@ type MutableBindingState = {
   unsubscribe?: UnsubscribeResourceDestroy;
 };
 
-
+/** Creates the per-Draw binding state machine used by Pass/Draw.set(). */
 export function createSetCore(options: SetCoreOptions): SetCore {
-  const bindings = new Map<string, MutableBindingState>();
-  const groups = [...new Set(options.reflection.bindings.map((binding) => binding.group))].sort((a, b) => a - b);
+  const bindings = initializeBindings(options.reflection);
+  const groups = reflectedGroups(options.reflection);
   const claimedGroups = new Map<number, GPUBindGroup>();
 
-  for (const binding of options.reflection.bindings) bindings.set(binding.name, { info: binding, memberOwnership: new Map() });
-
-  function set(values: SetBag): void {
-    for (const [name, value] of Object.entries(values)) {
-      const direct = bindings.get(name);
-      if (direct) {
-        setBinding(direct, name, value);
-        continue;
-      }
-      const member = findMemberBinding(name);
-      if (!member) throw unsupportedError(`${options.label}.set`, `Binding '${name}' no existe en '${options.label}'.`);
-      setBindingMember(member, name, value);
-    }
+  function set(values: SetBag): readonly BindingIdentityChange[] {
+    const changes: BindingIdentityChange[] = [];
+    for (const [name, value] of Object.entries(values)) changes.push(...setNamedValue(name, value));
+    return changes;
   }
 
-  function setBinding(state: MutableBindingState, name: string, value: unknown): void {
-    if (claimedGroups.has(state.info.group)) throw claimedGroupSetError(options.label, state.info.group);
-    const ownership = isPlainValue(value) ? "lib" : "user";
-    if (state.ownership && state.ownership !== ownership) throw ownershipFlipError(name, state.ownership);
-    state.ownership ??= ownership;
+  function setNamedValue(name: string, value: unknown): readonly BindingIdentityChange[] {
+    const direct = bindings.get(name);
+    if (direct) return setBinding(direct, name, value);
+    const member = findMemberBinding(name, bindings, options.label);
+    if (!member) throw unsupportedError(`${options.label}.set`, `Binding '${name}' no existe en '${options.label}'.`);
+    return setBindingMember(member, name, value);
+  }
+
+  function setBinding(state: MutableBindingState, name: string, value: unknown): readonly BindingIdentityChange[] {
+    ensureGroupSettable(state.info.group);
+    const ownership = ownershipFor(state.info, value);
+    latchBindingOwnership(state, name, ownership);
+    const before = identityString(state.identity);
     if (ownership === "lib") setLibOwned(state, mergeLibValue(state.libValue, value));
     else setUserOwned(state, value);
+    return identityChangeFor(state, before);
   }
 
-  function setBindingMember(state: MutableBindingState, memberName: string, value: unknown): void {
-    if (claimedGroups.has(state.info.group)) throw claimedGroupSetError(options.label, state.info.group);
-    const ownership = isPlainValue(value) ? "lib" : "user";
-    if (state.ownership && state.ownership !== ownership) throw ownershipFlipError(memberName, state.ownership);
-    state.ownership ??= ownership;
-    const previousMemberOwnership = state.memberOwnership.get(memberName);
-    if (previousMemberOwnership && previousMemberOwnership !== ownership) throw ownershipFlipError(memberName, previousMemberOwnership);
-    state.memberOwnership.set(memberName, ownership);
+  function setBindingMember(state: MutableBindingState, memberName: string, value: unknown): readonly BindingIdentityChange[] {
+    ensureGroupSettable(state.info.group);
+    const ownership = ownershipFor(state.info, value);
+    latchBindingOwnership(state, memberName, ownership);
+    latchMemberOwnership(state, memberName, ownership);
     if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' no puede recibir recursos; seteá el binding completo '${state.info.name}'.`);
+    const before = identityString(state.identity);
     setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
-  }
-
-  function findMemberBinding(memberName: string): MutableBindingState | undefined {
-    let match: MutableBindingState | undefined;
-    for (const state of bindings.values()) {
-      if (!state.info.layout?.members?.some((member) => member.name === memberName)) continue;
-      if (match) throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' es ambiguo en '${options.label}'; seteá el binding completo.`);
-      match = state;
-    }
-    return match;
-  }
-
-  function mergeLibValue(previous: unknown, value: unknown): unknown {
-    if (isPlainObject(previous) && isPlainObject(value)) return { ...previous, ...value };
-    return value;
-  }
-
-  function objectValue(value: unknown): Record<string, unknown> {
-    return isPlainObject(value) ? value : {};
+    return identityChangeFor(state, before);
   }
 
   function setLibOwned(state: MutableBindingState, value: unknown): void {
-    if (state.info.kind !== "buffer" || !state.info.layout?.size) {
-      throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' no acepta valores JS planos; pasá un recurso compatible.`);
-    }
-    const layout = state.info.layout;
+    const layout = requiredLibLayout(state);
     state.libValue = value;
     const bytes = writeLayoutValue(layout, value);
-    if (!state.buffer) {
-      const size = layout.size;
-      if (size === undefined) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' tiene tamaño runtime y no acepta empaquetado automático.`);
-      state.buffer = options.device.createBuffer({ size, usage: ["uniform", "copy_dst"], label: `${options.label}.${state.info.name}` });
-      state.resource = { buffer: state.buffer.gpu, offset: 0, size };
-      state.identity = state.buffer.resourceIdentity;
-      state.unsubscribe = state.buffer.onDestroy(() => options.cache.evictIdentity(state.buffer!.resourceIdentity));
-    }
+    if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
-    state.buffer.write(bytes, 0);
+    state.buffer!.write(bytes, 0);
   }
 
   function setUserOwned(state: MutableBindingState, value: unknown): void {
-    const normalized = normalizeResource(value);
+    const normalized = normalizeResource(state.info, value);
     state.resource = normalized.resource;
     state.identity = normalized.identity;
     state.unsubscribe?.();
@@ -146,31 +125,54 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }[] {
-    const result: { group: number; bindGroup: GPUBindGroup; offsets: readonly number[] }[] = [];
-    for (const group of groups) {
-      const claimed = claimedGroups.get(group);
-      if (claimed) {
-        result.push({ group, bindGroup: claimed, offsets: [] });
-        continue;
-      }
-      const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
-      const entries: GPUBindGroupEntry[] = [];
-      const identities: BindGroupIdentityPart[] = [];
-      for (const binding of groupBindings) {
-        const state = bindings.get(binding.name);
-        if (!state?.resource || !state.identity) throw neverSetError(options.label, binding);
-        entries.push({ binding: binding.binding, resource: state.resource });
-        identities.push(state.identity);
-      }
-      const bgl = layout(group);
-      const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
-        label: `${options.label}.group${group}`,
-        layout: bgl,
-        entries,
-      }));
-      result.push({ group, bindGroup, offsets: [] });
-    }
-    return result;
+    return groups.map(bindGroupFor);
+  }
+
+  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] } {
+    const claimed = claimedGroups.get(group);
+    if (claimed) return { group, bindGroup: claimed, offsets: [] };
+    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
+    const entries = bindGroupEntries(groupBindings);
+    const identities = identitiesFor(groupBindings);
+    const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
+      label: `${options.label}.group${group}`,
+      layout: layout(group),
+      entries,
+    }));
+    return { group, bindGroup, offsets: [] };
+  }
+
+  function bindGroupEntries(groupBindings: readonly BindingInfo[]): GPUBindGroupEntry[] {
+    return groupBindings.map((binding) => {
+      const state = requiredState(binding);
+      return { binding: binding.binding, resource: state.resource! };
+    });
+  }
+
+  function identitiesFor(groupBindings: readonly BindingInfo[]): BindGroupIdentityPart[] {
+    return groupBindings.map((binding) => requiredState(binding).identity!);
+  }
+
+  function requiredState(binding: BindingInfo): MutableBindingState {
+    const state = bindings.get(binding.name);
+    if (!state?.resource || !state.identity) throw neverSetError(options.label, binding);
+    return state;
+  }
+
+  function ensureGroupSettable(group: number): void {
+    if (claimedGroups.has(group)) throw claimedGroupSetError(options.label, group);
+  }
+
+  function createLibBuffer(state: MutableBindingState, size: number): void {
+    state.buffer = options.device.createBuffer({ size, usage: ["uniform", "copy_dst"], label: `${options.label}.${state.info.name}` });
+    state.resource = { buffer: state.buffer.gpu, offset: 0, size };
+    state.identity = state.buffer.resourceIdentity;
+    state.unsubscribe = state.buffer.onDestroy(() => options.cache.evictIdentity(state.buffer!.resourceIdentity));
+  }
+
+  function requiredLibLayout(state: MutableBindingState): NonNullable<BindingInfo["layout"]> & { readonly size: number } {
+    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' no acepta valores JS planos; pasá un recurso compatible.`);
+    return state.info.layout as NonNullable<BindingInfo["layout"]> & { readonly size: number };
   }
 
   return {
@@ -185,6 +187,64 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       return { info: state.info, ownership: state.ownership, resource: state.resource, identity: state.identity };
     },
   };
+}
+
+function initializeBindings(reflection: Reflection): Map<string, MutableBindingState> {
+  return new Map(reflection.bindings.map((binding) => [binding.name, { info: binding, memberOwnership: new Map() }]));
+}
+
+function reflectedGroups(reflection: Reflection): readonly number[] {
+  return [...new Set(reflection.bindings.map((binding) => binding.group))].sort((a, b) => a - b);
+}
+
+function findMemberBinding(memberName: string, bindings: ReadonlyMap<string, MutableBindingState>, label: string): MutableBindingState | undefined {
+  let match: MutableBindingState | undefined;
+  for (const state of bindings.values()) {
+    if (!state.info.layout?.members?.some((member) => member.name === memberName)) continue;
+    if (match) throw unsupportedError(`${label}.set`, `Binding member '${memberName}' es ambiguo en '${label}'; seteá el binding completo.`);
+    match = state;
+  }
+  return match;
+}
+
+function ownershipFor(binding: BindingInfo, value: unknown): BindingOwnership {
+  return binding.bindingLayout?.kind === "buffer" && isPlainValue(value) ? "lib" : "user";
+}
+
+function latchBindingOwnership(state: MutableBindingState, name: string, ownership: BindingOwnership): void {
+  if (state.ownership && state.ownership !== ownership) throw ownershipFlipError(name, state.ownership);
+  state.ownership ??= ownership;
+}
+
+function latchMemberOwnership(state: MutableBindingState, memberName: string, ownership: BindingOwnership): void {
+  const previous = state.memberOwnership.get(memberName);
+  if (previous && previous !== ownership) throw ownershipFlipError(memberName, previous);
+  state.memberOwnership.set(memberName, ownership);
+}
+
+function identityChangeFor(state: MutableBindingState, previousIdentity: string | undefined): readonly BindingIdentityChange[] {
+  const nextIdentity = identityString(state.identity);
+  if (!nextIdentity || previousIdentity === nextIdentity) return [];
+  return [{
+    group: state.info.group,
+    binding: state.info.binding,
+    bindingName: state.info.name,
+    bindingKind: state.info.kind,
+    previousIdentity,
+    newIdentity: nextIdentity,
+  }];
+}
+
+function identityString(identity: BindGroupIdentityPart | undefined): string | undefined {
+  return identity === undefined ? undefined : identityKey(identity);
+}
+
+function mergeLibValue(previous: unknown, value: unknown): unknown {
+  return isPlainObject(previous) && isPlainObject(value) ? { ...previous, ...value } : value;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return isPlainObject(value) ? value : {};
 }
 
 export { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";

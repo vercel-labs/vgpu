@@ -1,7 +1,7 @@
 import type { Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type SetBag, type SetCore } from "./set-core.ts";
+import { bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
 
@@ -27,21 +27,26 @@ export interface MeshLike {
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
 }
 
+export type BundleStaleEvent =
+  | ({ readonly kind: "binding-identity"; readonly drawLabel: string } & BindingIdentityChange)
+  | { readonly kind: "group-claim"; readonly drawLabel: string; readonly group: number; readonly previousIdentity?: string; readonly newIdentity: string };
+
 export interface BundleBackReference {
   readonly id: string;
-  markStale(reason: string): void;
+  markStale(event: BundleStaleEvent): void;
 }
 
-/** Bundle back-reference hook frozen for Lane D; set()/group() mark registered bundles stale. */
+/** Bundle back-reference hook frozen for Lane D; only bind-group identity changes emit structured stale events. */
 export interface BundleBackReferenceRegistry {
   add(bundle: BundleBackReference): void;
   delete(bundle: BundleBackReference): void;
   list(): readonly BundleBackReference[];
-  markStale(reason: string): void;
+  markStale(event: BundleStaleEvent): void;
 }
 
 let nextDrawId = 1;
 
+/** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
 export class Draw {
   readonly id = nextDrawId++;
   readonly label: string;
@@ -68,8 +73,17 @@ export class Draw {
   get gpu(): GPURenderPipeline | undefined { return this.pipelineCache.values().next().value; }
   get targets(): readonly Target[] | undefined { return this.opts.targets; }
 
-  set(values: SetBag): this { this.setCore.set(values); this.__recordedIn.markStale(`set() rebind en '${this.label}'`); return this; }
-  group(n: number, bindGroup: GPUBindGroup): this { this.setCore.claimGroup(n, bindGroup); this.__recordedIn.markStale(`group(${n}) rebind en '${this.label}'`); return this; }
+  set(values: SetBag): this {
+    for (const change of this.setCore.set(values)) this.__recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change });
+    return this;
+  }
+
+  group(n: number, bindGroup: GPUBindGroup): this {
+    this.setCore.claimGroup(n, bindGroup);
+    this.__recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, newIdentity: `claimed-group:${n}` });
+    return this;
+  }
+
   layout(n: number): GPUBindGroupLayout { return this.setCore.layout(n); }
 
   draw(opts: DrawCallOptions = {}): void {
@@ -84,27 +98,32 @@ export class Draw {
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}): void {
     pass.setPipeline(this.pipelineFor(target));
-    for (const binding of this.setCore.bindGroups()) {
-      pass.setBindGroup(binding.group, binding.bindGroup, offsetsForGroup(opts.offsets, binding.group, binding.offsets));
-    }
-    const mesh = this.opts.mesh;
-    if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
-    if (mesh?.indexBuffer) {
-      pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
-      pass.drawIndexed(mesh.indexCount ?? 0);
-      return;
-    }
-    pass.draw(mesh?.vertexCount ?? 3);
+    for (const binding of this.setCore.bindGroups()) pass.setBindGroup(binding.group, binding.bindGroup, offsetsForGroup(opts.offsets, binding.group, binding.offsets));
+    this.encodeMesh(pass);
   }
 
   pipelineFor(target: Target): GPURenderPipeline {
     const key = `${target.colors.map((color) => color.format).join(",")}:${target.depth?.format ?? "none"}:${target.sampleCount}`;
     let pipeline = this.pipelineCache.get(key);
     if (pipeline) return pipeline;
+    pipeline = this.createPipeline(target);
+    this.pipelineCache.set(key, pipeline);
+    return pipeline;
+  }
+
+  private encodeMesh(pass: GPURenderPassEncoder): void {
+    const mesh = this.opts.mesh;
+    if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
+    if (!mesh?.indexBuffer) return pass.draw(mesh?.vertexCount ?? 3);
+    pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
+    pass.drawIndexed(mesh.indexCount ?? 0);
+  }
+
+  private createPipeline(target: Target): GPURenderPipeline {
     const entries = this.reflection.entryPoints;
     const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
     const fragment = entries.find((entry) => entry.stage === "fragment")?.name ?? "fs_main";
-    pipeline = this.device.gpu.createRenderPipeline({
+    return this.device.gpu.createRenderPipeline({
       label: `${this.label}.pipeline`,
       layout: this.pipelineLayout,
       vertex: { module: this.shaderModule, entryPoint: vertex, buffers: [...(this.opts.mesh?.vertexBufferLayouts ?? [])] },
@@ -113,8 +132,6 @@ export class Draw {
       depthStencil: target.depth ? { format: target.depth.format, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: target.sampleCount },
     });
-    this.pipelineCache.set(key, pipeline);
-    return pipeline;
   }
 }
 
@@ -124,7 +141,7 @@ export function createBundleRegistry(): BundleBackReferenceRegistry {
     add(bundle) { set.add(bundle); },
     delete(bundle) { set.delete(bundle); },
     list() { return [...set]; },
-    markStale(reason) { for (const bundle of set) bundle.markStale(reason); },
+    markStale(event) { for (const bundle of set) bundle.markStale(event); },
   };
 }
 

@@ -4,9 +4,10 @@ import type { BindingInfo } from "@vgpu/wgsl/runtime";
 export class VGPUError extends CoreVGPUError {}
 
 export function neverSetError(drawLabel: string, binding: BindingInfo): VGPUError {
+  const fix = missingBindingFix(drawLabel, binding);
   return new VGPUError({
     code: "VGPU-R1-BINDING-NEVER-SET",
-    message: `el binding \`${binding.name}\` (@group(${binding.group}) @binding(${binding.binding}), ${binding.kind}) de '${drawLabel}' nunca fue seteado. Opciones:\n    ${drawLabel}.set({ ${binding.name}: gpu.sampler() })            // valor canónico cacheado\n    ${drawLabel}.group(${binding.group}, miBindGroup)                   // o reclamá el grupo entero\n  Nunca se crean recursos fantasma por vos.`,
+    message: `el binding \`${binding.name}\` (@group(${binding.group}) @binding(${binding.binding}), ${binding.kind}) de '${drawLabel}' nunca fue seteado. Opciones:\n    ${fix}\n    ${drawLabel}.group(${binding.group}, miBindGroup)                   // o reclamá el grupo entero\n  Nunca se crean recursos fantasma por vos.`,
     where: `${drawLabel}.draw`,
   });
 }
@@ -27,7 +28,7 @@ export function claimedGroupSetError(label: string, group: number): VGPUError {
   return new VGPUError({
     code: "VGPU-R4-GROUP-CLAIMED",
     message: `el grupo ${group} de '${label}' fue reclamado con group(${group}, bindGroup); no se puede usar set() sobre ese grupo.`,
-    fix: `Usá set() antes de reclamar el grupo, o construí un bind group compatible con ${label}.layout(${group}).`,
+    fix: `Usá set() antes de reclamar el grupo, o construí un bind group compatible con ${label}.layout(${group}); los offsets dinámicos viajan en p.draw(draw, { offsets }).`,
     where: `${label}.set`,
   });
 }
@@ -40,6 +41,26 @@ export function missingScreenError(): VGPUError {
   });
 }
 
+export function incompatibleResourceError(binding: BindingInfo, expected: string, fix?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE",
+    message: `el binding \`${binding.name}\` (@group(${binding.group}) @binding(${binding.binding}), ${binding.kind}) esperaba ${expected}.`,
+    fix,
+    where: "set",
+  });
+}
+
 export function unsupportedError(where: string, message: string, fix?: string): VGPUError {
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
+}
+
+function missingBindingFix(drawLabel: string, binding: BindingInfo): string {
+  switch (binding.kind) {
+    case "sampler": return `${drawLabel}.set({ ${binding.name}: gpu.sampler() })            // valor canónico cacheado`;
+    case "texture": return `${drawLabel}.set({ ${binding.name}: scene.color })              // textura/target explícito`;
+    case "buffer": return binding.addressSpace === "uniform"
+      ? `${drawLabel}.set({ ${binding.name}: { /* valores */ } })              // uniform lib-owned, o recurso Buffer/Uniform`
+      : `${drawLabel}.set({ ${binding.name}: buffer })                    // storage/user-owned explícito`;
+    default: return `${drawLabel}.set({ ${binding.name}: recurso })`;
+  }
 }

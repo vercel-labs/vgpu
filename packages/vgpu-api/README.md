@@ -21,20 +21,27 @@ engine used by downstream lanes.
   `.pass()`, `.draw()`, `.target()`, callable `.frame()` plus `.frame.loop()`,
   `.sampler()`, `.mesh()`, `.onResize()`, `.dispose()`
 - Reserved method names for lanes: `.compute()`, `.storage()`, `.pingPong()`,
-  `.uniforms()`, `.bundle()`
-- `Pass`: `.set(bag)`, `.draw(opts?)`, `.group(n, bg)`, `.layout(n)`; creation
-  `{ set }` is exactly an initial `.set()`
+  `.pingPongStorage()`, `.uniforms()`, `.bundle()` with Phase-3 lane signatures
+  frozen and explicit `VGPUError` placeholders.
+- `Pass`: `.set(bag)`, `.draw(opts?)`, `.gpu`; creation `{ set }` is exactly an
+  initial `.set()`.
 - `Draw`: `.set(bag)`, `.draw(opts?)`, `.group(n, bg)`, `.layout(n)`, per-draw
   `{ offsets }`, `.targets?`, and internal `.__recordedIn` bundle back-reference
-  registry for Lane D staleness tracking
+  registry for Lane D staleness tracking. The registry receives structured
+  `BundleStaleEvent` records only when a binding identity changes; JS value
+  writes stay bundle-safe.
 - `Target`: `.size`, `.texelSize`, `.color`, `.colors[]`, `.depth`, `.resize()`,
   `.read()`, `.gpu`, `.sampleCount`; `msaa: true | 4` creates real 4x MSAA
-  attachments and resolves into sampleable `.color` / `.colors[]` textures for
-  multisample-capable color formats. Unsupported MSAA formats throw a `VGPUError`
-  with a fix-it instead of silently degrading.
+  attachments and resolves into sampleable `.color` / `.colors[]` textures. Device
+  capability is consulted: Dawn compatibility mode rejects `rgba16float + msaa`
+  with a `VGPUError` fix-it instead of silently degrading, while capable devices
+  keep the by-example HDR+MSAA contract.
 - `Frame`: `.pass({ target, clear }, cb)` with one encoder / N passes / one submit
 - Bind-group cache API: `getOrCreate(drawId, group, identityTuple, factory)` with
   eviction by resource identity destroy hooks
+- Browser resize: `autoResize` defaults to true, applies canvas framebuffer size
+  on frame boundaries, and `onResize()` is notified for explicit or automatic
+  `screen.resize()` changes.
 
 ## Ownership rules
 

@@ -37,8 +37,7 @@ export class Frame {
 export class FramePass {
   constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target) {}
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    if (drawable instanceof Pass) drawable.encode(this.encoder, this.target, opts);
-    else drawable.encode(this.encoder, this.target, opts);
+    drawable.encode(this.encoder, this.target, opts);
   }
 }
 

@@ -1,4 +1,4 @@
-export { createGpu, type AdapterFactory, type Gpu, type InitOptions } from "./gpu.ts";
+export { createGpu, type AdapterFactory, type Bundle, type BundleOptions, type BundleRecorder, type Compute, type ComputeOptions, type Gpu, type InitOptions, type PingPongStorage, type PingPongTargets, type SharedUniforms, type StorageAccess, type StorageBuffer } from "./gpu.ts";
 
 import { createGpu, type AdapterFactory, type InitOptions } from "./gpu.ts";
 

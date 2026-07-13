@@ -10,17 +10,20 @@ export interface PassOptions {
 }
 
 export class Pass {
+  /** @internal Draw-backed implementation so FramePass can encode fullscreen passes without exposing R4 on Pass. */
   readonly drawImpl: Draw;
   readonly gpu: GPURenderPipeline | undefined;
+
   constructor(device: Device, source: string, opts: PassOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
     const shader = fullscreenSource(source);
     this.drawImpl = new Draw(device, shader, { shader, set: opts.set, label: opts.label ?? "pass" }, cache, defaultTarget);
     this.gpu = this.drawImpl.gpu;
   }
+
   set(values: SetBag): this { this.drawImpl.set(values); return this; }
-  group(n: number, bindGroup: GPUBindGroup): this { this.drawImpl.group(n, bindGroup); return this; }
-  layout(n: number): GPUBindGroupLayout { return this.drawImpl.layout(n); }
   draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { this.drawImpl.draw(opts); }
+
+  /** @internal FramePass delegates here; not part of the frozen public Pass surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}): void { this.drawImpl.encode(pass, target, opts); }
 }
 

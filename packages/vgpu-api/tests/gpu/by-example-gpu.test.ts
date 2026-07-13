@@ -25,6 +25,8 @@ const SOLID = `
 }
 `;
 
+const dockerDawnCompatMode = process.platform === "linux";
+
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU acceptance", () => {
   test("by-example §2 fullscreen happy path renders via explicit time set", async () => {
     const gpu = await init({ size: [8, 8] });
@@ -42,10 +44,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
     }
   });
 
-  test("by-example §7 first half renders HDR target and post pass", async () => {
+  test("by-example §7 first half renders HDR target and post pass; rgba8unorm MSAA exercises resolve", async () => {
     const gpu = await init({ size: [8, 8] });
     try {
-      expect(() => gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/msaa: true/);
       const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
       expect(scene.sampleCount).toBe(1);
       const msaaScene = gpu.target({ size: [8, 8], format: "rgba8unorm", depth: true, msaa: true, label: "msaaScene" });
@@ -59,7 +60,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
         frame.pass({ target: msaaScene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: output }, (p) => {
-          post.set({ src: scene.color, texel: scene.texelSize });
+          post.set({ src: scene, texel: scene.texelSize });
           p.draw(post);
         });
       });
@@ -73,6 +74,37 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
       expect(pixel[1]).toBeGreaterThan(100);
       expect(pixel[2]).toBeGreaterThan(150);
       expect(pixel[3]).toBe(255);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test.skipIf(dockerDawnCompatMode)("by-example §7 exact HDR+MSAA path renders on devices capable of multisampling rgba16float", async () => {
+    const gpu = await init({ size: [8, 8] });
+    try {
+      const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "sceneHdrMsaa" });
+      expect(scene.sampleCount).toBe(4);
+      const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "outputHdrMsaa" });
+      const solid = gpu.pass(SOLID, { label: "solidHdrMsaa" });
+      const post = gpu.pass(POST, { label: "postHdrMsaa" });
+      gpu.frame((frame) => {
+        frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
+        frame.pass({ target: output }, (p) => { post.set({ src: scene, texel: scene.texelSize }); p.draw(post); });
+      });
+      const pixels = await output.read();
+      const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
+      expect(pixel[1]).toBeGreaterThan(100);
+      expect(pixel[2]).toBeGreaterThan(150);
+      expect(pixel[3]).toBe(255);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test.skipIf(!dockerDawnCompatMode)("Dawn compat mode explicitly rejects rgba16float+msaa instead of silently degrading", async () => {
+    const gpu = await init({ size: [8, 8] });
+    try {
+      expect(() => gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/Dawn compatibility mode/);
     } finally {
       gpu.dispose();
     }
