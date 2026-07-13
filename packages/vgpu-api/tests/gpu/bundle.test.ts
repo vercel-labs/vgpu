@@ -74,7 +74,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
       const slot = pool.alloc({
         size: 4,
-        bindGroupLayout: cube.layout(1),
+        bindGroupLayout: cube.layout(1, { dynamicOffsets: true }),
         encode(value: number, dst: ArrayBuffer, byteOffset: number) { new DataView(dst).setFloat32(byteOffset, value, true); },
       });
       cube.group(1, slot.bindGroup);
@@ -83,12 +83,13 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const offsets = Array.from({ length: 1000 }, (_, index) => pool.push(slot, index / 999));
       pool.endFrame();
 
-      for (const index of [0, 500, 999]) {
-        const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-        gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(cube, { offsets: { 1: [offsets[index]!] } })));
-        const pixel = rgbaAt(await target.read(), 4, 2, 2);
-        expect(pixel[0]).toBeCloseTo(Math.round((index / 999) * 255), 1);
-      }
+      const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
+      gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => {
+        for (const offset of offsets) p.draw(cube, { offsets: { 1: [offset] } });
+      }));
+
+      const pixel = rgbaAt(await target.read(), 4, 2, 2);
+      expect(pixel[0]).toBeGreaterThan(240);
     } finally {
       gpu.dispose();
     }

@@ -1,4 +1,4 @@
-import { VGPUError, type Device } from "@vgpu/core";
+import { VGPUError, attachBindGroupLayoutMetadata, attachBindGroupMetadata, type Device } from "@vgpu/core";
 import {
   copyDstUsage,
   defaultCapacityBytes,
@@ -125,15 +125,16 @@ class PoolSlot<T> implements UniformSlot<T> {
 
   constructor(readonly pool: UniformPool, readonly layout: UniformLayout<T>, readonly stride: number) {
     this.gpu = pool.gpu;
-    this.bindGroupLayout = layout.bindGroupLayout ?? pool.device.gpu.createBindGroupLayout({
+    const entries = layout.bindings ?? [{ binding: 0, visibility: shaderVisibility(), buffer: { type: "uniform", hasDynamicOffset: true, minBindingSize: layout.size } }];
+    this.bindGroupLayout = layout.bindGroupLayout ?? attachBindGroupLayoutMetadata(pool.device.gpu.createBindGroupLayout({
       label: "UniformPool.slot.bgl",
-      entries: layout.bindings ?? [{ binding: 0, visibility: shaderVisibility(), buffer: { type: "uniform", hasDynamicOffset: true, minBindingSize: layout.size } }],
-    });
-    this.bindGroup = pool.device.gpu.createBindGroup({
+      entries,
+    }), { entries });
+    this.bindGroup = attachBindGroupMetadata(pool.device.gpu.createBindGroup({
       label: "UniformPool.slot.bg",
       layout: this.bindGroupLayout,
       entries: [{ binding: 0, resource: { buffer: this.gpu, offset: 0, size: stride } }],
-    });
+    }), this.bindGroupLayout);
   }
 
   push(value: T): number { return this.pool.push(this, value); }

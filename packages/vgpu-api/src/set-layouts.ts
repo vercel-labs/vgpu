@@ -1,4 +1,4 @@
-import type { Device } from "@vgpu/core";
+import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/runtime";
 import { unsupportedError } from "./errors.ts";
 
@@ -23,7 +23,9 @@ export function pipelineLayoutFor(device: Device, bindGroupLayouts: ReadonlyMap<
 }
 
 function createBindGroupLayout(device: Device, label: string, reflection: Reflection, group: number): GPUBindGroupLayout {
-  return device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries: bindGroupLayoutEntriesForGroup(reflection.bindings, group) });
+  const entries = bindGroupLayoutEntriesForGroup(reflection.bindings, group);
+  const layout = device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries });
+  return attachBindGroupLayoutMetadata(layout, { entries });
 }
 
 function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>): GPUBindGroupLayout[] {

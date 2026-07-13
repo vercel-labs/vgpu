@@ -1,9 +1,8 @@
 import { createGpu, type InitOptions } from "./init.ts";
 
 export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer } from "./init.ts";
-export { claimGroup } from "./init.ts";
 export { Draw } from "./draw.ts";
-export type { DrawOptions, DrawCallOptions, MeshLike, BundleBackReference, BundleBackReferenceRegistry, BundleStaleEvent } from "./draw.ts";
+export type { DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike, BundleBackReference, BundleBackReferenceRegistry, BundleStaleEvent } from "./draw.ts";
 export { Frame, FramePass, FrameRunner } from "./frame.ts";
 export type { FramePassOptions, FrameLoopHandle } from "./frame.ts";
 export { Pass } from "./pass.ts";

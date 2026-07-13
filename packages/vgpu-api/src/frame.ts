@@ -1,4 +1,5 @@
 import type { Device } from "@vgpu/core";
+import { replayBundles, type Bundle } from "./bundle.ts";
 import { Draw, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
@@ -38,6 +39,9 @@ export class FramePass {
   constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target) {}
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
     drawable.encode(this.encoder, this.target, opts);
+  }
+  bundles(...bundles: readonly Bundle[]): void {
+    replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));
   }
 }
 

@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { bind, createBindGroup, createBindGroupLayout } from "@vgpu/core";
 import { UniformPool } from "@vgpu/render";
 import { init } from "../../src/mock.ts";
 
@@ -79,9 +80,23 @@ test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", a
   const pool = new UniformPool(gpu.device, { capacityBytes: 1024 });
   const slot = pool.alloc({
     size: 4,
-    bindGroupLayout: cube.layout(1),
+    bindGroupLayout: cube.layout(1, { dynamicOffsets: true }),
     encode(value: number, dst: ArrayBuffer, byteOffset: number) { new DataView(dst).setFloat32(byteOffset, value, true); },
   });
+
+  const staticBuffer = gpu.device.createBuffer({ size: 4, usage: ["uniform"] });
+  const staticLayout = createBindGroupLayout(gpu.device, {
+    label: "staticLayout",
+    entries: [bind.uniform(0, "fragment", { minBindingSize: 4 })],
+  });
+  const staticBindGroup = createBindGroup(gpu.device, {
+    label: "staticBindGroup",
+    layout: staticLayout,
+    entries: [bind.resource(0, staticBuffer)],
+  });
+  expect(() => cube.group(1, staticBindGroup)).toThrowError(
+    "el grupo 1 reclamado en draw 'cube' no es compatible: @binding(0) no coincide con el layout reflejado.",
+  );
 
   cube.group(1, slot.bindGroup);
   expect(() => cube.set({ obj: { value: 1 } })).toThrowError(

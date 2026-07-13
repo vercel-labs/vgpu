@@ -1,9 +1,9 @@
-import type { Device } from "@vgpu/core";
+import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
+import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
-import { unsupportedError } from "./errors.ts";
+import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
 
 export interface DrawOptions {
   readonly shader: string;
@@ -18,6 +18,10 @@ export interface DrawCallOptions {
   readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
 }
 
+export interface DrawLayoutOptions {
+  readonly dynamicOffsets?: boolean;
+}
+
 export interface MeshLike {
   readonly vertexCount?: number;
   readonly indexCount?: number;
@@ -26,6 +30,8 @@ export interface MeshLike {
   readonly indexFormat?: GPUIndexFormat;
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
 }
+
+type BindGroupBinding = { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimed?: boolean };
 
 export type BundleStaleEvent =
   | ({ readonly kind: "binding-identity"; readonly drawLabel: string } & BindingIdentityChange)
@@ -52,16 +58,17 @@ export class Draw {
   readonly label: string;
   readonly reflection: Reflection;
   readonly setCore: SetCore;
-  readonly bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>;
-  readonly pipelineLayout: GPUPipelineLayout;
+  readonly bindGroupLayouts: Map<number, GPUBindGroupLayout>;
+  pipelineLayout: GPUPipelineLayout;
   readonly shaderModule: GPUShaderModule;
   readonly __recordedIn: BundleBackReferenceRegistry;
+  private readonly dynamicBindGroupLayouts = new Map<number, GPUBindGroupLayout>();
   private readonly pipelineCache = new Map<string, GPURenderPipeline>();
 
   constructor(readonly device: Device, readonly source: string, readonly opts: DrawOptions, private readonly cache: BindGroupCache = createBindGroupCache(), private readonly defaultTarget?: Target) {
     this.label = opts.label ?? "draw";
     this.reflection = reflectSource(source, `${this.label}.wgsl`);
-    this.bindGroupLayouts = bindGroupLayoutsForReflection(device, this.label, this.reflection);
+    this.bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, this.reflection));
     this.pipelineLayout = pipelineLayoutFor(device, this.bindGroupLayouts);
     this.shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });
     this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
@@ -79,12 +86,30 @@ export class Draw {
   }
 
   group(n: number, bindGroup: GPUBindGroup): this {
-    this.setCore.claimGroup(n, bindGroup);
-    this.__recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, newIdentity: `claimed-group:${n}` });
+    const expectedLayout = this.dynamicBindGroupLayouts.get(n) ?? this.layout(n);
+    const previousIdentity = this.setCore.claimGroup(n, bindGroup, expectedLayout);
+    this.__recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
     return this;
   }
 
-  layout(n: number): GPUBindGroupLayout { return this.setCore.layout(n); }
+  layout(n: number, opts: DrawLayoutOptions = {}): GPUBindGroupLayout {
+    if (!opts.dynamicOffsets) return this.setCore.layout(n);
+    return this.dynamicLayout(n);
+  }
+
+  private dynamicLayout(group: number): GPUBindGroupLayout {
+    this.setCore.layout(group);
+    const existing = this.dynamicBindGroupLayouts.get(group);
+    if (existing) return existing;
+    const entries = dynamicEntries(this, group);
+    const rawLayout = this.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
+    const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
+    this.dynamicBindGroupLayouts.set(group, layout);
+    this.bindGroupLayouts.set(group, layout);
+    this.pipelineLayout = pipelineLayoutFor(this.device, this.bindGroupLayouts);
+    this.pipelineCache.clear();
+    return layout;
+  }
 
   draw(opts: DrawCallOptions = {}): void {
     const target = opts.target ?? this.defaultTarget;
@@ -98,8 +123,17 @@ export class Draw {
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}): void {
     pass.setPipeline(this.pipelineFor(target));
-    for (const binding of this.setCore.bindGroups()) pass.setBindGroup(binding.group, binding.bindGroup, offsetsForGroup(opts.offsets, binding.group, binding.offsets));
+    for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts);
     this.encodeMesh(pass);
+  }
+
+  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions): void {
+    const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
+    try { pass.setBindGroup(binding.group, binding.bindGroup, offsets); }
+    catch (error) {
+      if (binding.claimed) throw claimedGroupNativeValidationError(this.label, binding.group, error);
+      throw error;
+    }
   }
 
   pipelineFor(target: Target): GPURenderPipeline {
@@ -150,4 +184,13 @@ function offsetsForGroup(offsets: DrawCallOptions["offsets"], group: number, fal
   if (Array.isArray(offsets)) return offsets;
   const byGroup = offsets as Partial<Record<number, readonly number[]>>;
   return byGroup[group] ?? fallback;
+}
+
+function dynamicEntries(draw: Draw, group: number): GPUBindGroupLayoutEntry[] {
+  return bindGroupLayoutEntriesForGroup(draw.reflection.bindings, group).map(dynamicEntry);
+}
+
+function dynamicEntry(entry: GPUBindGroupLayoutEntry): GPUBindGroupLayoutEntry {
+  if (!entry.buffer) return entry;
+  return { ...entry, buffer: { ...entry.buffer, hasDynamicOffset: true } };
 }

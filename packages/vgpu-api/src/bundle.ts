@@ -1,6 +1,5 @@
 import { createRenderBundle } from "@vgpu/render";
 import { Draw, type BundleBackReference, type BundleStaleEvent, type DrawCallOptions } from "./draw.ts";
-import { FramePass } from "./frame.ts";
 import { Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
 import { VGPUError } from "./errors.ts";
@@ -17,12 +16,6 @@ export interface BundleRecorder {
 export interface Bundle {
   readonly id: string;
   readonly gpu: GPURenderBundle;
-}
-
-declare module "./frame.ts" {
-  interface FramePass {
-    bundles(...bundles: readonly Bundle[]): void;
-  }
 }
 
 let nextBundleId = 1;
@@ -125,21 +118,15 @@ function bundleStaleError(id: string, message: string): VGPUError {
   return new VGPUError({ code: "VGPU-R3-BUNDLE-STALE", message, where: `bundle '${id}' replay` });
 }
 
-function replayBundles(pass: FramePass, bundles: readonly Bundle[]): void {
-  const internals = pass as unknown as { readonly encoder: GPURenderPassEncoder; readonly target: Target };
+export function replayBundles(target: Target, bundles: readonly Bundle[], execute: (bundles: readonly GPURenderBundle[]) => void): void {
   const recorded = bundles.map((bundle) => assertRecordedBundle(bundle));
-  for (const bundle of recorded) bundle.assertReplayable(internals.target);
-  internals.encoder.executeBundles(recorded.map((bundle) => bundle.gpu));
+  for (const bundle of recorded) bundle.assertReplayable(target);
+  execute(recorded.map((bundle) => bundle.gpu));
 }
 
 function assertRecordedBundle(bundle: Bundle): RecordedBundle {
   if (bundle instanceof RecordedBundle) return bundle;
   throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() esperaba bundles creados por gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
-}
-
-function installFramePassBundles(): void {
-  const proto = FramePass.prototype as FramePass & { bundles?: (...bundles: readonly Bundle[]) => void };
-  proto.bundles ??= function bundles(...items: readonly Bundle[]) { replayBundles(this, items); };
 }
 
 function sameTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
@@ -153,5 +140,3 @@ function sameSize(a: readonly [number, number], b: readonly [number, number]): b
 function sameTuple<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
-
-installFramePassBundles();
