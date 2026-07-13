@@ -3,18 +3,29 @@ import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
-export function bindGroupLayoutEntriesForGroup(bindings: readonly BindingInfo[], group: number): GPUBindGroupLayoutEntry[] {
+export type BindingVisibilityFn = (binding: BindingInfo) => GPUShaderStageFlags;
+
+export function bindGroupLayoutEntriesForGroup(
+  bindings: readonly BindingInfo[],
+  group: number,
+  visibility: BindingVisibilityFn = defaultVisibility,
+): GPUBindGroupLayoutEntry[] {
   return bindings.filter((binding) => binding.group === group).map((binding) => ({
     binding: binding.binding,
-    visibility: visibilityForBinding(binding),
+    visibility: visibility(binding),
     ...layoutEntry(binding),
   }));
 }
 
-export function bindGroupLayoutsForReflection(device: Device, label: string, reflection: Reflection): ReadonlyMap<number, GPUBindGroupLayout> {
+export function bindGroupLayoutsForReflection(
+  device: Device,
+  label: string,
+  reflection: Reflection,
+  visibility: (binding: BindingInfo) => GPUShaderStageFlags = defaultVisibility,
+): ReadonlyMap<number, GPUBindGroupLayout> {
   const map = new Map<number, GPUBindGroupLayout>();
   const groups = [...new Set(reflection.bindings.map((binding) => binding.group))].sort((a, b) => a - b);
-  for (const group of groups) map.set(group, createBindGroupLayout(device, label, reflection, group));
+  for (const group of groups) map.set(group, createBindGroupLayout(device, label, reflection, group, visibility));
   return map;
 }
 
@@ -22,8 +33,14 @@ export function pipelineLayoutFor(device: Device, bindGroupLayouts: ReadonlyMap<
   return device.gpu.createPipelineLayout({ bindGroupLayouts: contiguousLayouts(bindGroupLayouts) });
 }
 
-function createBindGroupLayout(device: Device, label: string, reflection: Reflection, group: number): GPUBindGroupLayout {
-  return device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries: bindGroupLayoutEntriesForGroup(reflection.bindings, group) });
+function createBindGroupLayout(
+  device: Device,
+  label: string,
+  reflection: Reflection,
+  group: number,
+  visibility: BindingVisibilityFn,
+): GPUBindGroupLayout {
+  return device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries: bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility) });
 }
 
 function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>): GPUBindGroupLayout[] {
@@ -55,7 +72,7 @@ function reflectedToWebGPU(layout: ReflectedBindingLayout): Omit<GPUBindGroupLay
   }
 }
 
-function visibilityForBinding(binding: BindingInfo): GPUShaderStageFlags {
+function defaultVisibility(binding: BindingInfo): GPUShaderStageFlags {
   const stages = globalThis.GPUShaderStage as unknown as Record<string, number> | undefined;
   const vertex = stages?.VERTEX ?? 1;
   const fragment = stages?.FRAGMENT ?? 2;

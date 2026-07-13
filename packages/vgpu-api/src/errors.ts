@@ -54,6 +54,14 @@ export function unsupportedError(where: string, message: string, fix?: string): 
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
 }
 
+export function writableStorageAliasingError(where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-STORAGE-ALIASING",
+    message: "`src` y `dst` apuntan al MISMO buffer y `dst` es read_write (writable-storage aliasing,\n  prohibido por WebGPU). Fix: usá gpu.pingPongStorage() y alterná read/write.",
+    where,
+  });
+}
+
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {
   switch (binding.kind) {
     case "sampler": return `${drawLabel}.set({ ${binding.name}: gpu.sampler() })            // valor canónico cacheado`;
