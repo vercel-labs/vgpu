@@ -39,5 +39,8 @@
     "generate:docs": "node lib/docs/generate/cli.js",
     "prepack": "node lib/docs/generate/cli.js",
     "test": "cd ../.. && vitest run packages/vgpu"
+  },
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*"
   }
 }

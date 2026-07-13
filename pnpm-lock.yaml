@@ -179,7 +179,11 @@ importers:
         specifier: ^3.4.2
         version: 3.4.2
 
-  packages/vgpu: {}
+  packages/vgpu:
+    dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
 
   packages/vgpu-api:
     dependencies:
