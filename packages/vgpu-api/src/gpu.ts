@@ -5,7 +5,6 @@ import { Draw, type DrawOptions, type MeshLike } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
 import { Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
-import { inlineStdWgslImports } from "./std-wgsl-imports.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
 import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
@@ -95,12 +94,9 @@ class RingGpu implements Gpu {
 
   pass(source: string, opts: PassOptions = {}): Pass {
     if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new Pass(this.device, inlineStdWgslImports(source), opts, this.cache, this.screen);
+    return new Pass(this.device, source, opts, this.cache, this.screen);
   }
-  draw(opts: DrawOptions): Draw {
-    const shader = inlineStdWgslImports(opts.shader);
-    return new Draw(this.device, shader, { ...opts, shader }, this.cache, this.screen);
-  }
+  draw(opts: DrawOptions): Draw { return new Draw(this.device, opts.shader, opts, this.cache, this.screen); }
   target(opts: TargetOptions = {}): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
   mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
