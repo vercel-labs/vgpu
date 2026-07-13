@@ -1,5 +1,5 @@
 {
-  "name": "vgpu",
+  "name": "@vgpu/cli",
   "version": "0.0.8",
   "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
