@@ -43,5 +43,16 @@
   "dependencies": {
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0"
+  },
+  "peerDependencies": {
+    "vgpu": "^0.0.8"
+  },
+  "peerDependenciesMeta": {
+    "vgpu": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "vgpu": "workspace:*"
   }
 }

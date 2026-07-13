@@ -14,7 +14,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("representative gradient match
     pass.set({ time: Math.PI / 4 });
     gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(pass)));
     const result = await comparePixelSnapshot(BASELINE, await target.read(), SNAPSHOT_SIZE[0], SNAPSHOT_SIZE[1]);
-    expect(result).toEqual({ status: "matched", mismatchedPixels: 0, ratio: 0 });
+    expect(result).toMatchObject({ status: "matched", mismatchedPixels: 0, ratio: 0 });
   } finally {
     gpu.dispose();
   }
