@@ -1,4 +1,4 @@
-import { Texture, type Device } from "@vgpu/core";
+import { createResourceIdentity, DestroySignal, Texture, type Device, type ResourceDestroyCallback, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { RenderTarget, RenderTargetGpu } from "./types.ts";
 
 export interface CanvasRenderTargetOptions {
@@ -19,7 +19,12 @@ const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
  */
 export function renderTargetForCanvas(context: GPUCanvasContext, options: CanvasRenderTargetOptions = {}): RenderTarget {
   const clearColor = colorDict(options.clearColor);
-  const target = {
+  const resourceIdentity = createResourceIdentity("render-target");
+  const destroySignal = new DestroySignal<RenderTarget>();
+  let target: RenderTarget;
+  const onDestroy = (cb: ResourceDestroyCallback<RenderTarget>): UnsubscribeResourceDestroy => destroySignal.onDestroy(target, cb);
+
+  target = Object.freeze({
     get color(): Texture { return canvasTexture(context, options.label); },
     get colors(): readonly [Texture, ...Texture[]] { return Object.freeze([this.color]) as readonly [Texture, ...Texture[]]; },
     get depth(): undefined { return undefined; },
@@ -37,8 +42,10 @@ export function renderTargetForCanvas(context: GPUCanvasContext, options: Canvas
         colorTextures: Object.freeze([texture]),
       });
     },
-  } satisfies RenderTarget;
-  return Object.freeze(target);
+    resourceIdentity,
+    onDestroy,
+  });
+  return target;
 }
 
 function canvasTexture(context: GPUCanvasContext, label: string | undefined): Texture {

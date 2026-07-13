@@ -1,6 +1,7 @@
 import { ValidationError } from "./errors.ts";
 import { textureUsageFlags } from "./gpuConstants.ts";
 import { isMockGPUTexture } from "./mock-gpu-storage.ts";
+import { createResourceIdentity, DestroySignal, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "./resource-lifecycle.ts";
 import type { Device } from "./device.ts";
 import type { TextureOptions } from "./types.ts";
 
@@ -11,6 +12,8 @@ type TextureOwnership = "owned" | "external";
 
 export class Texture {
   readonly [textureBrand] = true;
+  private readonly destroySignal = new DestroySignal<Texture>();
+  private readonly identity = createResourceIdentity("texture");
   private currentGpu: GPUTexture;
   private currentOptions: TextureOptions;
   private defaultView: GPUTextureView | null = null;
@@ -40,6 +43,11 @@ export class Texture {
   get dimension(): GPUTextureDimension { return this.options.dimension ?? "2d"; }
   get viewFormats(): readonly GPUTextureFormat[] { return this.options.viewFormats ?? []; }
   get label(): string | undefined { return this.options.label; }
+  get resourceIdentity(): ResourceIdentity { return this.identity; }
+
+  onDestroy(cb: ResourceDestroyCallback<Texture>): UnsubscribeResourceDestroy {
+    return this.destroySignal.onDestroy(this, cb);
+  }
 
   get view(): GPUTextureView {
     this.assertAlive();
@@ -94,6 +102,7 @@ export class Texture {
     if (this.destroyed) return;
     this.destroyed = true;
     this.defaultView = null;
+    this.destroySignal.emit(this);
     if (this.ownership === "external") return;
     if (!isMockGPUTexture(this.gpu)) this.gpu.destroy();
   }

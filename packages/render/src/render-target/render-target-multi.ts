@@ -1,4 +1,5 @@
 import { ValidationError, type Texture } from "@vgpu/core";
+import { createRenderTargetLifecycle } from "./render-target-lifecycle.ts";
 import type { ColorAttachmentSpec, RenderTargetGpu, RenderTargetMultiSpec, RenderTargetN } from "./types.ts";
 import { markTextureCapturedByRenderTarget } from "./texture-resize-lock.ts";
 
@@ -56,7 +57,8 @@ export async function renderTargetMulti<const Specs extends readonly ColorAttach
     depthTexture: depth?.gpu,
   });
   const frozenColors = Object.freeze(colors) as { readonly [K in keyof Specs]: Texture };
-  return Object.freeze({
+  const lifecycle = createRenderTargetLifecycle([...colors, depth]);
+  const target = Object.freeze({
     color: colors[0] as Texture,
     colors: frozenColors,
     depth,
@@ -65,7 +67,11 @@ export async function renderTargetMulti<const Specs extends readonly ColorAttach
     sampleCount: 1,
     label: spec.label,
     gpu,
+    resourceIdentity: lifecycle.resourceIdentity,
+    onDestroy: lifecycle.onDestroy,
   }) as RenderTargetN<Specs>;
+  lifecycle.bind(target as unknown as import("./types.ts").RenderTarget);
+  return target;
 }
 
 function validateSpec(spec: RenderTargetMultiSpec): void {

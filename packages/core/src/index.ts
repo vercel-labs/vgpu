@@ -5,6 +5,8 @@ export type { DeviceOptions } from "./device.ts";
 export { Queue } from "./queue.ts";
 export { Shader } from "./shader.ts";
 export { Texture } from "./texture.ts";
+export { createResourceIdentity, DestroySignal } from "./resource-lifecycle.ts";
+export type { ResourceDestroyCallback, ResourceIdentity, ResourceKind, UnsubscribeResourceDestroy } from "./resource-lifecycle.ts";
 export { pingPong } from "./ping-pong.ts";
 export { cubeView, layerView } from "./texture-view.ts";
 export type { CubeViewOptions, LayerViewOptions } from "./texture-view.ts";

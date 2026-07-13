@@ -1,4 +1,4 @@
-import type { Device, Texture } from "@vgpu/core";
+import type { Device, ResourceDestroyCallback, ResourceIdentity, Texture, UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { Material } from "../domain/material.ts";
 import type { Mesh } from "../domain/mesh.ts";
 
@@ -12,6 +12,8 @@ export interface RenderTarget {
   readonly sampleCount: 1 | 4;
   readonly label?: string;
   readonly gpu: RenderTargetGpu;
+  readonly resourceIdentity: ResourceIdentity;
+  onDestroy(cb: ResourceDestroyCallback<RenderTarget>): UnsubscribeResourceDestroy;
 }
 
 /** Raw GPU attachments and pass descriptor fragments owned by a render target. */
