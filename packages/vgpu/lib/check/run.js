@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { resolveShader } from "@vgpu/wgsl/runtime";
 
 /**
  * Runs WGSL reflection/validation for a single entry module and dumps JSON.
@@ -13,8 +12,10 @@ export async function runCheck(args) {
 
   const absEntry = resolveEntry(entry);
   try {
+    const { resolveShader } = await loadWgslRuntime();
     const result = await resolveShader({ entry: absEntry, rootDir: dirname(absEntry) });
     const payload = {
+      schemaVersion: 1,
       entry: absEntry,
       deps: result.deps,
       diagnostics: result.diagnostics,
@@ -27,6 +28,10 @@ export async function runCheck(args) {
   }
 }
 
+/**
+ * Resolves package-filter invocations back to the workspace root when possible.
+ * Outside a pnpm workspace this intentionally falls back to cwd-relative paths.
+ */
 function resolveEntry(entry) {
   const fromCwd = resolve(process.cwd(), entry);
   if (existsSync(fromCwd)) return fromCwd;
@@ -34,6 +39,26 @@ function resolveEntry(entry) {
   if (!workspaceRoot) return fromCwd;
   const fromWorkspace = resolve(workspaceRoot, entry);
   return existsSync(fromWorkspace) ? fromWorkspace : fromCwd;
+}
+
+async function loadWgslRuntime() {
+  try {
+    return await import("@vgpu/wgsl/runtime");
+  } catch (error) {
+    if (isMissingWgslRuntime(error)) {
+      throw new Error("`vgpu check` requires @vgpu/wgsl to be installed. Install it next to @vgpu/cli, for example: pnpm add -D @vgpu/wgsl");
+    }
+    throw error;
+  }
+}
+
+function isMissingWgslRuntime(error) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      error.code === "ERR_MODULE_NOT_FOUND" &&
+      String(error.message ?? "").includes("@vgpu/wgsl"),
+  );
 }
 
 function findWorkspaceRoot(startDir) {

@@ -1,3 +1,5 @@
+/// <reference types="@webgpu/types" />
+
 declare module "vgpu/client" {
   export interface VGPUClientEnvironment {
     readonly gpu?: GPU;

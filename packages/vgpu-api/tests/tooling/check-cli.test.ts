@@ -17,6 +17,7 @@ async function runCheckSuccess(entry: string) {
 test("vgpu check emits reflection JSON for WGSL files", async () => {
   const output = await runCheckSuccess(resolve(fixtureRoot, "sample.wgsl"));
 
+  expect(output.schemaVersion).toBe(1);
   expect(output.entry).toBe(resolve(fixtureRoot, "sample.wgsl"));
   expect(output.reflection.bindings).toEqual(
     expect.arrayContaining([

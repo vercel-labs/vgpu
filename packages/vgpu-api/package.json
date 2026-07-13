@@ -67,7 +67,8 @@
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
     "@vgpu/render": "workspace:*",
-    "@vgpu/wgsl": "workspace:*"
+    "@vgpu/wgsl": "workspace:*",
+    "@webgpu/types": "^0.1.69"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 4096,

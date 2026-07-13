@@ -40,7 +40,15 @@
     "prepack": "node lib/docs/generate/cli.js",
     "test": "cd ../.. && vitest run packages/vgpu"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@vgpu/wgsl": "^0.0.8"
+  },
+  "peerDependenciesMeta": {
+    "@vgpu/wgsl": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
     "@vgpu/wgsl": "workspace:*"
   }
 }

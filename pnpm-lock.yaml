@@ -180,7 +180,7 @@ importers:
         version: 3.4.2
 
   packages/vgpu:
-    dependencies:
+    devDependencies:
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../wgsl
@@ -202,6 +202,9 @@ importers:
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../wgsl
+      '@webgpu/types':
+        specifier: ^0.1.69
+        version: 0.1.69
 
   packages/wgsl:
     devDependencies:
