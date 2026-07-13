@@ -95,20 +95,22 @@ class ExplicitBundleRecorder implements BundleRecorder {
 
 type TargetSnapshot = {
   readonly size: readonly [number, number];
-  readonly colorIdentities: readonly string[];
-  readonly depthIdentity?: string;
+  readonly colorFormats: readonly GPUTextureFormat[];
+  readonly depthFormat?: GPUTextureFormat;
+  readonly sampleCount: 1 | 4;
 };
 
 function snapshotTarget(target: Target): TargetSnapshot {
   return {
     size: [target.size[0], target.size[1]],
-    colorIdentities: target.colors.map((color) => `${color.resourceIdentity.kind}:${color.resourceIdentity.id}`),
-    depthIdentity: target.depth ? `${target.depth.resourceIdentity.kind}:${target.depth.resourceIdentity.id}` : undefined,
+    colorFormats: target.colors.map((color) => color.format),
+    depthFormat: target.depth?.format,
+    sampleCount: target.sampleCount,
   };
 }
 
 function targetResizeStaleMessage(id: string, before: TargetSnapshot, after: TargetSnapshot): string | undefined {
-  if (sameSize(before.size, after.size) && sameTuple(before.colorIdentities, after.colorIdentities) && before.depthIdentity === after.depthIdentity) return undefined;
+  if (sameTargetSnapshot(before, after)) return undefined;
   return `bundle '${id}' está stale: el target cambió después de la grabación. Los bundles congelan attachments y bind groups.\n  Fix: re-grabá el bundle después de resize → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
 }
 
@@ -140,11 +142,15 @@ function installFramePassBundles(): void {
   proto.bundles ??= function bundles(...items: readonly Bundle[]) { replayBundles(this, items); };
 }
 
+function sameTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
+  return sameSize(a.size, b.size) && a.sampleCount === b.sampleCount && a.depthFormat === b.depthFormat && sameTuple(a.colorFormats, b.colorFormats);
+}
+
 function sameSize(a: readonly [number, number], b: readonly [number, number]): boolean {
   return a[0] === b[0] && a[1] === b[1];
 }
 
-function sameTuple(a: readonly string[], b: readonly string[]): boolean {
+function sameTuple<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
