@@ -188,6 +188,9 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
     devDependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
       vgpu:
         specifier: workspace:*
         version: link:../vgpu-api
@@ -209,6 +212,9 @@ importers:
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../wgsl
+      '@webgpu/types':
+        specifier: ^0.1.69
+        version: 0.1.69
 
   packages/wgsl:
     devDependencies:

@@ -12,7 +12,17 @@ engine used by downstream lanes.
 - `vgpu/node` — Node/Dawn entrypoint, `init({ size })`
 - `vgpu/mock` — mock-adapter entrypoint for GPU-less tests
 - `vgpu/scene` — scene helpers placeholder
-- `vgpu/client` — client environment typing placeholder
+- `vgpu/client` — client typing baseline for `.wgsl` imports and Vite WGSL plugin passthrough
+
+## WGSL import typing
+
+Create a `vgpu-env.d.ts` file in app projects that import `.wgsl` modules:
+
+```ts
+/// <reference types="vgpu/client" />
+```
+
+This is intentionally a loose `*.wgsl` string import type. Runtime reflection remains the source of truth for binding names, types, and layouts.
 
 ## Frozen Phase-2 surface
 

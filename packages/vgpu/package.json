@@ -45,14 +45,19 @@
     "pngjs": "^7.0.0"
   },
   "peerDependencies": {
+    "@vgpu/wgsl": "^0.0.8",
     "vgpu": "^0.0.8"
   },
   "peerDependenciesMeta": {
+    "@vgpu/wgsl": {
+      "optional": true
+    },
     "vgpu": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@vgpu/wgsl": "workspace:*",
     "vgpu": "workspace:*"
   }
 }

@@ -1,0 +1,21 @@
+{
+  "extends": "../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "vgpu": ["../../../src/index.ts"],
+      "vgpu/*": ["../../../src/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "vgpu-env.d.ts"
+  ]
+}
