@@ -10,6 +10,7 @@ import { unsupportedError } from "./errors.ts";
 import { ComputePipeline } from "./compute.ts";
 import { createStorageBuffer } from "./storage.ts";
 import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
+import { createSharedUniforms } from "./uniforms.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
@@ -110,7 +111,7 @@ class RingGpu implements Gpu {
   storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
   pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
   pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
-  uniforms<T extends Record<string, unknown>>(_values: T): never { throw lanePlaceholder("gpu.uniforms", "fase 3 Lane E"); }
+  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
   bundle(_opts: BundleOptions, _cb: (recorder: BundleRecorder) => void): never { throw lanePlaceholder("gpu.bundle", "fase 3 Lane D"); }
 
   private advanceFrameState(): void {

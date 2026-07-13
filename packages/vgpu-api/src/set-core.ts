@@ -107,7 +107,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function setUserOwned(state: MutableBindingState, value: unknown): void {
-    const normalized = normalizeResource(state.info, value);
+    const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
     state.resource = normalized.resource;
     state.identity = normalized.identity;
     state.unsubscribe?.();

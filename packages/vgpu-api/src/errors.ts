@@ -62,6 +62,20 @@ export function writableStorageAliasingError(where: string): VGPUError {
   });
 }
 
+export function sharedUniformLayoutMismatchError(opts: {
+  readonly bindingName: string;
+  readonly adoptedLayout: string;
+  readonly adoptedSource: string;
+  readonly incomingLayout: string;
+  readonly incomingSource: string;
+}): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH",
+    message: `shared uniforms '${opts.bindingName}' ya tiene layout ${opts.adoptedLayout} (adoptado de ${opts.adoptedSource});\n  ${opts.incomingSource} declara ${opts.incomingLayout} — alineá los structs o usá dos uniforms distintos.`,
+    where: "gpu.uniforms",
+  });
+}
+
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {
   switch (binding.kind) {
     case "sampler": return `${drawLabel}.set({ ${binding.name}: gpu.sampler() })            // valor canónico cacheado`;
