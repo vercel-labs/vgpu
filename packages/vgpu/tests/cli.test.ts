@@ -84,7 +84,7 @@ test("returns nonzero for missing and unknown docs commands", () => {
 });
 
 
-test("snapshot command requires the Docker GPU harness", async () => {
+test.skipIf(process.env.VGPU_DOCKER_TEST === "1")("snapshot command requires the Docker GPU harness", async () => {
   await expect(Promise.resolve(runCli(["snapshot", "--ci"]))).resolves.toMatchObject({
     code: 1,
     stderr: expect.stringContaining("VGPU_DOCKER_TEST=1"),

@@ -4,6 +4,21 @@
 
 `resolveShader` loads a WGSL entry module, follows vgpu-wgsl import/export declarations, and returns a single plain WGSL string that can be passed to WebGPU. Callers can provide `modules` as an in-memory filesystem or let the resolver read files from disk; relative imports resolve from the importing module, `@/` imports use `rootDir`, and package imports use `packageMap` or package `exports`. With validation enabled, emitted WGSL is checked by the configured validator and failures are reported as structured `VGPU-WGSL-*` diagnostics.
 
+Imported WGSL modules are pure: they may export structs, aliases, constants, and functions, but they cannot declare `@group/@binding` resources. All bindings live in the entry module so runtime reflection and `set()` use source-facing entry names without a binding map, renumbering, or binding-name mangling. If a module declares a resource, resolution throws `VGPU-RESOLVE-MODULE-BINDING` with the canonical fix-it. The entry itself may declare bindings.
+
+Canonical module pattern:
+
+```wgsl
+// noise.wgsl
+export struct NoiseConfig { seed: u32 }
+export fn noise(cfg: NoiseConfig) -> f32 { return f32(cfg.seed); }
+
+// entry.wgsl
+import { NoiseConfig, noise } from "./noise.wgsl";
+@group(0) @binding(0) var<uniform> cfg: NoiseConfig;
+@fragment fn main() -> @location(0) vec4f { return vec4f(noise(cfg)); }
+```
+
 `ResolveOptions` contains the entry path plus optional `rootDir`, `packageMap`, `modules`, `validate`, and `minify` flags. `minify` accepts `boolean | { whitespace?: boolean; identifiers?: "none" | "safe" }` and defaults to `false`. `minify: true` is the production preset (`{ whitespace: true, identifiers: "safe" }`). Object form defaults to whitespace on and identifier renaming off, so `{ minify: { whitespace: true } }` is whitespace-only and `{ minify: { identifiers: "safe" } }` enables whitespace plus safe identifier shortening.
 
 ## Usage caveat

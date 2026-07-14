@@ -45,3 +45,13 @@ test("vgpu check surfaces Phase-1 fix-it text verbatim", async () => {
   expect(result.stderr).toContain("VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE");
   expect(result.stderr).toContain("VGPUError: `bool` no es host-shareable en uniform/storage. Fix: usá `u32` (0 | 1) → struct Params { enabled: u32 }");
 });
+
+test("vgpu check rejects imported modules that declare bindings", async () => {
+  const result = await runCheck([resolve(fixtureRoot, "module-binding-entry.wgsl")]);
+  expect(result.code).toBe(1);
+  expect(result.stdout).toBeUndefined();
+  expect(result.stderr).toContain("VGPU-RESOLVE-MODULE-BINDING");
+  expect(result.stderr).toContain("Los módulos no pueden declarar bindings — exportá el struct y declaralo en tu entry:\\n" +
+    "  export struct NoiseConfig { seed: u32 }\\n" +
+    "  // en tu entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;");
+});
