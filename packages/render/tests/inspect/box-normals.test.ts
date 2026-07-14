@@ -5,7 +5,7 @@ import { PNG } from "pngjs";
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { App } from "@vgpu/core";
-import { degToRad, Mesh, perspectiveCamera, type Vec3 } from "@vgpu/render";
+import { Mesh, perspectiveCamera, type Vec3 } from "vgpu/scene";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import { renderInspectFrame } from "./_helpers.ts";
 
@@ -25,7 +25,7 @@ for (const [angle, { position }] of Object.entries(CAMERAS)) {
       const mesh = Mesh.box({ device, size: 1 });
       const material = normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
       const camera = perspectiveCamera({
-        fovYRadians: degToRad(45),
+        fov: 45,
         aspect: 1,
         near: 0.1,
         far: 100,

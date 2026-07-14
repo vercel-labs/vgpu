@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { UniformPool } from "@vgpu/render";
+import { UniformPool } from "../../src/core.ts";
 import { init } from "../../src/node.ts";
 
 const SOLID_GREEN = `

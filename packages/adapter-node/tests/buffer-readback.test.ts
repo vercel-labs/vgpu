@@ -1,10 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { App } from "@vgpu/core";
-import { createNodeAdapter } from "@vgpu/adapter-node";
+import { init } from "vgpu/node";
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("adapter-node Docker GPU", () => {
   test("writes f32 buffer and reads it back byte-equal", async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const { device } = await init();
     const data = new Float32Array([1, 2, 3, 4]);
     const buffer = device.createBuffer({ size: data.byteLength, usage: ["copy_dst", "copy_src", "storage"] });
 
@@ -17,7 +16,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("adapter-node Docker GPU",
   });
 
   test("node error scope captures validation error from invalid buffer creation", async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const { device } = await init();
     device.pushErrorScope("validation");
     device.createBuffer({ size: 16, usage: [] });
 
@@ -26,7 +25,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("adapter-node Docker GPU",
   });
 
   test("node device destroy is idempotent", async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const { device } = await init();
 
     device.destroy();
     device.destroy();
@@ -35,7 +34,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("adapter-node Docker GPU",
   });
 
   test("node .gpu escape hatch returns underlying GPUDevice", async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const { device } = await init();
 
     expect(device.gpu).toBeDefined();
     expect(typeof device.gpu.createBuffer).toBe("function");

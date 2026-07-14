@@ -1,4 +1,4 @@
-import { createRenderBundle } from "@vgpu/render";
+import { createRenderBundle } from "./core/render-bundle.ts";
 import { Draw, type BundleBackReference, type BundleStaleEvent, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
 import type { Target } from "./target.ts";

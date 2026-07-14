@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PNG } from "pngjs";
 import { expect } from "vitest";
 import type { Device } from "@vgpu/core";
-import { degToRad, perspectiveCamera, type Mat4, type Mesh, type Vec3 } from "@vgpu/render";
+import { perspectiveCamera, type Mat4, type Mesh, type Vec3 } from "vgpu/scene";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import type { EditableMesh, ElementSelection } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
@@ -83,5 +83,5 @@ export function editableSignature(em: EditableMesh): string {
 
 export function sha(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
 function bytes(view: ArrayBufferView): Uint8Array { return new Uint8Array(view.buffer, view.byteOffset, view.byteLength); }
-function camera(angle: keyof typeof ANGLES) { return perspectiveCamera({ fovYRadians: degToRad(45), aspect: 1, near: 0.1, far: 100, position: vec3(ANGLES[angle]), target: vec3([0, 0, 0]) }); }
+function camera(angle: keyof typeof ANGLES) { return perspectiveCamera({ fov: 45, aspect: 1, near: 0.1, far: 100, position: vec3(ANGLES[angle]), target: vec3([0, 0, 0]) }); }
 function vec3(values: readonly number[]): Vec3 { return new Float32Array(values) as Vec3; }
