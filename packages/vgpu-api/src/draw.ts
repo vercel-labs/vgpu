@@ -1,7 +1,7 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popClaimedGroupValidationScopes, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
@@ -125,7 +125,7 @@ export class Draw {
     const encoder = this.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
     const validations: ClaimedGroupValidationResult[] = [];
-    try { this.encode(pass, target, opts, (context) => pushClaimedGroupValidationScope(this.device, context)); }
+    try { this.encode(pass, target, opts, (result) => validations.push(result)); }
     catch (error) {
       discardClaimedGroupValidationResults(validations);
       discardClaimedGroupValidationScopes(this.device);
@@ -137,49 +137,64 @@ export class Draw {
       const scopes = popClaimedGroupValidationScopes(this.device);
       discardClaimedGroupValidationResults(validations);
       discardClaimedGroupValidationResults(scopes);
-      const context = scopes[0]?.context;
+      const context = scopes[0]?.context ?? validations[0]?.context;
       if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
       throw error;
     }
     let commandBuffer: GPUCommandBuffer;
+    const finishContext = validations[0]?.context;
+    if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
     try { commandBuffer = encoder.finish(); }
     catch (error) {
-      const scopes = popClaimedGroupValidationScopes(this.device);
+      const result = finishContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(validations);
-      discardClaimedGroupValidationResults(scopes);
-      const context = scopes[0]?.context;
+      if (result) discardClaimedGroupValidationResults([result]);
+      const context = result?.context ?? finishContext;
       if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
       throw error;
     }
-    validations.push(...popClaimedGroupValidationScopes(this.device));
+    if (finishContext) {
+      const result = popLastClaimedGroupValidationScope(this.device);
+      if (result) validations.push(result);
+    }
+    const submitContext = validations[0]?.context;
+    if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
     try { this.device.gpu.queue.submit([commandBuffer]); }
     catch (error) {
-      const context = validations[0]?.context;
+      const result = submitContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(validations);
+      if (result) discardClaimedGroupValidationResults([result]);
+      const context = result?.context ?? submitContext;
       if (context) return Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
       throw error;
+    }
+    if (submitContext) {
+      const result = popLastClaimedGroupValidationScope(this.device);
+      if (result) validations.push(result);
     }
     return claimedGroupValidationDone(this.device, validations);
   }
 
-  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {
+  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     pass.setPipeline(this.pipelineFor(target));
     for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
     this.encodeMesh(pass);
   }
 
-  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {
+  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
     if (!binding.claimValidation || !claimValidation) {
       pass.setBindGroup(binding.group, binding.bindGroup, offsets);
       return;
     }
-    claimValidation(binding.claimValidation);
+    pushClaimedGroupValidationScope(this.device, binding.claimValidation);
     try { pass.setBindGroup(binding.group, binding.bindGroup, offsets); }
     catch (error) {
       discardLastClaimedGroupValidationScope(this.device);
       throw claimedGroupNativeValidationError(binding.claimValidation.label, binding.claimValidation.group, error);
     }
+    const result = popLastClaimedGroupValidationScope(this.device);
+    if (result) claimValidation(result);
   }
 
   pipelineFor(target: Target): GPURenderPipeline {

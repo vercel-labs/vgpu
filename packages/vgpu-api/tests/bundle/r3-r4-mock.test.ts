@@ -69,10 +69,15 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
   const cubeA = rawClaimedDraw(gpu, "cubeA");
   const cubeB = rawClaimedDraw(gpu, "cubeB");
 
-  const frameA = gpu.frame((f) => f.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } })));
+  const frameA = gpu.frame();
+  frameA.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
   expect(popResolvers).toHaveLength(1);
-  const frameB = gpu.frame((f) => f.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } })));
+  const frameB = gpu.frame();
+  frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
   expect(popResolvers).toHaveLength(2);
+
+  frameB.submit();
+  frameA.submit();
 
   const expectA = expect(frameA.done).rejects.toMatchObject({
     code: "VGPU-R4-GROUP-VALIDATION",
@@ -85,8 +90,9 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
     where: "cubeB.draw",
   });
 
-  popResolvers[1]!({ message: "second frame validation" } as GPUError);
   popResolvers[0]!({ message: "first frame validation" } as GPUError);
+  popResolvers[1]!({ message: "second frame validation" } as GPUError);
+  for (const resolve of popResolvers.slice(2)) resolve(null);
 
   await expectA;
   await expectB;

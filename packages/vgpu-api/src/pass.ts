@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
 import { Draw, type DrawCallOptions } from "./draw.ts";
-import type { ClaimedGroupValidationContext } from "./claim-validation.ts";
+import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
 import type { SetBag } from "./set-core.ts";
 import type { Target } from "./target.ts";
@@ -25,7 +25,7 @@ export class Pass {
   draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { this.drawImpl.draw(opts); }
 
   /** @internal FramePass delegates here; not part of the frozen public Pass surface. */
-  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (context: ClaimedGroupValidationContext) => void): void {
+  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     this.drawImpl.encode(pass, target, opts, claimValidation);
   }
 }

@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popClaimedGroupValidationScopes, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { Draw, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
@@ -34,7 +34,7 @@ export class Frame {
     const target = opts.target ?? this.defaultTarget;
     if (!target) throw missingScreenError();
     const encoder = this.encoder.beginRenderPass(target.renderPassDescriptor(opts.clear));
-    try { cb(new FramePass(this.device, encoder, target)); }
+    try { cb(new FramePass(encoder, target, this.validations)); }
     catch (error) {
       discardClaimedGroupValidationResults(this.validations);
       this.validations.length = 0;
@@ -58,33 +58,46 @@ export class Frame {
     if (this.submitted) return;
     this.submitted = true;
     let commandBuffer: GPUCommandBuffer;
+    const finishContext = this.validations[0]?.context;
+    if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
     try { commandBuffer = this.encoder.finish(); }
     catch (error) {
-      const scopes = popClaimedGroupValidationScopes(this.device);
-      this.validations.push(...scopes);
-      const context = this.validations[0]?.context;
+      const result = finishContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(this.validations);
+      if (result) discardClaimedGroupValidationResults([result]);
+      const context = result?.context ?? finishContext;
       if (!context) throw error;
       this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
       return;
     }
-    this.validations.push(...popClaimedGroupValidationScopes(this.device));
+    if (finishContext) {
+      const result = popLastClaimedGroupValidationScope(this.device);
+      if (result) this.validations.push(result);
+    }
+    const submitContext = this.validations[0]?.context;
+    if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
     try { this.device.gpu.queue.submit([commandBuffer]); }
     catch (error) {
-      const context = this.validations[0]?.context;
+      const result = submitContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(this.validations);
+      if (result) discardClaimedGroupValidationResults([result]);
+      const context = result?.context ?? submitContext;
       if (!context) throw error;
       this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
       return;
+    }
+    if (submitContext) {
+      const result = popLastClaimedGroupValidationScope(this.device);
+      if (result) this.validations.push(result);
     }
     this.done = claimedGroupValidationDone(this.device, this.validations);
   }
 }
 
 export class FramePass {
-  constructor(private readonly device: Device, private readonly encoder: GPURenderPassEncoder, readonly target: Target) {}
+  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[]) {}
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    drawable.encode(this.encoder, this.target, opts, (context) => pushClaimedGroupValidationScope(this.device, context));
+    drawable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result));
   }
   bundles(...bundles: readonly Bundle[]): void {
     replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));
