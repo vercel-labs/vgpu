@@ -1,8 +1,7 @@
+/** V1 loader artifact. The bindings field is reserved for a future version bump and is not part of this shape. */
 export interface ShaderSource {
   readonly version: 1;
   readonly wgsl: string;
-  /** Reserved for a future version bump; loaders must not emit binding maps in v1. */
-  readonly bindings?: never;
 }
 
 export interface WGSLSource {
