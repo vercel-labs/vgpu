@@ -62,7 +62,6 @@ function createPublishedConsumerFixture() {
           strict: true,
           noEmit: true,
           lib: ["ES2022", "DOM"],
-          skipLibCheck: true,
         },
         include: ["src/**/*", "vgpu-env.d.ts"],
       },
