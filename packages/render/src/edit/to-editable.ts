@@ -1,4 +1,4 @@
-import type { Mesh } from "../domain/mesh.ts";
+import type { Mesh } from "../mesh-like.ts";
 import { MeshEditWarning } from "./warnings.ts";
 import { EditableMesh } from "./editable-mesh.ts";
 import { sourceOf } from "./edit-source.ts";

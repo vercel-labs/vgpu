@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
 import type { Vec3 } from "wgpu-matrix";
-import { invalidUsage } from "../../core/uniform-pool-internals.ts";
+import { invalidUsage } from "./errors.ts";
 import { polyhedronData, type PolyhedronSeed } from "./polyhedron-data.ts";
 import type { Mesh, VertexAttributes } from "./mesh-types.ts";
 

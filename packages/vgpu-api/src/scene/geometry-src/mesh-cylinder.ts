@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
 import type { Vec3 } from "wgpu-matrix";
-import { invalidUsage } from "../../core/uniform-pool-internals.ts";
+import { invalidUsage } from "./errors.ts";
 import { cylinderData } from "./cylinder-data.ts";
 import { cachedMesh } from "./mesh-cache.ts";
 import type { Mesh, VertexAttributes } from "./mesh-types.ts";

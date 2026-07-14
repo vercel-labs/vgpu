@@ -7,5 +7,6 @@ export { UniformPool } from "./core/uniform-pool.ts";
 export type { RenderBundleOptions } from "./core/render-bundle.ts";
 export type { StorageBufferOptions } from "./core/storage-buffer.ts";
 export type { ScalarUniformType, StructuredUniformOptions, UniformValues, VectorUniformInput } from "./core/structured-uniform.ts";
+export type { UniformField, UniformLayoutInfo, WgslUniformType } from "./core/wgsl-alignment.ts";
 export type { UniformOptions } from "./core/uniform.ts";
 export type { UniformLayout, UniformPoolOptions, UniformSlot } from "./core/uniform-pool-types.ts";

@@ -1,6 +1,7 @@
 import { PNG } from "pngjs";
 import type { Device } from "@vgpu/core";
-import type { Camera, Mat4, Mesh, Vec3 } from "vgpu/scene";
+import type { Camera, Mat4, Vec3 } from "vgpu/scene";
+import type { Mesh } from "../../src/mesh-like.ts";
 import type { InspectMaterial } from "@vgpu/render/inspect";
 
 export interface RenderInspectFrameSpec {
