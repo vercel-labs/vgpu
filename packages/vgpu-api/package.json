@@ -71,8 +71,8 @@
     "@vgpu/adapter-mock": "workspace:*",
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
-    "@vgpu/render": "workspace:*",
     "@vgpu/wgsl": "workspace:*",
+    "wgpu-matrix": "^3.4.2",
     "@webgpu/types": "^0.1.69"
   },
   "vgpuExportBundleBudgetsGzipBytes": {

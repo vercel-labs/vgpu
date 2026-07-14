@@ -6,7 +6,7 @@ import { claimedGroupValidationDone, discardClaimedGroupValidationResults, disca
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
+import { claimedGroupNativeValidationError, unsupportedError, VGPUError } from "./errors.ts";
 
 export interface DrawOptions {
   readonly shader: string | ShaderSource;
@@ -14,11 +14,25 @@ export interface DrawOptions {
   readonly set?: SetBag;
   readonly label?: string;
   readonly targets?: readonly Target[];
+  /** Default instance count for every draw call. Overridden by per-call opts. Use 0 for a valid no-instance draw. */
+  readonly instances?: number;
+  /** Vertex count when rendering without a mesh. Mesh.vertexCount wins over this default; indexed meshes ignore it and use MeshLike.indexCount. */
+  readonly vertices?: number;
+  /** Default firstInstance for every draw call. Overridden by per-call opts. */
+  readonly firstInstance?: number;
 }
 
 export interface DrawCallOptions {
   readonly target?: Target;
   readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
+  /** Instance count precedence: per-call > DrawOptions.instances > 1. Use 0 for a valid no-instance draw. */
+  readonly instances?: number;
+  /** Vertex count precedence for non-indexed draws: per-call > mesh.vertexCount > DrawOptions.vertices > 3. Indexed meshes ignore it and use MeshLike.indexCount. */
+  readonly vertices?: number;
+  /** Starting vertex for non-indexed draws. Defaults to 0; indexed meshes ignore it and use firstIndex/baseVertex = 0. */
+  readonly firstVertex?: number;
+  /** First instance precedence: per-call > DrawOptions.firstInstance > 0. */
+  readonly firstInstance?: number;
 }
 
 export interface DrawLayoutOptions {
@@ -172,7 +186,7 @@ export class Draw {
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     pass.setPipeline(this.pipelineFor(target));
     for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
-    this.encodeMesh(pass);
+    this.encodeMesh(pass, opts);
   }
 
   private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
@@ -200,12 +214,14 @@ export class Draw {
     return pipeline;
   }
 
-  private encodeMesh(pass: GPURenderPassEncoder): void {
+  private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
     const mesh = this.opts.mesh;
     if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
-    if (!mesh?.indexBuffer) return pass.draw(mesh?.vertexCount ?? 3);
+    const counts = resolveDrawCounts(this.label, mesh, this.opts, callOpts);
+    if (!mesh?.indexBuffer) return pass.draw(counts.vertexCount, counts.instanceCount, counts.firstVertex, counts.firstInstance);
+    // Indexed meshes intentionally use their indexCount with firstIndex/baseVertex = 0; vertices/firstVertex only apply to non-indexed draws.
     pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
-    pass.drawIndexed(mesh.indexCount ?? 0);
+    pass.drawIndexed(mesh.indexCount ?? 0, counts.instanceCount, 0, 0, counts.firstInstance);
   }
 
   private createPipeline(target: Target): GPURenderPipeline {
@@ -222,6 +238,41 @@ export class Draw {
       multisample: { count: target.sampleCount },
     });
   }
+}
+
+type DrawCounts = {
+  readonly instanceCount: number;
+  readonly firstInstance: number;
+  readonly vertexCount: number;
+  readonly firstVertex: number;
+};
+
+function resolveDrawCounts(label: string, mesh: MeshLike | undefined, drawOpts: DrawOptions, callOpts: DrawCallOptions): DrawCounts {
+  validateOptionalDrawCount(label, "DrawOptions.instances", drawOpts.instances);
+  validateOptionalDrawCount(label, "DrawOptions.vertices", drawOpts.vertices);
+  validateOptionalDrawCount(label, "DrawOptions.firstInstance", drawOpts.firstInstance);
+  validateOptionalDrawCount(label, "DrawCallOptions.instances", callOpts.instances);
+  validateOptionalDrawCount(label, "DrawCallOptions.vertices", callOpts.vertices);
+  validateOptionalDrawCount(label, "DrawCallOptions.firstVertex", callOpts.firstVertex);
+  validateOptionalDrawCount(label, "DrawCallOptions.firstInstance", callOpts.firstInstance);
+  validateOptionalDrawCount(label, "MeshLike.vertexCount", mesh?.vertexCount);
+  validateOptionalDrawCount(label, "MeshLike.indexCount", mesh?.indexCount);
+  return {
+    instanceCount: callOpts.instances ?? drawOpts.instances ?? 1,
+    firstInstance: callOpts.firstInstance ?? drawOpts.firstInstance ?? 0,
+    vertexCount: callOpts.vertices ?? mesh?.vertexCount ?? drawOpts.vertices ?? 3,
+    firstVertex: callOpts.firstVertex ?? 0,
+  };
+}
+
+function validateOptionalDrawCount(label: string, field: string, value: number | undefined): void {
+  if (value === undefined) return;
+  if (Number.isInteger(value) && value >= 0) return;
+  throw new VGPUError({
+    code: "VGPU-R1-DRAW-COUNT",
+    message: `${field} de '${label}' debe ser un entero >= 0; recibí ${String(value)}. Usá 0 solo cuando quieras emitir un draw válido sin vértices/instancias.`,
+    where: `${label}.draw`,
+  });
 }
 
 export function createBundleRegistry(): BundleBackReferenceRegistry {

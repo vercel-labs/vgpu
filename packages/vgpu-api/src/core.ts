@@ -1,3 +1,12 @@
 export * from "@vgpu/core";
-export { UniformPool } from "@vgpu/render";
-export type { UniformLayout, UniformPoolOptions, UniformSlot } from "@vgpu/render";
+export { createRenderBundle, RenderBundleRecorder } from "./core/render-bundle.ts";
+export { StorageBuffer } from "./core/storage-buffer.ts";
+export { StructuredUniform } from "./core/structured-uniform.ts";
+export { Uniform } from "./core/uniform.ts";
+export { UniformPool } from "./core/uniform-pool.ts";
+export type { RenderBundleOptions } from "./core/render-bundle.ts";
+export type { StorageBufferOptions } from "./core/storage-buffer.ts";
+export type { ScalarUniformType, StructuredUniformOptions, UniformValues, VectorUniformInput } from "./core/structured-uniform.ts";
+export type { UniformField, UniformLayoutInfo, WgslUniformType } from "./core/wgsl-alignment.ts";
+export type { UniformOptions } from "./core/uniform.ts";
+export type { UniformLayout, UniformPoolOptions, UniformSlot } from "./core/uniform-pool-types.ts";

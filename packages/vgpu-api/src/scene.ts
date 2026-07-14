@@ -33,8 +33,11 @@ export type {
   SphereOptions,
   TorusOptions,
 } from "./scene/geometry.ts";
+export { degToRad, srgb } from "./scene/geometry-src/index.ts";
 export { orthographicCamera, perspectiveCamera } from "./scene/camera.ts";
-export type { CameraVec3, OrthographicCameraOptions, PerspectiveCameraOptions, SceneCamera } from "./scene/camera.ts";
+export type { Camera, CameraVec3, OrthographicCameraOptions, PerspectiveCameraOptions, SceneCamera } from "./scene/camera.ts";
 export { orbit } from "./scene/orbit.ts";
 export type { Mat4, OrbitOptions } from "./scene/orbit.ts";
+/** Three-component vector type accepted by low-level scene camera helpers. */
+export type { Vec3 } from "./scene/geometry-src/index.ts";
 export type { SceneMesh } from "./scene/mesh.ts";

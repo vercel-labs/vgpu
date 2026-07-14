@@ -1,11 +1,14 @@
-import { degToRad, orthographicCamera as renderOrthographicCamera, perspectiveCamera as renderPerspectiveCamera, type Camera as RenderCamera, type Vec3 } from "@vgpu/render";
+import { degToRad, orthographicCamera as renderOrthographicCamera, perspectiveCamera as renderPerspectiveCamera, type Camera as RenderCamera, type Vec3 } from "./geometry-src/index.ts";
 
 export type CameraVec3 = readonly [number, number, number] | Float32Array;
 
 export interface SceneCamera {
   readonly viewProjection: Float32Array;
+  readonly viewProjectionMatrix: Float32Array;
   readonly position: Float32Array;
 }
+
+export type Camera = SceneCamera;
 
 export interface PerspectiveCameraOptions {
   readonly fov: number;
@@ -58,8 +61,10 @@ export function orthographicCamera(options: OrthographicCameraOptions): SceneCam
 }
 
 function sceneCamera(camera: RenderCamera): SceneCamera {
+  const viewProjection = new Float32Array(camera.viewProjectionMatrix);
   return Object.freeze({
-    viewProjection: new Float32Array(camera.viewProjectionMatrix),
+    viewProjection,
+    viewProjectionMatrix: viewProjection,
     position: new Float32Array(camera.position),
   });
 }

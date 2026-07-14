@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { bind, createBindGroup, createBindGroupLayout } from "@vgpu/core";
-import { UniformPool } from "@vgpu/render";
+import { UniformPool } from "../../src/core.ts";
 import { init } from "../../src/mock.ts";
 
 const FLOOR = `

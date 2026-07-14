@@ -329,15 +329,15 @@ importers:
       '@vgpu/core':
         specifier: workspace:*
         version: link:../core
-      '@vgpu/render':
-        specifier: workspace:*
-        version: link:../render
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../wgsl
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
+      wgpu-matrix:
+        specifier: ^3.4.2
+        version: 3.4.2
 
   packages/wgsl:
     devDependencies:
