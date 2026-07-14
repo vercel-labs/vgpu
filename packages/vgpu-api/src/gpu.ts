@@ -1,6 +1,7 @@
 import type { VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
+import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
 import { Draw, type DrawOptions, type MeshLike } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
 import { Pass, type PassOptions } from "./pass.ts";
@@ -31,10 +32,6 @@ export interface StorageBuffer { readonly size: number; readonly access: Storage
 export interface PingPongTargets { readonly read: Target; readonly write: Target; swap(): void }
 export interface PingPongStorage { readonly read: StorageBuffer; readonly write: StorageBuffer; swap(): void }
 export interface SharedUniforms<T extends Record<string, unknown> = Record<string, unknown>> { set(values: Partial<T>): void }
-export interface BundleOptions { readonly target: Target }
-export interface BundleRecorder { draw(drawable: Draw | Pass, opts?: unknown): void }
-export interface Bundle { readonly id: string }
-
 /** Ring-1 facade shared by browser, node, and mock entrypoints. */
 export interface Gpu {
   readonly device: Device;
@@ -116,7 +113,7 @@ class RingGpu implements Gpu {
   pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
   pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
   uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
-  bundle(_opts: BundleOptions, _cb: (recorder: BundleRecorder) => void): never { throw lanePlaceholder("gpu.bundle", "fase 3 Lane D"); }
+  bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { return createBundle(this.device, opts, cb); }
 
   private advanceFrameState(): void {
     this.advanceTime();

@@ -4,7 +4,7 @@ import { createGpu, type InitOptions } from "./init.ts";
 export { createMockAdapter } from "@vgpu/adapter-mock";
 export { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer } from "./init.ts";
-export type { Draw, DrawOptions, DrawCallOptions, MeshLike, BundleBackReference, BundleBackReferenceRegistry, BundleStaleEvent } from "./draw.ts";
+export type { Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike, BundleBackReference, BundleBackReferenceRegistry, BundleStaleEvent } from "./draw.ts";
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle } from "./frame.ts";
 export type { Pass, PassOptions } from "./pass.ts";
 export type { Target, TargetOptions } from "./target.ts";

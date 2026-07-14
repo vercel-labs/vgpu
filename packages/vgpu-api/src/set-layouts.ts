@@ -1,4 +1,4 @@
-import type { Device } from "@vgpu/core";
+import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/runtime";
 import { unsupportedError } from "./errors.ts";
 
@@ -38,9 +38,11 @@ function createBindGroupLayout(
   label: string,
   reflection: Reflection,
   group: number,
-  visibility: BindingVisibilityFn,
+  visibility: BindingVisibilityFn = defaultVisibility,
 ): GPUBindGroupLayout {
-  return device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries: bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility) });
+  const entries = bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility);
+  const layout = device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries });
+  return attachBindGroupLayoutMetadata(layout, { entries });
 }
 
 function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>): GPUBindGroupLayout[] {

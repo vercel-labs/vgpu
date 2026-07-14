@@ -33,6 +33,26 @@ export function claimedGroupSetError(label: string, group: number): VGPUError {
   });
 }
 
+export function claimedGroupIncompatibleError(label: string, group: number, reason: string, cause?: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R4-GROUP-INCOMPATIBLE",
+    message: `el grupo ${group} reclamado en draw '${label}' no es compatible: ${reason}.`,
+    fix: `Construí el bind group con ${label}.layout(${group}) o ${label}.layout(${group}, { dynamicOffsets: true }) si necesitás offsets dinámicos; después usá ${label}.group(${group}, bindGroup).`,
+    where: `${label}.group`,
+    cause,
+  });
+}
+
+export function claimedGroupNativeValidationError(label: string, group: number, cause: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R4-GROUP-VALIDATION",
+    message: `falló la validación nativa de WebGPU para el grupo ${group} reclamado en draw '${label}'.`,
+    fix: `Verificá que el bind group haya sido creado con ${label}.layout(${group}) y que los offsets dinámicos viajen en p.draw(draw, { offsets: { ${group}: [...] } }).`,
+    where: `${label}.draw`,
+    cause,
+  });
+}
+
 export function missingScreenError(): VGPUError {
   return new VGPUError({
     code: "VGPU-SCREEN-MISSING",

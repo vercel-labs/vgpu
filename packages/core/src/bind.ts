@@ -1,3 +1,4 @@
+import { attachBindGroupLayoutMetadata, attachBindGroupMetadata } from "./bind-group-metadata.ts";
 import { Buffer } from "./buffer.ts";
 import { Device } from "./device.ts";
 import { ValidationError } from "./errors.ts";
@@ -23,7 +24,8 @@ export interface CreateBindGroupOptions {
 }
 
 export function createBindGroupLayout(device: DeviceLike, opts: CreateBindGroupLayoutOptions): GPUBindGroupLayout {
-  return unwrapDevice(device).createBindGroupLayout({ label: opts.label, entries: [...opts.entries] });
+  const layout = unwrapDevice(device).createBindGroupLayout({ label: opts.label, entries: [...opts.entries] });
+  return attachBindGroupLayoutMetadata(layout, { entries: opts.entries });
 }
 
 export function createPipelineLayout(device: DeviceLike, opts: CreatePipelineLayoutOptions): GPUPipelineLayout {
@@ -38,7 +40,8 @@ export function createBindGroup(device: DeviceLike, opts: CreateBindGroupOptions
       where: "createBindGroup",
     });
   }
-  return unwrapDevice(device).createBindGroup({ label: opts.label, layout: opts.layout, entries: [...opts.entries] });
+  const bindGroup = unwrapDevice(device).createBindGroup({ label: opts.label, layout: opts.layout, entries: [...opts.entries] });
+  return attachBindGroupMetadata(bindGroup, opts.layout);
 }
 
 export interface SamplerDescriptorWithSugar extends GPUSamplerDescriptor {
