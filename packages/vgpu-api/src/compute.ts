@@ -8,6 +8,11 @@ import { unsupportedError, writableStorageAliasingError } from "./errors.ts";
 let nextComputeId = 1;
 const COMPUTE_STAGE = (globalThis.GPUShaderStage as unknown as Record<string, number> | undefined)?.COMPUTE ?? 4;
 
+/**
+ * Internal Ring-1 compute implementation behind `Gpu.compute()`.
+ *
+ * @internal
+ */
 export class ComputePipeline implements Compute {
   readonly id = nextComputeId++;
   readonly label: string;

@@ -1,7 +1,11 @@
 import { Buffer, type BufferWriteData, type Device } from "@vgpu/core";
 import type { StorageAccess, StorageBuffer } from "./gpu.ts";
 
-/** Ring-1 StorageBuffer facade backed by a core Buffer. */
+/**
+ * Ring-1 StorageBuffer facade backed by a core Buffer.
+ *
+ * @internal
+ */
 export class RingStorageBuffer implements StorageBuffer {
   readonly size: number;
   readonly access: StorageAccess;
@@ -47,6 +51,11 @@ export function createStorageBuffer(device: Device, bytes: number, access: Stora
   return RingStorageBuffer.create(device, bytes, access, label);
 }
 
+/**
+ * Wraps an existing core buffer as an internal StorageBuffer facade.
+ *
+ * @internal
+ */
 export function wrapStorageBuffer(buffer: Buffer, access: StorageAccess): RingStorageBuffer {
   return new RingStorageBuffer(buffer, access);
 }
