@@ -95,7 +95,7 @@ export function parseVarDecl(module: MangleModule, tokens: readonly Token[], ind
   const colon = findNext(tokens, after + 1, ":");
   const end = skipUntil(tokens, colon + 1, ";");
   return {
-    item: { path: module.path, name, mangledName: mangledDeclName(module, name, "var"), attrs, addressSpace, access, type: parseType(tokens.slice(colon + 1, end)) },
+    item: { path: module.path, name, mangledName: isBindingVar(attrs) ? name : mangledDeclName(module, name, "var"), attrs, addressSpace, access, type: parseType(tokens.slice(colon + 1, end)) },
     next: end + 1,
   };
 }
@@ -138,4 +138,8 @@ export function parseMembers(tokens: readonly Token[]): StructMemberInfo[] {
 
 function mangledDeclName(module: MangleModule, name: string, kind: string): string {
   return kind === "override" ? name : mangle(module.path, name);
+}
+
+function isBindingVar(attrs: readonly Attr[]): boolean {
+  return numericAttr(attrs, "group") !== undefined || numericAttr(attrs, "binding") !== undefined;
 }

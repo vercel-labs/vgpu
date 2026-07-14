@@ -74,7 +74,30 @@ function isLocalDecl(tokens: readonly Token[], i: number, braceDepth: number): b
 function blocked(tokens: readonly Token[], i: number): boolean { const prev = tokens[i - 1]?.text, next = tokens[i + 1]?.text; return prev === "@" || prev === "." || (next === ":" && !declared(tokens, i)) || prev === "enable" || prev === "requires" || prev === "override"; }
 function declared(tokens: readonly Token[], i: number): boolean { for (let j = i - 1; j >= 0 && tokens[j]?.text !== ";" && tokens[j]?.text !== "{" && tokens[j]?.text !== "}"; j--) if (["var", "let", "const", "override"].includes(tokens[j]!.text)) return true; return false; }
 function stripExports(source: string): string { return source.replace(/\bexport\s+(?=@|fn|struct|const|alias|var|override)/g, "").replace(/(@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*)export\s+(?=fn|struct|const|alias|var|override)/g, "$1"); }
-function isVisible(kind: string, module: MangleModule, name: string): boolean { return kind === "override" || isEntryPoint(module, name); }
+function isVisible(kind: string, module: MangleModule, name: string): boolean { return kind === "override" || isEntryPoint(module, name) || isBindingVar(module, name); }
+function isBindingVar(module: MangleModule, name: string): boolean {
+  for (let i = 0; i < module.tokens.length; i++) {
+    if (module.tokens[i]?.text !== "var") continue;
+    const nameIndex = varNameIndex(module.tokens, i);
+    if (module.tokens[nameIndex]?.text !== name) continue;
+    for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
+      if (module.tokens[j]?.text === "@" && ["group", "binding"].includes(module.tokens[j + 1]?.text ?? "")) return true;
+    }
+  }
+  return false;
+}
+function varNameIndex(tokens: readonly Token[], varIndex: number): number {
+  if (tokens[varIndex + 1]?.text !== "<") return varIndex + 1;
+  let depth = 0;
+  for (let i = varIndex + 1; i < tokens.length; i++) {
+    if (tokens[i]?.text === "<") depth++;
+    if (tokens[i]?.text === ">") {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return varIndex + 1;
+}
 function isEntryPoint(module: MangleModule, name: string): boolean {
   let depth = 0;
   for (let i = 0; i < module.tokens.length; i++) {

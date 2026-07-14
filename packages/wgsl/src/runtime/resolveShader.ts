@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import { sourceMap, toAstModule } from "./astProjection.ts";
+import { assertModulesHaveNoBindings } from "./assert-module-purity.ts";
 import { cacheKeys } from "./cacheKey.ts";
 import type { DiagnosticList } from "./diagnosticTypes.ts";
 import { remember } from "./lru.ts";
@@ -15,6 +16,7 @@ import { validateWGSL } from "./validation.ts";
 
 export type { BindingInfo, BindingKind, EntryPointInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
+export type { ShaderSource } from "../types.ts";
 export interface ResolveOptions {
   readonly entry: string;
   readonly rootDir?: string;
@@ -55,6 +57,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   await loadGraph(entry, opts, loaded, [], diagnostics);
   const modules = [...loaded.values()];
   const deps = [...loaded.keys()].sort();
+  assertModulesHaveNoBindings(modules, entry);
   assertNoMangleCollisions(modules.map((module) => module.path));
   assertNoJsVisibleDuplicates(modules);
   const exportsByPath = buildExports(modules);

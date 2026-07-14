@@ -83,7 +83,7 @@ test("unreachable duplicate overrides ignored", async () => await expect(resolve
 test("duplicate entry points error", async () => await expect(resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { a } from './a.wgsl'; @compute @workgroup_size(1) fn main(){}", "/a.wgsl": "@compute @workgroup_size(1) export fn main(){} export fn a(){}" }, validate: false })).rejects.toMatchObject({ code: "VGPU-WGSL-ENTRYPOINT-DUP" }));
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("pipeline constants work on Dawn", async () => {
   const { device } = await App.create({ adapter: createNodeAdapter() });
-  const shader = await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { out } from './buf.wgsl'; override SAMPLES: u32 = 1u; @compute @workgroup_size(1) fn main(){ out.value = SAMPLES; }", "/buf.wgsl": "struct Out { value: u32 } @group(0) @binding(0) export var<storage, read_write> out: Out;" }, validate: false });
+  const shader = await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "import { Out } from './buf.wgsl'; @group(0) @binding(0) var<storage, read_write> out: Out; override SAMPLES: u32 = 1u; @compute @workgroup_size(1) fn main(){ out.value = SAMPLES; }", "/buf.wgsl": "export struct Out { value: u32 }" }, validate: false });
   const gpu = device.gpu;
   const b = gpu.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
   gpu.queue.writeBuffer(b, 0, new Uint32Array([0]));

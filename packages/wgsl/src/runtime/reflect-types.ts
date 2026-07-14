@@ -143,7 +143,7 @@ export type VarDecl = {
   readonly type: WGSLType;
 };
 
-export type Attr = { readonly name: string; readonly args: readonly Token[] };
+export type Attr = { readonly name: string; readonly args: readonly Token[]; readonly token?: Token };
 
 export type ModuleSymbols = ReadonlyMap<string, SymbolTarget>;
 export type SymbolTarget = { readonly path: string; readonly name: string; readonly mangledName: string; readonly kind: "struct" | "alias" | "namespace" };

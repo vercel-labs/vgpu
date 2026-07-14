@@ -51,6 +51,7 @@ export function readAttrs(tokens: readonly Token[], start: number): [Attr[], num
   const attrs: Attr[] = [];
   let i = start;
   while (tokens[i]?.text === "@") {
+    const token = tokens[i]!;
     const name = expectIdent(tokens[i + 1]);
     i += 2;
     let args: Token[] = [];
@@ -59,7 +60,7 @@ export function readAttrs(tokens: readonly Token[], start: number): [Attr[], num
       args = tokens.slice(i + 1, close);
       i = close + 1;
     }
-    attrs.push({ name, args });
+    attrs.push({ name, args, token });
   }
   return [attrs, i];
 }

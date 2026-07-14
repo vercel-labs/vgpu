@@ -226,9 +226,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     const [, uniformName, uniformType] = uniformDecl!;
     const [, storageName, storageType] = storageDecl!;
 
-    expect(uniformName).toMatch(/^_vgsl_[0-9a-f]{8}__params$/);
+    expect(uniformName).toBe("params");
     expect(uniformType).toMatch(/^_vgsl_[0-9a-f]{8}__Params$/);
-    expect(storageName).toMatch(/^_vgsl_[0-9a-f]{8}__output_buffer$/);
+    expect(storageName).toBe("output_buffer");
     expect(storageType).toMatch(/^_vgsl_[0-9a-f]{8}__Out$/);
     expect(minified).toContain(`var<uniform> ${uniformName}:${uniformType}`);
     expect(minified).toContain(`var<storage,read_write> ${storageName}:${storageType}`);
