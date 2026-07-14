@@ -14,6 +14,9 @@ export interface DrawSpec {
   readonly depthTarget?: GPUTextureView | Texture;
 }
 
+/**
+ * @deprecated Use `gpu.draw({ shader, mesh })`, `gpu.pass()`, and `gpu.frame()` from the ring-1 `vgpu` entrypoint. `RapidRenderer` is retained only for the old thick layer.
+ */
 export class RapidRenderer {
   constructor(private readonly device: Device) {}
 
