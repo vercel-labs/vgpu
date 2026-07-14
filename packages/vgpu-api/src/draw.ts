@@ -1,4 +1,5 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
+import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
@@ -8,7 +9,7 @@ import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
 
 export interface DrawOptions {
-  readonly shader: string;
+  readonly shader: string | ShaderSource;
   readonly mesh?: MeshLike;
   readonly set?: SetBag;
   readonly label?: string;

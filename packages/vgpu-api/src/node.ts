@@ -12,7 +12,7 @@ export type { AppCreateOptions, AppInstance, Buffer, Device, ResourceIdentity, T
 export { Uniform } from "@vgpu/render";
 export type { UniformOptions } from "@vgpu/render";
 export type { RenderTarget, RenderTargetSpec } from "@vgpu/render/passes";
-export type { ResolvedShader, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
+export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
 /** Node headless entrypoint (Dawn via @vgpu/adapter-node). */
 export function init(options?: InitOptions): ReturnType<typeof createGpu> {

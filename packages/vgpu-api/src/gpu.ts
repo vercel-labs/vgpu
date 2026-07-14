@@ -1,3 +1,4 @@
+import type { ShaderSource } from "@vgpu/wgsl";
 import type { VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
@@ -12,6 +13,7 @@ import { unsupportedError } from "./errors.ts";
 import { ComputePipeline } from "./compute.ts";
 import { createStorageBuffer } from "./storage.ts";
 import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
+import { toWgsl } from "./shader-source.ts";
 import { createSharedUniforms } from "./uniforms.ts";
 
 export interface InitOptions {
@@ -40,7 +42,7 @@ export interface Gpu {
   time: number;
   deltaTime: number;
   frameCount: number;
-  pass(source: string, opts?: PassOptions): Pass;
+  pass(source: string | ShaderSource, opts?: PassOptions): Pass;
   draw(opts: DrawOptions): Draw;
   target(opts?: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
@@ -48,7 +50,7 @@ export interface Gpu {
   mesh(geometry: unknown): MeshLike;
   onResize(cb: (size: readonly [number, number]) => void): () => void;
   dispose(): void;
-  compute(source: string, opts?: ComputeOptions): Compute;
+  compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
   storage(bytes: number, access?: StorageAccess): StorageBuffer;
   pingPong(width: number, height: number, opts?: TargetOptions): PingPongTargets;
   pingPongStorage(bytes: number): PingPongStorage;
@@ -93,11 +95,14 @@ class RingGpu implements Gpu {
     this.frame = callableFrameRunner(runner);
   }
 
-  pass(source: string, opts: PassOptions = {}): Pass {
+  pass(source: string | ShaderSource, opts: PassOptions = {}): Pass {
     if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new Pass(this.device, source, opts, this.cache, this.screen);
+    return new Pass(this.device, toWgsl(source), opts, this.cache, this.screen);
   }
-  draw(opts: DrawOptions): Draw { return new Draw(this.device, opts.shader, opts, this.cache, this.screen); }
+  draw(opts: DrawOptions): Draw {
+    const shader = toWgsl(opts.shader);
+    return new Draw(this.device, shader, { ...opts, shader }, this.cache, this.screen);
+  }
   target(opts: TargetOptions = {}): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
   mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
@@ -108,7 +113,7 @@ class RingGpu implements Gpu {
     return () => { callbacks.delete(cb); };
   }
   dispose(): void { this.cache.dispose(); this.device.dispose(); }
-  compute(source: string, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, source, opts, this.cache); }
+  compute(source: string | ShaderSource, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, toWgsl(source), opts, this.cache); }
   storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
   pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
   pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }

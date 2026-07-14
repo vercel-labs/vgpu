@@ -14,7 +14,7 @@ export type { AppCreateOptions, AppInstance, Buffer, Device, ResourceIdentity, T
 export { Uniform } from "@vgpu/render";
 export type { UniformOptions } from "@vgpu/render";
 export type { RenderTarget, RenderTargetSpec } from "@vgpu/render/passes";
-export type { ResolvedShader, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
+export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
 /** Browser entrypoint. */
 export function init(canvas: HTMLCanvasElement | OffscreenCanvas, options?: InitOptions): ReturnType<typeof createGpu>;

@@ -74,6 +74,23 @@ export function unsupportedError(where: string, message: string, fix?: string): 
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
 }
 
+export function malformedShaderSourceError(input: unknown): VGPUError {
+  if (hasVersion(input) && input.version !== 1) {
+    return new VGPUError({
+      code: "VGPU-SHADER-SOURCE-INVALID",
+      message: `VGPU-SHADER-SOURCE-INVALID: ShaderSource version ${String(input.version)} no soportada por este runtime (soporta version: 1).\n` +
+        "Actualizá @vgpu/vgpu-api o regenerá el artefacto con un loader compatible.",
+      where: "shader source",
+    });
+  }
+  return new VGPUError({
+    code: "VGPU-SHADER-SOURCE-INVALID",
+    message: `VGPU-SHADER-SOURCE-INVALID: se esperaba un WGSL string o un ShaderSource { version, wgsl }, se recibió ${previewShaderSource(input)}.\n` +
+      "Si importás un .wgsl, asegurate de tener configurado el loader (@vgpu/wgsl/loader-vite o /loader-webpack).",
+    where: "shader source",
+  });
+}
+
 export function writableStorageAliasingError(where: string): VGPUError {
   return new VGPUError({
     code: "VGPU-R1-STORAGE-ALIASING",
@@ -94,6 +111,20 @@ export function sharedUniformLayoutMismatchError(opts: {
     message: `shared uniforms '${opts.bindingName}' ya tiene layout ${opts.adoptedLayout} (adoptado de ${opts.adoptedSource});\n  ${opts.incomingSource} declara ${opts.incomingLayout} — alineá los structs o usá dos uniforms distintos.`,
     where: "gpu.uniforms",
   });
+}
+
+function hasVersion(input: unknown): input is { readonly version: unknown } {
+  return typeof input === "object" && input !== null && "version" in input;
+}
+
+function previewShaderSource(input: unknown): string {
+  if (typeof input !== "object" || input === null) return typeof input;
+  try {
+    const json = JSON.stringify(input);
+    return json.length > 80 ? `${json.slice(0, 77)}...` : json;
+  } catch {
+    return "object";
+  }
 }
 
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {
