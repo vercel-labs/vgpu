@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { runFullscreenExample } from "./example.ts";
+import { runFullscreenExample, WAVE } from "./example.ts";
+
+test("by-example §2 uses explicit JS time/speed uniforms in a fragment-only fullscreen pass", () => {
+  expect(WAVE).toContain("struct Params { time: f32, speed: f32 }");
+  expect(WAVE).toContain("@fragment fn main");
+  expect(WAVE).not.toContain("@vertex");
+});
 
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §2 fullscreen pass renders explicit time", async () => {
   const { gpu, target } = await runFullscreenExample();

@@ -1,9 +1,9 @@
 import { init } from "vgpu/node";
 
-const SOLID = /* wgsl */ `
+export const SOLID = /* wgsl */ `
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(0.25 + uv.x * 0.5, 0.5, 0.75, 1.0); }
 `;
-const POST = /* wgsl */ `
+export const POST = /* wgsl */ `
 struct PostParams { texel: vec2f }
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var<uniform> params: PostParams;

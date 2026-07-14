@@ -1,6 +1,6 @@
 import { init } from "vgpu/node";
 
-const WAVE = /* wgsl */ `
+export const WAVE = /* wgsl */ `
 struct Globals { time: f32, mouse: vec2f }
 @group(0) @binding(0) var<uniform> globals: Globals;
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -8,7 +8,7 @@ struct Globals { time: f32, mouse: vec2f }
 }
 `;
 
-const TINT = /* wgsl */ `
+export const TINT = /* wgsl */ `
 struct Globals { time: f32, mouse: vec2f }
 @group(0) @binding(0) var<uniform> g: Globals;
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {

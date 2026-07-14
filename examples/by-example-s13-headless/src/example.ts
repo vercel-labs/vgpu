@@ -1,6 +1,6 @@
 import { init } from "vgpu/node";
 
-const GRADIENT = /* wgsl */ `
+export const GRADIENT = /* wgsl */ `
 struct Params { time: f32, speed: f32 }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {

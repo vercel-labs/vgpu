@@ -1,12 +1,20 @@
 import { expect, test } from "vitest";
-import { renderGradientHeadless } from "./example.ts";
+import { GRADIENT, renderGradientHeadless } from "./example.ts";
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §13 headless Node render is deterministic", async () => {
-  const { gpu, target } = await renderGradientHeadless();
+test("by-example §13 fixes inputs for deterministic headless rendering", () => {
+  expect(GRADIENT).toContain("params.time");
+  expect(GRADIENT).toContain("params.speed");
+});
+
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §13 headless Node render is byte-deterministic", async () => {
+  const first = await renderGradientHeadless();
+  const second = await renderGradientHeadless();
   try {
-    const px = await target.read();
-    expect(px[0]).toBeGreaterThan(0);
+    const a = await first.target.read();
+    const b = await second.target.read();
+    expect(Array.from(b)).toEqual(Array.from(a));
   } finally {
-    gpu.dispose();
+    first.gpu.dispose();
+    second.gpu.dispose();
   }
 });

@@ -1,6 +1,6 @@
 import { init } from "vgpu/node";
 
-const SIM = /* wgsl */ `
+export const SIM = /* wgsl */ `
 struct Sim { dt: f32 }
 @group(0) @binding(0) var<uniform> sim: Sim;
 @group(0) @binding(1) var<storage, read> src: array<vec4f>;
