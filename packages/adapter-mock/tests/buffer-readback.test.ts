@@ -1,9 +1,8 @@
 import { expect, test } from "vitest";
-import { App } from "@vgpu/core";
-import { createMockAdapter } from "@vgpu/adapter-mock";
+import { init } from "vgpu/mock";
 
 test("adapter-mock writes f32 buffer and reads it back byte-equal", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const { device } = await init();
   const data = new Float32Array([1, 2, 3, 4]);
   const buffer = device.createBuffer({ size: data.byteLength, usage: ["copy_dst", "copy_src", "storage"] });
 
@@ -16,7 +15,7 @@ test("adapter-mock writes f32 buffer and reads it back byte-equal", async () => 
 });
 
 test("adapter-mock error scope captures validation error", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const { device } = await init();
   device.pushErrorScope("validation");
   device.createBuffer({ size: 16, usage: [] });
 
@@ -25,7 +24,7 @@ test("adapter-mock error scope captures validation error", async () => {
 });
 
 test("adapter-mock device destroy is idempotent", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const { device } = await init();
 
   device.destroy();
   device.destroy();
@@ -34,7 +33,7 @@ test("adapter-mock device destroy is idempotent", async () => {
 });
 
 test("adapter-mock exposes .gpu escape hatch", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const { device } = await init();
 
   expect(device.gpu).toBeDefined();
   expect(typeof device.gpu.createBuffer).toBe("function");

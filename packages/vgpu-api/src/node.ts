@@ -9,9 +9,8 @@ export type { Pass, PassOptions } from "./pass.ts";
 export type { Target, TargetOptions } from "./target.ts";
 export { VGPUError } from "./errors.ts";
 export type { AppCreateOptions, AppInstance, Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
-export { Uniform } from "@vgpu/render";
-export type { UniformOptions } from "@vgpu/render";
-export type { RenderTarget, RenderTargetSpec } from "@vgpu/render/passes";
+export { Uniform } from "./core/uniform.ts";
+export type { UniformOptions } from "./core/uniform.ts";
 export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
 /** Node headless entrypoint (Dawn via @vgpu/adapter-node). */

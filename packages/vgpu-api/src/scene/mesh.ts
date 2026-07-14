@@ -17,7 +17,7 @@ import {
   torus as renderTorus,
   type MeshPrimitive,
   type VertexAttributes,
-} from "@vgpu/render";
+} from "./geometry-src/index.ts";
 import type { MeshLike } from "../draw.ts";
 import type { SceneGeometry } from "./geometry.ts";
 

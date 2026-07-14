@@ -11,7 +11,7 @@ import type {
   RingSpec,
   SphereSpec,
   TorusSpec,
-} from "@vgpu/render";
+} from "./geometry-src/index.ts";
 
 /** Removes Device and makes render-domain spec fields optional so scene descriptors stay pure. */
 type WithoutDevice<T> = Partial<Omit<T, "device">>;

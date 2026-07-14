@@ -1,4 +1,4 @@
-import type { Mat4 } from "../domain/index.ts";
+import type { Mat4 } from "../mesh-like.ts";
 
 export interface InspectMaterial {
   readonly pipeline: GPURenderPipeline;

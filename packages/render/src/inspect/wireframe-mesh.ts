@@ -1,4 +1,4 @@
-import type { Mesh } from "../domain/index.ts";
+import type { Mesh } from "../mesh-like.ts";
 
 export interface WireframeMesh {
   readonly vertexBuffer: Mesh["vertexBuffer"];

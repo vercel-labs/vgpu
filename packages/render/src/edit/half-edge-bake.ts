@@ -1,5 +1,5 @@
 import type { Device, Buffer } from "@vgpu/core";
-import type { Mesh, VertexAttributes } from "../domain/mesh.ts";
+import type { Mesh, VertexAttributes } from "../mesh-like.ts";
 import type { HalfEdgeKernel } from "./half-edge-kernel.ts";
 import { attachSource } from "./edit-source.ts";
 
