@@ -1,7 +1,8 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError } from "./errors.ts";
@@ -132,15 +133,7 @@ export class Draw {
       try { pass.end(); } catch { /* ignore cleanup failure after encode failure */ }
       throw error;
     }
-    try { pass.end(); }
-    catch (error) {
-      const scopes = popClaimedGroupValidationScopes(this.device);
-      discardClaimedGroupValidationResults(validations);
-      discardClaimedGroupValidationResults(scopes);
-      const context = scopes[0]?.context ?? validations[0]?.context;
-      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
-      throw error;
-    }
+    endRenderPassWithClaimValidation(this.device, pass, validations, validations[0]?.context);
     let commandBuffer: GPUCommandBuffer;
     const finishContext = validations[0]?.context;
     if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);

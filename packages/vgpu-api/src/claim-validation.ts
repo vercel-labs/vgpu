@@ -45,7 +45,15 @@ export function popLastClaimedGroupValidationScope(device: Device): ClaimedGroup
   return { context, error: device.gpu.popErrorScope() };
 }
 
-/** Pops every currently open raw-claim scope for this device in native LIFO order. */
+/**
+ * Pops every currently open raw-claim scope for this device in native LIFO order.
+ *
+ * Device-global WebGPU error scopes are not an ownership/collection boundary;
+ * this exists only for abort paths that must drain scopes left open by a failed
+ * protected encode region before rethrowing.
+ *
+ * @internal
+ */
 export function popClaimedGroupValidationScopes(device: Device): readonly ClaimedGroupValidationResult[] {
   const results: ClaimedGroupValidationResult[] = [];
   let result = popLastClaimedGroupValidationScope(device);
@@ -62,7 +70,14 @@ export function discardLastClaimedGroupValidationScope(device: Device): void {
   if (result) suppressClaimedGroupValidationResult(result);
 }
 
-/** Discards every currently open raw-claim scope for this device after aborting an encode region. */
+/**
+ * Discards every currently open raw-claim scope for this device after aborting an encode region.
+ *
+ * This is intentionally device-global and abort-only: normal validation owners
+ * pop scopes immediately and store the returned promises on their frame/draw.
+ *
+ * @internal
+ */
 export function discardClaimedGroupValidationScopes(device: Device): void {
   for (const result of popClaimedGroupValidationScopes(device)) suppressClaimedGroupValidationResult(result);
 }

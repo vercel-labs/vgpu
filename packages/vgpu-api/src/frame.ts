@@ -1,5 +1,6 @@
 import type { Device } from "@vgpu/core";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { Draw, type DrawCallOptions } from "./draw.ts";
 import { Pass } from "./pass.ts";
@@ -42,16 +43,7 @@ export class Frame {
       try { encoder.end(); } catch { /* ignore cleanup failure after encode failure */ }
       throw error;
     }
-    try { encoder.end(); }
-    catch (error) {
-      const scopes = popClaimedGroupValidationScopes(this.device);
-      discardClaimedGroupValidationResults(this.validations);
-      discardClaimedGroupValidationResults(scopes);
-      this.validations.length = 0;
-      const context = scopes[0]?.context;
-      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
-      throw error;
-    }
+    endRenderPassWithClaimValidation(this.device, encoder, this.validations);
   }
 
   submit(): void {
