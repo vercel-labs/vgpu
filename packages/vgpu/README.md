@@ -11,6 +11,7 @@ pnpm exec vgpu --help
 pnpm exec vgpu docs ls
 pnpm exec vgpu docs cat /@vgpu/core/Buffer.docs.md
 pnpm exec vgpu docs grep -i --package @vgpu/wgsl minify
+pnpm add -D @vgpu/wgsl # required only for `vgpu check`
 pnpm exec vgpu check ./shader.wgsl
 ```
 
@@ -36,6 +37,6 @@ This package only owns the CLI binary.
 - `vgpu docs grep [-i] [--package <pkg>] <pattern>` searches bundled docs content. Matching is case-sensitive by default; use `-i` for case-insensitive search.
 - `vgpu docs find <query>` searches docs paths and symbols, not full content.
 - `vgpu docs path <symbol|path>` resolves a symbol/path for shell usage.
-- `vgpu check <file.wgsl>` resolves imports, validates through `@vgpu/wgsl`, and prints reflection JSON with bindings/layouts for agent tooling. Reflection errors surface the Phase-1 fix-it text verbatim.
+- `vgpu check <file.wgsl>` resolves imports, validates through `@vgpu/wgsl`, and prints reflection JSON with bindings/layouts for agent tooling. Because `@vgpu/wgsl` is an optional peer of `@vgpu/cli`, install it next to the CLI before using `check` (for example, `pnpm add -D @vgpu/wgsl`). Reflection errors surface the Phase-1 fix-it text verbatim.
 
 `vgpu doctor` and `vgpu wgsl` are reserved and currently print coming-soon messages.
