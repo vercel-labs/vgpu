@@ -68,6 +68,22 @@ test("gpu.draw records storage-driven vertices and instances without vertex buff
   }
 });
 
+test("instances zero is a valid no-instance draw", async () => {
+  const gpu = await init({ size: [4, 4] });
+  const drawCalls = spyRenderPassDraws(gpu.device.gpu);
+  try {
+    const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "zero-dots", instances: 0, vertices: 6 });
+    const target = gpu.target({ size: [4, 4] });
+
+    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(dots)));
+
+    expect(drawCalls).toEqual([[6, 0, 0, 0]]);
+  } finally {
+    gpu.dispose();
+    vi.restoreAllMocks();
+  }
+});
+
 test("per-call instances override draw defaults while vertices fall back to draw options", async () => {
   const gpu = await init({ size: [4, 4] });
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
@@ -107,9 +123,10 @@ test("mesh vertexCount wins over DrawOptions.vertices unless call vertices overr
   }
 });
 
-test("bundle recording preserves per-call instance counts", async () => {
+test("bundle recording preserves per-call instance counts and replays the bundle", async () => {
   const gpu = await init({ size: [4, 4] });
   const bundleDrawCalls = spyRenderBundleDraws(gpu.device.gpu);
+  const bundleExecutions = spyRenderPassBundleExecutions(gpu.device.gpu);
   try {
     const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "bundle-dots", instances: 9, vertices: 6 });
     const target = gpu.target({ size: [4, 4] });
@@ -120,9 +137,40 @@ test("bundle recording preserves per-call instance counts", async () => {
     gpu.frame((frame) => frame.pass({ target }, (pass) => pass.bundles(bundle)));
 
     expect(bundleDrawCalls).toEqual([[6, 4, 0, 0]]);
+    expect(bundleExecutions).toEqual([[bundle.gpu]]);
   } finally {
     gpu.dispose();
     vi.restoreAllMocks();
+  }
+});
+
+test("draw count options reject negative and non-integer values with VGPU errors", async () => {
+  const cases: readonly {
+    readonly name: string;
+    readonly drawOpts?: Record<string, number>;
+    readonly callOpts?: Record<string, number>;
+  }[] = [
+    { name: "draw instances negative", drawOpts: { instances: -1 } },
+    { name: "draw vertices fractional", drawOpts: { vertices: 1.5 } },
+    { name: "draw firstInstance negative", drawOpts: { firstInstance: -1 } },
+    { name: "call instances fractional", callOpts: { instances: 2.5 } },
+    { name: "call vertices negative", callOpts: { vertices: -1 } },
+    { name: "call firstVertex fractional", callOpts: { firstVertex: 0.5 } },
+    { name: "call firstInstance negative", callOpts: { firstInstance: -1 } },
+  ];
+
+  for (const testCase of cases) {
+    const gpu = await init({ size: [4, 4] });
+    try {
+      const target = gpu.target({ size: [4, 4] });
+      const draw = gpu.draw({ shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });
+
+      expect(() => gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw, testCase.callOpts)))).toThrowError(
+        /VGPU-R1-DRAW-COUNT|debe ser un entero >= 0/,
+      );
+    } finally {
+      gpu.dispose();
+    }
   }
 });
 
@@ -148,6 +196,31 @@ function spyRenderPassDraws(device: GPUDevice): unknown[][] {
     } as GPUCommandEncoder;
   });
   return drawCalls;
+}
+
+function spyRenderPassBundleExecutions(device: GPUDevice): unknown[][] {
+  const bundleExecutions: unknown[][] = [];
+  const originalCreateCommandEncoder = device.createCommandEncoder.bind(device);
+  vi.spyOn(device, "createCommandEncoder").mockImplementation((descriptor?: GPUCommandEncoderDescriptor) => {
+    const encoder = originalCreateCommandEncoder(descriptor);
+    const originalBeginRenderPass = encoder.beginRenderPass.bind(encoder);
+    return {
+      ...encoder,
+      beginRenderPass(renderPassDescriptor: GPURenderPassDescriptor): GPURenderPassEncoder {
+        const pass = originalBeginRenderPass(renderPassDescriptor);
+        const originalExecuteBundles = pass.executeBundles.bind(pass);
+        return {
+          ...pass,
+          executeBundles(bundles: Iterable<GPURenderBundle>): void {
+            const recorded = [...bundles];
+            bundleExecutions.push(recorded);
+            originalExecuteBundles(recorded);
+          },
+        } as GPURenderPassEncoder;
+      },
+    } as GPUCommandEncoder;
+  });
+  return bundleExecutions;
 }
 
 function spyRenderBundleDraws(device: GPUDevice): unknown[][] {
