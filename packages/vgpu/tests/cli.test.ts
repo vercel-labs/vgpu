@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import { runCli } from "../bin/vgpu.js";
 
@@ -87,4 +89,20 @@ test("snapshot command requires the Docker GPU harness", async () => {
     code: 1,
     stderr: expect.stringContaining("VGPU_DOCKER_TEST=1"),
   });
+});
+
+
+test("create scaffolds a typecheckable project", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vgpu-create-"));
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const result = runCli(["create", "demo"]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
+    expect(existsSync(join(dir, "demo", "package.json"))).toBe(true);
+    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("vgpu/node");
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
