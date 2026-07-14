@@ -1,0 +1,32 @@
+# `gpu.uniforms()` and `SharedUniforms`
+
+`gpu.uniforms(values)` creates a shared uniforms object before a binary WGSL layout is known. The first shader that binds it supplies the layout through reflection; later shaders must match structurally by member name and type.
+
+```ts
+const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
+
+const wave = gpu.pass(/* wgsl */ `
+  struct Globals { time: f32, mouse: vec2f }
+  @group(0) @binding(0) var<uniform> globals: Globals;
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(globals.time) * .5 + .5, 1);
+  }
+`, { set: { globals } });
+
+const blur = gpu.pass(BLUR_WGSL, { set: { globals } });
+
+gpu.frame.loop(() => {
+  globals.set({ time: gpu.time });
+  wave.draw();
+  blur.draw();
+});
+```
+
+Use shared uniforms for values like time, mouse, camera matrices, exposure, or viewport data consumed by many shaders. It avoids N buffers and N writes for the same value while preserving WGSL as the source of truth.
+
+## Ownership and performance defaults
+
+- WGSL is the source of truth. Declare every `@group/@binding` in the shader and bind by name with `set()`.
+- JS values passed to `set()` are lib-owned and are written in-place (R1/R2), so animated uniforms do not recreate bind groups.
+- Resources (`Uniform`, storage buffers, textures, targets, samplers, claimed bind groups) are user-owned; vgpu only binds their identity.
+- Time is explicit JS (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`). Resolution lives on targets (`target.size`, `target.texelSize`).

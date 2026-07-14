@@ -1,3 +1,9 @@
+## Unreleased — vgpu rewrite
+
+### Breaking
+- Public rendering docs now target the `vgpu` package (`init`, `Gpu`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`) and mark the old thick render surface for removal in the rewrite.
+- Shader authoring guidance now treats performance patterns as defaults: bundles/replay, pipeline pre-warm, R4 dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and target-owned MSAA/depth.
+
 ## 0.0.3 — 2026-05-13
 
 ### Minor

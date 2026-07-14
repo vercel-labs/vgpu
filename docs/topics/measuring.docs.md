@@ -1,56 +1,31 @@
 # Measuring
 
-How to verify a shader optimization before keeping it: confirm it's still correct (`pixelDiff`) and
-actually faster (`gpuFrameTime`). Both ship in `@vgpu/render/perf`. **Tooling only — never call them
-on a live animation-frame path.**
-
-## pixelDiff — did the output change?
+Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
 
 ```ts
-import { pixelDiff } from "@vgpu/render/perf";
+import { init } from "vgpu";
 
-const before = await target.read();   // baseline (Texture.read() → rgba8 bytes)
-applyOptimization();
-const after = await target.read();
-const { maxByte, changedFraction } = await pixelDiff(before, after);
-```
+const gpu = await init(canvas, { dpr: [1, 2] });
+const target = gpu.target({ format: "rgba16float", depth: true });
+const pass = gpu.pass(`
+struct Params { time: f32, texel: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * .5 + .5, 1);
+}
+`, { set: { texel: target.texelSize } });
 
-Accepts two `Texture`s (reads them back) or two `Uint8Array`s. Interpret `maxByte` (max per-channel
-delta, 0–255):
-
-| maxByte | meaning |
-| --- | --- |
-| 0 | bit-exact — output is identical |
-| 1–2 | imperceptible — driver-rounding floor (typical for reordered float math) |
-| more | real visual change — only keep behind a quality tier, or revert |
-
-A tiny `changedFraction` with `maxByte` ≤ 2 is the signature of a safe optimization. A *large*
-`changedFraction` means a systematic shift (likely a bug), even if `maxByte` is small.
-
-## gpuFrameTime — is it faster?
-
-```ts
-import { gpuFrameTime } from "@vgpu/render/perf";
-
-const { medianMs, method } = await gpuFrameTime(device, (frame, i) => {
-  // record the SAME passes you run in production, onto the provided Frame
-  frame.renderPass(scenePass, (pass) => drawScene(pass, i));
-  frame.renderPass(floorPass, (pass) => drawFloor(pass, i));
+gpu.frame.loop((f) => {
+  pass.set({ time: gpu.time });
+  f.pass({ target }, (p) => p.draw(pass));
 });
 ```
 
-Returns `{ medianMs, meanMs, minMs, p95Ms, samples, method }`. It owns warmup + the loop + timing;
-you only encode. `method` is `"timestamp-query"` (GPU-only, when the device feature exists) or
-`"wall-clock"` (`queue.flush`, the robust fallback — what headless browsers get). The `i` argument
-lets you advance animation so the bench exercises per-frame work.
+## Defaults
 
-Compare medians before vs after. For absolute numbers prefer a real-GPU device (`@vgpu/adapter-node`
-Dawn, or a browser); CPU/software backends only give relative signal.
-
-## Discipline
-
-- Measure **every** non-bit-exact change. Many "obvious" optimizations are imperceptible-but-not-free
-  — and a few are silent correctness bugs that only `pixelDiff` catches.
-- Measure each render configuration the shader actually ships in (resolution, DPR, theme).
-- A baseline captured from the current committed code is the reference; diff against it, not against
-  intuition.
+- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
+- Use `gpu.bundle()` when the same static draws replay for many frames.
+- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
+- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
+- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
+- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.

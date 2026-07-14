@@ -1,58 +1,31 @@
 # Authoring for performance
 
-Tier-0 habits: how to write a shader during iteration so the later [optimize pass](./optimize-pass.docs.md)
-is mechanical instead of archaeological. These cost nothing up front and are painful to retrofit —
-unlike Tier 1–2 work, do them from v1. They do **not** slow iteration; they're about *structure and
-legibility*, not premature micro-optimization.
+Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
 
-## Use the idiomatic primitives
+```ts
+import { init } from "vgpu";
 
-They make change-frequency explicit and keep the hot path clean — which is exactly what makes
-optimization easy later.
+const gpu = await init(canvas, { dpr: [1, 2] });
+const target = gpu.target({ format: "rgba16float", depth: true });
+const pass = gpu.pass(`
+struct Params { time: f32, texel: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * .5 + .5, 1);
+}
+`, { set: { texel: target.texelSize } });
 
-- **Encode with `Frame`** (`beginFrame` → `frame.renderPass(...)` → `frame.submit()`), not a
-  hand-rolled encoder. Each pass is then a named, separable unit.
-- **Pick the uniform path by uniform count.** For a single stable uniform buffer you rewrite per
-  frame and change-gate yourself (the typical full-screen-pass case), use the lightweight `Uniform`
-  helper (`new Uniform(device, { size }).write(bytes)`), or a plain `Float32Array` + `buffer.write`
-  when you hand-gate uploads. `UniformPool` is only for **many** per-draw uniforms — it's a
-  dynamic-offset ring allocator that re-uploads every frame, which defeats change-gating. Don't reach
-  for it for one stable buffer. Either way, pushing a value to a uniform later (pattern 2) stays a
-  one-liner, not a packing rewrite.
-- **Resolve/compile shaders and build pipelines at setup**, never per frame (`resolveShader` is for
-  setup/build/test; swap pipelines at frame boundaries).
-- **Build pipelines via `createRenderPipeline` / `createRenderPipelineAsync`** for the async→sync
-  fallback. Already holding a raw `GPURenderPipelineDescriptor`? Use
-  `createRenderPipelineFromDescriptor` / `createRenderPipelineFromDescriptorAsync` to forward it
-  unchanged (the async variant keeps the same async→sync fallback) — don't reshape it into
-  `RenderPipelineOptions`.
-- **Read back with `Texture.read()`** for baselines and golden comparisons.
+gpu.frame.loop((f) => {
+  pass.set({ time: gpu.time });
+  f.pass({ target }, (p) => p.draw(pass));
+});
+```
 
-## Keep bakeable work in its own pass
+## Defaults
 
-If part of the scene is time-invariant (geometry, an SDF, a static mask), author it as its **own
-named `renderPass`** from the start. Baking it later (pattern 1, the biggest win) becomes "stop
-re-encoding this pass," not "untangle it from the per-frame pass." Don't interleave time-invariant
-and animated work in one pass.
-
-## Make change-frequency legible
-
-The expensive part of optimizing is discovering *what changes when*. Leave that signal in the code:
-
-- Comment non-obvious values with their frequency: `// uniform-invariant`, `// per-frame`,
-  `// per-pixel`. The optimize pass then just hoists what's marked.
-- Name CPU-side helpers by what they depend on, so a `uniform-only` helper is obviously a hoist
-  candidate.
-- Keep a fragment's per-pixel inputs (`@builtin(position)`, varyings) visibly separate from its
-  uniform inputs.
-
-## Don't pre-pessimize
-
-Avoiding *obvious* waste isn't premature optimization:
-
-- Don't compute a uniform-only value per pixel even in v1 (pattern 2) — it's never the right call.
-- Don't `select()` over an expensive branch you mean to skip (pattern 6).
-- Don't recompute a loop invariant inside the loop (pattern 3).
-
-Everything beyond that — baking, restructuring, cheaper-op swaps — waits for the
-[optimize pass](./optimize-pass.docs.md).
+- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
+- Use `gpu.bundle()` when the same static draws replay for many frames.
+- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
+- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
+- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
+- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.

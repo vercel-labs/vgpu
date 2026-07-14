@@ -1,40 +1,31 @@
-# The optimize pass
+# Optimize pass
 
-A procedure to run **once the look is locked**, to clean up and speed up shader/render code without
-changing what's on screen. Don't run it mid-iteration (you'll pivot). It is the disciplined form of
-Tiers 1–2 in the [performance model](./performance-model.docs.md).
+Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
 
-## Procedure
+```ts
+import { init } from "vgpu";
 
-1. **Lock + baseline.** Confirm the visual is final. Capture a reference render and a baseline
-   timing — see [measuring](./measuring.docs.md):
-   ```ts
-   const before = await target.read();                 // reference pixels
-   const baseline = await gpuFrameTime(device, encodeFrame);
-   ```
-2. **Walk the [catalog](./performance-patterns.docs.md) biggest-first.** Bake → hoist-to-uniform →
-   loop-invariant → dead/masked → early-out → branch → cheaper-ops. The early patterns dwarf the
-   late ones; don't start with `pow`→`sqrt`.
-3. **One change at a time.** Apply a single optimization.
-4. **Measure it.** Re-render and diff; re-time:
-   ```ts
-   const after = await target.read();
-   const { maxByte } = await pixelDiff(before, after);  // 0 = bit-exact; ≤~2 = imperceptible
-   const now = await gpuFrameTime(device, encodeFrame);
-   ```
-   Keep it only if `maxByte` is within tolerance **and** the timing improved. Otherwise revert.
-5. **Mirror to twins.** If the shader has a fallback twin (e.g. a WebGL/GLSL port, or a second
-   uniform packer), apply the identical change there and re-check parity. Diverging twins render
-   differently on different devices — a silent bug.
-6. **Repeat** from step 3 until the remaining patterns are low-value or high-risk for this shader.
+const gpu = await init(canvas, { dpr: [1, 2] });
+const target = gpu.target({ format: "rgba16float", depth: true });
+const pass = gpu.pass(`
+struct Params { time: f32, texel: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * .5 + .5, 1);
+}
+`, { set: { texel: target.texelSize } });
 
-## Rules
+gpu.frame.loop((f) => {
+  pass.set({ time: gpu.time });
+  f.pass({ target }, (p) => p.draw(pass));
+});
+```
 
-- **Measure, don't assume.** Most of these changes are numerically-equivalent-not-identical. "Looks
-  fine" is not a measurement; a `pixelDiff` is.
-- **Render targets vary.** If the shader runs at multiple resolutions, DPRs, or themes, measure each
-  — an opt can be exact at one size and shift at another.
-- **Keep GUI/debug toggles.** Gate default-off work behind a branch (pattern 6); don't delete the
-  toggle.
-- **Stop at diminishing returns.** Log what you deliberately left (e.g. "constant-folds the driver
-  already does", "visible at glow edges") so the next pass doesn't re-litigate it.
+## Defaults
+
+- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
+- Use `gpu.bundle()` when the same static draws replay for many frames.
+- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
+- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
+- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
+- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.

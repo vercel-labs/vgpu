@@ -1,48 +1,31 @@
 # Performance model
 
-The mental model for making vgpu render code fast. Read this first; the other perf topics are the
-how-to.
+Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
 
-## The change-frequency ladder
+```ts
+import { init } from "vgpu";
 
-Classify every computation by how often its inputs change. Cost grows sharply down the ladder:
+const gpu = await init(canvas, { dpr: [1, 2] });
+const target = gpu.target({ format: "rgba16float", depth: true });
+const pass = gpu.pass(`
+struct Params { time: f32, texel: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * .5 + .5, 1);
+}
+`, { set: { texel: target.texelSize } });
 
-| Tier | Runs | Cost driver |
-| --- | --- | --- |
-| static | once (build / app start) | free at runtime |
-| per-resize | when the canvas/layout changes | rare |
-| per-frame (CPU) | once per frame | ×~60/s |
-| per-pixel / per-vertex (GPU) | width × height × dpr, every frame | dominates |
+gpu.frame.loop((f) => {
+  pass.set({ time: gpu.time });
+  f.pass({ target }, (p) => p.draw(pass));
+});
+```
 
-**Optimization is pushing work UP the ladder** — compute it less often for the same result:
+## Defaults
 
-- per-pixel → static uniform (precompute on the CPU, pass it in)
-- per-frame → per-resize (cache a result that only changes on resize)
-- per-sample (in a loop) → per-pixel (hoist invariants out of the loop)
-
-A value that only depends on uniforms but is computed per-pixel is pure waste: it's the same for
-every one of millions of pixels. Find those and push them up. See [patterns](./performance-patterns.docs.md).
-
-## When to optimize
-
-Do **not** optimize during creative iteration — the look will pivot and verbose optimizations slow
-you down and lock in the wrong structure. Optimize in three tiers, ordered by how expensive each is
-to retrofit:
-
-- **Tier 0 — habits (from v1).** Structure so work is *pushable later*: idiomatic primitives,
-  separable passes, change-frequency comments. Costs nothing now; painful to retrofit. See
-  [authoring-for-perf](./authoring-for-perf.docs.md).
-- **Tier 1 — cheap cleanup (when the look stabilizes).** Mechanical local rewrites: dead code,
-  loop hoists, cheaper ops, gate default-off toggles.
-- **Tier 2 — structural (final pass, measured).** Move work across the ladder: bake a pass, hoist
-  per-pixel work to a uniform.
-
-Run Tiers 1–2 as a deliberate [optimize pass](./optimize-pass.docs.md) once the design is locked,
-and **measure every change** ([measuring](./measuring.docs.md)) — most shader optimizations are
-numerically-equivalent-not-identical, so you confirm "imperceptible" rather than assume it.
-
-## Why structural beats clever
-
-In practice the big wins are structural (move work up the ladder), not micro-tricks. Baking one
-time-invariant pass or hoisting one per-pixel uniform routinely beats every `pow`→`sqrt` combined.
-Spend effort finding *what changes when*, not on shaving cycles in place.
+- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
+- Use `gpu.bundle()` when the same static draws replay for many frames.
+- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
+- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
+- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
+- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.

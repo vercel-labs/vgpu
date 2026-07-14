@@ -1,4 +1,4 @@
-import { docsManifest } from 'vgpu/lib/generated/docs-manifest.generated.js';
+import { docsManifest } from '@vgpu/cli/lib/generated/docs-manifest.generated.js';
 
 export type DocsRecordKind = 'api' | 'guide';
 
@@ -24,41 +24,71 @@ export interface NavSection {
   groups: PackageGroup[];
 }
 
-const records = (docsManifest.records as DocsRecord[]).slice();
+const publicApiRecords: DocsRecord[] = [
+  doc(
+    'init',
+    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init(canvas, { dpr: [1, 2] });\n```',
+  ),
+  doc(
+    'Gpu',
+    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to ring-0 handles.\n\n```ts\nconst target = gpu.target({ format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
+  ),
+  doc(
+    'pass',
+    '# pass\n\nFragment-only fullscreen sugar. `gpu.pass()` reflects WGSL bindings, owns values through `set()`, and draws to the screen or to an explicit target.\n\n```ts\nconst toneMap = gpu.pass(shader, { set: { exposure: 1 } });\ntoneMap.set({ time: gpu.time });\ntoneMap.draw({ target });\n```',
+  ),
+  doc(
+    'draw',
+    '# draw\n\nGeneral render pipeline entry point for vertex/fragment WGSL, meshes, target pre-warm, manual groups, dynamic offsets, and instancing.\n\n```ts\nconst draw = gpu.draw({ shader, mesh, targets: [target], instances: 128 });\ndraw.group(1, bindGroup);\ngpu.frame((f) => f.pass({ target }, (p) => p.draw(draw, { offsets: { 1: [offset] } })));\n```',
+  ),
+  doc(
+    'compute',
+    '# compute\n\nCreate reflected compute pipelines with explicit resources. Writable-storage aliasing is validated before dispatch.\n\n```ts\nconst step = gpu.compute(shader, { set: { src: pingPong.read, dst: pingPong.write } });\nstep.dispatch(64);\npingPong.swap();\n```',
+  ),
+  doc(
+    'frame',
+    '# frame\n\nSubmit on demand. Use a frame callback for multi-pass work and `frame.loop()` only when continuous animation is required.\n\n```ts\ngpu.frame((f) => {\n  f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(scene));\n});\n```',
+  ),
+  doc(
+    'bundle',
+    '# bundle\n\nRecord static draw sequences once and replay them when the same work repeats across frames.\n\n```ts\nconst background = gpu.bundle({ target }, (b) => b.draw(grid));\ngpu.frame((f) => f.pass({ target }, (p) => p.bundle(background)));\n```',
+  ),
+  doc(
+    'target',
+    '# target\n\nTargets own size, texel size, color formats, optional depth, and MSAA. Resize targets instead of threading resolution globals through shaders.\n\n```ts\nconst hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });\npass.set({ texel: hdr.texelSize });\n```',
+  ),
+  doc(
+    'uniforms',
+    '# uniforms\n\nCreate shared uniform state once and bind the same object to multiple passes or draws. Update in place with `set()`.\n\n```ts\nconst globals = gpu.uniforms({ time: 0, viewProjection });\nsky.set({ globals });\nmesh.set({ globals });\nglobals.set({ time: gpu.time });\n```',
+  ),
+  doc(
+    'pingPong',
+    '# pingPong\n\nCreate two stable target or storage identities for iterative effects. Bind once, dispatch or draw, then swap read/write roles.\n\n```ts\nconst state = gpu.pingPongStorage(bytes);\nconst step = gpu.compute(shader, { set: { src: state.read, dst: state.write } });\nstep.dispatch(workgroups);\nstate.swap();\n```',
+  ),
+];
+
+const generatedRecords = (docsManifest.records as DocsRecord[]).filter(isGeneratedRecordKept);
+const records = [...publicApiRecords, ...generatedRecords];
 
 const packageOrder = [
-  '@vgpu/core',
-  '@vgpu/render',
-  '@vgpu/render/passes',
-  '@vgpu/render/inspect',
-  '@vgpu/render/perf',
-  '@vgpu/render/utils',
+  'vgpu',
   '@vgpu/wgsl',
   '@vgpu/wgsl/runtime',
   '@vgpu/wgsl/loader-webpack',
   '@vgpu/wgsl/loader-vite',
   '@vgpu/wgsl-std',
-  '@vgpu/adapter-node',
-  '@vgpu/adapter-mock',
   'guides',
 ];
 
-const sectionOrder = ['Core', 'Render', 'WGSL', 'Adapters', 'Guides', 'Other'];
+const sectionOrder = ['VGPU', 'WGSL', 'Guides', 'Other'];
 
 const packageDescriptions: Record<string, string> = {
-  '@vgpu/core': 'Device, resource, queue, shader, binding, and app primitives.',
-  '@vgpu/render': 'Materials, meshes, render passes, render bundles, cameras, and uniform helpers.',
-  '@vgpu/render/passes': 'Convenience pass helpers and canvas render targets.',
-  '@vgpu/render/inspect': 'Debug materials and mesh inspection utilities.',
-  '@vgpu/render/perf': 'GPU timing and pixel-diff measurement helpers.',
-  '@vgpu/render/utils': 'Canvas sizing, frame clocks, and input utilities.',
+  vgpu: 'Public ring-1 API: init, Gpu, pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
   '@vgpu/wgsl': 'WGSL compile-time entry points and resolved shader metadata.',
   '@vgpu/wgsl/runtime': 'Runtime shader resolution primitives.',
   '@vgpu/wgsl/loader-webpack': 'Webpack loader entry point for WGSL modules.',
   '@vgpu/wgsl/loader-vite': 'Vite plugin and transform entry points for WGSL modules.',
   '@vgpu/wgsl-std': 'Standard WGSL modules and utility snippets.',
-  '@vgpu/adapter-node': 'Dawn-backed adapter helpers for Node.js and serverless rendering.',
-  '@vgpu/adapter-mock': 'Deterministic in-memory adapter for tests without GPU hardware.',
   guides: 'Conceptual and task-oriented articles for using vgpu effectively.',
 };
 
@@ -147,6 +177,21 @@ export function resolveMarkdownHref(href: string | undefined) {
   return href;
 }
 
+function doc(symbol: string, content: string): DocsRecord {
+  return {
+    package: 'vgpu',
+    symbol,
+    repoPath: `packages/vgpu-api/src/${symbol === 'pingPong' ? 'gpu' : symbol}.docs.md`,
+    virtualPath: `/vgpu/${symbol}.docs.md`,
+    kind: 'api',
+    content,
+  };
+}
+
+function isGeneratedRecordKept(record: DocsRecord) {
+  return record.package === 'guides' || record.package.startsWith('@vgpu/wgsl');
+}
+
 function buildPackageGroups(sourceRecords: DocsRecord[]) {
   const byPackage = new Map<string, DocsRecord[]>();
   for (const record of sourceRecords) {
@@ -199,11 +244,9 @@ function comparePackageNames(a: string, b: string) {
 }
 
 function sectionForPackage(packageName: string) {
+  if (packageName === 'vgpu') return 'VGPU';
   if (packageName === 'guides') return 'Guides';
-  if (packageName.startsWith('@vgpu/render')) return 'Render';
   if (packageName.startsWith('@vgpu/wgsl')) return 'WGSL';
-  if (packageName.startsWith('@vgpu/adapter')) return 'Adapters';
-  if (packageName === '@vgpu/core') return 'Core';
   return 'Other';
 }
 
