@@ -14,11 +14,25 @@ export interface DrawOptions {
   readonly set?: SetBag;
   readonly label?: string;
   readonly targets?: readonly Target[];
+  /** Default instance count for every draw call. Overridden by per-call opts. */
+  readonly instances?: number;
+  /** Vertex count when rendering without a mesh. Mesh.vertexCount wins over this default. */
+  readonly vertices?: number;
+  /** Default firstInstance for every draw call. Overridden by per-call opts. */
+  readonly firstInstance?: number;
 }
 
 export interface DrawCallOptions {
   readonly target?: Target;
   readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
+  /** Instance count precedence: per-call > DrawOptions.instances > 1. */
+  readonly instances?: number;
+  /** Vertex count precedence: per-call > mesh.vertexCount > DrawOptions.vertices > 3. */
+  readonly vertices?: number;
+  /** Starting vertex for non-indexed draws. Defaults to 0. */
+  readonly firstVertex?: number;
+  /** First instance precedence: per-call > DrawOptions.firstInstance > 0. */
+  readonly firstInstance?: number;
 }
 
 export interface DrawLayoutOptions {
@@ -172,7 +186,7 @@ export class Draw {
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     pass.setPipeline(this.pipelineFor(target));
     for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
-    this.encodeMesh(pass);
+    this.encodeMesh(pass, opts);
   }
 
   private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
@@ -200,12 +214,16 @@ export class Draw {
     return pipeline;
   }
 
-  private encodeMesh(pass: GPURenderPassEncoder): void {
+  private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
     const mesh = this.opts.mesh;
     if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
-    if (!mesh?.indexBuffer) return pass.draw(mesh?.vertexCount ?? 3);
+    const instanceCount = callOpts.instances ?? this.opts.instances ?? 1;
+    const firstInstance = callOpts.firstInstance ?? this.opts.firstInstance ?? 0;
+    const vertexCount = callOpts.vertices ?? mesh?.vertexCount ?? this.opts.vertices ?? 3;
+    const firstVertex = callOpts.firstVertex ?? 0;
+    if (!mesh?.indexBuffer) return pass.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
-    pass.drawIndexed(mesh.indexCount ?? 0);
+    pass.drawIndexed(mesh.indexCount ?? 0, instanceCount, 0, 0, firstInstance);
   }
 
   private createPipeline(target: Target): GPURenderPipeline {
