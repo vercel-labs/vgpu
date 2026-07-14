@@ -1,3 +1,10 @@
+export interface ShaderSource {
+  readonly version: 1;
+  readonly wgsl: string;
+  /** Reserved for a future version bump; loaders must not emit binding maps in v1. */
+  readonly bindings?: never;
+}
+
 export interface WGSLSource {
   readonly text: string;
   readonly path?: string;

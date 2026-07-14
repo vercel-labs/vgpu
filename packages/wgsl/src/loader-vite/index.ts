@@ -1,3 +1,4 @@
+import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
 import { resolveShader } from "../runtime/resolveShader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
@@ -26,12 +27,15 @@ export function transformWgsl(opts: TransformWgslOptions): Promise<ViteLoadResul
 export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions, id?: string, options: WgslVitePluginOptions = {}): Promise<ViteLoadResult> {
   const opts = typeof sourceOrOpts === "string" ? { ...options, source: sourceOrOpts, id: id ?? "<vite>" } : sourceOrOpts;
   if (!hasTopLevelImport(opts.source)) {
+    // A leaf .wgsl can be a legitimate entry that declares bindings, so the
+    // entry-only module-purity rule is intentionally enforced only when an
+    // importer resolves a graph through resolveShader().
     const wgsl = applyMinifyWgsl(opts.source, opts.minify);
-    return { code: `export default ${JSON.stringify(wgsl)};`, map: null };
+    return { code: shaderSourceModule(wgsl), map: null };
   }
   const resolved = await resolveShader({ entry: opts.id, validate: false, minify: opts.minify });
   for (const dep of resolved.deps) if (dep !== opts.id) opts.onDependency?.(dep);
-  return { code: `export default ${JSON.stringify(resolved.wgsl)};`, map: null };
+  return { code: shaderSourceModule(resolved.wgsl), map: null };
 }
 
 export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly name: string; readonly transform: (this: VitePluginContext, source: string, id: string) => Promise<ViteLoadResult | null> } {

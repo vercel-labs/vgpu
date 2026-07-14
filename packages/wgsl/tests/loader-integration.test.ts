@@ -49,7 +49,11 @@ test("leaf loader path supports object-form whitespace-only minify", async () =>
   expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify }) }, source) ?? "")).toBe(expected);
 });
 
-test("loader comment-only import passes through", async () => expect((await transformWgsl("// import { x } from 'y'", "/x.wgsl")).code).toContain("// import"));
+test("loader comment-only import passes through", async () => {
+  const code = (await transformWgsl("// import { x } from 'y'", "/x.wgsl")).code;
+  expect(code).toContain("version: 1");
+  expect(code).toContain("// import");
+});
 test("loaders resolve top-level import", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
   await writeFile(join(dir, "main.wgsl"), "import { x } from './x.wgsl'; fn main(){x();}");
@@ -109,8 +113,12 @@ async function pkgFixture(opts: { exports: unknown; files: Record<string, string
 }
 
 function defaultExport(codeOrResult: string | { readonly code: string }): string {
+  return shaderSource(codeOrResult).wgsl;
+}
+
+function shaderSource(codeOrResult: string | { readonly code: string }): { readonly version: 1; readonly wgsl: string } {
   const code = typeof codeOrResult === "string" ? codeOrResult : codeOrResult.code;
-  return JSON.parse(code.replace(/^export default /, "").replace(/;$/, "")) as string;
+  return Function(code.replace(/^export default /, "return ").replace(/;$/, ";"))() as { readonly version: 1; readonly wgsl: string };
 }
 
 async function webpack(resourcePath: string, source: string, options: { readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" } } = {}) {

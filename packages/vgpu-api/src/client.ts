@@ -8,4 +8,5 @@ export type VGPUClientEnvironment = {
 };
 
 export { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+export type { ShaderSource } from "@vgpu/wgsl";
 export type { ViteLoadResult, WgslVitePluginOptions } from "@vgpu/wgsl/loader-vite";

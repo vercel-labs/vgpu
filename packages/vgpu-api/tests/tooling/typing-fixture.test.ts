@@ -46,8 +46,10 @@ function createPublishedConsumerFixture() {
       'import shaderSource from "./shader.wgsl";',
       'import type { VGPUClientEnvironment } from "vgpu/client";',
       "const env: VGPUClientEnvironment = {};",
-      "const source: string = shaderSource;",
-      "export { env, source };",
+      "const source = shaderSource;",
+      "const wgsl: string = source.wgsl;",
+      "const version: 1 = source.version;",
+      "export { env, source, version, wgsl };",
       "",
     ].join("\n"),
   );
