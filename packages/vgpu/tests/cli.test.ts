@@ -131,6 +131,21 @@ test("create browser-vite scaffolds a runnable Vite app shell", () => {
   }
 });
 
+
+test("create outside the vgpu workspace emits an installable package dependency", () => {
+  const parent = mkdtempSync(join(tmpdir(), "vgpu-create-outside-"));
+  const target = join(parent, "demo");
+  try {
+    const result = runCli(["create", target]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining(`Created ${target}`) });
+    const pkg = readFileSync(join(target, "package.json"), "utf8");
+    expect(pkg).not.toContain("workspace:*");
+    expect(pkg).toContain('"vgpu": "link:');
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("create only resolves to the vgpu workspace root, not arbitrary pnpm workspaces", () => {
   const dir = mkdtempSync(join(tmpdir(), "vgpu-foreign-workspace-"));
   const cwd = process.cwd();

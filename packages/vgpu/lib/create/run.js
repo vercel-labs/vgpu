@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 const defaultTemplate = "node-headless";
 const templates = new Set([defaultTemplate, "browser-vite"]);
@@ -10,11 +10,12 @@ export function runCreate(args) {
   if (!parsed.name) return { code: 1, stderr: help() };
   if (!templates.has(parsed.template)) return { code: 1, stderr: `Unknown vgpu create template: ${parsed.template}\n\n${help()}` };
 
-  const baseDir = createBaseDir();
-  const workspaceMode = hasWorkspacePackages(baseDir);
+  const workspaceRoot = findVgpuWorkspaceRoot(process.cwd());
+  const baseDir = workspaceRoot ?? process.cwd();
   const root = resolve(baseDir, parsed.name);
+  const workspaceMode = workspaceRoot !== undefined && hasWorkspacePackages(workspaceRoot) && isWithinDirectory(root, workspaceRoot);
   if (existsSync(root)) return { code: 1, stderr: `Cannot create '${parsed.name}': path already exists.\n` };
-  writeTemplate(root, parsed.name, parsed.template, workspaceMode);
+  writeTemplate(root, parsed.name, parsed.template, workspaceMode, workspaceRoot);
   return { code: 0, stdout: `Created ${parsed.name} with ${parsed.template}.\nNext steps:\n  cd ${parsed.name}\n  pnpm typecheck\n` };
 }
 
@@ -30,10 +31,6 @@ function parseArgs(args) {
     else positionals.push(arg);
   }
   return { help: helpRequested, name: positionals[0], template };
-}
-
-function createBaseDir() {
-  return findVgpuWorkspaceRoot(process.cwd()) ?? process.cwd();
 }
 
 function findVgpuWorkspaceRoot(startDir) {
@@ -57,10 +54,15 @@ function hasWorkspacePackages(baseDir) {
   return isVgpuWorkspaceRoot(baseDir) && existsSync(resolve(baseDir, "packages/vgpu-api/src"));
 }
 
-function writeTemplate(root, name, template, workspaceMode) {
+function isWithinDirectory(child, parent) {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function writeTemplate(root, name, template, workspaceMode, workspaceRoot) {
   mkdirSync(resolve(root, "src"), { recursive: true });
-  writeFileSync(resolve(root, "package.json"), `${JSON.stringify(packageJson(name, template, workspaceMode), null, 2)}\n`);
-  writeFileSync(resolve(root, "tsconfig.json"), `${JSON.stringify(tsconfig(workspaceMode), null, 2)}\n`);
+  writeFileSync(resolve(root, "package.json"), `${JSON.stringify(packageJson(name, template, workspaceMode, workspaceRoot), null, 2)}\n`);
+  writeFileSync(resolve(root, "tsconfig.json"), `${JSON.stringify(tsconfig(workspaceMode, root, workspaceRoot), null, 2)}\n`);
   if (template === "browser-vite") {
     mkdirSync(resolve(root, "src/vite-node-shims"), { recursive: true });
     writeFileSync(resolve(root, "index.html"), browserHtml);
@@ -70,7 +72,7 @@ function writeTemplate(root, name, template, workspaceMode) {
   writeFileSync(resolve(root, "src/main.ts"), sourceFor(template));
 }
 
-function packageJson(name, template, workspaceMode) {
+function packageJson(name, template, workspaceMode, workspaceRoot) {
   return {
     name,
     private: true,
@@ -81,7 +83,7 @@ function packageJson(name, template, workspaceMode) {
       ...(template === "browser-vite" ? { build: "vite build" } : {}),
     },
     dependencies: {
-      vgpu: workspaceMode ? "workspace:*" : "^0.0.8",
+      vgpu: vgpuDependency(workspaceMode, workspaceRoot),
     },
     devDependencies: {
       "@types/node": "^22.10.7",
@@ -93,7 +95,13 @@ function packageJson(name, template, workspaceMode) {
   };
 }
 
-function tsconfig(workspaceMode) {
+function vgpuDependency(workspaceMode, workspaceRoot) {
+  if (workspaceMode) return "workspace:*";
+  if (workspaceRoot !== undefined && hasWorkspacePackages(workspaceRoot)) return `link:${resolve(workspaceRoot, "packages/vgpu-api")}`;
+  return "^0.0.8";
+}
+
+function tsconfig(workspaceMode, root, workspaceRoot) {
   const compilerOptions = {
     target: "ES2022",
     module: "NodeNext",
@@ -103,11 +111,12 @@ function tsconfig(workspaceMode) {
     types: ["node", "@webgpu/types"],
   };
   if (workspaceMode) {
+    const packagesDir = relative(root, resolve(workspaceRoot, "packages")).replaceAll("\\", "/") || "packages";
     compilerOptions.allowImportingTsExtensions = true;
     compilerOptions.baseUrl = ".";
     compilerOptions.paths = {
-      "vgpu": ["../packages/vgpu-api/src/index.ts"],
-      "vgpu/*": ["../packages/vgpu-api/src/*.ts"],
+      "vgpu": [`${packagesDir}/vgpu-api/src/index.ts`],
+      "vgpu/*": [`${packagesDir}/vgpu-api/src/*.ts`],
     };
   }
   return { compilerOptions, include: ["src/**/*.ts"] };
