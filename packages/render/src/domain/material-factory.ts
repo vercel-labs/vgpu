@@ -52,6 +52,9 @@ export interface FactoryMaterial<
 
 const DEFAULT_TARGET_FORMAT = "bgra8unorm-srgb";
 
+/**
+ * @deprecated Use ring-1 WGSL reflection via `gpu.pass()` or `gpu.draw({ shader, mesh })` and `.set(...)`. `material()` belongs to the old thick layer and is kept for compatibility only.
+ */
 export function material<
   U extends Record<string, WgslUniformType>,
   T extends Record<string, MaterialTextureSpec> = Record<string, never>,

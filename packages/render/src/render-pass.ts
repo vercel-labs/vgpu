@@ -43,6 +43,9 @@ interface RenderPassEncoderSource {
 
 const renderPassEncoderSources = new WeakMap<RenderPassOptions, RenderPassEncoderSource>();
 
+/**
+ * @deprecated Use `gpu.frame((f) => f.pass({ target }, (p) => ...))` from `vgpu`. The standalone render pass is retained only as a ring-0 escape hatch.
+ */
 export class RenderPass {
   private readonly encoder: GPUCommandEncoder;
   private readonly submitOnEnd: boolean;
