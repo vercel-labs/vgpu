@@ -12,6 +12,7 @@ function success(args) {
 }
 
 test("preserves root help, version, and placeholders", () => {
+  expect(success(["--help"])).toContain("snapshot");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
   expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
@@ -78,4 +79,12 @@ test("returns nonzero for missing and unknown docs commands", () => {
   expect(runCli(["docs", "cat", "MissingSymbol"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Symbol not found") });
   expect(runCli(["docs", "nope"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Unknown docs command") });
   expect(runCli(["nope"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Unknown vgpu command") });
+});
+
+
+test("snapshot command requires the Docker GPU harness", async () => {
+  await expect(Promise.resolve(runCli(["snapshot", "--ci"]))).resolves.toMatchObject({
+    code: 1,
+    stderr: expect.stringContaining("VGPU_DOCKER_TEST=1"),
+  });
 });

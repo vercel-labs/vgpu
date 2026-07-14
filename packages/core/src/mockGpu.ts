@@ -9,6 +9,7 @@ export interface MockGPUDeviceInstrumentation {
     createRenderBundleEncoder: number;
     createRenderPipeline: number;
     createRenderPipelineAsync: number;
+    createComputePipeline: number;
   };
   readonly createBufferDescriptors: GPUBufferDescriptor[];
   readonly createBindGroupDescriptors: GPUBindGroupDescriptor[];
@@ -16,6 +17,7 @@ export interface MockGPUDeviceInstrumentation {
   readonly createRenderBundleEncoderDescriptors: GPURenderBundleEncoderDescriptor[];
   readonly createRenderPipelineDescriptors: GPURenderPipelineDescriptor[];
   readonly createRenderPipelineAsyncDescriptors: GPURenderPipelineDescriptor[];
+  readonly createComputePipelineDescriptors: GPUComputePipelineDescriptor[];
 }
 
 const mockInstrumentationKey = "__vgpuMockInstrumentation";
@@ -71,6 +73,14 @@ export function createMockGPUDevice(): GPUDevice {
       instrumentation.createRenderPipelineAsyncDescriptors.push(desc);
       return {} as GPURenderPipeline;
     },
+    createComputePipeline(desc: GPUComputePipelineDescriptor): GPUComputePipeline {
+      instrumentation.calls.createComputePipeline += 1;
+      instrumentation.createComputePipelineDescriptors.push(desc);
+      return {
+        label: desc.label ?? "",
+        getBindGroupLayout: (_groupIndex: number) => ({}) as GPUBindGroupLayout,
+      } as unknown as GPUComputePipeline;
+    },
     createRenderBundleEncoder(desc: GPURenderBundleEncoderDescriptor): GPURenderBundleEncoder {
       instrumentation.calls.createRenderBundleEncoder += 1;
       instrumentation.createRenderBundleEncoderDescriptors.push(desc);
@@ -91,6 +101,7 @@ export function createMockGPUDevice(): GPUDevice {
       return {
         copyBufferToBuffer() {},
         copyTextureToBuffer() {},
+        beginComputePass: () => ({ setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} }) as unknown as GPUComputePassEncoder,
         // Mock render pass encoder: only binding/pipeline/draw/bundle/end methods used by tests are implemented.
         beginRenderPass: () => ({ setBindGroup() {}, setVertexBuffer() {}, setPipeline() {}, executeBundles() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
         finish: () => ({}),
@@ -131,6 +142,7 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
       createRenderBundleEncoder: 0,
       createRenderPipeline: 0,
       createRenderPipelineAsync: 0,
+      createComputePipeline: 0,
     },
     createBufferDescriptors: [],
     createBindGroupDescriptors: [],
@@ -138,6 +150,7 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
     createRenderBundleEncoderDescriptors: [],
     createRenderPipelineDescriptors: [],
     createRenderPipelineAsyncDescriptors: [],
+    createComputePipelineDescriptors: [],
   };
 }
 

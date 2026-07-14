@@ -3,11 +3,16 @@ import type { BindingInfo } from "@vgpu/wgsl/runtime";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
 import { incompatibleResourceError } from "./errors.ts";
 import type { Target } from "./target.ts";
+import { isSharedUniformsValue } from "./uniforms.ts";
 
 export interface NormalizedBindingResource {
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;
   readonly unsubscribe?: (cb: () => void) => UnsubscribeResourceDestroy;
+}
+
+export interface ResourceNormalizationContext {
+  readonly sourceHint: string;
 }
 
 type ObjectRecord = Record<PropertyKey, unknown>;
@@ -30,9 +35,9 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /** Normalizes resources for the reflected binding kind and rejects incompatible values with vgpu fix-its. */
-export function normalizeResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
+export function normalizeResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
   switch (binding.bindingLayout?.kind) {
-    case "buffer": return normalizeBufferResource(binding, value);
+    case "buffer": return normalizeBufferResource(binding, value, context);
     case "texture": return normalizeTextureResource(binding, value);
     case "sampler": return normalizeSamplerResource(binding, value);
     case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pasá una textura storage-compatible; Lane C congela el helper storage texture.");
@@ -41,7 +46,8 @@ export function normalizeResource(binding: BindingInfo, value: unknown): Normali
   }
 }
 
-function normalizeBufferResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
+function normalizeBufferResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
+  if (isSharedUniformsValue(value)) return value.asBindingResource(binding, context.sourceHint);
   if (value instanceof Buffer) {
     validateBufferUsage(binding, value.options.usage);
     return { resource: { buffer: value.gpu }, identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };

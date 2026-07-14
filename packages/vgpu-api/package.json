@@ -47,12 +47,18 @@
       "default": "./dist/scene.js"
     },
     "./client": {
-      "types": "./dist/client.d.ts",
+      "types": "./client.d.ts",
       "import": "./dist/client.js",
       "default": "./dist/client.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
     }
   },
   "files": [
+    "client.d.ts",
     "dist",
     "README.md",
     "LICENSE"
@@ -66,7 +72,8 @@
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
     "@vgpu/render": "workspace:*",
-    "@vgpu/wgsl": "workspace:*"
+    "@vgpu/wgsl": "workspace:*",
+    "@webgpu/types": "^0.1.69"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 4096,

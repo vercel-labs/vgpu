@@ -33,6 +33,26 @@ export function claimedGroupSetError(label: string, group: number): VGPUError {
   });
 }
 
+export function claimedGroupIncompatibleError(label: string, group: number, reason: string, cause?: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R4-GROUP-INCOMPATIBLE",
+    message: `el grupo ${group} reclamado en draw '${label}' no es compatible: ${reason}.`,
+    fix: `Construí el bind group con ${label}.layout(${group}) o ${label}.layout(${group}, { dynamicOffsets: true }) si necesitás offsets dinámicos; después usá ${label}.group(${group}, bindGroup).`,
+    where: `${label}.group`,
+    cause,
+  });
+}
+
+export function claimedGroupNativeValidationError(label: string, group: number, cause: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R4-GROUP-VALIDATION",
+    message: `falló la validación nativa de WebGPU para el grupo ${group} reclamado en draw '${label}'.`,
+    fix: `Verificá que el bind group haya sido creado con ${label}.layout(${group}) y que los offsets dinámicos viajen en p.draw(draw, { offsets: { ${group}: [...] } }).`,
+    where: `${label}.draw`,
+    cause,
+  });
+}
+
 export function missingScreenError(): VGPUError {
   return new VGPUError({
     code: "VGPU-SCREEN-MISSING",
@@ -52,6 +72,28 @@ export function incompatibleResourceError(binding: BindingInfo, expected: string
 
 export function unsupportedError(where: string, message: string, fix?: string): VGPUError {
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
+}
+
+export function writableStorageAliasingError(where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-STORAGE-ALIASING",
+    message: "`src` y `dst` apuntan al MISMO buffer y `dst` es read_write (writable-storage aliasing,\n  prohibido por WebGPU). Fix: usá gpu.pingPongStorage() y alterná read/write.",
+    where,
+  });
+}
+
+export function sharedUniformLayoutMismatchError(opts: {
+  readonly bindingName: string;
+  readonly adoptedLayout: string;
+  readonly adoptedSource: string;
+  readonly incomingLayout: string;
+  readonly incomingSource: string;
+}): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH",
+    message: `shared uniforms '${opts.bindingName}' ya tiene layout ${opts.adoptedLayout} (adoptado de ${opts.adoptedSource});\n  ${opts.incomingSource} declara ${opts.incomingLayout} — alineá los structs o usá dos uniforms distintos.`,
+    where: "gpu.uniforms",
+  });
 }
 
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {

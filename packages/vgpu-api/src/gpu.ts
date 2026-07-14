@@ -1,12 +1,18 @@
 import type { VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
+import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
 import { Draw, type DrawOptions, type MeshLike } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
 import { Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
+import { mesh as createSceneMesh } from "./scene/mesh.ts";
 import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
 import { unsupportedError } from "./errors.ts";
+import { ComputePipeline } from "./compute.ts";
+import { createStorageBuffer } from "./storage.ts";
+import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
+import { createSharedUniforms } from "./uniforms.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
@@ -26,10 +32,6 @@ export interface StorageBuffer { readonly size: number; readonly access: Storage
 export interface PingPongTargets { readonly read: Target; readonly write: Target; swap(): void }
 export interface PingPongStorage { readonly read: StorageBuffer; readonly write: StorageBuffer; swap(): void }
 export interface SharedUniforms<T extends Record<string, unknown> = Record<string, unknown>> { set(values: Partial<T>): void }
-export interface BundleOptions { readonly target: Target }
-export interface BundleRecorder { draw(drawable: Draw | Pass, opts?: unknown): void }
-export interface Bundle { readonly id: string }
-
 /** Ring-1 facade shared by browser, node, and mock entrypoints. */
 export interface Gpu {
   readonly device: Device;
@@ -91,11 +93,14 @@ class RingGpu implements Gpu {
     this.frame = callableFrameRunner(runner);
   }
 
-  pass(source: string, opts: PassOptions = {}): Pass { return new Pass(this.device, source, opts, this.cache, this.screen); }
+  pass(source: string, opts: PassOptions = {}): Pass {
+    if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
+    return new Pass(this.device, source, opts, this.cache, this.screen);
+  }
   draw(opts: DrawOptions): Draw { return new Draw(this.device, opts.shader, opts, this.cache, this.screen); }
   target(opts: TargetOptions = {}): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
-  mesh(_geometry: unknown): MeshLike { return {}; }
+  mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
   onResize(cb: (size: readonly [number, number]) => void): () => void {
     const callbacks = this.resizeState?.callbacks;
     if (!callbacks) return () => undefined;
@@ -103,12 +108,12 @@ class RingGpu implements Gpu {
     return () => { callbacks.delete(cb); };
   }
   dispose(): void { this.cache.dispose(); this.device.dispose(); }
-  compute(_source: string, _opts?: ComputeOptions): never { throw lanePlaceholder("gpu.compute", "fase 3 Lane C"); }
-  storage(_bytes: number, _access: StorageAccess = "read-write"): never { throw lanePlaceholder("gpu.storage", "fase 3 Lane C"); }
-  pingPong(_width: number, _height: number, _opts?: TargetOptions): never { throw lanePlaceholder("gpu.pingPong", "fase 3 Lane C"); }
-  pingPongStorage(_bytes: number): never { throw lanePlaceholder("gpu.pingPongStorage", "fase 3 Lane C"); }
-  uniforms<T extends Record<string, unknown>>(_values: T): never { throw lanePlaceholder("gpu.uniforms", "fase 3 Lane E"); }
-  bundle(_opts: BundleOptions, _cb: (recorder: BundleRecorder) => void): never { throw lanePlaceholder("gpu.bundle", "fase 3 Lane D"); }
+  compute(source: string, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, source, opts, this.cache); }
+  storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
+  pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
+  pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
+  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
+  bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { return createBundle(this.device, opts, cb); }
 
   private advanceFrameState(): void {
     this.advanceTime();
@@ -181,6 +186,10 @@ function setCanvasSize(canvas: HTMLCanvasElement | OffscreenCanvas, size: readon
 
 function lanePlaceholder(where: string, lane: string): never {
   throw unsupportedError(where, `${where} está reservado y se implementa en ${lane}; Phase 2 congela la firma solamente.`);
+}
+
+function hasMesh(opts: PassOptions): boolean {
+  return "mesh" in (opts as Record<string, unknown>);
 }
 
 function clampDpr(dpr: InitOptions["dpr"]): number {

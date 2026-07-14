@@ -1,7 +1,7 @@
-import { type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
+import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/runtime";
 import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
-import { claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
+import { claimedGroupIncompatibleError, claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
 import { writeLayoutValue } from "./set-packing.ts";
@@ -31,9 +31,9 @@ export interface BindingIdentityChange {
 export interface SetCore {
   readonly groups: readonly number[];
   set(values: SetBag): readonly BindingIdentityChange[];
-  claimGroup(group: number, bindGroup: GPUBindGroup): void;
+  claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
   layout(group: number): GPUBindGroupLayout;
-  bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }[];
+  bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
   bindingState(name: string): BindingState | undefined;
 }
 
@@ -107,15 +107,19 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function setUserOwned(state: MutableBindingState, value: unknown): void {
-    const normalized = normalizeResource(state.info, value);
+    const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
     state.resource = normalized.resource;
     state.identity = normalized.identity;
     state.unsubscribe?.();
     state.unsubscribe = normalized.unsubscribe?.(() => options.cache.evictIdentity(normalized.identity));
   }
 
-  function claimGroup(group: number, bindGroup: GPUBindGroup): void {
+  function claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined {
+    layout(group);
+    validateClaimedGroup(options.label, group, bindGroup, expectedLayout);
+    const previousIdentity = claimedGroups.has(group) ? `claimed-group:${group}` : undefined;
     claimedGroups.set(group, bindGroup);
+    return previousIdentity;
   }
 
   function layout(group: number): GPUBindGroupLayout {
@@ -124,13 +128,13 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     return bgl;
   }
 
-  function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }[] {
+  function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[] {
     return groups.map(bindGroupFor);
   }
 
-  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] } {
+  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
-    if (claimed) return { group, bindGroup: claimed, offsets: [] };
+    if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
     const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
     const entries = bindGroupEntries(groupBindings);
     const identities = identitiesFor(groupBindings);
@@ -140,6 +144,10 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       entries,
     }));
     return { group, bindGroup, offsets: [] };
+  }
+
+  function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {
+    return bindGroupMetadataFor(bindGroup) ? undefined : { label: options.label, group };
   }
 
   function bindGroupEntries(groupBindings: readonly BindingInfo[]): GPUBindGroupEntry[] {
@@ -220,6 +228,43 @@ function latchMemberOwnership(state: MutableBindingState, memberName: string, ow
   const previous = state.memberOwnership.get(memberName);
   if (previous && previous !== ownership) throw ownershipFlipError(memberName, previous);
   state.memberOwnership.set(memberName, ownership);
+}
+
+function validateClaimedGroup(label: string, group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): void {
+  const claimedMetadata = bindGroupMetadataFor(bindGroup);
+  if (!claimedMetadata) return;
+  const expectedMetadata = bindGroupLayoutMetadata(expectedLayout);
+  if (!expectedMetadata) return;
+  const reason = layoutMismatchReason(expectedMetadata.entries, claimedMetadata.layout.entries);
+  if (reason) throw claimedGroupIncompatibleError(label, group, reason);
+}
+
+function layoutMismatchReason(expected: readonly GPUBindGroupLayoutEntry[], claimed: readonly GPUBindGroupLayoutEntry[]): string | undefined {
+  if (expected.length !== claimed.length) return `esperaba ${expected.length} bindings y recibió ${claimed.length}`;
+  const expectedByBinding = entriesByBinding(expected);
+  const claimedByBinding = entriesByBinding(claimed);
+  for (const [binding, entry] of expectedByBinding) {
+    const claimedEntry = claimedByBinding.get(binding);
+    if (!claimedEntry) return `falta @binding(${binding})`;
+    if (entrySignature(entry) !== entrySignature(claimedEntry)) return `@binding(${binding}) no coincide con el layout reflejado`;
+  }
+  return undefined;
+}
+
+function entriesByBinding(entries: readonly GPUBindGroupLayoutEntry[]): ReadonlyMap<number, GPUBindGroupLayoutEntry> {
+  return new Map(entries.map((entry) => [entry.binding, entry]));
+}
+
+function entrySignature(entry: GPUBindGroupLayoutEntry): string {
+  return JSON.stringify({
+    binding: entry.binding,
+    visibility: entry.visibility,
+    buffer: entry.buffer,
+    sampler: entry.sampler,
+    texture: entry.texture,
+    storageTexture: entry.storageTexture,
+    externalTexture: entry.externalTexture ? {} : undefined,
+  });
 }
 
 function identityChangeFor(state: MutableBindingState, previousIdentity: string | undefined): readonly BindingIdentityChange[] {

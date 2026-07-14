@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/vgpu-rewrite]
   pull_request:
 
 jobs:
@@ -20,8 +20,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test:fast
+      - run: pnpm -w typecheck
+      - run: pnpm exec vitest run
       - run: pnpm bundle-check
 
   wgsl-loader-bundler-tests:
@@ -42,26 +42,44 @@ jobs:
       - run: pnpm build
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts
 
-  test-integration:
-    runs-on: ubuntu-24.04-arm
+  docker-gpu:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build Docker test image
-        run: docker buildx build --platform linux/arm64 --load -t vgpu-test:s2 -f infra/test-docker/Dockerfile .
-      - name: Run integration tests in Docker
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -w typecheck
+      - name: Build Docker GPU image
+        run: docker build -t vgpu-test-dev:ci -f infra/test-docker/Dockerfile.dev .
+      - name: Run Dawn GPU validation in Docker
         run: |
-          docker run --rm vgpu-test:s2 sh -lc '
-            Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 &
-            xvfb_pid=$!
-            VGPU_DOCKER_TEST=1 pnpm test
-            status=$?
-            kill $xvfb_pid
-            exit $status
-          '
-      - name: Prune labeled Docker test images
-        run: docker image prune -f --filter "label=vgpu-test=1"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e VGPU_DOCKER_TEST=1 \
+            vgpu-test-dev:ci \
+            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
+              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/vgpu-api/tests/gpu; \
+              s=$?; kill $xp; exit $s'
+      - name: Run pixel snapshot CLI in Docker
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e VGPU_DOCKER_TEST=1 \
+            -e CI=true \
+            vgpu-test-dev:ci \
+            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
+              pnpm --filter @vgpu/cli exec vgpu snapshot --ci; \
+              s=$?; kill $xp; exit $s'
 
   wgsl-cachekey-determinism:
     name: wgsl-cachekey-determinism (${{ matrix.os }})
