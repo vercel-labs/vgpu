@@ -1,33 +1,83 @@
-# `gpu.pass` and `Pass`
+# Pass
 
-`gpu.pass()` is the happy path for fullscreen fragment shaders. vgpu injects an internal fullscreen triangle and provides `@location(0) uv: vec2f` when your WGSL has no vertex entry point. A pass never accepts vertex buffers; use `gpu.draw()` as soon as you have mesh or vertex data.
+Fullscreen-fragment render unit created by `gpu.pass()`. Use it for post-processing, gradients, blurs, and screen/target copies; use `gpu.draw()` for meshes, vertex buffers, instancing, or explicit vertex counts.
+
+## Import
 
 ```ts
-import { init } from "vgpu";
+import type { Pass, PassOptions } from "vgpu";
+```
 
-const gpu = await init(canvas);
-const wave = gpu.pass(/* wgsl */ `
+## Signature
+
+```ts
+import type { DrawCallOptions, Target } from "vgpu";
+
+type SetBag = Record<string, unknown>;
+
+interface PassOptions {
+  readonly set?: SetBag;
+  readonly label?: string;
+}
+
+interface Pass {
+  readonly gpu: GPURenderPipeline | undefined;
+  set(values: SetBag): this;
+  draw(opts?: DrawCallOptions & { readonly target?: Target }): void;
+}
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| gpu.pass.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
+| gpu.pass.opts | `PassOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; pass has no vertex buffers. |
+| opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes R1 ownership and validates reflected bindings. |
+| opts.label | `string` | ✖ | `"pass"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |
+| pass.set.values | `Record<string, unknown>` | ✔ | — | Binding values by WGSL variable name. JS values are lib-owned; resources are user-owned. |
+| pass.draw.opts | `DrawCallOptions & { target?: Target }` | ✖ | `{}` | One-shot render pass. `target` defaults to `gpu.screen`; required in headless/offscreen contexts. |
+
+**Returns:** `gpu.pass()` returns `Pass`; `pass.set()` returns the same `Pass`; `pass.draw()` returns `void` after submitting a one-shot frame.
+
+**Throws:** `VGPU-RING1-UNSUPPORTED` when `gpu.pass()` receives mesh/vertex data or when one-shot `draw()` has no target; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-R4-GROUP-*` errors can surface through the underlying `Draw` if raw groups are claimed.
+
+## Examples
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init({ size: [64, 64] });
+const target = gpu.target({ size: [64, 64] });
+const pass = gpu.pass(`
   struct Params { time: f32, speed: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(params.time * params.speed) * 0.5 + 0.5, 1);
   }
-`, { set: { speed: 2 } });
+`, { label: "wave", set: { params: { time: 0, speed: 2 } } });
 
-gpu.frame.loop(() => {
-  wave.set({ time: gpu.time });
-  wave.draw();
-});
+pass.set({ params: { time: gpu.time, speed: 2 } });
+gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(pass)));
 ```
 
-`{ set }` at creation is exactly one initial `.set()` call: same validation, same R1 ownership latch, same missing-binding checks at draw time.
+```ts
+import { init } from "vgpu/mock";
 
-Use `pass` for post-processing, shadertoy-style fullscreen effects, blurs, gradients, display passes, and target-to-target copies. Use `draw` for vertex buffers, mesh layouts, storage-driven vertices, instancing, depth-tested geometry, and anything where vertex count matters.
+const gpu = await init({ size: [32, 32] });
+const target = gpu.target({ size: [32, 32] });
+const copy = gpu.pass(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv.x, uv.y, 0.0, 1.0);
+  }
+`);
+copy.draw({ target });
+```
 
-## Ownership and performance defaults
+## Notes
 
-- WGSL is the source of truth. Declare every `@group/@binding` in the shader and bind by name with `set()`.
-- JS values passed to `set()` are lib-owned and are written in-place (R1/R2), so animated uniforms do not recreate bind groups.
-- Resources (`Uniform`, storage buffers, textures, targets, samplers, claimed bind groups) are user-owned; vgpu only binds their identity.
-- Time is explicit JS (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`). Resolution lives on targets (`target.size`, `target.texelSize`).
+- A fragment-only pass is internally implemented as a `Draw` with an injected fullscreen triangle.
+- `Pass.gpu` is `undefined` until a target-specific pipeline has been compiled.
+- Do not rely on implicit uniforms like time or resolution; pass `gpu.time`, `target.size`, or `target.texelSize` explicitly through `set()`.
+- **See also:** `Gpu.pass`, `Draw`, `FramePass.draw`, `Target`, `SharedUniforms`.
