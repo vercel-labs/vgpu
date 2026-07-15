@@ -2,7 +2,7 @@ import { init as initMock } from "../../../src/mock.ts";
 import { init as initNode } from "../../../src/node.ts";
 import { Mesh, cone, type MeshPrimitive } from "../../../src/scene/geometry-src/index.ts";
 import { expect, test } from "vitest";
-import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./_helpers.ts";
+import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./helpers.ts";
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
 const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];

@@ -9,7 +9,7 @@ import {
   renderPrimitiveFrame,
   type PrimitiveCameraAngle,
   type PrimitiveMaterialVariant,
-} from "./_helpers.ts";
+} from "./helpers.ts";
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
 const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];

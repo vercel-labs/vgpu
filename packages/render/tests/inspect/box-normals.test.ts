@@ -7,7 +7,7 @@ import { createNodeAdapter } from "@vgpu/adapter-node";
 
 import { perspectiveCamera, type Vec3 } from "vgpu/scene";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
-import { createReadableBoxMesh, renderInspectFrame } from "./_helpers.ts";
+import { createReadableBoxMesh, renderInspectFrame } from "./helpers.ts";
 
 const WIDTH = 256;
 const HEIGHT = 256;

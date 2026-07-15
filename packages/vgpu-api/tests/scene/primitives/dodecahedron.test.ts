@@ -1,6 +1,6 @@
 import { Mesh } from "../../../src/scene/geometry-src/index.ts";
 import { test } from "vitest";
-import { expectPolyhedronBasics, expectPolyhedronSnapshots } from "./_polyhedron-test-utils.ts";
+import { expectPolyhedronBasics, expectPolyhedronSnapshots } from "./polyhedron-test-utils.ts";
 
 const DODECAHEDRON = { name: "dodecahedron", vertexCount: 108, normalCount: 12, create: (device: Parameters<typeof Mesh.dodecahedron>[0]["device"], radius: number) => Mesh.dodecahedron({ device, radius }) };
 

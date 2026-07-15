@@ -4,7 +4,7 @@ import { EditableMesh, MeshEditError, bevel, toEditable } from "@vgpu/render/edi
 import { describe, expect, test } from "vitest";
 import { makeTestPyramid } from "./fixtures/test-pyramid.ts";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const tri = (positions: number[], indices: number[], sharpEdges?: Uint8Array) => EditableMesh.fromArrays({ positions: new Float32Array(positions), indices: new Uint32Array(indices), sharpEdges });
 const tetra = () => tri([1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1], [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);

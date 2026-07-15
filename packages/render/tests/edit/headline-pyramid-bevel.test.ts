@@ -3,7 +3,7 @@ import { createNodeAdapter } from "@vgpu/adapter-node";
 import { Mesh } from "../fixtures/mesh.ts";
 import { bevel, toEditable } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
-import { ANGLES, expectEditSnapshot, renderEditMesh, sha } from "./_helpers.ts";
+import { ANGLES, expectEditSnapshot, renderEditMesh, sha } from "./helpers.ts";
 
 const HAS_CONE = typeof (Mesh as unknown as { cone?: unknown }).cone === "function";
 const skipMessage = "user headline scene deferred — requires Mesh.cone from geometry-primitives PR (issue #32)";

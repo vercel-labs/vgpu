@@ -1,6 +1,6 @@
 import { Mesh } from "../../../src/scene/geometry-src/index.ts";
 import { test } from "vitest";
-import { expectPolyhedronBasics, expectPolyhedronSnapshots } from "./_polyhedron-test-utils.ts";
+import { expectPolyhedronBasics, expectPolyhedronSnapshots } from "./polyhedron-test-utils.ts";
 
 const TETRAHEDRON = { name: "tetrahedron", vertexCount: 12, normalCount: 4, create: (device: Parameters<typeof Mesh.tetrahedron>[0]["device"], radius: number) => Mesh.tetrahedron({ device, radius }) };
 

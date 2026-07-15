@@ -3,7 +3,7 @@ import type { Device } from "@vgpu/core";
 import { Mesh, type Mesh as MeshLike, type Vec3 } from "../fixtures/mesh.ts";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
 import { expect, test, vi } from "vitest";
-import { createReadableBoxMesh } from "./_helpers.ts";
+import { createReadableBoxMesh } from "./helpers.ts";
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
