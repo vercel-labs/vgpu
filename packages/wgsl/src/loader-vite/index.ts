@@ -1,6 +1,6 @@
 import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
-import { resolveShader } from "../runtime/resolveShader.ts";
+import { resolveShader } from "../runtime/resolve-shader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
 export interface ViteLoadResult { readonly code: string; readonly map: null }

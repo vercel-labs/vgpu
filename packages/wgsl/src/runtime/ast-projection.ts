@@ -1,5 +1,5 @@
 import { hash8, type MangleModule } from "./mangler.ts";
-import type { SourceMap, WGSLModule } from "./resolveShader.ts";
+import type { SourceMap, WGSLModule } from "./resolve-shader.ts";
 
 export function sourceMap(modules: readonly MangleModule[]): SourceMap {
   return { version: 3, sources: modules.map((module) => module.path), mappings: "" };

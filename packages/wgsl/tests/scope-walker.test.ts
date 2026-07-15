@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { analyzeWgslScopes } from "../src/runtime/scopeWalker.ts";
+import { analyzeWgslScopes } from "../src/runtime/scope-walker.ts";
 
 function decls(source: string) {
   return analyzeWgslScopes(source).declarations.map((decl) => ({ name: decl.name, kind: decl.kind, safeToRename: decl.safeToRename }));

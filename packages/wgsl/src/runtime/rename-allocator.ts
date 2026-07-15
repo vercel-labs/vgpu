@@ -1,4 +1,4 @@
-import { isWgslRenameForbiddenIdentifier } from "./wgslIdentifiers.ts";
+import { isWgslRenameForbiddenIdentifier } from "./wgsl-identifiers.ts";
 
 export interface RenameAllocatorOptions {
   readonly reserved?: Iterable<string>;

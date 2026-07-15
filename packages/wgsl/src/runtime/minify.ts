@@ -1,7 +1,7 @@
 import { wgslError, type VGPUError } from "./errors.ts";
 import { scan } from "./scanner.ts";
-import { applyIdentifierMinifyWgsl } from "./identifierMinify.ts";
-import { printWgslTokens, type TokenPrinterOptions } from "./tokenPrinter.ts";
+import { applyIdentifierMinifyWgsl } from "./identifier-minify.ts";
+import { printWgslTokens, type TokenPrinterOptions } from "./token-printer.ts";
 
 export type MinifyWgslOptions = TokenPrinterOptions;
 /**

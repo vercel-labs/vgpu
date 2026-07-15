@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
-import { applyIdentifierMinifyWgsl } from "../src/runtime/identifierMinify.ts";
+import { applyIdentifierMinifyWgsl } from "../src/runtime/identifier-minify.ts";
 import { minifyWgsl, normalizeMinifyOption, applyMinifyWgsl } from "../src/runtime/minify.ts";
 import { scan } from "../src/runtime/scanner.ts";
-import { printWgslTokens } from "../src/runtime/tokenPrinter.ts";
-import { RenameAllocator } from "../src/runtime/renameAllocator.ts";
-import { WGSL_ATTRIBUTE_NAMES, WGSL_BUILTIN_VALUES, WGSL_RENAME_FORBIDDEN_IDENTIFIERS } from "../src/runtime/wgslIdentifiers.ts";
+import { printWgslTokens } from "../src/runtime/token-printer.ts";
+import { RenameAllocator } from "../src/runtime/rename-allocator.ts";
+import { WGSL_ATTRIBUTE_NAMES, WGSL_BUILTIN_VALUES, WGSL_RENAME_FORBIDDEN_IDENTIFIERS } from "../src/runtime/wgsl-identifiers.ts";
 
 test("normalizeMinifyOption maps booleans and object defaults", () => {
   expect(normalizeMinifyOption(undefined)).toEqual({ whitespace: false, identifiers: "none" });

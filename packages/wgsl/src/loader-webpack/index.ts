@@ -1,7 +1,7 @@
 import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { wgslError } from "../runtime/errors.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
-import { resolveShader } from "../runtime/resolveShader.ts";
+import { resolveShader } from "../runtime/resolve-shader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
 export interface WgslWebpackLoaderOptions {
