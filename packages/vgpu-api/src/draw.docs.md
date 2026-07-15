@@ -1,76 +1,146 @@
-# `gpu.draw`, `DrawOptions`, `DrawCallOptions`, `MeshLike`
+# Draw
 
-`gpu.draw()` creates a target-agnostic renderable shader unit. It uses WGSL reflection for bindings and caches pipelines by the target formats it sees. Pass `targets: [...]` to pre-warm those pipelines before the first visible frame.
+Target-agnostic renderable shader unit created by `gpu.draw()`. It reflects WGSL bindings, caches pipelines per target format/depth/sample count, and supports meshes, explicit vertex counts, instancing, and raw group claims.
+
+## Import
 
 ```ts
-import { init } from "vgpu";
-import { box, perspectiveCamera, orbit } from "vgpu/scene";
-
-const gpu = await init(canvas);
-const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({
-  shader: LIT_WGSL,
-  mesh: gpu.mesh(box({ size: 1 })),
-  targets: [gpu.screen!, hdr],
-});
-const cam = perspectiveCamera({ fov: 45, position: [2, 2, 3], target: [0, 0, 0] });
-
-gpu.frame.loop((f) => {
-  cube.set({
-    camera: { viewProjection: cam.viewProjection },
-    model: orbit(gpu.time),
-    light: { direction: [-1, -1, -1], color: [1, 1, 1], intensity: 1 },
-  });
-  f.pass({ target: hdr, clear: [0.04, 0.04, 0.06, 1] }, (p) => p.draw(cube));
-});
+import type { Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } from "vgpu";
 ```
 
-## Draw options
-
-- `shader` is WGSL source or a resolved shader source.
-- `mesh` is `gpu.mesh(...)` or any `MeshLike` with vertex/index buffers and layouts.
-- `targets` eagerly compiles pipelines for the target color/depth/sample formats.
-- `set` is initial binding state.
-- `instances`, `vertices`, and `firstInstance` may be set on `DrawOptions`; call options may override `instances`, `vertices`, `firstVertex`, and `firstInstance`. Precedence is call-option > draw-option > default. Indexed meshes use `indexCount` and ignore `vertices`/`firstVertex`; `instances: 0` is valid.
+## Signature
 
 ```ts
-const dots = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6, targets: [target] });
-dots.set({ particles });
-gpu.frame.loop((f) => f.pass({ target }, (p) => p.draw(dots)));
+import type { ShaderSource, Target } from "vgpu";
+
+type SetBag = Record<string, unknown>;
+
+interface DrawOptions {
+  readonly shader: string | ShaderSource;
+  readonly mesh?: MeshLike;
+  readonly set?: SetBag;
+  readonly label?: string;
+  readonly targets?: readonly Target[];
+  readonly instances?: number;
+  readonly vertices?: number;
+  readonly firstInstance?: number;
+}
+
+interface DrawCallOptions {
+  readonly target?: Target;
+  readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
+  readonly instances?: number;
+  readonly vertices?: number;
+  readonly firstVertex?: number;
+  readonly firstInstance?: number;
+}
+
+interface DrawLayoutOptions { readonly dynamicOffsets?: boolean; }
+
+interface MeshLike {
+  readonly vertexCount?: number;
+  readonly indexCount?: number;
+  readonly vertexBuffers?: readonly GPUBuffer[];
+  readonly indexBuffer?: GPUBuffer;
+  readonly indexFormat?: GPUIndexFormat;
+  readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
+}
+
+interface Draw {
+  readonly gpu: GPURenderPipeline | undefined;
+  readonly targets: readonly Target[] | undefined;
+  set(values: SetBag): this;
+  group(n: number, bindGroup: GPUBindGroup): this;
+  layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
+  draw(opts?: DrawCallOptions): Promise<void>;
+}
 ```
 
-## R4 group claim and dynamic offsets
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| opts.shader | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource`. Must contain compatible vertex/fragment entry points; default names are `vs_main` and `fs_main` if reflection does not find them. |
+| opts.mesh | `MeshLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
+| opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
+| opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
+| opts.targets | `readonly Target[]` | ✖ | `undefined` | Pre-warms pipelines for the listed target formats. |
+| opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
+| opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
+| opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
+| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
+| draw.group.n | `number` | ✔ | — | Bind group index to claim for R4 raw binding. |
+| draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
+| draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
+| draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |
+| draw.draw.opts | `DrawCallOptions` | ✖ | `{}` | One-shot draw into `opts.target` or `gpu.screen`. Prefer `gpu.frame()` for multiple passes. |
+| opts.target | `Target` | ✖ | `gpu.screen` | Required when no screen exists. |
+| opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
+| opts.instances | `number` | ✖ | `DrawOptions.instances ?? 1` | Per-call instance count; integer `>= 0`. |
+| opts.vertices | `number` | ✖ | `mesh.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed meshes use `mesh.indexCount`. |
+| opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed meshes use firstIndex/baseVertex `0`. |
+| opts.firstInstance | `number` | ✖ | `DrawOptions.firstInstance ?? 0` | Per-call first instance. |
+
+**Returns:** `gpu.draw()` returns `Draw`; `set()` and `group()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `Promise<void>` so raw claimed-group validation can be awaited.
+
+**Throws:** `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-RING1-UNSUPPORTED` when one-shot `draw()` has no target; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
+
+## Examples
 
 ```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init({ size: [64, 64] });
+const target = gpu.target({ size: [64, 64] });
+const tri = gpu.draw({
+  label: "tri",
+  targets: [target],
+  shader: `
+    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+      var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+      return vec4f(p[vi], 0, 1);
+    }
+    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
+  `,
+});
+
+await tri.draw({ target, vertices: 3, instances: 1 });
+```
+
+```ts
+import { init } from "vgpu/mock";
 import { UniformPool, type UniformLayout } from "vgpu/core";
 
-type ObjectUniforms = { model: Float32Array };
-const objectLayout: UniformLayout<ObjectUniforms> = {
-  size: 64,
-  bindGroupLayout: cube.layout(1, { dynamicOffsets: true }),
-  encode(value, dst, byteOffset) {
-    new Float32Array(dst, byteOffset, 16).set(value.model);
-  },
-};
-const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
-const slot = pool.alloc(objectLayout);
-cube.group(1, slot.bindGroup);
+const gpu = await init({ size: [32, 32] });
+const target = gpu.target({ size: [32, 32] });
+const draw = gpu.draw({ shader: `
+  struct Object { model: mat4x4f }
+  @group(0) @binding(0) var<uniform> object: Object;
+  @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+    var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+    return object.model * vec4f(p[vi], 0, 1);
+  }
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+` });
 
-gpu.frame.loop((f) => {
-  pool.beginFrame(gpu.frameCount);
-  f.pass({ target: scene }, (p) => {
-    for (const obj of objects) {
-      const offset = slot.push({ model: obj.model });
-      p.draw(cube, { offsets: { 1: [offset] } });
-    }
-  });
-  pool.endFrame();
-});
+type ObjectUniforms = { model: Float32Array };
+const layout: UniformLayout<ObjectUniforms> = {
+  size: 64,
+  bindGroupLayout: draw.layout(0, { dynamicOffsets: true }),
+  encode(value, dst, byteOffset) { new Float32Array(dst, byteOffset, 16).set(value.model); },
+};
+const pool = new UniformPool(gpu.device);
+const slot = pool.alloc(layout);
+draw.group(0, slot.bindGroup);
+pool.beginFrame(gpu.frameCount);
+const offset = slot.push({ model: new Float32Array(16) });
+pool.endFrame();
+await draw.draw({ target, offsets: { 0: [offset] } });
 ```
 
-## Ownership and performance defaults
+## Notes
 
-- WGSL is the source of truth. Declare every `@group/@binding` in the shader and bind by name with `set()`.
-- JS values passed to `set()` are lib-owned and are written in-place (R1/R2), so animated uniforms do not recreate bind groups.
-- Resources (`Uniform`, storage buffers, textures, targets, samplers, claimed bind groups) are user-owned; vgpu only binds their identity.
-- Time is explicit JS (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`). Resolution lives on targets (`target.size`, `target.texelSize`).
+- Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
+- Indexed meshes ignore `vertices` and `firstVertex`; they draw `mesh.indexCount ?? 0` with first index/base vertex `0`.
+- Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
+- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `UniformPool`, `Target`, `SharedUniforms`.
