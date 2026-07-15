@@ -6,7 +6,7 @@ Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-g
 
 If the CPU is busy rebuilding the same render pass, compare a direct loop with a bundle:
 
-```ts
+```text
 const staticScene = gpu.bundle({ target }, (b) => staticDraws.forEach((draw) => b.draw(draw)));
 gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 ```
@@ -15,7 +15,7 @@ gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 
 If the first visible frame stutters, pre-warm target signatures:
 
-```ts
+```text
 const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
 const draw = gpu.draw({ shader: WGSL, mesh, targets: [hdr] });
 ```

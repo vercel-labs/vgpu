@@ -1,6 +1,6 @@
 # vgpu
 
-> 0.0.8 — public ring-1 API preview
+> 0.0.8 — public main API (`vgpu`) preview
 
 `vgpu` is the public package for the new API. It is built around one `Gpu` context, explicit WGSL reflection, and `set()` ownership rules that make the fast path the default.
 
@@ -11,11 +11,11 @@ pnpm add vgpu
 pnpm add -D @webgpu/types
 ```
 
-## Rings
+## Entry points and layers
 
-- **Ring 1 (`vgpu`)**: `init`, `Gpu`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `pingPong`, `uniforms`.
-- **Ring 0 (`vgpu/core`)**: device/resource escape hatches, native handles, bind groups, `Uniform`, `UniformPool`, storage buffers.
-- **Ring 2 (`vgpu/scene`)**: pure geometry and camera helpers. No scene graph and no material layer.
+- **main API (`vgpu`)**: `init`, `Gpu`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `pingPong`, `uniforms`.
+- **core layer (`vgpu/core`)**: device/resource escape hatches, native handles, bind groups, `Uniform`, `UniformPool`, storage buffers.
+- **scene helpers (`vgpu/scene`)**: pure geometry and camera helpers. No scene graph and no material layer.
 
 ## Browser quick start
 
@@ -52,7 +52,7 @@ gpu.dispose();
 
 ## Performance defaults
 
-Read `docs/topics/performance-playbook.docs.md` before writing shader code. It documents bundles, target pre-warm, R4 dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and MSAA/depth as defaults rather than late optimizations.
+Read `docs/topics/performance-playbook.docs.md` before writing shader code. It documents bundles, target pre-warm, manual bind-group dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and MSAA/depth as defaults rather than late optimizations.
 
 ## WGSL imports
 

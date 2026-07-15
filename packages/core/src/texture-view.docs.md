@@ -15,7 +15,7 @@ Compatibility mode is not auto-detected inside `cubeView`. The same boolean sele
 
 `cubeView` throws `ValidationError` unless the texture has exactly six array layers.
 
-```ts
+```text
 import { cubeView } from "@vgpu/core";
 
 const cubemap = device.createTexture({
@@ -36,7 +36,7 @@ const view = cubeView(cubemap, {
 
 When `opts.mipLevel` is provided, the view pins `baseMipLevel` to that level and sets `mipLevelCount: 1`, which is the shape render attachments require. `format`, `aspect`, and `label` forward to the native texture view descriptor.
 
-```ts
+```text
 import { layerView } from "@vgpu/core";
 
 for (let face = 0; face < 6; face++) {

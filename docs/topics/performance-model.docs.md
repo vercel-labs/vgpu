@@ -2,23 +2,23 @@
 
 vgpu's public API is organized around stable identities.
 
-## R1 — ownership
+## Binding ownership
 
 The first `set()` for a binding decides ownership. Plain JS values are lib-owned and can be updated in place; resources are user-owned and their identity is bound directly. Switching ownership triggers `VGPU-R1-OWNERSHIP-FLIP`.
 
-## R2 — identity cache
+## Identity cache
 
 Bind groups are cached by resource identity. Updating a JS value in place keeps the identity stable; replacing a texture/storage/sampler changes identity and may stale bundles.
 
-## R3 — bundle staleness
+## Bundle staleness
 
 Bundles freeze encoded commands and bind groups. Buffer contents may change, but target resize or resource identity changes require re-recording. Replay reports `VGPU-R3-BUNDLE-STALE`.
 
-## R4 — claimed groups
+## Claimed groups
 
 `draw.group(group, bindGroup)` claims an entire reflected group. vgpu validates the group layout and forbids `set()` into that group. Dynamic offsets are passed at draw time:
 
-```ts
+```text
 p.draw(draw, { offsets: { 1: [offset] } });
 ```
 

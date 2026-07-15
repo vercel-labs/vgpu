@@ -1,7 +1,7 @@
 # createNodeDevice
 
 `createNodeDevice(opts?)` is a mechanical convenience that requests a `Device` from
-the Node adapter directly. Use `createNodeDevice()` for focused scripts, server-side renders, and agentic headless snapshot tests that need one explicit WebGPU device. Application code can also use `init()` from `vgpu/node` for the ring-1 facade.
+the Node adapter directly. Use `createNodeDevice()` for focused scripts, server-side renders, and agentic headless snapshot tests that need one explicit WebGPU device. Application code can also use `init()` from `vgpu/node` for the main API (`vgpu`) facade.
 
 ## Agentic headless snapshot workflow
 
@@ -22,7 +22,7 @@ operation. You must create the target with `COPY_SRC`, align rows to 256 bytes,
 copy the texture into a mappable buffer, submit the copy, wait for submitted work,
 map the buffer, then strip row padding before comparing pixels:
 
-```ts
+```text
 const width = 256;
 const height = 256;
 const bytesPerPixel = 4;
@@ -76,7 +76,7 @@ WebGPU pipeline creation through `.gpu` because VGPU intentionally keeps that
 escape hatch available for native interop; wrapper lifecycle methods should still
 own teardown.
 
-```ts
+```text
 import { createNodeDevice } from "@vgpu/adapter-node";
 
 const width = 256;
@@ -161,7 +161,7 @@ Keep PNG encoding and image comparison outside the VGPU API. A Vitest/Jest-style
 harness can use packages such as `pngjs` and `pixelmatch`, or your repository's
 existing snapshot writer:
 
-```ts
+```text
 import { readFileSync, writeFileSync } from "node:fs";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";

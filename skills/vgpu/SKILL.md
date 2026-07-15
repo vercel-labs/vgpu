@@ -12,6 +12,8 @@ description: >-
 Generated from the vgpu `.docs.md` source. Each entry maps to a file in `references/` and to a
 doc you can load on demand with the CLI — **load only what you need, don't read the whole skill**:
 
+vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL reflection) → vgpu/scene (geometry/camera helpers). Lower layers are always accessible and interoperable.
+
 ```sh
 npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols
 npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT

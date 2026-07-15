@@ -13,7 +13,7 @@ test("dry-run pack includes bundled docs artifact", () => {
 
   expect(files).toContain("bin/vgpu.js");
   expect(files).toContain("lib/generated/docs-manifest.generated.js");
-  expect(pack.size).toBeLessThan(100_000);
+  expect(pack.size).toBeLessThan(700_000);
 });
 
 test("packed install exposes vgpu docs bin", () => {

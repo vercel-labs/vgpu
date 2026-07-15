@@ -4,7 +4,7 @@
 
 Browser tests should exercise the same public API users copy: `init(canvas)`, explicit targets, and deterministic frame submission. Avoid hidden app globals and avoid relying on a continuous loop in assertions.
 
-```ts
+```text
 import { init } from "vgpu";
 
 export async function renderOnce(canvas: HTMLCanvasElement) {

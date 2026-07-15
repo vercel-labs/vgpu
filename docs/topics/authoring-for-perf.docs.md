@@ -20,7 +20,7 @@ struct Globals {
 
 ## JavaScript defaults
 
-```ts
+```text
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0], enabled: 1 });
 const draw = gpu.draw({ shader: WGSL, targets: [target], set: { globals } });
 gpu.frame.loop((f) => {

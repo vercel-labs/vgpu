@@ -2,23 +2,63 @@
 
 # wireframeMaterial
 
-`wireframeMaterial` renders a mesh as line segments, which is useful for
-visualizing geometry edges during development.
+Creates an `InspectMaterial` configured to render line segments from a readable mesh. Use it with `meshToWireframe` outputs to visualize topology edges while keeping your primary material untouched.
+
+## Import
 
 ```ts
-import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
-
-const wireframe = await meshToWireframe(readableMesh, device);
-const material = wireframeMaterial({ device, color: [1, 1, 1] });
+import { wireframeMaterial } from "@vgpu/render/inspect";
 ```
 
-The pipeline uses `line-list` topology with depth testing on and no back-face
-culling. It expects the same interleaved position and normal vertex layout as the
-source mesh passed to `meshToWireframe`.
+## Signature
 
-`color` defaults to `[1, 1, 1]` in linear RGB. `targetFormat` defaults to
-`'bgra8unorm-srgb'`; use `'rgba8unorm-srgb'` on platforms that require it.
+```ts
+export function wireframeMaterial(spec: WireframeMaterialSpec): InspectMaterial;
+```
 
-The returned `InspectMaterial` is for low-level draws. Pair it with
-`meshToWireframe`, bind a uniform buffer at group 0, then issue an indexed
-line-list draw.
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| spec | WireframeMaterialSpec | ✔ | — | Configuration object used to allocate the pipeline. |
+| spec.device | Device | ✔ | — | Device that owns the pipeline, bind group layout, and uniform buffer writes. |
+| spec.color | readonly [number, number, number] | ✖ | [1, 1, 1] | Linear RGB line color; each component must be between 0 and 1. |
+| spec.targetFormat | GPUTextureFormat | ✖ | "bgra8unorm-srgb" | Color attachment format for the fragment target. Use "rgba8unorm-srgb" on implementations that lack BGRA support. |
+
+**Returns:** `InspectMaterial` — exposes the configured `pipeline`, `bindGroupLayout`, uniform byte size (144 bytes), and a writer that packs view-projection, model matrices, and the wire color.
+
+## Examples
+
+```ts
+import { createMockAdapter } from "@vgpu/adapter-mock";
+import { InspectMaterial, wireframeMaterial } from "@vgpu/render/inspect";
+
+const IDENTITY_MATRIX = new Float32Array([
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+]);
+
+async function main(): Promise<void> {
+  const device = await createMockAdapter().requestDevice();
+  const material: InspectMaterial = wireframeMaterial({ device, color: [1, 0.75, 0.5] });
+  const uniforms = device.createBuffer({ size: material.uniformByteSize, usage: ["uniform", "copy_dst"] });
+
+  material.writeUniforms(uniforms.gpu, 0, {
+    viewProjectionMatrix: IDENTITY_MATRIX,
+    modelMatrix: IDENTITY_MATRIX,
+  });
+}
+
+main().catch((error) => {
+  console.error(error);
+});
+```
+
+## Notes
+
+- Uses `line-list` topology with depth testing enabled and no culling to guarantee all edges stay visible.
+- The vertex buffer layout expects interleaved position/normal attributes that match the `meshToWireframe` output stride (24 bytes).
+- Uniform writes allocate a temporary `Float32Array`; reuse the same uniform buffer between frames to avoid churn.
+- **See also:** `meshToWireframe`, `InspectMaterial`, `normalDebugMaterial`

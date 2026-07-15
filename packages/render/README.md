@@ -8,7 +8,7 @@ New applications should use the public `vgpu` package. `@vgpu/render` remains as
 
 - `@vgpu/render/inspect`: wireframe/normal debug helpers and inspect materials.
 - `@vgpu/render/edit`: mesh edit utilities.
-- `@vgpu/render/utils`: canvas/mouse/frame-clock helpers that are independent from ring-1.
+- `@vgpu/render/utils`: canvas/mouse/frame-clock helpers that are independent from the main API (`vgpu`).
 - `@vgpu/render/perf`: measurement utilities such as frame timing and pixel diff.
 
 ## Preferred rendering API

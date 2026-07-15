@@ -1,39 +1,99 @@
-# `gpu.frame`, `Frame`, and `FramePass`
+# Frame
 
-`gpu.frame(cb)` defines what a frame is: one command encoder, any number of passes, then one submit. vgpu never decides when your frames happen; `gpu.frame.loop(cb, { fps }?)` is optional rAF sugar that advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, with an optional FPS cap.
+`gpu.frame` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of render passes, then submits once.
+
+## Import
 
 ```ts
-const scene = gpu.target({ format: "rgba16float", depth: true });
-const post = gpu.pass(POST_WGSL);
+import type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameRunner } from "vgpu";
+```
 
-gpu.frame.loop((f) => {
-  f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube));
-  f.pass({ target: gpu.screen! }, (p) => {
-    post.set({ src: scene.color, texel: scene.texelSize, time: gpu.time });
-    p.draw(post);
-  });
+## Signature
+
+```ts
+import type { Bundle, Draw, DrawCallOptions, Pass, Target } from "vgpu";
+
+interface FramePassOptions {
+  readonly target?: Target;
+  readonly clear?: GPUColor | readonly [number, number, number, number];
+}
+
+interface FrameLoopHandle { stop(): void; }
+interface FrameLoopOptions { readonly fps?: number; }
+type FrameLoopCallback = (frame: Frame) => void;
+
+declare class Frame {
+  done: Promise<void>;
+  pass(opts: FramePassOptions, cb: (pass: FramePass) => void): void;
+  submit(): void;
+}
+
+declare class FramePass {
+  readonly target: Target;
+  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  bundles(...bundles: readonly Bundle[]): void;
+}
+
+declare class FrameRunner {
+  frame(cb?: (frame: Frame) => void): Frame;
+  loop(cb: FrameLoopCallback, opts?: FrameLoopOptions): FrameLoopHandle;
+}
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| gpu.frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If supplied, called and then `frame.submit()` runs in `finally`. If omitted, submit manually. |
+| frame.pass.opts | `FramePassOptions` | ✔ | — | Pass target and clear options. |
+| opts.target | `Target` | ✖ | Frame default target (`gpu.screen`) | Required if the `Gpu` has no screen. |
+| opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue`; render passes always use `loadOp: "clear"`. |
+| frame.pass.cb | `(pass: FramePass) => void` | ✔ | — | Encodes draw and bundle commands for this render pass. |
+| pass.draw.drawable | `Draw \| Pass` | ✔ | — | A main API (`vgpu`) draw or fullscreen pass. |
+| pass.draw.opts | `DrawCallOptions` | ✖ | `{}` | Per-call counts and dynamic offsets. Target is the frame pass target. |
+| pass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Bundles recorded by `gpu.bundle({ target }, cb)`. |
+| runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame; frame is submitted in `finally`. |
+| runner.loop.opts.fps | `number` | ✖ | `0` (uncapped) | Positive values cap by minimum frame interval `1000 / fps`; omitted or non-positive uses every rAF/timer tick. |
+
+**Returns:** `gpu.frame()` / `FrameRunner.frame()` return `Frame`; `Frame.pass()` and `Frame.submit()` return `void`; `FramePass.draw()` and `.bundles()` return `void`; `loop()` returns `FrameLoopHandle` with `stop()`.
+
+**Throws:** `VGPU-SCREEN-MISSING` when a pass needs a default target but no `gpu.screen` exists; `VGPU-R4-GROUP-VALIDATION` may be thrown or assigned to `frame.done` for native validation failures in raw claimed groups; `VGPU-R3-BUNDLE-STALE` or `VGPU-R3-BUNDLE-INVALID` when replaying invalid/stale bundles; draw/pass binding errors such as `VGPU-R1-BINDING-NEVER-SET` propagate during encoding.
+
+## Examples
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init({ size: [64, 64] });
+const scene = gpu.target({ size: [64, 64], format: "rgba8unorm" });
+const draw = gpu.draw({ shader: `
+  @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+    var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+    return vec4f(p[vi], 0, 1);
+  }
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }
+` });
+
+gpu.frame((frame) => {
+  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => pass.draw(draw));
 });
 ```
 
-## Bake once, sample many times
-
 ```ts
-const baked = gpu.target({ format: "rgba16float" });
-gpu.frame((f) => f.pass({ target: baked }, (p) => p.draw(heavyScene)));
+import { init } from "vgpu/mock";
 
-gpu.frame.loop((f) => {
-  f.pass({ target: gpu.screen! }, (p) => {
-    post.set({ src: baked.color, texel: baked.texelSize, time: gpu.time });
-    p.draw(post);
-  });
-});
+const gpu = await init({ size: [16, 16] });
+const target = gpu.target({ size: [16, 16] });
+const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const handle = gpu.frame.loop((frame) => {
+  frame.pass({ target }, (p) => p.draw(pass));
+}, { fps: 30 });
+handle.stop();
 ```
 
-Resize is explicit on resources. `onResize()` notifies; `target.resize()` realocates exactly when you call it.
+## Notes
 
-## Ownership and performance defaults
-
-- WGSL is the source of truth. Declare every `@group/@binding` in the shader and bind by name with `set()`.
-- JS values passed to `set()` are lib-owned and are written in-place (R1/R2), so animated uniforms do not recreate bind groups.
-- Resources (`Uniform`, storage buffers, textures, targets, samplers, claimed bind groups) are user-owned; vgpu only binds their identity.
-- Time is explicit JS (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`). Resolution lives on targets (`target.size`, `target.texelSize`).
+- `Frame`, `FramePass`, and `FrameRunner` are type-only public exports. Create frames through `gpu.frame`, not `new Frame(...)`.
+- Always `await frame.done` or the `Draw.draw()` promise when using raw claimed bind groups and you need validation failures as normal control flow.
+- `gpu.frame.loop` uses `requestAnimationFrame` when available and a `setTimeout` fallback otherwise.
+- **See also:** `Gpu.frame`, `Pass`, `Draw`, `Bundle`, `Target`.

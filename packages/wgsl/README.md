@@ -162,7 +162,7 @@ import { reflectSource, resolveShader } from "@vgpu/wgsl/runtime";
 const resolved = await resolveShader({ entry: "./shader.wgsl" });
 const fragment = resolved.reflection.entryPoints.find((entry) => entry.stage === "fragment");
 
-// Synchronous single-source reflection for ring-1/runtime WGSL strings.
+// Synchronous single-source reflection for main API (vgpu)/runtime WGSL strings.
 // Use resolveShader() for import graphs.
 const reflection = reflectSource(`
   struct Params { time: f32 }
