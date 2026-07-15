@@ -20,6 +20,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check:filenames
       - run: pnpm -w typecheck
       - run: pnpm exec vitest run
       - run: pnpm bundle-check
