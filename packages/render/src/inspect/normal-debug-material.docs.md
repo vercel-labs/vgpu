@@ -4,11 +4,11 @@ Renders each fragment colored by its surface normal, which is useful for
 verifying mesh normals visually during development.
 
 ```ts
-import { Mesh } from "@vgpu/render";
+import { box } from "vgpu/scene";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 
-const mesh = Mesh.box({ device });
-const material = normalDebugMaterial({ device });
+const mesh = gpu.mesh(box({ size: 1 }));
+const material = normalDebugMaterial({ device: gpu.device });
 ```
 
 Each fragment outputs `(normal + 1) / 2` as RGB, mapping the unit-cube normal

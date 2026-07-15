@@ -1,6 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { beginFrame, type Frame } from "../frame.ts";
-import { measureTimestamp, measureWallClock, summarize } from "./frame-time-measure.ts";
+import { measureTimestamp, measureWallClock, summarize, type GpuFrameEncoder } from "./frame-time-measure.ts";
 
 /**
  * Options for {@link gpuFrameTime}. All have sensible defaults; the common call passes only the
@@ -36,7 +35,7 @@ export interface GpuFrameTimeResult {
 /**
  * Measures GPU time per frame for a render routine, for before/after optimization comparisons.
  *
- * The `encode` callback records the frame's passes onto a vgpu {@link Frame} — the SAME body you
+ * The `encode` callback records the frame's passes onto a a GPUCommandEncoder — the SAME body you
  * run in production. The harness owns warmup, the loop, submit, and timing, so you don't hand-roll
  * a bench. It prefers GPU timestamp queries when the device supports them (`timestamp-query`) and
  * otherwise falls back to wall-clock timing via `device.queue.flush()`.
@@ -44,14 +43,15 @@ export interface GpuFrameTimeResult {
  * Tooling only — never call this on a live animation-frame path.
  *
  * @example
- * const { medianMs, method } = await gpuFrameTime(device, (frame, i) => {
- *   frame.renderPass(scenePass, (pass) => drawScene(pass, i));
- *   frame.renderPass(floorPass, (pass) => drawFloor(pass, i));
+ * const { medianMs, method } = await gpuFrameTime(device, (encoder, i) => {
+ *   const pass = encoder.beginRenderPass(renderPassDescriptor);
+ *   drawScene(pass, i);
+ *   pass.end();
  * });
  */
 export async function gpuFrameTime(
   device: Device,
-  encode: (frame: Frame, index: number) => void,
+  encode: GpuFrameEncoder,
   options: GpuFrameTimeOptions = {},
 ): Promise<GpuFrameTimeResult> {
   const frames = Math.max(1, Math.floor(options.frames ?? 120));
@@ -81,14 +81,14 @@ export async function gpuFrameTime(
 
 async function warmupFrames(
   device: Device,
-  encode: (frame: Frame, index: number) => void,
+  encode: GpuFrameEncoder,
   warmup: number,
   label: string,
 ): Promise<void> {
   for (let i = 0; i < warmup; i++) {
-    const frame = beginFrame(device, { label });
-    encode(frame, i);
-    frame.submit();
+    const encoder = device.gpu.createCommandEncoder({ label });
+    encode(encoder, i);
+    device.queue.gpu.submit([encoder.finish()]);
   }
   await device.queue.flush();
 }

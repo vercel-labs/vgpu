@@ -9,18 +9,18 @@ guide (`vgpu docs cat /guides/measuring.docs.md`) for the workflow.
 ## gpuFrameTime
 
 `gpuFrameTime(device, encode, options?)` measures median GPU time per frame for a render routine.
-
-The `encode(frame, index)` callback records the frame's passes onto a vgpu `Frame` — the same body
-you run in production. The harness owns warmup, the loop, submit, and timing. It uses GPU timestamp
-queries when the device exposes `timestamp-query`, otherwise wall-clock timing via
-`device.queue.flush()`.
+The `encode(encoder, index)` callback records commands into a fresh `GPUCommandEncoder`; the harness
+owns warmup, submit, and timing. It uses GPU timestamp queries when available, otherwise wall-clock
+timing via `device.queue.flush()`.
 
 ```ts
 import { gpuFrameTime } from "@vgpu/render/perf";
 
-const { medianMs, method } = await gpuFrameTime(device, (frame, i) => {
-  frame.renderPass(scenePass, (pass) => drawScene(pass, i));
-  frame.renderPass(floorPass, (pass) => drawFloor(pass, i));
+const { medianMs, method } = await gpuFrameTime(device, (encoder, i) => {
+  const pass = encoder.beginRenderPass(renderPassDescriptor);
+  pass.setPipeline(scenePipeline);
+  pass.draw(3, 1, 0, 0);
+  pass.end();
 });
 ```
 

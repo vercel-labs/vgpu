@@ -2,13 +2,14 @@
 
 # canvasResolution
 
-Reads the drawing size of a canvas. Use it when shaders or render targets need the current canvas width and height.
+Reads the drawing size of a canvas. Use it when a shader uniform needs the current canvas width and height without wiring resize listeners by hand.
 
 ```ts
-const size = canvasResolution(canvas, { observe: true });
-function draw() {
-  material.writeUniforms({ resolution: [size.width, size.height] });
-  renderer.draw({ target, material, mesh });
+import { canvasResolution } from "@vgpu/render/utils";
+
+const resolution = canvasResolution(canvas, { observe: true });
+function frame() {
+  pass.set({ resolution: [resolution.width, resolution.height] });
 }
 ```
 

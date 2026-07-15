@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
+
 import { assertNoMangleCollisions, hash8 } from "../src/runtime/mangler.ts";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 
@@ -72,7 +72,7 @@ test("entry point names are not mangled", async () => expect((await resolveShade
 test("original entry-point appears verbatim", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" }, validate: false })).wgsl.includes("fn main(")).toBe(true));
 test("override name appears verbatim", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "override SAMPLES: u32 = 4u;" }, validate: false })).wgsl).toContain("override SAMPLES"));
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("entry point main works and mangled fails", async () => {
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   const shader = await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" }, validate: false });
   expect(shader.reflection.entryPoints[0]).toMatchObject({ name: "main", mangledName: "main" });
   expect(() => device.gpu.createComputePipeline({ layout: "auto", compute: { module: device.gpu.createShaderModule({ code: shader.wgsl }), entryPoint: "main" } })).not.toThrow();

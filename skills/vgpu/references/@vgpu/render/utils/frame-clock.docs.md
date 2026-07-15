@@ -2,9 +2,11 @@
 
 # frameClock
 
-Measures elapsed time and frame delta in seconds. Use it in animation loops that need stable time values and pause support.
+Measures elapsed time and frame delta in seconds. Use it in animation loops that need stable time values and pause support outside the ring-1 `gpu.frame.loop(...)` helper.
 
 ```ts
+import { frameClock } from "@vgpu/render/utils";
+
 const clock = frameClock();
 function frame() {
   const time = clock.now();

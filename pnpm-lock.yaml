@@ -62,9 +62,6 @@ importers:
       '@vgpu/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@vgpu/render':
-        specifier: workspace:*
-        version: link:../../packages/render
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../../packages/wgsl

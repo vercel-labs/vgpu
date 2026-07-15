@@ -2,15 +2,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import { Mesh } from "../../fixtures/mesh.ts";
 import { bevel, dissolveFaces, extrude, inset, subdivideEdges, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 
 const OUT = "packages/render/perf-baselines/long-pipeline.json";
 
 test("long mesh-edit pipeline stays within loose runtime budget", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   try {
     const startHeap = process.memoryUsage().heapUsed;
     let peakHeap = startHeap, mesh = toEditable(Mesh.box({ device, size: 1 }));

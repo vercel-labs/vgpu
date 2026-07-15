@@ -1,0 +1,25 @@
+# meshToReadable
+
+`meshToReadable(mesh, device)` returns a mesh whose vertex buffer can be read back
+on the CPU. It is part of the slim `@vgpu/render/inspect` tooling surface for
+snapshot tests, debug visualizers, and mesh inspection utilities.
+
+If the input vertex buffer already includes `copy_src` usage, the same mesh
+object is returned. Otherwise the helper copies the vertex data into a new VGPU
+buffer with the original usages plus `copy_src`; index buffers and mesh metadata
+are preserved by reference.
+
+```ts
+import { createMockAdapter } from "@vgpu/adapter-mock";
+import { meshToReadable, meshToWireframe } from "@vgpu/render/inspect";
+import { init } from "vgpu/mock";
+import { box } from "vgpu/scene";
+
+const gpu = await init({ adapter: createMockAdapter() });
+const mesh = gpu.mesh(box({ size: 1 }));
+const readable = await meshToReadable(mesh, gpu.device);
+const wireframe = await meshToWireframe(readable, gpu.device);
+```
+
+Use this only for inspection/test paths. Rendering code should keep buffers in
+normal vertex/index usage and avoid readback unless a debug tool needs CPU bytes.

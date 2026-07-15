@@ -1,5 +1,5 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+
 import { EditableMesh, MeshEditError, bevel, toEditable } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { makeTestPyramid } from "./fixtures/test-pyramid.ts";
@@ -57,10 +57,10 @@ describe("bevel", () => {
 
   test("works on the headline pyramid scene", async () => {
     const adapter = createMockAdapter();
-    const app = await App.create({ adapter });
-    const pyramid = makeTestPyramid(app.device), em = toEditable(pyramid);
+    const device = await adapter.requestDevice();
+    const pyramid = makeTestPyramid(device), em = toEditable(pyramid);
     const result = bevel(em, em.edges.where((e) => e.isSharp), { offset: 0.1, segments: 1 });
-    const beveledPyramid = result.mesh.toRenderMesh({ device: app.device });
+    const beveledPyramid = result.mesh.toRenderMesh({ device: device });
     expect(beveledPyramid.vertexCount).toBeGreaterThan(0);
     expect(result.newFaces.count).toBeGreaterThan(0);
   });

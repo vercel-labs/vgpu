@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { App } from "@vgpu/core";
+
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { writeLayoutValue } from "./reflection-test-utils.ts";
@@ -47,7 +47,7 @@ async function runGpuCase(item: GpuCase): Promise<void> {
   if (!layout) throw new Error(`No layout reflected for ${item.name}`);
   const inputBytes = writeLayoutValue(layout, item.value);
 
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   try {
     const input = device.gpu.createBuffer({ size: inputBytes.byteLength, usage: (layout.addressSpace === "uniform" ? GPU_BUFFER_USAGE.UNIFORM : GPU_BUFFER_USAGE.STORAGE) | GPU_BUFFER_USAGE.COPY_DST });
     device.gpu.queue.writeBuffer(input, 0, inputBytes);
@@ -108,7 +108,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("texture reflection BGL classi
     { kind: "texture", texture: { sampleType: "depth", viewDimension: "2d", multisampled: false } },
   ]);
 
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   try {
     const hdr = device.gpu.createTexture({ size: [1, 1], format: "rgba32float", usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST });
     device.gpu.queue.writeTexture({ texture: hdr }, new Float32Array([0.25, 0.5, 0, 1]), { bytesPerRow: 16 }, [1, 1]);

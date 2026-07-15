@@ -2,13 +2,14 @@
 
 # canvasMouseTracker
 
-Tracks the latest pointer position over a canvas. Use it when a render loop needs the mouse position without storing event handlers in your app code.
+Tracks the latest pointer position over a canvas. Use it when a render loop needs mouse coordinates without storing DOM event handlers in app state.
 
 ```ts
+import { canvasMouseTracker } from "@vgpu/render/utils";
+
 const mouse = canvasMouseTracker({ canvas, normalize: true });
-function draw() {
-  const [x, y] = mouse.position;
-  material.writeUniforms({ mouse: [x, y] });
+function frame() {
+  pass.set({ mouse: mouse.position });
 }
 ```
 

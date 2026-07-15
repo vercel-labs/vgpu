@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { App, getMockGPUDeviceInstrumentation } from "@vgpu/core";
+import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { createMockAdapter } from "@vgpu/adapter-mock";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 import { resolveShader, type ResolvedShader } from "@vgpu/wgsl/runtime";
@@ -26,7 +26,7 @@ struct Params { time: f32, speed: f32 }
 `;
 
 test("toy gpu.pass().set() prototype writes reflected uniforms in-place with stable bind groups on mock", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const reflected = await resolveShader({ entry: "/toy.wgsl", validate: false, modules: { "/toy.wgsl": TOY_WGSL } });
   const pass = new ToyPass(device.gpu, reflected);
   const instrumentation = getMockGPUDeviceInstrumentation(device.gpu);
@@ -44,7 +44,7 @@ test("toy gpu.pass().set() prototype writes reflected uniforms in-place with sta
 });
 
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("toy gpu.pass().set() prototype renders offscreen using reflected layout on Dawn", async () => {
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   try {
     const reflected = await resolveShader({ entry: "/toy.wgsl", validate: true, modules: { "/toy.wgsl": TOY_WGSL } });
     const pass = new ToyPass(device.gpu, reflected);

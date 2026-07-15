@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App, type Device } from "@vgpu/core";
-import { Mesh, type Mesh as MeshLike, type Vec3 } from "@vgpu/render";
+import type { Device } from "@vgpu/core";
+import { Mesh, type Mesh as MeshLike, type Vec3 } from "../fixtures/mesh.ts";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
 import { expect, test, vi } from "vitest";
 import { createReadableBoxMesh } from "./_helpers.ts";
@@ -8,7 +8,7 @@ import { createReadableBoxMesh } from "./_helpers.ts";
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 test("wireframeMaterial returns a pipeline configured for line-list topology", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
 
   wireframeMaterial({ device });
@@ -20,7 +20,7 @@ test("wireframeMaterial returns a pipeline configured for line-list topology", a
 });
 
 test("wireframeMaterial respects custom color", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const material = wireframeMaterial({ device, color: [0.25, 0.5, 0.75] });
   const buffer = device.createBuffer({ size: material.uniformByteSize, usage: ["uniform", "copy_dst"] });
 
@@ -32,7 +32,7 @@ test("wireframeMaterial respects custom color", async () => {
 });
 
 test("wireframeMaterial respects custom targetFormat", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
 
   wireframeMaterial({ device, targetFormat: "rgba8unorm-srgb" });
@@ -44,7 +44,7 @@ test("wireframeMaterial respects custom targetFormat", async () => {
 });
 
 test("meshToWireframe converts a readable cube to deduplicated edges", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createBuffer = vi.spyOn(device.gpu, "createBuffer");
   const result = await meshToWireframe(createReadableBoxMesh(device), device);
 
@@ -57,7 +57,7 @@ test("meshToWireframe converts a readable cube to deduplicated edges", async () 
 });
 
 test("meshToWireframe rejects unreadable Mesh.box", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
 
   await expect(meshToWireframe(Mesh.box({ device }), device)).rejects.toMatchObject({
     code: "VGPU-CORE-INVALID-USAGE",
@@ -67,7 +67,7 @@ test("meshToWireframe rejects unreadable Mesh.box", async () => {
 });
 
 test("meshToWireframe keeps smooth-shaded non-coplanar shared edges", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const result = await meshToWireframe(nonCoplanarSharedEdgeMesh(device), device);
 
   expect(result.lineCount).toBe(5);
@@ -75,7 +75,7 @@ test("meshToWireframe keeps smooth-shaded non-coplanar shared edges", async () =
 });
 
 test("meshToWireframe preserves source vertex buffer reference", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const sourceMesh = createReadableBoxMesh(device);
   const result = await meshToWireframe(sourceMesh, device);
 
@@ -99,8 +99,8 @@ function nonCoplanarSharedEdgeMesh(device: Device): MeshLike {
     vertexCount: 6,
     attributes: {
       stride: 24,
-      position: { offset: 0, format: "float32x3" },
-      normal: { offset: 12, format: "float32x3" },
+      position: { offset: 0, format: "float32x3" as const },
+      normal: { offset: 12, format: "float32x3" as const },
     },
     bbox: { min: new Float32Array([0, 0, 0]) as Vec3, max: new Float32Array([1, 1, 1]) as Vec3 },
   });

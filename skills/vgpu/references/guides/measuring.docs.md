@@ -2,57 +2,30 @@
 
 # Measuring
 
-How to verify a shader optimization before keeping it: confirm it's still correct (`pixelDiff`) and
-actually faster (`gpuFrameTime`). Both ship in `@vgpu/render/perf`. **Tooling only — never call them
-on a live animation-frame path.**
+Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost. The public API makes those boundaries visible.
 
-## pixelDiff — did the output change?
+## CPU encoding vs replay
 
-```ts
-import { pixelDiff } from "@vgpu/render/perf";
-
-const before = await target.read();   // baseline (Texture.read() → rgba8 bytes)
-applyOptimization();
-const after = await target.read();
-const { maxByte, changedFraction } = await pixelDiff(before, after);
-```
-
-Accepts two `Texture`s (reads them back) or two `Uint8Array`s. Interpret `maxByte` (max per-channel
-delta, 0–255):
-
-| maxByte | meaning |
-| --- | --- |
-| 0 | bit-exact — output is identical |
-| 1–2 | imperceptible — driver-rounding floor (typical for reordered float math) |
-| more | real visual change — only keep behind a quality tier, or revert |
-
-A tiny `changedFraction` with `maxByte` ≤ 2 is the signature of a safe optimization. A *large*
-`changedFraction` means a systematic shift (likely a bug), even if `maxByte` is small.
-
-## gpuFrameTime — is it faster?
+If the CPU is busy rebuilding the same render pass, compare a direct loop with a bundle:
 
 ```ts
-import { gpuFrameTime } from "@vgpu/render/perf";
-
-const { medianMs, method } = await gpuFrameTime(device, (frame, i) => {
-  // record the SAME passes you run in production, onto the provided Frame
-  frame.renderPass(scenePass, (pass) => drawScene(pass, i));
-  frame.renderPass(floorPass, (pass) => drawFloor(pass, i));
-});
+const staticScene = gpu.bundle({ target }, (b) => staticDraws.forEach((draw) => b.draw(draw)));
+gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 ```
 
-Returns `{ medianMs, meanMs, minMs, p95Ms, samples, method }`. It owns warmup + the loop + timing;
-you only encode. `method` is `"timestamp-query"` (GPU-only, when the device feature exists) or
-`"wall-clock"` (`queue.flush`, the robust fallback — what headless browsers get). The `i` argument
-lets you advance animation so the bench exercises per-frame work.
+## First-frame hitches
 
-Compare medians before vs after. For absolute numbers prefer a real-GPU device (`@vgpu/adapter-node`
-Dawn, or a browser); CPU/software backends only give relative signal.
+If the first visible frame stutters, pre-warm target signatures:
 
-## Discipline
+```ts
+const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const draw = gpu.draw({ shader: WGSL, mesh, targets: [hdr] });
+```
 
-- Measure **every** non-bit-exact change. Many "obvious" optimizations are imperceptible-but-not-free
-  — and a few are silent correctness bugs that only `pixelDiff` catches.
-- Measure each render configuration the shader actually ships in (resolution, DPR, theme).
-- A baseline captured from the current committed code is the reference; diff against it, not against
-  intuition.
+## Binding churn
+
+If allocations or bind-group count grows every frame, switch repeated JS values to in-place `set()`, shared state to `gpu.uniforms()`, or many object uniforms to `UniformPool` + dynamic offsets.
+
+## Correctness before speed
+
+When measuring visual output, render one deterministic `gpu.frame(...)` into an explicit target and read it back. Do not measure while also resizing, compiling pipelines lazily, or creating temporary targets inside the loop.

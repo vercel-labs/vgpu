@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
+
 import { resolveShader } from "@vgpu/wgsl/runtime";
 
 const dockerTest = process.env.VGPU_DOCKER_TEST === "1";
@@ -240,7 +240,7 @@ fn main() {
   };
   const shader = await resolveShader({ entry: "/main.wgsl", modules, packageMap: { "@vgpu/wgsl-std/math": mathPath }, validate: false });
 
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   const gpu = device.gpu;
   const output = gpu.createBuffer({ size: outputSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
   const readback = gpu.createBuffer({ size: outputSize, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
