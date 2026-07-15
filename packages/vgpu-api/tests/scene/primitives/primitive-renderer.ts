@@ -2,7 +2,7 @@ import { PNG } from "pngjs";
 import type { Device } from "@vgpu/core";
 import type { Camera, Mat4, MeshPrimitive, VertexLayoutKind } from "../../../src/scene/geometry-src/index.ts";
 
-export type PrimitiveMaterialVariant = "pbr" | "normalDebug32";
+export type PrimitiveMaterialVariant = "pbr" | "normal-debug-32";
 
 export interface RenderPrimitiveFrameSpec {
   readonly device: Device;
@@ -68,7 +68,7 @@ function uniformBytes(spec: RenderPrimitiveFrameSpec): ArrayBuffer {
   floats.set(spec.camera.viewProjectionMatrix, 0);
   floats.set(spec.modelMatrix ?? IDENTITY, 16);
   floats.set([...(spec.baseColor ?? [0.7, 0.55, 0.45]), 1], 32);
-  new DataView(bytes).setUint32(144, spec.material === "normalDebug32" ? 1 : 0, true);
+  new DataView(bytes).setUint32(144, spec.material === "normal-debug-32" ? 1 : 0, true);
   return bytes;
 }
 

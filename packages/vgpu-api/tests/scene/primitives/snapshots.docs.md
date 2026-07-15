@@ -31,7 +31,7 @@ Every primitive battery must call `assertAllDistinct(...)` for its PNG set. The 
 Each primitive is rendered with two variants:
 
 - `pbr`: simple Lambert lighting with a single directional light and ambient term.
-- `normalDebug32`: world-space normals visualized as `normal * 0.5 + 0.5` for 32-byte primitive meshes.
+- `normal-debug-32`: world-space normals visualized as `normal * 0.5 + 0.5` for 32-byte primitive meshes.
 
 ## Background
 
