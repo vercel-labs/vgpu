@@ -1,6 +1,6 @@
 # Bundle
 
-Ring-1 render bundle recorded by `gpu.bundle({ target }, cb)`. Bundles freeze commands and bind groups for static work, then `FramePass.bundles()` replays them with R3 stale checks.
+main API (vgpu) render bundle recorded by `gpu.bundle({ target }, cb)`. Bundles freeze commands and bind groups for static work, then `FramePass.bundles()` replays them with R3 stale checks.
 
 ## Import
 
@@ -88,5 +88,5 @@ gpu.frame((frame) => {
 
 - Bundles freeze bind group identities, not buffer contents. Updating JS-owned packed values in-place is safe; rebinding a different texture/buffer/sampler stales the bundle.
 - Re-record after `target.resize()`, ping-pong parity changes, or any resource identity change captured by the bundle.
-- Prefer Ring-1 `gpu.bundle` over low-level `createRenderBundle` so target formats and R3 checks are automatic.
+- Prefer main API (`vgpu`) `gpu.bundle` over low-level `createRenderBundle` so target formats and R3 checks are automatic.
 - **See also:** `FramePass.bundles`, `Draw`, `Pass`, `Target`, `createRenderBundle`.

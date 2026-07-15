@@ -2,27 +2,62 @@
 
 # normalDebugMaterial
 
-Renders each fragment colored by its surface normal, which is useful for
-verifying mesh normals visually during development.
+Creates an `InspectMaterial` that visualizes per-fragment normals as RGB. Use it to confirm vertex normals before passing geometry into lighting passes.
+
+## Import
 
 ```ts
-import { box } from "vgpu/scene";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
-
-const mesh = gpu.mesh(box({ size: 1 }));
-const material = normalDebugMaterial({ device: gpu.device });
 ```
 
-Each fragment outputs `(normal + 1) / 2` as RGB, mapping the unit-cube normal
-range `[-1, +1]³` to `[0, 1]³`. A face whose normal points along +X reads pure
-red; +Y reads pure green; +Z reads pure blue. Reverse directions read cyan,
-magenta, and yellow.
+## Signature
 
-The pipeline uses `triangle-list` topology with depth testing and back-face
-culling. Default `targetFormat` is `'bgra8unorm-srgb'`; use
-`'rgba8unorm-srgb'` on platforms that require it.
+```ts
+export function normalDebugMaterial(spec: NormalDebugMaterialSpec): InspectMaterial;
+```
 
-Normals are passed through in object space. Applying a rotation in `modelMatrix`
-rotates the visualized colors with the geometry, which is the intended behavior
-for this inspector. A normal matrix is not applied; this is a development
-visualization, not a lighting pass.
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| spec | NormalDebugMaterialSpec | ✔ | — | Configuration object used to allocate the material. |
+| spec.device | Device | ✔ | — | Device that owns the pipeline, bind group layout, and uniform buffer writes. |
+| spec.targetFormat | GPUTextureFormat | ✖ | "bgra8unorm-srgb" | Color attachment format; use "rgba8unorm-srgb" if BGRA is unavailable. |
+
+**Returns:** `InspectMaterial` — exposes the configured `pipeline`, `bindGroupLayout`, 128-byte uniform size, and a writer that uploads view-projection and model matrices.
+
+## Examples
+
+```ts
+import { createMockAdapter } from "@vgpu/adapter-mock";
+import { InspectMaterial, normalDebugMaterial } from "@vgpu/render/inspect";
+
+const IDENTITY_MATRIX = new Float32Array([
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+]);
+
+async function main(): Promise<void> {
+  const device = await createMockAdapter().requestDevice();
+  const material: InspectMaterial = normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
+  const uniforms = device.createBuffer({ size: material.uniformByteSize, usage: ["uniform", "copy_dst"] });
+
+  material.writeUniforms(uniforms.gpu, 0, {
+    viewProjectionMatrix: IDENTITY_MATRIX,
+    modelMatrix: IDENTITY_MATRIX,
+  });
+}
+
+main().catch((error) => {
+  console.error(error);
+});
+```
+
+## Notes
+
+- Renders with `triangle-list` topology, depth testing, and back-face culling so front-facing normals remain visible.
+- Outputs `(normal + 1) / 2` in linear space; rotating the model matrix rotates the visualized colors.
+- There is no normal-matrix correction: this inspector intentionally shows object-space normals to match authoring errors.
+- **See also:** `wireframeMaterial`, `InspectMaterial`

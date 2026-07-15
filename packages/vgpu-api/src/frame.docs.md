@@ -49,7 +49,7 @@ declare class FrameRunner {
 | opts.target | `Target` | ✖ | Frame default target (`gpu.screen`) | Required if the `Gpu` has no screen. |
 | opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue`; render passes always use `loadOp: "clear"`. |
 | frame.pass.cb | `(pass: FramePass) => void` | ✔ | — | Encodes draw and bundle commands for this render pass. |
-| pass.draw.drawable | `Draw \| Pass` | ✔ | — | A Ring-1 draw or fullscreen pass. |
+| pass.draw.drawable | `Draw \| Pass` | ✔ | — | A main API (`vgpu`) draw or fullscreen pass. |
 | pass.draw.opts | `DrawCallOptions` | ✖ | `{}` | Per-call counts and dynamic offsets. Target is the frame pass target. |
 | pass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Bundles recorded by `gpu.bundle({ target }, cb)`. |
 | runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame; frame is submitted in `finally`. |

@@ -1,6 +1,6 @@
 # StructuredUniform
 
-Low-level structured uniform buffer that computes WGSL-compatible offsets from a schema and writes typed values into one stable uniform buffer. Prefer Ring-1 `set({ params: ... })` unless you need a reusable resource and generated WGSL struct text.
+Low-level structured uniform buffer that computes WGSL-compatible offsets from a schema and writes typed values into one stable uniform buffer. Prefer main API (`vgpu`) `set({ params: ... })` unless you need a reusable resource and generated WGSL struct text.
 
 ## Import
 

@@ -1,6 +1,6 @@
 # StorageBuffer
 
-Low-level user-owned storage buffer with a stable bind group at binding `0`. Use it for arrays, large data, compute scratch buffers, or storage-driven rendering when Ring-1 `gpu.storage()` is not enough.
+Low-level user-owned storage buffer with a stable bind group at binding `0`. Use it for arrays, large data, compute scratch buffers, or storage-driven rendering when main API (`vgpu`) `gpu.storage()` is not enough.
 
 ## Import
 
@@ -96,5 +96,5 @@ draw.set({ positions });
 
 - Default visibility is fragment + compute, not vertex. Vertex-stage storage is legal only on adapters with the needed limits; opt in explicitly and request limits when creating the device.
 - `access: "read-write"` cannot be used from the vertex stage in WebGPU.
-- For Ring-1 readback and ping-pong helpers, use `gpu.storage()` and `gpu.pingPongStorage()`.
+- For main API (`vgpu`) readback and ping-pong helpers, use `gpu.storage()` and `gpu.pingPongStorage()`.
 - **See also:** `Compute`, `gpu.storage`, `Uniform`, `UniformPool`, `Draw.set`.

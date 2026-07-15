@@ -2,15 +2,78 @@
 
 # canvasMouseTracker
 
-Tracks the latest pointer position over a canvas. Use it when a render loop needs mouse coordinates without storing DOM event handlers in app state.
+Listens for pointer movement over a canvas and exposes the latest coordinates. Use it to feed shaders with mouse positions without wiring global event listeners.
+
+## Import
 
 ```ts
 import { canvasMouseTracker } from "@vgpu/render/utils";
-
-const mouse = canvasMouseTracker({ canvas, normalize: true });
-function frame() {
-  pass.set({ mouse: mouse.position });
-}
 ```
 
-Call `dispose()` when the canvas is removed.
+## Signature
+
+```ts
+export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTracker;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| spec | CanvasMouseTrackerSpec | ✔ | — | Configuration object describing the canvas and how to normalize coordinates. |
+| spec.canvas | HTMLCanvasElement | ✔ | — | Target element that receives `pointermove` events. |
+| spec.normalize | boolean | ✖ | false | When true, `position` is expressed in [0, 1] relative coordinates; otherwise uses raw canvas pixel coordinates. |
+| spec.flipY | boolean | ✖ | false | Reflects the Y axis (top → bottom) while preserving the chosen unit (normalized or pixel). |
+
+**Returns:** `CanvasMouseTracker` — exposes a live `position` tuple (`[x, y]`) and a `dispose()` method that removes the internal event listener.
+
+## Examples
+
+```ts
+const canvas = document.createElement("canvas");
+const mouse = canvasMouseTracker({ canvas, normalize: true, flipY: true });
+
+function frame() {
+  const [u, v] = mouse.position; // normalized UV with origin at bottom-left
+  pass.set({ mouse: [u, v] });
+  requestAnimationFrame(frame);
+}
+
+frame();
+// Later:
+mouse.dispose();
+```
+
+## Notes
+
+- The initial `position` is `[0, 0]` until the first pointer event fires; guard against that if your shader requires seeded values.
+- The tracker prefers `PointerEvent.offsetX/Y` when available, falling back to `clientX/Y` minus the canvas bounds, so it works with both pointer-lock and classic pointer events.
+- Call `dispose()` before removing the canvas from the DOM to avoid dangling listeners.
+- **See also:** `canvasResolution`, `frameClock`
+
+---
+
+# CanvasMouseTrackerSpec
+
+Configuration object accepted by `canvasMouseTracker`.
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| canvas | HTMLCanvasElement | ✔ | — | Canvas to observe. |
+| normalize | boolean | ✖ | false | Enables normalized `[0, 1]` output in both axes; otherwise uses raw pixel units. |
+| flipY | boolean | ✖ | false | Mirrors the Y coordinate so normalized output matches WebGPU clip space (`0` at bottom). |
+
+---
+
+# CanvasMouseTracker
+
+Handle returned by `canvasMouseTracker`.
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| position | readonly [number, number] | ✔ | — | Latest `[x, y]` coordinates (normalized or pixels depending on spec). Always returns a frozen tuple. |
+| dispose | () => void | ✔ | — | Removes the internal `pointermove` listener; idempotent. |

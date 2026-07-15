@@ -1,6 +1,6 @@
 # Gpu
 
-The Ring-1 facade returned by `init()`. It owns the `Device`, optional screen target, frame clocks, and public factories for passes, draws, compute, targets, buffers, uniforms, samplers, and bundles.
+The main API (`vgpu`) facade returned by `init()`. It owns the `Device`, optional screen target, frame clocks, and public factories for passes, draws, compute, targets, buffers, uniforms, samplers, and bundles.
 
 ## Import
 
@@ -56,7 +56,7 @@ interface Gpu {
 | onResize.cb | `(size) => void` | ✔ | — | Called only for canvas-backed screen resize notifications. Returns unsubscribe. |
 | compute.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. Must contain a `@compute` entry point. |
 | compute.opts | `ComputeOptions` | ✖ | `{}` | `label` defaults to `"compute"`; `set` defaults to no initial bindings. |
-| storage.bytes | `number` | ✔ | — | Byte size for a Ring-1 storage buffer. |
+| storage.bytes | `number` | ✔ | — | Byte size for a main API (`vgpu`) storage buffer. |
 | storage.access | `"read" \| "read-write"` | ✖ | `"read-write"` | Reflection still controls shader compatibility; writable aliases are checked before compute dispatch. |
 | pingPong.width | `number` | ✔ | — | Floored and clamped to at least `1`. |
 | pingPong.height | `number` | ✔ | — | Floored and clamped to at least `1`. |

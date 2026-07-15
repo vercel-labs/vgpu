@@ -1,6 +1,6 @@
 # createRenderBundle
 
-Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer Ring-1 `gpu.bundle({ target }, cb)` when recording Ring-1 `Draw`/`Pass` commands because it derives formats from `Target` and performs R3 stale checks.
+Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Pass` commands because it derives formats from `Target` and performs R3 stale checks.
 
 ## Import
 
@@ -55,7 +55,7 @@ declare function createRenderBundle(device: { readonly gpu: GPUDevice }, opts: R
 | opts.label | `string` | ✖ | `undefined` | Passed to `createRenderBundleEncoder` and `finish`. |
 | opts.colorFormats | `readonly (GPUTextureFormat \| null)[]` | ✔ | — | Must match the render pass where the bundle will execute. |
 | opts.depthStencilFormat | `GPUTextureFormat` | ✖ | `undefined` | Required when the replay pass has depth/stencil. |
-| opts.sampleCount | `number` | ✖ | WebGPU encoder default (`1`) | Must match replay pass sample count. Ring-1 passes `target.sampleCount`. |
+| opts.sampleCount | `number` | ✖ | WebGPU encoder default (`1`) | Must match replay pass sample count. main API (`vgpu`) passes `target.sampleCount`. |
 | opts.depthReadOnly | `boolean` | ✖ | `undefined` | Forwarded to WebGPU encoder descriptor. |
 | opts.stencilReadOnly | `boolean` | ✖ | `undefined` | Forwarded to WebGPU encoder descriptor. |
 | opts.record | `(bundle: RenderBundleRecorder) => void` | ✔ | — | Called synchronously before `encoder.finish()`. |
@@ -74,7 +74,7 @@ declare function createRenderBundle(device: { readonly gpu: GPUDevice }, opts: R
 
 **Returns:** `createRenderBundle()` returns `GPURenderBundle`; recorder methods return `void`.
 
-**Throws:** No custom `VGPU-*` errors are thrown here. Native WebGPU validation errors occur for incompatible formats, pipelines, bind groups, buffers, or draw parameters. Ring-1 stale errors (`VGPU-R3-BUNDLE-STALE`, `VGPU-R3-BUNDLE-INVALID`) are available only through `gpu.bundle()` / `FramePass.bundles()`.
+**Throws:** No custom `VGPU-*` errors are thrown here. Native WebGPU validation errors occur for incompatible formats, pipelines, bind groups, buffers, or draw parameters. main API (`vgpu`) stale errors (`VGPU-R3-BUNDLE-STALE`, `VGPU-R3-BUNDLE-INVALID`) are available only through `gpu.bundle()` / `FramePass.bundles()`.
 
 ## Examples
 
@@ -113,7 +113,7 @@ void bundle;
 
 ## Notes
 
-- This helper intentionally does not know about Ring-1 `Draw`, `Pass`, or `Target`; you must supply formats and native commands yourself.
+- This helper intentionally does not know about main API (`vgpu`) `Draw`, `Pass`, or `Target`; you must supply formats and native commands yourself.
 - Use `gpu.bundle()` for public API examples unless you are already managing native pipelines.
 - `RenderBundleRecorder.draw(number, ...)` defaults to `(instanceCount=1, firstVertex=0, firstInstance=0)`; object overload has the same defaults.
 - **See also:** `Bundle`, `FramePass.bundles`, `Draw`, `Target`.

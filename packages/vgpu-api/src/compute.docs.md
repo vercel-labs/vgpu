@@ -43,11 +43,11 @@ interface StorageBuffer {
 | compute.dispatch.x | `number` | ✔ | — | Workgroup count X passed to `dispatchWorkgroups`. |
 | compute.dispatch.y | `number` | ✖ | `1` | Workgroup count Y. |
 | compute.dispatch.z | `number` | ✖ | `1` | Workgroup count Z. |
-| gpu.storage.bytes | `number` | ✔ | — | Byte size for a Ring-1 storage buffer. |
+| gpu.storage.bytes | `number` | ✔ | — | Byte size for a main API (`vgpu`) storage buffer. |
 | gpu.storage.access | `StorageAccess` | ✖ | `"read-write"` | Stored on the resource facade and used by binding normalization. |
-| storage.write.data | `BufferSource` | ✔ | — | `ArrayBuffer` or `ArrayBufferView`; writes at offset `0` in the public Ring-1 type. |
+| storage.write.data | `BufferSource` | ✔ | — | `ArrayBuffer` or `ArrayBufferView`; writes at offset `0` in the public main API (`vgpu`) type. |
 
-**Returns:** `gpu.compute()` returns `Compute`; `set()` returns the same `Compute`; `dispatch()` returns `void` after submitting; `gpu.storage()` returns a Ring-1 `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
+**Returns:** `gpu.compute()` returns `Compute`; `set()` returns the same `Compute`; `dispatch()` returns `void` after submitting; `gpu.storage()` returns a main API (`vgpu`) `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
 
 **Throws:** `VGPU-RING1-UNSUPPORTED` when the shader has no `@compute` entry point; `VGPU-R1-STORAGE-ALIASING` when the same storage buffer is bound more than once and at least one reflected binding is writable; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` for binding errors; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `TypeError` if `StorageBuffer.write()` receives a non-buffer source.
 

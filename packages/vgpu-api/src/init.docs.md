@@ -1,6 +1,6 @@
 # init
 
-Creates a Ring-1 `Gpu` context. Use the browser entrypoint with a canvas, or the `vgpu/node` / `vgpu/mock` entrypoints for headless and tests.
+Creates a main API (`vgpu`) `Gpu` context. Use the browser entrypoint with a canvas, or the `vgpu/node` / `vgpu/mock` entrypoints for headless and tests.
 
 ## Import
 
@@ -43,9 +43,9 @@ interface InitOptions {
 | options.powerPreference | `GPUPowerPreference` | ✖ | `undefined` | Forwarded to `navigator.gpu.requestAdapter({ powerPreference })`. |
 | options.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. |
 | options.requiredLimits | `Record<string, number>` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. Use for limits such as storage buffers in vertex stage. |
-| options.label | `string` | ✖ | `undefined` | Reserved public option; current Ring-1 device creation does not use it as a debug label. |
+| options.label | `string` | ✖ | `undefined` | Reserved public option; current main API (`vgpu`) device creation does not use it as a debug label. |
 
-**Returns:** `Promise<Gpu>` — resolves to the shared Ring-1 facade with `device`, `gpu`, optional `screen`, `pass`, `draw`, `compute`, `frame`, targets, buffers, uniforms, and bundles.
+**Returns:** `Promise<Gpu>` — resolves to the shared main API (`vgpu`) facade with `device`, `gpu`, optional `screen`, `pass`, `draw`, `compute`, `frame`, targets, buffers, uniforms, and bundles.
 
 **Throws:** `VGPU-RING1-UNSUPPORTED` when WebGPU is unavailable, adapter request returns `null`, a canvas cannot create a `webgpu` context, or an entrypoint lacks an adapter factory — use `vgpu/mock` in tests, `vgpu/node` in Node, or pass a valid canvas/adapter.
 

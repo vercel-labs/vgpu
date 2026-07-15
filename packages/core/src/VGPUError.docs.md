@@ -125,6 +125,6 @@ device.destroy();
 
 - Match on `.code`, not `.message`. Messages can become more descriptive; codes are the stable contract.
 - `ValidationError` forces severity to `"error"`; use `VGPUError` directly for `"warning"` or `"info"` severities.
-- Core currently emits these `VGPU-CORE-*` codes from ring-0 code paths: `VGPU-CORE-INVALID-USAGE`, `VGPU-CORE-VALIDATION`, `VGPU-CORE-EXTERNAL-TEXTURE`, `VGPU-CORE-TEXTURE-RESIZE-LOCKED`, `VGPU-CORE-TEXTURE-DESTROYED`, `VGPU-CORE-UNSUPPORTED-FORMAT`, `VGPU-CORE-BIND-GROUP-LAYOUT-REQUIRED`, `VGPU-CORE-SAMPLER-ANISOTROPY-FILTERS`, `VGPU-CORE-BINDING-INVALID`, and `VGPU-CORE-VISIBILITY-INVALID`.
+- Core currently emits these `VGPU-CORE-*` codes from core layer (`vgpu/core`) code paths: `VGPU-CORE-INVALID-USAGE`, `VGPU-CORE-VALIDATION`, `VGPU-CORE-EXTERNAL-TEXTURE`, `VGPU-CORE-TEXTURE-RESIZE-LOCKED`, `VGPU-CORE-TEXTURE-DESTROYED`, `VGPU-CORE-UNSUPPORTED-FORMAT`, `VGPU-CORE-BIND-GROUP-LAYOUT-REQUIRED`, `VGPU-CORE-SAMPLER-ANISOTROPY-FILTERS`, `VGPU-CORE-BINDING-INVALID`, and `VGPU-CORE-VISIBILITY-INVALID`.
 - Native WebGPU errors are converted to `VGPU-CORE-VALIDATION` only by `Device.popErrorScope()`; other native calls may still throw native errors directly.
 - **See also:** `Device`, `Buffer`, `Texture`, `bind`, `VGPUAdapter`.

@@ -2,108 +2,78 @@
 
 # @vgpu/wgsl-std/color
 
-Raw WGSL color utility module for `@vgpu/wgsl` imports. The module contains pure declarations only: no bindings, overrides, hidden state, or entry points.
+Pure WGSL color utilities for shaders resolved by `@vgpu/wgsl`. Import these functions from WGSL modules when you need sRGB transfer, luminance, exposure, tone mapping, or bloom threshold helpers without declaring any resources.
+
+## Import
 
 ```wgsl
-import { srgbToLinear3, linearToSrgb3, luminance, applyExposure, tonemapAces } from "@vgpu/wgsl-std/color";
+import { applyExposure, luminance, luminanceThreshold, tonemapAces, tonemapReinhard } from "@vgpu/wgsl-std/color";
+```
 
-fn shade(baseColorSrgb: vec3f, exposureStops: f32) -> vec3f {
+## Signature
+
+```wgsl
+export fn luminance(value: vec3f) -> f32;
+export fn applyExposure(value: vec3f, exposure: f32) -> vec3f;
+export fn srgbToLinear(value: f32) -> f32;
+export fn srgbToLinear3(value: vec3f) -> vec3f;
+export fn srgbToLinear4(value: vec4f) -> vec4f;
+export fn linearToSrgb(value: f32) -> f32;
+export fn linearToSrgb3(value: vec3f) -> vec3f;
+export fn linearToSrgb4(value: vec4f) -> vec4f;
+export fn tonemapAces(value: vec3f) -> vec3f;
+export fn tonemapReinhard(value: vec3f) -> vec3f;
+export fn luminanceThreshold(value: vec3f, threshold: f32, softKnee: f32) -> vec3f;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| value | `f32` | ✔ | — | Scalar color channel for `srgbToLinear` or `linearToSrgb`. Expected range is usually `[0.0, 1.0]`; helpers do not clamp scalar transfer inputs. |
+| value | `vec3f` | ✔ | — | RGB/linear-HDR color for `luminance`, `applyExposure`, `tonemap*`, `luminanceThreshold`, `srgbToLinear3`, and `linearToSrgb3`. |
+| value | `vec4f` | ✔ | — | RGBA color for `srgbToLinear4` and `linearToSrgb4`; RGB is converted and alpha is preserved unchanged. |
+| exposure | `f32` | ✔ | — | Exposure in stops/EV for `applyExposure`; `1.0` doubles, `0.0` leaves unchanged, `-2.0` multiplies by `0.25`. |
+| threshold | `f32` | ✔ | — | Linear luminance threshold for `luminanceThreshold`. |
+| softKnee | `f32` | ✔ | — | Width of bright-pass transition. Internally clamped with `max(softKnee, 0.000001)`, so `0.0` behaves as an extremely hard edge without invalid `smoothstep` edges. |
+
+**Returns:** WGSL functions return `f32`, `vec3f`, or `vec4f` as declared. Transfer helpers return converted color, `luminance` returns Rec.709/sRGB relative luminance, exposure/tonemap/threshold helpers return linear color values.
+
+**Throws:** These WGSL declarations do not throw. `resolveShader()` can still throw `VGPU-WGSL-SYM-NOEXPORT` for misspelled imports, `VGPU-WGSL-PKG-NOTFOUND` if the package import cannot be resolved, or validation errors such as `VGPU-WGSL-NAGA-UNKNOWN` if caller WGSL is invalid.
+
+## Examples
+
+```ts
+const shaderWgsl = `
+import { applyExposure, linearToSrgb3, srgbToLinear3, tonemapAces } from "@vgpu/wgsl-std/color";
+
+fn grade(baseColorSrgb: vec3f, exposureStops: f32) -> vec3f {
   let linear = srgbToLinear3(baseColorSrgb);
   let exposed = applyExposure(linear, exposureStops);
   return linearToSrgb3(tonemapAces(exposed));
 }
+`;
+
+console.log(shaderWgsl.includes("tonemapAces"));
 ```
 
-## API
+```ts
+const bloomWgsl = `
+import { luminanceThreshold } from "@vgpu/wgsl-std/color";
 
-WGSL has no user-defined generics, so v1 uses an explicit dimensional suffix for vector transfer helpers and unsuffixed scalar helpers:
+fn bloomExtract(hdrColor: vec3f) -> vec3f {
+  return luminanceThreshold(hdrColor, 1.0, 0.25);
+}
+`;
 
-- `srgbToLinear(value: f32) -> f32`
-- `srgbToLinear3(color: vec3f) -> vec3f`
-- `srgbToLinear4(color: vec4f) -> vec4f`
-- `linearToSrgb(value: f32) -> f32`
-- `linearToSrgb3(color: vec3f) -> vec3f`
-- `linearToSrgb4(color: vec4f) -> vec4f`
-- `luminance(color: vec3f) -> f32`
-- `applyExposure(color: vec3f, exposure: f32) -> vec3f`
-- `tonemapAces(color: vec3f) -> vec3f`
-- `tonemapReinhard(color: vec3f) -> vec3f`
-- `luminanceThreshold(color: vec3f, threshold: f32, softKnee: f32) -> vec3f`
-
-The `vec4f` transfer helpers convert RGB channels and preserve alpha unchanged.
-
-## sRGB transfer functions
-
-`srgbToLinear*` and `linearToSrgb*` implement the standard IEC/sRGB piecewise transfer formulas:
-
-```text
-srgbToLinear(c) = c / 12.92                         when c <= 0.04045
-                = ((c + 0.055) / 1.055) ^ 2.4       otherwise
-
-linearToSrgb(c) = 12.92 * c                         when c <= 0.0031308
-                = 1.055 * c ^ (1 / 2.4) - 0.055     otherwise
+console.log(bloomWgsl.length > 0);
 ```
 
-The expected input and output range is `[0.0, 1.0]` for color channels. These helpers do **not** clamp inputs or outputs; callers that need display-range saturation should import `saturate` or `clamp01` from `@vgpu/wgsl-std/math` explicitly. The formulas are mathematically standard; replacing an artistic or tuned approximation with these helpers can still change the look of a shader and should be reviewed visually.
+## Notes
 
-## Luminance
-
-`luminance(color)` returns relative luminance for a linear RGB color using Rec.709/sRGB coefficients:
-
-```text
-dot(color, vec3f(0.2126, 0.7152, 0.0722))
-```
-
-Pass linear-light color values. If your source is sRGB encoded, decode with `srgbToLinear3` before computing luminance.
-
-## Exposure
-
-`applyExposure(color, exposure)` treats `exposure` as photographic stops/EV and returns:
-
-```text
-color * exp2(exposure)
-```
-
-Examples: `0.0` leaves the color unchanged, `1.0` doubles it, and `-2.0` multiplies it by `0.25`. The function is intentionally unclamped so HDR pipelines can keep values above `1.0` until an explicit later display transform.
-
-## Tonemapping
-
-`tonemapAces(color)` implements Krzysztof Narkowicz's 2015 ACES filmic tone-mapping fit:
-
-```text
-clamp((color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14), 0.0, 1.0)
-```
-
-The helper is an approximation to the ACES look, not a full ACES color pipeline. It clamps to display range after the fit.
-
-`tonemapReinhard(color)` is luminance-keyed Reinhard tone mapping:
-
-```text
-color / (1.0 + luminance(color))
-```
-
-`tonemapReinhard` does not clamp its result; saturated HDR inputs can still produce individual channels above `1.0`. Clamp explicitly if your output target requires display-range values. Both tonemap helpers expect linear-light HDR color values. Callers should apply display encoding such as `linearToSrgb3` after tonemapping when writing to an sRGB target that expects encoded values.
-
-## Luminance threshold
-
-`luminanceThreshold(color, threshold, softKnee)` applies a soft bright-pass gate driven by `luminance(color)`:
-
-```text
-let knee = max(softKnee, 0.000001)
-let t = clamp((luminance(color) - threshold) / knee, 0.0, 1.0)
-color * (t * t * (3.0 - 2.0 * t))
-```
-
-This is useful for bloom extraction. `softKnee` is clamped to at least `0.000001`, then the smoothstep Hermite curve is evaluated directly instead of calling WGSL `smoothstep`. That avoids undefined behavior from equal or inverted smoothstep edges even for large HDR thresholds where `threshold + epsilon` would round back to `threshold`. A `softKnee` of `0.0` therefore behaves like a hard edge at `threshold`; positive values spread the transition over that luminance interval. The helper does not clamp the input color.
-
-## Performance notes
-
-- Scalar transfer helpers branch once and use `pow` only above the sRGB breakpoint.
-- Vector transfer helpers call the scalar helper per RGB channel. This keeps behavior identical for scalar and vector paths and avoids hidden approximation tables.
-- `luminance` is a single dot product; `applyExposure` is a scalar `exp2` and vector multiply.
-- `tonemapAces` is component-wise arithmetic plus a clamp; `tonemapReinhard` adds one luminance dot product.
-- `luminanceThreshold` uses one luminance dot product and a direct Hermite evaluation.
-
-## Deferred helpers
-
-This color module intentionally does not include PBR helpers, BRDF/Fresnel/IBL routines, Hable/Filament tonemappers, or a default tonemap. Additional tonemapping and PBR-specific utilities are deferred so applications choose their own display transform and resource model explicitly.
+- This module is pure WGSL: it declares no `@group`, no `@binding`, no overrides, no hidden state, and no entry points. It is safe to import into resolver graphs.
+- `luminance` uses `dot(value, vec3f(0.2126, 0.7152, 0.0722))`; pass linear-light colors, not encoded sRGB.
+- `tonemapAces` implements the Narkowicz ACES fit and clamps to `[0.0, 1.0]`; `tonemapReinhard` uses `value / (1.0 + luminance(value))` and does not explicitly clamp.
+- sRGB transfer helpers implement the standard piecewise formulas and do not clamp. Clamp explicitly if your target requires saturated display-range values.
+- This module intentionally does not include PBR, BRDF, Fresnel, IBL, Hable/Filament tone mappers, or a default display pipeline.
+- **See also:** `@vgpu/wgsl-std/hash`, `@vgpu/wgsl-std/noise`, `resolveShader`.

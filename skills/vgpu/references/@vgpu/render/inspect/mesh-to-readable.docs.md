@@ -2,26 +2,58 @@
 
 # meshToReadable
 
-`meshToReadable(mesh, device)` returns a mesh whose vertex buffer can be read back
-on the CPU. It is part of the slim `@vgpu/render/inspect` tooling surface for
-snapshot tests, debug visualizers, and mesh inspection utilities.
+Promotes a render `Mesh` into a CPU-readable shape by ensuring its vertex buffer has `GPUBufferUsage.COPY_SRC`. Use it before inspection tools (wireframe, byte comparisons) that need to read vertex data.
 
-If the input vertex buffer already includes `copy_src` usage, the same mesh
-object is returned. Otherwise the helper copies the vertex data into a new VGPU
-buffer with the original usages plus `copy_src`; index buffers and mesh metadata
-are preserved by reference.
+## Import
+
+```ts
+import { meshToReadable } from "@vgpu/render/inspect";
+```
+
+## Signature
+
+```ts
+export function meshToReadable(mesh: Mesh, device: Device): Promise<Mesh>;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| mesh | Mesh | ✔ | — | Source mesh. Must come from `@vgpu/render` helpers or user code with a valid `vertexBuffer`. |
+| device | Device | ✔ | — | Device that owns the target vertex buffer and command encoder used for the copy. |
+
+**Returns:** `Promise<Mesh>` — resolves to the original mesh when it already has `copy_src` usage or to a frozen clone that shares all metadata but replaces `vertexBuffer` with a readable copy.
+
+**Throws:** `VGPU-CORE-INVALID-USAGE` when the source vertex buffer exposes an invalid `GPUBuffer.usage` mask (non-finite); fix by creating the mesh through `gpu.mesh(...)` or adding `copy_src` when constructing buffers manually.
+
+## Examples
 
 ```ts
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { meshToReadable, meshToWireframe } from "@vgpu/render/inspect";
+import { meshToReadable } from "@vgpu/render/inspect";
 import { init } from "vgpu/mock";
 import { box } from "vgpu/scene";
 
-const gpu = await init({ adapter: createMockAdapter() });
-const mesh = gpu.mesh(box({ size: 1 }));
-const readable = await meshToReadable(mesh, gpu.device);
-const wireframe = await meshToWireframe(readable, gpu.device);
+async function main(): Promise<void> {
+  const adapter = createMockAdapter();
+  const gpu = await init({ adapter });
+  const mesh = gpu.mesh(box({ size: 1 }));
+
+  const readable = await meshToReadable(mesh, gpu.device);
+  const vertices = await readable.vertexBuffer.read(readable.vertexBuffer.options.size);
+  console.log("Readable bytes", new Float32Array(vertices));
+}
+
+main().catch((error) => {
+  console.error(error);
+});
 ```
 
-Use this only for inspection/test paths. Rendering code should keep buffers in
-normal vertex/index usage and avoid readback unless a debug tool needs CPU bytes.
+## Notes
+
+- When the input already includes `copy_src`, the function returns the exact same object; equality checks remain stable.
+- Newly created readable buffers add `copy_src` (and `copy_dst` if it was missing) without removing the original usage flags.
+- Index buffers and mesh metadata (`vertexCount`, `attributes`, etc.) are preserved by reference; only the vertex buffer identity changes.
+- Await `queue.onSubmittedWorkDone()` in environments that expose it to guarantee the copy finished before reading.
+- **See also:** `meshToWireframe`, `wireframeMaterial`

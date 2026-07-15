@@ -1,6 +1,6 @@
 # Uniform
 
-Low-level user-owned uniform buffer with a stable bind group at binding `0`. Prefer Ring-1 `set({ params: ... })` for ordinary values; use `Uniform` when you need byte-level writes or one buffer shared by many draws.
+Low-level user-owned uniform buffer with a stable bind group at binding `0`. Prefer main API (`vgpu`) `set({ params: ... })` for ordinary values; use `Uniform` when you need byte-level writes or one buffer shared by many draws.
 
 ## Import
 
@@ -39,7 +39,7 @@ declare class Uniform {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| device | `Device` | ✔ | — | Core device, usually `gpu.device` from Ring-1 `init()`. |
+| device | `Device` | ✔ | — | Core device, usually `gpu.device` from the main API (`vgpu`) `init()`. |
 | opts | `UniformOptions` | ✔ | — | Buffer/layout options. |
 | opts.size | `number` | ✔ | — | Byte size. Used for `device.createBuffer({ usage: ["uniform", "copy_dst"] })` and `minBindingSize`. |
 | opts.label | `string` | ✖ | `undefined` | Forwarded to buffer label; layout label becomes `${label}.bgl`; bind group label becomes `${label}.bg`. |
@@ -50,7 +50,7 @@ declare class Uniform {
 
 **Returns:** Constructor returns `Uniform`; `gpu` returns the underlying `GPUBuffer`; `write()`, `destroy()`, and `dispose()` return `void`.
 
-**Throws:** No Ring-1 `VGPU-*` errors are thrown directly by `Uniform`; invalid sizes, incompatible reused layouts, out-of-range writes, or destroyed-buffer usage can surface as core/native WebGPU validation errors. Binding a `Uniform` through Ring-1 can still trigger `VGPU-R1-OWNERSHIP-FLIP` if the same shader binding was first set with JS values.
+**Throws:** No main API (`vgpu`) `VGPU-*` errors are thrown directly by `Uniform`; invalid sizes, incompatible reused layouts, out-of-range writes, or destroyed-buffer usage can surface as core/native WebGPU validation errors. Binding a `Uniform` through main API (`vgpu`) can still trigger `VGPU-R1-OWNERSHIP-FLIP` if the same shader binding was first set with JS values.
 
 ## Examples
 

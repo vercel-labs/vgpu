@@ -8,8 +8,8 @@ vgpu is an agentic-first WebGPU library for browsers, Node/Dawn, and determinist
 
 | Package | What it is |
 | --- | --- |
-| [`vgpu`](./packages/vgpu-api/README.md) | Public ring-1 API: `init`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, scene and core subpaths. |
-| [`@vgpu/core`](./packages/core/README.md) | Ring-0 resource wrappers and native WebGPU escape hatches. |
+| [`vgpu`](./packages/vgpu-api/README.md) | Public main API (`vgpu`): `init`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, scene and core subpaths. |
+| [`@vgpu/core`](./packages/core/README.md) | core layer (`vgpu/core`) resource wrappers and native WebGPU escape hatches. |
 | [`@vgpu/render`](./packages/render/README.md) | Slim edit/inspect/utils/perf package for helpers outside the new rendering surface. |
 | [`@vgpu/wgsl`](./packages/wgsl/README.md) | WGSL modules, reflection, runtime resolution, and loaders. |
 | [`@vgpu/wgsl-std`](./packages/wgsl-std/README.md) | Standard WGSL utility modules. |

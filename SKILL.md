@@ -1,16 +1,16 @@
 ---
 name: vgpu-ring1
 description: >-
-  Lane I skill: memorize the ring-1 nouns, R1–R4, canonical sketches, fix-its, and agent-confusion traps.
+  Lane I skill: memorize the main API (`vgpu`) nouns, R1–R4, canonical sketches, fix-its, and agent-confusion traps.
 ---
 
 
-# vgpu ring-1 ownership SKILL
+# vgpu main API (`vgpu`) ownership SKILL
 
-Este skill es el material congelado del rewrite: copialo tal cual cuando necesites recordar el contrato ring-1.
+Este skill es el material congelado del rewrite: copialo tal cual cuando necesites recordar el contrato main API (`vgpu`).
 
 
-## Ring-1 nouns (aplicá este vocabulario)
+## main API (`vgpu`) nouns (aplicá este vocabulario)
 
 ```text
 init(canvas?|opts) → Gpu           contexto; vgpu (browser) y vgpu/node (Dawn) mismo tipo. DPR explícito en init.
@@ -93,9 +93,9 @@ const wave2 = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
 ## Sketch (b) — set() dual + sharing (§3)
 
 ```ts
-import { Uniform } from "vgpu/core";   // ring 0: el thin layer sigue público
+import { Uniform } from "vgpu/core";   // core layer (vgpu/core): el thin layer sigue público
 
-// Recurso ring-0: VOS controlás usage, lifetime y sharing.
+// Recurso core layer (vgpu/core): VOS controlás usage, lifetime y sharing.
 const camera = new Uniform(gpu.device, { size: 64, label: "camera" });
 
 const cube  = gpu.draw({ shader: LIT_WGSL,  mesh: gpu.mesh(box()) });
@@ -104,7 +104,7 @@ const floor = gpu.draw({ shader: FLOOR_WGSL, mesh: gpu.mesh(plane()) });
 cube.set({ camera });    // recurso → la lib SOLO bindea. No crea buffers,
 floor.set({ camera });   // no escribe nada. 1 write → N consumidores:
 camera.write(cam.viewProjection);   // un solo write alimenta ambos draws.
-// (Este es el path ring-0 crudo — bytes, sin nombres. Para sharing con
+// (Este es el path core layer (`vgpu/core`) crudo — bytes, sin nombres. Para sharing con
 //  set() por nombre y tipos inferidos, usá gpu.uniforms() → §4.)
 
 // ── Mixed-ownership en el MISMO @group WGSL: permitido ───────────────
@@ -290,7 +290,7 @@ wave.set({ speed: 2 });          // lib-owned desde acá
 wave.set({ speed: miBuffer });
 // ✖ VGPUError: `speed` es lib-owned desde su primer set() (valor JS).
 //   No se puede cambiar el ownership de un binding. Si necesitás compartir
-//   el buffer entre passes, creá un recurso ring-0 y pasalo desde el inicio:
+//   el buffer entre passes, creá un recurso core layer (`vgpu/core`) y pasalo desde el inicio:
 //     const speed = new Uniform(gpu.device, { size: 4 });
 //     wave.set({ speed });   // user-owned desde el primer set
 
@@ -312,5 +312,5 @@ p.bundles(staticScene);
 
 - Sampler sin setear (viene de ralph auto-samplers) → error con fix-it de una línea (`set({ samp: gpu.sampler() })`).
 - Esperar que un bundle "vea" `buf.swap()`/`target.resize()` → error de staleness con binding culpable + patrón de re-grabación (2 bundles).
-- Intentar flipear ownership (valor→recurso) → error R1 con la alternativa correcta (crear recurso ring-0 desde el inicio).
+- Intentar flipear ownership (valor→recurso) → error R1 con la alternativa correcta (crear recurso core layer (`vgpu/core`) desde el inicio).
 - Pasar offsets en el claim en vez del draw → el error apunta a `p.draw(d, { offsets })`.

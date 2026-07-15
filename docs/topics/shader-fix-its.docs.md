@@ -20,7 +20,7 @@ import { NoiseConfig, noise } from "./noise.wgsl";
 
 ## `VGPU-SHADER-SOURCE-INVALID`
 
-Ring-1 shader arguments are either a WGSL string or a loader `ShaderSource { version: 1, wgsl }`. If importing `.wgsl` returns a URL/object without `version` and `wgsl`, configure `@vgpu/wgsl/loader-vite`, `@vgpu/wgsl/loader-webpack`, or pass a raw WGSL string.
+main API (vgpu) shader arguments are either a WGSL string or a loader `ShaderSource { version: 1, wgsl }`. If importing `.wgsl` returns a URL/object without `version` and `wgsl`, configure `@vgpu/wgsl/loader-vite`, `@vgpu/wgsl/loader-webpack`, or pass a raw WGSL string.
 
 ```ts
 import shader from "./shader.wgsl";

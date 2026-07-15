@@ -122,11 +122,11 @@ declare function toEditableSignature(mesh: EditableInputMesh, opts?: { readonly 
 import { toEditable } from "@vgpu/render/edit";
 
 const renderMeshForEdit = {
-  vertexBuffer: {} as Parameters<typeof toEditable>[0]["vertexBuffer"],
+  vertexBuffer: {},
   vertexCount: 3,
   attributes: { stride: 12, position: { offset: 0, format: "float32x3" as const } },
   bbox: { min: new Float32Array([0, 0, 0]), max: new Float32Array([1, 1, 1]) },
-} as Parameters<typeof toEditable>[0];
+} as unknown as Parameters<typeof toEditable>[0];
 const toEditableMesh = toEditable(renderMeshForEdit, { creaseAngle: Math.PI / 4 });
 ```
 
@@ -174,11 +174,11 @@ declare function toEditableWithDiagnosticsSignature(
 import { toEditableWithDiagnostics } from "@vgpu/render/edit";
 
 const renderMeshWithDiagnostics = {
-  vertexBuffer: {} as Parameters<typeof toEditableWithDiagnostics>[0]["vertexBuffer"],
+  vertexBuffer: {},
   vertexCount: 3,
   attributes: { stride: 12, position: { offset: 0, format: "float32x3" as const } },
   bbox: { min: new Float32Array([0, 0, 0]), max: new Float32Array([1, 1, 1]) },
-} as Parameters<typeof toEditableWithDiagnostics>[0];
+} as unknown as Parameters<typeof toEditableWithDiagnostics>[0];
 const diagnostics = toEditableWithDiagnostics(renderMeshWithDiagnostics);
 const diagnosticsWarnings = diagnostics.warnings.map((warning) => warning.code);
 ```

@@ -1,7 +1,7 @@
 # createNodeDevice
 
 `createNodeDevice(opts?)` is a mechanical convenience that requests a `Device` from
-the Node adapter directly. Use `createNodeDevice()` for focused scripts, server-side renders, and agentic headless snapshot tests that need one explicit WebGPU device. Application code can also use `init()` from `vgpu/node` for the ring-1 facade.
+the Node adapter directly. Use `createNodeDevice()` for focused scripts, server-side renders, and agentic headless snapshot tests that need one explicit WebGPU device. Application code can also use `init()` from `vgpu/node` for the main API (`vgpu`) facade.
 
 ## Agentic headless snapshot workflow
 
