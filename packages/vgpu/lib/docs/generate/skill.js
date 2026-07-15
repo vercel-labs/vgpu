@@ -56,9 +56,9 @@ function router(docs) {
     "doc you can load on demand with the CLI — **load only what you need, don't read the whole skill**:",
     "",
     "```sh",
-    "npx vgpu docs find <query>    # search doc paths + symbols",
-    "npx vgpu docs grep -i <term>  # search doc CONTENT",
-    "npx vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
+    "npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols",
+    "npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT",
+    "npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
     "```",
     "",
     "## Performance guides",
@@ -72,7 +72,7 @@ function router(docs) {
   out.push("");
   out.push("## API reference");
   out.push("");
-  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx vgpu docs cat <symbol>\`:`);
+  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx --package @vgpu/cli vgpu docs cat <symbol>\`:`);
   out.push("");
   for (const pkg of packages) {
     const symbols = api

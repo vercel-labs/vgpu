@@ -1,6 +1,6 @@
 # `gpu.frame`, `Frame`, and `FramePass`
 
-`gpu.frame(cb)` defines what a frame is: one command encoder, any number of passes, then one submit. vgpu never decides when your frames happen; `gpu.frame.loop(cb)` is optional rAF sugar that advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`.
+`gpu.frame(cb)` defines what a frame is: one command encoder, any number of passes, then one submit. vgpu never decides when your frames happen; `gpu.frame.loop(cb, { fps }?)` is optional rAF sugar that advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, with an optional FPS cap.
 
 ```ts
 const scene = gpu.target({ format: "rgba16float", depth: true });

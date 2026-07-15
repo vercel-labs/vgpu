@@ -13,9 +13,9 @@ Generated from the vgpu `.docs.md` source. Each entry maps to a file in `referen
 doc you can load on demand with the CLI — **load only what you need, don't read the whole skill**:
 
 ```sh
-npx vgpu docs find <query>    # search doc paths + symbols
-npx vgpu docs grep -i <term>  # search doc CONTENT
-npx vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
+npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols
+npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT
+npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
 ```
 
 ## Performance guides
@@ -34,7 +34,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-192 symbols across 15 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
+192 symbols across 15 packages — open `references/<package>/<file>` or `npx --package @vgpu/cli vgpu docs cat <symbol>`:
 
 - `@vgpu/render/edit` — bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, EdgeView, EditableMesh, EditableMeshValue, ElementDomain, ElementSelection, ElementSet, extrude, FaceView, fillHole, gridFill, healManifold, inset, KernelHandle, loopCut, mergeByDistance, MeshEditError, MeshEditWarning, recomputeNormals, ScoredSelection, subdivideEdges, subdivideFaces, toEditable, toEditableWithDiagnostics, VertexView
 - `@vgpu/render/inspect` — InspectMaterial, InspectMaterialUniformParams, meshToReadable, meshToWireframe, normalDebugMaterial, NormalDebugMaterialSpec, wireframeMaterial, WireframeMaterialSpec, WireframeMesh

@@ -15,7 +15,7 @@ Este skill es el material congelado del rewrite: copialo tal cual cuando necesit
 ```text
 init(canvas?|opts) → Gpu           contexto; vgpu (browser) y vgpu/node (Dawn) mismo tipo. DPR explícito en init.
 gpu.time / deltaTime / frameCount  números JS planos, NO bindings. Pasados explícito vía set().
-gpu.shader(src) → Shader           WGSL resuelto + reflection. Cacheado.
+WGSL source                      pasá string o import `.wgsl` (`ShaderSource {version,wgsl}`) a gpu.pass/draw/compute.
 gpu.pass(src, opts?) → Pass        fragment-only, quad interno provee uv. JAMÁS vertex buffers.
 gpu.draw({shader, mesh?, ...})→Draw pipeline+mesh+bindings. Target-agnóstico, pipeline cache lazy/eager.
 gpu.compute(src) → Compute         pipeline compute + dispatch. First-class.
