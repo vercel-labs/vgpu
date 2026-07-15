@@ -1,23 +1,73 @@
 # InspectMaterial
 
-`InspectMaterial` is the low-level material shape used by the inspect sub-export.
-It contains a pipeline, a group-0 bind group layout, and a typed uniform writer.
+Shape returned by inspect materials such as `wireframeMaterial` and `normalDebugMaterial`. It bundles the configured pipeline, group-0 layout, uniform size, and a helper to encode shared matrices into a uniform buffer.
+
+## Import
 
 ```ts
-const uniforms = device.createBuffer({
-  size: material.uniformByteSize,
-  usage: ["uniform", "copy_dst"],
-});
-
-material.writeUniforms(uniforms.gpu, 0, {
-  viewProjectionMatrix: camera.viewProjectionMatrix,
-  modelMatrix,
-});
+import type { InspectMaterial } from "@vgpu/render/inspect";
 ```
 
-`writeUniforms` writes the shared inspect matrices into the buffer. This keeps
-inspect materials independent from application materials used by the ring-1 `vgpu` draw/pass APIs.
+## Signature
 
-`InspectMaterialUniformParams` includes `viewProjectionMatrix` and `modelMatrix`.
-Future inspect materials should extend this interface explicitly if they need
-additional uniform inputs.
+```ts
+export interface InspectMaterial {
+  readonly pipeline: GPURenderPipeline;
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly uniformByteSize: number;
+  readonly writeUniforms: (
+    buffer: GPUBuffer,
+    offset: number,
+    params: InspectMaterialUniformParams,
+  ) => void;
+}
+```
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| pipeline | GPURenderPipeline | ✔ | — | Ready-to-use pipeline configured for the corresponding inspector material. |
+| bindGroupLayout | GPUBindGroupLayout | ✔ | — | Group 0 layout; allocate a uniform buffer that matches `uniformByteSize` and bind it here. |
+| uniformByteSize | number | ✔ | — | Exact byte size that `writeUniforms` writes; use it when allocating uniform buffers. |
+| writeUniforms | (buffer: GPUBuffer, offset: number, params: InspectMaterialUniformParams) => void | ✔ | — | Packs matrices (and any extra inspector uniforms) into the provided buffer at `offset`. |
+
+**Notes**
+
+- `writeUniforms` writes the shared camera view-projection and per-mesh model matrices, so every inspect material can share the same uniform allocation logic.
+- Reuse one uniform buffer per material instance; pass offsets when interleaving data for multiple meshes.
+- **See also:** `InspectMaterialUniformParams`, `wireframeMaterial`, `normalDebugMaterial`
+
+---
+
+# InspectMaterialUniformParams
+
+Uniform inputs shared by all inspect materials. Additional inspector-specific uniforms should extend this interface explicitly.
+
+## Import
+
+```ts
+import type { InspectMaterialUniformParams } from "@vgpu/render/inspect";
+```
+
+## Signature
+
+```ts
+export interface InspectMaterialUniformParams {
+  readonly viewProjectionMatrix: Mat4;
+  readonly modelMatrix: Mat4;
+}
+```
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| viewProjectionMatrix | Mat4 | ✔ | — | Combined camera matrix written to the inspector's uniform buffer slots 0–63 bytes. |
+| modelMatrix | Mat4 | ✔ | — | Object transform written immediately after `viewProjectionMatrix`. |
+
+**Notes**
+
+- The interface is intentionally minimal so different inspectors can share the same math; extend it when a tool needs more uniforms.
+- Matrices are expected to be column-major `Float32Array` values matching the mesh layout used elsewhere in vgpu.
+- **See also:** `InspectMaterial`, `wireframeMaterial`, `normalDebugMaterial`

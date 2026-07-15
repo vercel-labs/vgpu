@@ -1,29 +1,58 @@
 # meshToWireframe
 
-`meshToWireframe(mesh, device)` converts a readable triangle-list `Mesh` into a
-line-list index buffer with duplicate edges removed by endpoint position.
+Builds a deduplicated line-list index buffer out of a readable triangle-list mesh. Use it alongside `wireframeMaterial` to visualize topology edges during debugging sessions.
+
+## Import
 
 ```ts
 import { meshToWireframe } from "@vgpu/render/inspect";
-
-const wireframe = await meshToWireframe(readableMesh, device);
-
-// wireframe.vertexBuffer is readableMesh.vertexBuffer
-// wireframe.indexBuffer contains two indices per line segment
 ```
 
-The source mesh's vertex buffer must be created with `GPUBufferUsage.COPY_SRC`
-so `meshToWireframe` can read back vertex positions. If the buffer is not
-readable, the function throws `VGPU-CORE-INVALID-USAGE`; `Mesh.box` currently
-does not satisfy this contract.
+## Signature
 
-Endpoints are quantized to a `1e-6` grid before comparison. Meshes with distinct
-features below that scale may have edges incorrectly merged, so author debug
-geometry at a larger scale or use a precomputed wireframe for tiny details.
+```ts
+export function meshToWireframe(mesh: Mesh, device: Device): Promise<WireframeMesh>;
+```
 
-Coplanar triangle diagonals are omitted by comparing triangle face normals, so a
-readable unit-box triangle list produces 12 line segments and 24 indices.
+## Parameters
 
-The returned `indexBuffer` is a raw `GPUBuffer`. Callers own its lifetime and
-should call `indexBuffer.destroy()` when done, or rely on `device.destroy()` to
-clean up at teardown.
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| mesh | Mesh | ✔ | — | Must have a vertex buffer created with `GPUBufferUsage.COPY_SRC`; otherwise the function cannot read vertex positions. |
+| device | Device | ✔ | — | Supplies the command encoder, index buffer, and queue submit used to bake the wireframe lines. |
+
+**Returns:** `Promise<WireframeMesh>` — frozen mesh-like object that reuses the source `vertexBuffer`, exposes a raw `indexBuffer`, reports whether the index data is `uint16` or `uint32`, and includes the deduplicated `lineCount`.
+
+**Throws:** `VGPU-CORE-INVALID-USAGE` when the source mesh lacks a readable vertex buffer; fix by creating the mesh via `gpu.mesh(...)` or promoting it through `meshToReadable` first.
+
+## Examples
+
+```ts
+import { createMockAdapter } from "@vgpu/adapter-mock";
+import { meshToReadable, meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
+import { init } from "vgpu/mock";
+import { box } from "vgpu/scene";
+
+async function main(): Promise<void> {
+  const adapter = createMockAdapter();
+  const gpu = await init({ adapter });
+  const solid = gpu.mesh(box({ size: 1 }));
+  const readable = await meshToReadable(solid, gpu.device);
+  const wireframe = await meshToWireframe(readable, gpu.device);
+  const inspector = wireframeMaterial({ device: gpu.device });
+
+  console.log(wireframe.lineCount); // 12 for a cube
+  inspector.pipeline; // ready-to-use GPURenderPipeline
+}
+
+main().catch((error) => {
+  console.error(error);
+});
+```
+
+## Notes
+
+- The helper quantizes edge endpoints to a `1e-6` grid before it deduplicates them; bake tiny debug meshes at a larger scale if you need finer detail.
+- Triangle pairs that share a coplanar face have their diagonal removed by comparing face normals, so smooth surfaces only emit silhouette edges.
+- The returned `indexBuffer` is a raw `GPUBuffer`. Destroy it manually when the wireframe is no longer needed or rely on `device.destroy()` during teardown.
+- **See also:** `meshToReadable`, `wireframeMaterial`, `InspectMaterial`
