@@ -1,10 +1,47 @@
-# `degToRad`
+# degToRad
 
-`degToRad(degrees)` converts degrees to radians for low-level math. Most public camera helpers accept degrees directly, but custom animation and shader parameter code often needs radians.
+Converts degrees to radians for custom scene math. Use it when a shader uniform, animation helper, or math API expects radians while your input is in degrees.
+
+## Import
+
+```ts
+import { degToRad } from "vgpu/scene";
+```
+
+## Signature
+
+```ts
+declare function degToRad(deg: number): number;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| deg | `number` | ✔ | — | Angle in degrees. Positive, negative, fractional, `Infinity`, and `NaN` are passed through JavaScript number arithmetic. |
+
+**Returns:** `number` — `deg * Math.PI / 180`, suitable for `Math.sin`, `Math.cos`, matrix helpers, or shader uniforms that expect radians.
+**Throws:** None.
+
+## Examples
 
 ```ts
 import { degToRad } from "vgpu/scene";
 
-const angle = degToRad(45);
-spin.set({ sinAngle: Math.sin(angle), cosAngle: Math.cos(angle) });
+const quarterTurn = degToRad(90);
+const rotation = { sinAngle: Math.sin(quarterTurn), cosAngle: Math.cos(quarterTurn) };
+void rotation;
 ```
+
+```ts
+import { degToRad } from "vgpu/scene";
+
+const clockwise = degToRad(-45);
+console.log(clockwise < 0);
+```
+
+## Notes
+
+- Public camera helpers in `vgpu/scene` accept degrees for field-of-view values; do not convert `PerspectiveCameraOptions.fov` yourself.
+- Use `degToRad` for custom transforms and CPU-side uniform values that explicitly need radians.
+- **See also:** `perspectiveCamera`, `orbit`.
