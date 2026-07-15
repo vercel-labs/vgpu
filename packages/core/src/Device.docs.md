@@ -1,41 +1,143 @@
 # Device
 
-`Device` is the opaque core module around a raw `GPUDevice`. It creates buffers,
-owns the queue wrapper, captures structured validation errors through error scopes,
-and exposes the raw WebGPU object via `.gpu` for mechanical escape-hatch use.
-Use `destroy()` or `dispose()` for teardown.
+`Device` is the core wrapper around a raw `GPUDevice`. Use it when you need explicit low-level resource creation (`Buffer`, `Texture`, `Shader`), queue access, readback, and structured WebGPU error scopes.
 
-## Capabilities
-
-`device.limits` and `device.features` are transparent accessors for the underlying
-WebGPU device capabilities. They do not negotiate, normalize, or polyfill support;
-use them to inspect limits and gate optional paths without reaching through `.gpu`.
-
-`device.isCompatibilityMode` is `true` when the adapter requested WebGPU
-`featureLevel: "compatibility"`; otherwise it defaults to `false`. Use it to
-choose explicit compatibility-sensitive resource and shader variants together,
-such as passing the same boolean to `cubeView(texture, { compat })` and your WGSL
-binding selector. `cubeView` does not auto-detect compatibility mode because the
-view dimension and shader binding type must stay in lockstep.
-
-Native WebGPU:
+## Import
 
 ```ts
-const max = device.gpu.limits.maxTextureDimension2D;
-const hasTimestamps = device.gpu.features.has("timestamp-query");
+import { Device } from "vgpu/core";
 ```
 
-VGPU:
+## Signature
 
 ```ts
-const max = device.limits.maxTextureDimension2D;
-const hasTimestamps = device.features.has("timestamp-query");
-```
+import type { Buffer, BufferOptions, Queue, Shader, ShaderInput, Texture, TextureOptions, VGPUError } from "vgpu/core";
 
-Gate optional behavior with the same setlike feature checks that WebGPU exposes:
+interface DeviceOptions {
+  readonly isCompatibilityMode?: boolean;
+}
 
-```ts
-if (device.features.has("timestamp-query")) {
-  // create timestamp query resources for this device
+declare class Device {
+  readonly gpu: GPUDevice;
+  readonly adapterInfo: GPUAdapterInfo | null;
+  readonly queue: Queue;
+  readonly isCompatibilityMode: boolean;
+  constructor(gpu: GPUDevice, adapterInfo?: GPUAdapterInfo | null, opts?: DeviceOptions);
+  get limits(): GPUSupportedLimits;
+  get features(): GPUSupportedFeatures;
+  createShader(input: ShaderInput): Shader;
+  createTexture(opts: TextureOptions): Texture;
+  createBuffer(opts: BufferOptions): Buffer;
+  pushErrorScope(filter: GPUErrorFilter): void;
+  popErrorScope(): Promise<VGPUError | null>;
+  destroy(): void;
+  dispose(): void;
 }
 ```
+
+## Parameters
+
+### Constructor
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| gpu | `GPUDevice` | ✔ | — | Raw WebGPU device. `Device` does not request adapters itself. |
+| adapterInfo | `GPUAdapterInfo \| null` | ✖ | `null` | Stored as `device.adapterInfo`; pass adapter metadata when an adapter provides it. |
+| opts | `DeviceOptions` | ✖ | `{}` | Core-only options for wrapper behavior. |
+| opts.isCompatibilityMode | `boolean` | ✖ | `false` | Stored as `device.isCompatibilityMode`; adapters set it when they requested WebGPU `featureLevel: "compatibility"`. |
+
+### `createShader(input)`
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| input | `ShaderInput` | ✔ | — | A WGSL string or a resolved shader object with `.wgsl`. Strings are compiled with `@vgpu/wgsl` before creating the native shader module. |
+
+### `createTexture(opts)`
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| opts | `TextureOptions` | ✔ | — | Descriptor-first texture options; see `TextureOptions` rows in `Texture`. |
+
+### `createBuffer(opts)`
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| opts | `BufferOptions` | ✔ | — | Descriptor-first buffer options; see `BufferOptions` rows in `Buffer`. |
+
+### Error scopes and teardown
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| filter | `GPUErrorFilter` | ✔ | — | Passed to `gpu.pushErrorScope(filter)` and also starts a vgpu structured-error scope. |
+
+**Returns:**
+
+- `new Device(...)` returns a wrapper with `.gpu`, `.queue`, `.limits`, `.features`, and resource factory methods.
+- `createShader(input)` returns `Shader`.
+- `createTexture(opts)` returns `Texture`.
+- `createBuffer(opts)` returns `Buffer`.
+- `pushErrorScope(filter)`, `destroy()`, and `dispose()` return `void`.
+- `popErrorScope()` returns `Promise<VGPUError | null>`; the first captured vgpu error wins, otherwise a native `GPUError` is converted to `VGPU-CORE-VALIDATION`, otherwise `null`.
+
+**Throws:**
+
+- `VGPU-CORE-INVALID-USAGE` when `createBuffer({ size })` receives a non-finite size, `size <= 0`, or an empty `usage` array — pass a positive byte size and at least one buffer usage.
+- `VGPU-CORE-VALIDATION` can be returned from `popErrorScope()` when the native WebGPU scope reports a `GPUError` — inspect `.message` and fix the invalid WebGPU descriptor or command.
+- Native WebGPU errors may be thrown by `gpu.createShaderModule`, `gpu.createTexture`, `gpu.pushErrorScope`, `gpu.popErrorScope`, or `gpu.destroy`; use error scopes around native validation-sensitive calls.
+
+## Examples
+
+```ts
+import { createMockAdapter } from "vgpu/mock";
+
+const device = await createMockAdapter().requestDevice();
+
+const buffer = device.createBuffer({
+  label: "positions",
+  size: 16,
+  usage: ["vertex", "copy_dst", "copy_src"],
+});
+
+buffer.write(new Float32Array([0, 1, 2, 3]));
+const bytes = await buffer.read(16);
+console.log(bytes.byteLength);
+
+device.destroy();
+```
+
+```ts
+import { createMockAdapter } from "vgpu/mock";
+
+const device = await createMockAdapter().requestDevice();
+
+device.pushErrorScope("validation");
+const badBuffer = device.createBuffer({ size: 0, usage: ["copy_dst"] });
+const error = await device.popErrorScope();
+
+console.log(badBuffer.options.size, error?.code); // "VGPU-CORE-INVALID-USAGE"
+device.dispose();
+```
+
+```ts
+import { createMockAdapter } from "vgpu/mock";
+
+const device = await createMockAdapter().requestDevice();
+
+if (device.features.has("timestamp-query")) {
+  console.log("timestamp queries are available");
+}
+
+console.log(device.limits.maxTextureDimension2D);
+console.log(device.isCompatibilityMode);
+
+device.destroy();
+```
+
+## Notes
+
+- `Device` is intentionally low-level: it does not infer buffer/texture usage from shaders or pipeline state. Provide explicit descriptors.
+- Prefer `device.createBuffer(...)` and `device.createTexture(...)` over raw `.gpu` creation when you want vgpu wrappers, readback, lifecycle callbacks, or structured core errors.
+- `destroy()` is idempotent and `dispose()` is an alias. Do not call `device.gpu.destroy()` directly unless you intentionally bypass vgpu lifecycle.
+- `createBuffer` throws immediately without an error scope, but captures into the current vgpu error scope when one is active.
+- `isCompatibilityMode` is only a signal set by the adapter; keep compatibility-specific texture views and WGSL bindings in lockstep yourself.
+- **See also:** `Buffer`, `Texture`, `Queue`, `VGPUError`, `VGPUAdapter`.
