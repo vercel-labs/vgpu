@@ -1,48 +1,72 @@
 # @vgpu/wgsl-std/hash
 
-Pure WGSL integer and float hash helpers for `@vgpu/wgsl` imports. The module contains declarations only: no bindings, overrides, hidden state, or entry points.
+Pure WGSL hash utilities for deterministic shader randomness. Import them for integer hashing, multi-output PCG-style lattice hashes, and stable conversion from `u32` hashes to unit floats.
+
+## Import
 
 ```wgsl
-import { hashU32, pcg3d, unitFloat } from "@vgpu/wgsl-std/hash";
+import { hash1, hash2, hash3, hashU32, pcg2d, pcg3d, unitFloat } from "@vgpu/wgsl-std/hash";
+```
+
+## Signature
+
+```wgsl
+export fn hashU32(value: u32) -> u32;
+export fn pcg2d(value: vec2u) -> vec2u;
+export fn pcg3d(value: vec3u) -> vec3u;
+export fn unitFloat(hash: u32) -> f32;
+export fn hash1(seed: f32) -> f32;
+export fn hash2(seed: vec2f) -> vec2f;
+export fn hash3(seed: vec3f) -> vec3f;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| value | `u32` | ✔ | — | Input integer for `hashU32`, implemented with Wellons lowbias32 constants. |
+| value | `vec2u` | ✔ | — | Two-dimensional unsigned seed for `pcg2d`; returns two decorrelated unsigned outputs. |
+| value | `vec3u` | ✔ | — | Three-dimensional unsigned seed for `pcg3d`; returns three decorrelated unsigned outputs. |
+| hash | `u32` | ✔ | — | Hash bits passed to `unitFloat`. The low 8 bits are discarded, then the top 24 bits map to `[0.0, 1.0)`. |
+| seed | `f32` | ✔ | — | Float seed for `hash1`; bitcast to `u32` before hashing. `-0.0` and `0.0` hash differently. |
+| seed | `vec2f` | ✔ | — | Float vector seed for `hash2`; bitcast to `vec2u`, hashed with `pcg2d`, converted with `unitFloat`. |
+| seed | `vec3f` | ✔ | — | Float vector seed for `hash3`; bitcast to `vec3u`, hashed with `pcg3d`, converted with `unitFloat`. |
+
+**Returns:** `hashU32` returns `u32`; `pcg2d`/`pcg3d` return unsigned vectors; `unitFloat` and `hash1` return `f32` in `[0.0, 1.0)`; `hash2`/`hash3` return float vectors with each component in `[0.0, 1.0)`.
+
+**Throws:** These WGSL declarations do not throw. `resolveShader()` can still throw `VGPU-WGSL-SYM-NOEXPORT` for misspelled imports, `VGPU-WGSL-PKG-NOTFOUND` if the package import cannot be resolved, or validation errors such as `VGPU-WGSL-NAGA-UNKNOWN` if caller WGSL is invalid.
+
+## Examples
+
+```ts
+const hashWgsl = `
+import { pcg3d, unitFloat } from "@vgpu/wgsl-std/hash";
 
 fn cellRandom(cell: vec3i) -> f32 {
   return unitFloat(pcg3d(bitcast<vec3u>(cell)).x);
 }
+`;
+
+console.log(hashWgsl.includes("cellRandom"));
 ```
 
-## API
+```ts
+const jitterWgsl = `
+import { hash2 } from "@vgpu/wgsl-std/hash";
 
-- `hashU32(value: u32) -> u32`
-- `pcg2d(value: vec2u) -> vec2u`
-- `pcg3d(value: vec3u) -> vec3u`
-- `unitFloat(hash: u32) -> f32`
-- `hash1(seed: f32) -> f32`
-- `hash2(seed: vec2f) -> vec2f`
-- `hash3(seed: vec3f) -> vec3f`
+fn jitter(pixel: vec2f) -> vec2f {
+  return hash2(pixel) - vec2f(0.5);
+}
+`;
 
-## Integer hashes
-
-`hashU32` implements Chris Wellons' `lowbias32` integer hash. It is not PCG; the name intentionally describes the public behavior, while the docs name the algorithm so shader ports can match constants bit-for-bit.
-
-`pcg2d` and `pcg3d` implement Jarzynski and Olano-style multi-output PCG hash variants for vector lattice coordinates. Use them when you need two or three decorrelated integer outputs from one seed, such as jittering a 2D or 3D feature point.
-
-## Unit floats
-
-`unitFloat(hash)` maps a `u32` hash to `[0.0, 1.0)` with exact 24-bit mantissa precision:
-
-```text
-f32(hash >> 8u) * (1.0 / 16777216.0)
+console.log(jitterWgsl.length > 0);
 ```
 
-Because the lower eight bits are discarded before conversion, the result never reaches `1.0`.
+## Notes
 
-## Float-domain wrappers
-
-`hash1`, `hash2`, and `hash3` bitcast float inputs to unsigned integers, hash those bit patterns, then convert each result with `unitFloat`. This avoids precision cliffs from sine/fract-style hashes and is stable across the full `f32` bit pattern range.
-
-Precision notes:
-
-- `hash1(-0.0) != hash1(0.0)` because the raw float bits differ.
-- NaN payloads are caller responsibility; different NaN encodings can hash differently.
-- For lattice positions, prefer `floor()` before hashing so integer cell coordinates remain exact.
-- Integer-lattice callers can skip float wrappers entirely: `unitFloat(pcg3d(bitcast<vec3u>(cell)).x)`.
+- This module is pure WGSL: it declares no `@group`, no `@binding`, no overrides, no hidden state, and no entry points.
+- `hashU32` is Wellons lowbias32, not PCG. `pcg2d` and `pcg3d` are multi-output PCG-style vector hashes for lattice coordinates.
+- `unitFloat(hash)` computes `f32(hash >> 8u) * (1.0 / 16777216.0)`, so it never returns `1.0`.
+- Float wrappers hash raw IEEE bit patterns. Normalize NaNs and signed zero yourself if those values should collide.
+- For lattice noise, prefer integer cell coordinates (`vec*i` bitcast to `vec*u`) over sine/fract-style float hashes.
+- **See also:** `@vgpu/wgsl-std/noise`, `@vgpu/wgsl-std/color`, `resolveShader`.

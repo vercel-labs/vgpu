@@ -1,61 +1,113 @@
 # ResolvedShader and ShaderSource
 
-`ResolvedShader` is the plain-WGSL shader description shared by `@vgpu/wgsl` and
-`@vgpu/core`. It is intentionally data-only: `compile(wgsl)` returns it, and
-`device.createShader(resolved)` turns it into a GPU shader module.
+Data shapes returned or consumed by the WGSL helpers. Use `ResolvedShader` for `compile()` output and `ShaderSource` for loader-emitted `.wgsl` modules.
 
-Public `ResolvedShader` shape includes:
+## Import
 
-- `kind: "wgsl"` and `wgsl`: the unchanged WGSL source.
-- `source`, `ast`, `sourceMap`: passthrough metadata with empty import and
-  diagnostics lists.
-- `cacheKey`: deterministic source key for future shader caches.
-- `entryPoints`: names detected from `@vertex`, `@fragment`, and `@compute`
-  declarations.
-- `stats`: line count, UTF-8 byte count, and placeholder bind-group count.
+```ts
+import type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
+```
 
-`ShaderSource` is the smaller artifact emitted by the Vite and webpack `.wgsl`
-loaders:
+## Signature
 
 ```ts
 interface ShaderSource {
   readonly version: 1;
   readonly wgsl: string;
 }
+
+interface WGSLSource {
+  readonly text: string;
+  readonly path?: string;
+  readonly imports?: readonly { readonly path: string; readonly from: string }[];
+}
+
+interface SourceMap {
+  readonly version: 1;
+  readonly mappings: readonly [];
+}
+
+interface WGSLAst {
+  readonly version: 1;
+  readonly modules: readonly [{ readonly path: string; readonly text: string }];
+  readonly diagnostics: readonly [];
+  readonly sourceMap: SourceMap;
+  readonly cacheKey: Record<string, string>;
+}
+
+interface ResolvedShader {
+  readonly kind: "wgsl";
+  readonly wgsl: string;
+  readonly source: WGSLSource;
+  readonly ast: WGSLAst;
+  readonly sourceMap: SourceMap;
+  readonly diagnostics: readonly [];
+  readonly cacheKey: Record<string, string>;
+  readonly entryPoints: readonly string[];
+  readonly stats: { readonly lines: number; readonly bytes: number; readonly bindGroups: number };
+}
 ```
 
-It intentionally contains no reflection, layouts, or `bindings` map. The
-`bindings` field is reserved for a future format version and is not emitted in
-v1. Ring-1 APIs (`gpu.pass`, `gpu.draw`, and `gpu.compute`) accept either a raw
-WGSL string or this object and normalize at the API boundary.
+## Parameters
 
-Invariants: `compile()` does not resolve imports, mangle names, or build full
-reflection. Runtime strings containing `import` are rejected before a
-`ResolvedShader` is created. Consumers should treat fields as read-only and
-pass objects across package boundaries rather than depending on placeholder AST
-internals.
+`ResolvedShader` fields:
 
-Imported modules are pure: structs/functions live in modules, while every
-`@group/@binding` resource is declared by the entry module. That keeps `set()`
-name reflection source-facing without binding renumbering or a binding map.
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| kind | `"wgsl"` | ✔ | — | Discriminant for WGSL shader data returned by `compile()`. |
+| wgsl | string | ✔ | — | Original source string passed to `compile()`. |
+| source | `WGSLSource` | ✔ | — | Runtime source metadata. `compile()` sets `text` to the input, `path` to `"<runtime>"`, and `imports` to `[]`. |
+| ast | `WGSLAst` | ✔ | — | Lightweight passthrough AST metadata with one runtime module and no diagnostics. |
+| sourceMap | `SourceMap` | ✔ | — | Passthrough v1 source map with empty `mappings`. |
+| diagnostics | `readonly []` | ✔ | — | Always empty for `compile()` output. |
+| cacheKey | `Record<string, string>` | ✔ | — | Deterministic FNV-style key in the form `vgpu-wgsl-1:<hash>` under `default`. |
+| entryPoints | `readonly string[]` | ✔ | — | Names matched by `@(vertex|fragment|compute) fn <name>` in the source. |
+| stats | `{ lines: number; bytes: number; bindGroups: number }` | ✔ | — | Line count, UTF-8 byte length, and `bindGroups: 0`. |
 
-```wgsl
-// noise.wgsl
-export struct NoiseConfig { seed: u32 }
-export fn noise(cfg: NoiseConfig) -> f32 { return f32(cfg.seed); }
+`ShaderSource` fields:
 
-// entry.wgsl
-import { NoiseConfig, noise } from "./noise.wgsl";
-@group(0) @binding(0) var<uniform> cfg: NoiseConfig;
-@fragment fn main() -> @location(0) vec4f { return vec4f(noise(cfg)); }
-```
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| version | `1` | ✔ | — | Loader artifact version. |
+| wgsl | string | ✔ | — | Plain WGSL emitted by a loader or resolver. |
 
-Examples:
+**Returns:** These are TypeScript interfaces, not callables. They return nothing.
+
+**Throws:** These type declarations throw nothing. `compile()` throws before constructing `ResolvedShader` when runtime WGSL contains a top-level import.
+
+## Examples
 
 ```ts
-const resolved = compile(wgslSource);
-const shader = device.createShader(resolved);
+import { compile, type ResolvedShader, type ShaderSource } from "@vgpu/wgsl";
 
-import shaderSource from "./shader.wgsl";
-gpu.pass(shaderSource); // ShaderSource is accepted directly by ring-1 APIs.
+const resolved: ResolvedShader = compile(`
+@fragment
+fn fs_main() -> @location(0) vec4f {
+  return vec4f(1.0, 0.0, 0.0, 1.0);
+}
+`);
+
+const source: ShaderSource = { version: 1, wgsl: resolved.wgsl };
+console.log(source.version, resolved.entryPoints[0]);
 ```
+
+```ts
+import type { ShaderSource } from "@vgpu/wgsl";
+
+function acceptsLoaderOutput(shader: ShaderSource): string {
+  return shader.wgsl;
+}
+
+acceptsLoaderOutput({
+  version: 1,
+  wgsl: "@compute @workgroup_size(1) fn main() {}",
+});
+```
+
+## Notes
+
+- `ShaderSource` v1 is exactly `{ version: 1, wgsl: string }`. It has no `bindings`, reflection, layouts, or cache metadata; `bindings` is reserved for a future version bump.
+- Treat `ResolvedShader` fields as read-only data. Do not patch placeholder AST internals to represent imports; use `resolveShader()` for import graphs.
+- `compile()` output does not prove WGSL validity. It only packages the string and rejects top-level `import`.
+- Pure-module contract for resolver graphs: imported modules may export structs/functions/constants/aliases, but no imported module may declare `@group/@binding`; declare resources only in the entry module.
+- **See also:** `compile`, `resolveShader`, `wgslVitePlugin`, `wgslWebpackLoader`.

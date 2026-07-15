@@ -1,38 +1,132 @@
 # resolveShader
 
-`resolveShader` loads a WGSL entry module, follows vgpu-wgsl import/export declarations, and returns a single plain WGSL string that can be passed to WebGPU. Callers can provide `modules` as an in-memory filesystem or let the resolver read files from disk; relative imports resolve from the importing module, `@/` imports use `rootDir`, and package imports use `packageMap` or package `exports`. With validation enabled, emitted WGSL is checked by the configured validator and failures are reported as structured `VGPU-WGSL-*` diagnostics.
+Loads a WGSL entry module, resolves vgpu WGSL imports, enforces pure imported modules, and emits one plain WGSL string. Use it in build/setup/tooling code when shader source is split across files or in-memory modules.
 
-Imported WGSL modules are pure: they may export structs, aliases, constants, and functions, but they cannot declare `@group/@binding` resources. All bindings live in the entry module so runtime reflection and `set()` use source-facing entry names without a binding map, renumbering, or binding-name mangling. If a module declares a resource, resolution throws `VGPU-RESOLVE-MODULE-BINDING` with the canonical fix-it. The entry itself may declare bindings.
+## Import
 
-Canonical module pattern:
-
-```wgsl
-// noise.wgsl
-export struct NoiseConfig { seed: u32 }
-export fn noise(cfg: NoiseConfig) -> f32 { return f32(cfg.seed); }
-
-// entry.wgsl
-import { NoiseConfig, noise } from "./noise.wgsl";
-@group(0) @binding(0) var<uniform> cfg: NoiseConfig;
-@fragment fn main() -> @location(0) vec4f { return vec4f(noise(cfg)); }
+```ts
+import { resolveShader } from "@vgpu/wgsl/runtime";
+import type { ResolveOptions, ResolvedShader } from "@vgpu/wgsl/runtime";
 ```
 
-`ResolveOptions` contains the entry path plus optional `rootDir`, `packageMap`, `modules`, `validate`, and `minify` flags. `minify` accepts `boolean | { whitespace?: boolean; identifiers?: "none" | "safe" }` and defaults to `false`. `minify: true` is the production preset (`{ whitespace: true, identifiers: "safe" }`). Object form defaults to whitespace on and identifier renaming off, so `{ minify: { whitespace: true } }` is whitespace-only and `{ minify: { identifiers: "safe" } }` enables whitespace plus safe identifier shortening.
+## Signature
 
-## Usage caveat
+```ts
+import type { ResolvedShader } from "@vgpu/wgsl/runtime";
 
-`resolveShader()` is intended for setup, build, test, and tooling code, not for per-frame calls or animation-frame hot paths. If shader source changes dynamically, resolve the WGSL, create the shader module, and build the affected pipeline off the frame path. When the replacement is ready, swap staged or double-buffered pipelines at a frame boundary so import resolution, validation, DCE, minification, and pipeline creation do not add frame-time work.
+interface ResolveOptions {
+  readonly entry: string;
+  readonly rootDir?: string;
+  readonly packageMap?: Record<string, string>;
+  readonly modules?: Record<string, string>;
+  readonly validate?: boolean;
+  readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" };
+}
 
-`identifiers: "safe"` is AST/scope-aware and intentionally limited in this release to function-local `let`/`var`/`const`, function parameters, `for`-initializer locals, and resolver-generated private helper functions named like `_vgsl_<hash>__name` when analysis proves they are safe. It never renames entry points, resources/bindings/uniform/storage/texture/sampler declarations, overrides or references, struct/type names, struct fields, import/export/reflection-visible names, attributes, builtins, or WGSL predeclared names. If analysis is unsure, the conservative fallback preserves names. The minifier adds no dependency; compact-output source maps and struct-field renaming are deferred.
+declare function resolveShader(opts: ResolveOptions): Promise<ResolvedShader>;
+```
 
-Before validation and minification, `resolveShader()` always runs conservative declaration-level dead-code elimination on the flattened import graph for resolved shaders that contain entry points. There is no DCE opt-out in this release. The pass starts from shader entry points, `@group`/`@binding` resource declarations, and overrides, then retains functions, structs, aliases, constants, and private variables referenced by those roots. This keeps broad utility imports such as `@vgpu/wgsl-std/color` or `@vgpu/wgsl-std/sampling` from emitting every helper when only one export is used. If the resolver cannot find an entry point, it preserves the full graph rather than guessing; if reference analysis is unsure, it may over-retain a declaration rather than risk removing required WGSL. It also preserves all resource bindings and overrides because those are externally visible to pipeline setup.
+## Parameters
 
-DCE runs whether or not `minify` is enabled; `minify: true` still gives the smallest production WGSL because it removes comments/whitespace and safely shortens selected identifiers after unused declarations are gone. To measure size, compare `resolved.wgsl.length` or `new TextEncoder().encode(resolved.wgsl).byteLength` with `minify: false` and `minify: true`. Cache keys remain deterministic and independent of the minify option; declaration DCE does not make cache keys ignore unused imported source changes in this release.
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| opts.entry | string | ✔ | — | Entry WGSL module path. With `modules`, it is canonicalized against the virtual module map; without `modules`, it is resolved on disk and may omit `.wgsl` when a matching file or `index.wgsl` exists. The entry may declare `@group/@binding` resources. |
+| opts.rootDir | string | ✖ | `dirname(entry)` for cache-key grouping; no `@/` alias unless provided | Base directory for `@/foo.wgsl` imports. Also used as the default root passed to cache key generation when present. |
+| opts.packageMap | `Record<string, string>` | ✖ | `{}` | Prefix map for package-style WGSL imports. If a specifier starts with a key, the target prefix is joined with the remainder. |
+| opts.modules | `Record<string, string>` | ✖ | filesystem reads | In-memory WGSL filesystem. Keys are normalized with `/`; relative imports use virtual paths and package imports require `packageMap`. |
+| opts.validate | boolean | ✖ | `true` | When not `false`, validates emitted WGSL via `validateWGSL`. In normal processes validation is a no-op unless `VGPU_DOCKER_TEST=1`; in that mode Naga/WebGPU diagnostics can throw. |
+| opts.minify | `boolean | MinifyOptions` | ✖ | `false` | `true` means `{ whitespace: true, identifiers: "safe" }`; object form defaults to `{ whitespace: true, identifiers: "none" }`; `false` or omitted preserves whitespace/comments after resolver emission and DCE. |
 
-When validation is enabled, `resolveShader()` validates the DCE-pruned unminified emitted WGSL before minifying so diagnostics map to authored modules. If identifier minification is enabled, it also validates the final minified WGSL. Existing import flattening and collision-avoidance mangling is unchanged.
+**Returns:** `Promise<ResolvedShader>` — resolved WGSL plus dependency paths, cache keys, lightweight AST modules, source map, diagnostics, and reflection for entry points/resources.
 
-The output `ResolvedShader` contains `wgsl`, entry-point `cacheKey` values, `reflection`, a `sourceMap`, `diagnostics`, and `ast`. Resolution throws structured errors for missing files, invalid imports, missing exports, duplicate JavaScript-visible names, namespace misuse, mangle collisions, and validator errors.
+**Throws:** `VGPU-RESOLVE-MODULE-BINDING` when a non-entry imported module declares any `@group(...)` or `@binding(...)` resource — move the resource declaration into the entry module and export only structs/functions from the module. The error message is exactly:
 
-`WGSLAst` is a lightweight tooling view over the resolved graph. Its `modules` array contains `WGSLModule` records with module path, byte size, stable path hash prefix, imports, and exports; it does not expose parser internals. The AST also carries the same `cacheKey`, diagnostics, and `SourceMap` returned at the top level.
+```text
+VGPU-RESOLVE-MODULE-BINDING: <module> declara '@group(<group>) @binding(<binding>) <name>'.
+Los módulos no pueden declarar bindings — exportá el struct y declaralo en tu entry:
+  export struct NoiseConfig { seed: u32 }
+  // en tu entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;
+```
 
-`SourceMap` identifies the generated source list used for diagnostic remapping. It is line-oriented in this release: diagnostics expose authored file and line, while columns may be approximate when a line contains substituted identifiers. Because the source map is built from the resolved module graph, `sourceMap.sources` may still list imported modules whose declarations were fully removed by DCE. Diagnostic remapping remains based on generated module headers and is not regressed by this bookkeeping caveat. Approximate-column diagnostics keep their primary validator code and add `VGPU-WGSL-COL-APPROX` metadata so tooling can detect the limitation without parsing messages.
+**Throws:** `VGPU-WGSL-RES-ABS` when an import specifier starts with `/` — use a relative, `@/`, or package import.
+**Throws:** `VGPU-WGSL-RES-NOTFOUND` when the entry/import path or virtual module cannot be found, or when an import path token is not a string — add the module, fix the spelling, or add `.wgsl`/`index.wgsl`.
+**Throws:** `VGPU-WGSL-PKG-NOTFOUND` when a package or package export cannot be found — install/map the package or fix `packageMap`/exports.
+**Throws:** `VGPU-WGSL-IMP-SELF` when the graph contains an import cycle — break the cycle.
+**Throws:** `VGPU-WGSL-IMP-ORDER` when an `import` appears after declarations — move imports before declarations.
+**Throws:** `VGPU-WGSL-IMP-SIDEEFFECT` for `import "x"` — import named symbols or a namespace.
+**Throws:** `VGPU-WGSL-IMP-DEFAULT` for default import syntax or malformed import bindings — use `import { name } from "..."` or `import * as ns from "..."`.
+**Throws:** `VGPU-WGSL-EXP-REEXPORT-CYCLE` for `export { ... }` re-export syntax — export declarations directly.
+**Throws:** `VGPU-WGSL-EXP-NOTDECL` for invalid export attributes or exported declarations without a name — attach `export` to a declaration.
+**Throws:** `VGPU-WGSL-SYM-NOEXPORT` when an imported binding is not exported by the target module — export it or fix the import name.
+**Throws:** `VGPU-WGSL-SYM-IMPORT-SHADOW` when imports conflict with each other or shadow locals — rename with `as` or rename the local declaration.
+**Throws:** `VGPU-WGSL-OVERRIDE-DUP` or `VGPU-WGSL-ENTRYPOINT-DUP` when JavaScript-visible override or entry-point names appear in multiple modules — rename one declaration.
+**Throws:** `VGPU-WGSL-MANGLE-COLLISION` when canonical path hashes collide — rename one directory in either path.
+**Throws:** `VGPU-WGSL-NS-NOTVALUE` or `VGPU-WGSL-NS-NOMEMBER` for invalid namespace use — access exported namespace members directly.
+**Throws:** `VGPU-WGSL-MINIFY-IDENTIFIERS` when `minify.identifiers` is not `"none"` or `"safe"` — pass a valid mode.
+**Throws:** `VGPU-WGSL-MINIFY-BLOCK`, `VGPU-WGSL-LEX-UNTERM-COMMENT`, or `VGPU-WGSL-LEX-UNTERM-STRING` for unterminated WGSL comments/strings during scanning/minification — close the token.
+**Throws:** `VGPU-WGSL-NAGA-UNKNOWN` when validation is active and WebGPU/Naga rejects emitted WGSL or no validation adapter is available — fix the WGSL reported by the diagnostic.
+
+## Examples
+
+```ts
+import { resolveShader } from "@vgpu/wgsl/runtime";
+
+const resolved = await resolveShader({
+  entry: "/entry.wgsl",
+  validate: false,
+  modules: {
+    "/math.wgsl": `
+export fn tint(value: vec3f) -> vec3f {
+  return value * vec3f(1.0, 0.5, 0.25);
+}
+`,
+    "/entry.wgsl": `
+import { tint } from "./math.wgsl";
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+  return vec4f(tint(vec3f(1.0)), 1.0);
+}
+`,
+  },
+});
+
+console.log(resolved.wgsl.includes("fs_main"));
+```
+
+```ts
+import { resolveShader } from "@vgpu/wgsl/runtime";
+
+const resolved = await resolveShader({
+  entry: "/entry.wgsl",
+  validate: false,
+  minify: { whitespace: true },
+  modules: {
+    "/types.wgsl": `
+export struct NoiseConfig { seed: u32 }
+export fn noise(cfg: NoiseConfig) -> f32 { return f32(cfg.seed); }
+`,
+    "/entry.wgsl": `
+import { NoiseConfig, noise } from "./types.wgsl";
+
+@group(0) @binding(0) var<uniform> cfg: NoiseConfig;
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+  return vec4f(noise(cfg));
+}
+`,
+  },
+});
+
+console.log(resolved.deps.length);
+```
+
+## Notes
+
+- Imported modules are pure: no `@group`/`@binding` in any non-entry module. Export structs, aliases, constants, and functions from modules; declare uniforms/storage/textures/samplers only in the entry.
+- `resolveShader()` is for setup, tests, loaders, and build tooling. Do not call it per frame; resolve and create pipelines off the render hot path.
+- Declaration-level DCE always runs before validation/minification when entry points exist. There is no DCE opt-out in this release.
+- `minify: true` is the production preset. Safe identifier minification is conservative and does not rename entry points, resources, overrides, structs, fields, import/export names, attributes, builtins, or predeclared WGSL names.
+- Validation maps diagnostics back to generated module headers. Columns can be approximate when substituted identifiers appear; those diagnostics include `VGPU-WGSL-COL-APPROX` metadata.
+- **See also:** `compile`, `ShaderSource`, `wgslVitePlugin`, `wgslWebpackLoader`, `@vgpu/wgsl-std/hash`.
