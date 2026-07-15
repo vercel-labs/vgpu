@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { PackageNav } from './PackageNav';
+import { PackageNav } from './package-nav';
 
 const navItems = [
   {

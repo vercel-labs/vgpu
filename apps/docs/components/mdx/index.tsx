@@ -1,3 +1,3 @@
-export { CodeBlock, Pre } from './CodeBlock';
-export { Callout } from './Callout';
-export { ApiTable, ApiSignature } from './ApiTable';
+export { CodeBlock, Pre } from './code-block';
+export { Callout } from './callout';
+export { ApiTable, ApiSignature } from './api-table';

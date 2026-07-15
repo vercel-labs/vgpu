@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CodeBlock } from '@/components/CodeBlock';
+import { CodeBlock } from '@/components/code-block';
 
 const heroCode = `import { init } from "vgpu";
 

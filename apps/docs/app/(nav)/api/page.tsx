@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CodeBlock } from '@/components/CodeBlock';
+import { CodeBlock } from '@/components/code-block';
 
 const packages = [
   { name: 'vgpu', href: '/packages/vgpu', description: 'Public ring-1 API: one Gpu context with pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.', symbols: ['init', 'Gpu', 'Pass', 'Draw', 'Compute', 'Frame', 'Bundle', 'Target', 'SharedUniforms'] },

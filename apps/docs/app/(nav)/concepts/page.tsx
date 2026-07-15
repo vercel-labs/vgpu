@@ -1,5 +1,5 @@
-import { CodeBlock } from '@/components/CodeBlock';
-import { Callout } from '@/components/mdx/Callout';
+import { CodeBlock } from '@/components/code-block';
+import { Callout } from '@/components/mdx/callout';
 const gpuCode = `import { init } from "vgpu";
 const gpu = await init(canvas, { dpr: [1, 2] });
 const target = gpu.target({ format: "rgba16float", depth: true, msaa: true });`;

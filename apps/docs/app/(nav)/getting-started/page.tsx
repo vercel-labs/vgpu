@@ -1,5 +1,5 @@
-import { CodeBlock } from '@/components/CodeBlock';
-import { Callout } from '@/components/mdx/Callout';
+import { CodeBlock } from '@/components/code-block';
+import { Callout } from '@/components/mdx/callout';
 
 const installCode = `pnpm add vgpu
 pnpm add -D @webgpu/types`;

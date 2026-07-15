@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { highlightCode } from '@/lib/shiki';
-import { CopyButton } from './CopyButton';
+import { CopyButton } from './copy-button';
 
 export interface CodeViewerFile {
   name: string;

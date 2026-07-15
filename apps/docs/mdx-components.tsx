@@ -1,7 +1,7 @@
 import type { MDXComponents } from 'mdx/types';
-import { CodeBlock, Pre } from '@/components/mdx/CodeBlock';
-import { Callout } from '@/components/mdx/Callout';
-import { ApiTable, ApiSignature } from '@/components/mdx/ApiTable';
+import { CodeBlock, Pre } from '@/components/mdx/code-block';
+import { Callout } from '@/components/mdx/callout';
+import { ApiTable, ApiSignature } from '@/components/mdx/api-table';
 
 export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {

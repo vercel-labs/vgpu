@@ -1,4 +1,4 @@
-import { ExampleCard } from '@/components/ExampleCard';
+import { ExampleCard } from '@/components/example-card';
 import { examples } from '@/lib/examples-registry';
 
 export default function ExamplesPage() {
