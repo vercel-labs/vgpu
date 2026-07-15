@@ -1,5 +1,5 @@
 import { ValidationError } from "./errors.ts";
-import { textureUsageFlags } from "./gpuConstants.ts";
+import { textureUsageFlags } from "./gpu-constants.ts";
 import { isMockGPUTexture } from "./mock-gpu-storage.ts";
 import { createResourceIdentity, DestroySignal, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "./resource-lifecycle.ts";
 import type { Device } from "./device.ts";

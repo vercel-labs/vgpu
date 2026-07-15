@@ -1,4 +1,4 @@
-import { bufferUsageFlags } from "./gpuConstants.ts";
+import { bufferUsageFlags } from "./gpu-constants.ts";
 import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock-gpu-storage.ts";
 
 export interface MockGPUDeviceInstrumentation {
