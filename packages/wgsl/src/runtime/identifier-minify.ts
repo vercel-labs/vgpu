@@ -1,6 +1,6 @@
-import { printWgslTokens } from "./tokenPrinter.ts";
-import { RenameAllocator } from "./renameAllocator.ts";
-import { analyzeWgslTokens, type ScopeAnalysis, type ScopeDeclaration, type FunctionScopeInfo } from "./scopeWalker.ts";
+import { printWgslTokens } from "./token-printer.ts";
+import { RenameAllocator } from "./rename-allocator.ts";
+import { analyzeWgslTokens, type ScopeAnalysis, type ScopeDeclaration, type FunctionScopeInfo } from "./scope-walker.ts";
 import { scan, type Token } from "./scanner.ts";
 
 export interface IdentifierMinifyResult {

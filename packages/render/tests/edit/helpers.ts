@@ -9,7 +9,7 @@ import type { Mesh } from "../../src/mesh-like.ts";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import type { EditableMeshValue as EditableMesh, ElementSelection } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { renderInspectFrame } from "../inspect/_helpers.ts";
+import { renderInspectFrame } from "../inspect/helpers.ts";
 import { wireframeOverlayMaterial } from "./fixtures/wireframe-overlay-material.ts";
 
 export const SNAPSHOT_DIR = "packages/render/tests/edit/__snapshots__";

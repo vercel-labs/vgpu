@@ -1,6 +1,6 @@
 import { Terminal } from "lucide-react";
 import { highlightCode, countLinesInHtml } from "@/lib/shiki";
-import { CopyButton } from "./CopyButton";
+import { CopyButton } from "./copy-button";
 
 interface CodeBlockProps {
   code: string;

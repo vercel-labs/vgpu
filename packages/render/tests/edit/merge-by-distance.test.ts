@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { edgeBetween, mergeDuplicateTetra } from "./fixtures/cleanup.ts";
 import type { EditableMeshValue } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const euler = (em: EditableMeshValue) => em.vertexCount - em.edgeCount + em.faceCount;
 

@@ -1,5 +1,5 @@
 import { ValidationError } from "./errors.ts";
-import { bufferUsageFlags, mapReadMode } from "./gpuConstants.ts";
+import { bufferUsageFlags, mapReadMode } from "./gpu-constants.ts";
 import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
 
 const stagingUsage = bufferUsageFlags(["copy_dst", "map_read"]);

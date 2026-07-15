@@ -26,12 +26,12 @@ test("supports docs help and path listing", () => {
   expect(help).toContain("Usage: vgpu docs <command>");
   expect(help).toContain("Start here: vgpu docs cat getting-started.md");
   expect(success(["docs", "ls"])).toContain("/vgpu/core");
-  expect(success(["docs", "ls", "/vgpu/core"])).toContain("Buffer.docs.md");
+  expect(success(["docs", "ls", "/vgpu/core"])).toContain("buffer.docs.md");
   expect(success(["docs", "ls", "/guides"])).toContain("getting-started.docs.md");
 });
 
 test("cats docs by path and unique symbol", () => {
-  expect(success(["docs", "cat", "/vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
+  expect(success(["docs", "cat", "/vgpu/core/buffer.docs.md"])).toContain("# Buffer");
   expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
 });
 
@@ -62,8 +62,8 @@ test("greps content with case and package options", () => {
 
 test("finds symbols and resolves paths", () => {
   expect(success(["docs", "find", "Buffer"])).toContain("Buffer\tvgpu/core");
-  expect(success(["docs", "path", "Buffer"])).toBe("/vgpu/core/Buffer.docs.md\n");
-  expect(success(["docs", "path", "/vgpu/core/Buffer.docs.md"])).toBe("/vgpu/core/Buffer.docs.md\n");
+  expect(success(["docs", "path", "Buffer"])).toBe("/vgpu/core/buffer.docs.md\n");
+  expect(success(["docs", "path", "/vgpu/core/buffer.docs.md"])).toBe("/vgpu/core/buffer.docs.md\n");
   expect(success(["docs", "path", "getting-started"])).toBe("/guides/getting-started.docs.md\n");
   expect(success(["docs", "path", "getting-started.md"])).toBe("/guides/getting-started.docs.md\n");
   expect(success(["docs", "path", "/guides/performance-model.docs.md"])).toBe("/guides/performance-model.docs.md\n");
@@ -74,7 +74,7 @@ test("keeps existing guide and API docs forms working", () => {
   expect(success(["docs", "cat", "performance-model"])).toContain("# Performance model");
   expect(success(["docs", "cat", "/guides/performance-model.docs.md"])).toContain("# Performance model");
   expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
-  expect(success(["docs", "cat", "/vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
+  expect(success(["docs", "cat", "/vgpu/core/buffer.docs.md"])).toContain("# Buffer");
 });
 
 test("returns nonzero for missing and unknown docs commands", () => {

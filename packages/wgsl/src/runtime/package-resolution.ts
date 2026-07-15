@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { wgslError, wgslWarning } from "./errors.ts";
-import type { Diagnostic } from "./diagnosticTypes.ts";
+import type { Diagnostic } from "./diagnostic-types.ts";
 
 export interface PackageResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string> }
 

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CodeBlock } from '@/components/CodeBlock';
+import { CodeBlock } from '@/components/code-block';
 import { resolveMarkdownHref } from '@/lib/manifest';
 
 interface MarkdownContentProps {

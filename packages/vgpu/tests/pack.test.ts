@@ -25,7 +25,7 @@ test("packed install exposes vgpu docs bin", () => {
     execFileSync("npm", ["install", tarball, "--prefix", installDir], { stdio: "pipe" });
     const bin = join(installDir, "node_modules/.bin/vgpu");
     const result = execFileSync(bin, ["docs", "path", "Buffer"], { encoding: "utf8" });
-    expect(result).toBe("/vgpu/core/Buffer.docs.md\n");
+    expect(result).toBe("/vgpu/core/buffer.docs.md\n");
   } finally {
     rmSync(packDir, { recursive: true, force: true });
     rmSync(installDir, { recursive: true, force: true });

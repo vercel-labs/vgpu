@@ -3,7 +3,7 @@ import { init as initMock } from "../../../src/mock.ts";
 import { init as initNode } from "../../../src/node.ts";
 import { type MeshPrimitive } from "../../../src/scene/geometry-src/index.ts";
 import { expect } from "vitest";
-import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./_helpers.ts";
+import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./helpers.ts";
 
 export interface PolyhedronCase {
   readonly name: string;

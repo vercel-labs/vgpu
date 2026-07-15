@@ -71,7 +71,7 @@ try {
         "@vgpu/render/perf": ["packages/render/src/perf/index.ts"],
         "@vgpu/render/edit": ["packages/render/src/edit/index.ts"],
         "@vgpu/wgsl": ["packages/wgsl/src/index.ts"],
-        "@vgpu/wgsl/runtime": ["packages/wgsl/src/runtime/resolveShader.ts"],
+        "@vgpu/wgsl/runtime": ["packages/wgsl/src/runtime/resolve-shader.ts"],
         "@vgpu/wgsl/loader-vite": ["packages/wgsl/src/loader-vite/index.ts"],
         "@vgpu/wgsl/loader-webpack": ["packages/wgsl/src/loader-webpack/index.ts"],
         "@vgpu/wgsl-std/color": ["packages/wgsl-std/src/color/index.ts"],

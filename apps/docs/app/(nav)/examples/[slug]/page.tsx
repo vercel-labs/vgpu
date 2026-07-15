@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { CodeViewer } from '@/components/CodeViewer';
-import { ExamplePreview } from '@/components/ExamplePreview';
+import { CodeViewer } from '@/components/code-viewer';
+import { ExamplePreview } from '@/components/example-preview';
 import { examples, getExample } from '@/lib/examples-registry';
 
 interface ExampleDetailPageProps {

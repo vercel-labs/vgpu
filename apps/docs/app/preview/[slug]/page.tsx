@@ -1,5 +1,5 @@
 import { examples } from '@/lib/examples-registry';
-import { ExampleCanvas } from './ExampleCanvas';
+import { ExampleCanvas } from './example-canvas';
 
 interface PreviewPageProps {
   params: Promise<{ slug: string }>;

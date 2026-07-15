@@ -1,7 +1,7 @@
 import { compile } from "@vgpu/wgsl";
 import { Buffer } from "./buffer.ts";
-import { bufferUsageFlags } from "./gpuConstants.ts";
-import { mockBufferDescriptor } from "./mockGpu.ts";
+import { bufferUsageFlags } from "./gpu-constants.ts";
+import { mockBufferDescriptor } from "./mock-gpu.ts";
 import { Queue } from "./queue.ts";
 import { Shader, type ShaderInput } from "./shader.ts";
 import { Texture, toGPUTextureDescriptor } from "./texture.ts";
