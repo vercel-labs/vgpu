@@ -17,7 +17,6 @@
     "@vgpu/adapter-mock": "workspace:*",
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
-    "@vgpu/render": "workspace:*",
     "@vgpu/wgsl": "workspace:*",
     "@vgpu/wgsl-std": "workspace:*",
     "geist": "^1.5.1",

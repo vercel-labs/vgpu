@@ -16,7 +16,7 @@ material.writeUniforms(uniforms.gpu, 0, {
 ```
 
 `writeUniforms` writes the shared inspect matrices into the buffer. This keeps
-inspect materials independent from application materials used by `RapidRenderer`.
+inspect materials independent from application materials used by the ring-1 `vgpu` draw/pass APIs.
 
 `InspectMaterialUniformParams` includes `viewProjectionMatrix` and `modelMatrix`.
 Future inspect materials should extend this interface explicitly if they need

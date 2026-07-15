@@ -2,49 +2,32 @@
 
 # Performance model
 
-The mental model for making vgpu render code fast. Read this first; the other perf topics are the
-how-to.
+vgpu's public API is organized around stable identities.
 
-## The change-frequency ladder
+## R1 — ownership
 
-Classify every computation by how often its inputs change. Cost grows sharply down the ladder:
+The first `set()` for a binding decides ownership. Plain JS values are lib-owned and can be updated in place; resources are user-owned and their identity is bound directly. Switching ownership triggers `VGPU-R1-OWNERSHIP-FLIP`.
 
-| Tier | Runs | Cost driver |
-| --- | --- | --- |
-| static | once (build / app start) | free at runtime |
-| per-resize | when the canvas/layout changes | rare |
-| per-frame (CPU) | once per frame | ×~60/s |
-| per-pixel / per-vertex (GPU) | width × height × dpr, every frame | dominates |
+## R2 — identity cache
 
-**Optimization is pushing work UP the ladder** — compute it less often for the same result:
+Bind groups are cached by resource identity. Updating a JS value in place keeps the identity stable; replacing a texture/storage/sampler changes identity and may stale bundles.
 
-- per-pixel → static uniform (precompute on the CPU, pass it in)
-- per-frame → per-resize (cache a result that only changes on resize)
-- per-sample (in a loop) → per-pixel (hoist invariants out of the loop)
+## R3 — bundle staleness
 
-A value that only depends on uniforms but is computed per-pixel is pure waste: it's the same for
-every one of millions of pixels. Find those and push them up. See [patterns](./performance-patterns.docs.md).
+Bundles freeze encoded commands and bind groups. Buffer contents may change, but target resize or resource identity changes require re-recording. Replay reports `VGPU-R3-BUNDLE-STALE`.
 
-## When to optimize
+## R4 — claimed groups
 
-Do **not** optimize during creative iteration — the look will pivot and verbose optimizations slow
-you down and lock in the wrong structure. Optimize in three tiers, ordered by how expensive each is
-to retrofit:
+`draw.group(group, bindGroup)` claims an entire reflected group. vgpu validates the group layout and forbids `set()` into that group. Dynamic offsets are passed at draw time:
 
-- **Tier 0 — habits (from v1).** Structure so work is *pushable later*: idiomatic primitives,
-  separable passes, change-frequency comments. Costs nothing now; painful to retrofit. See
-  [authoring-for-perf](./authoring-for-perf.docs.md).
-- **Tier 1 — cheap cleanup (when the look stabilizes).** Mechanical local rewrites: dead code,
-  loop hoists, cheaper ops, gate default-off toggles.
-- **Tier 2 — structural (final pass, measured).** Move work across the ladder: bake a pass, hoist
-  per-pixel work to a uniform.
+```ts
+p.draw(draw, { offsets: { 1: [offset] } });
+```
 
-Run Tiers 1–2 as a deliberate [optimize pass](./optimize-pass.docs.md) once the design is locked,
-and **measure every change** ([measuring](./measuring.docs.md)) — most shader optimizations are
-numerically-equivalent-not-identical, so you confirm "imperceptible" rather than assume it.
+## Cost model defaults
 
-## Why structural beats clever
-
-In practice the big wins are structural (move work up the ladder), not micro-tricks. Baking one
-time-invariant pass or hoisting one per-pixel uniform routinely beats every `pow`→`sqrt` combined.
-Spend effort finding *what changes when*, not on shaving cycles in place.
+- Pre-warm pipelines with `targets:`.
+- Share globals with `gpu.uniforms()`.
+- Use `instances` for repeated geometry.
+- Use ping-pong for iterative read/write resources.
+- Put depth/MSAA/format on targets, not global state.

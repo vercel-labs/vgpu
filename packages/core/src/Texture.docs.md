@@ -60,10 +60,7 @@ Contract:
 - Invalidates the cached `texture.view`, so the next read returns a view of the
   new GPU texture.
 - Throws `ValidationError` if the texture is destroyed or wraps an externally
-  owned GPU texture such as a canvas swapchain texture from `renderTargetForCanvas`.
-- Throws `ValidationError` when the texture is captured by a `renderTarget()`
-  snapshot. Recreate the render target instead of resizing its textures;
-  resizable render targets are planned as a later additive API.
+  owned GPU texture such as a canvas swapchain texture.
 
 Example:
 
@@ -78,7 +75,9 @@ if (target.resize([canvas.width, canvas.height])) {
   // Contents were lost; re-seed or rebuild derived objects if needed.
 }
 
-pass({ colorAttachments: [{ view: target.view, loadOp: "clear", storeOp: "store" }] });
+const encoder = device.gpu.createCommandEncoder();
+const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.view, loadOp: "clear", storeOp: "store" }] });
+pass.end();
 const bindGroup = cache.get(target.gpu) ?? makeBindGroup(target.view);
 const pixels = await target.read();
 ```

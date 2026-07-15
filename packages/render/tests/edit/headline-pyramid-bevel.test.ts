@@ -1,6 +1,6 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
 import { bevel, toEditable } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, renderEditMesh, sha } from "./_helpers.ts";
@@ -15,7 +15,7 @@ describe("issue #34 headline pyramid+bevel scene availability", () => {
 
 (HAS_CONE ? describe : describe.skip)("issue #34 headline pyramid+bevel scene", () => {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("renders the pyramid+bevel scene byte-equal to snapshot", async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const device = await createNodeAdapter().requestDevice();
     try {
       const cone = (Mesh as unknown as { cone: (opts: unknown) => Mesh }).cone;
       const pyramid = cone({ device, radius: 0.5, height: 1, radialSegments: 4 });

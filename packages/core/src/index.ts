@@ -1,4 +1,3 @@
-export { App } from "./app.ts";
 export { Buffer } from "./buffer.ts";
 export { Device } from "./device.ts";
 export type { DeviceOptions } from "./device.ts";
@@ -17,7 +16,6 @@ export type { BindGroupLayoutMetadata, BindGroupMetadata } from "./bind-group-me
 export { createMockGPUDevice, getMockGPUDeviceInstrumentation } from "./mockGpu.ts";
 export type { MockGPUDeviceInstrumentation } from "./mockGpu.ts";
 export type { BufferPingPong, PingPongCore, TexturePingPong } from "./ping-pong.ts";
-export type { AppCreateOptions, AppInstance, VGPUAdapter } from "./app-types.ts";
 export type {
   BufferOptions,
   BufferUsageName,
@@ -25,6 +23,7 @@ export type {
   TextureOptions,
   TextureUsageName,
   CreateDeviceOptions,
+  VGPUAdapter,
 } from "./types.ts";
 export type {
   BindVisibility,

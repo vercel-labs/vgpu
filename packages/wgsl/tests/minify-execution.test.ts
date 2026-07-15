@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
+
 import { resolveShader } from "@vgpu/wgsl/runtime";
 
 type Modules = Record<string, string>;
@@ -54,7 +54,7 @@ async function expectSameExecution(testCase: ComputeCase, expected: readonly num
   const wgsl = await resolveBaselineAndMinified(testCase);
   await inspect?.(wgsl);
 
-  const { device } = await App.create({ adapter: createNodeAdapter() });
+  const device = await createNodeAdapter().requestDevice();
   try {
     const baselineOutput = await runCompute(device.gpu, wgsl.baseline, testCase);
     const minifiedOutput = await runCompute(device.gpu, wgsl.minified, testCase);

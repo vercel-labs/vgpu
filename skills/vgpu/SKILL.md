@@ -21,26 +21,20 @@ npx vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performanc
 
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.
 
-- **authoring-for-perf** — Tier-0 habits: how to write a shader during iteration so the later optimize pass is mechanical instead of archaeological.  `references/guides/authoring-for-perf.docs.md`
-- **browser-testing** — Reliable Playwright WebGPU runs in VGPU rely on the SwiftShader Vulkan stack inside a virtual X11 server.  `references/guides/browser-testing.docs.md`
-- **getting-started** — Use this as the VGPU docs index when you arrive through npx vgpu docs.  `references/guides/getting-started.docs.md`
-- **measuring** — How to verify a shader optimization before keeping it: confirm it's still correct (pixelDiff) and actually faster (gpuFrameTime).  `references/guides/measuring.docs.md`
-- **optimize-pass** — A procedure to run once the look is locked, to clean up and speed up shader/render code without changing what's on screen.  `references/guides/optimize-pass.docs.md`
-- **performance-model** — The mental model for making vgpu render code fast.  `references/guides/performance-model.docs.md`
-- **performance-patterns** — The catalog of vgpu render optimizations, ordered by typical payoff.  `references/guides/performance-patterns.docs.md`
+- **authoring-for-perf** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
+- **browser-testing** — Browser tests should exercise the same public API users copy: init(canvas), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
+- **getting-started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
+- **measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
+- **optimize-pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
+- **performance-model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
+- **performance-patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
+- **performance-playbook** — This guide is for LLMs and humans writing shaders.  `references/guides/performance-playbook.docs.md`
+- **shader-fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
 
 ## API reference
 
-139 symbols across 16 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
+142 symbols across 11 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
 
-- `@vgpu/adapter-mock` — createMockAdapter
-- `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
-- `@vgpu/core` — App, AppCreateOptions, AppInstance, bind, BindVisibility, Buffer, BufferOptions, BufferPingPong, BufferUsageName, BufferWriteData, createBindGroup, createBindGroupLayout, CreateBindGroupLayoutOptions, CreateBindGroupOptions, CreateDeviceOptions, createMockGPUDevice, createPipelineLayout, CreatePipelineLayoutOptions, createSampler, cubeView, CubeViewOptions, Device, DeviceLike, DeviceOptions, layerView, LayerViewOptions, pingPong, PingPongCore, Queue, SamplerDescriptorWithSugar, Shader, ShaderInput, Texture, TextureOptions, TexturePingPong, TextureUsageName, ValidationError, VGPUAdapter, VGPUError
-- `@vgpu/render` — beginFrame, Camera, ColorAttachment, createRenderBundle, createRenderPipeline, createRenderPipelineFromDescriptor, createRenderPipelineFromDescriptorAsync, degToRad, DepthStencilAttachment, DrawSpec, Frame, FrameOptions, FrameRenderPassCallback, Mat4, Material, MaterialUniformValue, Mesh, orthographicCamera, perspectiveCamera, RapidRenderer, RenderBundleOptions, RenderBundleRecorder, RenderPass, RenderPassDrawOptions, RenderPassDynamicOffsets, RenderPassOptions, RenderPipelineOptions, ScalarUniformType, srgb, StorageBuffer, StorageBufferOptions, StructuredUniform, StructuredUniformOptions, Uniform, UniformLayout, UniformLayoutInfo, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, UniformValues, Vec3, VectorUniformInput
-- `@vgpu/render/inspect` — InspectMaterial, InspectMaterialUniformParams, meshToWireframe, normalDebugMaterial, NormalDebugMaterialSpec, wireframeMaterial, WireframeMaterialSpec, WireframeMesh
-- `@vgpu/render/passes` — renderTargetForCanvas
-- `@vgpu/render/perf` — gpuFrameTime, GpuFrameTimeOptions, GpuFrameTimeResult, pixelDiff, PixelDiffResult
-- `@vgpu/render/utils` — canvasMouseTracker, CanvasMouseTracker, CanvasMouseTrackerSpec, canvasResolution, CanvasResolution, frameClock, FrameClock
 - `@vgpu/wgsl` — compile, ResolvedShader, SourceMap, WGSLAst, WGSLSource
 - `@vgpu/wgsl-std/color` — applyExposure, luminance, luminanceThreshold, tonemapAces, tonemapReinhard
 - `@vgpu/wgsl-std/fullscreen` — fullscreenTriangleClip, fullscreenTriangleUv
@@ -49,3 +43,6 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - `@vgpu/wgsl/loader-vite` — transformWgsl, ViteLoadResult, wgslVitePlugin
 - `@vgpu/wgsl/loader-webpack` — wgslWebpackLoader
 - `@vgpu/wgsl/runtime` — ResolvedShader, ResolveOptions, resolveShader, SourceMap, WGSLAst, WGSLModule
+- `vgpu` — Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawCallOptions, DrawLayoutOptions, DrawOptions, Frame, FrameLoopHandle, FramePass, FramePassOptions, FrameRunner, Gpu, init, InitOptions, MeshLike, Pass, PassOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Target, TargetOptions, Uniform, UniformOptions
+- `vgpu/core` — bind, Buffer, BufferOptions, createBindGroup, createBindGroupLayout, CreateDeviceOptions, createPipelineLayout, createRenderBundle, createSampler, Device, DeviceOptions, Queue, RenderBundleOptions, RenderBundleRecorder, ScalarUniformType, StorageBuffer, StorageBufferOptions, StructuredUniform, StructuredUniformOptions, Texture, TextureOptions, Uniform, UniformField, UniformLayout, UniformLayoutInfo, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, UniformValues, ValidationError, VectorUniformInput, VGPUAdapter, VGPUError, WgslUniformType
+- `vgpu/scene` — box, BoxOptions, Camera, CameraVec3, capsule, CapsuleOptions, cone, ConeOptions, cylinder, CylinderOptions, degToRad, disk, DiskOptions, dodecahedron, fullscreenQuad, FullscreenQuadOptions, geometries, GeometryKind, icosahedron, icosphere, IcosphereOptions, Mat4, octahedron, orbit, OrbitOptions, orthographicCamera, OrthographicCameraOptions, perspectiveCamera, PerspectiveCameraOptions, plane, PlaneOptions, PolyhedronOptions, ring, RingOptions, SceneCamera, SceneGeometry, SceneGeometryOfKind, SceneMesh, sphere, SphereOptions, srgb, tetrahedron, torus, TorusOptions, Vec3

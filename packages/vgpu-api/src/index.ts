@@ -10,7 +10,7 @@ export type { PassOptions } from "./pass.ts";
 export { OffscreenTarget, ScreenTarget } from "./target.ts";
 export type { Target, TargetOptions } from "./target.ts";
 export { VGPUError } from "./errors.ts";
-export type { AppCreateOptions, AppInstance, Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
+export type { Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
 export { Uniform } from "./core/uniform.ts";
 export type { UniformOptions } from "./core/uniform.ts";
 export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";

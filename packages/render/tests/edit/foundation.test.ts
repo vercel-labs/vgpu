@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
 import { EditableMesh, MeshEditWarning, toEditable, toEditableWithDiagnostics } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
@@ -24,7 +24,7 @@ describe("editable mesh foundation", () => {
   });
 
   test("Mesh.box bridge round-trips byte-equal and preserves hard edges", async () => {
-    const { device } = await App.create({ adapter: createMockAdapter() });
+    const device = await createMockAdapter().requestDevice();
     const box = Mesh.box({ device });
     const em = toEditable(box);
     expect(em.edgeCount).toBe(18);
@@ -57,7 +57,7 @@ describe("editable mesh foundation", () => {
   });
 
   test("render meshes baked from arrays carry edit source for round-trip", async () => {
-    const { device } = await App.create({ adapter: createMockAdapter() });
+    const device = await createMockAdapter().requestDevice();
     const em = tri([0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2]);
     const again = toEditable(em.toRenderMesh({ device }));
     expect(again.vertexCount).toBe(3);
@@ -67,7 +67,7 @@ describe("editable mesh foundation", () => {
   });
 
   test("diagnostic bridge emits tangent strip warning", async () => {
-    const { device } = await App.create({ adapter: createMockAdapter() });
+    const device = await createMockAdapter().requestDevice();
     const mesh = { ...Mesh.box({ device }), attributes: { ...Mesh.box({ device }).attributes, tangent: { offset: 24, format: "float32x4" } } } as never;
     const result = toEditableWithDiagnostics(mesh);
     expect(result.warnings[0]).toBeInstanceOf(MeshEditWarning);

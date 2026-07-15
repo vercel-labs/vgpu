@@ -1,6 +1,6 @@
 # Mesh editing
 
-`@vgpu/render/edit` is the CPU-side mesh editing layer for `@vgpu/render`.
+`@vgpu/render/edit` is the CPU-side mesh editing layer for mesh-like render data.
 `Mesh` is upload-ready render data; `EditableMesh` is a CPU-side topology value.
 Use `toEditable(mesh)` to enter the edit layer and `editable.toRenderMesh({ device })`
 to return to render data. Operators are public free functions and return new
@@ -16,10 +16,10 @@ that unwraps the handle is outside the public safety contract.
 ## Quick start
 
 ```ts
-import { Mesh } from "@vgpu/render";
+import { box } from "vgpu/scene";
 import { toEditable, extrude, bevel } from "@vgpu/render/edit";
 
-const em = toEditable(Mesh.box({ device, size: 1 }));
+const em = toEditable(gpu.mesh(box({ size: 1 })));
 const top = em.faces.scoreBy((f) => f.center[1]).top();
 const raised = extrude(em, top, { distance: 0.4 });
 const rounded = bevel(raised.mesh, raised.boundaryEdges, { offset: 0.04 });

@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
 import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";
@@ -11,7 +11,7 @@ const ops = ["extrude", "bevel", "inset", "subdivideEdges", "subdivideFaces", "l
 
 describe("all mesh edit operators smoke", () => {
   for (const name of ops) test(`${name} is exported and bakes to Mesh`, async () => {
-    const { device } = await App.create({ adapter: createMockAdapter() });
+    const device = await createMockAdapter().requestDevice();
     try {
       const mesh = run(name, toEditable(Mesh.box({ device, size: 1 })));
       expect(() => mesh.toRenderMesh({ device })).not.toThrow();
