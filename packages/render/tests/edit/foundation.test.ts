@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
 
-import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh } from "../fixtures/mesh.ts";
 import { EditableMesh, MeshEditWarning, toEditable, toEditableWithDiagnostics } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";

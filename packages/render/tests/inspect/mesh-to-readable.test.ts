@@ -1,6 +1,7 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
 
-import { Mesh, type Mesh as MeshLike, type Vec3 } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import type { Device } from "@vgpu/core";
+import { Mesh, type Mesh as MeshLike, type Vec3 } from "../fixtures/mesh.ts";
 import { meshToReadable, meshToWireframe } from "@vgpu/render/inspect";
 import { expect, test } from "vitest";
 
@@ -75,8 +76,8 @@ function createMesh(
     indexBuffer,
     attributes: {
       stride: 24,
-      position: { offset: 0, format: "float32x3" },
-      normal: { offset: 12, format: "float32x3" },
+      position: { offset: 0, format: "float32x3" as const },
+      normal: { offset: 12, format: "float32x3" as const },
     },
     bbox: { min: new Float32Array([0, 0, 0]) as Vec3, max: new Float32Array([1, 1, 0]) as Vec3 },
   });

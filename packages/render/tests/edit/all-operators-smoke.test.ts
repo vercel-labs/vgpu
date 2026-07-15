@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
 
-import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh } from "../fixtures/mesh.ts";
 import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";

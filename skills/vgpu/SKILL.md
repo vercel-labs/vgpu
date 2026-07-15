@@ -1,9 +1,10 @@
 ---
 name: vgpu
 description: >-
-  Build and optimize WebGPU shaders and render pipelines with vgpu (@vgpu/core, @vgpu/render,
-  @vgpu/wgsl). Use when authoring GPU rendering or making it faster. Bundles the performance
-  guides and the full API reference; load one doc at a time.
+  Build and optimize WebGPU apps with the vgpu package and entrypoints vgpu/node,
+  vgpu/mock, vgpu/scene, and vgpu/client. Use @vgpu/render/inspect, /utils, /edit,
+  and /perf only as slim tooling subpaths. Bundles performance guides and the API
+  reference; load one doc at a time.
 ---
 
 # vgpu
@@ -33,8 +34,12 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-142 symbols across 11 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
+192 symbols across 15 packages — open `references/<package>/<file>` or `npx vgpu docs cat <symbol>`:
 
+- `@vgpu/render/edit` — bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, EdgeView, EditableMesh, EditableMeshValue, ElementDomain, ElementSelection, ElementSet, extrude, FaceView, fillHole, gridFill, healManifold, inset, KernelHandle, loopCut, mergeByDistance, MeshEditError, MeshEditWarning, recomputeNormals, ScoredSelection, subdivideEdges, subdivideFaces, toEditable, toEditableWithDiagnostics, VertexView
+- `@vgpu/render/inspect` — InspectMaterial, InspectMaterialUniformParams, meshToReadable, meshToWireframe, normalDebugMaterial, NormalDebugMaterialSpec, wireframeMaterial, WireframeMaterialSpec, WireframeMesh
+- `@vgpu/render/perf` — gpuFrameTime, GpuFrameTimeOptions, GpuFrameTimeResult, pixelDiff, PixelDiffResult
+- `@vgpu/render/utils` — canvasMouseTracker, CanvasMouseTracker, CanvasMouseTrackerSpec, canvasResolution, CanvasResolution, frameClock, FrameClock
 - `@vgpu/wgsl` — compile, ResolvedShader, SourceMap, WGSLAst, WGSLSource
 - `@vgpu/wgsl-std/color` — applyExposure, luminance, luminanceThreshold, tonemapAces, tonemapReinhard
 - `@vgpu/wgsl-std/fullscreen` — fullscreenTriangleClip, fullscreenTriangleUv

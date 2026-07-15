@@ -7,7 +7,7 @@ import type { Device } from "@vgpu/core";
 import { perspectiveCamera, type Mat4, type Vec3 } from "vgpu/scene";
 import type { Mesh } from "../../src/mesh-like.ts";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
-import type { EditableMesh, ElementSelection } from "@vgpu/render/edit";
+import type { EditableMeshValue as EditableMesh, ElementSelection } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 import { renderInspectFrame } from "../inspect/_helpers.ts";
 import { wireframeOverlayMaterial } from "./fixtures/wireframe-overlay-material.ts";

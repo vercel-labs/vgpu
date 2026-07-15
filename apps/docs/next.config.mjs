@@ -11,7 +11,6 @@ const nextConfig = {
   transpilePackages: [
     'vgpu',
     '@vgpu/core',
-    '@vgpu/render',
     '@vgpu/wgsl',
     '@vgpu/wgsl-std',
     '@vgpu/adapter-mock',

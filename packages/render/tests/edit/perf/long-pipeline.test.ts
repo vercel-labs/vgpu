@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { createMockAdapter } from "@vgpu/adapter-mock";
 
-import { Mesh } from "../../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh } from "../../fixtures/mesh.ts";
 import { bevel, dissolveFaces, extrude, inset, subdivideEdges, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 

@@ -1,6 +1,6 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 
-import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh } from "../fixtures/mesh.ts";
 import { bevel, toEditable } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, renderEditMesh, sha } from "./_helpers.ts";

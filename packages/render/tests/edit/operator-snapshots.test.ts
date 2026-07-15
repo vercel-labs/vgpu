@@ -1,6 +1,6 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
 
-import { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh } from "../fixtures/mesh.ts";
 import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, renderEditMeshWireframe, sha } from "./_helpers.ts";

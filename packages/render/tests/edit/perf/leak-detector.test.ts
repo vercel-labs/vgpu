@@ -1,6 +1,7 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
 
-import { Mesh } from "../../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import type { Device } from "@vgpu/core";
+import { Mesh } from "../../fixtures/mesh.ts";
 import { bevel, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 

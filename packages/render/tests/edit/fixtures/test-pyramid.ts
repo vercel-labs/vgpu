@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import type { Mesh } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import type { Mesh } from "../../fixtures/mesh.ts";
 import { EditableMesh } from "@vgpu/render/edit";
 
 export function makeTestPyramid(device: Device): Mesh {

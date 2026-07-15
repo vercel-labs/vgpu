@@ -23,9 +23,20 @@ Commands:
   doctor     Coming soon
   wgsl       Coming soon
 
-Runtime libraries are available under @vgpu/*:
-  - @vgpu/core
-  - @vgpu/render
+Primary runtime entrypoints:
+  - vgpu
+  - vgpu/node
+  - vgpu/mock
+  - vgpu/scene
+  - vgpu/client
+
+Slim tooling subpaths:
+  - @vgpu/render/inspect
+  - @vgpu/render/utils
+  - @vgpu/render/edit
+  - @vgpu/render/perf
+
+WGSL and adapter packages:
   - @vgpu/wgsl
   - @vgpu/adapter-mock
   - @vgpu/adapter-node
@@ -35,8 +46,8 @@ Run \`vgpu docs --help\` for docs commands.
 
 const comingSoon = (command) => `vgpu ${command} is coming soon.
 
-This package currently ships docs lookup first. For now, use the @vgpu/* runtime libraries directly.
-Run \`vgpu --help\` for details.
+This package currently ships docs lookup first. Use vgpu, vgpu/node, vgpu/mock,
+vgpu/scene, and the documented slim tooling subpaths. Run \`vgpu --help\` for details.
 `;
 
 export function runCli(args) {

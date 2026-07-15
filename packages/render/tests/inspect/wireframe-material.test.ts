@@ -1,6 +1,6 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
 import type { Device } from "@vgpu/core";
-import { Mesh, type Mesh as MeshLike, type Vec3 } from "../../../vgpu-api/src/scene/geometry-src/mesh.ts";
+import { Mesh, type Mesh as MeshLike, type Vec3 } from "../fixtures/mesh.ts";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
 import { expect, test, vi } from "vitest";
 import { createReadableBoxMesh } from "./_helpers.ts";
@@ -99,8 +99,8 @@ function nonCoplanarSharedEdgeMesh(device: Device): MeshLike {
     vertexCount: 6,
     attributes: {
       stride: 24,
-      position: { offset: 0, format: "float32x3" },
-      normal: { offset: 12, format: "float32x3" },
+      position: { offset: 0, format: "float32x3" as const },
+      normal: { offset: 12, format: "float32x3" as const },
     },
     bbox: { min: new Float32Array([0, 0, 0]) as Vec3, max: new Float32Array([1, 1, 1]) as Vec3 },
   });
