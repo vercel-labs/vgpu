@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./helpers.ts";
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
-const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];
+const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normal-debug-32"];
 
 test("Mesh.torus creates default smooth position-normal-uv data", async () => {
   const { device } = await initMock();

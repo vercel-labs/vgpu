@@ -12,7 +12,7 @@ import {
 } from "./helpers.ts";
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
-const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];
+const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normal-debug-32"];
 
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("box primitive snapshot battery matches", async () => {
   const { device } = await initNode();

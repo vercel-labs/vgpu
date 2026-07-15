@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import { assertAllDistinct, expectSnapshot, primitiveCamera, renderPrimitiveFrame, type PrimitiveCameraAngle, type PrimitiveMaterialVariant } from "./helpers.ts";
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
-const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];
+const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normal-debug-32"];
 
 test("Mesh.cone creates default smooth side data with a split flat cap", async () => {
   const { device } = await initMock();

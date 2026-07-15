@@ -13,7 +13,7 @@ export interface PolyhedronCase {
 }
 
 const ANGLES: readonly PrimitiveCameraAngle[] = ["front", "iso", "side"];
-const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normalDebug32"];
+const MATERIALS: readonly PrimitiveMaterialVariant[] = ["pbr", "normal-debug-32"];
 
 export async function expectPolyhedronBasics(testCase: PolyhedronCase): Promise<void> {
   const { device } = await initMock();

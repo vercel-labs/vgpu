@@ -19,7 +19,7 @@ violations=$(
         if (fname ~ /\.d\.ts$/) return 1
 
         # Binary/data/source formats where external/generated names are accepted here.
-        if (fname ~ /\.(png|jpg|jpeg|gif|svg|ico|webp|wgsl|json|yaml|yml|css|txt|lock)$/) return 1
+        if (fname ~ /\.(jpg|jpeg|gif|svg|ico|webp|wgsl|json|yaml|yml|css|txt|lock)$/) return 1
 
         stem = fname
         gsub(/(\.[^.]+)+$/, "", stem)
