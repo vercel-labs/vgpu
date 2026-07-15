@@ -43,15 +43,15 @@ const publicApiRecords: DocsRecord[] = [
   ),
   doc(
     'compute',
-    '# compute\n\nCreate reflected compute pipelines with explicit resources. Writable-storage aliasing is validated before dispatch.\n\n```ts\nconst step = gpu.compute(shader, { set: { src: pingPong.read, dst: pingPong.write } });\nstep.dispatch(64);\npingPong.swap();\n```',
+    '# compute\n\nCreate reflected compute pipelines with explicit resources. Writable-storage aliasing is validated before dispatch.\n\n```ts\nconst state = gpu.pingPongStorage(bytes);\nconst step = gpu.compute(shader, { set: { src: state.read, dst: state.write } });\nstep.dispatch(workgroups);\nstate.swap();\n```',
   ),
   doc(
     'frame',
-    '# frame\n\nSubmit on demand. Use a frame callback for multi-pass work and `frame.loop()` only when continuous animation is required.\n\n```ts\ngpu.frame((f) => {\n  f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(scene));\n});\n```',
+    '# frame\n\nSubmit on demand. Use a frame callback for multi-pass work and `frame.loop()` only when continuous animation is required.\n\n```ts\ngpu.frame((f) => {\n  f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw));\n});\n```',
   ),
   doc(
     'bundle',
-    '# bundle\n\nRecord static draw sequences once and replay them when the same work repeats across frames.\n\n```ts\nconst background = gpu.bundle({ target }, (b) => b.draw(grid));\ngpu.frame((f) => f.pass({ target }, (p) => p.bundle(background)));\n```',
+    '# bundle\n\nRecord static draw sequences once and replay them when the same work repeats across frames.\n\n```ts\nconst background = gpu.bundle({ target }, (b) => b.draw(grid));\ngpu.frame((f) => f.pass({ target }, (p) => p.bundles(background)));\n```',
   ),
   doc(
     'target',

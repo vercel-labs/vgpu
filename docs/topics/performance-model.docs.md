@@ -1,31 +1,31 @@
 # Performance model
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+vgpu's public API is organized around stable identities.
+
+## R1 — ownership
+
+The first `set()` for a binding decides ownership. Plain JS values are lib-owned and can be updated in place; resources are user-owned and their identity is bound directly. Switching ownership triggers `VGPU-R1-OWNERSHIP-FLIP`.
+
+## R2 — identity cache
+
+Bind groups are cached by resource identity. Updating a JS value in place keeps the identity stable; replacing a texture/storage/sampler changes identity and may stale bundles.
+
+## R3 — bundle staleness
+
+Bundles freeze encoded commands and bind groups. Buffer contents may change, but target resize or resource identity changes require re-recording. Replay reports `VGPU-R3-BUNDLE-STALE`.
+
+## R4 — claimed groups
+
+`draw.group(group, bindGroup)` claims an entire reflected group. vgpu validates the group layout and forbids `set()` into that group. Dynamic offsets are passed at draw time:
 
 ```ts
-import { init } from "vgpu";
-
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
-}
-`, { set: { texel: target.texelSize } });
-
-gpu.frame.loop((f) => {
-  pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
-});
+p.draw(draw, { offsets: { 1: [offset] } });
 ```
 
-## Defaults
+## Cost model defaults
 
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+- Pre-warm pipelines with `targets:`.
+- Share globals with `gpu.uniforms()`.
+- Use `instances` for repeated geometry.
+- Use ping-pong for iterative read/write resources.
+- Put depth/MSAA/format on targets, not global state.

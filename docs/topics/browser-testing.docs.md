@@ -1,31 +1,23 @@
 # Browser testing with Playwright WebGPU
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+Browser tests should exercise the same public API users copy: `init(canvas)`, explicit targets, and deterministic frame submission. Avoid hidden app globals and avoid relying on a continuous loop in assertions.
 
 ```ts
 import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
+export async function renderOnce(canvas: HTMLCanvasElement) {
+  const gpu = await init(canvas, { dpr: 1, autoResize: false });
+  const target = gpu.screen!;
+  const pass = gpu.pass(WGSL, { set: { time: 0, texel: target.texelSize } });
+  gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(pass)));
+  return gpu;
 }
-`, { set: { texel: target.texelSize } });
-
-gpu.frame.loop((f) => {
-  pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
-});
 ```
 
-## Defaults
+## Test checklist
 
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+- Use fixed DPR/size (`dpr: 1`, `autoResize: false`) for pixel snapshots.
+- Submit with `gpu.frame(...)` for one deterministic frame, not `requestAnimationFrame` loops.
+- Read from explicit offscreen targets with `target.read()` when testing Node/mock-compatible logic.
+- Keep WGSL imports pure: modules export helpers only; bindings live in the entry shader. If a module declares a binding, fix `VGPU-RESOLVE-MODULE-BINDING`.
+- For headless tests use `vgpu/mock` for deterministic unit tests and `vgpu/node` only when Dawn/WebGPU behavior is under test.

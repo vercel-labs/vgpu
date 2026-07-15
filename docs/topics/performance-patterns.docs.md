@@ -1,31 +1,31 @@
 # Performance patterns
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+This is the quick index. Open `performance-playbook` for copy-paste before/after snippets.
 
-```ts
-import { init } from "vgpu";
+## Static scene
 
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
-}
-`, { set: { texel: target.texelSize } });
+Use `gpu.bundle({ target }, recorder)` and replay with `p.bundles(bundle)`.
 
-gpu.frame.loop((f) => {
-  pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
-});
-```
+## First-frame stability
 
-## Defaults
+Use `gpu.draw({ shader, mesh, targets: [screenOrTarget] })` so pipeline compilation happens before the transition frame.
 
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+## Animated uniforms
+
+Create the pass/draw once and call `.set({ changedValue })`. Do not allocate a new pass or uniform buffer every frame.
+
+## Many objects
+
+Use `instances` when geometry and material are shared. Use `UniformPool` + `draw.group()` + dynamic offsets when each object needs a different uniform block.
+
+## Shared globals
+
+Use one `gpu.uniforms({ time, mouse, camera })` object and bind it into every shader that needs the same struct.
+
+## Iterative effects
+
+Use `gpu.pingPong()` for targets or `gpu.pingPongStorage()` for compute. Do not allocate temporary targets/storage in the loop.
+
+## 3D targets
+
+Create targets with `depth: true` and `msaa: true` when needed; pass those targets through `targets:` at draw creation.

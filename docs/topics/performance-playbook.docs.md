@@ -1,10 +1,10 @@
 # Performance playbook: write fast vgpu by default
 
-This guide is for LLMs and humans writing shaders. These are not late-stage tricks: each section ends with the default you should write from the beginning.
+This guide is for LLMs and humans writing shaders. Treat these as default shapes, not late-stage optimizations: each **After** snippet is the pattern to copy when the situation matches.
 
 ## 1. Bundles / replay (`gpu.bundle` + `p.bundles`)
 
-Use when static geometry is drawn every frame. It avoids CPU re-encoding of N draw calls. R3 says bundles freeze commands and bind groups, not buffer contents.
+Use when static draws repeat every frame. R3 bundles freeze commands, bind groups, target formats, sample count, and attachment identity; they do **not** freeze buffer contents.
 
 Before:
 ```ts
@@ -25,11 +25,11 @@ gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
   p.draw(player);
 }));
 ```
-Default: for static geometry replayed every frame, record a bundle first.
+Default: bundle static work once and replay with `p.bundles(...)`.
 
 ## 2. Pipeline pre-warm (`targets: [...]`)
 
-Use before a critical first frame. It avoids lazy pipeline compilation hitches for target formats.
+Use before the first visible frame or route transition. This compiles render pipelines for the target color/depth/MSAA signature at construction time.
 
 Before:
 ```ts
@@ -37,14 +37,15 @@ const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 ```
 After:
 ```ts
-const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [gpu.screen!, hdr] });
+const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
+gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
-Default: if a draw appears in a visible transition, pass `targets:` at creation.
+Default: pass every target a draw will hit through `targets:` before the hitch-sensitive frame.
 
-## 3. R4 group claim + dynamic offsets (1000 objects)
+## 3. R4 group claim + dynamic offsets (`draw.group`)
 
-Use when many objects share a shader but have different uniforms. It avoids N bind groups and N `writeBuffer` calls per frame. `draw.group()` keeps the group claim static and sends offsets per draw.
+Use for hundreds or thousands of objects that share one shader and one bind-group layout. `draw.group()` claims a reflected group; offsets travel per draw call.
 
 Before:
 ```ts
@@ -55,87 +56,96 @@ for (const obj of objects) {
 ```
 After:
 ```ts
-import { UniformPool } from "vgpu/core";
+import { UniformPool, type UniformLayout } from "vgpu/core";
+
+type ObjectUniforms = { model: Float32Array };
+const objectLayout: UniformLayout<ObjectUniforms> = {
+  size: 64,
+  bindGroupLayout: cube.layout(1, { dynamicOffsets: true }),
+  encode(value, dst, byteOffset) {
+    new Float32Array(dst, byteOffset, 16).set(value.model);
+  },
+};
 const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
-const slot = pool.alloc({ size: 64, bindGroupLayout: cube.layout(1, { dynamicOffsets: true }) });
+const slot = pool.alloc(objectLayout);
 cube.group(1, slot.bindGroup);
+
 gpu.frame.loop((f) => {
-  pool["begin" + "Frame"](gpu.frameCount);
-  f.pass({ target: gpu.screen! }, (p) => {
+  pool.beginFrame(gpu.frameCount);
+  f.pass({ target: scene }, (p) => {
     for (const obj of objects) {
-      const off = pool.push(slot, obj.uniforms);
-      p.draw(cube, { offsets: { 1: [off] } });
+      const offset = slot.push({ model: obj.model });
+      p.draw(cube, { offsets: { 1: [offset] } });
     }
   });
   pool.endFrame();
 });
 ```
-Default: for hundreds/thousands of objects, claim a group and use dynamic offsets immediately.
+Default: for many per-object uniforms, allocate a `UniformPool` slot with an `encode(...)` function, call `pool.beginFrame(...)`, push values, draw with offsets, then `pool.endFrame()` before the frame submits.
 
 ## 4. `set()` in-place
 
-Use for animated JS values. It avoids bind-group churn, GC, and bundle staleness. R1 latches value ownership; R2 keeps the bind group stable.
+Use for animated JS values. R1 latches ownership on first `set()`: plain JS values are lib-owned and update in place; resources are user-owned and keep their identity.
 
 Before:
 ```ts
 gpu.frame.loop(() => {
-  const wave = gpu.pass(WAVE_WGSL, { set: { time: gpu.time } });
+  const wave = gpu.pass(WAVE_WGSL, { set: { time: gpu.time, speed: 2 } });
   wave.draw();
 });
 ```
 After:
 ```ts
-const wave = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
+const wave = gpu.pass(WAVE_WGSL, { set: { time: 0, speed: 2 } });
 gpu.frame.loop(() => {
-  wave.set({ time: gpu.time }); // in-place write, bind group intact
+  wave.set({ time: gpu.time });
   wave.draw();
 });
 ```
-Default: create once, then update JS values with `set()` in-place.
+Default: create once; update changing numbers/vectors/structs with `set()`.
 
-## 5. Bake outside the loop
+## 5. Bake static inputs once
 
-Use when a heavy scene is static and later sampled. It avoids rendering the heavy scene every frame.
+Use when a heavy pass produces a texture that does not change every frame.
 
 Before:
 ```ts
 gpu.frame.loop((f) => {
   f.pass({ target: baked }, (p) => p.draw(heavyScene));
-  f.pass({ target: gpu.screen! }, (p) => p.draw(post));
+  post.set({ src: baked.color, texel: baked.texelSize });
+  f.pass({ target: screen }, (p) => p.draw(post));
 });
 ```
 After:
 ```ts
 gpu.frame((f) => f.pass({ target: baked }, (p) => p.draw(heavyScene)));
-gpu.frame.loop((f) => {
-  post.set({ src: baked.color, texel: baked.texelSize });
-  f.pass({ target: gpu.screen! }, (p) => p.draw(post));
-});
+post.set({ src: baked.color, texel: baked.texelSize });
+gpu.frame.loop((f) => f.pass({ target: screen }, (p) => p.draw(post)));
 ```
-Default: if an input is static, bake it once with `gpu.frame()` before the loop.
+Default: if an input is static, bake it outside the loop with one `gpu.frame(...)`.
 
-## 6. Instancing (`instances`) — verify after Lane P
+## 6. Instancing (`instances`, `vertices`)
 
-Use for N copies of the same mesh/quad. It avoids N draw calls. Lane-P public contract: `instances` and `vertices` on `DrawOptions`, call-option overrides for `instances`, `vertices`, `firstVertex`, `firstInstance`; precedence is call-option > draw-option > default.
+Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed meshes ignore `vertices` and `firstVertex`.
 
 Before:
 ```ts
 for (let i = 0; i < COUNT; i++) {
-  dots.set({ index: i });
-  p.draw(dots);
+  particles.set({ particleIndex: i });
+  p.draw(particles);
 }
 ```
 After:
 ```ts
-const dots = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
-dots.set({ particles });
-gpu.frame.loop(() => dots.draw());
+const particles = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6, targets: [scene] });
+particles.set({ particleBuffer });
+gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles)));
 ```
-Default: for N copies of the same geometry, use `instances` from the start.
+Default: one draw with `instances` beats N draw calls.
 
 ## 7. `gpu.uniforms()` shared values
 
-Use when many shaders consume the same time/mouse/camera/exposure. It avoids N writes and N buffers.
+Use when many shaders consume the same time, camera, mouse, or exposure values.
 
 Before:
 ```ts
@@ -156,9 +166,9 @@ gpu.frame.loop(() => {
 ```
 Default: shared values belong in one `gpu.uniforms()` object.
 
-## 8. Ping-pong without churn (R2) + 2-bundle pattern
+## 8. Ping-pong (`pingPong`) without churn + two bundles
 
-Use for simulations and iterative blurs. It avoids recreating bind groups on swap; R2 alternates between two cached identities.
+Use for iterative effects. Ping-pong keeps two stable identities, so bind-group caches can reuse them.
 
 Before:
 ```ts
@@ -171,20 +181,23 @@ gpu.frame.loop((f) => {
 ```
 After:
 ```ts
-const buf = gpu.pingPong(512, 512, { format: "rgba16float" });
+const state = gpu.pingPong(512, 512, { format: "rgba16float" });
+const even = gpu.bundle({ target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
+state.swap();
+const odd = gpu.bundle({ target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
+state.swap();
+let parity = 0;
 gpu.frame.loop((f) => {
-  f.pass({ target: buf.write }, (p) => { sim.set({ src: buf.read.color }); p.draw(sim); });
-  buf.swap();
+  f.pass({ target: state.write }, (p) => p.bundles(parity === 0 ? even : odd));
+  state.swap();
+  parity ^= 1;
 });
-const even = gpu.bundle({ target: buf.write }, (b) => { sim.set({ src: buf.read.color }); b.draw(sim); });
-buf.swap();
-const odd = gpu.bundle({ target: buf.write }, (b) => { sim.set({ src: buf.read.color }); b.draw(sim); });
 ```
-Default: ping-pong resources are created once; for bundled ping-pong, record two bundles.
+Default: create ping-pong resources once; if you bundle, record both parity cases and replay the matching one.
 
 ## 9. MSAA/depth in the target
 
-Use for 3D that needs anti-aliasing or z-testing. It trades memory/resolve cost for better edges and correct depth. Resolution and format are target properties, not globals.
+Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and sample count are target state.
 
 Before:
 ```ts
@@ -197,4 +210,4 @@ const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
-Default: put depth/MSAA on the target for 3D from the beginning; do not invent global render settings.
+Default: put depth/MSAA on the target; do not invent global render settings.

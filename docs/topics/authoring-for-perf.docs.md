@@ -1,31 +1,32 @@
-# Authoring for performance
+# Authoring shaders for performance
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+Write WGSL so reflection can build stable layouts. Bindings should be explicit, structs should be host-shareable, and hot paths should avoid per-frame resource identity changes.
+
+## WGSL defaults
+
+```wgsl
+struct Globals {
+  time: f32,
+  mouse: vec2f,
+  enabled: u32,
+}
+@group(0) @binding(0) var<uniform> globals: Globals;
+```
+
+- Use `u32` instead of `bool` in host-written uniforms; encode false/true as `0`/`1`.
+- Put target resolution in a uniform value sourced from `target.size` or `target.texelSize`.
+- Keep imported WGSL modules binding-free. Modules may export structs/functions/constants; entry shaders own `@group/@binding` declarations.
+- Prefer storage buffers plus `instances` for many similar particles or sprites.
+
+## JavaScript defaults
 
 ```ts
-import { init } from "vgpu";
-
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
-}
-`, { set: { texel: target.texelSize } });
-
+const globals = gpu.uniforms({ time: 0, mouse: [0, 0], enabled: 1 });
+const draw = gpu.draw({ shader: WGSL, targets: [target], set: { globals } });
 gpu.frame.loop((f) => {
-  pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
+  globals.set({ time: gpu.time, mouse });
+  f.pass({ target }, (p) => p.draw(draw));
 });
 ```
 
-## Defaults
-
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+Use the performance playbook before writing a new shader: bundles for static draws, `targets:` for pre-warm, `draw.group()` for many objects, `gpu.uniforms()` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.

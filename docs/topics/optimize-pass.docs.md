@@ -1,31 +1,44 @@
-# Optimize pass
+# Optimize a pass
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+Optimize one pass by first deciding what changes every frame.
+
+## 1. Static commands
+
+If the draw list is static, record it once:
 
 ```ts
-import { init } from "vgpu";
+const passBundle = gpu.bundle({ target }, (b) => {
+  b.draw(background);
+  b.draw(grid);
+});
+gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(passBundle)));
+```
 
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
-}
-`, { set: { texel: target.texelSize } });
+## 2. Animated scalar/vector values
 
-gpu.frame.loop((f) => {
+Keep the pass object and write values in place:
+
+```ts
+const pass = gpu.pass(WGSL, { set: { time: 0, exposure: 1 } });
+gpu.frame.loop(() => {
   pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
+  pass.draw({ target });
 });
 ```
 
-## Defaults
+## 3. Resources that swap
 
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+Use ping-pong rather than allocating a new target or storage buffer:
+
+```ts
+const state = gpu.pingPong(512, 512, { format: "rgba16float" });
+gpu.frame.loop((f) => {
+  step.set({ src: state.read.color });
+  f.pass({ target: state.write }, (p) => p.draw(step));
+  state.swap();
+});
+```
+
+## 4. Many objects
+
+Use instancing for many copies of the same draw, or use `UniformPool` plus `draw.group()` when every object needs a different uniform block.

@@ -1,31 +1,29 @@
 # Measuring
 
-Use the ring-1 `vgpu` API. WGSL declares bindings, JavaScript passes values explicitly with `set()`, frames are on-demand, and target size is the source of resolution.
+Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost. The public API makes those boundaries visible.
+
+## CPU encoding vs replay
+
+If the CPU is busy rebuilding the same render pass, compare a direct loop with a bundle:
 
 ```ts
-import { init } from "vgpu";
-
-const gpu = await init(canvas, { dpr: [1, 2] });
-const target = gpu.target({ format: "rgba16float", depth: true });
-const pass = gpu.pass(`
-struct Params { time: f32, texel: vec2f }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, sin(params.time) * .5 + .5, 1);
-}
-`, { set: { texel: target.texelSize } });
-
-gpu.frame.loop((f) => {
-  pass.set({ time: gpu.time });
-  f.pass({ target }, (p) => p.draw(pass));
-});
+const staticScene = gpu.bundle({ target }, (b) => staticDraws.forEach((draw) => b.draw(draw)));
+gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 ```
 
-## Defaults
+## First-frame hitches
 
-- Use `gpu.frame(f => f.pass(...))` for multi-pass and for explicit one-shot bakes.
-- Use `gpu.bundle()` when the same static draws replay for many frames.
-- Use `targets: [...]` on `gpu.draw()` when the first visible frame cannot hitch.
-- Use `gpu.uniforms()` for shared values consumed by multiple shaders.
-- Use `draw.group()` plus dynamic offsets for hundreds or thousands of per-object uniforms.
-- Use `gpu.pingPong()` / `gpu.pingPongStorage()` for iterative effects; R2 makes the two identities cheap.
+If the first visible frame stutters, pre-warm target signatures:
+
+```ts
+const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const draw = gpu.draw({ shader: WGSL, mesh, targets: [hdr] });
+```
+
+## Binding churn
+
+If allocations or bind-group count grows every frame, switch repeated JS values to in-place `set()`, shared state to `gpu.uniforms()`, or many object uniforms to `UniformPool` + dynamic offsets.
+
+## Correctness before speed
+
+When measuring visual output, render one deterministic `gpu.frame(...)` into an explicit target and read it back. Do not measure while also resizing, compiling pipelines lazily, or creating temporary targets inside the loop.

@@ -19,6 +19,8 @@ const mockGpu = await initMock({ size: [64, 64] });
 DPR is explicit and clamped by `dpr`. Every `.size` reports device pixels. `autoResize` defaults to true for canvas screens; set it to false when you want a user-owned resize timeline.
 
 ```ts
+import { init } from "vgpu";
+
 const gpu = await init(canvas, { autoResize: false, dpr: [1, 2] });
 let pending: readonly [number, number] | null = null;
 gpu.onResize((size) => { pending = size; });

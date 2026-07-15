@@ -31,31 +31,37 @@ gpu.frame.loop((f) => {
 - `mesh` is `gpu.mesh(...)` or any `MeshLike` with vertex/index buffers and layouts.
 - `targets` eagerly compiles pipelines for the target color/depth/sample formats.
 - `set` is initial binding state.
-- **Lane-P instancing contract (verify after lane P lands):** `instances`, `vertices`, and `firstInstance` may be set on `DrawOptions`; call options may override `instances`, `vertices`, `firstVertex`, and `firstInstance` with precedence call-option > draw-option > default. With a mesh, `mesh.vertexCount` wins over `DrawOptions.vertices`.
+- `instances`, `vertices`, and `firstInstance` may be set on `DrawOptions`; call options may override `instances`, `vertices`, `firstVertex`, and `firstInstance`. Precedence is call-option > draw-option > default. Indexed meshes use `indexCount` and ignore `vertices`/`firstVertex`; `instances: 0` is valid.
 
 ```ts
-// Instancing after Lane P: one draw call, N copies. Marked for final verification.
-const dots = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
+const dots = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6, targets: [target] });
 dots.set({ particles });
-gpu.frame.loop(() => dots.draw());
+gpu.frame.loop((f) => f.pass({ target }, (p) => p.draw(dots)));
 ```
 
 ## R4 group claim and dynamic offsets
 
 ```ts
-import { UniformPool } from "vgpu/core";
+import { UniformPool, type UniformLayout } from "vgpu/core";
 
-const draw = gpu.draw({ shader: OBJ_WGSL, mesh: gpu.mesh(box()) });
+type ObjectUniforms = { model: Float32Array };
+const objectLayout: UniformLayout<ObjectUniforms> = {
+  size: 64,
+  bindGroupLayout: cube.layout(1, { dynamicOffsets: true }),
+  encode(value, dst, byteOffset) {
+    new Float32Array(dst, byteOffset, 16).set(value.model);
+  },
+};
 const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
-const slot = pool.alloc({ size: 64, bindGroupLayout: draw.layout(1, { dynamicOffsets: true }) });
-draw.group(1, slot.bindGroup);
+const slot = pool.alloc(objectLayout);
+cube.group(1, slot.bindGroup);
 
 gpu.frame.loop((f) => {
-  pool["begin" + "Frame"](gpu.frameCount);
-  f.pass({ target: gpu.screen! }, (p) => {
+  pool.beginFrame(gpu.frameCount);
+  f.pass({ target: scene }, (p) => {
     for (const obj of objects) {
-      const offset = pool.push(slot, obj.uniforms);
-      p.draw(draw, { offsets: { 1: [offset] } });
+      const offset = slot.push({ model: obj.model });
+      p.draw(cube, { offsets: { 1: [offset] } });
     }
   });
   pool.endFrame();
