@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init as initBrowser } from "../src/index.ts";
+import { registerDrawBundle } from "../src/draw.ts";
+import { passDraw } from "../src/pass.ts";
 import { createMockAdapter, init } from "../src/mock.ts";
 
 const WAVE = `
@@ -117,7 +119,7 @@ test("bundle back-refs stale only on identity changes, never lib-owned in-place 
   const gpu = await init({ size: [4, 4] });
   const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
   const events: unknown[] = [];
-  wave.drawImpl.__recordedIn.add({ id: "bundle", markStale: (event) => { events.push(event); } });
+  registerDrawBundle(passDraw(wave), { id: "bundle", markStale: (event) => { events.push(event); } });
 
   wave.set({ time: 1 });
   wave.set({ speed: 3 });
@@ -127,7 +129,7 @@ test("bundle back-refs stale only on identity changes, never lib-owned in-place 
   const a = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
   const b = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
   camera.set({ camera: a });
-  camera.__recordedIn.add({ id: "bundle", markStale: (event) => { events.push(event); } });
+  registerDrawBundle(camera, { id: "bundle", markStale: (event) => { events.push(event); } });
   camera.set({ camera: a });
   expect(events).toEqual([]);
   camera.set({ camera: b });

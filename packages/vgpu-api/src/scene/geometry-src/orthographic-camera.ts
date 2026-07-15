@@ -1,5 +1,5 @@
 import { mat4 } from "wgpu-matrix";
-import type { Camera, Vec3 } from "./camera.ts";
+import type { CameraSource, Vec3 } from "./camera.ts";
 
 const DEFAULT_UP = new Float32Array([0, 1, 0]) as Vec3;
 
@@ -15,10 +15,10 @@ export interface OrthographicCameraSpec {
   readonly up?: Vec3;
 }
 
-export function orthographicCamera(spec: OrthographicCameraSpec): Camera {
+export function orthographicCamera(spec: OrthographicCameraSpec): CameraSource {
   const projection = mat4.ortho(spec.left, spec.right, spec.bottom, spec.top, spec.near, spec.far);
   const view = mat4.lookAt(spec.position, spec.target, spec.up ?? DEFAULT_UP);
-  const viewProjectionMatrix = new Float32Array(mat4.multiply(projection, view)) as Camera["viewProjectionMatrix"];
+  const viewProjectionMatrix = new Float32Array(mat4.multiply(projection, view)) as CameraSource["viewProjectionMatrix"];
   const position = new Float32Array(spec.position) as Vec3;
 
   return Object.freeze({ viewProjectionMatrix, position });

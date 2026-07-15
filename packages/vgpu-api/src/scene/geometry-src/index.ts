@@ -18,7 +18,7 @@ export { sphere } from "./mesh-sphere.ts";
 export { srgb } from "./srgb.ts";
 export { tetrahedron } from "./mesh-tetrahedron.ts";
 export { torus } from "./mesh-torus.ts";
-export type { Camera, Mat4, Vec3 } from "./camera.ts";
+export type { CameraSource, Mat4, Vec3 } from "./camera.ts";
 export type { BoxSpec } from "./mesh-box.ts";
 export type { CapsuleSpec } from "./mesh-capsule.ts";
 export type { ConeSpec } from "./mesh-cone.ts";

@@ -1,4 +1,4 @@
-import { degToRad, orthographicCamera as renderOrthographicCamera, perspectiveCamera as renderPerspectiveCamera, type Camera as RenderCamera, type Vec3 } from "./geometry-src/index.ts";
+import { degToRad, orthographicCamera as renderOrthographicCamera, perspectiveCamera as renderPerspectiveCamera, type CameraSource as RenderCamera, type Vec3 } from "./geometry-src/index.ts";
 
 export type CameraVec3 = readonly [number, number, number] | Float32Array;
 

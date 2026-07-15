@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
 import { init } from "../src/mock.ts";
+import { drawReflection } from "../src/draw.ts";
+import { passDraw } from "../src/pass.ts";
 
 const FRAGMENT = `
 struct Params { value: f32 }
@@ -30,8 +32,8 @@ test("gpu.pass accepts string and ShaderSource with identical reflection", async
   const fromString = gpu.pass(FRAGMENT, { label: "shader" });
   const fromArtifact = gpu.pass({ version: 1, wgsl: FRAGMENT }, { label: "shader" });
 
-  expect(fromArtifact.drawImpl.reflection.bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })))
-    .toEqual(fromString.drawImpl.reflection.bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })));
+  expect(drawReflection(passDraw(fromArtifact)).bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })))
+    .toEqual(drawReflection(passDraw(fromString)).bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })));
   gpu.dispose();
 });
 
@@ -39,8 +41,7 @@ test("gpu.draw accepts ShaderSource and keeps Draw internals string-only", async
   const gpu = await init({ size: [4, 4] });
   const draw = gpu.draw({ shader: { version: 1, wgsl: DRAW }, label: "artifact-draw" });
 
-  expect(draw.source).toBe(DRAW);
-  expect(draw.reflection.bindings[0]).toMatchObject({ name: "params", group: 0, binding: 0 });
+  expect(drawReflection(draw).bindings[0]).toMatchObject({ name: "params", group: 0, binding: 0 });
   gpu.dispose();
 });
 

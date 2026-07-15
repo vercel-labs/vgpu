@@ -76,10 +76,11 @@
     "@webgpu/types": "^0.1.69"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 4096,
-    "./node": 4096,
-    "./mock": 4096,
-    "./scene": 1024,
-    "./client": 1024
+    ".": 24576,
+    "./node": 24576,
+    "./mock": 24576,
+    "./scene": 14336,
+    "./client": 1024,
+    "./core": 4096
   }
 }

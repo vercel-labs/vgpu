@@ -1,6 +1,8 @@
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { describe, expect, test } from "vitest";
 import { init } from "../../src/mock.ts";
+import { drawBindingState } from "../../src/draw.ts";
+import { passDraw } from "../../src/pass.ts";
 
 const WAVE_WGSL = `
 struct Globals { time: f32, mouse: vec2f }
@@ -60,7 +62,7 @@ describe("gpu.uniforms() shared uniforms", () => {
     const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
 
     expect(mock.calls.createBuffer).toBe(1);
-    const state = wave.drawImpl.setCore.bindingState("globals");
+    const state = drawBindingState(passDraw(wave), "globals");
     expect(state?.ownership).toBe("user");
     expect(mock.createBufferDescriptors[0]).toMatchObject({ size: 16, label: "globals.sharedUniform" });
     gpu.dispose();
@@ -116,8 +118,8 @@ describe("gpu.uniforms() shared uniforms", () => {
       });
     });
 
-    const resource = wave.drawImpl.setCore.bindingState("globals")?.resource as GPUBufferBinding;
-    expect(resource.buffer).toBe((blur.drawImpl.setCore.bindingState("globals")?.resource as GPUBufferBinding).buffer);
+    const resource = drawBindingState(passDraw(wave), "globals")?.resource as GPUBufferBinding;
+    expect(resource.buffer).toBe((drawBindingState(passDraw(blur), "globals")?.resource as GPUBufferBinding).buffer);
     expect(mock.calls.createBuffer).toBe(1);
     expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame);
     expect(bindGroupsAfterFirstFrame).toBe(2);
@@ -153,9 +155,9 @@ describe("gpu.uniforms() shared uniforms", () => {
     const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     const override = gpu.pass(OVERRIDE_NAME_WGSL, { label: "OVERRIDE_WGSL", set: { g: globals } });
 
-    expect(wave.drawImpl.setCore.bindingState("globals")?.ownership).toBe("user");
-    expect(override.drawImpl.setCore.bindingState("g")?.ownership).toBe("user");
-    expect((wave.drawImpl.setCore.bindingState("globals")?.resource as GPUBufferBinding).buffer).toBe((override.drawImpl.setCore.bindingState("g")?.resource as GPUBufferBinding).buffer);
+    expect(drawBindingState(passDraw(wave), "globals")?.ownership).toBe("user");
+    expect(drawBindingState(passDraw(override), "g")?.ownership).toBe("user");
+    expect((drawBindingState(passDraw(wave), "globals")?.resource as GPUBufferBinding).buffer).toBe((drawBindingState(passDraw(override), "g")?.resource as GPUBufferBinding).buffer);
     gpu.dispose();
   });
 
@@ -165,7 +167,7 @@ describe("gpu.uniforms() shared uniforms", () => {
     const storage = gpu.pass(STORAGE_WGSL, { label: "STORAGE_WGSL", set: { globals } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-    expect(storage.drawImpl.setCore.bindingState("globals")?.ownership).toBe("user");
+    expect(drawBindingState(passDraw(storage), "globals")?.ownership).toBe("user");
     expect(mock.createBufferDescriptors[0]?.usage).toBe(128 | 8);
     gpu.dispose();
   });

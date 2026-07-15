@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { init } from "../../src/node.ts";
+import { drawReflection } from "../../src/draw.ts";
 import { box, orbit, perspectiveCamera } from "../../src/scene.ts";
 
 const shaderPath = join(dirname(fileURLToPath(import.meta.url)), "scene-lit-cube.wgsl");
@@ -52,8 +53,8 @@ async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string,
   return target.read();
 }
 
-function bindingName(draw: { readonly reflection: { readonly bindings: readonly { readonly binding: number; readonly name: string }[] } }, binding: number): string {
-  const name = draw.reflection.bindings.find((item) => item.group === 0 && item.binding === binding)?.name;
+function bindingName(draw: Parameters<typeof drawReflection>[0], binding: number): string {
+  const name = drawReflection(draw).bindings.find((item) => item.group === 0 && item.binding === binding)?.name;
   if (!name) throw new Error(`Missing reflected binding ${binding}`);
   return name;
 }
