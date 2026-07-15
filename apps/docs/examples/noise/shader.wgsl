@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn hash(p: vec2f) -> f32 {
   return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
 }

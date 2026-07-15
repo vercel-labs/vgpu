@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(41.0, 289.0))) * 45758.5453); }
 fn noise(p: vec2f) -> f32 {
   let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);

@@ -1,32 +1,28 @@
 # @vgpu/adapter-mock
 
-> 0.0.8 — early preview
+> 0.0.8 — deterministic adapter for `vgpu/mock`
 
-`@vgpu/adapter-mock` provides a `VGPUAdapter` implementation for tests, snapshots, and development workflows where you want the vgpu API surface without a real GPU backend. It pairs well with `App.create()` from `@vgpu/core` and supports the same high-level device, buffer, and texture flows used in fast unit tests across the repository.
+`@vgpu/adapter-mock` backs the `vgpu/mock` entrypoint for tests that need the public `Gpu` API without real GPU hardware.
 
 ## Install
 
 ```bash
-pnpm add @vgpu/adapter-mock
+pnpm add -D @vgpu/adapter-mock
 ```
-
-## Exports
-
-### Runtime
-- `createMockAdapter`
 
 ## Usage
 
 ```ts
-import { App } from "@vgpu/core";
-import { createMockAdapter } from "@vgpu/adapter-mock";
+import { init } from "vgpu/mock";
 
-const { device } = await App.create({ adapter: createMockAdapter() });
-const buffer = device.createBuffer({ size: 16, usage: ["copy_dst", "copy_src", "storage"] });
+const gpu = await init({ size: [64, 64] });
+const buffer = gpu.storage(16);
 buffer.write(new Float32Array([1, 2, 3, 4]));
-const bytes = await buffer.read(16);
-device.destroy();
+await buffer.read();
+gpu.dispose();
 ```
+
+Use `vgpu/mock` for command/resource tests and `vgpu/node` for real rendering/readback snapshots.
 
 ## License
 

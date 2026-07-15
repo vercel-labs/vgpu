@@ -95,6 +95,9 @@ importers:
       shiki:
         specifier: ^3.21.0
         version: 3.23.0
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
     devDependencies:
       '@types/mdx':
         specifier: ^2.0.13

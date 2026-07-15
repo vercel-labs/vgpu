@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn palette(t: f32) -> vec3f {
   return 0.5 + 0.5 * cos(6.28318 * (vec3f(0.1, 0.35, 0.65) + t));
 }

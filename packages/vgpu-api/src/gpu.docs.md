@@ -1,0 +1,38 @@
+# `Gpu`
+
+`Gpu` is the one context object. It owns the device, the optional browser `screen` target, frame time counters, and verbs for render, compute, resources, and replay.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init(canvas, { dpr: [1, 2] });
+const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
+const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const linear = gpu.sampler({ magFilter: "linear", minFilter: "linear" });
+```
+
+Core verbs:
+
+- `gpu.pass(wgsl, { set })` for fragment-only fullscreen work.
+- `gpu.draw({ shader, mesh, targets, set })` for vertex data, meshes, 3D, MRT, instancing, and storage-driven vertices.
+- `gpu.compute(wgsl, { set })` for compute dispatches with the same binding rules.
+- `gpu.frame(cb)` for one encoder / N passes / one submit; `gpu.frame.loop(cb)` is optional rAF sugar.
+- `gpu.bundle({ target }, cb)` for explicit render-bundle recording and replay.
+- `gpu.target()` and `gpu.pingPong()` for render targets; `gpu.storage()` and `gpu.pingPongStorage()` for buffers.
+- `gpu.uniforms(values)` for shared, values-first uniforms.
+- `gpu.mesh(geometry)` for `vgpu/scene` geometry descriptors.
+
+```ts
+const wave = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
+gpu.frame.loop(() => {
+  wave.set({ time: gpu.time });
+  wave.draw();
+});
+```
+
+## Ownership and performance defaults
+
+- WGSL is the source of truth. Declare every `@group/@binding` in the shader and bind by name with `set()`.
+- JS values passed to `set()` are lib-owned and are written in-place (R1/R2), so animated uniforms do not recreate bind groups.
+- Resources (`Uniform`, storage buffers, textures, targets, samplers, claimed bind groups) are user-owned; vgpu only binds their identity.
+- Time is explicit JS (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`). Resolution lives on targets (`target.size`, `target.texelSize`).

@@ -1,6 +1,11 @@
-import { Device, type CreateDeviceOptions } from '@vgpu/core';
+export interface BrowserGpuDeviceOptions {
+  readonly powerPreference?: GPUPowerPreference;
+  readonly label?: string;
+  readonly requiredFeatures?: readonly GPUFeatureName[];
+  readonly requiredLimits?: Record<string, number>;
+}
 
-export async function createBrowserDevice(options: CreateDeviceOptions = {}): Promise<Device> {
+export async function requestBrowserGpuDevice(options: BrowserGpuDeviceOptions = {}): Promise<GPUDevice> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     throw new Error('WebGPU is not available in this browser.');
   }
@@ -10,13 +15,11 @@ export async function createBrowserDevice(options: CreateDeviceOptions = {}): Pr
     throw new Error('No WebGPU adapter was found.');
   }
 
-  const gpuDevice = await adapter.requestDevice({
+  return adapter.requestDevice({
     label: options.label,
     requiredFeatures: options.requiredFeatures ? [...options.requiredFeatures] : undefined,
     requiredLimits: options.requiredLimits,
   });
-
-  return new Device(gpuDevice, adapter.info ?? null);
 }
 
 export function preferredCanvasFormat(): GPUTextureFormat {

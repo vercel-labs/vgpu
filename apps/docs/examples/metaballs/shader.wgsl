@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn ball(p: vec2f, c: vec2f, r: f32) -> f32 {
   return r * r / max(dot(p - c, p - c), 0.0008);
 }

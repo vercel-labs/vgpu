@@ -1,58 +1,32 @@
-# Authoring for performance
+# Authoring shaders for performance
 
-Tier-0 habits: how to write a shader during iteration so the later [optimize pass](./optimize-pass.docs.md)
-is mechanical instead of archaeological. These cost nothing up front and are painful to retrofit —
-unlike Tier 1–2 work, do them from v1. They do **not** slow iteration; they're about *structure and
-legibility*, not premature micro-optimization.
+Write WGSL so reflection can build stable layouts. Bindings should be explicit, structs should be host-shareable, and hot paths should avoid per-frame resource identity changes.
 
-## Use the idiomatic primitives
+## WGSL defaults
 
-They make change-frequency explicit and keep the hot path clean — which is exactly what makes
-optimization easy later.
+```wgsl
+struct Globals {
+  time: f32,
+  mouse: vec2f,
+  enabled: u32,
+}
+@group(0) @binding(0) var<uniform> globals: Globals;
+```
 
-- **Encode with `Frame`** (`beginFrame` → `frame.renderPass(...)` → `frame.submit()`), not a
-  hand-rolled encoder. Each pass is then a named, separable unit.
-- **Pick the uniform path by uniform count.** For a single stable uniform buffer you rewrite per
-  frame and change-gate yourself (the typical full-screen-pass case), use the lightweight `Uniform`
-  helper (`new Uniform(device, { size }).write(bytes)`), or a plain `Float32Array` + `buffer.write`
-  when you hand-gate uploads. `UniformPool` is only for **many** per-draw uniforms — it's a
-  dynamic-offset ring allocator that re-uploads every frame, which defeats change-gating. Don't reach
-  for it for one stable buffer. Either way, pushing a value to a uniform later (pattern 2) stays a
-  one-liner, not a packing rewrite.
-- **Resolve/compile shaders and build pipelines at setup**, never per frame (`resolveShader` is for
-  setup/build/test; swap pipelines at frame boundaries).
-- **Build pipelines via `createRenderPipeline` / `createRenderPipelineAsync`** for the async→sync
-  fallback. Already holding a raw `GPURenderPipelineDescriptor`? Use
-  `createRenderPipelineFromDescriptor` / `createRenderPipelineFromDescriptorAsync` to forward it
-  unchanged (the async variant keeps the same async→sync fallback) — don't reshape it into
-  `RenderPipelineOptions`.
-- **Read back with `Texture.read()`** for baselines and golden comparisons.
+- Use `u32` instead of `bool` in host-written uniforms; encode false/true as `0`/`1`.
+- Put target resolution in a uniform value sourced from `target.size` or `target.texelSize`.
+- Keep imported WGSL modules binding-free. Modules may export structs/functions/constants; entry shaders own `@group/@binding` declarations.
+- Prefer storage buffers plus `instances` for many similar particles or sprites.
 
-## Keep bakeable work in its own pass
+## JavaScript defaults
 
-If part of the scene is time-invariant (geometry, an SDF, a static mask), author it as its **own
-named `renderPass`** from the start. Baking it later (pattern 1, the biggest win) becomes "stop
-re-encoding this pass," not "untangle it from the per-frame pass." Don't interleave time-invariant
-and animated work in one pass.
+```ts
+const globals = gpu.uniforms({ time: 0, mouse: [0, 0], enabled: 1 });
+const draw = gpu.draw({ shader: WGSL, targets: [target], set: { globals } });
+gpu.frame.loop((f) => {
+  globals.set({ time: gpu.time, mouse });
+  f.pass({ target }, (p) => p.draw(draw));
+});
+```
 
-## Make change-frequency legible
-
-The expensive part of optimizing is discovering *what changes when*. Leave that signal in the code:
-
-- Comment non-obvious values with their frequency: `// uniform-invariant`, `// per-frame`,
-  `// per-pixel`. The optimize pass then just hoists what's marked.
-- Name CPU-side helpers by what they depend on, so a `uniform-only` helper is obviously a hoist
-  candidate.
-- Keep a fragment's per-pixel inputs (`@builtin(position)`, varyings) visibly separate from its
-  uniform inputs.
-
-## Don't pre-pessimize
-
-Avoiding *obvious* waste isn't premature optimization:
-
-- Don't compute a uniform-only value per pixel even in v1 (pattern 2) — it's never the right call.
-- Don't `select()` over an expensive branch you mean to skip (pattern 6).
-- Don't recompute a loop invariant inside the loop (pattern 3).
-
-Everything beyond that — baking, restructuring, cheaper-op swaps — waits for the
-[optimize pass](./optimize-pass.docs.md).
+Use the performance playbook before writing a new shader: bundles for static draws, `targets:` for pre-warm, `draw.group()` for many objects, `gpu.uniforms()` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.

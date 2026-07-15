@@ -1,84 +1,29 @@
 # @vgpu/core
 
-> 0.0.8 — early preview
+> 0.0.8 — ring-0 runtime primitives
 
-`@vgpu/core` is the runtime foundation for vgpu. It gives you a small wrapper layer around WebGPU devices, queues, buffers, textures, and shader modules, plus an `App.create()` entry point that asks an adapter for a device and returns a compact app instance. In 0.0.8 the goal is portability and a minimal public surface, not a fully opinionated engine.
+`@vgpu/core` contains the low-level WebGPU wrappers used by `vgpu/core`: `Device`, `Buffer`, `Texture`, `Queue`, shader modules, bind-group helpers, resource identities, and validation errors. Most applications should start from `init()` in `vgpu`, `vgpu/node`, or `vgpu/mock` and drop to these primitives only for explicit native control.
 
 ## Install
 
 ```bash
-pnpm add @vgpu/core
+pnpm add vgpu
 ```
 
-## Exports
-
-### Classes
-- `App`
-- `Buffer`
-- `Device`
-- `Queue`
-- `Shader`
-- `Texture`
-- `VGPUError`
-- `ValidationError`
-
-### Functions
-- `bind`
-- `createBindGroupLayout`
-- `createPipelineLayout`
-- `createBindGroup`
-- `createSampler`
-- `createMockGPUDevice`
-
-### Types
-- `AppCreateOptions`
-- `AppInstance`
-- `VGPUAdapter`
-- `BufferOptions`
-- `BufferUsageName`
-- `BufferWriteData`
-- `TextureOptions`
-- `TextureUsageName`
-- `CreateDeviceOptions`
-- `BindVisibility`
-- `CreateBindGroupLayoutOptions`
-- `CreatePipelineLayoutOptions`
-- `CreateBindGroupOptions`
-- `DeviceLike`
-- `ShaderInput`
-
-## Usage
+## Use from ring 1
 
 ```ts
-import { App } from "@vgpu/core";
-import { createMockAdapter } from "@vgpu/adapter-mock";
+import { init } from "vgpu/mock";
+import { UniformPool } from "vgpu/core";
 
-const { device } = await App.create({ adapter: createMockAdapter() });
-const data = new Float32Array([1, 2, 3, 4]);
-const buffer = device.createBuffer({
-  size: data.byteLength,
-  usage: ["copy_dst", "copy_src", "storage"],
-});
-
-buffer.write(data);
-const copy = new Float32Array(await buffer.read(data.byteLength));
-device.destroy();
+const gpu = await init({ size: [64, 64] });
+const draw = gpu.draw({ shader: OBJ_WGSL });
+const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
+const slot = pool.alloc({ size: 64, bindGroupLayout: draw.layout(1, { dynamicOffsets: true }) });
+draw.group(1, slot.bindGroup);
 ```
 
-Explicit binding helpers keep layout control in user code without WGSL reflection or
-`layout: "auto"`:
-
-```ts
-import { bind, createBindGroupLayout } from "@vgpu/core";
-
-const sceneLayout = createBindGroupLayout(device, {
-  entries: [bind.uniform(0, "vertex|fragment")],
-});
-```
-
-The `.gpu` property is an unmanaged raw WebGPU escape hatch for APIs that VGPU
-does not wrap yet. Prefer wrapper lifecycle methods (`buffer.destroy()`,
-`texture.destroy()`, `device.destroy()`) instead of destroying `.gpu` directly.
+Use raw `.gpu` handles deliberately. Wrapper lifecycle methods (`buffer.destroy()`, `texture.destroy()`, `device.destroy()`) remain preferred for resources created through vgpu.
 
 ## License
 

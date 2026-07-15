@@ -1,106 +1,38 @@
 # Getting started
 
-Use this as the VGPU docs index when you arrive through `npx vgpu docs`. It is not a tutorial: scan
-for the feature you need, then open the one referenced API/guide doc for details. The canonical guide
-symbol is `getting-started`.
+Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from JavaScript (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
 
-## Concrete navigation commands
+```ts
+import { init } from "vgpu";
+
+const gpu = await init(canvas, { dpr: [1, 2] });
+const screen = gpu.screen!;
+const gradient = gpu.pass(`
+struct Params { time: f32, texel: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+}
+`, { set: { time: 0, texel: screen.texelSize } });
+
+gpu.frame.loop((f) => {
+  gradient.set({ time: gpu.time, texel: screen.texelSize });
+  f.pass({ target: screen }, (p) => p.draw(gradient));
+});
+```
+
+## Default choices
+
+- Use `gpu.pass()` for fullscreen fragment work.
+- Use `gpu.draw()` for vertex shaders, meshes, storage-driven vertices, instancing, MRT, and depth.
+- Use `gpu.frame((f) => ...)` for explicit one-shot work and `gpu.frame.loop(...)` only for animation.
+- Use `set()` for every binding declared in WGSL; missing bindings fail with `VGPU-R1-BINDING-NEVER-SET`.
+- Keep plain JS values plain from their first `set()`; if you need user-owned lifetime, pass a resource from the first `set()`.
+
+## Open concrete docs
 
 ```sh
-vgpu docs ls
-vgpu docs ls /guides
-vgpu docs ls /@vgpu/core
-vgpu docs path getting-started.md
-vgpu docs cat /guides/getting-started.docs.md
+vgpu docs cat /guides/performance-model.docs.md
+vgpu docs cat /guides/performance-patterns.docs.md
 vgpu docs cat browser-testing
-```
-
-`vgpu docs cat <symbol>` is shortest for unique symbols. `vgpu docs cat <virtual-path>` is safest
-when a table below gives an exact path.
-
-## Guides
-
-| Feature / use case | Doc path | Read it for |
-| --- | --- | --- |
-| Start here / docs index | `/guides/getting-started.docs.md` | This overview and the main entry points. |
-| Browser WebGPU screenshots/tests | `/guides/browser-testing.docs.md` | Playwright + Chromium + SwiftShader/Xvfb baseline. |
-| Performance mental model | `/guides/performance-model.docs.md` | What work to move up the change-frequency ladder. |
-| Authoring shaders for later perf | `/guides/authoring-for-perf.docs.md` | Tier-0 habits and primitives that keep optimizations mechanical. |
-| Optimization pass procedure | `/guides/optimize-pass.docs.md` | Ordered cleanup/optimization workflow after visuals are locked. |
-| Performance patterns | `/guides/performance-patterns.docs.md` | Bake, hoist, simplify, and other shader optimization patterns. |
-| Measuring changes | `/guides/measuring.docs.md` | `gpuFrameTime`, `pixelDiff`, and correctness/perf validation. |
-
-## Core package: apps, resources, binding
-
-| Feature / utility | Doc path | Read it for |
-| --- | --- | --- |
-| App lifecycle | `/@vgpu/core/App.docs.md` | Creating an app/device loop from an adapter. |
-| Device wrapper | `/@vgpu/core/Device.docs.md` | Device options and VGPU device behavior. |
-| Queue writes/submission | `/@vgpu/core/Queue.docs.md` | Writing buffers/textures and submitting work. |
-| Buffers | `/@vgpu/core/Buffer.docs.md` | Buffer creation, usage names, and writes. |
-| Textures/readback surfaces | `/@vgpu/core/Texture.docs.md` | Texture creation, usage names, and reads. |
-| Cubemap and layer views | `/@vgpu/core/texture-view.docs.md` | `cubeView`, `layerView`, and compatibility-mode view dimensions. |
-| Shaders | `/@vgpu/core/Shader.docs.md` | Passing WGSL/compiled shader inputs into core. |
-| Bind groups/layouts/samplers | `/@vgpu/core/bind.docs.md` | `bind`, bind group layouts, pipeline layouts, samplers. |
-| Validation errors | `/@vgpu/core/VGPUError.docs.md` | Error shape/codes for VGPU validation failures. |
-| Adapter contract | `/@vgpu/core/VGPUAdapter.docs.md` | Implementing or consuming the adapter interface. |
-| Mock GPU device | `/@vgpu/core/createMockGPUDevice.docs.md` | Unit tests without a real WebGPU implementation. |
-
-## Adapters: mock and native Node
-
-| Feature / utility | Doc path | Read it for |
-| --- | --- | --- |
-| Mock adapter | `/@vgpu/adapter-mock/createMockAdapter.docs.md` | Fast non-rendering tests. |
-| Native Node adapter | `/@vgpu/adapter-node/createNodeAdapter.docs.md` | Creating an adapter backed by native WebGPU. |
-| Native Node device/readback | `/@vgpu/adapter-node/createNodeDevice.docs.md` | Render targets, PNG snapshots, and readback workflows. |
-
-## Render package: frames, passes, pipelines, helpers
-
-| Feature / utility | Doc path | Read it for |
-| --- | --- | --- |
-| Frame orchestration | `/@vgpu/render/Frame.docs.md` | `beginFrame` and frame-scoped rendering. |
-| Render passes | `/@vgpu/render/RenderPass.docs.md` | Color/depth attachments, draw calls, dynamic offsets. |
-| Pipeline creation | `/@vgpu/render/createRenderPipeline.docs.md` | Creating pipelines from high-level options or descriptors. |
-| Canvas render target | `/@vgpu/render/passes/render-target-canvas.docs.md` | `renderTargetForCanvas` and canvas setup. |
-| Render bundles | `/@vgpu/render/render-bundle.docs.md` | Recording/reusing render bundles. |
-| Rapid renderer | `/@vgpu/render/rapid-renderer.docs.md` | Higher-level draw-spec based rendering. |
-| Uniforms | `/@vgpu/render/uniform.docs.md` | Single uniform resources. |
-| Uniform pools | `/@vgpu/render/uniform-pool.docs.md` | Packed/reused uniform slots. |
-| Storage buffers | `/@vgpu/render/storage-buffer.docs.md` | Storage-buffer resources for render code. |
-| Camera math | `/@vgpu/render/camera.docs.md` | `Camera`, `Mat4`, and `Vec3` shapes. |
-| Perspective/orthographic cameras | `/@vgpu/render/perspective-camera.docs.md`, `/@vgpu/render/orthographic-camera.docs.md` | Projection matrix helpers. |
-| Color/domain helpers | `/@vgpu/render/srgb.docs.md`, `/@vgpu/render/deg-to-rad.docs.md` | sRGB and angle conversion helpers. |
-| Mesh/material domain types | `/@vgpu/render/mesh.docs.md`, `/@vgpu/render/material.docs.md` | Geometry/material data structures. |
-| Inspection materials | `/@vgpu/render/inspect/wireframe-material.docs.md`, `/@vgpu/render/inspect/normal-debug-material.docs.md` | Debug rendering materials. |
-| Mesh wireframes | `/@vgpu/render/inspect/mesh-to-wireframe.docs.md` | Wireframe mesh conversion. |
-| Canvas utilities | `/@vgpu/render/utils/canvas-resolution.docs.md`, `/@vgpu/render/utils/canvas-mouse-tracker.docs.md` | Canvas sizing and mouse tracking. |
-| Frame clock | `/@vgpu/render/utils/frame-clock.docs.md` | Frame timing utility. |
-| Render perf utilities | `/@vgpu/render/perf/perf.docs.md` | `gpuFrameTime` and `pixelDiff`. |
-
-## WGSL package: compile, resolve, bundlers
-
-| Feature / utility | Doc path | Read it for |
-| --- | --- | --- |
-| Compile plain WGSL | `/@vgpu/wgsl/compile.docs.md` | `compile(wgsl)` and runtime import rejection. |
-| Resolved shader data | `/@vgpu/wgsl/ResolvedShader.docs.md` | Shared shader data shape and metadata. |
-| Resolve WGSL imports/modules | `/@vgpu/wgsl/runtime/resolveShader.docs.md` | Import flattening, DCE, validation, minification. |
-| Vite WGSL imports | `/@vgpu/wgsl/loader-vite/index.docs.md` | Vite plugin/transform behavior. |
-| Webpack WGSL imports | `/@vgpu/wgsl/loader-webpack/index.docs.md` | Webpack loader behavior. |
-
-## How to open the table entries
-
-Use exact paths from the tables when possible:
-
-```sh
-vgpu docs cat /@vgpu/render/Frame.docs.md
-vgpu docs cat /@vgpu/wgsl/runtime/resolveShader.docs.md
-vgpu docs cat /@vgpu/adapter-node/createNodeDevice.docs.md
-```
-
-Or use unique symbols when you already know them:
-
-```sh
-vgpu docs cat Frame
-vgpu docs cat resolveShader
-vgpu docs cat createNodeDevice
 ```
