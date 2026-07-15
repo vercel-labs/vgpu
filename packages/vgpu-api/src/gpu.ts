@@ -3,9 +3,9 @@ import type { VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
 import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
-import { Draw, type DrawOptions, type MeshLike } from "./draw.ts";
+import { InternalDraw, type Draw, type DrawOptions, type MeshLike } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
-import { Pass, type PassOptions } from "./pass.ts";
+import { InternalPass, type Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
 import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
@@ -97,11 +97,11 @@ class RingGpu implements Gpu {
 
   pass(source: string | ShaderSource, opts: PassOptions = {}): Pass {
     if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new Pass(this.device, toWgsl(source), opts, this.cache, this.screen);
+    return new InternalPass(this.device, toWgsl(source), opts, this.cache, this.screen);
   }
   draw(opts: DrawOptions): Draw {
     const shader = toWgsl(opts.shader);
-    return new Draw(this.device, shader, { ...opts, shader }, this.cache, this.screen);
+    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache, this.screen);
   }
   target(opts: TargetOptions = {}): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
@@ -189,9 +189,6 @@ function setCanvasSize(canvas: HTMLCanvasElement | OffscreenCanvas, size: readon
   (canvas as { width: number; height: number }).height = size[1];
 }
 
-function lanePlaceholder(where: string, lane: string): never {
-  throw unsupportedError(where, `${where} está reservado y se implementa en ${lane}; Phase 2 congela la firma solamente.`);
-}
 
 function hasMesh(opts: PassOptions): boolean {
   return "mesh" in (opts as Record<string, unknown>);

@@ -4,7 +4,7 @@ import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
-import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type SetBag, type SetCore } from "./set-core.ts";
+import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, unsupportedError, VGPUError } from "./errors.ts";
 
@@ -69,61 +69,83 @@ export interface BundleBackReferenceRegistry {
 
 let nextDrawId = 1;
 
-/** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
-export class Draw {
-  readonly id = nextDrawId++;
-  readonly label: string;
+type DrawState = {
+  readonly id: number;
+  readonly device: Device;
+  readonly opts: DrawOptions;
+  readonly cache: BindGroupCache;
+  readonly defaultTarget?: Target;
   readonly reflection: Reflection;
   readonly setCore: SetCore;
   readonly bindGroupLayouts: Map<number, GPUBindGroupLayout>;
   pipelineLayout: GPUPipelineLayout;
   readonly shaderModule: GPUShaderModule;
-  readonly __recordedIn: BundleBackReferenceRegistry;
+  readonly recordedIn: BundleBackReferenceRegistry;
+};
+
+const drawStates = new WeakMap<Draw, DrawState>();
+
+export interface Draw {
+  readonly gpu: GPURenderPipeline | undefined;
+  readonly targets: readonly Target[] | undefined;
+  set(values: SetBag): this;
+  group(n: number, bindGroup: GPUBindGroup): this;
+  layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
+  draw(opts?: DrawCallOptions): Promise<void>;
+}
+
+/** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
+export class InternalDraw implements Draw {
+  readonly label: string;
   private readonly dynamicBindGroupLayouts = new Map<number, GPUBindGroupLayout>();
   private readonly pipelineCache = new Map<string, GPURenderPipeline>();
 
-  constructor(readonly device: Device, readonly source: string, readonly opts: DrawOptions, private readonly cache: BindGroupCache = createBindGroupCache(), private readonly defaultTarget?: Target) {
+  constructor(device: Device, readonly source: string, opts: DrawOptions, cache: BindGroupCache = createBindGroupCache(), defaultTarget?: Target) {
     this.label = opts.label ?? "draw";
-    this.reflection = reflectSource(source, `${this.label}.wgsl`);
-    this.bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, this.reflection));
-    this.pipelineLayout = pipelineLayoutFor(device, this.bindGroupLayouts);
-    this.shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });
-    this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
-    this.__recordedIn = createBundleRegistry();
+    const id = nextDrawId++;
+    const reflection = reflectSource(source, `${this.label}.wgsl`);
+    const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
+    const pipelineLayout = pipelineLayoutFor(device, bindGroupLayouts);
+    const shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });
+    const setCore = createSetCore({ device, label: this.label, drawId: id, reflection, bindGroupLayouts, cache });
+    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, recordedIn: createBundleRegistry() });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.pipelineFor(target);
   }
 
   get gpu(): GPURenderPipeline | undefined { return this.pipelineCache.values().next().value; }
-  get targets(): readonly Target[] | undefined { return this.opts.targets; }
+  get targets(): readonly Target[] | undefined { return drawState(this).opts.targets; }
 
   set(values: SetBag): this {
-    for (const change of this.setCore.set(values)) this.__recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change });
+    const state = drawState(this);
+    for (const change of state.setCore.set(values)) state.recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change });
     return this;
   }
 
   group(n: number, bindGroup: GPUBindGroup): this {
+    const state = drawState(this);
     const expectedLayout = this.dynamicBindGroupLayouts.get(n) ?? this.layout(n);
-    const previousIdentity = this.setCore.claimGroup(n, bindGroup, expectedLayout);
-    this.__recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
+    const previousIdentity = state.setCore.claimGroup(n, bindGroup, expectedLayout);
+    state.recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
     return this;
   }
 
   layout(n: number, opts: DrawLayoutOptions = {}): GPUBindGroupLayout {
-    if (!opts.dynamicOffsets) return this.setCore.layout(n);
+    if (!opts.dynamicOffsets) return drawState(this).setCore.layout(n);
     return this.dynamicLayout(n);
   }
 
   private dynamicLayout(group: number): GPUBindGroupLayout {
-    this.setCore.layout(group);
+    const state = drawState(this);
+    state.setCore.layout(group);
     const existing = this.dynamicBindGroupLayouts.get(group);
     if (existing) return existing;
     const entries = dynamicEntries(this, group);
-    const rawLayout = this.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
+    const rawLayout = state.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
     const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
     this.dynamicBindGroupLayouts.set(group, layout);
-    this.bindGroupLayouts.set(group, layout);
-    this.pipelineLayout = pipelineLayoutFor(this.device, this.bindGroupLayouts);
+    state.bindGroupLayouts.set(group, layout);
+    state.pipelineLayout = pipelineLayoutFor(state.device, state.bindGroupLayouts);
     this.pipelineCache.clear();
     return layout;
   }
@@ -136,25 +158,26 @@ export class Draw {
    * Ignoring the promise can surface those failures as unhandled rejections.
    */
   draw(opts: DrawCallOptions = {}): Promise<void> {
-    const target = opts.target ?? this.defaultTarget;
+    const state = drawState(this);
+    const target = opts.target ?? state.defaultTarget;
     if (!target) throw unsupportedError(`${this.label}.draw`, "Draw.draw() one-shot requiere opts.target cuando gpu.screen no existe; usá gpu.frame.pass({ target }, p => p.draw(draw)).");
-    const encoder = this.device.gpu.createCommandEncoder();
+    const encoder = state.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
     const validations: ClaimedGroupValidationResult[] = [];
     try { this.encode(pass, target, opts, (result) => validations.push(result)); }
     catch (error) {
       discardClaimedGroupValidationResults(validations);
-      discardClaimedGroupValidationScopes(this.device);
+      discardClaimedGroupValidationScopes(state.device);
       try { pass.end(); } catch { /* ignore cleanup failure after encode failure */ }
       throw error;
     }
-    endRenderPassWithClaimValidation(this.device, pass, validations, validations[0]?.context);
+    endRenderPassWithClaimValidation(state.device, pass, validations, validations[0]?.context);
     let commandBuffer: GPUCommandBuffer;
     const finishContext = validations[0]?.context;
-    if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
+    if (finishContext) pushClaimedGroupValidationScope(state.device, finishContext);
     try { commandBuffer = encoder.finish(); }
     catch (error) {
-      const result = finishContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
+      const result = finishContext ? popLastClaimedGroupValidationScope(state.device) : undefined;
       discardClaimedGroupValidationResults(validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
@@ -162,14 +185,14 @@ export class Draw {
       throw error;
     }
     if (finishContext) {
-      const result = popLastClaimedGroupValidationScope(this.device);
+      const result = popLastClaimedGroupValidationScope(state.device);
       if (result) validations.push(result);
     }
     const submitContext = validations[0]?.context;
-    if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
-    try { this.device.gpu.queue.submit([commandBuffer]); }
+    if (submitContext) pushClaimedGroupValidationScope(state.device, submitContext);
+    try { state.device.gpu.queue.submit([commandBuffer]); }
     catch (error) {
-      const result = submitContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
+      const result = submitContext ? popLastClaimedGroupValidationScope(state.device) : undefined;
       discardClaimedGroupValidationResults(validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
@@ -177,15 +200,15 @@ export class Draw {
       throw error;
     }
     if (submitContext) {
-      const result = popLastClaimedGroupValidationScope(this.device);
+      const result = popLastClaimedGroupValidationScope(state.device);
       if (result) validations.push(result);
     }
-    return claimedGroupValidationDone(this.device, validations);
+    return claimedGroupValidationDone(state.device, validations);
   }
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     pass.setPipeline(this.pipelineFor(target));
-    for (const binding of this.setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
+    for (const binding of drawState(this).setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
     this.encodeMesh(pass, opts);
   }
 
@@ -195,13 +218,13 @@ export class Draw {
       pass.setBindGroup(binding.group, binding.bindGroup, offsets);
       return;
     }
-    pushClaimedGroupValidationScope(this.device, binding.claimValidation);
+    pushClaimedGroupValidationScope(drawState(this).device, binding.claimValidation);
     try { pass.setBindGroup(binding.group, binding.bindGroup, offsets); }
     catch (error) {
-      discardLastClaimedGroupValidationScope(this.device);
+      discardLastClaimedGroupValidationScope(drawState(this).device);
       throw claimedGroupNativeValidationError(binding.claimValidation.label, binding.claimValidation.group, error);
     }
-    const result = popLastClaimedGroupValidationScope(this.device);
+    const result = popLastClaimedGroupValidationScope(drawState(this).device);
     if (result) claimValidation(result);
   }
 
@@ -215,9 +238,9 @@ export class Draw {
   }
 
   private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
-    const mesh = this.opts.mesh;
+    const mesh = drawState(this).opts.mesh;
     if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
-    const counts = resolveDrawCounts(this.label, mesh, this.opts, callOpts);
+    const counts = resolveDrawCounts(this.label, mesh, drawState(this).opts, callOpts);
     if (!mesh?.indexBuffer) return pass.draw(counts.vertexCount, counts.instanceCount, counts.firstVertex, counts.firstInstance);
     // Indexed meshes intentionally use their indexCount with firstIndex/baseVertex = 0; vertices/firstVertex only apply to non-indexed draws.
     pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
@@ -225,14 +248,15 @@ export class Draw {
   }
 
   private createPipeline(target: Target): GPURenderPipeline {
-    const entries = this.reflection.entryPoints;
+    const state = drawState(this);
+    const entries = state.reflection.entryPoints;
     const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
     const fragment = entries.find((entry) => entry.stage === "fragment")?.name ?? "fs_main";
-    return this.device.gpu.createRenderPipeline({
+    return state.device.gpu.createRenderPipeline({
       label: `${this.label}.pipeline`,
-      layout: this.pipelineLayout,
-      vertex: { module: this.shaderModule, entryPoint: vertex, buffers: [...(this.opts.mesh?.vertexBufferLayouts ?? [])] },
-      fragment: { module: this.shaderModule, entryPoint: fragment, targets: target.colors.map((color) => ({ format: color.format })) },
+      layout: state.pipelineLayout,
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      fragment: { module: state.shaderModule, entryPoint: fragment, targets: target.colors.map((color) => ({ format: color.format })) },
       primitive: { topology: "triangle-list" },
       depthStencil: target.depth ? { format: target.depth.format, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: target.sampleCount },
@@ -275,6 +299,22 @@ function validateOptionalDrawCount(label: string, field: string, value: number |
   });
 }
 
+export function drawReflection(draw: Draw): Reflection { return drawState(draw).reflection; }
+
+export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
+
+export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
+
+export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
+  draw.encode(pass, target, opts, claimValidation);
+}
+
+function drawState(draw: Draw): DrawState {
+  const state = drawStates.get(draw);
+  if (!state) throw new TypeError("Invalid Draw instance");
+  return state;
+}
+
 export function createBundleRegistry(): BundleBackReferenceRegistry {
   const set = new Set<BundleBackReference>();
   return {
@@ -292,8 +332,8 @@ function offsetsForGroup(offsets: DrawCallOptions["offsets"], group: number, fal
   return byGroup[group] ?? fallback;
 }
 
-function dynamicEntries(draw: Draw, group: number): GPUBindGroupLayoutEntry[] {
-  return bindGroupLayoutEntriesForGroup(draw.reflection.bindings, group).map(dynamicEntry);
+function dynamicEntries(draw: InternalDraw, group: number): GPUBindGroupLayoutEntry[] {
+  return bindGroupLayoutEntriesForGroup(drawState(draw).reflection.bindings, group).map(dynamicEntry);
 }
 
 function dynamicEntry(entry: GPUBindGroupLayoutEntry): GPUBindGroupLayoutEntry {

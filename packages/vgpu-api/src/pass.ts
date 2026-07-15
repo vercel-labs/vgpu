@@ -1,5 +1,6 @@
 import type { Device } from "@vgpu/core";
-import { Draw, type DrawCallOptions } from "./draw.ts";
+import { reflectSource } from "@vgpu/wgsl/runtime";
+import { InternalDraw, encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
 import type { SetBag } from "./set-core.ts";
@@ -10,28 +11,43 @@ export interface PassOptions {
   readonly label?: string;
 }
 
-export class Pass {
-  /** @internal Draw-backed implementation so FramePass can encode fullscreen passes without exposing R4 on Pass. */
-  readonly drawImpl: Draw;
+const passImpls = new WeakMap<Pass, InternalDraw>();
+
+export interface Pass {
+  readonly gpu: GPURenderPipeline | undefined;
+  set(values: SetBag): this;
+  draw(opts?: DrawCallOptions & { readonly target?: Target }): void;
+}
+
+export class InternalPass implements Pass {
   readonly gpu: GPURenderPipeline | undefined;
 
   constructor(device: Device, source: string, opts: PassOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
     const shader = fullscreenSource(source);
-    this.drawImpl = new Draw(device, shader, { shader, set: opts.set, label: opts.label ?? "pass" }, cache, defaultTarget);
-    this.gpu = this.drawImpl.gpu;
+    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "pass" }, cache, defaultTarget);
+    passImpls.set(this, impl);
+    this.gpu = impl.gpu;
   }
 
-  set(values: SetBag): this { this.drawImpl.set(values); return this; }
-  draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { this.drawImpl.draw(opts); }
+  set(values: SetBag): this { passImpl(this).set(values); return this; }
+  draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { passImpl(this).draw(opts); }
 
   /** @internal FramePass delegates here; not part of the frozen public Pass surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
-    this.drawImpl.encode(pass, target, opts, claimValidation);
+    encodeDraw(passImpl(this), pass, target, opts, claimValidation);
   }
 }
 
+export function passDraw(pass: Pass): InternalDraw { return passImpl(pass); }
+
+function passImpl(pass: Pass): InternalDraw {
+  const impl = passImpls.get(pass);
+  if (!impl) throw new TypeError("Invalid Pass instance");
+  return impl;
+}
+
 export function fullscreenSource(source: string): string {
-  if (/@vertex\s+fn\s+/.test(source)) return source;
+  if (hasVertexEntry(source)) return source;
   return `
 struct VgpuFullscreenVertexOut {
   @builtin(position) position: vec4f,
@@ -46,4 +62,8 @@ struct VgpuFullscreenVertexOut {
   return out;
 }
 ${source}`;
+}
+
+function hasVertexEntry(source: string): boolean {
+  return reflectSource(source, "pass.wgsl").entryPoints.some((entry) => entry.stage === "vertex");
 }

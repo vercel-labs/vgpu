@@ -2,8 +2,8 @@ import type { Device } from "@vgpu/core";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
-import { Draw, type DrawCallOptions } from "./draw.ts";
-import { Pass } from "./pass.ts";
+import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
+import { passDraw, type Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, missingScreenError } from "./errors.ts";
 
@@ -13,6 +13,7 @@ export interface FramePassOptions {
 }
 
 export interface FrameLoopHandle { stop(): void }
+export interface FrameLoopOptions { readonly fps?: number }
 export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
@@ -89,11 +90,16 @@ export class Frame {
 export class FramePass {
   constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[]) {}
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    drawable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result));
+    encodeFrameDrawable(drawable, this.encoder, this.target, opts, (result) => this.validations.push(result));
   }
   bundles(...bundles: readonly Bundle[]): void {
     replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));
   }
+}
+
+function encodeFrameDrawable(drawable: Draw | Pass, encoder: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation: (result: ClaimedGroupValidationResult) => void): void {
+  if ("layout" in drawable) return encodeDraw(drawable as never, encoder, target, opts, claimValidation);
+  encodeDraw(passDraw(drawable), encoder, target, opts, claimValidation);
 }
 
 export class FrameRunner {
@@ -107,19 +113,30 @@ export class FrameRunner {
     }
     return frame;
   }
-  loop(cb: FrameLoopCallback): FrameLoopHandle {
+  loop(cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
     let stopped = false;
     const request = globalThis.requestAnimationFrame ?? ((fn: FrameRequestCallback) => setTimeout(() => fn(performance.now()), 16) as unknown as number);
     const cancel = globalThis.cancelAnimationFrame ?? ((id: number) => clearTimeout(id));
+    const minIntervalMs = opts.fps && opts.fps > 0 ? 1000 / opts.fps : 0;
+    let lastFrameMs: number | undefined;
     let id = 0;
-    const tick = () => {
+    const tick = (timestamp: number) => {
       if (stopped) return;
-      const frame = this.frame();
-      try { cb(frame); }
-      finally { frame.submit(); }
+      if (shouldRunFrame(timestamp, lastFrameMs, minIntervalMs)) {
+        lastFrameMs = timestamp;
+        const frame = this.frame();
+        try { cb(frame); }
+        finally { frame.submit(); }
+      }
       id = request(tick);
     };
     id = request(tick);
     return { stop() { stopped = true; cancel(id); } };
   }
+}
+
+function shouldRunFrame(timestamp: number, lastFrameMs: number | undefined, minIntervalMs: number): boolean {
+  if (lastFrameMs === undefined) return true;
+  if (minIntervalMs <= 0) return true;
+  return timestamp - lastFrameMs >= minIntervalMs;
 }

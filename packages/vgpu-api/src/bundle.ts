@@ -1,6 +1,6 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
-import { Draw, type BundleBackReference, type BundleStaleEvent, type DrawCallOptions } from "./draw.ts";
-import { Pass } from "./pass.ts";
+import { InternalDraw, encodeDraw, registerDrawBundle, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
+import { InternalPass, passDraw, type Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
 import { VGPUError } from "./errors.ts";
 
@@ -33,7 +33,7 @@ class RecordedBundle implements Bundle, BundleBackReference {
   gpu!: GPURenderBundle;
   private staleEvent?: BundleStaleEvent;
   private readonly targetSnapshot: TargetSnapshot;
-  private readonly draws = new Set<Draw>();
+  private readonly draws = new Set<InternalDraw>();
 
   constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly target: Target) {
     this.targetSnapshot = snapshotTarget(target);
@@ -47,7 +47,7 @@ class RecordedBundle implements Bundle, BundleBackReference {
       sampleCount: this.target.sampleCount,
       record: (recorder) => this.recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
     });
-    for (const draw of this.draws) draw.__recordedIn.add(this);
+    for (const draw of this.draws) registerDrawBundle(draw, this);
   }
 
   markStale(event: BundleStaleEvent): void {
@@ -61,7 +61,7 @@ class RecordedBundle implements Bundle, BundleBackReference {
     if (this.staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.staleEvent));
   }
 
-  remember(draw: Draw): void {
+  remember(draw: InternalDraw): void {
     this.draws.add(draw);
   }
 
@@ -76,9 +76,9 @@ class ExplicitBundleRecorder implements BundleRecorder {
   constructor(private readonly bundle: RecordedBundle, private readonly encoder: GPURenderPassEncoder) {}
 
   draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    const draw = drawable instanceof Pass ? drawable.drawImpl : drawable;
+    const draw = drawable instanceof InternalPass ? passDraw(drawable) : drawable as InternalDraw;
     this.bundle.remember(draw);
-    draw.encode(this.encoder, this.bundleTarget(), opts);
+    encodeDraw(draw, this.encoder, this.bundleTarget(), opts);
   }
 
   private bundleTarget(): Target {
