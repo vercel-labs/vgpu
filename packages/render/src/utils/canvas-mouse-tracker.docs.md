@@ -28,7 +28,10 @@ export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTra
 ## Examples
 
 ```ts
+import { canvasMouseTracker } from "@vgpu/render/utils";
+
 const canvas = document.createElement("canvas");
+const pass = { set(values: { readonly mouse: readonly [number, number] }): void { void values; } };
 const mouse = canvasMouseTracker({ canvas, normalize: true, flipY: true });
 
 function frame() {

@@ -52,7 +52,7 @@ gpu.dispose();
 
 ## Performance defaults
 
-Read `docs/topics/performance-playbook.docs.md` before writing shader code. It documents bundles, target pre-warm, R4 dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and MSAA/depth as defaults rather than late optimizations.
+Read `docs/topics/performance-playbook.docs.md` before writing shader code. It documents bundles, target pre-warm, manual bind-group dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and MSAA/depth as defaults rather than late optimizations.
 
 ## WGSL imports
 

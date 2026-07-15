@@ -2,7 +2,7 @@
 
 Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from JavaScript (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
 
-```ts
+```text
 import { init } from "vgpu";
 
 const gpu = await init(canvas, { dpr: [1, 2] });

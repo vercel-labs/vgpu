@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const gpu = await init({ adapter });
   const mesh = gpu.mesh(box({ size: 1 }));
 
-  const readable = await meshToReadable(mesh, gpu.device);
+  const readable = await meshToReadable(mesh as never, gpu.device);
   const vertices = await readable.vertexBuffer.read(readable.vertexBuffer.options.size);
   console.log("Readable bytes", new Float32Array(vertices));
 }

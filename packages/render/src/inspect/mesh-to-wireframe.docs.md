@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   const adapter = createMockAdapter();
   const gpu = await init({ adapter });
   const solid = gpu.mesh(box({ size: 1 }));
-  const readable = await meshToReadable(solid, gpu.device);
+  const readable = await meshToReadable(solid as never, gpu.device);
   const wireframe = await meshToWireframe(readable, gpu.device);
   const inspector = wireframeMaterial({ device: gpu.device });
 

@@ -32,7 +32,7 @@ export function gpuFrameTime(
 |---|---|---|---|---|
 | device | Device | ✔ | — | Source device used to create command encoders, submit work, and flush the queue. Must expose `timestamp-query` if you want GPU timestamps. |
 | encode | GpuFrameEncoder | ✔ | — | Callback invoked per frame with a fresh `GPUCommandEncoder`; record passes exactly as in production. |
-| options | GpuFrameTimeOptions | ✖ | — | Tunables for warmup, sample count, and measurement mode. |
+| options | GpuFrameTimeOptions | ✖ | `{}` | Tunables for warmup, sample count, and measurement mode. |
 | options.frames | number | ✖ | 120 | Measured frames after warmup. Values below 1 are clamped to 1. |
 | options.warmup | number | ✖ | 30 | Throws away the first N frames so shader compilation and lazy allocations settle. |
 | options.batch | number | ✖ | 8 | Frames per batch when falling back to wall-clock. Ignored for timestamp queries. |
@@ -52,8 +52,9 @@ import { createMockAdapter } from "@vgpu/adapter-mock";
 async function bench(): Promise<void> {
   const adapter = createMockAdapter();
   const device = await adapter.requestDevice();
-  const renderPassDescriptor = { colorAttachments: [{ view: {} as GPUTextureView, loadOp: "clear", storeOp: "store" }] };
+  const renderPassDescriptor: GPURenderPassDescriptor = { colorAttachments: [{ view: {} as GPUTextureView, loadOp: "clear", storeOp: "store" }] };
   const pipeline = device.gpu.createRenderPipeline({
+    layout: "auto",
     vertex: { module: device.gpu.createShaderModule({ code: "@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(); }" }), entryPoint: "vs_main" },
     fragment: { module: device.gpu.createShaderModule({ code: "@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }" }), entryPoint: "fs_main", targets: [{ format: "bgra8unorm" }] },
     primitive: { topology: "triangle-list" },

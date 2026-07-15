@@ -8,7 +8,7 @@ Optimize one pass by first deciding what changes every frame.
 
 If the draw list is static, record it once:
 
-```ts
+```text
 const passBundle = gpu.bundle({ target }, (b) => {
   b.draw(background);
   b.draw(grid);
@@ -20,7 +20,7 @@ gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(passBundle)));
 
 Keep the pass object and write values in place:
 
-```ts
+```text
 const pass = gpu.pass(WGSL, { set: { time: 0, exposure: 1 } });
 gpu.frame.loop(() => {
   pass.set({ time: gpu.time });
@@ -32,7 +32,7 @@ gpu.frame.loop(() => {
 
 Use ping-pong rather than allocating a new target or storage buffer:
 
-```ts
+```text
 const state = gpu.pingPong(512, 512, { format: "rgba16float" });
 gpu.frame.loop((f) => {
   step.set({ src: state.read.color });

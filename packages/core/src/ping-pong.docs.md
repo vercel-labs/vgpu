@@ -13,7 +13,7 @@ explicitly.
 
 ## Overloads
 
-```ts
+```text
 const textures = pingPong(device, textureOptions); // TextureOptions -> TexturePingPong
 const buffers = pingPong(device, bufferOptions);   // BufferOptions -> BufferPingPong
 ```
@@ -46,7 +46,7 @@ resources.
 
 ## Texture example
 
-```ts
+```text
 import { pingPong, type Device } from "@vgpu/core";
 
 function reactionDiffusion(device: Device, width: number, height: number) {
@@ -76,7 +76,7 @@ function reactionDiffusion(device: Device, width: number, height: number) {
 
 ## Buffer example
 
-```ts
+```text
 import { pingPong, type Device } from "@vgpu/core";
 
 function boids(device: Device, count: number) {

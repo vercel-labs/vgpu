@@ -5,5 +5,13 @@ Creates a pure camera object with `viewProjection` and `position`. FOV is in deg
 ```ts
 import { perspectiveCamera } from "vgpu/scene";
 
-const cam = perspectiveCamera({ fov: 60, aspect: gpu.screen!.size[0] / gpu.screen!.size[1], position: [0, 2, 4], target: [0, 0, 0] });
+const screenSize = [128, 72] as const;
+const cam = perspectiveCamera({
+  fov: 60,
+  aspect: screenSize[0] / screenSize[1],
+  position: [0, 2, 4],
+  target: [0, 0, 0],
+});
+
+cam.position satisfies Float32Array;
 ```

@@ -1,6 +1,6 @@
 # createRenderBundle
 
-Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Pass` commands because it derives formats from `Target` and performs R3 stale checks.
+Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Pass` commands because it derives formats from `Target` and performs stale-bundle checks (`VGPU-R3-BUNDLE-STALE`).
 
 ## Import
 

@@ -31,6 +31,11 @@ import { frameClock } from "@vgpu/render/utils";
 
 const clock = frameClock();
 
+function updateScene(elapsed: number, dt: number): void {
+  void elapsed;
+  void dt;
+}
+
 function tick() {
   if (!clock.isPaused) {
     const elapsed = clock.now();

@@ -20,6 +20,10 @@ no-op because WebGPU shader modules have no destroy method.
 Example:
 
 ```ts
+import { createMockAdapter } from "@vgpu/adapter-mock";
+
+const device = await createMockAdapter().requestDevice();
 const shader = device.createShader("@compute @workgroup_size(1) fn main() {}");
 console.log(shader.kind); // "wgsl"
+device.destroy();
 ```

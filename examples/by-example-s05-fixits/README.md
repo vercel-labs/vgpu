@@ -1,6 +1,6 @@
 # by-example §5 fix-it errors
 
-This example uses `vgpu/mock` on purpose so it can run locally without a GPU. It exercises developer-facing fix-it messages for two canonical mistakes: drawing with a required binding that was never set, and violating R1 by flipping a binding from lib-owned JS values to a user-owned resource.
+This example uses `vgpu/mock` on purpose so it can run locally without a GPU. It exercises developer-facing fix-it messages for two canonical mistakes: drawing with a required binding that was never set, and violating first-set ownership by flipping a binding from lib-owned JS values to a user-owned resource.
 
 ## Run it
 

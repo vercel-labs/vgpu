@@ -71,7 +71,7 @@ interface Draw {
 | opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
 | opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
 | draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
-| draw.group.n | `number` | ✔ | — | Bind group index to claim for R4 raw binding. |
+| draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
 | draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
 | draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |

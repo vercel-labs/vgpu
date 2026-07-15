@@ -22,7 +22,7 @@ import { NoiseConfig, noise } from "./noise.wgsl";
 
 main API (vgpu) shader arguments are either a WGSL string or a loader `ShaderSource { version: 1, wgsl }`. If importing `.wgsl` returns a URL/object without `version` and `wgsl`, configure `@vgpu/wgsl/loader-vite`, `@vgpu/wgsl/loader-webpack`, or pass a raw WGSL string.
 
-```ts
+```text
 import shader from "./shader.wgsl";
 const draw = gpu.draw({ shader });
 ```
@@ -31,7 +31,7 @@ const draw = gpu.draw({ shader });
 
 Every reflected binding must be set by name or covered by a claimed group. Do not rely on globals or implicit buffers.
 
-```ts
+```text
 const pass = gpu.pass(WGSL);
 pass.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
 ```
@@ -40,7 +40,7 @@ pass.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() })
 
 The first `set()` decides ownership. Plain JS values are lib-owned and updated in place. Resources (`Uniform`, storage, textures, samplers, bind groups) are user-owned. Do not switch the same binding from JS value to resource later.
 
-```ts
+```text
 // Pick one from the start:
 wave.set({ params: { time: 0 } });     // lib-owned
 // or
@@ -55,11 +55,11 @@ Rule of thumb: treat every bool host-shareable uniform as a `u32` in WGSL. WGSL 
 struct Params { enabled: u32 }
 ```
 
-## R3 bundle stale
+## Bundle stale
 
 `VGPU-R3-BUNDLE-STALE` means a bundle was recorded against an old target or bind-group identity. Re-record after resize or resource identity changes. Plain JS `set()` updates are safe because buffers are written in place.
 
-## R4 claims
+## Manual bind-group claims
 
 `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, and `VGPU-R4-GROUP-VALIDATION` all point to manual bind-group ownership. Build the bind group with `draw.layout(group)` or `draw.layout(group, { dynamicOffsets: true })`, call `draw.group(group, bindGroup)`, and send dynamic offsets through `p.draw(draw, { offsets })`.
 

@@ -33,14 +33,14 @@ interface Pass {
 |---|---|---:|---|---|
 | gpu.pass.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
 | gpu.pass.opts | `PassOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; pass has no vertex buffers. |
-| opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes R1 ownership and validates reflected bindings. |
+| opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes first-set binding ownership in the main API and validates reflected bindings. |
 | opts.label | `string` | ✖ | `"pass"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |
 | pass.set.values | `Record<string, unknown>` | ✔ | — | Binding values by WGSL variable name. JS values are lib-owned; resources are user-owned. |
 | pass.draw.opts | `DrawCallOptions & { target?: Target }` | ✖ | `{}` | One-shot render pass. `target` defaults to `gpu.screen`; required in headless/offscreen contexts. |
 
-**Returns:** `gpu.pass()` returns `Pass`; `pass.set()` returns the same `Pass`; `pass.draw()` returns `void` after submitting a one-shot frame.
+**Returns:** `gpu.pass()` returns `Pass`; `pass.set()` returns the same `Pass`; `pass.draw()` returns `void` after starting a one-shot draw path.
 
-**Throws:** `VGPU-RING1-UNSUPPORTED` when `gpu.pass()` receives mesh/vertex data or when one-shot `draw()` has no target; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-R4-GROUP-*` errors can surface through the underlying `Draw` if raw groups are claimed.
+**Throws:** `VGPU-RING1-UNSUPPORTED` when `gpu.pass()` receives mesh/vertex data or when one-shot `draw()` has no target; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership. `pass.draw()` discards the underlying `Draw.draw()` promise, so do not use it when manual bind-group validation needs to be normal control flow; use `Draw.draw()` directly or submit through `gpu.frame(...)` and `await frame.done` instead.
 
 ## Examples
 

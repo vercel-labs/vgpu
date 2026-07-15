@@ -6,10 +6,10 @@ This guide is for LLMs and humans writing shaders. Treat these as default shapes
 
 ## 1. Bundles / replay (`gpu.bundle` + `p.bundles`)
 
-Use when static draws repeat every frame. R3 bundles freeze commands, bind groups, target formats, sample count, and attachment identity; they do **not** freeze buffer contents.
+Use when static draws repeat every frame. Bundles freeze commands, bind groups, target formats, sample count, and attachment identity; they do **not** freeze buffer contents.
 
 Before:
-```ts
+```text
 gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
   p.draw(floor);
   p.draw(walls);
@@ -17,7 +17,7 @@ gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
 }));
 ```
 After:
-```ts
+```text
 const staticScene = gpu.bundle({ target: scene }, (b) => {
   b.draw(floor);
   b.draw(walls);
@@ -34,30 +34,30 @@ Default: bundle static work once and replay with `p.bundles(...)`.
 Use before the first visible frame or route transition. This compiles render pipelines for the target color/depth/MSAA signature at construction time.
 
 Before:
-```ts
+```text
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 ```
 After:
-```ts
+```text
 const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
 gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
 Default: pass every target a draw will hit through `targets:` before the hitch-sensitive frame.
 
-## 3. R4 group claim + dynamic offsets (`draw.group`)
+## 3. Manual group claim + dynamic offsets (`draw.group`)
 
 Use for hundreds or thousands of objects that share one shader and one bind-group layout. `draw.group()` claims a reflected group; offsets travel per draw call.
 
 Before:
-```ts
+```text
 for (const obj of objects) {
   cube.set({ model: obj.model });
   p.draw(cube);
 }
 ```
 After:
-```ts
+```text
 import { UniformPool, type UniformLayout } from "vgpu/core";
 
 type ObjectUniforms = { model: Float32Array };
@@ -87,17 +87,17 @@ Default: for many per-object uniforms, allocate a `UniformPool` slot with an `en
 
 ## 4. `set()` in-place
 
-Use for animated JS values. R1 latches ownership on first `set()`: plain JS values are lib-owned and update in place; resources are user-owned and keep their identity.
+Use for animated JS values. The first `set()` latches ownership: plain JS values are lib-owned and update in place; resources are user-owned and keep their identity.
 
 Before:
-```ts
+```text
 gpu.frame.loop(() => {
   const wave = gpu.pass(WAVE_WGSL, { set: { time: gpu.time, speed: 2 } });
   wave.draw();
 });
 ```
 After:
-```ts
+```text
 const wave = gpu.pass(WAVE_WGSL, { set: { time: 0, speed: 2 } });
 gpu.frame.loop(() => {
   wave.set({ time: gpu.time });
@@ -111,7 +111,7 @@ Default: create once; update changing numbers/vectors/structs with `set()`.
 Use when a heavy pass produces a texture that does not change every frame.
 
 Before:
-```ts
+```text
 gpu.frame.loop((f) => {
   f.pass({ target: baked }, (p) => p.draw(heavyScene));
   post.set({ src: baked.color, texel: baked.texelSize });
@@ -119,7 +119,7 @@ gpu.frame.loop((f) => {
 });
 ```
 After:
-```ts
+```text
 gpu.frame((f) => f.pass({ target: baked }, (p) => p.draw(heavyScene)));
 post.set({ src: baked.color, texel: baked.texelSize });
 gpu.frame.loop((f) => f.pass({ target: screen }, (p) => p.draw(post)));
@@ -131,14 +131,14 @@ Default: if an input is static, bake it outside the loop with one `gpu.frame(...
 Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed meshes ignore `vertices` and `firstVertex`.
 
 Before:
-```ts
+```text
 for (let i = 0; i < COUNT; i++) {
   particles.set({ particleIndex: i });
   p.draw(particles);
 }
 ```
 After:
-```ts
+```text
 const particles = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6, targets: [scene] });
 particles.set({ particleBuffer });
 gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles)));
@@ -150,13 +150,13 @@ Default: one draw with `instances` beats N draw calls.
 Use when many shaders consume the same time, camera, mouse, or exposure values.
 
 Before:
-```ts
+```text
 wave.set({ time: gpu.time, mouse });
 blur.set({ time: gpu.time, mouse });
 post.set({ time: gpu.time, mouse });
 ```
 After:
-```ts
+```text
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 const wave = gpu.pass(WAVE_WGSL, { set: { globals } });
 const blur = gpu.pass(BLUR_WGSL, { set: { globals } });
@@ -173,7 +173,7 @@ Default: shared values belong in one `gpu.uniforms()` object.
 Use for iterative effects. Ping-pong keeps two stable identities, so bind-group caches can reuse them.
 
 Before:
-```ts
+```text
 gpu.frame.loop((f) => {
   const tmp = gpu.target({ format: "rgba16float" });
   sim.set({ src: previous.color });
@@ -182,7 +182,7 @@ gpu.frame.loop((f) => {
 });
 ```
 After:
-```ts
+```text
 const state = gpu.pingPong(512, 512, { format: "rgba16float" });
 const even = gpu.bundle({ target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
 state.swap();
@@ -202,12 +202,12 @@ Default: create ping-pong resources once; if you bundle, record both parity case
 Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and sample count are target state.
 
 Before:
-```ts
+```text
 const scene = gpu.target({ format: "rgba8unorm" });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 ```
 After:
-```ts
+```text
 const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
