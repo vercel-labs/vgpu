@@ -27,8 +27,7 @@ export interface NavSection {
 const publicApiRecords: DocsRecord[] = [
   doc(
     'init',
-    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();
-const surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
+    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();\nconst surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
   ),
   doc(
     'Gpu',
