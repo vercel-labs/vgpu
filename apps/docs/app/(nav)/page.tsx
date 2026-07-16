@@ -17,7 +17,7 @@ const features = [
   ['Explicit WGSL', 'Shaders declare bindings; vgpu reflects them and `set()` binds by name.'],
   ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns are documented as defaults.'],
   ['Browser and Node', 'Use the same Gpu API from `vgpu`, `vgpu/node`, and `vgpu/mock`.'],
-  ['Ring-0 escape hatches', 'Native handles, UniformPool, buffers, textures, and bind groups remain available when you need them.'],
+  ['Native escape hatches', 'Drop to `vgpu/core` for native handles, buffers, textures, and bind groups when you need them.'],
   ['Scene helpers', 'Pure geometry and camera utilities live in `vgpu/scene` without a retained scene graph.'],
 ];
 
@@ -25,10 +25,6 @@ export default function HomePage() {
   return (
     <div className="px-6 py-16 lg:px-12 lg:py-20">
       <section className="max-w-4xl mx-auto text-center mb-24">
-        <div className="mb-8 flex flex-wrap justify-center gap-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-1 border border-blue-4 text-blue-9 text-sm font-medium">Ring-1 WebGPU API</div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-2 border border-gray-4 text-gray-10 text-sm"><span className="w-2 h-2 rounded-full bg-green-9" />Early preview 0.0.8</div>
-        </div>
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-12 mb-6 tracking-tight">vgpu</h1>
         <p className="text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">Agentic-first WebGPU for shaders that should be correct and fast the first time.</p>
         <div className="flex flex-wrap justify-center gap-4 mb-16">
@@ -39,7 +35,7 @@ export default function HomePage() {
       </section>
       <section className="max-w-4xl mx-auto mb-24">
         <h2 className="text-2xl md:text-3xl font-semibold text-gray-12 text-center mb-4">Everything You Need</h2>
-        <p className="text-gray-9 text-center mb-12 max-w-xl mx-auto">Start with ring-1. Drop to ring-0 only for explicit native control.</p>
+        <p className="text-gray-9 text-center mb-12 max-w-xl mx-auto">Start with the public `vgpu` API. Drop to native WebGPU only when you need explicit control.</p>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map(([title, description]) => (
             <div key={title} className="p-5 rounded-lg bg-gray-1 border border-gray-4 hover:border-gray-5 transition-colors group">
@@ -55,7 +51,7 @@ export default function HomePage() {
           {[
             ['/getting-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
             ['/concepts', 'Core Concepts', 'Learn Gpu, set(), targets, frames, bundles, and adapters.'],
-            ['/api', 'API Overview', 'Ring map and generated reference pages.'],
+            ['/api', 'API Overview', 'Package map and generated reference pages.'],
             ['/examples', 'Examples', 'Live WebGPU demos with read-only source views.'],
           ].map(([href, title, description]) => (
             <Link key={href} href={href} className="group p-6 rounded-lg bg-gray-1 border border-gray-4 hover:border-gray-5 transition-all">

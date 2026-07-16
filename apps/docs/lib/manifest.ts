@@ -27,11 +27,11 @@ export interface NavSection {
 const publicApiRecords: DocsRecord[] = [
   doc(
     'init',
-    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();\nconst surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
+    '# init\n\nCreate the public `vgpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();\nconst surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
   ),
   doc(
     'Gpu',
-    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to ring-0 handles.\n\n```ts\nconst target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
+    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to native WebGPU handles in `vgpu/core`.\n\n```ts\nconst target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
   ),
   doc(
     'pass',
@@ -83,7 +83,7 @@ const packageOrder = [
 const sectionOrder = ['VGPU', 'WGSL', 'Guides', 'Other'];
 
 const packageDescriptions: Record<string, string> = {
-  vgpu: 'Public ring-1 API: init, Gpu, pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
+  vgpu: 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
   '@vgpu/wgsl': 'WGSL compile-time entry points and resolved shader metadata.',
   '@vgpu/wgsl/runtime': 'Runtime shader resolution primitives.',
   '@vgpu/wgsl/loader-webpack': 'Webpack loader entry point for WGSL modules.',
