@@ -33,13 +33,11 @@ const gradient = gpu.effect(`
 `);
 
 // Render the gradient onto the canvas once
-gpu.frame((frame) => {
-  frame.pass({ target: surface }, (pass) => pass.draw(gradient));
-});
+gradient.draw({ target: surface });
 ```
 
 ## Create resources once, draw every frame
 
-Create the context, surface, and effects outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick. Calling `gpu.frame()` renders immediately.
+Create the context, surface, and effects once, up front. Each `draw()` renders immediately; rendering should encode work, not rebuild long-lived resources every tick.
 
-The expensive objects — context, surface, effect — live outside and are reused by every frame you draw later. What changes per frame is data, not resources.
+The expensive objects — context, surface, effect — live outside your render code and are reused by every draw. What changes per frame is data, not resources.
