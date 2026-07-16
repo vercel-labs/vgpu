@@ -1,20 +1,96 @@
 import { CodeBlock } from '@/components/code-block';
 import { Callout } from '@/components/mdx/callout';
 import { DocsPageShell } from '@/components/docs-page-shell';
+
 const gpuCode = `import { init } from "vgpu";
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });`;
-const setCode = `const wave = gpu.pass(\`
-struct Params { time: f32, speed: f32 }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, params.speed, 1); }
-\`, { set: { speed: 2 } });
-wave.set({ time: gpu.time });`;
-const frameCode = `gpu.frame((f) => {
-  f.pass({ target: scene }, (p) => p.draw(cube));
-  f.pass({ target: surface }, (p) => p.draw(post));
+
+const setCode = [
+  'const waveSource = /* wgsl */ `',
+  '  struct Params { time: f32, speed: f32 }',
+  '  @group(0) @binding(0) var<uniform> params: Params;',
+  '',
+  '  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {',
+  '    return vec4f(uv, params.speed, 1);',
+  '  }',
+  '`;',
+  '',
+  'const wave = gpu.pass(waveSource, {',
+  '  set: { params: { time: 0, speed: 2 } }, // initial uniform defaults',
+  '});',
+  '',
+  'wave.set({ params: { time: gpu.time } }); // update uniforms per frame',
+].join('\n');
+
+const frameCode = `gpu.frame((frame) => {
+  frame.pass({ target: scene }, (pass) => pass.draw(cube));
+  frame.pass({ target: surface }, (pass) => pass.draw(post));
 });`;
-const packageRows = [['vgpu', 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, uniforms.'], ['vgpu/core', 'Native WebGPU handles for buffers, textures, bind groups, and manual pipelines.'], ['vgpu/scene', 'Pure geometry and camera helpers.'], ['@vgpu/wgsl', 'WGSL module resolution, reflection, and loaders.']];
-const toc = [{ id: 'packages', title: 'Packages', level: 2 as const }, { id: 'one-gpu-context', title: 'One Gpu context', level: 2 as const }, { id: 'wgsl-owns-bindings', title: 'WGSL owns bindings', level: 2 as const }, { id: 'frames-are-on-demand', title: 'Frames are on-demand', level: 2 as const }];
-export default function ConceptsPage() { return <DocsPageShell pathname="/concepts" toc={toc}><h1 className="text-3xl md:text-4xl font-semibold text-gray-12 mb-4">Core Concepts</h1><p className="text-xl text-gray-10 mb-12">vgpu is one context, explicit WGSL bindings, and frames you schedule yourself.</p><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Packages</h2><div className="rounded-lg border border-gray-4 overflow-hidden">{packageRows.map(([name, description]) => <div key={name} className="grid md:grid-cols-[11rem_1fr] gap-3 p-4 border-b border-gray-4 last:border-b-0 bg-gray-1"><code className="text-blue-9 text-sm">{name}</code><p className="text-gray-10 text-sm leading-relaxed">{description}</p></div>)}</div></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">One Gpu context</h2><CodeBlock code={gpuCode} language="typescript" /></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">WGSL owns bindings</h2><p className="text-gray-11 mb-4">The shader declares resources; <code>set()</code> binds by name. JS values are written in-place, resources are user-owned.</p><CodeBlock code={setCode} language="typescript" /><Callout type="info">There are no globals. Pass time explicitly and read resolution from targets.</Callout></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Frames are on-demand</h2><CodeBlock code={frameCode} language="typescript" /></section></DocsPageShell>; }
+
+const packageRows = [
+  ['vgpu', 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, uniforms.'],
+  ['vgpu/core', 'Native WebGPU handles for buffers, textures, bind groups, and manual pipelines.'],
+  ['vgpu/scene', 'Pure geometry and camera helpers.'],
+  ['@vgpu/wgsl', 'WGSL module resolution, reflection, and loaders.'],
+];
+
+const toc = [
+  { id: 'packages', title: 'Packages', level: 2 as const },
+  { id: 'one-gpu-context', title: 'One Gpu context', level: 2 as const },
+  { id: 'wgsl-owns-bindings', title: 'WGSL owns bindings', level: 2 as const },
+  { id: 'frames-are-on-demand', title: 'Frames are on-demand', level: 2 as const },
+];
+
+export default function ConceptsPage() {
+  return (
+    <DocsPageShell pathname="/concepts" toc={toc}>
+      <h1 className="text-3xl md:text-4xl font-semibold text-gray-12 mb-4">Core Concepts</h1>
+      <p className="text-xl text-gray-10 mb-12">vgpu is one context, explicit WGSL bindings, and frames you schedule yourself.</p>
+
+      <section className="mb-12">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">Packages</h2>
+        <div className="rounded-lg border border-gray-4 overflow-hidden">
+          {packageRows.map(([name, description]) => (
+            <div key={name} className="grid md:grid-cols-[11rem_1fr] gap-3 p-4 border-b border-gray-4 last:border-b-0 bg-gray-1">
+              <code className="text-blue-9 text-sm">{name}</code>
+              <p className="text-gray-10 text-sm leading-relaxed">{description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-12">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">One Gpu context</h2>
+        <CodeBlock code={gpuCode} language="typescript" />
+      </section>
+
+      <section className="mb-12" id="wgsl-owns-bindings">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">WGSL owns bindings</h2>
+        <p className="text-gray-11 mb-4">
+          WGSL declares every binding you plan to use (<code>var&lt;uniform&gt;</code>, textures, storage buffers, and so on). That shader source is the authority on layouts.
+        </p>
+        <p className="text-gray-11 mb-4">
+          <code>set()</code> connects JavaScript data to a binding by the WGSL variable name, so calling <code>set(&#123; params: ... &#125;)</code> updates the <code>params</code> block you declared in WGSL.
+          Plain JS values are copied into the uniform buffer, while GPU resources such as textures or buffers stay under your ownership—you decide when to reuse, resize, or dispose them.
+        </p>
+        <CodeBlock code={setCode} language="typescript" />
+        <Callout type="info">There are no globals. Pass time explicitly and read resolution from targets.</Callout>
+      </section>
+
+      <section className="mb-12" id="frames-are-on-demand">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">Frames are on-demand</h2>
+        <p className="text-gray-11 mb-4">
+          <code>gpu.frame((frame) =&gt; &#123; ... &#125;)</code> runs immediately and submits once in a <code>finally</code> block after your callback returns, so nothing keeps drawing automatically afterward.
+          vgpu does not observe state changes for you—call <code>gpu.frame()</code> yourself whenever an event (resize, drag, toggle) needs a redraw.
+        </p>
+        <CodeBlock code={frameCode} language="typescript" />
+        <p className="text-gray-11 mb-4">
+          Use <code>gpu.frame.loop()</code> for animation. It owns the <code>requestAnimationFrame</code> (or ~16&nbsp;ms <code>setTimeout</code>) driver, advances <code>gpu.time</code> every tick, respects the optional <code>fps</code> throttle, and returns a handle whose <code>stop()</code> method halts the loop.
+        </p>
+        <Callout type="info">Good to know: you never call <code>requestAnimationFrame</code> yourself. Use <code>gpu.frame.loop()</code> and stop it with <code>handle.stop()</code> when you are done.</Callout>
+      </section>
+    </DocsPageShell>
+  );
+}

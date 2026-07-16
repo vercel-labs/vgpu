@@ -5,6 +5,27 @@ import { CodeBlock } from '@/components/code-block';
 import { resolveMarkdownHref, resolveSymbolHref } from '@/lib/manifest';
 import type { TocItem } from '@/components/table-of-contents';
 
+interface HastNode {
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+}
+
+// Marks <code> elements that already live inside an <a> so the code renderer
+// skips symbol autolinking (nested <a> breaks hydration). Runs on the hast
+// tree because react-markdown hands hast nodes (with `properties`) to
+// component renderers; mdast `data` never reaches them.
+const markCodeInsideLinks = () => (tree: HastNode) => {
+  const walk = (node: HastNode, inLink: boolean) => {
+    if (node.tagName === 'code' && inLink) {
+      node.properties = { ...node.properties, dataSkipAutolink: 'true' };
+    }
+    const childInLink = inLink || node.tagName === 'a';
+    for (const child of node.children ?? []) walk(child, childInLink);
+  };
+  walk(tree, false);
+};
+
 interface MarkdownContentProps {
   content: string;
 }
@@ -77,6 +98,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
     <div className="prose-content text-gray-11 leading-7">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[markCodeInsideLinks]}
         components={{
           h1: ({ children }) => {
             const id = headingId(children);
@@ -149,11 +171,12 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
           thead: ({ children }) => <thead className="bg-gray-2 text-gray-12">{children}</thead>,
           th: ({ children }) => <th className="border-b border-gray-4 px-4 py-2 text-left font-medium">{children}</th>,
           td: ({ children }) => <td className="border-b border-gray-4 px-4 py-2 text-gray-11">{children}</td>,
-          code: ({ className, children }) => {
+          code: ({ className, children, node }) => {
+            const skipAutoLink = Boolean((node as HastNode | undefined)?.properties?.dataSkipAutolink);
             const code = String(children).replace(/\n$/, '');
             const match = /language-([^\s]+)/.exec(className ?? '');
             if (!match && !code.includes('\n')) {
-              const symbolHref = resolveSymbolHref(code);
+              const symbolHref = skipAutoLink ? undefined : resolveSymbolHref(code);
               if (symbolHref) {
                 return (
                   <Link href={symbolHref} className="rounded bg-gray-2 px-1.5 py-0.5 text-sm text-blue-9 no-underline hover:text-blue-10">

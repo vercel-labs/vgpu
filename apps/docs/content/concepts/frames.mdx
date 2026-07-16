@@ -41,22 +41,24 @@ Create the GPU context, a target, and a renderable unit outside the frame callba
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init();
-const target = gpu.target({ size: [64, 64], format: "rgba8unorm" });
-const gradient = gpu.pass(`
+const gradientSource = `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.4, 1.0);
   }
-`);
+`;
+
+const gpu = await init();
+const target = gpu.target({ size: [64, 64], format: "rgba8unorm" });
+const gradient = gpu.pass(gradientSource);
 
 gpu.frame((frame) => {
   frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => {
     pass.draw(gradient);
   });
-});
+}); // runs the callback immediately, then submits once
 ```
 
-The callback form of [`gpu.frame()`](/reference/vgpu/frame#framerunner) submits in a `finally` block. Use it for the common case: encode the frame immediately and let vgpu submit it.
+[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs your callback synchronously and submits once in a `finally` block when it returns. After that, nothing keeps drawing: vgpu never redraws on its own and does not watch your state for changes. To redraw after an event — a resize, a slider, a click — call `gpu.frame()` again from your handler.
 
 > Good to know: `frame.pass()` always needs a target. Use an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })` or a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)`.
 
@@ -67,20 +69,24 @@ A pass is a render-pass section inside the frame. It has one target, one clear c
 ```ts
 import { init } from "vgpu/mock";
 
+const sceneSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 1.0, 1.0);
+  }
+`;
+
+const postSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(1.0 - uv.x, uv.y, 0.2, 1.0);
+  }
+`;
+
 const gpu = await init();
 const scene = gpu.target({ size: [128, 128], depth: true });
 const post = gpu.target({ size: [128, 128], format: "rgba8unorm" });
 
-const scenePass = gpu.pass(`
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 1.0, 1.0);
-  }
-`);
-const postPass = gpu.pass(`
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0 - uv.x, uv.y, 0.2, 1.0);
-  }
-`);
+const scenePass = gpu.pass(sceneSource);
+const postPass = gpu.pass(postSource);
 
 gpu.frame((frame) => {
   frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
@@ -102,9 +108,7 @@ Frames do not create shader globals. If a shader needs time, resolution, or a te
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init();
-const target = gpu.target({ size: [64, 64] });
-const pulse = gpu.pass(`
+const pulseSource = `
   struct Params { time: f32, width: f32, height: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -112,9 +116,16 @@ const pulse = gpu.pass(`
     let glow = sin(params.time) * 0.5 + 0.5;
     return vec4f(uv.x, uv.y, glow, 1.0);
   }
-`, { set: { params: { time: 0, width: 64, height: 64 } } });
+`;
+
+const gpu = await init();
+const target = gpu.target({ size: [64, 64] });
+const pulse = gpu.pass(pulseSource, {
+  set: { params: { time: 0, width: 64, height: 64 } }, // initial uniform defaults
+});
 
 gpu.frame((frame) => {
+  // update uniforms for this frame before encoding the draw
   pulse.set({
     params: {
       time: gpu.time,
@@ -140,24 +151,30 @@ Use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) for animation. The l
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init();
-const target = gpu.target({ size: [32, 32] });
-const draw = gpu.pass(`
+const drawSource = `
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
-`, { set: { params: { time: 0 } } });
+`;
+
+const gpu = await init();
+const target = gpu.target({ size: [32, 32] });
+const draw = gpu.pass(drawSource, {
+  set: { params: { time: 0 } }, // initial uniform defaults
+});
 
 const handle = gpu.frame.loop((frame) => {
-  draw.set({ params: { time: gpu.time } });
+  draw.set({ params: { time: gpu.time } }); // update uniforms every tick
   frame.pass({ target }, (pass) => pass.draw(draw));
 }, { fps: 30 });
 
 handle.stop();
 ```
+
+> Good to know: you never call `requestAnimationFrame` yourself. `gpu.frame.loop()` drives it internally — falling back to a ~16 ms timer where rAF is unavailable — and the optional `fps` option throttles ticks.
 
 Use the returned [`FrameLoopHandle`](/reference/vgpu/frame#frameloophandle) to stop the loop when a component unmounts, a test finishes, or a preview is no longer visible.
 
