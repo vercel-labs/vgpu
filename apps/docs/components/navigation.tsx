@@ -135,7 +135,9 @@ function NavSectionBlock({ section, pathname, onNavigate, className }: NavSectio
         </button>
       </div>
       {open ? (
-        <PackageNav groups={section.groups} pathname={pathname} onNavigate={onNavigate} />
+        <div className="pl-2">
+          <PackageNav groups={section.groups} pathname={pathname} onNavigate={onNavigate} />
+        </div>
       ) : null}
     </div>
   );
