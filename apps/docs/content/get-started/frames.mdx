@@ -15,25 +15,29 @@ prevNext:
 
 A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
 
-## Encode one frame
+## Render a single frame
 
-[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs your callback synchronously and submits once when it returns. After that, nothing keeps drawing: vgpu never redraws on its own and does not watch your state for changes. To redraw after an event — a resize, a slider, a click — call `gpu.frame()` again from your handler.
+[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs synchronously and submits once when it returns. Calling `gpu.frame()` renders its callback immediately.
 
 ```ts
 import { init } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-const gradient = gpu.effect(`
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 0.4, 1.0);
-  }
-`);
 
 // ---cut---
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0 } } });
+
 gpu.frame((frame) => {
-  frame.pass({ target: surface }, (pass) => pass.draw(gradient));
+  frame.pass({ target: canvasTarget }, (pass) => pass.draw(pulseEffect));
 }); // renders immediately
 ```
 
@@ -47,8 +51,9 @@ For animation, use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) — i
 import { init } from "vgpu";
 
 const gpu = await init();
-const target = gpu.target({ size: [32, 32] });
-const pulse = gpu.effect(`
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -59,8 +64,8 @@ const pulse = gpu.effect(`
 
 // ---cut---
 const handle = gpu.frame.loop((frame) => {
-  pulse.set({ params: { time: gpu.time } }); // update uniforms every tick
-  frame.pass({ target }, (pass) => pass.draw(pulse));
+  pulseEffect.set({ params: { time: gpu.time } }); // update uniforms every tick
+  frame.pass({ target: canvasTarget }, (pass) => pass.draw(pulseEffect));
 }, { fps: 30 });
 
 handle.stop(); // call it when your component unmounts
@@ -74,8 +79,9 @@ This is what the same loop looks like by hand with `requestAnimationFrame`:
 import { init } from "vgpu";
 
 const gpu = await init();
-const target = gpu.target({ size: [32, 32] });
-const pulse = gpu.effect(`
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -86,8 +92,8 @@ const pulse = gpu.effect(`
 
 // ---cut---
 function tick() {
-  pulse.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
-  pulse.draw({ target }); // one-shot draw: one pass, one submit
+  pulseEffect.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
+  pulseEffect.draw({ target: canvasTarget });
   requestAnimationFrame(tick); // and the scheduling
 }
 requestAnimationFrame(tick);
