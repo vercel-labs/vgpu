@@ -31,26 +31,15 @@ const gradient = gpu.effect(`
     return vec4f(uv, 0.4, 1.0);
   }
 `);
+
+// Render the gradient onto the canvas once
+gpu.frame((frame) => {
+  frame.pass({ target: surface }, (pass) => pass.draw(gradient));
+});
 ```
 
 ## Create resources once, draw every frame
 
-Create the context, surface, and effects outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
+Create the context, surface, and effects outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick. Calling `gpu.frame()` renders immediately.
 
-```ts
-import { init } from "vgpu";
-import gradientSource from "./gradient.wgsl";
-
-const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-const gradient = gpu.effect(gradientSource);
-
-gpu.frame((frame) => {
-  frame.pass({ target: surface, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(gradient);
-  });
-}); // renders immediately
-```
-
-The expensive objects — context, surface, effect — live outside and are reused by every frame you draw later. What changes per frame is data, not resources: update values with `set()`, then draw again.
+The expensive objects — context, surface, effect — live outside and are reused by every frame you draw later. What changes per frame is data, not resources.
