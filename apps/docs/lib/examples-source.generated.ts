@@ -11,7 +11,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'alien-planet',\n  title: 'Alien Planet',\n  description: 'A procedural planet with atmosphere, terrain bands, and stars.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'alien-planet',\n  title: 'Alien Planet',\n  description: 'A procedural planet with atmosphere, terrain bands, and stars.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -28,7 +28,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'color-cycle',\n  title: 'Color Cycle',\n  description: 'Smooth animated bands built from sine-wave color palettes.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'color-cycle',\n  title: 'Color Cycle',\n  description: 'Smooth animated bands built from sine-wave color palettes.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -45,12 +45,12 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fluid',\n  title: 'Fluid Simulation',\n  description: 'Compute-driven dye flow with ping-pong storage textures and a vgpu display pass.',\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'display.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'fluid',\n  title: 'Fluid Simulation',\n  description: 'Compute-driven dye flow with ping-pong storage textures and a vgpu display pass.',\n  thumb: { warmupFrames: 180, dt: 1 / 60, note: 'Rendered at a converged synthetic time for a stable poster.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'display.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './display.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { runFragmentExample, renderFragmentThumb } from '../_shared/render';\nimport type { Gpu, Target } from 'vgpu';\nimport fragment from './display.wgsl';\n\nexport interface FluidThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n  readonly fragment?: string;\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt, fragment: fragmentSource = fragment }: FluidThumbOptions): void {\n  renderFragmentThumb(gpu, target, { fragment: fragmentSource }, { time: frames * dt });\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
     },
     {
       "name": "compute.wgsl",
@@ -67,7 +67,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fractal',\n  title: 'Fractal Explorer',\n  description: 'Animated Mandelbrot-style fractal coloring on the GPU.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'fractal',\n  title: 'Fractal Explorer',\n  description: 'Animated Mandelbrot-style fractal coloring on the GPU.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -84,7 +84,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'gradient',\n  title: 'Simple Gradient',\n  description: 'Map screen coordinates to color with a tiny fullscreen fragment shader.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'gradient',\n  title: 'Simple Gradient',\n  description: 'Map screen coordinates to color with a tiny fullscreen fragment shader.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -101,7 +101,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'metaballs',\n  title: 'Metaballs',\n  description: 'Moving fields merge into soft glowing blobs.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'metaballs',\n  title: 'Metaballs',\n  description: 'Moving fields merge into soft glowing blobs.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -118,7 +118,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'noise',\n  title: 'Procedural Noise',\n  description: 'Layered value noise creates drifting clouds of color.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'noise',\n  title: 'Procedural Noise',\n  description: 'Layered value noise creates drifting clouds of color.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -135,7 +135,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'raymarching',\n  title: 'Raymarching',\n  description: 'A shaded signed-distance sphere rendered entirely in WGSL.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'raymarching',\n  title: 'Raymarching',\n  description: 'A shaded signed-distance sphere rendered entirely in WGSL.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
@@ -152,12 +152,12 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'triangle-particles',\n  title: 'Triangle Particles',\n  description: 'A compute-updated particle field emitted from a glowing triangle.',\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'render.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'triangle-particles',\n  title: 'Triangle Particles',\n  description: 'A compute-updated particle field emitted from a glowing triangle.',\n  thumb: { warmupFrames: 90, dt: 1 / 60, note: 'Compute warm-up with a synthetic fixed-step clock.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'render.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { init } from 'vgpu';\nimport computeSource from './compute.wgsl';\nimport renderSource from './render.wgsl';\n\nconst PARTICLE_COUNT = 24000;\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const positions = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  const velocities = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  const sim = gpu.compute(computeSource, { set: { positions, velocities } });\n  const draw = gpu.draw({ shader: renderSource, set: { positions, velocities }, instances: PARTICLE_COUNT, vertices: 3 });\n  const handle = gpu.frame.loop((frame) => {\n    const size = surface.size;\n    sim.set({ sim: { time: gpu.time, deltaTime: gpu.deltaTime, aspect: size[0] / Math.max(size[1], 1), count: PARTICLE_COUNT, mouse: [0, 0], mouseStrength: 0, pad: 0 } });\n    sim.dispatch(Math.ceil(PARTICLE_COUNT / 64));\n    draw.set({ renderUniforms: { resolution: size, time: gpu.time, count: PARTICLE_COUNT } });\n    frame.pass({ target: surface }, (p) => p.draw(draw));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
+      "code": "import { init, type Gpu, type Target } from 'vgpu';\nimport computeSource from './compute.wgsl';\nimport renderSource from './render.wgsl';\n\nconst PARTICLE_COUNT = 24000;\nconst WORKGROUP_SIZE = 64;\n\nexport interface TriangleParticlesThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n}\n\nfunction createTriangleParticles(gpu: Gpu) {\n  const positions = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  const velocities = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  initializeParticles(positions, velocities);\n  const sim = gpu.compute(computeSource, { set: { positions, velocities } });\n  const draw = gpu.draw({ shader: renderSource, set: { positions, velocities }, instances: PARTICLE_COUNT, vertices: 3 });\n  return { sim, draw };\n}\n\nfunction initializeParticles(\n  positions: ReturnType<Gpu['storage']>,\n  velocities: ReturnType<Gpu['storage']>,\n): void {\n  const positionData = new Float32Array(PARTICLE_COUNT * 4);\n  const velocityData = new Float32Array(PARTICLE_COUNT * 4);\n  const vertices = [\n    [0, 1.28],\n    [-1.1, -0.64],\n    [1.1, -0.64],\n  ] as const;\n\n  for (let i = 0; i < PARTICLE_COUNT; i++) {\n    let a = random01(i * 4 + 1);\n    let b = random01(i * 4 + 2);\n    if (a + b > 1) {\n      a = 1 - a;\n      b = 1 - b;\n    }\n    const c = 1 - a - b;\n    const ox = vertices[0][0] * a + vertices[1][0] * b + vertices[2][0] * c;\n    const oy = vertices[0][1] * a + vertices[1][1] * b + vertices[2][1] * c;\n    const angle = random01(i * 4 + 3) * Math.PI * 2;\n    const speed = 0.08 + random01(i * 4 + 4) * 0.22;\n    const offset = i * 4;\n    positionData[offset] = ox;\n    positionData[offset + 1] = oy;\n    positionData[offset + 2] = ox;\n    positionData[offset + 3] = oy;\n    velocityData[offset] = Math.cos(angle) * speed;\n    velocityData[offset + 1] = Math.sin(angle) * speed;\n    velocityData[offset + 2] = 0.6 + random01(i * 4 + 5) * 4.8;\n    velocityData[offset + 3] = random01(i * 4 + 6) * 10000;\n  }\n\n  positions.write(positionData);\n  velocities.write(velocityData);\n}\n\nfunction random01(seed: number): number {\n  const x = Math.sin(seed * 12.9898) * 43758.5453;\n  return x - Math.floor(x);\n}\n\nfunction stepTriangleParticles(scene: ReturnType<typeof createTriangleParticles>, size: readonly [number, number], time: number, deltaTime: number): void {\n  scene.sim.set({\n    sim: {\n      time,\n      deltaTime,\n      aspect: size[0] / Math.max(size[1], 1),\n      count: PARTICLE_COUNT,\n      mouse: [0, 0],\n      mouseStrength: 0,\n      pad: 0,\n    },\n  });\n  scene.sim.dispatch(Math.ceil(PARTICLE_COUNT / WORKGROUP_SIZE));\n}\n\nfunction drawTriangleParticles(gpu: Gpu, scene: ReturnType<typeof createTriangleParticles>, target: Target, time: number): void {\n  scene.draw.set({ renderUniforms: { resolution: target.size, time, count: PARTICLE_COUNT } });\n  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(scene.draw)));\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt }: TriangleParticlesThumbOptions): void {\n  const scene = createTriangleParticles(gpu);\n  let time = 0;\n  for (let frame = 0; frame < frames; frame++) {\n    time += dt;\n    stepTriangleParticles(scene, target.size, time, dt);\n  }\n  drawTriangleParticles(gpu, scene, target, time);\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const scene = createTriangleParticles(gpu);\n  const handle = gpu.frame.loop((frame) => {\n    const size = surface.size;\n    stepTriangleParticles(scene, size, gpu.time, gpu.deltaTime);\n    scene.draw.set({ renderUniforms: { resolution: size, time: gpu.time, count: PARTICLE_COUNT } });\n    frame.pass({ target: surface }, (p) => p.draw(scene.draw));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "compute.wgsl",
@@ -174,7 +174,7 @@ export const exampleSources = {
     {
       "name": "meta.ts",
       "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'wave',\n  title: 'Animated Wave',\n  description: 'A bright sine wave animated by time and custom uniforms.',\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
+      "code": "export const meta = {\n  slug: 'wave',\n  title: 'Animated Wave',\n  description: 'A bright sine wave animated by time and custom uniforms.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
     },
     {
       "name": "example.ts",
