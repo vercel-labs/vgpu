@@ -30,7 +30,7 @@ Build a frame by naming targets, opening passes, and encoding draws before vgpu 
 
 A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
 
-## Create the work before the frame
+## Create resources once, draw every frame
 
 Create the GPU context, canvas surface, and renderable unit outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
 
