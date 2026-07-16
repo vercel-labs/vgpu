@@ -1,5 +1,5 @@
 import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import type { BindingInfo, Reflection } from "@vgpu/wgsl/runtime";
+import type { BindingInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";

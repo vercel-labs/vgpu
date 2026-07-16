@@ -1,5 +1,5 @@
 import type { Buffer, Device } from "@vgpu/core";
-import type { BindingInfo, HostShareableLayout } from "@vgpu/wgsl/runtime";
+import type { BindingInfo, HostShareableLayout } from "@vgpu/wgsl/reflect-source";
 import type { SharedUniforms } from "./gpu.ts";
 import type { NormalizedBindingResource } from "./set-resources.ts";
 import { sharedUniformLayoutMismatchError, unsupportedError } from "./errors.ts";

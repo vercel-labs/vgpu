@@ -1,5 +1,5 @@
 import { VGPUError as CoreVGPUError } from "@vgpu/core";
-import type { BindingInfo } from "@vgpu/wgsl/runtime";
+import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 

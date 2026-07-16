@@ -1,6 +1,6 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { reflectSource, type Reflection } from "@vgpu/wgsl/runtime";
+import { reflectSource, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";

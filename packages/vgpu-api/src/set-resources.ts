@@ -1,5 +1,5 @@
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import type { BindingInfo } from "@vgpu/wgsl/runtime";
+import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
 import { incompatibleResourceError } from "./errors.ts";
 import type { Target } from "./target.ts";

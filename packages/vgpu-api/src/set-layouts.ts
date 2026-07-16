@@ -1,5 +1,5 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
-import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/runtime";
+import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */

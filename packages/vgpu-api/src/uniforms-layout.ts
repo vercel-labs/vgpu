@@ -1,4 +1,4 @@
-import type { HostShareableLayout, LayoutMember, WGSLType } from "@vgpu/wgsl/runtime";
+import type { HostShareableLayout, LayoutMember, WGSLType } from "@vgpu/wgsl/reflect-source";
 
 /** Builds the binary compatibility signature used by shared uniforms after first-bind adoption. */
 export function sharedUniformLayoutSignature(layout: HostShareableLayout): string {

@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { reflectSource } from "@vgpu/wgsl/runtime";
+import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { InternalDraw, encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";

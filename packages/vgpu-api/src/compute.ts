@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { reflectSource, type BindingInfo, type Reflection } from "@vgpu/wgsl/runtime";
+import { reflectSource, type BindingInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, pipelineLayoutFor, type SetBag, type SetCore } from "./set-core.ts";
 import type { Compute, ComputeOptions } from "./gpu.ts";
