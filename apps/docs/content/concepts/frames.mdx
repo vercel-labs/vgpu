@@ -28,11 +28,7 @@ Build a frame by naming targets, opening passes, and encoding draws before vgpu 
 - Open one or more `FramePass` sections and draw `Effect` or `Draw` objects into them.
 - Switch to `gpu.frame.loop()` when you need continuous animation.
 
-A frame is the unit of work you submit to the GPU. In vgpu, a frame owns one command encoder. You add render passes to that encoder, encode draws inside each pass, and submit once at the end.
-
-This model keeps targets explicit. There is no hidden canvas, no global backbuffer, and no implicit resolution uniform. You choose the `Target` or `Surface` for every pass, then pass size, time, or other values to shaders yourself.
-
-Start with frames when you need more than a one-shot draw. They make the order visible: create resources, update bindings, open passes, draw, then submit.
+A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
 
 ## Create the work before the frame
 
