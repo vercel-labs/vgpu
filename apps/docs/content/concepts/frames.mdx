@@ -39,7 +39,7 @@ Start with frames when you need more than a one-shot draw. They make the order v
 Create the GPU context, a target, and a renderable unit outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
 
 ```ts
-import { init } from "vgpu/mock";
+import { init } from "vgpu";
 
 const gradientSource = `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -67,7 +67,7 @@ gpu.frame((frame) => {
 A pass is a render-pass section inside the frame. It has one target, one clear color, and any number of draw calls or render bundles. Use separate passes when you need separate targets or when a later pass reads the result of an earlier one.
 
 ```ts
-import { init } from "vgpu/mock";
+import { init } from "vgpu";
 
 const sceneSource = `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -75,29 +75,40 @@ const sceneSource = `
   }
 `;
 
+// Post-processing: reads the scene texture and inverts its colors.
 const postSource = `
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0 - uv.x, uv.y, 0.2, 1.0);
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    return vec4f(1.0 - base.rgb, 1.0);
   }
 `;
 
 const gpu = await init();
-const scene = gpu.target({ size: [128, 128], depth: true });
-const post = gpu.target({ size: [128, 128], format: "rgba8unorm" });
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+const scene = gpu.target({ size: [1280, 720], depth: true });
 
 const scenePass = gpu.pass(sceneSource);
-const postPass = gpu.pass(postSource);
+const post = gpu.pass(postSource);
+post.set({ src: scene }); // the offscreen result becomes the post input
 
 gpu.frame((frame) => {
+  // 1. render the scene into the offscreen target
   frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
     pass.draw(scenePass);
   });
 
-  frame.pass({ target: post, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(postPass);
+  // 2. post-process the scene texture onto the canvas
+  frame.pass({ target: surface }, (pass) => {
+    pass.draw(post);
   });
 });
 ```
+
+To chain passes, bind the earlier target as a texture: `post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. The last pass targets the canvas [`Surface`](/reference/vgpu/surface#surface), which is what puts pixels on screen.
 
 [`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Pass`](/reference/vgpu/pass#pass) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.pass()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
 
@@ -106,7 +117,7 @@ gpu.frame((frame) => {
 Frames do not create shader globals. If a shader needs time, resolution, or a texture, set those values on the renderable before encoding the draw.
 
 ```ts
-import { init } from "vgpu/mock";
+import { init } from "vgpu";
 
 const pulseSource = `
   struct Params { time: f32, width: f32, height: f32 }
@@ -149,7 +160,7 @@ The first `set()` establishes binding ownership from the WGSL variable name. Kee
 Use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) for animation. The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, runs surface auto-resize before your callback, and submits each frame.
 
 ```ts
-import { init } from "vgpu/mock";
+import { init } from "vgpu";
 
 const drawSource = `
   struct Params { time: f32 }
