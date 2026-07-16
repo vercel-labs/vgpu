@@ -76,7 +76,7 @@ export default async function ReferenceTopicPage({ params }: ReferenceTopicPageP
               className="scroll-mt-24 rounded-full border border-gray-4 bg-black/30 px-3 py-1 text-sm text-gray-10 transition-colors hover:border-gray-5 hover:text-blue-9"
             >
               <code>{record.symbol}</code>
-              <span className="ml-2 text-[11px] uppercase tracking-wide text-gray-8">{record.symbolKind}</span>
+              <span className="ml-2 inline-flex items-center text-[11px] uppercase tracking-wide text-gray-8 leading-none">{record.symbolKind}</span>
             </a>
           ))}
         </div>

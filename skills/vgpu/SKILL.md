@@ -22,6 +22,8 @@ npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT
 npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
 ```
 
+Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bake example thumbnails with `pnpm thumbs:docker` / `pnpm --filter docs thumbs:check` (pass `-- --only <slug>` for a single example).
+
 ## Performance guides
 
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.

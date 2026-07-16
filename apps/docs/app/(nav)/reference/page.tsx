@@ -30,8 +30,8 @@ export default function ReferencePage() {
             >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <code className="font-semibold text-blue-9">{record.symbol}</code>
-                  <span className="rounded-full border border-gray-4 px-2 py-0.5 text-[11px] uppercase tracking-wide text-gray-9">
+                  <code className="font-semibold text-gray-12">{record.symbol}</code>
+                  <span className="inline-flex items-center rounded-full border border-gray-4 px-2 py-0.5 text-[11px] uppercase tracking-wide text-gray-9 leading-none">
                     {record.symbolKind}
                   </span>
                 </div>
