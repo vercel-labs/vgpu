@@ -12,7 +12,7 @@ const platforms = [
     description: 'Render to a canvas with WebGPU, and set up the .wgsl loader for Next.js or Vite.',
   },
   {
-    title: 'Node',
+    title: 'Node.js',
     href: '/get-started/node',
     description: 'Render headless through Dawn — save a PNG or assert on pixels in a test.',
   },

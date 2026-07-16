@@ -83,7 +83,7 @@ export const navSections: NavSection[] = [
         title: '',
         items: [
           { title: 'Web', href: '/get-started/web' },
-          { title: 'Node', href: '/get-started/node' },
+          { title: 'Node.js', href: '/get-started/node' },
           { title: 'Context', href: '/get-started/context' },
           { title: 'Effects', href: '/get-started/effects' },
           { title: 'Passes', href: '/get-started/passes' },
