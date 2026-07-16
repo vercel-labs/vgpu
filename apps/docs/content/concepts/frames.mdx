@@ -1,0 +1,169 @@
+---
+title: Frames & Passes
+summary: Build a frame by naming targets, opening passes, and encoding draws before vgpu submits once.
+relatedSymbols:
+  - Frame
+  - FramePass
+  - FrameRunner
+  - Pass
+  - Draw
+  - Target
+prevNext:
+  prev:
+    title: Surfaces & Targets
+    href: /concepts/targets
+  next:
+    title: Drawing
+    href: /concepts/drawing
+---
+
+# Frames & Passes
+
+Build a frame by naming targets, opening passes, and encoding draws before vgpu submits once.
+
+## What you'll learn
+
+- Create an explicit `Target` for a frame.
+- Use `gpu.frame()` to encode one frame and submit it automatically.
+- Open one or more `FramePass` sections and draw `Pass` or `Draw` objects into them.
+- Switch to `gpu.frame.loop()` when you need continuous animation.
+
+A frame is the unit of work you submit to the GPU. In vgpu, a frame owns one command encoder. You add render passes to that encoder, encode draws inside each pass, and submit once at the end.
+
+This model keeps targets explicit. There is no hidden canvas, no global backbuffer, and no implicit resolution uniform. You choose the `Target` or `Surface` for every pass, then pass size, time, or other values to shaders yourself.
+
+Start with frames when you need more than a one-shot draw. They make the order visible: create resources, update bindings, open passes, draw, then submit.
+
+## Create the work before the frame
+
+Create the GPU context, a target, and a renderable unit outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const target = gpu.target({ size: [64, 64], format: "rgba8unorm" });
+const gradient = gpu.pass(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`);
+
+gpu.frame((frame) => {
+  frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(gradient);
+  });
+});
+```
+
+The callback form of [`gpu.frame()`](/reference/vgpu/frame#framerunner) submits in a `finally` block. Use it for the common case: encode the frame immediately and let vgpu submit it.
+
+> Good to know: `frame.pass()` always needs a target. Use an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })` or a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)`.
+
+## Think in passes
+
+A pass is a render-pass section inside the frame. It has one target, one clear color, and any number of draw calls or render bundles. Use separate passes when you need separate targets or when a later pass reads the result of an earlier one.
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const scene = gpu.target({ size: [128, 128], depth: true });
+const post = gpu.target({ size: [128, 128], format: "rgba8unorm" });
+
+const scenePass = gpu.pass(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 1.0, 1.0);
+  }
+`);
+const postPass = gpu.pass(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(1.0 - uv.x, uv.y, 0.2, 1.0);
+  }
+`);
+
+gpu.frame((frame) => {
+  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(scenePass);
+  });
+
+  frame.pass({ target: post, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(postPass);
+  });
+});
+```
+
+[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Pass`](/reference/vgpu/pass#pass) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.pass()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+
+## Update bindings before you draw
+
+Frames do not create shader globals. If a shader needs time, resolution, or a texture, set those values on the renderable before encoding the draw.
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const target = gpu.target({ size: [64, 64] });
+const pulse = gpu.pass(`
+  struct Params { time: f32, width: f32, height: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let glow = sin(params.time) * 0.5 + 0.5;
+    return vec4f(uv.x, uv.y, glow, 1.0);
+  }
+`, { set: { params: { time: 0, width: 64, height: 64 } } });
+
+gpu.frame((frame) => {
+  pulse.set({
+    params: {
+      time: gpu.time,
+      width: target.size[0],
+      height: target.size[1],
+    },
+  });
+
+  frame.pass({ target }, (pass) => {
+    pass.draw(pulse);
+  });
+});
+```
+
+The first `set()` establishes binding ownership from the WGSL variable name. Keep JS values as JS values, and keep GPU resources as resources; vgpu validates that you do not flip ownership later.
+
+> Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
+
+## Loop when the scene changes over time
+
+Use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) for animation. The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, runs surface auto-resize before your callback, and submits each frame.
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const target = gpu.target({ size: [32, 32] });
+const draw = gpu.pass(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0 } } });
+
+const handle = gpu.frame.loop((frame) => {
+  draw.set({ params: { time: gpu.time } });
+  frame.pass({ target }, (pass) => pass.draw(draw));
+}, { fps: 30 });
+
+handle.stop();
+```
+
+Use the returned [`FrameLoopHandle`](/reference/vgpu/frame#frameloophandle) to stop the loop when a component unmounts, a test finishes, or a preview is no longer visible.
+
+## Next steps
+
+- Read the [`Frame`](/reference/vgpu/frame#frame), [`FramePass`](/reference/vgpu/frame#framepass), and [`FrameRunner`](/reference/vgpu/frame#framerunner) reference.
+- Learn how fullscreen [`Pass`](/reference/vgpu/pass#pass) and explicit [`Draw`](/reference/vgpu/draw#draw) objects differ in the Drawing concept.
+- Review [`Target`](/reference/vgpu/target#target) and [`Surface`](/reference/vgpu/surface#surface) when a frame needs offscreen rendering or a canvas.
+- Open the [gradient example](/examples/gradient) for a minimal fullscreen pass, or the [triangle particles example](/examples/triangle-particles) for a frame that combines compute and render work.
