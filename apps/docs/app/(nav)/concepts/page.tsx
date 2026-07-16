@@ -25,9 +25,17 @@ const setCode = [
 ].join('\n');
 
 const frameCode = `gpu.frame((frame) => {
-  frame.pass({ target: scene }, (pass) => pass.draw(cube));
-  frame.pass({ target: surface }, (pass) => pass.draw(post));
-});`;
+  frame.pass({ target: surface }, (pass) => {
+    pass.draw(wave); // the same wave pass from above — nothing new is compiled
+  });
+}); // runs immediately, submits once`;
+
+const loopCode = `const handle = gpu.frame.loop((frame) => {
+  wave.set({ params: { time: gpu.time } }); // update uniforms every tick
+  frame.pass({ target: surface }, (pass) => pass.draw(wave));
+}, { fps: 60 }); // optional throttle
+
+handle.stop(); // stop when the canvas goes away`;
 
 const packageRows = [
   ['vgpu', 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, uniforms.'],
@@ -40,7 +48,8 @@ const toc = [
   { id: 'packages', title: 'Packages', level: 2 as const },
   { id: 'one-gpu-context', title: 'One Gpu context', level: 2 as const },
   { id: 'wgsl-owns-bindings', title: 'WGSL owns bindings', level: 2 as const },
-  { id: 'frames-are-on-demand', title: 'Frames are on-demand', level: 2 as const },
+  { id: 'render-a-frame', title: 'Render a frame', level: 2 as const },
+  { id: 'animate-with-frame-loop', title: 'Animate with frame.loop()', level: 2 as const },
 ];
 
 export default function ConceptsPage() {
@@ -79,17 +88,23 @@ export default function ConceptsPage() {
         <Callout type="info">There are no globals. Pass time explicitly and read resolution from targets.</Callout>
       </section>
 
-      <section className="mb-12" id="frames-are-on-demand">
-        <h2 className="text-2xl font-semibold text-gray-12 mb-4">Frames are on-demand</h2>
+      <section className="mb-12" id="render-a-frame">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">Render a frame</h2>
         <p className="text-gray-11 mb-4">
-          <code>gpu.frame((frame) =&gt; &#123; ... &#125;)</code> runs immediately and submits once in a <code>finally</code> block after your callback returns, so nothing keeps drawing automatically afterward.
-          vgpu does not observe state changes for you—call <code>gpu.frame()</code> yourself whenever an event (resize, drag, toggle) needs a redraw.
+          <code>gpu.frame()</code> runs your callback right away and submits the work to the GPU once. Nothing keeps drawing afterward.
+          When something changes—a resize, a drag, a toggle—call <code>gpu.frame()</code> again from your event handler.
         </p>
         <CodeBlock code={frameCode} language="typescript" />
+      </section>
+
+      <section className="mb-12" id="animate-with-frame-loop">
+        <h2 className="text-2xl font-semibold text-gray-12 mb-4">Animate with frame.loop()</h2>
         <p className="text-gray-11 mb-4">
-          Use <code>gpu.frame.loop()</code> for animation. It owns the <code>requestAnimationFrame</code> (or ~16&nbsp;ms <code>setTimeout</code>) driver, advances <code>gpu.time</code> every tick, respects the optional <code>fps</code> throttle, and returns a handle whose <code>stop()</code> method halts the loop.
+          For animation, start a loop instead. <code>gpu.frame.loop()</code> calls your callback once per tick and advances <code>gpu.time</code> for you.
+          Update uniforms inside the callback, and stop the loop when you are done.
         </p>
-        <Callout type="info">Good to know: you never call <code>requestAnimationFrame</code> yourself. Use <code>gpu.frame.loop()</code> and stop it with <code>handle.stop()</code> when you are done.</Callout>
+        <CodeBlock code={loopCode} language="typescript" />
+        <Callout type="info">Good to know: you never call <code>requestAnimationFrame</code> yourself—<code>gpu.frame.loop()</code> drives it internally.</Callout>
       </section>
     </DocsPageShell>
   );
