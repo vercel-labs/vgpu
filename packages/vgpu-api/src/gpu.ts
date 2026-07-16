@@ -5,7 +5,7 @@ import { createBindGroupCache } from "./bind-cache.ts";
 import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
 import { InternalDraw, type Draw, type DrawOptions, type MeshLike } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
-import { InternalPass, type Pass, type PassOptions } from "./pass.ts";
+import { InternalEffect, type Effect, type EffectOptions } from "./effect.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
 import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
@@ -40,7 +40,7 @@ export interface Gpu {
   deltaTime: number;
   frameCount: number;
   surface(canvas: SurfaceCanvas, opts?: SurfaceOptions): Surface;
-  pass(source: string | ShaderSource, opts?: PassOptions): Pass;
+  effect(source: string | ShaderSource, opts?: EffectOptions): Effect;
   draw(opts: DrawOptions): Draw;
   target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
@@ -90,9 +90,9 @@ class RingGpu implements Gpu {
     this.surfaces.set(canvas, surface);
     return surface;
   }
-  pass(source: string | ShaderSource, opts: PassOptions = {}): Pass {
-    if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new InternalPass(this.device, toWgsl(source), opts, this.cache);
+  effect(source: string | ShaderSource, opts: EffectOptions = {}): Effect {
+    if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
+    return new InternalEffect(this.device, toWgsl(source), opts, this.cache);
   }
   draw(opts: DrawOptions): Draw {
     const shader = toWgsl(opts.shader);
@@ -156,7 +156,7 @@ async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   return new Device(gpuDevice, adapter.info ?? null);
 }
 
-function hasMesh(opts: PassOptions): boolean {
+function hasMesh(opts: EffectOptions): boolean {
   return "mesh" in (opts as Record<string, unknown>);
 }
 

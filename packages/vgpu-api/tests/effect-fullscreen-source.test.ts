@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fullscreenSource } from "../src/pass.ts";
+import { fullscreenSource } from "../src/effect.ts";
 
 test("fullscreenSource ignores @vertex text in comments", () => {
   const source = `

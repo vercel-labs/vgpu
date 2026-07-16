@@ -50,6 +50,9 @@ const nextConfig = {
     return [
       { source: '/api', destination: '/reference', permanent: true },
       { source: '/packages', destination: '/reference', permanent: true },
+      { source: '/packages/vgpu/Pass', destination: '/reference/vgpu/effect#effect', permanent: true },
+      { source: '/packages/vgpu/PassOptions', destination: '/reference/vgpu/effect#effectoptions', permanent: true },
+      { source: '/reference/vgpu/pass', destination: '/reference/vgpu/effect', permanent: true },
       ...packageRedirects,
       ...symbolRedirects,
     ];

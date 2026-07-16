@@ -5,7 +5,7 @@ relatedSymbols:
   - Frame
   - FramePass
   - FrameRunner
-  - Pass
+  - Effect
   - Draw
   - Target
 prevNext:
@@ -25,7 +25,7 @@ Build a frame by naming targets, opening passes, and encoding draws before vgpu 
 
 - Create an explicit `Target` for a frame.
 - Use `gpu.frame()` to encode one frame and submit it automatically.
-- Open one or more `FramePass` sections and draw `Pass` or `Draw` objects into them.
+- Open one or more `FramePass` sections and draw `Effect` or `Draw` objects into them.
 - Switch to `gpu.frame.loop()` when you need continuous animation.
 
 A frame is the unit of work you submit to the GPU. In vgpu, a frame owns one command encoder. You add render passes to that encoder, encode draws inside each pass, and submit once at the end.
@@ -49,7 +49,7 @@ const gradientSource = `
 
 const gpu = await init();
 const target = gpu.target({ size: [64, 64], format: "rgba8unorm" });
-const gradient = gpu.pass(gradientSource);
+const gradient = gpu.effect(gradientSource);
 
 gpu.frame((frame) => {
   frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => {
@@ -85,8 +85,8 @@ const gpu = await init();
 const scene = gpu.target({ size: [128, 128], depth: true });
 const post = gpu.target({ size: [128, 128], format: "rgba8unorm" });
 
-const scenePass = gpu.pass(sceneSource);
-const postPass = gpu.pass(postSource);
+const scenePass = gpu.effect(sceneSource);
+const postPass = gpu.effect(postSource);
 
 gpu.frame((frame) => {
   frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
@@ -99,7 +99,7 @@ gpu.frame((frame) => {
 });
 ```
 
-[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Pass`](/reference/vgpu/pass#pass) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.pass()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.effect()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
 
 ## Update bindings before you draw
 
@@ -120,7 +120,7 @@ const pulseSource = `
 
 const gpu = await init();
 const target = gpu.target({ size: [64, 64] });
-const pulse = gpu.pass(pulseSource, {
+const pulse = gpu.effect(pulseSource, {
   set: { params: { time: 0, width: 64, height: 64 } }, // initial uniform defaults
 });
 
@@ -162,7 +162,7 @@ const drawSource = `
 
 const gpu = await init();
 const target = gpu.target({ size: [32, 32] });
-const draw = gpu.pass(drawSource, {
+const draw = gpu.effect(drawSource, {
   set: { params: { time: 0 } }, // initial uniform defaults
 });
 
@@ -181,6 +181,6 @@ Use the returned [`FrameLoopHandle`](/reference/vgpu/frame#frameloophandle) to s
 ## Next steps
 
 - Read the [`Frame`](/reference/vgpu/frame#frame), [`FramePass`](/reference/vgpu/frame#framepass), and [`FrameRunner`](/reference/vgpu/frame#framerunner) reference.
-- Learn how fullscreen [`Pass`](/reference/vgpu/pass#pass) and explicit [`Draw`](/reference/vgpu/draw#draw) objects differ in the Drawing concept.
+- Learn how fullscreen [`Effect`](/reference/vgpu/effect#effect) and explicit [`Draw`](/reference/vgpu/draw#draw) objects differ in the Drawing concept.
 - Review [`Target`](/reference/vgpu/target#target) and [`Surface`](/reference/vgpu/surface#surface) when a frame needs offscreen rendering or a canvas.
-- Open the [gradient example](/examples/gradient) for a minimal fullscreen pass, or the [triangle particles example](/examples/triangle-particles) for a frame that combines compute and render work.
+- Open the [gradient example](/examples/gradient) for a minimal fullscreen effect, or the [triangle particles example](/examples/triangle-particles) for a frame that combines compute and render work.

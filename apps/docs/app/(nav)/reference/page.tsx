@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { DocsPageShell } from '@/components/docs-page-shell';
 import { referenceGroups, recordHref } from '@/lib/manifest';
 
-const featuredSymbols = ['init', 'Gpu', 'Pass', 'Draw', 'Compute', 'Frame', 'Bundle', 'Target', 'SharedUniforms', 'PingPongStorage'];
+const featuredSymbols = ['init', 'Gpu', 'Effect', 'Draw', 'Compute', 'Frame', 'Bundle', 'Target', 'SharedUniforms', 'PingPongStorage'];
 
 export default function ReferencePage() {
   const allRecords = referenceGroups.flatMap((group) => group.records);

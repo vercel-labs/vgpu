@@ -58,7 +58,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping
     const gpu = await init();
     try {
       const pingPong = gpu.pingPong(4, 4, { format: "rgba8unorm", label: "pingpong" });
-      const feedback = gpu.pass(PING_PONG_PASS, { label: "feedback" });
+      const feedback = gpu.effect(PING_PONG_PASS, { label: "feedback" });
       for (let frame = 0; frame < 4; frame += 1) {
         gpu.frame((f) => {
           f.pass({ target: pingPong.write, clear: [0, 0, 0, 1] }, (p) => {

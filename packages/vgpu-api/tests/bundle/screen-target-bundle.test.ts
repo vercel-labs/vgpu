@@ -11,7 +11,7 @@ const SOLID = `
 test("surface bundles do not stale just because getCurrentTexture returns a fresh wrapper", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const surface = gpu.surface(mockCanvas(), { size: [4, 4] });
-  const draw = gpu.pass(SOLID, { label: "surfaceStatic" });
+  const draw = gpu.effect(SOLID, { label: "surfaceStatic" });
 
   const bundle = gpu.bundle({ target: surface, label: "surfaceBundle" }, (b) => b.draw(draw));
 

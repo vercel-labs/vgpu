@@ -91,10 +91,10 @@ async function main() {
   if (!canvas) throw new Error("Missing <canvas>.");
   const gpu = await init();
   const surface = gpu.surface(canvas, { dpr: [1, 2] });
-  const pass = gpu.pass(shader, { set: { speed: 2 } });
+  const effect = gpu.effect(shader, { set: { speed: 2 } });
   gpu.frame.loop((frame) => {
-    pass.set({ time: gpu.time });
-    frame.pass({ target: surface }, (p) => p.draw(pass));
+    effect.set({ time: gpu.time });
+    frame.pass({ target: surface }, (p) => p.draw(effect));
   });
 }
 

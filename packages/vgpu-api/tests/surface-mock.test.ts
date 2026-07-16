@@ -193,13 +193,13 @@ test("resize and frame reentrancy are guarded, but resizing another surface and 
 
 test("target is required for frame and one-shot draws, and target size is required at runtime", async () => {
   const gpu = await init();
-  const pass = gpu.pass(SOLID);
+  const effect = gpu.effect(SOLID);
   const draw = gpu.draw({ shader: SOLID });
   expect(() => {
     // @ts-expect-error Frame.pass requires an explicit target; this asserts the runtime JS error.
-    gpu.frame((frame) => frame.pass({}, (p) => p.draw(pass)));
+    gpu.frame((frame) => frame.pass({}, (p) => p.draw(effect)));
   }).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
-  expect(() => pass.draw()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
+  expect(() => effect.draw()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
   expect(() => draw.draw()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
   expect(() => {
     // @ts-expect-error gpu.target requires size; this asserts the runtime JS error.
@@ -228,16 +228,16 @@ test("bloom pattern immediate same-size resize does not recreate derived target 
 test("surface bundle stale on resize, and re-recording from onResize is usable in the same frame", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const manual = gpu.surface(canvasLike(10, 10), { autoResize: false });
-  const pass = gpu.pass(SOLID);
-  const staleBundle = gpu.bundle({ target: manual, label: "surfaceBundle" }, (b) => b.draw(pass));
+  const effect = gpu.effect(SOLID);
+  const staleBundle = gpu.bundle({ target: manual, label: "surfaceBundle" }, (b) => b.draw(effect));
 
   manual.resize([12, 12]);
   expect(() => gpu.frame((f) => f.pass({ target: manual }, (p) => p.bundles(staleBundle)))).toThrowError(/VGPU-R3-BUNDLE-STALE|stale/);
 
   const canvas = canvasLike(10, 10);
   const surface = gpu.surface(canvas);
-  let bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(pass));
-  surface.onResize(() => { bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(pass)); });
+  let bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(effect));
+  surface.onResize(() => { bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(effect)); });
   (canvas as unknown as { clientWidth: number; clientHeight: number }).clientWidth = 13;
   (canvas as unknown as { clientWidth: number; clientHeight: number }).clientHeight = 13;
   expect(() => gpu.frame((f) => f.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();

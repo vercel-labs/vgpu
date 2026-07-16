@@ -51,14 +51,14 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const target = gpu.target({ size: [64, 64], format: "rgba8unorm" });
-const pass = gpu.pass(`
+const effect = gpu.effect(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.0, 1.0);
   }
 `);
 
 gpu.frame((frame) => {
-  frame.pass({ target }, (p) => p.draw(pass));
+  frame.pass({ target }, (p) => p.draw(effect));
 });
 ```
 
@@ -69,10 +69,10 @@ declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 gpu.frame((frame) => {
-  frame.pass({ target: surface }, (p) => p.draw(pass));
+  frame.pass({ target: surface }, (p) => p.draw(effect));
 });
 ```
 

@@ -11,7 +11,7 @@ import type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameRunner }
 ## Signature
 
 ```ts
-import type { Bundle, Draw, DrawCallOptions, Pass, Target } from "vgpu";
+import type { Bundle, Draw, DrawCallOptions, Effect, Target } from "vgpu";
 
 interface FramePassOptions {
   readonly target: Target;
@@ -30,7 +30,7 @@ declare class Frame {
 
 declare class FramePass {
   readonly target: Target;
-  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  draw(drawable: Draw | Effect, opts?: DrawCallOptions): void;
   bundles(...bundles: readonly Bundle[]): void;
 }
 
@@ -49,7 +49,7 @@ declare class FrameRunner {
 | opts.target | `Target` | ✔ | — | Required explicitly. Use a `Surface` from `gpu.surface(canvas)` or an offscreen `Target` from `gpu.target({ size })`. |
 | opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue`; render passes always use `loadOp: "clear"`. |
 | frame.pass.cb | `(pass: FramePass) => void` | ✔ | — | Encodes draw and bundle commands for this render pass. |
-| pass.draw.drawable | `Draw \| Pass` | ✔ | — | A main API (`vgpu`) draw or fullscreen pass. |
+| pass.draw.drawable | `Draw \| Effect` | ✔ | — | A main API (`vgpu`) draw or fullscreen effect. |
 | pass.draw.opts | `DrawCallOptions` | ✖ | `{}` | Per-call counts and dynamic offsets. Target is the frame pass target. |
 | pass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Bundles recorded by `gpu.bundle({ target }, cb)`. |
 | runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame; frame is submitted in `finally`. Surface auto-resize runs before this callback. |
@@ -84,9 +84,9 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const target = gpu.target({ size: [16, 16] });
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 const handle = gpu.frame.loop((frame) => {
-  frame.pass({ target }, (p) => p.draw(pass));
+  frame.pass({ target }, (p) => p.draw(effect));
 }, { fps: 30 });
 handle.stop();
 ```
@@ -96,4 +96,4 @@ handle.stop();
 - `Frame`, `FramePass`, and `FrameRunner` are type-only public exports. Create frames through `gpu.frame`, not `new Frame(...)`.
 - There is no default target and no implicit canvas target; every `frame.pass` names its target.
 - Always `await frame.done` or the `Draw.draw()` promise when using raw claimed bind groups and you need validation failures as normal control flow.
-- **See also:** `Gpu.frame`, `Surface`, `Pass`, `Draw`, `Bundle`, `Target`.
+- **See also:** `Gpu.frame`, `Surface`, `Effect`, `Draw`, `Bundle`, `Target`.

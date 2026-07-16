@@ -57,7 +57,7 @@ const packageOrder = [
 ];
 
 const topicOrder: Record<string, string[]> = {
-  vgpu: ['init', 'gpu', 'surface', 'target', 'frame', 'pass', 'draw', 'compute', 'uniforms', 'bundle'],
+  vgpu: ['init', 'gpu', 'surface', 'target', 'frame', 'effect', 'draw', 'compute', 'uniforms', 'bundle'],
   'vgpu/scene': ['mesh', 'camera', 'orthographic-camera', 'perspective-camera', 'deg-to-rad', 'srgb', 'orbit'],
   'vgpu/core': ['device', 'buffer', 'texture', 'queue', 'vgpu-error', 'vgpu-adapter', 'bind', 'render-bundle', 'storage-buffer', 'uniform', 'structured-uniform', 'uniform-pool'],
   '@vgpu/wgsl': ['compile', 'resolved-shader', 'runtime', 'loader-webpack', 'loader-vite'],
@@ -66,7 +66,7 @@ const topicOrder: Record<string, string[]> = {
 };
 
 const packageDescriptions: Record<string, string> = {
-  vgpu: 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
+  vgpu: 'Public API: init, Gpu, effect, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
   'vgpu/scene': 'Tree-shakeable geometry, camera, color, and orbit helpers without a retained scene graph.',
   'vgpu/core': 'Advanced escape hatches for native WebGPU handles, buffers, textures, bind groups, and structured uniforms.',
   '@vgpu/wgsl': 'WGSL compile-time entry points, runtime resolution, reflection metadata, and bundler loaders.',

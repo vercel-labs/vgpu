@@ -10,7 +10,7 @@ import { init } from "vgpu";
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const screen = surface!;
-const gradient = gpu.pass(`
+const gradient = gpu.effect(`
 struct Params { time: f32, texel: vec2f }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -26,7 +26,7 @@ gpu.frame.loop((f) => {
 
 ## Default choices
 
-- Use `gpu.pass()` for fullscreen fragment work.
+- Use `gpu.effect()` for fullscreen fragment work.
 - Use `gpu.draw()` for vertex shaders, meshes, storage-driven vertices, instancing, MRT, and depth.
 - Use `gpu.frame((f) => ...)` for explicit one-shot work and `gpu.frame.loop(...)` only for animation.
 - Use `set()` for every binding declared in WGSL; missing bindings fail with `VGPU-R1-BINDING-NEVER-SET`.

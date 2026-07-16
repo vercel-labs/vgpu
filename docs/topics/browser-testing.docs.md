@@ -8,8 +8,8 @@ import { init } from "vgpu";
 export async function renderOnce(canvas: HTMLCanvasElement) {
   const gpu = await init();
   const surface = gpu.surface(canvas, { dpr: 1, autoResize: false });
-  const pass = gpu.pass(WGSL, { set: { time: 0, texel: surface.texelSize } });
-  gpu.frame((f) => f.pass({ target: surface, clear: [0, 0, 0, 1] }, (p) => p.draw(pass)));
+  const effect = gpu.effect(WGSL, { set: { time: 0, texel: surface.texelSize } });
+  gpu.frame((f) => f.pass({ target: surface, clear: [0, 0, 0, 1] }, (p) => p.draw(effect)));
   return gpu;
 }
 ```

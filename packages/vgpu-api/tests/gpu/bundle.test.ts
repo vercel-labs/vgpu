@@ -46,8 +46,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     const gpu = await init();
     try {
       const scene = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-      const floor = gpu.pass(SOLID_GREEN, { label: "floor" });
-      const player = gpu.pass(RIGHT_RED, { label: "player" });
+      const floor = gpu.effect(SOLID_GREEN, { label: "floor" });
+      const player = gpu.effect(RIGHT_RED, { label: "player" });
       const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => b.draw(floor));
 
       gpu.frame((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => {
@@ -130,8 +130,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     try {
       let read = gpu.target({ size: [4, 4], format: "rgba8unorm" });
       let write = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-      const seed = gpu.pass(SOLID_GREEN, { label: "seed" });
-      const sim = gpu.pass(COPY, { label: "sim" });
+      const seed = gpu.effect(SOLID_GREEN, { label: "seed" });
+      const sim = gpu.effect(COPY, { label: "sim" });
       gpu.frame((f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
 
       const even = gpu.bundle({ target: write, label: "even" }, (b) => { sim.set({ src: read }); b.draw(sim); });

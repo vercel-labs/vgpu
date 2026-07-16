@@ -15,8 +15,8 @@ struct Params { texel: vec2f }
 export async function runPingPongExample() {
   const gpu = await init();
   const buf = gpu.pingPong(8, 8, { format: "rgba8unorm" });
-  const fill = gpu.pass(FILL, { label: "fill" });
-  const copy = gpu.pass(COPY, { label: "copy" });
+  const fill = gpu.effect(FILL, { label: "fill" });
+  const copy = gpu.effect(COPY, { label: "copy" });
   gpu.frame((frame) => frame.pass({ target: buf.write }, (p) => p.draw(fill)));
   buf.swap();
   gpu.frame((frame) => frame.pass({ target: buf.write }, (p) => { copy.set({ src: buf.read, texel: buf.read.texelSize }); p.draw(copy); }));

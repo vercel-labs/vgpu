@@ -34,7 +34,7 @@ const draw = gpu.draw({ shader });
 Every reflected binding must be set by name or covered by a claimed group. Do not rely on globals or implicit buffers.
 
 ```text
-const pass = gpu.pass(WGSL);
+const effect = gpu.effect(WGSL);
 pass.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
 ```
 

@@ -23,7 +23,7 @@ const browserCode = `import { init } from "vgpu";
 
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.pass(\`
+const wave = gpu.effect(\`
 struct Params { time: f32 }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {

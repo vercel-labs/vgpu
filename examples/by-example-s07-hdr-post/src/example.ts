@@ -17,8 +17,8 @@ export async function runHdrPostExample() {
   const gpu = await init();
   const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
   const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
-  const solid = gpu.pass(SOLID, { label: "solid" });
-  const post = gpu.pass(POST, { label: "post" });
+  const solid = gpu.effect(SOLID, { label: "solid" });
+  const post = gpu.effect(POST, { label: "post" });
   gpu.frame((frame) => {
     frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
     frame.pass({ target: output }, (p) => { post.set({ src: scene.color, texel: scene.texelSize }); p.draw(post); });

@@ -56,7 +56,7 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
 export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-REQUIRED",
-    message: "esta operación necesita un target explícito. Fix: pass.draw({ target }) — creá una surface con gpu.surface(canvas) o un gpu.target({ size }) y pasalo.",
+    message: "esta operación necesita un target explícito. Fix: effect.draw({ target }) — creá una surface con gpu.surface(canvas) o un gpu.target({ size }) y pasalo.",
     where,
   });
 }

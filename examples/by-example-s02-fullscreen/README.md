@@ -1,6 +1,6 @@
-# by-example §2 fullscreen pass
+# by-example §2 fullscreen effect
 
-This example is the minimal main API (`vgpu`) render loop: initialize a headless GPU, create an explicit render target, build a fragment-only fullscreen pass, pass ordinary JS numbers with `set()`, and draw into the target.
+This example is the minimal main API (`vgpu`) render loop: initialize a headless GPU, create an explicit render target, build a fragment-only fullscreen effect, pass ordinary JS numbers with `set()`, and draw into the target.
 
 ## Run it
 

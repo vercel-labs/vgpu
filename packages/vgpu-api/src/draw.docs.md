@@ -112,4 +112,4 @@ await tri.draw({ target, vertices: 3, instances: 1 });
 - Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
 - One-shot `draw.draw()` has no implicit target. Prefer `gpu.frame((frame) => frame.pass({ target }, ...))` for multi-pass work.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
-- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
+- **See also:** `Effect`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.

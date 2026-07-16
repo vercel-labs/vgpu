@@ -37,7 +37,7 @@ import { init } from "vgpu/mock";
 const gpu = await init();
 const target = gpu.target({ size: [64, 64] });
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-const wave = gpu.pass(`
+const wave = gpu.effect(`
   struct Globals { time: f32, mouse: vec2f }
   @group(0) @binding(0) var<uniform> globals: Globals;
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -62,4 +62,4 @@ globals.set({ exposure: 1.25 });
 - The first shader to bind the object chooses the WGSL layout. Keep struct member names/types/order aligned for every later shader that reuses it.
 - Use shared uniforms for values like time, mouse, camera, exposure, and viewport data consumed by many passes.
 - If one shader needs a different layout, create a second `gpu.uniforms()` object rather than mutating the first layout.
-- **See also:** `Gpu.uniforms`, `Pass.set`, `Draw.set`, `Uniform`, `StructuredUniform`.
+- **See also:** `Gpu.uniforms`, `Effect.set`, `Draw.set`, `Uniform`, `StructuredUniform`.
