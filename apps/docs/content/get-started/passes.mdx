@@ -1,0 +1,73 @@
+---
+title: Passes
+summary: A pass renders into one target inside a frame; use several passes when a later pass reads an earlier result.
+relatedSymbols:
+  - Frame
+  - FramePass
+  - Effect
+  - Draw
+prevNext:
+  prev:
+    title: Effects
+    href: /get-started/effects
+  next:
+    title: Frames
+    href: /get-started/frames
+---
+
+# Passes
+
+A pass is a render-pass section inside a frame. It has one target, one clear color, and any number of draw calls or render bundles. Use separate passes when you need separate targets or when a later pass reads the result of an earlier one.
+
+Here is the effect chain from the previous page inside one frame — the GPU encodes the same two render passes, but everything submits once:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+
+const sceneSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 1.0, 1.0);
+  }
+`;
+
+const postSource = `
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    return vec4f(1.0 - base.rgb, 1.0);
+  }
+`;
+
+const scene = gpu.target({ size: [1280, 720] });
+
+const sceneEffect = gpu.effect(sceneSource);
+const post = gpu.effect(postSource);
+post.set({ src: scene });
+
+// ---cut---
+gpu.frame((frame) => {
+  // 1. render the scene into the offscreen target
+  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(sceneEffect);
+  });
+
+  // 2. post-process the scene texture onto the canvas
+  frame.pass({ target: surface }, (pass) => {
+    pass.draw(post);
+  });
+});
+```
+
+The last pass targets the canvas [`Surface`](/reference/vgpu/surface#surface), which is what puts pixels on screen.
+
+> Good to know: one-shot `draw()` calls and a frame produce the same GPU work here — the difference is CPU-side. A frame batches every pass into one submit; ten passes in a frame are still one submit.
+
+[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.effect()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+
+> Good to know: `frame.pass()` always needs a target. Use a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)` or an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })`.

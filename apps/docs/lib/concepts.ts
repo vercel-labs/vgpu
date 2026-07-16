@@ -29,20 +29,20 @@ export interface ConceptPage {
   headings: ConceptHeading[];
 }
 
-const conceptsDirectory = join(process.cwd(), 'content/concepts');
+const contentRoot = join(process.cwd(), 'content');
 
-export function conceptSlugs() {
-  return readdirSync(conceptsDirectory)
+export function collectionSlugs(collection: string) {
+  return readdirSync(join(contentRoot, collection))
     .filter((file) => file.endsWith('.mdx'))
     .map((file) => file.replace(/\.mdx$/u, ''))
     .sort();
 }
 
-export function getConceptPage(slug: string): ConceptPage | null {
-  if (!/^[a-z0-9-]+$/u.test(slug)) return null;
+export function getContentPage(collection: string, slug: string): ConceptPage | null {
+  if (!/^[a-z0-9-]+$/u.test(collection) || !/^[a-z0-9-]+$/u.test(slug)) return null;
 
   try {
-    const source = readFileSync(join(conceptsDirectory, `${slug}.mdx`), 'utf8');
+    const source = readFileSync(join(contentRoot, collection, `${slug}.mdx`), 'utf8');
     const { frontmatter, content } = parseConceptSource(source);
     return {
       slug,
@@ -53,6 +53,14 @@ export function getConceptPage(slug: string): ConceptPage | null {
   } catch {
     return null;
   }
+}
+
+export function conceptSlugs() {
+  return collectionSlugs('concepts');
+}
+
+export function getConceptPage(slug: string): ConceptPage | null {
+  return getContentPage('concepts', slug);
 }
 
 function parseConceptSource(source: string) {

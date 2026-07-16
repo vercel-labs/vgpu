@@ -1,0 +1,56 @@
+---
+title: Context
+summary: init() creates the Gpu context; every surface, target, effect, and frame is created from it.
+relatedSymbols:
+  - Gpu
+  - Surface
+  - Target
+prevNext:
+  prev:
+    title: Node
+    href: /get-started/node
+  next:
+    title: Effects
+    href: /get-started/effects
+---
+
+# Context
+
+Everything in vgpu starts from one call. `init()` requests the WebGPU adapter and device and returns a [`Gpu`](/reference/vgpu/gpu#gpu) context. Every other object — surfaces, targets, effects, draws, frames — is created from that context, so all of them share one device.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas); // the canvas you render into
+const target = gpu.target({ size: [256, 256] }); // an offscreen texture
+const gradient = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`);
+```
+
+## Create resources once, draw every frame
+
+Create the context, surface, and effects outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
+
+```ts
+import { init } from "vgpu";
+import gradientSource from "./gradient.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+const gradient = gpu.effect(gradientSource);
+
+gpu.frame((frame) => {
+  frame.pass({ target: surface, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(gradient);
+  });
+}); // renders immediately
+```
+
+The expensive objects — context, surface, effect — live outside and are reused by every frame you draw later. What changes per frame is data, not resources: update values with `set()`, then draw again.

@@ -5,16 +5,21 @@ import { spawnSync } from 'node:child_process';
 
 const repo = join(process.cwd(), '..', '..');
 const docs = process.cwd();
-const contentDir = join(docs, 'content', 'concepts');
-const files = readdirSync(contentDir).filter((file) => file.endsWith('.mdx'));
+const collections = ['concepts', 'get-started'];
+const sources = collections.flatMap((collection) => {
+  const dir = join(docs, 'content', collection);
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.mdx'))
+    .map((file) => ({ dir, file: `${collection}-${file}`, path: join(dir, file) }));
+});
 const out = mkdtempSync(join(repo, '.tmp-concept-snippets-'));
 let snippets = 0;
 
 try {
   mkdirSync(out, { recursive: true });
 
-  for (const file of files) {
-    const text = readFileSync(join(contentDir, file), 'utf8');
+  for (const { file, path } of sources) {
+    const text = readFileSync(path, 'utf8');
     let block = 0;
     for (const match of text.matchAll(/```([^\n`]*)\n([\s\S]*?)```/gu)) {
       block += 1;

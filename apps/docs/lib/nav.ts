@@ -74,23 +74,19 @@ const exampleItems: NavItem[] = [
 
 export const navSections: NavSection[] = [
   {
-    title: 'Getting Started',
+    title: 'Get started',
     groups: [
       {
-        title: 'Start here',
+        title: '',
         items: [
-          { title: 'Introduction', href: '/' },
-          { title: 'Installation & First Frame', href: '/getting-started' },
+          { title: 'Platforms', href: '/get-started' },
+          { title: 'Web', href: '/get-started/web' },
+          { title: 'Node', href: '/get-started/node' },
+          { title: 'Context', href: '/get-started/context' },
+          { title: 'Effects', href: '/get-started/effects' },
+          { title: 'Passes', href: '/get-started/passes' },
+          { title: 'Frames', href: '/get-started/frames' },
         ],
-      },
-    ],
-  },
-  {
-    title: 'Core Concepts',
-    groups: [
-      {
-        title: 'Learn',
-        items: [{ title: 'Core Concepts', href: '/concepts' }],
       },
     ],
   },
@@ -124,6 +120,20 @@ export const navSections: NavSection[] = [
         items: [{ title: 'Overview', href: '/reference' }],
       },
       ...referenceGroups.map(referenceGroupToNavGroup),
+    ],
+  },
+  {
+    title: 'Old drafts',
+    groups: [
+      {
+        title: '',
+        items: [
+          { title: 'Introduction', href: '/' },
+          { title: 'Installation & First Frame', href: '/getting-started' },
+          { title: 'Core Concepts', href: '/concepts' },
+          { title: 'Frames & Passes', href: '/concepts/frames' },
+        ],
+      },
     ],
   },
 ];
@@ -179,7 +189,7 @@ export function getBreadcrumbs(pathname: string): NavItem[] {
     const sectionHref = sectionOverviewHref(navItem.section);
     crumbs.push({ title: navItem.section, href: sectionHref });
     for (const group of navItem.groupPath) {
-      if (group !== navItem.section && group !== navItem.title && group !== 'Start here' && group !== 'Learn') {
+      if (group && group !== navItem.section && group !== navItem.title && group !== 'Start here' && group !== 'Learn') {
         crumbs.push({ title: group, href: sectionHref });
       }
     }
@@ -231,6 +241,7 @@ function normalizePathname(pathname: string) {
 }
 
 function sectionOverviewHref(section: string) {
+  if (section === 'Get started') return '/get-started';
   if (section === 'Getting Started') return '/getting-started';
   if (section === 'Core Concepts') return '/concepts';
   if (section === 'Guides') return '/guides';

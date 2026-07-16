@@ -1,0 +1,78 @@
+---
+title: Frames
+summary: gpu.frame() encodes your passes and submits once; gpu.frame.loop() drives animation.
+relatedSymbols:
+  - Frame
+  - FrameRunner
+  - FrameLoopHandle
+prevNext:
+  prev:
+    title: Passes
+    href: /get-started/passes
+---
+
+# Frames
+
+A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
+
+## Encode one frame
+
+[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs your callback synchronously and submits once when it returns. After that, nothing keeps drawing: vgpu never redraws on its own and does not watch your state for changes. To redraw after an event — a resize, a slider, a click — call `gpu.frame()` again from your handler.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+const gradient = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`);
+
+// ---cut---
+gpu.frame((frame) => {
+  frame.pass({ target: surface, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(gradient);
+  });
+}); // renders immediately
+```
+
+> Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
+
+## Loop when the scene changes over time
+
+Use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) for animation. The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, runs surface auto-resize before your callback, and submits each frame.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+
+// ---cut---
+const drawSource = `
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`;
+
+const target = gpu.target({ size: [32, 32] });
+const draw = gpu.effect(drawSource, {
+  set: { params: { time: 0 } }, // initial uniform defaults
+});
+
+const handle = gpu.frame.loop((frame) => {
+  draw.set({ params: { time: gpu.time } }); // update uniforms every tick
+  frame.pass({ target }, (pass) => pass.draw(draw));
+}, { fps: 30 });
+
+handle.stop();
+```
+
+> Good to know: you never call `requestAnimationFrame` yourself. `gpu.frame.loop()` drives it internally — falling back to a ~16 ms timer where rAF is unavailable — and the optional `fps` option throttles ticks.
+
+Use the returned [`FrameLoopHandle`](/reference/vgpu/frame#frameloophandle) to stop the loop when a component unmounts, a test finishes, or a preview is no longer visible.

@@ -29,10 +29,12 @@ export function PackageNav({ groups, pathname, onNavigate }: PackageNavProps) {
 function NavGroupList({ group, pathname, onNavigate, depth }: NavGroupListProps) {
   return (
     <div>
-      <div className={`px-3 ${depth === 0 ? 'mb-1' : 'mb-0.5'} text-[11px] font-medium uppercase tracking-wider text-gray-8`}>
-        {group.title}
-        {group.badge ? <span className="ml-2 text-[10px] text-yellow-10">{group.badge}</span> : null}
-      </div>
+      {group.title ? (
+        <div className={`px-3 ${depth === 0 ? 'mb-1' : 'mb-0.5'} text-[11px] font-medium uppercase tracking-wider text-gray-8`}>
+          {group.title}
+          {group.badge ? <span className="ml-2 text-[10px] text-yellow-10">{group.badge}</span> : null}
+        </div>
+      ) : null}
       {group.items?.length ? (
         <ul className="space-y-0.5">
           {group.items.map((item) => {
