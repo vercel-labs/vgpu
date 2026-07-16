@@ -53,7 +53,9 @@ gpu.frame((frame) => {
 }); // two passes, one encoder, one submit
 ```
 
-A frame with a single pass buys you nothing: `pulseEffect.draw({ target: canvasTarget })` does the same GPU work with the same single submit. Reach for `gpu.frame()` when there is more than one pass to batch.
+A frame is an optimization, not a requirement. Back-to-back one-shot draws also work — same passes, same order, just one submit each — and a frame with a single pass buys you nothing over `pulseEffect.draw({ target: canvasTarget })`. Reach for `gpu.frame()` when batching many passes into one submit starts to matter: heavy frames, or a render loop.
+
+> Warning: one-shot `draw()` calls do not join a surrounding frame — inside a frame callback they submit on their own immediately. Inside `gpu.frame()`, always draw through `frame.pass()`.
 
 > Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
 
