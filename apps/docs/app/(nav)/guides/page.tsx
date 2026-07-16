@@ -1,9 +1,10 @@
 import Link from 'next/link';
+import { DocsPageShell } from '@/components/docs-page-shell';
 import { guideRecords, recordHref, titleForRecord } from '@/lib/manifest';
 
 export default function GuidesPage() {
   return (
-    <div className="px-4 py-8 lg:px-8 lg:py-12 max-w-5xl mx-auto">
+    <DocsPageShell pathname="/guides" articleClassName="min-w-0 max-w-5xl">
       <header className="mb-10">
         <p className="text-sm font-medium text-blue-9 mb-3">Guides</p>
         <h1 className="text-3xl md:text-4xl font-semibold text-gray-12 mb-4">Guides</h1>
@@ -26,6 +27,6 @@ export default function GuidesPage() {
           </Link>
         ))}
       </div>
-    </div>
+    </DocsPageShell>
   );
 }

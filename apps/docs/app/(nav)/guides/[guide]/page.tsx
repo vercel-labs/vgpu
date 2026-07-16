@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MarkdownContent } from '@/components/markdown-content';
+import { DocsPageShell } from '@/components/docs-page-shell';
+import { extractToc, MarkdownContent } from '@/components/markdown-content';
 import { getGuideRecord, guideRecords, sourceHref, symbolToSlug, titleForRecord } from '@/lib/manifest';
 
 interface GuidePageProps {
@@ -26,14 +26,10 @@ export default async function GuidePage({ params }: GuidePageProps) {
   const record = getGuideRecord(guide);
   if (!record) notFound();
 
-  return (
-    <article className="px-4 py-8 lg:px-8 lg:py-12 max-w-4xl mx-auto">
-      <nav className="mb-8 flex flex-wrap items-center gap-2 text-sm text-gray-9">
-        <Link href="/guides" className="hover:text-blue-9 transition-colors">Guides</Link>
-        <span>/</span>
-        <span className="text-gray-11">{record.symbol}</span>
-      </nav>
+  const pathname = `/guides/${record.symbol}`;
 
+  return (
+    <DocsPageShell pathname={pathname} toc={extractToc(record.content)}>
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <span className="rounded-full border border-blue-4 bg-blue-1 px-3 py-1 text-xs font-medium text-blue-9">
           Guide
@@ -49,6 +45,6 @@ export default async function GuidePage({ params }: GuidePageProps) {
       </div>
 
       <MarkdownContent content={record.content} />
-    </article>
+    </DocsPageShell>
   );
 }

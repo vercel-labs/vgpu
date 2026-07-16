@@ -1,5 +1,6 @@
 import { CodeBlock } from '@/components/code-block';
 import { Callout } from '@/components/mdx/callout';
+import { DocsPageShell } from '@/components/docs-page-shell';
 
 const installCode = `pnpm add vgpu
 pnpm add -D @webgpu/types`;
@@ -42,13 +43,20 @@ buffer.write(new Float32Array([1, 2, 3, 4]));
 await expect(buffer.read()).resolves.toBeInstanceOf(ArrayBuffer);
 gpu.dispose();`;
 
+const toc = [
+  { id: 'installation', title: 'Installation', level: 2 as const },
+  { id: 'nodejs-rendering', title: 'Node.js Rendering', level: 2 as const },
+  { id: 'browser-rendering', title: 'Browser Rendering', level: 2 as const },
+  { id: 'testing', title: 'Testing', level: 2 as const },
+];
+
 export default function GettingStartedPage() {
-  return <div className="px-4 py-8 lg:px-8 lg:py-12 max-w-4xl mx-auto">
+  return <DocsPageShell pathname="/getting-started" toc={toc}>
     <h1 className="text-3xl md:text-4xl font-bold text-gray-12 mb-4">Getting Started</h1>
     <p className="text-xl text-gray-10 mb-12">Install the `vgpu` package and write WGSL as the source of truth for bindings.</p>
     <section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Installation</h2><CodeBlock code={installCode} language="bash" /><Callout type="info">Browser, Node, and mock entrypoints all return the same <code>Gpu</code> API.</Callout></section>
     <section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Node.js Rendering</h2><CodeBlock code={nodeTriangleCode} language="typescript" showLineNumbers /></section>
     <section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Browser Rendering</h2><CodeBlock code={browserCode} language="typescript" showLineNumbers /></section>
     <section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Testing</h2><CodeBlock code={testCode} language="typescript" /></section>
-  </div>;
+  </DocsPageShell>;
 }

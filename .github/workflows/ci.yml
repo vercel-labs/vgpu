@@ -157,6 +157,26 @@ jobs:
           PY
           tail -30 /tmp/next-wgsl-dev.log
 
+
+  docs-app-build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate docs manifest + skill
+        run: node packages/vgpu/lib/docs/generate/cli.js
+      - name: Build docs app
+        run: pnpm --filter docs build
+
   docs-generated:
     # Guards that the committed docs manifest + generated skill are in sync with their sources
     # (co-located *.docs.md, docs/topics, docs/allowlist.txt). The generator is dependency-free

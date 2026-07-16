@@ -3,25 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { navSections } from '@/lib/nav';
 import { PackageNav } from './package-nav';
-
-const navItems = [
-  {
-    label: 'Documentation',
-    items: [
-      { href: '/', label: 'Introduction' },
-      { href: '/getting-started', label: 'Getting Started' },
-      { href: '/concepts', label: 'Core Concepts' },
-    ],
-  },
-  {
-    label: 'Reference',
-    items: [
-      { href: '/reference', label: 'API Reference' },
-      { href: '/examples', label: 'Examples' },
-    ],
-  },
-];
 
 export function Navigation() {
   const pathname = usePathname();
@@ -66,32 +49,12 @@ export function Navigation() {
           </div>
 
           <nav className="flex-1 overflow-y-auto py-6 px-3">
-            {navItems.map((section, idx) => (
-              <div key={section.label} className={idx > 0 ? 'mt-8' : ''}>
+            {navSections.map((section, idx) => (
+              <div key={section.title} className={idx > 0 ? 'mt-8' : ''}>
                 <h4 className="px-3 mb-2 text-xs font-medium text-gray-9 uppercase tracking-wider">
-                  {section.label}
+                  {section.title}
                 </h4>
-                <ul className="space-y-0.5">
-                  {section.items.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`block px-3 py-2 rounded-md text-sm transition-colors ${
-                            isActive
-                              ? 'bg-gray-2 text-gray-12 font-medium'
-                              : 'text-gray-10 hover:bg-gray-1 hover:text-gray-12'
-                          }`}
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {section.label === 'Reference' ? <PackageNav /> : null}
+                <PackageNav groups={section.groups} pathname={pathname} onNavigate={() => setMobileMenuOpen(false)} />
               </div>
             ))}
           </nav>

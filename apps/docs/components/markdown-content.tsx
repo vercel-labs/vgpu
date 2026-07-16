@@ -2,7 +2,8 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/code-block';
-import { resolveMarkdownHref } from '@/lib/manifest';
+import { resolveMarkdownHref, resolveSymbolHref } from '@/lib/manifest';
+import type { TocItem } from '@/components/table-of-contents';
 
 interface MarkdownContentProps {
   content: string;
@@ -15,13 +16,17 @@ function textFromChildren(children: React.ReactNode): string {
   return '';
 }
 
-function slugifyHeading(children: React.ReactNode) {
-  return textFromChildren(children)
+function slugifyHeadingText(text: string) {
+  return text
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+}
+
+function slugifyHeading(children: React.ReactNode) {
+  return slugifyHeadingText(textFromChildren(children));
 }
 
 function normalizeCodeLanguage(language: string | undefined) {
@@ -32,6 +37,31 @@ function normalizeCodeLanguage(language: string | undefined) {
   if (normalized === 'js') return 'javascript';
   if (normalized === 'txt' || normalized === 'text' || normalized === 'plain') return 'typescript';
   return normalized;
+}
+
+export function extractToc(content: string): TocItem[] {
+  const headingCounts = new Map<string, number>();
+  const items: TocItem[] = [];
+
+  for (const match of content.matchAll(/^(#{1,3})\s+(.+)$/gm)) {
+    const level = match[1].length;
+    const title = match[2]
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .trim();
+    const base = slugifyHeadingText(title);
+    const count = headingCounts.get(base) ?? 0;
+    headingCounts.set(base, count + 1);
+    if (level === 2 || level === 3) {
+      items.push({
+        id: count === 0 ? base : `${base}-${count + 1}`,
+        title,
+        level,
+      });
+    }
+  }
+
+  return items;
 }
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
@@ -123,6 +153,14 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
             const code = String(children).replace(/\n$/, '');
             const match = /language-([^\s]+)/.exec(className ?? '');
             if (!match && !code.includes('\n')) {
+              const symbolHref = resolveSymbolHref(code);
+              if (symbolHref) {
+                return (
+                  <Link href={symbolHref} className="rounded bg-gray-2 px-1.5 py-0.5 text-sm text-blue-9 no-underline hover:text-blue-10">
+                    <code>{children}</code>
+                  </Link>
+                );
+              }
               return <code className="rounded bg-gray-2 px-1.5 py-0.5 text-sm text-gray-12">{children}</code>;
             }
             return <CodeBlock code={code} language={normalizeCodeLanguage(match?.[1])} showLineNumbers />;

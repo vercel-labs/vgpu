@@ -1,10 +1,11 @@
 import { ExampleCard } from '@/components/example-card';
+import { DocsPageShell } from '@/components/docs-page-shell';
 import { examples } from '@/lib/examples-registry';
 
 export default function ExamplesPage() {
   return (
-    <div className="px-6 py-12 lg:px-12 lg:py-16">
-      <div className="mx-auto max-w-6xl">
+    <DocsPageShell pathname="/examples" className="px-6 py-12 lg:px-12 lg:py-16" articleClassName="min-w-0 max-w-6xl">
+      <div className="max-w-6xl">
         <div className="mb-10">
           <h1 className="mb-4 text-4xl font-bold tracking-tight text-gray-12 md:text-5xl">
             Examples
@@ -20,6 +21,6 @@ export default function ExamplesPage() {
           ))}
         </div>
       </div>
-    </div>
+    </DocsPageShell>
   );
 }
