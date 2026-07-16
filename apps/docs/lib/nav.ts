@@ -16,6 +16,7 @@ export interface NavItem {
   title: string;
   href: string;
   badge?: NavBadge;
+  children?: NavItem[];
 }
 
 export interface NavGroup {
@@ -79,9 +80,14 @@ export const navSections: NavSection[] = [
       {
         title: '',
         items: [
-          { title: 'Platforms', href: '/get-started' },
-          { title: 'Web', href: '/get-started/web' },
-          { title: 'Node', href: '/get-started/node' },
+          {
+            title: 'Platforms',
+            href: '/get-started',
+            children: [
+              { title: 'Web', href: '/get-started/web' },
+              { title: 'Node', href: '/get-started/node' },
+            ],
+          },
           { title: 'Context', href: '/get-started/context' },
           { title: 'Effects', href: '/get-started/effects' },
           { title: 'Passes', href: '/get-started/passes' },
@@ -229,6 +235,9 @@ function flattenNavSections(sections: NavSection[]) {
 function flattenGroup(section: string, group: NavGroup, groupPath: string[], items: FlatNavItem[]) {
   for (const item of group.items ?? []) {
     items.push({ ...item, section, groupPath });
+    for (const child of item.children ?? []) {
+      items.push({ ...child, section, groupPath: [...groupPath, item.title] });
+    }
   }
   for (const child of group.groups ?? []) {
     flattenGroup(section, child, [...groupPath, child.title], items);
