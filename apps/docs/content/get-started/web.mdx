@@ -37,9 +37,7 @@ const canvas = document.querySelector("canvas")!;
 const surface = gpu.surface(canvas);
 const gradient = gpu.effect(gradientSource);
 
-gpu.frame((frame) => {
-  frame.pass({ target: surface }, (pass) => pass.draw(gradient));
-}); // renders immediately
+gradient.draw({ target: surface }); // renders immediately
 ```
 
 ```wgsl

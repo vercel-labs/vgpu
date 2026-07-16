@@ -48,7 +48,7 @@ import { init } from "vgpu";
 
 const gpu = await init();
 const target = gpu.target({ size: [32, 32] });
-const draw = gpu.effect(`
+const pulse = gpu.effect(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -59,8 +59,8 @@ const draw = gpu.effect(`
 
 // ---cut---
 const handle = gpu.frame.loop((frame) => {
-  draw.set({ params: { time: gpu.time } }); // update uniforms every tick
-  frame.pass({ target }, (pass) => pass.draw(draw));
+  pulse.set({ params: { time: gpu.time } }); // update uniforms every tick
+  frame.pass({ target }, (pass) => pass.draw(pulse));
 }, { fps: 30 });
 
 handle.stop(); // call it when your component unmounts
@@ -75,7 +75,7 @@ import { init } from "vgpu";
 
 const gpu = await init();
 const target = gpu.target({ size: [32, 32] });
-const draw = gpu.effect(`
+const pulse = gpu.effect(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -86,8 +86,8 @@ const draw = gpu.effect(`
 
 // ---cut---
 function tick() {
-  draw.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
-  gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw)));
+  pulse.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
+  pulse.draw({ target }); // one-shot draw: one pass, one submit
   requestAnimationFrame(tick); // and the scheduling
 }
 requestAnimationFrame(tick);
