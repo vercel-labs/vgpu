@@ -60,7 +60,7 @@ declare class Uniform {
 import { init } from "vgpu/mock";
 import { Uniform } from "vgpu/core";
 
-const gpu = await init({ size: [32, 32] });
+const gpu = await init();
 const camera = new Uniform(gpu.device, { size: 64, label: "camera" });
 camera.write(new Float32Array(16));
 
@@ -80,7 +80,7 @@ draw.set({ camera });
 import { init } from "vgpu/mock";
 import { Uniform } from "vgpu/core";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const draw = gpu.draw({ shader: `
   struct Params { value: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
