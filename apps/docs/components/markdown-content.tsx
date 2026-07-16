@@ -35,18 +35,29 @@ function normalizeCodeLanguage(language: string | undefined) {
 }
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
+  const headingCounts = new Map<string, number>();
+  const headingId = (children: React.ReactNode) => {
+    const base = slugifyHeading(children);
+    const count = headingCounts.get(base) ?? 0;
+    headingCounts.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count + 1}`;
+  };
+
   return (
     <div className="prose-content text-gray-11 leading-7">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: ({ children }) => (
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-12 mb-4">
-              {children}
-            </h1>
-          ),
+          h1: ({ children }) => {
+            const id = headingId(children);
+            return (
+              <h1 id={id} className="scroll-mt-24 text-3xl md:text-4xl font-semibold tracking-tight text-gray-12 mb-4">
+                {children}
+              </h1>
+            );
+          },
           h2: ({ children }) => {
-            const id = slugifyHeading(children);
+            const id = headingId(children);
             return (
               <h2 id={id} className="group scroll-mt-24 text-2xl font-semibold tracking-tight text-gray-12 mt-10 mb-4">
                 <a href={`#${id}`} className="no-underline text-gray-12">
@@ -56,7 +67,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
             );
           },
           h3: ({ children }) => {
-            const id = slugifyHeading(children);
+            const id = headingId(children);
             return (
               <h3 id={id} className="group scroll-mt-24 text-xl font-semibold text-gray-12 mt-8 mb-3">
                 <a href={`#${id}`} className="no-underline text-gray-12">

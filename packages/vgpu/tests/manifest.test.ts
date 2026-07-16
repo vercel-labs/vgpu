@@ -37,19 +37,38 @@ test("fails on missing allowlisted docs", () => {
 test("includes guide docs as a first-class kind", () => {
   const manifest = createManifest("@vgpu/core Buffer packages/core/src/buffer.docs.md", {
     exists: () => true,
-    read: (path) => `content for ${path}`,
+    read: (path) => `# ${path}\n\nSummary for ${path}.`,
     guides: ["docs/topics/performance-model.docs.md"],
   });
 
-  expect(manifest.records.find((record) => record.kind === "guide")).toEqual({
+  expect(manifest.records.find((record) => record.kind === "guide")).toMatchObject({
     package: "guides",
     symbol: "performance-model",
     repoPath: "docs/topics/performance-model.docs.md",
     virtualPath: "/guides/performance-model.docs.md",
     kind: "guide",
-    content: "content for docs/topics/performance-model.docs.md",
+    topic: "performance-model",
+    anchor: "performance-model",
+    summary: "Summary for docs/topics/performance-model.docs.md.",
   });
   expect(manifest.records.find((record) => record.symbol === "Buffer")?.kind).toBe("api");
+});
+
+test("extracts schema v3 topic metadata from symbol docs", () => {
+  const manifest = createManifest("vgpu Pass packages/vgpu-api/src/pass.docs.md", {
+    exists: () => true,
+    read: () => `# Pass\n\nFullscreen-fragment render unit created by \`gpu.pass()\`.\n\n\`\`\`ts\nconst pass = gpu.pass(shader);\n\`\`\`\n`,
+  });
+
+  expect(manifest.schemaVersion).toBe(3);
+  expect(manifest.records[0]).toMatchObject({
+    topic: "pass",
+    topicTitle: "Pass",
+    anchor: "pass",
+    symbolKind: "type",
+    summary: "Fullscreen-fragment render unit created by `gpu.pass()`.",
+    snippet: "const pass = gpu.pass(shader);",
+  });
 });
 
 test("fails on a missing guide doc", () => {

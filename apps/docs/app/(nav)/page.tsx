@@ -29,7 +29,7 @@ export default function HomePage() {
         <p className="text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">Agentic-first WebGPU for shaders that should be correct and fast the first time.</p>
         <div className="flex flex-wrap justify-center gap-4 mb-16">
           <Link href="/getting-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
-          <Link href="/api" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Overview</Link>
+          <Link href="/reference" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Reference</Link>
         </div>
         <div className="text-left max-w-2xl mx-auto"><CodeBlock code={heroCode} language="typescript" /></div>
       </section>
@@ -51,7 +51,7 @@ export default function HomePage() {
           {[
             ['/getting-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
             ['/concepts', 'Core Concepts', 'Learn Gpu, set(), targets, frames, bundles, and adapters.'],
-            ['/api', 'API Overview', 'Package map and generated reference pages.'],
+            ['/reference', 'API Reference', 'Package map and generated topic pages.'],
             ['/examples', 'Examples', 'Live WebGPU demos with read-only source views.'],
           ].map(([href, title, description]) => (
             <Link key={href} href={href} className="group p-6 rounded-lg bg-gray-1 border border-gray-4 hover:border-gray-5 transition-all">

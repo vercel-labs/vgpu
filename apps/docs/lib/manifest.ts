@@ -1,6 +1,7 @@
 import { docsManifest } from '@vgpu/cli/lib/generated/docs-manifest.generated.js';
 
 export type DocsRecordKind = 'api' | 'guide';
+export type DocsSymbolKind = 'class' | 'function' | 'type' | 'options';
 
 export interface DocsRecord {
   package: string;
@@ -9,100 +10,110 @@ export interface DocsRecord {
   kind: DocsRecordKind;
   virtualPath: string;
   content: string;
+  summary: string;
+  snippet: string;
+  anchor: string;
+  topic: string;
+  topicTitle: string;
+  symbolKind: DocsSymbolKind;
 }
 
-export interface PackageGroup {
+export interface ReferenceTopic {
   packageName: string;
   packageSlug: string;
   title: string;
   description: string;
+  topic: string;
+  topicTitle: string;
+  href: string;
+  repoPath: string;
+  records: DocsRecord[];
+  content: string;
+  advanced: boolean;
+}
+
+export interface ReferenceGroup {
+  packageName: string;
+  packageSlug: string;
+  title: string;
+  description: string;
+  advanced: boolean;
+  topics: ReferenceTopic[];
   records: DocsRecord[];
 }
 
 export interface NavSection {
   title: string;
-  groups: PackageGroup[];
+  groups: ReferenceGroup[];
 }
-
-const publicApiRecords: DocsRecord[] = [
-  doc(
-    'init',
-    '# init\n\nCreate the public `vgpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();\nconst surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
-  ),
-  doc(
-    'Gpu',
-    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to native WebGPU handles in `vgpu/core`.\n\n```ts\nconst target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
-  ),
-  doc(
-    'pass',
-    '# pass\n\nFragment-only fullscreen sugar. `gpu.pass()` reflects WGSL bindings, owns values through `set()`, and draws to the screen or to an explicit target.\n\n```ts\nconst toneMap = gpu.pass(shader, { set: { exposure: 1 } });\ntoneMap.set({ time: gpu.time });\ntoneMap.draw({ target });\n```',
-  ),
-  doc(
-    'draw',
-    '# draw\n\nGeneral render pipeline entry point for vertex/fragment WGSL, meshes, target pre-warm, manual groups, dynamic offsets, and instancing.\n\n```ts\nconst draw = gpu.draw({ shader, mesh, targets: [target], instances: 128 });\ndraw.group(1, bindGroup);\ngpu.frame((f) => f.pass({ target }, (p) => p.draw(draw, { offsets: { 1: [offset] } })));\n```',
-  ),
-  doc(
-    'compute',
-    '# compute\n\nCreate reflected compute pipelines with explicit resources. Writable-storage aliasing is validated before dispatch.\n\n```ts\nconst state = gpu.pingPongStorage(bytes);\nconst step = gpu.compute(shader, { set: { src: state.read, dst: state.write } });\nstep.dispatch(workgroups);\nstate.swap();\n```',
-  ),
-  doc(
-    'frame',
-    '# frame\n\nSubmit on demand. Use a frame callback for multi-pass work and `frame.loop()` only when continuous animation is required.\n\n```ts\ngpu.frame((f) => {\n  f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw));\n});\n```',
-  ),
-  doc(
-    'bundle',
-    '# bundle\n\nRecord static draw sequences once and replay them when the same work repeats across frames.\n\n```ts\nconst background = gpu.bundle({ target }, (b) => b.draw(grid));\ngpu.frame((f) => f.pass({ target }, (p) => p.bundles(background)));\n```',
-  ),
-  doc(
-    'target',
-    '# target\n\nTargets own size, texel size, color formats, optional depth, and MSAA. Resize targets instead of threading resolution globals through shaders.\n\n```ts\nconst hdr = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\npass.set({ texel: hdr.texelSize });\n```',
-  ),
-  doc(
-    'uniforms',
-    '# uniforms\n\nCreate shared uniform state once and bind the same object to multiple passes or draws. Update in place with `set()`.\n\n```ts\nconst globals = gpu.uniforms({ time: 0, viewProjection });\nsky.set({ globals });\nmesh.set({ globals });\nglobals.set({ time: gpu.time });\n```',
-  ),
-  doc(
-    'pingPong',
-    '# pingPong\n\nCreate two stable target or storage identities for iterative effects. Bind once, dispatch or draw, then swap read/write roles.\n\n```ts\nconst state = gpu.pingPongStorage(bytes);\nconst step = gpu.compute(shader, { set: { src: state.read, dst: state.write } });\nstep.dispatch(workgroups);\nstate.swap();\n```',
-  ),
-];
-
-const generatedRecords = (docsManifest.records as DocsRecord[]).filter(isGeneratedRecordKept);
-const records = [...publicApiRecords, ...generatedRecords];
 
 const packageOrder = [
   'vgpu',
+  'vgpu/scene',
   '@vgpu/wgsl',
-  '@vgpu/wgsl/runtime',
-  '@vgpu/wgsl/loader-webpack',
-  '@vgpu/wgsl/loader-vite',
   '@vgpu/wgsl-std',
-  'guides',
+  'vgpu/core',
+  '@vgpu/render',
 ];
 
-const sectionOrder = ['VGPU', 'WGSL', 'Guides', 'Other'];
+const topicOrder: Record<string, string[]> = {
+  vgpu: ['init', 'gpu', 'surface', 'target', 'frame', 'pass', 'draw', 'compute', 'uniforms', 'bundle'],
+  'vgpu/scene': ['mesh', 'camera', 'orthographic-camera', 'perspective-camera', 'deg-to-rad', 'srgb', 'orbit'],
+  'vgpu/core': ['device', 'buffer', 'texture', 'queue', 'vgpu-error', 'vgpu-adapter', 'bind', 'render-bundle', 'storage-buffer', 'uniform', 'structured-uniform', 'uniform-pool'],
+  '@vgpu/wgsl': ['compile', 'resolved-shader', 'runtime', 'loader-webpack', 'loader-vite'],
+  '@vgpu/wgsl-std': ['color', 'fullscreen', 'hash', 'noise'],
+  '@vgpu/render': ['wireframe-material', 'normal-debug-material', 'mesh-to-readable', 'mesh-to-wireframe', 'inspect-material', 'canvas-mouse-tracker', 'frame-clock', 'canvas-resolution', 'perf', 'edit'],
+};
 
 const packageDescriptions: Record<string, string> = {
   vgpu: 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, ping-pong, and uniforms.',
-  '@vgpu/wgsl': 'WGSL compile-time entry points and resolved shader metadata.',
-  '@vgpu/wgsl/runtime': 'Runtime shader resolution primitives.',
-  '@vgpu/wgsl/loader-webpack': 'Webpack loader entry point for WGSL modules.',
-  '@vgpu/wgsl/loader-vite': 'Vite plugin and transform entry points for WGSL modules.',
-  '@vgpu/wgsl-std': 'Standard WGSL modules and utility snippets.',
+  'vgpu/scene': 'Tree-shakeable geometry, camera, color, and orbit helpers without a retained scene graph.',
+  'vgpu/core': 'Advanced escape hatches for native WebGPU handles, buffers, textures, bind groups, and structured uniforms.',
+  '@vgpu/wgsl': 'WGSL compile-time entry points, runtime resolution, reflection metadata, and bundler loaders.',
+  '@vgpu/wgsl-std': 'Standard WGSL modules for color, fullscreen triangles, hashes, and procedural noise.',
+  '@vgpu/render': 'Advanced render tooling for inspection, performance measurement, utilities, and mesh editing.',
   guides: 'Conceptual and task-oriented articles for using vgpu effectively.',
 };
 
-export const docsRecords = records.sort(compareRecords);
+const packageTitles: Record<string, string> = {
+  vgpu: 'vgpu',
+  'vgpu/scene': 'vgpu/scene',
+  'vgpu/core': 'vgpu/core',
+  '@vgpu/wgsl': '@vgpu/wgsl',
+  '@vgpu/wgsl-std': '@vgpu/wgsl-std',
+  '@vgpu/render': '@vgpu/render',
+};
+
+export const docsRecords = (docsManifest.records as DocsRecord[]).slice().sort(compareRecords);
 export const apiRecords = docsRecords.filter((record) => record.kind === 'api');
 export const guideRecords = docsRecords.filter((record) => record.kind === 'guide');
+export const referenceGroups = buildReferenceGroups(apiRecords);
+export const referenceTopics = referenceGroups.flatMap((group) => group.topics);
+export const packageGroups = referenceGroups;
+export const navSections: NavSection[] = buildNavSections(referenceGroups);
+
+export function referencePackageName(record: DocsRecord) {
+  if (record.package === 'vgpu' || record.package === 'vgpu/core' || record.package === 'vgpu/scene') return record.package;
+  if (record.package.startsWith('@vgpu/wgsl-std')) return '@vgpu/wgsl-std';
+  if (record.package.startsWith('@vgpu/wgsl')) return '@vgpu/wgsl';
+  if (record.package.startsWith('@vgpu/render')) return '@vgpu/render';
+  return record.package;
+}
 
 export function slugifyPackage(packageName: string) {
   if (packageName === 'guides') return 'guides';
+  if (packageName === '@vgpu/wgsl') return 'wgsl';
+  if (packageName === '@vgpu/wgsl-std') return 'wgsl-std';
+  if (packageName === '@vgpu/render') return 'render';
+  return packageName.replace(/^@/, '').replace(/[\/@]/g, '-');
+}
+
+export function legacyPackageSlug(packageName: string) {
   return packageName.replace(/^@/, '').replace(/[\/@]/g, '-');
 }
 
 export function packageNameFromSlug(packageSlug: string) {
-  return packageGroups.find((group) => group.packageSlug === packageSlug)?.packageName ?? null;
+  return referenceGroups.find((group) => group.packageSlug === packageSlug)?.packageName ?? null;
 }
 
 export function symbolToSlug(symbol: string) {
@@ -118,27 +129,46 @@ export function titleFromSlug(slug: string) {
 }
 
 export function titleForRecord(record: DocsRecord) {
-  return firstMarkdownHeading(record.content) ?? record.symbol;
+  return record.topicTitle || firstMarkdownHeading(record.content) || record.symbol;
 }
 
 export function packageTitle(packageName: string) {
-  if (packageName === 'guides') return 'Guides';
-  return packageName;
+  return packageTitles[packageName] ?? packageName;
 }
 
-export const packageGroups: PackageGroup[] = buildPackageGroups(docsRecords);
+export function packageHref(packageName: string) {
+  if (packageName === 'guides') return '/guides';
+  return `/reference#${slugifyPackage(packageName)}`;
+}
 
-export const navSections: NavSection[] = buildNavSections(packageGroups);
+export function topicHref(topic: Pick<ReferenceTopic, 'packageSlug' | 'topic'>) {
+  return `/reference/${topic.packageSlug}/${encodeURIComponent(topic.topic)}`;
+}
 
-export function getPackageGroup(packageSlug: string) {
-  return packageGroups.find((group) => group.packageSlug === packageSlug) ?? null;
+export function recordHref(record: DocsRecord) {
+  if (record.kind === 'guide') return `/guides/${symbolToSlug(record.symbol)}`;
+  return `${topicHrefForRecord(record)}#${record.anchor}`;
+}
+
+export function topicHrefForRecord(record: DocsRecord) {
+  const packageName = referencePackageName(record);
+  return `/reference/${slugifyPackage(packageName)}/${encodeURIComponent(record.topic)}`;
+}
+
+export function getReferenceGroup(packageSlug: string) {
+  return referenceGroups.find((group) => group.packageSlug === packageSlug) ?? null;
+}
+
+export function getReferenceTopic(packageSlug: string, topicSlug: string) {
+  const decodedTopic = decodeURIComponent(topicSlug);
+  return referenceTopics.find((topic) => topic.packageSlug === packageSlug && topic.topic === decodedTopic) ?? null;
 }
 
 export function getRecord(packageSlug: string, symbol: string) {
   const decodedSymbol = decodeURIComponent(symbol);
   const packageName = packageNameFromSlug(packageSlug);
   if (!packageName) return null;
-  return docsRecords.find((record) => record.package === packageName && record.symbol === decodedSymbol) ?? null;
+  return apiRecords.find((record) => referencePackageName(record) === packageName && record.symbol === decodedSymbol) ?? null;
 }
 
 export function getGuideRecord(guideSlug: string) {
@@ -146,17 +176,7 @@ export function getGuideRecord(guideSlug: string) {
   return guideRecords.find((record) => record.symbol === decodedSlug) ?? null;
 }
 
-export function recordHref(record: DocsRecord) {
-  if (record.kind === 'guide') return `/guides/${symbolToSlug(record.symbol)}`;
-  return `/packages/${slugifyPackage(record.package)}/${symbolToSlug(record.symbol)}`;
-}
-
-export function packageHref(packageName: string) {
-  if (packageName === 'guides') return '/guides';
-  return `/packages/${slugifyPackage(packageName)}`;
-}
-
-export function sourceHref(record: DocsRecord) {
+export function sourceHref(record: DocsRecord | ReferenceTopic) {
   return `https://github.com/vercel-labs/vgpu/blob/main/${record.repoPath}`;
 }
 
@@ -177,59 +197,77 @@ export function resolveMarkdownHref(href: string | undefined) {
   return href;
 }
 
-function doc(symbol: string, content: string): DocsRecord {
-  return {
-    package: 'vgpu',
-    symbol,
-    repoPath: `packages/vgpu-api/src/${symbol === 'pingPong' ? 'gpu' : symbol}.docs.md`,
-    virtualPath: `/vgpu/${symbol}.docs.md`,
-    kind: 'api',
-    content,
-  };
-}
-
-function isGeneratedRecordKept(record: DocsRecord) {
-  return record.package === 'guides' || record.package.startsWith('@vgpu/wgsl');
-}
-
-function buildPackageGroups(sourceRecords: DocsRecord[]) {
+function buildReferenceGroups(sourceRecords: DocsRecord[]) {
   const byPackage = new Map<string, DocsRecord[]>();
   for (const record of sourceRecords) {
-    const current = byPackage.get(record.package) ?? [];
-    current.push(record);
-    byPackage.set(record.package, current);
+    const packageName = referencePackageName(record);
+    byPackage.set(packageName, [...(byPackage.get(packageName) ?? []), record]);
   }
 
   return Array.from(byPackage.entries())
-    .map(([packageName, packageRecords]) => ({
-      packageName,
-      packageSlug: slugifyPackage(packageName),
-      title: packageTitle(packageName),
-      description: packageDescriptions[packageName] ?? `Reference documentation for ${packageName}.`,
-      records: packageRecords.sort(compareRecords),
-    }))
+    .map(([packageName, packageRecords]) => {
+      const packageSlug = slugifyPackage(packageName);
+      const records = packageRecords.sort(compareRecords);
+      const advanced = packageName === 'vgpu/core' || packageName === '@vgpu/render';
+      return {
+        packageName,
+        packageSlug,
+        title: packageTitle(packageName),
+        description: packageDescriptions[packageName] ?? `Reference documentation for ${packageName}.`,
+        advanced,
+        records,
+        topics: buildReferenceTopics(packageName, packageSlug, records, advanced),
+      };
+    })
     .sort((a, b) => comparePackageNames(a.packageName, b.packageName));
 }
 
-function buildNavSections(groups: PackageGroup[]) {
-  const sections = new Map<string, PackageGroup[]>();
-  for (const group of groups) {
-    const section = sectionForPackage(group.packageName);
-    sections.set(section, [...(sections.get(section) ?? []), group]);
+function buildReferenceTopics(packageName: string, packageSlug: string, records: DocsRecord[], advanced: boolean) {
+  const byTopic = new Map<string, DocsRecord[]>();
+  for (const record of records) {
+    byTopic.set(record.topic, [...(byTopic.get(record.topic) ?? []), record]);
   }
 
-  return Array.from(sections.entries())
-    .map(([title, sectionGroups]) => ({
-      title,
-      groups: sectionGroups.sort((a, b) => comparePackageNames(a.packageName, b.packageName)),
-    }))
-    .sort((a, b) => sectionOrder.indexOf(a.title) - sectionOrder.indexOf(b.title));
+  return Array.from(byTopic.entries())
+    .map(([topic, topicRecords]) => {
+      const sortedRecords = topicRecords.sort(compareTopicRecords);
+      const first = sortedRecords[0];
+      return {
+        packageName,
+        packageSlug,
+        title: packageTitle(packageName),
+        description: packageDescriptions[packageName] ?? `Reference documentation for ${packageName}.`,
+        topic,
+        topicTitle: first.topicTitle || titleFromSlug(topic),
+        href: `/reference/${packageSlug}/${encodeURIComponent(topic)}`,
+        repoPath: first.repoPath,
+        records: sortedRecords,
+        content: first.content,
+        advanced,
+      };
+    })
+    .sort((a, b) => compareTopics(packageName, a.topic, b.topic));
+}
+
+function buildNavSections(groups: ReferenceGroup[]) {
+  const primary = groups.filter((group) => !group.advanced);
+  const advanced = groups.filter((group) => group.advanced);
+  return [
+    { title: 'API Reference', groups: primary },
+    { title: 'Advanced', groups: advanced },
+  ].filter((section) => section.groups.length > 0);
 }
 
 function compareRecords(a: DocsRecord, b: DocsRecord) {
   if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
-  if (a.package !== b.package) return comparePackageNames(a.package, b.package);
+  if (a.package !== b.package) return comparePackageNames(referencePackageName(a), referencePackageName(b));
+  if (a.topic !== b.topic) return compareTopics(referencePackageName(a), a.topic, b.topic);
   return a.symbol.localeCompare(b.symbol);
+}
+
+function compareTopicRecords(a: DocsRecord, b: DocsRecord) {
+  if (a.repoPath === b.repoPath) return a.symbol.localeCompare(b.symbol);
+  return a.repoPath.localeCompare(b.repoPath);
 }
 
 function comparePackageNames(a: string, b: string) {
@@ -243,11 +281,16 @@ function comparePackageNames(a: string, b: string) {
   return a.localeCompare(b);
 }
 
-function sectionForPackage(packageName: string) {
-  if (packageName === 'vgpu') return 'VGPU';
-  if (packageName === 'guides') return 'Guides';
-  if (packageName.startsWith('@vgpu/wgsl')) return 'WGSL';
-  return 'Other';
+function compareTopics(packageName: string, a: string, b: string) {
+  const order = topicOrder[packageName] ?? [];
+  const aIndex = order.indexOf(a);
+  const bIndex = order.indexOf(b);
+  if (aIndex !== -1 || bIndex !== -1) {
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  }
+  return a.localeCompare(b);
 }
 
 function firstMarkdownHeading(markdown: string) {
