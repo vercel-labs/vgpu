@@ -17,8 +17,7 @@ const navItems = [
   {
     label: 'Reference',
     items: [
-      { href: '/api', label: 'API Overview' },
-      { href: '/packages', label: 'Packages' },
+      { href: '/reference', label: 'API Reference' },
       { href: '/examples', label: 'Examples' },
     ],
   },
