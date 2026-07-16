@@ -17,7 +17,7 @@ const setCode = [
   '  }',
   '`;',
   '',
-  'const wave = gpu.pass(waveSource, {',
+  'const wave = gpu.effect(waveSource, {',
   '  set: { params: { time: 0, speed: 2 } }, // initial uniform defaults',
   '});',
   '',
@@ -26,7 +26,7 @@ const setCode = [
 
 const oneShotCode = `wave.draw({ target: surface }); // one encoder, one submit — that's the whole frame`;
 
-const frameCode = `const boat = gpu.pass(boatSource); // a second pass, created once like wave
+const frameCode = `const boat = gpu.effect(boatSource); // a second effect, created once like wave
 
 gpu.frame((frame) => {
   frame.pass({ target: surface }, (pass) => {
@@ -43,7 +43,7 @@ const loopCode = `const handle = gpu.frame.loop((frame) => {
 handle.stop(); // stop when the canvas goes away`;
 
 const packageRows = [
-  ['vgpu', 'Public API: init, Gpu, pass, draw, compute, frame, bundle, target, uniforms.'],
+  ['vgpu', 'Public API: init, Gpu, effect, draw, compute, frame, bundle, target, uniforms.'],
   ['vgpu/core', 'Native WebGPU handles for buffers, textures, bind groups, and manual pipelines.'],
   ['vgpu/scene', 'Pure geometry and camera helpers.'],
   ['@vgpu/wgsl', 'WGSL module resolution, reflection, and loaders.'],

@@ -56,7 +56,7 @@ type MutableBindingState = {
   unsubscribe?: UnsubscribeResourceDestroy;
 };
 
-/** Creates the per-Draw binding state machine used by Pass/Draw.set(). */
+/** Creates the per-Draw binding state machine used by Effect/Draw.set(). */
 export function createSetCore(options: SetCoreOptions): SetCore {
   const bindings = initializeBindings(options.reflection);
   const groups = reflectedGroups(options.reflection);

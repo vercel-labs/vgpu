@@ -10,9 +10,9 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("representative gradient match
   const gpu = await init();
   try {
     const target = gpu.target({ size: SNAPSHOT_SIZE, format: "rgba8unorm", label: "representative-gradient" });
-    const pass = gpu.pass(REPRESENTATIVE_GRADIENT_WGSL, { label: "representative-gradient", set: { speed: 2 } });
-    pass.set({ time: Math.PI / 4 });
-    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(pass)));
+    const effect = gpu.effect(REPRESENTATIVE_GRADIENT_WGSL, { label: "representative-gradient", set: { speed: 2 } });
+    effect.set({ time: Math.PI / 4 });
+    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(effect)));
     const result = await comparePixelSnapshot(BASELINE, await target.read(), SNAPSHOT_SIZE[0], SNAPSHOT_SIZE[1]);
     expect(result).toMatchObject({ status: "matched", mismatchedPixels: 0, ratio: 0 });
   } finally {

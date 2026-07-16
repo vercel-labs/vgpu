@@ -22,29 +22,29 @@ function fragmentUniforms(options: FragmentExampleOptions, time: number, width: 
   };
 }
 
-export function renderFragmentFrame(gpu: Gpu, pass: ReturnType<Gpu['pass']>, options: FragmentExampleOptions, { target, time }: FragmentFrameOptions): void {
+export function renderFragmentFrame(gpu: Gpu, effect: ReturnType<Gpu['effect']>, options: FragmentExampleOptions, { target, time }: FragmentFrameOptions): void {
   const [width, height] = target.size;
-  pass.set({
+  effect.set({
     uniforms: fragmentUniforms(options, time, width, height),
   });
-  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(pass)));
+  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
 }
 
 export function renderFragmentThumb(gpu: Gpu, target: Target, options: FragmentExampleOptions, { time }: { readonly time: number }): void {
-  const pass = gpu.pass(options.fragment);
-  renderFragmentFrame(gpu, pass, options, { target, time });
+  const effect = gpu.effect(options.fragment);
+  renderFragmentFrame(gpu, effect, options, { target, time });
 }
 
 export async function runFragmentExample(canvas: HTMLCanvasElement, options: FragmentExampleOptions): Promise<() => void> {
   const gpu = await init();
   const surface = gpu.surface(canvas, { dpr: [1, 2] });
-  const pass = gpu.pass(options.fragment);
+  const effect = gpu.effect(options.fragment);
   const handle = gpu.frame.loop((frame) => {
     const [width, height] = surface.size;
-    pass.set({
+    effect.set({
       uniforms: fragmentUniforms(options, gpu.time, width, height),
     });
-    frame.pass({ target: surface }, (p) => p.draw(pass));
+    frame.pass({ target: surface }, (p) => p.draw(effect));
   });
 
   return () => {

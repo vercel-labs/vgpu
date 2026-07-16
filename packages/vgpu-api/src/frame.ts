@@ -3,7 +3,7 @@ import { claimedGroupValidationDone, discardClaimedGroupValidationResults, disca
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
-import { passDraw, type Pass } from "./pass.ts";
+import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, frameReentrantError, targetRequiredError } from "./errors.ts";
 import { isSurfaceResizeCallbackActive } from "./surface.ts";
@@ -90,7 +90,7 @@ export class Frame {
 
 export class FramePass {
   constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[]) {}
-  draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
+  draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
     encodeFrameDrawable(drawable, this.encoder, this.target, opts, (result) => this.validations.push(result));
   }
   bundles(...bundles: readonly Bundle[]): void {
@@ -98,9 +98,9 @@ export class FramePass {
   }
 }
 
-function encodeFrameDrawable(drawable: Draw | Pass, encoder: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation: (result: ClaimedGroupValidationResult) => void): void {
+function encodeFrameDrawable(drawable: Draw | Effect, encoder: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation: (result: ClaimedGroupValidationResult) => void): void {
   if ("layout" in drawable) return encodeDraw(drawable as never, encoder, target, opts, claimValidation);
-  encodeDraw(passDraw(drawable), encoder, target, opts, claimValidation);
+  encodeDraw(effectDraw(drawable), encoder, target, opts, claimValidation);
 }
 
 export class FrameRunner {

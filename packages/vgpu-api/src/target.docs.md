@@ -76,7 +76,7 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const scene = gpu.target({ size: [128, 128], format: "rgba16float", depth: true, msaa: true });
-const post = gpu.pass(`
+const post = gpu.effect(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0, 1); }
 `);
 
@@ -92,11 +92,11 @@ const gpu = await init();
 const surface = gpu.surface(mockCanvas());
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = gpu.target({ size: bloomSize(surface.size[0], surface.size[1]) });
-const brightPass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const bright = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 surface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
-  brightPass.set({ resolution: bloom.size });
+  bright.set({ resolution: bloom.size });
 });
 
 function mockCanvas(): HTMLCanvasElement {
@@ -115,7 +115,7 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const pingPong = gpu.pingPong(32.9, 32.1, { format: "rgba8unorm" });
-const blur = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const blur = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 gpu.frame((frame) => {
   frame.pass({ target: pingPong.write }, (pass) => pass.draw(blur));
@@ -129,4 +129,4 @@ pingPong.swap();
 - `Surface.color` wraps the canvas current texture; offscreen target colors are stable until resize/destroy.
 - `target.read()` and `surface.read()` return RGBA bytes. BGRA canvas formats are read back with red/blue channels swizzled to RGBA.
 - Size-dependent targets derived from a surface should be created from the real initial `surface.size` and resized from `surface.onResize(...)`.
-- **See also:** `Surface`, `FramePassOptions`, `Pass`, `Draw`, `Bundle`, `Compute` storage ping-pong.
+- **See also:** `Surface`, `FramePassOptions`, `Effect`, `Draw`, `Bundle`, `Compute` storage ping-pong.

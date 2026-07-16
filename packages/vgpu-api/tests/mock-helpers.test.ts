@@ -12,9 +12,9 @@ struct Params { value: f32 }
 test("test-utils mock helper runs vgpu without loading Dawn", async () => {
   const gpu = await createMockGpu({ size: [4, 4] });
   try {
-    const pass = gpu.pass(SHADER, { label: "mock-helper", set: { value: 1 } });
+    const effect = gpu.effect(SHADER, { label: "mock-helper", set: { value: 1 } });
     const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(pass)));
+    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(effect)));
     const instrumentation = getMockDeviceInstrumentation(gpu);
     expect(instrumentation.calls.createRenderPipeline).toBe(1);
     expect(instrumentation.calls.createCommandEncoder).toBe(1);

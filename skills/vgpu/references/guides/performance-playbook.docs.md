@@ -92,13 +92,13 @@ Use for animated JS values. The first `set()` latches ownership: plain JS values
 Before:
 ```text
 gpu.frame.loop(() => {
-  const wave = gpu.pass(WAVE_WGSL, { set: { time: gpu.time, speed: 2 } });
+  const wave = gpu.effect(WAVE_WGSL, { set: { time: gpu.time, speed: 2 } });
   wave.draw();
 });
 ```
 After:
 ```text
-const wave = gpu.pass(WAVE_WGSL, { set: { time: 0, speed: 2 } });
+const wave = gpu.effect(WAVE_WGSL, { set: { time: 0, speed: 2 } });
 gpu.frame.loop(() => {
   wave.set({ time: gpu.time });
   wave.draw();
@@ -158,8 +158,8 @@ post.set({ time: gpu.time, mouse });
 After:
 ```text
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-const wave = gpu.pass(WAVE_WGSL, { set: { globals } });
-const blur = gpu.pass(BLUR_WGSL, { set: { globals } });
+const wave = gpu.effect(WAVE_WGSL, { set: { globals } });
+const blur = gpu.effect(BLUR_WGSL, { set: { globals } });
 gpu.frame.loop(() => {
   globals.set({ time: gpu.time, mouse });
   wave.draw();

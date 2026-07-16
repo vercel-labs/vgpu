@@ -77,7 +77,7 @@ declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`);
+const wave = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`);
 
 gpu.frame((frame) => {
   frame.pass({ target: surface }, (pass) => pass.draw(wave));
@@ -93,8 +93,8 @@ const surface = gpu.surface(canvas);
 
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = gpu.target({ size: bloomSize(surface.size[0], surface.size[1]) });
-const brightPass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-const composite = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const brightPass = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const composite = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 surface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
@@ -116,11 +116,11 @@ declare const canvasB: HTMLCanvasElement;
 const gpu = await init();
 const main = gpu.surface(canvasA);
 const preview = gpu.surface(canvasB, { autoResize: false, size: [320, 180] });
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 gpu.frame((frame) => {
-  frame.pass({ target: main }, (p) => p.draw(pass));
-  frame.pass({ target: preview }, (p) => p.draw(pass));
+  frame.pass({ target: main }, (p) => p.draw(effect));
+  frame.pass({ target: preview }, (p) => p.draw(effect));
 });
 ```
 
@@ -149,7 +149,7 @@ declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const surface = gpu.surface(canvas);
-const draw = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const draw = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 let statics = gpu.bundle({ target: surface }, (bundle) => bundle.draw(draw));
 
 surface.onResize(() => {

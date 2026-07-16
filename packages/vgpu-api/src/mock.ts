@@ -6,7 +6,7 @@ export { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent } from "./init.ts";
 export type { Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } from "./draw.ts";
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "./frame.ts";
-export type { Pass, PassOptions } from "./pass.ts";
+export type { Effect, EffectOptions } from "./effect.ts";
 export type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 export { VGPUError } from "./errors.ts";
 export type { Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";

@@ -32,7 +32,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
     const gpu = await init();
     try {
       const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-      const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
+      const wave = gpu.effect(WAVE, { label: "wave", set: { speed: 2 } });
       wave.set({ time: Math.PI / 4 });
       gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(wave)));
       const pixels = await target.read();
@@ -54,8 +54,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
       expect(msaaScene.color.sampleCount).toBe(1);
       expect(msaaScene.depth?.sampleCount).toBe(4);
       const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
-      const solid = gpu.pass(SOLID, { label: "solid" });
-      const post = gpu.pass(POST, { label: "post" });
+      const solid = gpu.effect(SOLID, { label: "solid" });
+      const post = gpu.effect(POST, { label: "post" });
       gpu.frame((frame) => {
         frame.pass({ target: msaaScene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
@@ -85,8 +85,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
       const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "sceneHdrMsaa" });
       expect(scene.sampleCount).toBe(4);
       const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "outputHdrMsaa" });
-      const solid = gpu.pass(SOLID, { label: "solidHdrMsaa" });
-      const post = gpu.pass(POST, { label: "postHdrMsaa" });
+      const solid = gpu.effect(SOLID, { label: "solidHdrMsaa" });
+      const post = gpu.effect(POST, { label: "postHdrMsaa" });
       gpu.frame((frame) => {
         frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         frame.pass({ target: output }, (p) => { post.set({ src: scene, texel: scene.texelSize }); p.draw(post); });

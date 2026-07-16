@@ -55,19 +55,19 @@ test("includes guide docs as a first-class kind", () => {
 });
 
 test("extracts schema v3 topic metadata from symbol docs", () => {
-  const manifest = createManifest("vgpu Pass packages/vgpu-api/src/pass.docs.md", {
+  const manifest = createManifest("vgpu Effect packages/vgpu-api/src/effect.docs.md", {
     exists: () => true,
-    read: () => `# Pass\n\nFullscreen-fragment render unit created by \`gpu.pass()\`.\n\n\`\`\`ts\nconst pass = gpu.pass(shader);\n\`\`\`\n`,
+    read: () => `# Effect\n\nFullscreen-fragment render unit created by \`gpu.effect()\`.\n\n\`\`\`ts\nconst effect = gpu.effect(shader);\n\`\`\`\n`,
   });
 
   expect(manifest.schemaVersion).toBe(3);
   expect(manifest.records[0]).toMatchObject({
-    topic: "pass",
-    topicTitle: "Pass",
-    anchor: "pass",
+    topic: "effect",
+    topicTitle: "Effect",
+    anchor: "effect",
     symbolKind: "type",
-    summary: "Fullscreen-fragment render unit created by `gpu.pass()`.",
-    snippet: "const pass = gpu.pass(shader);",
+    summary: "Fullscreen-fragment render unit created by `gpu.effect()`.",
+    snippet: "const effect = gpu.effect(shader);",
   });
 });
 

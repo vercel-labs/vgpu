@@ -6,43 +6,43 @@ import type { BindGroupCache } from "./bind-cache.ts";
 import type { SetBag } from "./set-core.ts";
 import type { Target } from "./target.ts";
 
-export interface PassOptions {
+export interface EffectOptions {
   readonly set?: SetBag;
   readonly label?: string;
 }
 
-const passImpls = new WeakMap<Pass, InternalDraw>();
+const effectImpls = new WeakMap<Effect, InternalDraw>();
 
-export interface Pass {
+export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
   draw(opts?: DrawCallOptions & { readonly target?: Target }): void;
 }
 
-export class InternalPass implements Pass {
+export class InternalEffect implements Effect {
   readonly gpu: GPURenderPipeline | undefined;
 
-  constructor(device: Device, source: string, opts: PassOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
+  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
     const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "pass" }, cache, defaultTarget);
-    passImpls.set(this, impl);
+    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget);
+    effectImpls.set(this, impl);
     this.gpu = impl.gpu;
   }
 
-  set(values: SetBag): this { passImpl(this).set(values); return this; }
-  draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { passImpl(this).draw(opts); }
+  set(values: SetBag): this { effectImpl(this).set(values); return this; }
+  draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { effectImpl(this).draw(opts); }
 
-  /** @internal FramePass delegates here; not part of the frozen public Pass surface. */
+  /** @internal FramePass delegates here; not part of the frozen public Effect surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
-    encodeDraw(passImpl(this), pass, target, opts, claimValidation);
+    encodeDraw(effectImpl(this), pass, target, opts, claimValidation);
   }
 }
 
-export function passDraw(pass: Pass): InternalDraw { return passImpl(pass); }
+export function effectDraw(effect: Effect): InternalDraw { return effectImpl(effect); }
 
-function passImpl(pass: Pass): InternalDraw {
-  const impl = passImpls.get(pass);
-  if (!impl) throw new TypeError("Invalid Pass instance");
+function effectImpl(effect: Effect): InternalDraw {
+  const impl = effectImpls.get(effect);
+  if (!impl) throw new TypeError("Invalid Effect instance");
   return impl;
 }
 
@@ -65,5 +65,5 @@ ${source}`;
 }
 
 function hasVertexEntry(source: string): boolean {
-  return reflectSource(source, "pass.wgsl").entryPoints.some((entry) => entry.stage === "vertex");
+  return reflectSource(source, "effect.wgsl").entryPoints.some((entry) => entry.stage === "vertex");
 }

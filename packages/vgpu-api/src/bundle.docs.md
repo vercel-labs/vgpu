@@ -11,7 +11,7 @@ import type { Bundle, BundleOptions, BundleRecorder } from "vgpu";
 ## Signature
 
 ```ts
-import type { Draw, DrawCallOptions, Pass, Target } from "vgpu";
+import type { Draw, DrawCallOptions, Effect, Target } from "vgpu";
 
 interface BundleOptions {
   readonly target: Target;
@@ -19,7 +19,7 @@ interface BundleOptions {
 }
 
 interface BundleRecorder {
-  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  draw(drawable: Draw | Effect, opts?: DrawCallOptions): void;
 }
 
 interface Bundle {
@@ -36,7 +36,7 @@ interface Bundle {
 | opts.target | `Target` | ✔ | — | Formats, depth format, sample count, and size are snapshotted from this target. |
 | opts.label | `string` | ✖ | `` `bundle${n}` `` | Bundle id and GPU label. Auto id increments from `bundle1`. |
 | gpu.bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Called immediately to encode commands. |
-| recorder.draw.drawable | `Draw \| Pass` | ✔ | — | Draw or fullscreen pass to encode into the bundle. |
+| recorder.draw.drawable | `Draw \| Effect` | ✔ | — | Draw or fullscreen effect to encode into the bundle. |
 | recorder.draw.opts | `DrawCallOptions` | ✖ | `{}` | Counts and offsets captured in the recorded commands. |
 | framePass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Replayed bundles; must be created by `gpu.bundle`. |
 
@@ -73,11 +73,11 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const surface = gpu.surface(mockCanvas());
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-let statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(pass));
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+let statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
 
 surface.onResize(() => {
-  statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(pass));
+  statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
 });
 
 gpu.frame((frame) => {
@@ -100,10 +100,10 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const ping = gpu.pingPong(32, 32);
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-const even = gpu.bundle({ target: ping.write }, (b) => b.draw(pass));
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const even = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
 ping.swap();
-const odd = gpu.bundle({ target: ping.write }, (b) => b.draw(pass));
+const odd = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
 ping.swap();
 
 gpu.frame((frame) => {
@@ -116,4 +116,4 @@ gpu.frame((frame) => {
 - Bundles freeze target size and attachment shape. Re-record after `target.resize()` or a surface resize.
 - `surface.onResize(...)` fires immediately, so the same re-recording callback can initialize and refresh a surface bundle.
 - Bundles freeze bind group identities, not buffer contents. Updating JS-owned packed values in-place is safe; rebinding a different texture/buffer/sampler stales the bundle.
-- **See also:** `FramePass.bundles`, `Draw`, `Pass`, `Surface`, `Target`, `createRenderBundle`.
+- **See also:** `FramePass.bundles`, `Draw`, `Effect`, `Surface`, `Target`, `createRenderBundle`.

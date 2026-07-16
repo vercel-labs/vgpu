@@ -1,6 +1,6 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
 import { InternalDraw, encodeDraw, registerDrawBundle, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
-import { InternalPass, passDraw, type Pass } from "./pass.ts";
+import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
 import { VGPUError } from "./errors.ts";
 
@@ -10,7 +10,7 @@ export interface BundleOptions {
 }
 
 export interface BundleRecorder {
-  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  draw(drawable: Draw | Effect, opts?: DrawCallOptions): void;
 }
 
 export interface Bundle {
@@ -75,8 +75,8 @@ class RecordedBundle implements Bundle, BundleBackReference {
 class ExplicitBundleRecorder implements BundleRecorder {
   constructor(private readonly bundle: RecordedBundle, private readonly encoder: GPURenderPassEncoder) {}
 
-  draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    const draw = drawable instanceof InternalPass ? passDraw(drawable) : drawable as InternalDraw;
+  draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
+    const draw = drawable instanceof InternalEffect ? effectDraw(drawable) : drawable as InternalDraw;
     this.bundle.remember(draw);
     encodeDraw(draw, this.encoder, this.bundleTarget(), opts);
   }

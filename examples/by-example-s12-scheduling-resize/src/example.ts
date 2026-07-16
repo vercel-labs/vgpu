@@ -9,7 +9,7 @@ struct Params { time: f32, texel: vec2f }
 export async function runSchedulingResizeExample() {
   const gpu = await init();
   const baked = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-  const post = gpu.pass(POST, { label: "post" });
+  const post = gpu.effect(POST, { label: "post" });
   gpu.frame((f) => f.pass({ target: baked }, (p) => { post.set({ time: 0.25, texel: baked.texelSize }); p.draw(post); }));
   baked.resize([8, 8]);
   gpu.frame((f) => f.pass({ target: baked }, (p) => { post.set({ time: 0.5, texel: baked.texelSize }); p.draw(post); }));

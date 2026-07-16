@@ -7,11 +7,11 @@ Optimize one pass by first deciding what changes every frame.
 If the draw list is static, record it once:
 
 ```text
-const passBundle = gpu.bundle({ target }, (b) => {
+const effectBundle = gpu.bundle({ target }, (b) => {
   b.draw(background);
   b.draw(grid);
 });
-gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(passBundle)));
+gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(effectBundle)));
 ```
 
 ## 2. Animated scalar/vector values
@@ -19,10 +19,10 @@ gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(passBundle)));
 Keep the pass object and write values in place:
 
 ```text
-const pass = gpu.pass(WGSL, { set: { time: 0, exposure: 1 } });
+const effect = gpu.effect(WGSL, { set: { time: 0, exposure: 1 } });
 gpu.frame.loop(() => {
-  pass.set({ time: gpu.time });
-  pass.draw({ target });
+  effect.set({ time: gpu.time });
+  effect.draw({ target });
 });
 ```
 

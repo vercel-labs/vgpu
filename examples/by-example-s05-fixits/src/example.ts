@@ -14,8 +14,8 @@ struct Params { speed: f32 }
 export async function collectFixitMessages() {
   const gpu = await init();
   try {
-    const missing = gpu.pass(NEEDS_SAMPLER, { label: "lighting" });
-    const ownership = gpu.pass(SPEED, { label: "wave", set: { speed: 2 } });
+    const missing = gpu.effect(NEEDS_SAMPLER, { label: "lighting" });
+    const ownership = gpu.effect(SPEED, { label: "wave", set: { speed: 2 } });
     const messages: string[] = [];
     try { missing.draw({ target: gpu.target({ size: [4, 4] }) }); } catch (error) { messages.push(String((error as Error).message)); }
     try { ownership.set({ speed: gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] }) }); } catch (error) { messages.push(String((error as Error).message)); }

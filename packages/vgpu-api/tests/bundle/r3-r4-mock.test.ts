@@ -33,8 +33,8 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   const scene = gpu.target({ size: [4, 4] });
   const tex1 = gpu.target({ size: [4, 4] });
   const tex2 = gpu.target({ size: [4, 4] });
-  const floor = gpu.pass(FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
-  const walls = gpu.pass(WALLS, { label: "walls" });
+  const floor = gpu.effect(FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
+  const walls = gpu.effect(WALLS, { label: "walls" });
   walls.set({ detail: tex1 });
 
   const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => {

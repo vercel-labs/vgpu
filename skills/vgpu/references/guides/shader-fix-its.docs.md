@@ -34,8 +34,8 @@ const draw = gpu.draw({ shader });
 Every reflected binding must be set by name or covered by a claimed group. Do not rely on globals or implicit buffers.
 
 ```text
-const pass = gpu.pass(WGSL);
-pass.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
+const effect = gpu.effect(WGSL);
+effect.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
 ```
 
 ## Ownership flip: `VGPU-R1-OWNERSHIP-FLIP`
