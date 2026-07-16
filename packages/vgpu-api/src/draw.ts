@@ -6,7 +6,7 @@ import { claimedGroupValidationDone, discardClaimedGroupValidationResults, disca
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, unsupportedError, VGPUError } from "./errors.ts";
+import { claimedGroupNativeValidationError, targetRequiredError, unsupportedError, VGPUError } from "./errors.ts";
 
 export interface DrawOptions {
   readonly shader: string | ShaderSource;
@@ -160,7 +160,7 @@ export class InternalDraw implements Draw {
   draw(opts: DrawCallOptions = {}): Promise<void> {
     const state = drawState(this);
     const target = opts.target ?? state.defaultTarget;
-    if (!target) throw unsupportedError(`${this.label}.draw`, "Draw.draw() one-shot requiere opts.target cuando gpu.screen no existe; usá gpu.frame.pass({ target }, p => p.draw(draw)).");
+    if (!target) throw targetRequiredError(`${this.label}.draw`);
     const encoder = state.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
     const validations: ClaimedGroupValidationResult[] = [];

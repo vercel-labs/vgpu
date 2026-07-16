@@ -1,10 +1,10 @@
 import type { Device } from "@vgpu/core";
 import type { PingPongStorage, PingPongTargets, StorageAccess, StorageBuffer } from "./gpu.ts";
-import type { Target, TargetOptions } from "./target.ts";
+import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 import { OffscreenTarget } from "./target-offscreen.ts";
 import { createStorageBuffer } from "./storage.ts";
 
-export function createPingPongTargets(device: Device, width: number, height: number, opts: TargetOptions = {}): PingPongTargets {
+export function createPingPongTargets(device: Device, width: number, height: number, opts: TargetTextureOptions = {}): PingPongTargets {
   const size: readonly [number, number] = [clampDimension(width), clampDimension(height)];
   const baseOptions: TargetOptions = { ...opts, size };
   const ping = new OffscreenTarget(device, labelOption(baseOptions, opts.label, "ping"));

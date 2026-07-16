@@ -53,11 +53,67 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
   });
 }
 
-export function missingScreenError(): VGPUError {
+export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
-    code: "VGPU-SCREEN-MISSING",
-    message: "gpu.screen no existe en este entorno. Pasá un target explícito o inicializá vgpu con un canvas.",
-    where: "Gpu.frame",
+    code: "VGPU-TARGET-REQUIRED",
+    message: "esta operación necesita un target explícito. Fix: pass.draw({ target }) — creá una surface con gpu.surface(canvas) o un gpu.target({ size }) y pasalo.",
+    where,
+  });
+}
+
+export function targetSizeRequiredError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-TARGET-SIZE-REQUIRED",
+    message: "gpu.target() requiere size explícito. Fix: gpu.target({ size: [w, h] }) — para targets derivados de una surface, calculá el inicial desde surface.size y actualizalo en surface.onResize.",
+    where: "gpu.target",
+  });
+}
+
+export function surfaceContextError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-CONTEXT",
+    message: "el canvas no pudo crear contexto webgpu. Fix: verificá soporte WebGPU (navigator.gpu) y que el canvas no tenga ya otro contexto (2d/webgl).",
+    where: "gpu.surface",
+  });
+}
+
+export function surfaceDuplicateError(label?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-DUPLICATE",
+    message: `ya existe una surface para este canvas${label ? ` ('${label}')` : ""}. Fix: reusá esa instancia o llamá surface.dispose() antes de crear otra.`,
+    where: "gpu.surface",
+  });
+}
+
+export function surfaceDisposedError(label?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-DISPOSED",
+    message: `la surface '${label ?? "surface"}' fue disposed. Fix: creá una nueva con gpu.surface(canvas).`,
+    where: "surface",
+  });
+}
+
+export function surfaceAutoResizeUnsupportedError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-AUTORESIZE-UNSUPPORTED",
+    message: "autoResize requiere un canvas con layout (clientWidth). Un OffscreenCanvas se dimensiona manualmente: surface.resize([w, h]) — onResize se dispara igual.",
+    where: "gpu.surface",
+  });
+}
+
+export function surfaceResizeReentrantError(label?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-RESIZE-REENTRANT",
+    message: `surface.resize() no puede llamarse desde un onResize de la misma surface${label ? ` ('${label}')` : ""}. Fix: resizeá otras surfaces o targets derivados.`,
+    where: "surface.resize",
+  });
+}
+
+export function frameReentrantError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-FRAME-REENTRANT",
+    message: "gpu.frame() no puede llamarse dentro de onResize ni de otro frame. Fix: encolá el trabajo para el próximo frame.",
+    where: "gpu.frame",
   });
 }
 

@@ -1,5 +1,5 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import type { Target, TargetOptions } from "./target.ts";
+import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions } from "./target-utils.ts";
 
 /** Offscreen render target. MSAA targets render into sampleCount=4 attachments and resolve into `.color`. */
@@ -13,7 +13,7 @@ export class OffscreenTarget implements Target {
 
   constructor(private readonly device: Device, private readonly options: TargetOptions) {
     validateTargetOptions(options, device);
-    this.currentSize = options.size ?? [1, 1];
+    this.currentSize = options.size;
     this.currentColors = this.createResolvedColors();
     this.currentMsaaColors = this.sampleCount === 4 ? this.createMsaaColors() : undefined;
     this.currentDepth = this.createDepth();
