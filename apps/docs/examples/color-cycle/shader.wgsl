@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn palette(t: f32) -> vec3f {
   let a = vec3f(0.52, 0.50, 0.48);
   let b = vec3f(0.48, 0.46, 0.50);

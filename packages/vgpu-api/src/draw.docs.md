@@ -1,0 +1,115 @@
+# Draw
+
+Target-agnostic renderable shader unit created by `gpu.draw()`. It reflects WGSL bindings, caches pipelines per target format/depth/sample count, and supports meshes, explicit vertex counts, instancing, and raw group claims.
+
+## Import
+
+```ts
+import type { Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } from "vgpu";
+```
+
+## Signature
+
+```ts
+import type { ShaderSource, Target } from "vgpu";
+
+type SetBag = Record<string, unknown>;
+
+interface DrawOptions {
+  readonly shader: string | ShaderSource;
+  readonly mesh?: MeshLike;
+  readonly set?: SetBag;
+  readonly label?: string;
+  readonly targets?: readonly Target[];
+  readonly instances?: number;
+  readonly vertices?: number;
+  readonly firstInstance?: number;
+}
+
+interface DrawCallOptions {
+  readonly target?: Target;
+  readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
+  readonly instances?: number;
+  readonly vertices?: number;
+  readonly firstVertex?: number;
+  readonly firstInstance?: number;
+}
+
+interface DrawLayoutOptions { readonly dynamicOffsets?: boolean; }
+
+interface MeshLike {
+  readonly vertexCount?: number;
+  readonly indexCount?: number;
+  readonly vertexBuffers?: readonly GPUBuffer[];
+  readonly indexBuffer?: GPUBuffer;
+  readonly indexFormat?: GPUIndexFormat;
+  readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
+}
+
+interface Draw {
+  readonly gpu: GPURenderPipeline | undefined;
+  readonly targets: readonly Target[] | undefined;
+  set(values: SetBag): this;
+  group(n: number, bindGroup: GPUBindGroup): this;
+  layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
+  draw(opts?: DrawCallOptions): Promise<void>;
+}
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---:|---|---|
+| opts.shader | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource`. Must contain compatible vertex/fragment entry points; default names are `vs_main` and `fs_main` if reflection does not find them. |
+| opts.mesh | `MeshLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
+| opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
+| opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
+| opts.targets | `readonly Target[]` | ✖ | `undefined` | Pre-warms pipelines for the listed target formats. |
+| opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
+| opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
+| opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
+| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
+| draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
+| draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
+| draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
+| draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |
+| draw.draw.opts | `DrawCallOptions` | ✖ | `{}` | One-shot draw options. `target` must be supplied explicitly. |
+| opts.target | `Target` | ✖ | — | Required at runtime for one-shot draws. Use a `Surface` or an offscreen `Target`. |
+| opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
+| opts.instances | `number` | ✖ | `DrawOptions.instances ?? 1` | Per-call instance count; integer `>= 0`. |
+| opts.vertices | `number` | ✖ | `mesh.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed meshes use `mesh.indexCount`. |
+| opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed meshes use firstIndex/baseVertex `0`. |
+| opts.firstInstance | `number` | ✖ | `DrawOptions.firstInstance ?? 0` | Per-call first instance. |
+
+**Returns:** `gpu.draw()` returns `Draw`; `set()` and `group()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `Promise<void>` so raw claimed-group validation can be awaited.
+
+**Throws:** `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
+
+## Examples
+
+```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const target = gpu.target({ size: [64, 64] });
+const tri = gpu.draw({
+  label: "tri",
+  targets: [target],
+  shader: `
+    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+      var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+      return vec4f(p[vi], 0, 1);
+    }
+    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
+  `,
+});
+
+await tri.draw({ target, vertices: 3, instances: 1 });
+```
+
+## Notes
+
+- Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
+- One-shot `draw.draw()` has no implicit target. Prefer `gpu.frame((frame) => frame.pass({ target }, ...))` for multi-pass work.
+- Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
+- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.

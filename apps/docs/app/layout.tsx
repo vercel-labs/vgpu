@@ -31,7 +31,7 @@ export default async function RootLayout({
 }) {
   const DevInstrumentation =
     process.env.NODE_ENV === 'development'
-      ? (await import('@/components/DevInstrumentation')).DevInstrumentation
+      ? (await import('@/components/dev-instrumentation')).DevInstrumentation
       : null;
 
   return (

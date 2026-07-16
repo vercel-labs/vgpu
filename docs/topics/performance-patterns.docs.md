@@ -1,87 +1,31 @@
 # Performance patterns
 
-The catalog of vgpu render optimizations, ordered by typical payoff. Each says which way it pushes
-work on the [ladder](./performance-model.docs.md). Apply them in an [optimize pass](./optimize-pass.docs.md)
-and [measure](./measuring.docs.md) each. Mirror every change into any fallback shader twin.
+This is the quick index. Open `performance-playbook` for copy-paste before/after snippets.
 
-## 1. Bake a time-invariant pass — per-frame → per-resize ★★★
+## Static scene
 
-If a whole pass's output depends only on resize-constant inputs (geometry, static uniforms — not
-time, not animated data), render it once into a cached `Texture` and reuse it every frame.
+Use `gpu.bundle({ target }, recorder)` and replay with `p.bundles(bundle)`.
 
-Litmus: would re-running this pass produce identical pixels next frame? Then don't re-run it.
+## First-frame stability
 
-```ts
-// before: re-encoded every frame
-frame.renderPass(sdfPass, (pass) => drawSdf(pass)); // identical output each frame
+Use `gpu.draw({ shader, mesh, targets: [surfaceOrTarget] })` so pipeline compilation happens before the transition frame; pass a canvas `surface` or an offscreen `target` explicitly.
 
-// after: baked once (on resize), reused
-if (!sdfCache) { const f = beginFrame(device); f.renderPass(sdfPass, drawSdf); f.submit(); sdfCache = sdfTarget; }
-// per frame: sample sdfCache, or draw only the parts that DO change on top (loadOp: "load")
-```
+## Animated uniforms
 
-This is usually the single biggest win. Keep bakeable passes separate so baking is "stop
-re-encoding," not a refactor (see [authoring-for-perf](./authoring-for-perf.docs.md)).
+Create the pass/draw once and call `.set({ changedValue })`. Do not allocate a new pass or uniform buffer every frame.
 
-## 2. Hoist uniform-invariant work off the per-pixel path — per-pixel → static uniform ★★
+## Many objects
 
-If a fragment/vertex value depends only on uniforms (not `@builtin(position)`, not a varying),
-it's identical for every pixel — compute it once on the CPU and pass it in via a uniform.
+Use `instances` when geometry and material are shared. Use `UniformPool` + `draw.group()` + dynamic offsets when each object needs a different uniform block.
 
-```wgsl
-// before: 3 cube-root color conversions per pixel, from constant uniforms
-let lab = rgb_to_oklab(cfg.edgeColor); // same for all pixels
-// after: CPU computes rgb_to_oklab(edgeColor) once; shader reads cfg.edgeColorOklab
-let lab = cfg.edgeColorOklab;
-```
+## Shared globals
 
-Pack the precomputed value into the same uniform buffer you already write each frame (the `Uniform`
-helper or a hand-gated `Float32Array` + `buffer.write` for a single stable buffer; a `UniformPool`
-slot only if you already have many per-draw uniforms). Reuse spare lanes of an existing uniform
-before adding new ones.
+Use one `gpu.uniforms({ time, mouse, camera })` object and bind it into every shader that needs the same struct.
 
-## 3. Hoist loop invariants + use incremental updates — per-sample → per-pixel ★★
+## Iterative effects
 
-In a per-pixel loop (ray march, multi-tap), move anything constant across iterations out of the
-loop, and replace repeated transcendentals with an incremental update.
+Use `gpu.pingPong()` for targets or `gpu.pingPongStorage()` for compute. Do not allocate temporary targets/storage in the loop.
 
-```wgsl
-// before: 2 trig calls per ray (×N rays)
-for (var i=0u; i<N; i++) { let a = a0 + step*f32(i); let dir = vec2f(cos(a), sin(a)); ... }
-// after: rotate the direction by a fixed step — 2 trig calls per pixel
-var dir = vec2f(cos(a0), sin(a0)); let c = cos(step); let s = sin(step);
-for (var i=0u; i<N; i++) { ...; dir = vec2f(dir.x*c - dir.y*s, dir.x*s + dir.y*c); }
-```
+## 3D targets
 
-Incremental accumulation drifts a few ULP over the loop — fine for shading; [measure](./measuring.docs.md).
-
-## 4. Don't compute dead or masked output ★★
-
-Skip work whose result never lands: channels excluded by the pipeline `writeMask`, values behind a
-`discard`, or a return value the consumer ignores. Compute only what's written.
-
-## 5. Coherent early-out ★★
-
-Return early where the result is already known (e.g. fully-occluded or fully-transparent regions),
-skipping the expensive body. Gate on a **uniform** where possible so the branch is wavefront-uniform
-(no divergence). Per-pixel branches still help when whole regions take the same path.
-
-> Derivatives (`fwidth`, `textureSample` auto-LOD) must run in uniform control flow — compute them
-> *before* any per-pixel early-out, or the result is undefined.
-
-## 6. Branch, don't `select`, to skip work — ★
-
-`select(a, expensive(), cond)` evaluates `expensive()` regardless. Use `if` to actually skip it.
-Gate work behind default-off GUI/debug toggles this way (it's free at the default and still works
-when toggled).
-
-```wgsl
-var v = 0.0;
-if (cfg.toggle > 0.5) { v = expensive(); } // skipped at the shipping default
-```
-
-## 7. Cheaper equivalents — ★
-
-Same frequency, fewer cycles: `sqrt(x)` over `pow(x, 0.5)`; one reciprocal `let r = 1.0/d;` feeding
-several divides; fold compile-time-constant math. These are numerically-equivalent-not-bit-exact, so
-[measure](./measuring.docs.md) — they're the smallest wins, do them last.
+Create targets with `depth: true` and `msaa: true` when needed; pass those targets through `targets:` at draw creation.

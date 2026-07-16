@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { bentSmoothPair, emptyMesh } from "./fixtures/cleanup.ts";
 import type { EditableMeshValue } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const n = (em: EditableMeshValue, f: number) => Array.from(unwrapKernel(em.gpu.halfEdgeKernel).faceNormals.slice(f * 3, f * 3 + 3));
 const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

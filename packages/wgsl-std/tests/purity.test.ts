@@ -21,6 +21,7 @@ test("exported wgsl-std snippets stay pure declaration modules", async () => {
     "src/constants/index.wgsl",
     "src/fullscreen/index.wgsl",
     "src/hash/index.wgsl",
+    "src/light/index.wgsl",
     "src/math/index.wgsl",
     "src/noise/index.wgsl",
     "src/sampling/index.wgsl",

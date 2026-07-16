@@ -1,3 +1,5 @@
+import type { Device } from "./device.ts";
+
 export type BufferUsageName =
   | "map_read"
   | "map_write"
@@ -21,6 +23,10 @@ export interface CreateDeviceOptions {
   readonly requiredFeatures?: readonly GPUFeatureName[];
   readonly requiredLimits?: Record<string, number>;
   readonly label?: string;
+}
+
+export interface VGPUAdapter {
+  requestDevice(opts?: CreateDeviceOptions): Promise<Device>;
 }
 
 export type BufferWriteData = ArrayBuffer | ArrayBufferView<ArrayBuffer>;

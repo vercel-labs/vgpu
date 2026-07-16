@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import { wgslError, type WGSLError } from "./errors.ts";
 
 type WebGPUModule = { create(options: string[]): GPU; globals: Record<string, unknown> };
@@ -56,10 +57,22 @@ function mapGenerated(wgsl: string, line: number, column: number): { file: strin
 
 function validationDevice(): Promise<GPUDevice> { devicePromise ??= createValidationDevice(); return devicePromise; }
 async function createValidationDevice(): Promise<GPUDevice> {
-  const webgpu = require("webgpu") as WebGPUModule;
+  const webgpu = loadValidationWebGPU();
   Object.assign(globalThis, webgpu.globals);
   gpu ??= webgpu.create(process.platform === "linux" ? ["backend=opengl"] : []);
   const adapter = await gpu.requestAdapter({ ...(process.platform === "linux" ? { featureLevel: "compatibility" } : {}) } as GPURequestAdapterOptions);
   if (!adapter) throw wgslError("VGPU-WGSL-NAGA-UNKNOWN", "No WebGPU adapter available for WGSL validation");
   return adapter.requestDevice();
+}
+
+function loadValidationWebGPU(): WebGPUModule {
+  try {
+    return require("webgpu") as WebGPUModule;
+  } catch (cause) {
+    try {
+      return createRequire(join(process.cwd(), "packages/adapter-node/package.json"))("webgpu") as WebGPUModule;
+    } catch {
+      throw cause;
+    }
+  }
 }

@@ -4,10 +4,10 @@ import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 import { expect, test } from "vitest";
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
-import { degToRad, perspectiveCamera, type Vec3 } from "@vgpu/render";
+
+import { perspectiveCamera, type Vec3 } from "vgpu/scene";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
-import { createReadableBoxMesh, renderInspectFrame } from "./_helpers.ts";
+import { createReadableBoxMesh, renderInspectFrame } from "./helpers.ts";
 
 const WIDTH = 256;
 const HEIGHT = 256;
@@ -20,13 +20,13 @@ const CAMERAS = {
 
 for (const [angle, { position }] of Object.entries(CAMERAS)) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`wireframe ${angle} matches snapshot`, async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const device = await createNodeAdapter().requestDevice();
     try {
       const mesh = createReadableBoxMesh(device, 1);
       const wireframe = await meshToWireframe(mesh, device);
       const material = wireframeMaterial({ device, color: [1, 1, 1], targetFormat: "rgba8unorm-srgb" });
       const camera = perspectiveCamera({
-        fovYRadians: degToRad(45),
+        fov: 45,
         aspect: 1,
         near: 0.1,
         far: 100,

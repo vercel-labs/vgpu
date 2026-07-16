@@ -1,13 +1,14 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import type { Device } from "@vgpu/core";
+import { Mesh } from "../../fixtures/mesh.ts";
 import { bevel, toEditable, type EditableMeshValue } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
 
 const gc = () => (globalThis as { gc?: () => void }).gc;
 
 test.skipIf(typeof gc() !== "function")("editable mesh values are collectable after an op; skipped without --expose-gc", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   try {
     const ref = makeDroppedEditableMesh(device);
     await forceCollection();
@@ -17,7 +18,7 @@ test.skipIf(typeof gc() !== "function")("editable mesh values are collectable af
   }
 });
 
-function makeDroppedEditableMesh(device: Awaited<ReturnType<typeof App.create>>["device"]): WeakRef<EditableMeshValue> {
+function makeDroppedEditableMesh(device: Device): WeakRef<EditableMeshValue> {
   let em: EditableMeshValue | undefined = toEditable(Mesh.box({ device }));
   const ref = new WeakRef(em);
   em = bevel(em, em.edges.all(), { offset: 0.05 }).mesh;

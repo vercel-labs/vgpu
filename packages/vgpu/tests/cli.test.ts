@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import { runCli } from "../bin/vgpu.js";
 
@@ -12,6 +14,7 @@ function success(args) {
 }
 
 test("preserves root help, version, and placeholders", () => {
+  expect(success(["--help"])).toContain("snapshot");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
   expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
@@ -22,13 +25,13 @@ test("supports docs help and path listing", () => {
   const help = success(["docs", "help"]);
   expect(help).toContain("Usage: vgpu docs <command>");
   expect(help).toContain("Start here: vgpu docs cat getting-started.md");
-  expect(success(["docs", "ls"])).toContain("/@vgpu/core");
-  expect(success(["docs", "ls", "/@vgpu/core"])).toContain("Buffer.docs.md");
+  expect(success(["docs", "ls"])).toContain("/vgpu/core");
+  expect(success(["docs", "ls", "/vgpu/core"])).toContain("buffer.docs.md");
   expect(success(["docs", "ls", "/guides"])).toContain("getting-started.docs.md");
 });
 
 test("cats docs by path and unique symbol", () => {
-  expect(success(["docs", "cat", "/@vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
+  expect(success(["docs", "cat", "/vgpu/core/buffer.docs.md"])).toContain("# Buffer");
   expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
 });
 
@@ -51,16 +54,16 @@ test("cats getting-started guide from forgiving guide names", () => {
 });
 
 test("greps content with case and package options", () => {
-  expect(success(["docs", "grep", "renderTargetForCanvas"])).toContain("renderTargetForCanvas");
-  expect(runCli(["docs", "grep", "rendertargetforcanvas"]).code).toBe(1);
+  expect(success(["docs", "grep", "gpu.uniforms"])).toContain("gpu.uniforms");
+  expect(runCli(["docs", "grep", "GPU.UNIFORMS"]).code).toBe(1);
   const filtered = success(["docs", "grep", "-i", "--package", "@vgpu/wgsl", "MINIFY"]);
   expect(filtered).toContain("/@vgpu/wgsl/");
 });
 
 test("finds symbols and resolves paths", () => {
-  expect(success(["docs", "find", "Buffer"])).toContain("Buffer\t@vgpu/core");
-  expect(success(["docs", "path", "Buffer"])).toBe("/@vgpu/core/Buffer.docs.md\n");
-  expect(success(["docs", "path", "/@vgpu/core/Buffer.docs.md"])).toBe("/@vgpu/core/Buffer.docs.md\n");
+  expect(success(["docs", "find", "Buffer"])).toContain("Buffer\tvgpu/core");
+  expect(success(["docs", "path", "Buffer"])).toBe("/vgpu/core/buffer.docs.md\n");
+  expect(success(["docs", "path", "/vgpu/core/buffer.docs.md"])).toBe("/vgpu/core/buffer.docs.md\n");
   expect(success(["docs", "path", "getting-started"])).toBe("/guides/getting-started.docs.md\n");
   expect(success(["docs", "path", "getting-started.md"])).toBe("/guides/getting-started.docs.md\n");
   expect(success(["docs", "path", "/guides/performance-model.docs.md"])).toBe("/guides/performance-model.docs.md\n");
@@ -71,11 +74,92 @@ test("keeps existing guide and API docs forms working", () => {
   expect(success(["docs", "cat", "performance-model"])).toContain("# Performance model");
   expect(success(["docs", "cat", "/guides/performance-model.docs.md"])).toContain("# Performance model");
   expect(success(["docs", "cat", "Buffer"])).toContain("# Buffer");
-  expect(success(["docs", "cat", "/@vgpu/core/Buffer.docs.md"])).toContain("# Buffer");
+  expect(success(["docs", "cat", "/vgpu/core/buffer.docs.md"])).toContain("# Buffer");
 });
 
 test("returns nonzero for missing and unknown docs commands", () => {
   expect(runCli(["docs", "cat", "MissingSymbol"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Symbol not found") });
   expect(runCli(["docs", "nope"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Unknown docs command") });
   expect(runCli(["nope"])).toMatchObject({ code: 1, stderr: expect.stringContaining("Unknown vgpu command") });
+});
+
+
+test.skipIf(process.env.VGPU_DOCKER_TEST === "1")("snapshot command requires the Docker GPU harness", async () => {
+  await expect(Promise.resolve(runCli(["snapshot", "--ci"]))).resolves.toMatchObject({
+    code: 1,
+    stderr: expect.stringContaining("VGPU_DOCKER_TEST=1"),
+  });
+});
+
+
+test("create scaffolds a typecheckable node project", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vgpu-create-"));
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const result = runCli(["create", "demo"]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
+    expect(existsSync(join(dir, "demo", "package.json"))).toBe(true);
+    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("vgpu/node");
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("create browser-vite scaffolds a runnable Vite app shell", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vgpu-create-browser-"));
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const result = runCli(["create", "demo", "--template", "browser-vite"]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
+    const html = readFileSync(join(dir, "demo", "index.html"), "utf8");
+    expect(html).toContain('<canvas aria-label="vgpu output"></canvas>');
+    expect(html).toContain('src="/src/main.ts"');
+    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("gpu.surface(canvas");
+    const viteConfig = readFileSync(join(dir, "demo", "vite.config.mjs"), "utf8");
+    expect(viteConfig).toContain("node:crypto");
+    expect(viteConfig).toContain("vite-node-shims");
+    expect(existsSync(join(dir, "demo", "src", "vite-node-shims", "crypto.ts"))).toBe(true);
+    const pkg = readFileSync(join(dir, "demo", "package.json"), "utf8");
+    expect(pkg).toContain('"vite"');
+    expect(pkg).toContain('"build": "vite build"');
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+
+test("create outside the vgpu workspace emits an installable package dependency", () => {
+  const parent = mkdtempSync(join(tmpdir(), "vgpu-create-outside-"));
+  const target = join(parent, "demo");
+  try {
+    const result = runCli(["create", target]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining(`Created ${target}`) });
+    const pkg = readFileSync(join(target, "package.json"), "utf8");
+    expect(pkg).not.toContain("workspace:*");
+    expect(pkg).toContain('"vgpu": "link:');
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("create only resolves to the vgpu workspace root, not arbitrary pnpm workspaces", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vgpu-foreign-workspace-"));
+  const cwd = process.cwd();
+  try {
+    writeFileSync(join(dir, "package.json"), `${JSON.stringify({ name: "customer-workspace", private: true }, null, 2)}\n`);
+    writeFileSync(join(dir, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+    mkdirSync(join(dir, "packages", "app"), { recursive: true });
+    process.chdir(join(dir, "packages", "app"));
+    const result = runCli(["create", "demo"]);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
+    expect(existsSync(join(dir, "packages", "app", "demo", "package.json"))).toBe(true);
+    expect(existsSync(join(dir, "demo", "package.json"))).toBe(false);
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

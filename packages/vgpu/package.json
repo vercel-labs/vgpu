@@ -1,5 +1,5 @@
 {
-  "name": "vgpu",
+  "name": "@vgpu/cli",
   "version": "0.0.8",
   "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
@@ -39,5 +39,25 @@
     "generate:docs": "node lib/docs/generate/cli.js",
     "prepack": "node lib/docs/generate/cli.js",
     "test": "cd ../.. && vitest run packages/vgpu"
+  },
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0"
+  },
+  "peerDependencies": {
+    "@vgpu/wgsl": "^0.0.8",
+    "vgpu": "^0.0.8"
+  },
+  "peerDependenciesMeta": {
+    "@vgpu/wgsl": {
+      "optional": true
+    },
+    "vgpu": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@vgpu/wgsl": "workspace:*",
+    "vgpu": "workspace:*"
   }
 }

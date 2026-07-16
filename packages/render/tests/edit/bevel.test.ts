@@ -1,10 +1,10 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+
 import { EditableMesh, MeshEditError, bevel, toEditable } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { makeTestPyramid } from "./fixtures/test-pyramid.ts";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const tri = (positions: number[], indices: number[], sharpEdges?: Uint8Array) => EditableMesh.fromArrays({ positions: new Float32Array(positions), indices: new Uint32Array(indices), sharpEdges });
 const tetra = () => tri([1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1], [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
@@ -57,10 +57,10 @@ describe("bevel", () => {
 
   test("works on the headline pyramid scene", async () => {
     const adapter = createMockAdapter();
-    const app = await App.create({ adapter });
-    const pyramid = makeTestPyramid(app.device), em = toEditable(pyramid);
+    const device = await adapter.requestDevice();
+    const pyramid = makeTestPyramid(device), em = toEditable(pyramid);
     const result = bevel(em, em.edges.where((e) => e.isSharp), { offset: 0.1, segments: 1 });
-    const beveledPyramid = result.mesh.toRenderMesh({ device: app.device });
+    const beveledPyramid = result.mesh.toRenderMesh({ device: device });
     expect(beveledPyramid.vertexCount).toBeGreaterThan(0);
     expect(result.newFaces.count).toBeGreaterThan(0);
   });

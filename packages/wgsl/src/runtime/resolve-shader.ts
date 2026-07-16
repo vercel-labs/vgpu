@@ -1,0 +1,132 @@
+import { dirname } from "node:path";
+import { sourceMap, toAstModule } from "./ast-projection.ts";
+import { assertModulesHaveNoBindings } from "./assert-module-purity.ts";
+import { cacheKeys } from "./cache-key.ts";
+import type { DiagnosticList } from "./diagnostic-types.ts";
+import { remember } from "./lru.ts";
+import { assertNoMangleCollisions, emitModule, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
+import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./minify.ts";
+import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
+import { parseModule, type ImportDecl } from "./parser.ts";
+import { reflect, type Reflection } from "./reflect.ts";
+import { eliminateDeadDeclarations } from "./declaration-dce.ts";
+import { wgslError } from "./errors.ts";
+import { scan } from "./scanner.ts";
+import { validateWGSL } from "./validation.ts";
+
+export type { BindingInfo, BindingKind, EntryPointInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
+export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
+export type { ShaderSource } from "../types.ts";
+export interface ResolveOptions {
+  readonly entry: string;
+  readonly rootDir?: string;
+  readonly packageMap?: Record<string, string>;
+  readonly modules?: Record<string, string>;
+  readonly validate?: boolean;
+  /**
+   * WGSL minification. `true` uses the production preset
+   * `{ whitespace: true, identifiers: "safe" }`; object form defaults to
+   * whitespace-only minification unless `identifiers: "safe"` is provided.
+   */
+  readonly minify?: MinifyOption;
+}
+export interface WGSLModule { readonly path: string; readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[]; readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[]; readonly bytes: number; readonly hash8: string }
+export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
+export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
+export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
+
+const scanCache = new Map<string, MangleModule>();
+
+/**
+ * Reflects one raw WGSL string through the same scanner/parser/ReflectionFacade path as resolveShader().
+ * This intentionally rejects WGSL import graphs; use resolveShader() when imports must be loaded/mangled.
+ */
+export function reflectSource(wgsl: string, path = "<runtime>"): Reflection {
+  const tokens = scan(wgsl);
+  const parsed = parseModule(tokens);
+  if (parsed.imports.length > 0) {
+    throw wgslError("VGPU-WGSL-REFLECT-SOURCE-IMPORT", "reflectSource() accepts a single raw WGSL string; use resolveShader() for WGSL import graphs.");
+  }
+  return reflect([{ path, source: wgsl, tokens, parsed }]);
+}
+
+export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
+  const loaded = new Map<string, MangleModule>();
+  const diagnostics: DiagnosticList[number][] = [];
+  const entry = canonicalEntry(opts.entry, opts);
+  await loadGraph(entry, opts, loaded, [], diagnostics);
+  const modules = [...loaded.values()];
+  const deps = [...loaded.keys()].sort();
+  assertModulesHaveNoBindings(modules, entry);
+  assertNoMangleCollisions(modules.map((module) => module.path));
+  assertNoJsVisibleDuplicates(modules);
+  const exportsByPath = buildExports(modules);
+  const pathOf = (from: string, imp: ImportDecl) => resolvePath(imp.from, from, opts, diagnostics);
+  const emittedWgsl = eliminateDeadDeclarations(modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n"));
+  const reflection = reflect(modules);
+  const map = sourceMap(modules);
+  const minify = normalizeMinifyOption(opts.minify);
+  if (opts.validate !== false) await validateWGSL(emittedWgsl);
+  const wgsl = applyMinifyWgsl(emittedWgsl, minify);
+  if (opts.validate !== false && minify.identifiers === "safe") await validateWGSL(wgsl);
+  const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
+  const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
+  return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
+}
+
+async function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string, MangleModule>, stack: string[], diagnostics: DiagnosticList[number][]): Promise<void> {
+  if (stack.includes(path)) throw wgslError("VGPU-WGSL-IMP-SELF", `Import cycle: ${[...stack, path].join(" -> ")}`);
+  if (loaded.has(path)) return;
+  const source = await readModule(path, opts);
+  const cacheKey = `${path}:${source}`;
+  let module = scanCache.get(cacheKey);
+  if (!module) { const tokens = scan(source); module = { path, source, tokens, parsed: parseModule(tokens) }; remember(scanCache, cacheKey, module); }
+  loaded.set(path, module);
+  stack.push(path);
+  for (const imp of module.parsed.imports) await loadGraph(resolvePath(imp.from, path, opts, diagnostics), opts, loaded, stack, diagnostics);
+  stack.pop();
+}
+
+function buildExports(modules: readonly MangleModule[]): ReadonlyMap<string, ExportMap> {
+  const byPath = new Map<string, ExportMap>();
+  for (const module of modules) {
+    const exports = new Map<string, ExportTarget>();
+    for (const item of module.parsed.exports) exports.set(item.name, { path: module.path, localName: item.localName, kind: entryKind(module, item.localName, item.kind) });
+    byPath.set(module.path, exports);
+  }
+  for (const module of modules) checkImportShadows(module);
+  return byPath;
+}
+
+function checkImportShadows(module: MangleModule): void {
+  const imported = new Set<string>();
+  for (const imp of module.parsed.imports) for (const binding of imp.bindings) {
+    if (imported.has(binding.local)) throw wgslError("VGPU-WGSL-SYM-IMPORT-SHADOW", `Import ${binding.local} conflicts with another import`);
+    imported.add(binding.local);
+    if (!binding.namespace && module.parsed.locals.some((local) => local.name === binding.local)) throw wgslError("VGPU-WGSL-SYM-IMPORT-SHADOW", `Import ${binding.local} shadows a local symbol`);
+  }
+}
+
+function assertNoJsVisibleDuplicates(modules: readonly MangleModule[]): void {
+  const overrides = new Map<string, string>(), entries = new Map<string, string>();
+  for (const module of modules) for (const local of module.parsed.locals) {
+    if (local.kind === "override") duplicate(overrides, local.name, module.path, "VGPU-WGSL-OVERRIDE-DUP");
+    if (entryKind(module, local.name, local.kind) === "entry") duplicate(entries, local.name, module.path, "VGPU-WGSL-ENTRYPOINT-DUP");
+  }
+}
+function duplicate(map: Map<string, string>, name: string, path: string, code: string): void { const previous = map.get(name); if (previous) throw wgslError(code, `${name} appears in ${previous} and ${path}`); map.set(name, path); }
+function entryKind(module: MangleModule, name: string, kind: string): string { return isEntryPoint(module, name) ? "entry" : kind; }
+function isEntryPoint(module: MangleModule, name: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < module.tokens.length; i++) {
+    const token = module.tokens[i]!;
+    if (token.text === "{") { depth++; continue; }
+    if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
+    if (depth > 0) continue;
+    if (token.text !== "fn" || module.tokens[i + 1]?.text !== name) continue;
+    for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
+      if (module.tokens[j]?.text === "@" && ["vertex", "fragment", "compute"].includes(module.tokens[j + 1]?.text ?? "")) return true;
+    }
+  }
+  return false;
+}

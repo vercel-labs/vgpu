@@ -17,7 +17,6 @@
     "@vgpu/adapter-mock": "workspace:*",
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
-    "@vgpu/render": "workspace:*",
     "@vgpu/wgsl": "workspace:*",
     "@vgpu/wgsl-std": "workspace:*",
     "geist": "^1.5.1",
@@ -28,6 +27,7 @@
     "react-markdown": "^9.0.3",
     "remark-gfm": "^4.0.0",
     "shiki": "^3.21.0",
+    "@vgpu/cli": "workspace:*",
     "vgpu": "workspace:*"
   },
   "devDependencies": {

@@ -1,9 +1,9 @@
 import { createNodeAdapter } from "@vgpu/adapter-node";
-import { App } from "@vgpu/core";
-import { Mesh } from "@vgpu/render";
+
+import { Mesh } from "../fixtures/mesh.ts";
 import { bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, extrude, fillHole, gridFill, healManifold, inset, loopCut, mergeByDistance, recomputeNormals, subdivideEdges, subdivideFaces, toEditable, type EditableMeshValue, type ElementSelection } from "@vgpu/render/edit";
 import { expect, test } from "vitest";
-import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, renderEditMeshWireframe, sha } from "./_helpers.ts";
+import { ANGLES, expectEditSnapshot, highlightMesh, renderEditMesh, renderEditMeshWireframe, sha } from "./helpers.ts";
 import { openCube, plateLoops, topHoleLoop, twoPlates } from "./fixtures/connectivity.ts";
 import { octahedron } from "./fixtures/dissolve.ts";
 import { bentSmoothPair, mergeDuplicateTetra, nonManifoldTetra } from "./fixtures/cleanup.ts";
@@ -72,7 +72,7 @@ const makeCleanupCases = (): readonly Case[] => {
 
 for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill", "dissolve-vertices", "dissolve-edges", "dissolve-faces", "merge-by-distance", "heal-manifold", "recompute-normals"] as const) {
   test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
-    const { device } = await App.create({ adapter: createNodeAdapter() });
+    const device = await createNodeAdapter().requestDevice();
     try {
       const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases(), ...makeDissolveCases(), ...makeCleanupCases()].find((v) => v.name === op)!;
       const before = new Map<string, Uint8Array>(), after = new Map<string, Uint8Array>();

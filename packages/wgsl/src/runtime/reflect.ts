@@ -1,33 +1,82 @@
 import type { MangleModule } from "./mangler.ts";
+import { bindingKind, reflectedBindingLayout } from "./reflect-bind-layout.ts";
+import { parseDeclarations } from "./reflect-declarations.ts";
+import { layoutOf } from "./reflect-layout.ts";
+import { buildModuleSymbols, buildRegistry, resolveType } from "./reflect-symbols.ts";
+import type { BindingInfo, HostShareableLayout, Reflection } from "./reflect-types.ts";
+import { numericAttr } from "./reflect-utils.ts";
 
-export interface Reflection {
-  readonly bindings: readonly BindingInfo[];
-  readonly entryPoints: readonly EntryPointInfo[];
-  readonly overrides: readonly OverrideInfo[];
-  readonly featuresRequired: readonly string[];
-  readonly hostShareableLayouts: readonly [];
-}
-export interface BindingInfo { readonly group: number; readonly binding: number; readonly name: string }
-export interface EntryPointInfo { readonly name: string; readonly mangledName: string; readonly stage: "vertex" | "fragment" | "compute" }
-export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly defaultValue?: string }
+export { layoutOf } from "./reflect-layout.ts";
+export { DEFAULT_LAYOUT_MODE } from "./reflect-types.ts";
+export type {
+  AccessMode,
+  AddressSpace,
+  AliasInfo,
+  BindingInfo,
+  BindingKind,
+  EntryPointInfo,
+  HostShareableLayout,
+  LayoutMember,
+  LayoutMode,
+  OverrideInfo,
+  ReflectedBindingLayout,
+  Reflection,
+  ReflectionFacade,
+  ScalarKind,
+  StorageTextureAccess,
+  StructInfo,
+  StructMemberInfo,
+  TextureDimension,
+  TextureSampleType,
+  TextureViewDimension,
+  WGSLType,
+} from "./reflect-types.ts";
 
+/**
+ * Reflects mangled WGSL modules into the frozen ReflectionFacade contract.
+ * The returned names preserve source-facing identifiers while `mangledName` points at emitted WGSL.
+ */
 export function reflect(modules: readonly MangleModule[]): Reflection {
+  const raw = modules.map(parseDeclarations);
+  const moduleSymbols = buildModuleSymbols(modules, raw);
+  const registry = buildRegistry(raw, moduleSymbols);
   const bindings: BindingInfo[] = [];
-  const entryPoints: EntryPointInfo[] = [];
-  const overrides: OverrideInfo[] = [];
-  const featuresRequired: string[] = [];
-  for (const module of modules) {
-    for (const match of module.source.matchAll(/@group\((\d+)\)\s*@binding\((\d+)\)[\s\S]*?var(?:<[^>]+>)?\s+([A-Za-z_][A-Za-z0-9_]*)/g)) {
-      bindings.push({ group: Number(match[1]), binding: Number(match[2]), name: match[3]! });
+  const hostShareableLayouts: HostShareableLayout[] = [];
+
+  for (const decls of raw) {
+    for (const variable of decls.vars) {
+      const group = numericAttr(variable.attrs, "group");
+      const binding = numericAttr(variable.attrs, "binding");
+      if (group === undefined || binding === undefined) continue;
+      const type = resolveType(variable.type, variable.path, moduleSymbols, registry);
+      const kind = bindingKind(type, variable.addressSpace);
+      const layout = variable.addressSpace === "uniform" || variable.addressSpace === "storage"
+        ? layoutOf(type, variable.addressSpace, variable.name, variable.mangledName, registry)
+        : undefined;
+      if (layout) hostShareableLayouts.push(layout);
+      bindings.push({
+        group,
+        binding,
+        name: variable.name,
+        mangledName: variable.mangledName,
+        type,
+        kind,
+        addressSpace: variable.addressSpace,
+        access: variable.access,
+        struct: type.kind === "identifier" ? registry.structs.get(type.mangledName ?? type.name) : undefined,
+        layout,
+        bindingLayout: reflectedBindingLayout(kind, variable.addressSpace, variable.access, type, layout),
+      });
     }
-    for (const match of module.source.matchAll(/@(vertex|fragment|compute)[\s\S]*?fn\s+([A-Za-z_][A-Za-z0-9_]*)/g)) {
-      const stage = match[1] as "vertex" | "fragment" | "compute";
-      entryPoints.push({ stage, name: match[2]!, mangledName: match[2]! });
-    }
-    for (const match of module.source.matchAll(/\boverride\s+([A-Za-z_][A-Za-z0-9_]*)(?:[^=;]*=\s*([^;]+))?/g)) {
-      overrides.push({ name: match[1]!, mangledName: match[1]!, defaultValue: match[2]?.trim() });
-    }
-    for (const match of module.source.matchAll(/\benable\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g)) featuresRequired.push(match[1]!);
   }
-  return { bindings, entryPoints, overrides, featuresRequired, hostShareableLayouts: [] };
+
+  return {
+    bindings: bindings.sort((a, b) => a.group - b.group || a.binding - b.binding),
+    entryPoints: raw.flatMap((item) => item.entries),
+    overrides: raw.flatMap((item) => item.overrides),
+    featuresRequired: [...new Set(raw.flatMap((item) => item.features))],
+    aliases: [...registry.aliases.values()],
+    structs: [...registry.structs.values()],
+    hostShareableLayouts,
+  };
 }

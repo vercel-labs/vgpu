@@ -1,5 +1,5 @@
 import { createMockAdapter } from "@vgpu/adapter-mock";
-import { App } from "@vgpu/core";
+
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import { expect, test, vi } from "vitest";
 
@@ -7,7 +7,7 @@ const VIEW_PROJECTION = new Float32Array([1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 4,
 const MODEL = new Float32Array([7, 0, 0, 0, 0, 8, 0, 0, 0, 0, 9, 0, 10, 11, 12, 1]);
 
 test("normalDebugMaterial returns a triangle-list pipeline", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
 
   normalDebugMaterial({ device });
@@ -20,7 +20,7 @@ test("normalDebugMaterial returns a triangle-list pipeline", async () => {
 });
 
 test("normalDebugMaterial respects custom targetFormat", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
 
   normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
@@ -32,7 +32,7 @@ test("normalDebugMaterial respects custom targetFormat", async () => {
 });
 
 test("normalDebugMaterial declares vertex shader entry vs_main and fragment fs_main", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const createRenderPipeline = vi.spyOn(device.gpu, "createRenderPipeline");
 
   normalDebugMaterial({ device });
@@ -45,7 +45,7 @@ test("normalDebugMaterial declares vertex shader entry vs_main and fragment fs_m
 });
 
 test("normalDebugMaterial writes a 128-byte uniform layout with matrices only", async () => {
-  const { device } = await App.create({ adapter: createMockAdapter() });
+  const device = await createMockAdapter().requestDevice();
   const material = normalDebugMaterial({ device });
   const buffer = device.createBuffer({ size: material.uniformByteSize, usage: ["uniform", "copy_dst"] });
 

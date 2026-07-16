@@ -1,5 +1,5 @@
 import { ValidationError } from "./errors.ts";
-import { bufferUsageFlags, mapReadMode } from "./gpuConstants.ts";
+import { bufferUsageFlags, mapReadMode } from "./gpu-constants.ts";
 import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
 
 const stagingUsage = bufferUsageFlags(["copy_dst", "map_read"]);
@@ -28,7 +28,8 @@ export class Readback {
 
   async readTexture(texture: GPUTexture, size: readonly [number, number, number?], format: GPUTextureFormat): Promise<Uint8Array> {
     const [width, height] = size;
-    const bytesPerPixel = formatBytesPerPixel(format);
+    const formatInfo = readbackFormatInfo(format);
+    const bytesPerPixel = formatInfo.bytesPerPixel;
     const bytesPerRow = align(width * bytesPerPixel, 256);
     const byteLength = bytesPerRow * height;
     const staging = this.device.createBuffer({ size: byteLength, usage: stagingUsage });
@@ -45,6 +46,7 @@ export class Readback {
     }
     staging.unmap();
     staging.destroy();
+    if (formatInfo.swizzle === "bgra-to-rgba") swizzleBgraToRgba(pixels);
     return pixels;
   }
 
@@ -55,11 +57,22 @@ function align(value: number, alignment: number): number {
   return Math.ceil(value / alignment) * alignment;
 }
 
-function formatBytesPerPixel(format: GPUTextureFormat): number {
-  if (format === "rgba8unorm" || format === "rgba8unorm-srgb") return 4;
+type ReadbackFormatInfo = { readonly bytesPerPixel: number; readonly swizzle?: "bgra-to-rgba" };
+
+function readbackFormatInfo(format: GPUTextureFormat): ReadbackFormatInfo {
+  if (format === "rgba8unorm" || format === "rgba8unorm-srgb") return { bytesPerPixel: 4 };
+  if (format === "bgra8unorm" || format === "bgra8unorm-srgb") return { bytesPerPixel: 4, swizzle: "bgra-to-rgba" };
   throw new ValidationError({
     code: "VGPU-CORE-UNSUPPORTED-FORMAT",
     message: `Texture.read does not support format ${format}`,
     where: "Readback.readTexture",
   });
+}
+
+function swizzleBgraToRgba(pixels: Uint8Array): void {
+  for (let i = 0; i < pixels.length; i += 4) {
+    const b = pixels[i]!;
+    pixels[i] = pixels[i + 2]!;
+    pixels[i + 2] = b;
+  }
 }

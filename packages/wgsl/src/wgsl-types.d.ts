@@ -1,4 +1,4 @@
 declare module "*.wgsl" {
-  const source: string;
+  const source: { readonly version: 1; readonly wgsl: string };
   export default source;
 }

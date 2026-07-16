@@ -1,0 +1,69 @@
+# orthographicCamera
+
+Creates an orthographic camera that maps a box in world space directly into clip space. Use it for UI, CAD, or any scene where perspective foreshortening is undesirable.
+
+## Import
+
+```ts
+import { orthographicCamera, type OrthographicCameraOptions } from "vgpu/scene";
+```
+
+## Signature
+
+```ts
+interface OrthographicCameraOptions {
+  readonly left: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly top: number;
+  readonly near?: number;
+  readonly far?: number;
+  readonly position: import("vgpu/scene").CameraVec3;
+  readonly target: import("vgpu/scene").CameraVec3;
+  readonly up?: import("vgpu/scene").CameraVec3;
+}
+
+declare function orthographicCamera(options: OrthographicCameraOptions): import("vgpu/scene").SceneCamera;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| options.left | number | ✔ | — | Left plane of the world-space box. |
+| options.right | number | ✔ | — | Right plane. Must be greater than `left`. |
+| options.bottom | number | ✔ | — | Bottom plane. |
+| options.top | number | ✔ | — | Top plane. Must be greater than `bottom`. |
+| options.near | number | ✖ | `0.1` | Near clip plane distance. Must be positive. |
+| options.far | number | ✖ | `100` | Far clip plane distance. Must be greater than `near`. |
+| options.position | CameraVec3 | ✔ | — | Camera world position. Converted to `Float32Array`. |
+| options.target | CameraVec3 | ✔ | — | Look-at target point. |
+| options.up | CameraVec3 | ✖ | `[0, 1, 0]` | Up vector. Any non-colinear vector works. |
+
+**Returns:** `SceneCamera` with `viewProjection`, `viewProjectionMatrix`, and `position` arrays suitable for binding to WGSL uniforms.
+**Throws:** None. Invalid projection parameters are passed to `wgpu-matrix`; avoid `left === right`, `bottom === top`, and `near === far` because they produce unusable matrices rather than a vgpu validation error.
+
+## Examples
+
+```ts
+import { orthographicCamera } from "vgpu/scene";
+
+const cam = orthographicCamera({
+  left: -2,
+  right: 2,
+  bottom: -2,
+  top: 2,
+  near: 0.01,
+  far: 50,
+  position: [0, 0, 5],
+  target: [0, 0, 0],
+});
+
+void cam.viewProjection;
+```
+
+## Notes
+
+- Orthographic cameras still use a real view matrix; move `position` and `target` to orbit the box without perspective.
+- Recreate the camera when canvas aspect changes to keep pixel-perfect scaling.
+- **See also:** `perspectiveCamera`, `Camera`, `orbit`.

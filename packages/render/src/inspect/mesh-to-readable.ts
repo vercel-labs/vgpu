@@ -1,6 +1,6 @@
 import { Buffer, ValidationError, type Device } from "@vgpu/core";
 import type { BufferUsageName } from "@vgpu/core";
-import type { Mesh } from "../domain/mesh.ts";
+import type { Mesh } from "../mesh-like.ts";
 
 export async function meshToReadable(mesh: Mesh, device: Device): Promise<Mesh> {
   const usage = mesh.vertexBuffer.gpu.usage;

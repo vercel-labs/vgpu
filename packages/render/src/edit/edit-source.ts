@@ -1,4 +1,4 @@
-import type { Mesh } from "../domain/mesh.ts";
+import type { Mesh } from "../mesh-like.ts";
 
 export interface EditSource {
   readonly positions: Float32Array;

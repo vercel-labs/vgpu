@@ -12,10 +12,10 @@ const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
 
 test("parses allowlist entries and maps virtual paths", () => {
-  const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/Buffer.docs.md\n");
+  const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/buffer.docs.md\n");
 
-  expect(entries).toEqual([{ package: "@vgpu/core", symbol: "Buffer", repoPath: "packages/core/src/Buffer.docs.md" }]);
-  expect(virtualPathFor(entries[0])).toBe("/@vgpu/core/Buffer.docs.md");
+  expect(entries).toEqual([{ package: "@vgpu/core", symbol: "Buffer", repoPath: "packages/core/src/buffer.docs.md" }]);
+  expect(virtualPathFor(entries[0])).toBe("/@vgpu/core/buffer.docs.md");
 });
 
 test("generates deterministic docs VFS artifact", () => {
@@ -35,7 +35,7 @@ test("fails on missing allowlisted docs", () => {
 });
 
 test("includes guide docs as a first-class kind", () => {
-  const manifest = createManifest("@vgpu/core Buffer packages/core/src/Buffer.docs.md", {
+  const manifest = createManifest("@vgpu/core Buffer packages/core/src/buffer.docs.md", {
     exists: () => true,
     read: (path) => `content for ${path}`,
     guides: ["docs/topics/performance-model.docs.md"],

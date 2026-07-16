@@ -2,7 +2,7 @@ import { MeshEditError, fillHole } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { openCube, topHoleLoop } from "./fixtures/connectivity.ts";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const euler = (em: ReturnType<typeof openCube>) => em.vertexCount - em.edgeCount + em.faceCount;
 

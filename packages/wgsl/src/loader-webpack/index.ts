@@ -1,6 +1,7 @@
+import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { wgslError } from "../runtime/errors.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
-import { resolveShader } from "../runtime/resolveShader.ts";
+import { resolveShader } from "../runtime/resolve-shader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
 export interface WgslWebpackLoaderOptions {
@@ -17,8 +18,11 @@ type LoaderContext = {
 export default function wgslWebpackLoader(this: LoaderContext, source: string): string | void {
   const options = readOptions(this);
   if (!hasTopLevelImport(source)) {
+    // A leaf .wgsl can be a legitimate entry that declares bindings, so the
+    // entry-only module-purity rule is intentionally enforced only when an
+    // importer resolves a graph through resolveShader().
     const wgsl = applyMinifyWgsl(source, options.minify);
-    return `export default ${JSON.stringify(wgsl)};`;
+    return shaderSourceModule(wgsl);
   }
   const done = this.async?.();
   const run = async () => {
@@ -26,7 +30,7 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
     // Webpack loader API: https://webpack.js.org/api/loaders/#thisadddependency
     // Invalidate this loader's output when any transitively-imported .wgsl file changes.
     for (const dep of resolved.deps) if (dep !== this.resourcePath) this.addDependency?.(dep);
-    return `export default ${JSON.stringify(resolved.wgsl)};`;
+    return shaderSourceModule(resolved.wgsl);
   };
   if (!done) throw wgslError("VGPU-WGSL-RUNTIME-IMPORT", "@vgpu/wgsl webpack loader requires asynchronous mode for imports.");
   run().then((code) => done(null, code), (error: unknown) => done(error instanceof Error ? error : new Error(String(error))));

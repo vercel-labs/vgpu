@@ -93,18 +93,18 @@ test("bindings overrides and entry points are never removed", async () => {
     entry: "/main.wgsl",
     validate: false,
     modules: {
-      "/main.wgsl": `import { buffer } from "./resource.wgsl";
+      "/main.wgsl": `import { Buffer } from "./resource.wgsl";
+@group(0) @binding(0) var<storage, read_write> buffer: Buffer;
 override WorkgroupSize: u32 = 1u;
 @compute @workgroup_size(WorkgroupSize) fn main() { buffer.value = WorkgroupSize; }`,
-      "/resource.wgsl": `struct Buffer { value: u32 }
-@group(0) @binding(0) export var<storage, read_write> buffer: Buffer;
+      "/resource.wgsl": `export struct Buffer { value: u32 }
 fn unusedHelper() {}`,
     },
   });
 
   expect(resolved.wgsl).toContain("fn main(");
   expect(resolved.wgsl).toContain("@group(0) @binding(0)");
-  expect(resolved.wgsl).toMatch(/var<storage, read_write> _vgsl_[0-9a-f]{8}__buffer/);
+  expect(resolved.wgsl).toContain("var<storage, read_write> buffer");
   expect(resolved.wgsl).toContain("override WorkgroupSize");
   expect(resolved.wgsl).toMatch(structPattern("Buffer"));
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));

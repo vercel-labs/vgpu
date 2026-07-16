@@ -1,5 +1,5 @@
 import { ValidationError, type Device } from "@vgpu/core";
-import type { Mesh } from "../domain/index.ts";
+import type { Mesh } from "../mesh-like.ts";
 import type { WireframeMesh } from "./wireframe-mesh.ts";
 
 const EPSILON_SCALE = 1_000_000;

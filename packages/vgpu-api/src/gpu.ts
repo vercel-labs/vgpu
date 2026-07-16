@@ -1,0 +1,163 @@
+import type { ShaderSource } from "@vgpu/wgsl";
+import type { VGPUAdapter } from "@vgpu/core";
+import { Device } from "@vgpu/core";
+import { createBindGroupCache } from "./bind-cache.ts";
+import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
+import { InternalDraw, type Draw, type DrawOptions, type MeshLike } from "./draw.ts";
+import { Frame, FrameRunner } from "./frame.ts";
+import { InternalPass, type Pass, type PassOptions } from "./pass.ts";
+import { createSamplerCache } from "./sampler.ts";
+import { mesh as createSceneMesh } from "./scene/mesh.ts";
+import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
+import { frameReentrantError, surfaceDuplicateError, unsupportedError } from "./errors.ts";
+import { ComputePipeline } from "./compute.ts";
+import { createStorageBuffer } from "./storage.ts";
+import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
+import { toWgsl } from "./shader-source.ts";
+import { createSharedUniforms } from "./uniforms.ts";
+import { CanvasSurface, type Surface, type SurfaceCanvas, type SurfaceOptions } from "./surface.ts";
+
+export interface InitOptions {
+  readonly adapter?: VGPUAdapter;
+  readonly powerPreference?: GPUPowerPreference;
+  readonly requiredFeatures?: readonly GPUFeatureName[];
+  readonly requiredLimits?: Record<string, number>;
+  readonly label?: string;
+}
+
+export interface ComputeOptions { readonly label?: string; readonly set?: Record<string, unknown> }
+export interface Compute { set(values: Record<string, unknown>): this; dispatch(x: number, y?: number, z?: number): void }
+export type StorageAccess = "read" | "read-write";
+export interface StorageBuffer { readonly size: number; readonly access: StorageAccess; read(): Promise<ArrayBuffer>; write(data: BufferSource): void }
+export interface PingPongTargets { readonly read: Target; readonly write: Target; swap(): void }
+export interface PingPongStorage { readonly read: StorageBuffer; readonly write: StorageBuffer; swap(): void }
+export interface SharedUniforms<T extends Record<string, unknown> = Record<string, unknown>> { set(values: Partial<T>): void }
+/** Ring-1 facade shared by browser, node, and mock entrypoints. */
+export interface Gpu {
+  readonly device: Device;
+  readonly gpu: GPUDevice;
+  time: number;
+  deltaTime: number;
+  frameCount: number;
+  surface(canvas: SurfaceCanvas, opts?: SurfaceOptions): Surface;
+  pass(source: string | ShaderSource, opts?: PassOptions): Pass;
+  draw(opts: DrawOptions): Draw;
+  target(opts: TargetOptions): Target;
+  readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
+  sampler(desc?: GPUSamplerDescriptor): GPUSampler;
+  mesh(geometry: unknown): MeshLike;
+  dispose(): void;
+  compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
+  storage(bytes: number, access?: StorageAccess): StorageBuffer;
+  pingPong(width: number, height: number, opts?: TargetTextureOptions): PingPongTargets;
+  pingPongStorage(bytes: number): PingPongStorage;
+  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T>;
+  bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle;
+}
+
+export type AdapterFactory = () => VGPUAdapter;
+
+export async function createGpu(entry: "browser" | "node" | "mock", opts: InitOptions = {}, _unused: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
+  const device = await createDevice(entry, opts, adapterFactory);
+  return new RingGpu(device);
+}
+
+class RingGpu implements Gpu {
+  readonly gpu: GPUDevice;
+  time = 0;
+  deltaTime = 0;
+  frameCount = 0;
+  private lastTimeMs = nowMs();
+  private readonly cache = createBindGroupCache();
+  private readonly samplers;
+  private readonly surfaces = new Map<SurfaceCanvas, CanvasSurface>();
+  private advancing = false;
+  readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
+
+  constructor(readonly device: Device) {
+    this.gpu = device.gpu;
+    this.samplers = createSamplerCache(device);
+    const runner = new FrameRunner(() => new Frame(device), () => this.advanceFrameState());
+    this.frame = callableFrameRunner(runner);
+  }
+
+  surface(canvas: SurfaceCanvas, opts: SurfaceOptions = {}): Surface {
+    const existing = this.surfaces.get(canvas);
+    if (existing && !existing.disposed) throw surfaceDuplicateError(existing.label);
+    const surface = new CanvasSurface(this.device, canvas, opts, (s) => {
+      if (this.surfaces.get(s.canvas) === s) this.surfaces.delete(s.canvas);
+    });
+    this.surfaces.set(canvas, surface);
+    return surface;
+  }
+  pass(source: string | ShaderSource, opts: PassOptions = {}): Pass {
+    if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
+    return new InternalPass(this.device, toWgsl(source), opts, this.cache);
+  }
+  draw(opts: DrawOptions): Draw {
+    const shader = toWgsl(opts.shader);
+    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache);
+  }
+  target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
+  sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
+  mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
+  dispose(): void {
+    for (const surface of [...this.surfaces.values()]) surface.dispose();
+    this.cache.dispose();
+    this.device.dispose();
+  }
+  compute(source: string | ShaderSource, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, toWgsl(source), opts, this.cache); }
+  storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
+  pingPong(width: number, height: number, opts: TargetTextureOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
+  pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
+  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
+  bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { return createBundle(this.device, opts, cb); }
+
+  private advanceFrameState(): void {
+    if (this.advancing) throw frameReentrantError();
+    this.advancing = true;
+    try {
+      this.advanceTime();
+      for (const surface of this.surfaces.values()) surface.applyAutoResize();
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  private advanceTime(): void {
+    const next = nowMs();
+    this.deltaTime = Math.max(0, (next - this.lastTimeMs) / 1000);
+    this.time += this.deltaTime;
+    this.lastTimeMs = next;
+    this.frameCount += 1;
+  }
+}
+
+async function createDevice(entry: "browser" | "node" | "mock", opts: InitOptions, adapterFactory?: AdapterFactory): Promise<Device> {
+  if (opts.adapter || adapterFactory) return (opts.adapter ?? adapterFactory!()).requestDevice(opts);
+  if (entry === "browser") return requestBrowserDevice(opts);
+  throw unsupportedError("init", `init(${entry}) requiere adapterFactory.`);
+}
+
+function callableFrameRunner(runner: FrameRunner): FrameRunner & ((cb?: (frame: Frame) => void) => Frame) {
+  const callable = ((cb?: (frame: Frame) => void) => runner.frame(cb)) as FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
+  Object.setPrototypeOf(callable, FrameRunner.prototype);
+  Object.assign(callable, runner);
+  callable.frame = runner.frame.bind(runner);
+  callable.loop = runner.loop.bind(runner);
+  return callable;
+}
+
+async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
+  const nav = globalThis.navigator as Navigator & { gpu?: GPU };
+  const adapter = await nav.gpu?.requestAdapter({ powerPreference: opts.powerPreference });
+  if (!adapter) throw unsupportedError("init", "navigator.gpu.requestAdapter() devolvió null.");
+  const gpuDevice = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
+  return new Device(gpuDevice, adapter.info ?? null);
+}
+
+function hasMesh(opts: PassOptions): boolean {
+  return "mesh" in (opts as Record<string, unknown>);
+}
+
+function nowMs(): number { return globalThis.performance?.now?.() ?? Date.now(); }

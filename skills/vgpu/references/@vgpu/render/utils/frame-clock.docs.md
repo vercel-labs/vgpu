@@ -2,15 +2,55 @@
 
 # frameClock
 
-Measures elapsed time and frame delta in seconds. Use it in animation loops that need stable time values and pause support.
+Creates a monotonic time source with pause/resume support for ad-hoc render loops. Use it when you need consistent elapsed seconds outside the built-in `gpu.frame` loop.
+
+## Import
 
 ```ts
-const clock = frameClock();
-function frame() {
-  const time = clock.now();
-  const dt = clock.delta();
-  update(time, dt);
-}
+import { frameClock } from "@vgpu/render/utils";
 ```
 
-Use `pause()`, `resume()`, and `reset()` to control the clock.
+## Signature
+
+```ts
+export function frameClock(): FrameClock;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| — | — | — | — | `frameClock` does not take arguments; it captures `performance.now()` internally. |
+
+**Returns:** `FrameClock` — exposes `now()`, `delta()`, `reset()`, `pause()`, `resume()`, and an `isPaused` getter. All time values are expressed in seconds.
+
+## Examples
+
+```ts
+import { frameClock } from "@vgpu/render/utils";
+
+const clock = frameClock();
+
+function updateScene(elapsed: number, dt: number): void {
+  void elapsed;
+  void dt;
+}
+
+function tick() {
+  if (!clock.isPaused) {
+    const elapsed = clock.now();
+    const dt = clock.delta();
+    updateScene(elapsed, dt);
+  }
+  requestAnimationFrame(tick);
+}
+
+tick();
+```
+
+## Notes
+
+- `delta()` returns `0` while paused, so you can leave animation code untouched and simply toggle `pause()` / `resume()`.
+- `reset()` zeroes both elapsed time and accumulated pause, making it ideal for restarting demos without allocating a new clock.
+- Calls to `pause()` are idempotent; repeated calls do nothing until `resume()` runs.
+- **See also:** `canvasMouseTracker`, `canvasResolution`

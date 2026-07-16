@@ -1,3 +1,9 @@
+struct Uniforms {
+  time: f32,
+  resolution: vec2f,
+};
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
 fn scene(p: vec3f) -> f32 {
   let wobble = 0.16 * sin(4.0 * p.x + uniforms.time) * sin(4.0 * p.y - uniforms.time * 0.7) * sin(4.0 * p.z);
   return length(p) - (1.0 + wobble);

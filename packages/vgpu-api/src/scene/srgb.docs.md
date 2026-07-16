@@ -1,0 +1,52 @@
+# srgb
+
+Converts sRGB color literals into linear RGB floats for CPU-side scene constants. Use it when your source color is a web-style hex value or normalized sRGB tuple but your shader math expects linear color.
+
+## Import
+
+```ts
+import { srgb } from "vgpu/scene";
+```
+
+## Signature
+
+```ts
+type SrgbInput = number | [number, number, number];
+type LinearRgb = [number, number, number];
+
+declare function srgb(input: SrgbInput): LinearRgb;
+```
+
+## Parameters
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| input | `number \| [number, number, number]` | ✔ | — | Either a packed `0xRRGGBB` number or a three-channel sRGB tuple. Tuple channels are expected in normalized `0..1` units, not byte `0..255` units. |
+
+**Returns:** `LinearRgb` (`[number, number, number]`) — normalized linear RGB channels. Each channel uses the standard sRGB transfer curve: `channel / 12.92` for `channel <= 0.04045`, otherwise `((channel + 0.055) / 1.055) ** 2.4`.
+**Throws:** None.
+
+## Examples
+
+```ts
+import { srgb } from "vgpu/scene";
+
+const albedo = srgb(0xff8040);
+console.log(albedo.length); // 3
+```
+
+```ts
+import { srgb } from "vgpu/scene";
+
+const normalizedWhite = srgb([1, 1, 1]);
+const normalizedGray = srgb([0.5, 0.5, 0.5]);
+void normalizedWhite;
+void normalizedGray;
+```
+
+## Notes
+
+- The numeric form is a packed hexadecimal color, for example `0xff8040`. Do not call `srgb(255, 128, 64)`; that is not the function signature.
+- Tuple input is not clamped. Values outside `0..1`, `NaN`, and `Infinity` flow through JavaScript arithmetic and can produce non-display color values.
+- `srgb` is CPU-side only. For texture sampling and post-processing, keep color-management decisions explicit in WGSL.
+- **See also:** `degToRad`, `SceneGeometry`.

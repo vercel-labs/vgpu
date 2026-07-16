@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MarkdownContent } from '@/components/MarkdownContent';
+import { MarkdownContent } from '@/components/markdown-content';
 import {
   apiRecords,
   getPackageGroup,

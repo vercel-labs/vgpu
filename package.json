@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b && node -e \"require('fs').copyFileSync('packages/wgsl/src/wgsl-types.d.ts', 'packages/wgsl/dist/wgsl-types.d.ts')\"",
     "typecheck": "tsc -b && pnpm run typecheck:fixtures",
-    "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json",
+    "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json && tsc -p packages/vgpu-api/tests/uniforms/tsconfig.types.json",
+    "docs:verify-snippets": "node scripts/verify-docs-snippets.mjs",
     "test": "vitest run",
     "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render",
     "test:docker": "bash infra/test-docker/run.sh",
@@ -17,6 +18,7 @@
     "generate-lit-cube-snapshot": "pnpm exec esbuild scripts/generate-lit-cube-snapshot.ts --bundle --platform=node --format=esm --external:pngjs --external:webgpu --outfile=packages/adapter-node/dist/generate-lit-cube-snapshot.mjs && node packages/adapter-node/dist/generate-lit-cube-snapshot.mjs",
     "bundle-check": "node scripts/check-bundle-size.mjs",
     "check-bundle-size": "node scripts/check-bundle-size.mjs",
+    "check:filenames": "bash scripts/check-filenames.sh",
     "bump:patch": "pnpm -r exec npm version patch --no-git-tag-version",
     "bump:minor": "pnpm -r exec npm version minor --no-git-tag-version",
     "bump:major": "pnpm -r exec npm version major --no-git-tag-version"
@@ -29,6 +31,8 @@
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@vgpu/cli": "workspace:*",
+    "vgpu": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 import { wgslError } from "./errors.ts";
-import { WGSL_KEYWORDS } from "./wgslIdentifiers.ts";
+import { WGSL_KEYWORDS } from "./wgsl-identifiers.ts";
 
 export type TokenKind = "ident" | "keyword" | "string" | "lineComment" | "blockComment" | "punct" | "number";
 

@@ -28,10 +28,6 @@
   "sideEffects": false,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
     "./inspect": {
       "types": "./dist/inspect/index.d.ts",
       "import": "./dist/inspect/index.js"
@@ -43,10 +39,6 @@
     "./edit": {
       "types": "./dist/edit/index.d.ts",
       "import": "./dist/edit/index.js"
-    },
-    "./passes": {
-      "types": "./dist/passes/index.d.ts",
-      "import": "./dist/passes/index.js"
     },
     "./perf": {
       "types": "./dist/perf/index.d.ts",
@@ -71,11 +63,9 @@
     "wgpu-matrix": "^3.4.2"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 49152,
     "./inspect": 4096,
     "./utils": 2048,
     "./edit": 25600,
-    "./passes": 3584,
     "./perf": 3072
   }
 }

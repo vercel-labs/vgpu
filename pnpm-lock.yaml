@@ -14,6 +14,9 @@ importers:
       '@types/pngjs':
         specifier: ^6.0.5
         version: 6.0.5
+      '@vgpu/cli':
+        specifier: workspace:*
+        version: link:packages/vgpu
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
@@ -29,6 +32,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+      vgpu:
+        specifier: workspace:*
+        version: link:packages/vgpu-api
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
@@ -50,12 +56,12 @@ importers:
       '@vgpu/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
+      '@vgpu/cli':
+        specifier: workspace:*
+        version: link:../../packages/vgpu
       '@vgpu/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@vgpu/render':
-        specifier: workspace:*
-        version: link:../../packages/render
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../../packages/wgsl
@@ -88,7 +94,7 @@ importers:
         version: 3.23.0
       vgpu:
         specifier: workspace:*
-        version: link:../../packages/vgpu
+        version: link:../../packages/vgpu-api
     devDependencies:
       '@types/mdx':
         specifier: ^2.0.13
@@ -120,6 +126,126 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+
+  examples/by-example-s02-fullscreen:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s03-sharing:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s04-shared-uniforms:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s05-fixits:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s06-scene:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s07-hdr-post:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s08-ping-pong:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s09-bundles:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s10-group-claim:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s11-compute:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s12-scheduling-resize:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
+  examples/by-example-s13-headless:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
 
   examples/next-wgsl:
     dependencies:
@@ -173,7 +299,42 @@ importers:
         specifier: ^3.4.2
         version: 3.4.2
 
-  packages/vgpu: {}
+  packages/vgpu:
+    dependencies:
+      pixelmatch:
+        specifier: ^7.2.0
+        version: 7.2.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
+    devDependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
+      vgpu:
+        specifier: workspace:*
+        version: link:../vgpu-api
+
+  packages/vgpu-api:
+    dependencies:
+      '@vgpu/adapter-mock':
+        specifier: workspace:*
+        version: link:../adapter-mock
+      '@vgpu/adapter-node':
+        specifier: workspace:*
+        version: link:../adapter-node
+      '@vgpu/core':
+        specifier: workspace:*
+        version: link:../core
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
+      '@webgpu/types':
+        specifier: ^0.1.69
+        version: 0.1.69
+      wgpu-matrix:
+        specifier: ^3.4.2
+        version: 3.4.2
 
   packages/wgsl:
     devDependencies:

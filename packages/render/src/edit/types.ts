@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
 import type { Vec3 } from "wgpu-matrix";
-import type { Mesh } from "../domain/mesh.ts";
+import type { Mesh } from "../mesh-like.ts";
 
 declare const kernelBrand: unique symbol;
 export type KernelHandle = { readonly [kernelBrand]: never };

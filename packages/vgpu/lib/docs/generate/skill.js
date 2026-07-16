@@ -44,9 +44,10 @@ function router(docs) {
     "---",
     "name: vgpu",
     "description: >-",
-    "  Build and optimize WebGPU shaders and render pipelines with vgpu (@vgpu/core, @vgpu/render,",
-    "  @vgpu/wgsl). Use when authoring GPU rendering or making it faster. Bundles the performance",
-    "  guides and the full API reference; load one doc at a time.",
+    "  Build and optimize WebGPU apps with the vgpu package and entrypoints vgpu/node,",
+    "  vgpu/mock, vgpu/scene, and vgpu/client. Use @vgpu/render/inspect, /utils, /edit,",
+    "  and /perf only as slim tooling subpaths. Bundles performance guides and the API",
+    "  reference; load one doc at a time.",
     "---",
     "",
     "# vgpu",
@@ -54,10 +55,14 @@ function router(docs) {
     "Generated from the vgpu `.docs.md` source. Each entry maps to a file in `references/` and to a",
     "doc you can load on demand with the CLI — **load only what you need, don't read the whole skill**:",
     "",
+    "vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL reflection) → vgpu/scene (geometry/camera helpers). Lower layers are always accessible and interoperable.",
+    "",
+    "Glossary: **Surface** means a canvas-backed render target (swapchain) created with `gpu.surface(canvas)`; do not confuse it with the general phrase ‘API surface’.",
+    "",
     "```sh",
-    "npx vgpu docs find <query>    # search doc paths + symbols",
-    "npx vgpu docs grep -i <term>  # search doc CONTENT",
-    "npx vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
+    "npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols",
+    "npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT",
+    "npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
     "```",
     "",
     "## Performance guides",
@@ -71,7 +76,7 @@ function router(docs) {
   out.push("");
   out.push("## API reference");
   out.push("");
-  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx vgpu docs cat <symbol>\`:`);
+  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx --package @vgpu/cli vgpu docs cat <symbol>\`:`);
   out.push("");
   for (const pkg of packages) {
     const symbols = api

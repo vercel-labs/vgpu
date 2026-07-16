@@ -2,7 +2,7 @@ import { MeshEditError, dissolveFaces } from "@vgpu/render/edit";
 import { describe, expect, test } from "vitest";
 import { octahedron } from "./fixtures/dissolve.ts";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
-import { editableSignature } from "./_helpers.ts";
+import { editableSignature } from "./helpers.ts";
 
 const euler = (em: ReturnType<typeof octahedron>) => em.vertexCount - em.edgeCount + em.faceCount;
 

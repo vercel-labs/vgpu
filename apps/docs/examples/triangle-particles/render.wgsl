@@ -15,8 +15,8 @@ struct VertexOut {
 };
 
 @vertex
-fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
-  let particle = vertexIndex / 3u;
+fn vs_main(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) instanceIndex: u32) -> VertexOut {
+  let particle = instanceIndex;
   let corner = vertexIndex % 3u;
   let basis = array<vec2f, 3>(vec2f(0.0, 1.0), vec2f(-0.866, -0.5), vec2f(0.866, -0.5));
   let pos = positions[particle].xy;

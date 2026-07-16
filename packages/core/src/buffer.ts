@@ -1,8 +1,11 @@
 import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
+import { createResourceIdentity, DestroySignal, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "./resource-lifecycle.ts";
 import type { Device } from "./device.ts";
 import type { BufferOptions, BufferWriteData } from "./types.ts";
 
 export class Buffer {
+  private readonly destroySignal = new DestroySignal<Buffer>();
+  private readonly identity = createResourceIdentity("buffer");
   private destroyed = false;
 
   constructor(
@@ -10,6 +13,12 @@ export class Buffer {
     readonly gpu: GPUBuffer,
     readonly options: BufferOptions,
   ) {}
+
+  get resourceIdentity(): ResourceIdentity { return this.identity; }
+
+  onDestroy(cb: ResourceDestroyCallback<Buffer>): UnsubscribeResourceDestroy {
+    return this.destroySignal.onDestroy(this, cb);
+  }
 
   write(data: BufferWriteData, offset = 0): void {
     this.assertAlive();
@@ -24,6 +33,7 @@ export class Buffer {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.destroySignal.emit(this);
     if (!isMockGPUBuffer(this.gpu)) this.gpu.destroy();
   }
 
