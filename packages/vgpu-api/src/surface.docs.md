@@ -64,7 +64,7 @@ interface Surface extends Target {
 
 **Returns:** `gpu.surface()` returns `Surface`; `onResize()` returns an unsubscribe function; `dispose()` returns `void`.
 
-**Throws:** `VGPU-SURFACE-CONTEXT` when `getContext("webgpu")` returns `null`; `VGPU-SURFACE-DUPLICATE` when a live surface already owns the canvas; `VGPU-SURFACE-AUTORESIZE-UNSUPPORTED` for explicit `autoResize: true` on buffer-only canvases; `VGPU-SURFACE-DISPOSED` when using a disposed surface; `VGPU-SURFACE-RESIZE-REENTRANT` when resizing the same surface from its own resize callback.
+**Throws:** `VGPU-SURFACE-CONTEXT` when `getContext("webgpu")` returns `null`; `VGPU-SURFACE-DUPLICATE` when a live surface already owns the canvas; `VGPU-SURFACE-AUTORESIZE-UNSUPPORTED` for explicit `autoResize: true` on buffer-only canvases; `VGPU-SURFACE-DISPOSED` when using a disposed surface; `VGPU-SURFACE-RESIZE-REENTRANT` when resizing the same surface from its own resize callback; `VGPU-FRAME-REENTRANT` when `gpu.frame()` is called from any `onResize` callback. The immediate `onResize` fire on subscription also counts as being inside an `onResize` callback, so call `gpu.frame()` before subscribing or from code outside the callback.
 
 ## Examples
 
@@ -162,5 +162,6 @@ gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.bundles(stat
 - Layout-backed detection is structural: `typeof canvas.clientWidth === "number"`; it does not use `instanceof`.
 - Resize callbacks run in surface creation order at the frame boundary, before the user frame callback.
 - Manual `surface.resize()` fires callbacks synchronously at the call site and works for `OffscreenCanvas`.
+- `surface.read()` returns RGBA bytes. Canvas formats `bgra8unorm` and `bgra8unorm-srgb` are supported and swizzled to RGBA, which matters on platforms where `navigator.gpu.getPreferredCanvasFormat()` returns BGRA.
 - A canvas can have only one live surface. Call `surface.dispose()` before creating another one for the same canvas.
 - **See also:** `init`, `Gpu.surface`, `Target`, `Frame`, `Bundle`.

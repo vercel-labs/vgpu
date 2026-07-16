@@ -10,7 +10,7 @@ Use `gpu.bundle({ target }, recorder)` and replay with `p.bundles(bundle)`.
 
 ## First-frame stability
 
-Use `gpu.draw({ shader, mesh, targets: [screenOrTarget] })` so pipeline compilation happens before the transition frame.
+Use `gpu.draw({ shader, mesh, targets: [surfaceOrTarget] })` so pipeline compilation happens before the transition frame; pass a canvas `surface` or an offscreen `target` explicitly.
 
 ## Animated uniforms
 

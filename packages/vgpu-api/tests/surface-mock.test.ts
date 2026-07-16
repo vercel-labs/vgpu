@@ -79,6 +79,20 @@ test("autoResize fires at frame boundary once with physical payload and immediat
   gpu.dispose();
 });
 
+test("immediate onResize callback also guards frame reentrancy", async () => {
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const surface = gpu.surface(canvasLike(10, 10));
+  let checked = false;
+
+  surface.onResize(() => {
+    checked = true;
+    expect(() => gpu.frame()).toThrowError(/VGPU-FRAME-REENTRANT|no puede llamarse/);
+  });
+
+  expect(checked).toBe(true);
+  gpu.dispose();
+});
+
 test("multi-surface autoResize callbacks run in creation order and shared handler can inspect event.surface", async () => {
   const a = canvasLike(10, 5);
   const b = canvasLike(20, 10);
@@ -181,11 +195,22 @@ test("target is required for frame and one-shot draws, and target size is requir
   const gpu = await init();
   const pass = gpu.pass(SOLID);
   const draw = gpu.draw({ shader: SOLID });
-  expect(() => gpu.frame((frame) => frame.pass({} as never, (p) => p.draw(pass)))).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
+  expect(() => {
+    // @ts-expect-error Frame.pass requires an explicit target; this asserts the runtime JS error.
+    gpu.frame((frame) => frame.pass({}, (p) => p.draw(pass)));
+  }).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
   expect(() => pass.draw()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
   expect(() => draw.draw()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
-  expect(() => gpu.target({} as never)).toThrowError(/VGPU-TARGET-SIZE-REQUIRED|requiere size/);
-  const pp = gpu.pingPong(8, 8, { size: [4, 4] } as never);
+  expect(() => {
+    // @ts-expect-error gpu.target requires size; this asserts the runtime JS error.
+    gpu.target({});
+  }).toThrowError(/VGPU-TARGET-SIZE-REQUIRED|requiere size/);
+  const pp = gpu.pingPong(
+    8,
+    8,
+    // @ts-expect-error pingPong options intentionally do not accept size; positional dimensions win.
+    { size: [4, 4] },
+  );
   expect(pp.read.size).toEqual([8, 8]);
   gpu.dispose();
 });

@@ -59,7 +59,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 | opts.msaa | `boolean \| 4` | ✖ | `false` / sample count `1` | `true` or `4` creates MSAA color/depth attachments with sample count `4` and resolves to sampleable `.color(s)`. |
 | opts.label | `string` | ✖ | `undefined` | Prefix for created texture labels. |
 | target.resize.size | `readonly [number, number]` | ✔ | — | Recreates offscreen textures unless size is unchanged. |
-| target.read | — | — | — | No parameters; reads `target.color`. |
+| target.read | — | — | — | No parameters; reads `target.color` and returns RGBA bytes. `bgra8unorm` / `bgra8unorm-srgb` are supported and swizzled to RGBA, matching canvas preferred formats on platforms such as macOS. |
 | target.onDestroy.cb | `ResourceDestroyCallback<Target>` | ✔ | — | Subscribes to target destruction. |
 | target.renderPassDescriptor.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Clear color for all color attachments. |
 | gpu.pingPong.width | `number` | ✔ | — | Floored and clamped to at least `1`. |
@@ -129,5 +129,6 @@ pingPong.swap();
 
 - There is no global resolution binding. Pass `target.size` or `target.texelSize` explicitly to shaders.
 - `Surface.color` wraps the canvas current texture; offscreen target colors are stable until resize/destroy.
+- `target.read()` and `surface.read()` return RGBA bytes. BGRA canvas formats are read back with red/blue channels swizzled to RGBA.
 - Size-dependent targets derived from a surface should be created from the real initial `surface.size` and resized from `surface.onResize(...)`.
 - **See also:** `Surface`, `FramePassOptions`, `Pass`, `Draw`, `Bundle`, `Compute` storage ping-pong.
