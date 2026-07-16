@@ -56,7 +56,7 @@ export default async function ExampleDetailPage({ params, searchParams }: Exampl
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-9">Preview</h2>
               <span className="text-xs text-gray-8">WebGPU iframe</span>
             </div>
-            <ExamplePreview slug={example.meta.slug} title={example.meta.title} />
+            <ExamplePreview slug={example.meta.slug} title={example.meta.title} poster={example.meta.hero} />
           </section>
         </div>
       </div>
