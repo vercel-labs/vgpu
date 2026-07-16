@@ -33,12 +33,12 @@ export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTra
 import { canvasMouseTracker } from "@vgpu/render/utils";
 
 const canvas = document.createElement("canvas");
-const pass = { set(values: { readonly mouse: readonly [number, number] }): void { void values; } };
+const effect = { set(values: { readonly mouse: readonly [number, number] }): void { void values; } };
 const mouse = canvasMouseTracker({ canvas, normalize: true, flipY: true });
 
 function frame() {
   const [u, v] = mouse.position; // normalized UV with origin at bottom-left
-  pass.set({ mouse: [u, v] });
+  effect.set({ mouse: [u, v] });
   requestAnimationFrame(frame);
 }
 

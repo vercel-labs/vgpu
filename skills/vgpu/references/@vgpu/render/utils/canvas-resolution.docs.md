@@ -35,11 +35,11 @@ export function canvasResolution(
 import { canvasResolution } from "@vgpu/render/utils";
 
 const canvas = document.createElement("canvas");
-const pass = { set(values: { readonly resolution: readonly [number, number] }): void { void values; } };
+const effect = { set(values: { readonly resolution: readonly [number, number] }): void { void values; } };
 const resolution = canvasResolution(canvas, { observe: true });
 
 function frame() {
-  pass.set({ resolution: [resolution.width, resolution.height] });
+  effect.set({ resolution: [resolution.width, resolution.height] });
   requestAnimationFrame(frame);
 }
 
