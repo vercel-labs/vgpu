@@ -27,7 +27,7 @@ struct Params { value: f32 }
 @compute @workgroup_size(1) fn main() { _ = params.value; }
 `;
 
-test("gpu.pass accepts string and ShaderSource with identical reflection", async () => {
+test("gpu.effect accepts string and ShaderSource with identical reflection", async () => {
   const gpu = await init();
   const fromString = gpu.effect(FRAGMENT, { label: "shader" });
   const fromArtifact = gpu.effect({ version: 1, wgsl: FRAGMENT }, { label: "shader" });
