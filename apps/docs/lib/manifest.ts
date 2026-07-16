@@ -197,6 +197,27 @@ export function resolveMarkdownHref(href: string | undefined) {
   return href;
 }
 
+const recordsBySymbol = buildRecordsBySymbol(apiRecords);
+
+export function resolveSymbolHref(symbol: string) {
+  const matches = recordsBySymbol.get(symbol);
+  if (!matches?.length) return null;
+  if (matches.length === 1) return recordHref(matches[0]);
+
+  const publicApiMatch = matches.find((record) => referencePackageName(record) === 'vgpu');
+  if (publicApiMatch) return recordHref(publicApiMatch);
+
+  return null;
+}
+
+function buildRecordsBySymbol(records: DocsRecord[]) {
+  const bySymbol = new Map<string, DocsRecord[]>();
+  for (const record of records) {
+    bySymbol.set(record.symbol, [...(bySymbol.get(record.symbol) ?? []), record]);
+  }
+  return bySymbol;
+}
+
 function buildReferenceGroups(sourceRecords: DocsRecord[]) {
   const byPackage = new Map<string, DocsRecord[]>();
   for (const record of sourceRecords) {

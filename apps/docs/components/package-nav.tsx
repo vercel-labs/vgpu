@@ -1,55 +1,69 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { navSections, topicHref } from '@/lib/manifest';
+import type { NavGroup } from '@/lib/nav';
 
-export function PackageNav() {
-  const pathname = usePathname();
+interface PackageNavProps {
+  groups: NavGroup[];
+  pathname: string;
+  onNavigate?: () => void;
+}
 
+interface NavGroupListProps {
+  group: NavGroup;
+  pathname: string;
+  onNavigate?: () => void;
+  depth: number;
+}
+
+export function PackageNav({ groups, pathname, onNavigate }: PackageNavProps) {
   return (
-    <div className="mt-4 space-y-5">
-      {navSections.map((section) => (
-        <div key={section.title}>
-          <h5 className="px-3 mb-2 text-[11px] font-medium text-gray-8 uppercase tracking-wider">
-            {section.title}
-          </h5>
-          <div className="space-y-3">
-            {section.groups.map((group) => (
-              <div key={group.packageName}>
-                <Link
-                  href={`/reference#${group.packageSlug}`}
-                  className="block px-3 py-1.5 rounded-md text-xs font-medium text-gray-9 transition-colors hover:bg-gray-1 hover:text-gray-12"
-                >
-                  {group.title}
-                  {group.advanced ? <span className="ml-2 text-[10px] uppercase text-yellow-10">Advanced</span> : null}
-                </Link>
-                <ul className="mt-1 space-y-0.5">
-                  {group.topics.map((topic) => {
-                    const href = topicHref(topic);
-                    const isActive = pathname === href;
-                    return (
-                      <li key={topic.href}>
-                        <Link
-                          href={href}
-                          className={`block truncate rounded-md py-1 pl-5 pr-3 text-xs transition-colors ${
-                            isActive
-                              ? 'bg-gray-2 text-blue-10'
-                              : 'text-gray-8 hover:bg-gray-1 hover:text-gray-11'
-                          }`}
-                          title={topic.topicTitle}
-                        >
-                          {topic.topicTitle}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
+    <div className="space-y-3">
+      {groups.map((group) => (
+        <NavGroupList key={group.title} group={group} pathname={pathname} onNavigate={onNavigate} depth={0} />
       ))}
+    </div>
+  );
+}
+
+function NavGroupList({ group, pathname, onNavigate, depth }: NavGroupListProps) {
+  return (
+    <div>
+      <div className={`px-3 ${depth === 0 ? 'mb-1' : 'mb-0.5'} text-[11px] font-medium uppercase tracking-wider text-gray-8`}>
+        {group.title}
+        {group.badge ? <span className="ml-2 text-[10px] text-yellow-10">{group.badge}</span> : null}
+      </div>
+      {group.items?.length ? (
+        <ul className="space-y-0.5">
+          {group.items.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={`block truncate rounded-md py-1.5 pr-3 text-sm transition-colors ${depth > 0 ? 'pl-6' : 'pl-3'} ${
+                    isActive
+                      ? 'bg-gray-2 text-gray-12 font-medium'
+                      : 'text-gray-10 hover:bg-gray-1 hover:text-gray-12'
+                  }`}
+                  title={item.title}
+                >
+                  {item.title}
+                  {item.badge ? <span className="ml-2 text-[10px] uppercase text-yellow-10">{item.badge}</span> : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {group.groups?.length ? (
+        <div className="mt-2 space-y-2">
+          {group.groups.map((child) => (
+            <NavGroupList key={child.title} group={child} pathname={pathname} onNavigate={onNavigate} depth={depth + 1} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

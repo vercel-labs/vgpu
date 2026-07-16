@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DocsPageShell } from '@/components/docs-page-shell';
 import { referenceGroups, recordHref } from '@/lib/manifest';
 
 const featuredSymbols = ['init', 'Gpu', 'Pass', 'Draw', 'Compute', 'Frame', 'Bundle', 'Target', 'SharedUniforms', 'PingPongStorage'];
@@ -10,7 +11,7 @@ export default function ReferencePage() {
     .filter((record): record is NonNullable<typeof record> => Boolean(record));
 
   return (
-    <div className="px-4 py-8 lg:px-8 lg:py-12 max-w-6xl mx-auto">
+    <DocsPageShell pathname="/reference" articleClassName="min-w-0 max-w-6xl">
       <header className="mb-12">
         <p className="text-sm font-medium text-blue-9 mb-3">Reference</p>
         <h1 className="text-3xl md:text-4xl font-semibold text-gray-12 mb-4">API Reference</h1>
@@ -90,6 +91,6 @@ export default function ReferencePage() {
           ))}
         </div>
       </section>
-    </div>
+    </DocsPageShell>
   );
 }

@@ -1,10 +1,11 @@
 import { ExampleCard } from '@/components/example-card';
+import { DocsPageShell } from '@/components/docs-page-shell';
 import { examples } from '@/lib/examples-registry';
 
 export default function ExamplesPage() {
   return (
-    <div className="px-6 py-12 lg:px-12 lg:py-16">
-      <div className="mx-auto max-w-6xl">
+    <DocsPageShell pathname="/examples" className="px-6 py-12 lg:px-12 lg:py-16" articleClassName="min-w-0 max-w-6xl">
+      <div className="max-w-6xl">
         <div className="mb-10">
           <div className="mb-3 inline-flex rounded-full border border-blue-4 bg-blue-1 px-3 py-1 text-sm font-medium text-blue-9">
             Live WebGPU examples
@@ -23,6 +24,6 @@ export default function ExamplesPage() {
           ))}
         </div>
       </div>
-    </div>
+    </DocsPageShell>
   );
 }

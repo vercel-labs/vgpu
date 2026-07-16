@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MarkdownContent } from '@/components/markdown-content';
+import { DocsPageShell } from '@/components/docs-page-shell';
+import { extractToc, MarkdownContent } from '@/components/markdown-content';
 import {
   getReferenceTopic,
   referenceTopics,
@@ -33,16 +33,10 @@ export default async function ReferenceTopicPage({ params }: ReferenceTopicPageP
   const topic = getReferenceTopic(packageSlug, topicSlug);
   if (!topic) notFound();
 
-  return (
-    <article className="px-4 py-8 lg:px-8 lg:py-12 max-w-4xl mx-auto">
-      <nav className="mb-8 flex flex-wrap items-center gap-2 text-sm text-gray-9">
-        <Link href="/reference" className="hover:text-blue-9 transition-colors">Reference</Link>
-        <span>/</span>
-        <Link href={`/reference#${topic.packageSlug}`} className="hover:text-blue-9 transition-colors">{topic.title}</Link>
-        <span>/</span>
-        <span className="text-gray-11">{topic.topicTitle}</span>
-      </nav>
+  const pathname = `/reference/${topic.packageSlug}/${topic.topic}`;
 
+  return (
+    <DocsPageShell pathname={pathname} toc={extractToc(topic.content)}>
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <span className="rounded-full border border-gray-4 bg-gray-1 px-3 py-1 text-xs font-medium text-gray-10">
           {topic.packageName}
@@ -71,9 +65,8 @@ export default async function ReferenceTopicPage({ params }: ReferenceTopicPageP
           {topic.records.map((record) => (
             <a
               key={`${record.package}:${record.symbol}`}
-              id={record.anchor}
               href={`#${record.anchor}`}
-              className="scroll-mt-24 rounded-full border border-gray-4 bg-black/30 px-3 py-1 text-sm text-gray-10 transition-colors hover:border-gray-5 hover:text-blue-9"
+              className="rounded-full border border-gray-4 bg-black/30 px-3 py-1 text-sm text-gray-10 transition-colors hover:border-gray-5 hover:text-blue-9"
             >
               <code>{record.symbol}</code>
               <span className="ml-2 text-[11px] uppercase tracking-wide text-gray-8">{record.symbolKind}</span>
@@ -83,6 +76,6 @@ export default async function ReferenceTopicPage({ params }: ReferenceTopicPageP
       </section>
 
       <MarkdownContent content={topic.content} />
-    </article>
+    </DocsPageShell>
   );
 }
