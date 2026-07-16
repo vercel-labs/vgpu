@@ -24,11 +24,16 @@ const setCode = [
   'wave.set({ params: { time: gpu.time } }); // update uniforms per frame',
 ].join('\n');
 
-const frameCode = `gpu.frame((frame) => {
+const oneShotCode = `wave.draw({ target: surface }); // one encoder, one submit — that's the whole frame`;
+
+const frameCode = `const boat = gpu.pass(boatSource); // a second pass, created once like wave
+
+gpu.frame((frame) => {
   frame.pass({ target: surface }, (pass) => {
-    pass.draw(wave); // the same wave pass from above — nothing new is compiled
+    pass.draw(wave); // nothing new is compiled — pipelines were built at creation
+    pass.draw(boat);
   });
-}); // runs immediately, submits once`;
+}); // runs immediately, submits everything above once`;
 
 const loopCode = `const handle = gpu.frame.loop((frame) => {
   wave.set({ params: { time: gpu.time } }); // update uniforms every tick
@@ -91,10 +96,15 @@ export default function ConceptsPage() {
       <section className="mb-12" id="render-a-frame">
         <h2 className="text-2xl font-semibold text-gray-12 mb-4">Render a frame</h2>
         <p className="text-gray-11 mb-4">
-          <code>gpu.frame()</code> runs your callback right away and submits the work to the GPU once. Nothing keeps drawing afterward.
-          When something changes—a resize, a drag, a toggle—call <code>gpu.frame()</code> again from your event handler.
+          The simplest draw is a one-shot. <code>wave.draw()</code> encodes a single render pass and submits it immediately.
+          Nothing keeps drawing afterward—when something changes (a resize, a drag, a toggle), call it again from your event handler.
+        </p>
+        <CodeBlock code={oneShotCode} language="typescript" />
+        <p className="text-gray-11 mb-4">
+          To draw more than one thing, batch the work with <code>gpu.frame()</code>. It runs your callback right away and submits everything inside as a single command buffer.
         </p>
         <CodeBlock code={frameCode} language="typescript" />
+        <Callout type="info">One-shot draws submit per call; a frame submits once for everything inside. Ten draws in one frame is still one submit.</Callout>
       </section>
 
       <section className="mb-12" id="animate-with-frame-loop">
