@@ -9,11 +9,13 @@ import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./min
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
 import { parseModule, type ImportDecl } from "./parser.ts";
 import { reflect, type Reflection } from "./reflect.ts";
+import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
 import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
+export { reflectSource } from "./reflect-source.ts";
 export type { BindingInfo, BindingKind, EntryPointInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";
@@ -36,19 +38,6 @@ export interface SourceMap { readonly version: 3; readonly sources: readonly str
 export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
 
 const scanCache = new Map<string, MangleModule>();
-
-/**
- * Reflects one raw WGSL string through the same scanner/parser/ReflectionFacade path as resolveShader().
- * This intentionally rejects WGSL import graphs; use resolveShader() when imports must be loaded/mangled.
- */
-export function reflectSource(wgsl: string, path = "<runtime>"): Reflection {
-  const tokens = scan(wgsl);
-  const parsed = parseModule(tokens);
-  if (parsed.imports.length > 0) {
-    throw wgslError("VGPU-WGSL-REFLECT-SOURCE-IMPORT", "reflectSource() accepts a single raw WGSL string; use resolveShader() for WGSL import graphs.");
-  }
-  return reflect([{ path, source: wgsl, tokens, parsed }]);
-}
 
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
   const loaded = new Map<string, MangleModule>();

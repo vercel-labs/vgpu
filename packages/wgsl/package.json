@@ -40,16 +40,23 @@
     "./loader-webpack": {
       "types": "./dist/loader-webpack/index.d.ts",
       "import": "./dist/loader-webpack/index.js",
+      "require": "./dist/loader-webpack/index.js",
       "default": "./dist/loader-webpack/index.js"
     },
     "./loader-vite": {
       "types": "./dist/loader-vite/index.d.ts",
       "import": "./dist/loader-vite/index.js",
+      "require": "./dist/loader-vite/index.js",
       "default": "./dist/loader-vite/index.js"
     },
     "./wgsl-types": {
       "types": "./dist/wgsl-types.d.ts",
       "default": "./dist/wgsl-types.d.ts"
+    },
+    "./reflect-source": {
+      "types": "./dist/runtime/reflect-source.d.ts",
+      "import": "./dist/runtime/reflect-source.js",
+      "default": "./dist/runtime/reflect-source.js"
     }
   },
   "files": [
@@ -69,6 +76,7 @@
     ".": 25600,
     "./runtime": 204800,
     "./loader-webpack": 204800,
-    "./loader-vite": 204800
+    "./loader-vite": 204800,
+    "./reflect-source": 25600
   }
 }
