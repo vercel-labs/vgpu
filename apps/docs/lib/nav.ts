@@ -28,6 +28,7 @@ export interface NavGroup {
 
 export interface NavSection {
   title: string;
+  href?: string;
   groups: NavGroup[];
 }
 
@@ -76,18 +77,13 @@ const exampleItems: NavItem[] = [
 export const navSections: NavSection[] = [
   {
     title: 'Get started',
+    href: '/get-started',
     groups: [
       {
         title: '',
         items: [
-          {
-            title: 'Platforms',
-            href: '/get-started',
-            children: [
-              { title: 'Web', href: '/get-started/web' },
-              { title: 'Node', href: '/get-started/node' },
-            ],
-          },
+          { title: 'Web', href: '/get-started/web' },
+          { title: 'Node', href: '/get-started/node' },
           { title: 'Context', href: '/get-started/context' },
           { title: 'Effects', href: '/get-started/effects' },
           { title: 'Passes', href: '/get-started/passes' },
@@ -98,6 +94,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: 'Guides',
+    href: '/guides',
     groups: guideGroups.map((group) => ({
       title: group.title,
       items: group.slugs.flatMap((slug) => {
@@ -108,25 +105,18 @@ export const navSections: NavSection[] = [
   },
   {
     title: 'Examples',
+    href: '/examples',
     groups: [
       {
-        title: 'Gallery',
-        items: [
-          { title: 'Gallery', href: '/examples' },
-          ...exampleItems,
-        ],
+        title: '',
+        items: exampleItems,
       },
     ],
   },
   {
     title: 'API Reference',
-    groups: [
-      {
-        title: 'Overview',
-        items: [{ title: 'Overview', href: '/reference' }],
-      },
-      ...referenceGroups.map(referenceGroupToNavGroup),
-    ],
+    href: '/reference',
+    groups: [...referenceGroups.map(referenceGroupToNavGroup)],
   },
   {
     title: 'Old drafts',
