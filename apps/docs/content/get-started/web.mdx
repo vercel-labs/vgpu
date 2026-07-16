@@ -38,9 +38,7 @@ const surface = gpu.surface(canvas);
 const gradient = gpu.effect(gradientSource);
 
 gpu.frame((frame) => {
-  frame.pass({ target: surface, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(gradient);
-  });
+  frame.pass({ target: surface }, (pass) => pass.draw(gradient));
 }); // renders immediately
 ```
 
