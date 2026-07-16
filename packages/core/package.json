@@ -36,6 +36,7 @@
   },
   "files": [
     "dist",
+    "!dist/tsconfig.tsbuildinfo",
     "src/**/*.docs.md",
     "README.md",
     "LICENSE"
