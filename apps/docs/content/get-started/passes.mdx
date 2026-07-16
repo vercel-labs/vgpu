@@ -1,6 +1,6 @@
 ---
 title: Passes
-summary: A pass renders into one target inside a frame; use several passes when a later pass reads an earlier result.
+summary: A pass composites any number of draws into one target; a single shader can draw directly.
 relatedSymbols:
   - Frame
   - FramePass
@@ -17,57 +17,76 @@ prevNext:
 
 # Passes
 
-A pass is a render-pass section inside a frame. It has one target, one clear color, and any number of draw calls or render bundles. Use separate passes when you need separate targets or when a later pass reads the result of an earlier one.
-
-Here is the effect chain from the previous page inside one frame — the GPU encodes the same two render passes, but everything submits once:
+A pass is a render-pass section inside a frame. It has one target, one clear color, and any number of draw calls. Open a pass by hand when you want to composite multiple draws into the same render target — here, an ocean and a boat rendered into one offscreen scene:
 
 ```ts
 import { init } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
+const screenSurface = gpu.surface(canvas);
 
-const sceneSource = `
+// ---cut---
+const oceanSource = `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 1.0, 1.0);
+    let wave = sin(uv.x * 24.0) * 0.01;
+    let depth = smoothstep(0.4 + wave, 1.0, uv.y);
+    return vec4f(0.1, 0.3 + depth * 0.2, 0.55 + depth * 0.3, 1.0);
   }
 `;
 
-const postSource = `
+// Draws only the hull pixels; discards everything else.
+const boatSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let inHull = abs(uv.x - 0.5) < 0.12 && abs(uv.y - 0.42) < 0.05;
+    if (!inHull) { discard; }
+    return vec4f(0.45, 0.26, 0.13, 1.0);
+  }
+`;
+
+const scene = gpu.target({ size: [1280, 720] });
+const ocean = gpu.effect(oceanSource);
+const boat = gpu.effect(boatSource);
+
+gpu.frame((frame) => {
+  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(ocean); // fill the scene with water
+    pass.draw(boat); // paint the boat on top — same target
+  });
+});
+```
+
+Both draws share one render pass and one target. Order inside the pass is paint order: the ocean fills the scene first, then the boat draws on top of it.
+
+> Good to know: [`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+
+## One shader? Draw it directly
+
+When a target only needs a single shader, you don't have to open a pass by hand. The scene above can go through a postprocessing effect (bound with `set({ src: scene })`) straight onto the screen:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const screenSurface = gpu.surface(canvas);
+const scene = gpu.target({ size: [1280, 720] });
+const postprocessing = gpu.effect(`
   @group(0) @binding(0) var src: texture_2d<f32>;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     let dims = vec2f(textureDimensions(src));
     let base = textureLoad(src, vec2u(uv * dims), 0);
-    return vec4f(1.0 - base.rgb, 1.0);
+    let vignette = 1.0 - 0.4 * length(uv - vec2f(0.5));
+    return vec4f(base.rgb * vignette, 1.0);
   }
-`;
-
-const scene = gpu.target({ size: [1280, 720] });
-
-const sceneEffect = gpu.effect(sceneSource);
-const post = gpu.effect(postSource);
-post.set({ src: scene });
+`);
+postprocessing.set({ src: scene });
 
 // ---cut---
-gpu.frame((frame) => {
-  // 1. render the scene into the offscreen target
-  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(sceneEffect);
-  });
-
-  // 2. post-process the scene texture onto the canvas
-  frame.pass({ target: surface }, (pass) => {
-    pass.draw(post);
-  });
-});
+postprocessing.draw({ target: screenSurface }); // rendering an effect creates a pass
 ```
 
-The last pass targets the canvas [`Surface`](/reference/vgpu/surface#surface), which is what puts pixels on screen.
-
-> Good to know: one-shot `draw()` calls and a frame produce the same GPU work here — the difference is CPU-side. A frame batches every pass into one submit; ten passes in a frame are still one submit.
-
-[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.effect()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+Under the hood this creates an encoder, opens a render pass on `screenSurface`, encodes the draw, and submits — the same GPU work you would write by hand with `frame.pass`.
 
 > Good to know: `frame.pass()` always needs a target. Use a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)` or an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })`.
