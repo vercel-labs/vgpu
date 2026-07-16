@@ -28,6 +28,7 @@ const markCodeInsideLinks = () => (tree: HastNode) => {
 
 interface MarkdownContentProps {
   content: string;
+  enableTwoslashCut?: boolean;
 }
 
 function textFromChildren(children: React.ReactNode): string {
@@ -48,6 +49,18 @@ function slugifyHeadingText(text: string) {
 
 function slugifyHeading(children: React.ReactNode) {
   return slugifyHeadingText(textFromChildren(children));
+}
+
+
+const TWOSLASH_CUT_MARKER = '// ---cut---';
+
+function stripTwoslashCut(code: string) {
+  const markerIndex = code.indexOf(TWOSLASH_CUT_MARKER);
+  if (markerIndex === -1) return code;
+
+  const afterMarker = markerIndex + TWOSLASH_CUT_MARKER.length;
+  const nextLineIndex = code.indexOf('\n', afterMarker);
+  return nextLineIndex === -1 ? '' : code.slice(nextLineIndex + 1);
 }
 
 function normalizeCodeLanguage(language: string | undefined) {
@@ -85,7 +98,7 @@ export function extractToc(content: string): TocItem[] {
   return items;
 }
 
-export function MarkdownContent({ content }: MarkdownContentProps) {
+export function MarkdownContent({ content, enableTwoslashCut = false }: MarkdownContentProps) {
   const headingCounts = new Map<string, number>();
   const headingId = (children: React.ReactNode) => {
     const base = slugifyHeading(children);
@@ -173,7 +186,8 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
           td: ({ children }) => <td className="border-b border-gray-4 px-4 py-2 text-gray-11">{children}</td>,
           code: ({ className, children, node }) => {
             const skipAutoLink = Boolean((node as HastNode | undefined)?.properties?.dataSkipAutolink);
-            const code = String(children).replace(/\n$/, '');
+            const rawCode = String(children).replace(/\n$/, '');
+            const code = enableTwoslashCut ? stripTwoslashCut(rawCode) : rawCode;
             const match = /language-([^\s]+)/.exec(className ?? '');
             if (!match && !code.includes('\n')) {
               const symbolHref = skipAutoLink ? undefined : resolveSymbolHref(code);

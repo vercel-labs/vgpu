@@ -44,7 +44,7 @@ export default async function ConceptPage({ params }: ConceptPageProps) {
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="min-w-0 max-w-4xl">
-          <MarkdownContent content={concept.content} />
+          <MarkdownContent content={concept.content} enableTwoslashCut />
 
           {frontmatter.relatedSymbols.length > 0 ? (
             <section className="mt-12 rounded-lg border border-gray-4 bg-gray-1 p-4">

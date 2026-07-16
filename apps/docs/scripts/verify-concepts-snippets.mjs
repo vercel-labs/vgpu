@@ -27,6 +27,12 @@ try {
     }
   }
 
+  writeFileSync(join(out, 'ambient.d.ts'), `declare module "*.wgsl" {
+  const src: string;
+  export default src;
+}
+`);
+
   writeFileSync(join(out, 'tsconfig.json'), JSON.stringify({
     extends: join(repo, 'tsconfig.base.json'),
     compilerOptions: {
@@ -52,7 +58,7 @@ try {
         '@vgpu/wgsl': ['packages/wgsl/src/index.ts']
       }
     },
-    include: ['*.ts']
+    include: ['*.ts', 'ambient.d.ts']
   }, null, 2));
 
   const tsc = spawnSync('pnpm', ['exec', 'tsc', '-p', join(out, 'tsconfig.json'), '--noEmit', '--pretty', 'false'], { cwd: repo, encoding: 'utf8' });
