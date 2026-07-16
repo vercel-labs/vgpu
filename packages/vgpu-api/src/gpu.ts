@@ -8,19 +8,17 @@ import { Frame, FrameRunner } from "./frame.ts";
 import { InternalPass, type Pass, type PassOptions } from "./pass.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
-import { OffscreenTarget, ScreenTarget, type Target, type TargetOptions } from "./target.ts";
-import { unsupportedError } from "./errors.ts";
+import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
+import { frameReentrantError, surfaceDuplicateError, unsupportedError } from "./errors.ts";
 import { ComputePipeline } from "./compute.ts";
 import { createStorageBuffer } from "./storage.ts";
 import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
 import { toWgsl } from "./shader-source.ts";
 import { createSharedUniforms } from "./uniforms.ts";
+import { CanvasSurface, type Surface, type SurfaceCanvas, type SurfaceOptions } from "./surface.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
-  readonly size?: readonly [number, number];
-  readonly dpr?: number | readonly [number, number];
-  readonly autoResize?: boolean;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
   readonly requiredLimits?: Record<string, number>;
@@ -38,21 +36,20 @@ export interface SharedUniforms<T extends Record<string, unknown> = Record<strin
 export interface Gpu {
   readonly device: Device;
   readonly gpu: GPUDevice;
-  readonly screen?: Target;
   time: number;
   deltaTime: number;
   frameCount: number;
+  surface(canvas: SurfaceCanvas, opts?: SurfaceOptions): Surface;
   pass(source: string | ShaderSource, opts?: PassOptions): Pass;
   draw(opts: DrawOptions): Draw;
-  target(opts?: TargetOptions): Target;
+  target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;
   mesh(geometry: unknown): MeshLike;
-  onResize(cb: (size: readonly [number, number]) => void): () => void;
   dispose(): void;
   compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
   storage(bytes: number, access?: StorageAccess): StorageBuffer;
-  pingPong(width: number, height: number, opts?: TargetOptions): PingPongTargets;
+  pingPong(width: number, height: number, opts?: TargetTextureOptions): PingPongTargets;
   pingPongStorage(bytes: number): PingPongStorage;
   uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T>;
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle;
@@ -60,22 +57,9 @@ export interface Gpu {
 
 export type AdapterFactory = () => VGPUAdapter;
 
-type ResizeState = {
-  readonly canvas: HTMLCanvasElement | OffscreenCanvas;
-  readonly opts: InitOptions;
-  readonly autoResize: boolean;
-  readonly callbacks: Set<(size: readonly [number, number]) => void>;
-};
-
-export async function createGpu(entry: "browser" | "node" | "mock", canvasOrOpts?: HTMLCanvasElement | OffscreenCanvas | InitOptions, maybeOpts: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
-  const hasCanvas = isCanvas(canvasOrOpts);
-  const opts = (hasCanvas ? maybeOpts : canvasOrOpts) ?? {};
+export async function createGpu(entry: "browser" | "node" | "mock", opts: InitOptions = {}, _unused: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
   const device = await createDevice(entry, opts, adapterFactory);
-  const canvas = hasCanvas ? canvasOrOpts : undefined;
-  const resizeCallbacks = new Set<(size: readonly [number, number]) => void>();
-  const screen = canvas ? configureCanvasScreen(device, canvas, opts, resizeCallbacks) : undefined;
-  const resizeState = canvas ? { canvas, opts, autoResize: opts.autoResize ?? true, callbacks: resizeCallbacks } : undefined;
-  return new RingGpu(device, screen, resizeState);
+  return new RingGpu(device);
 }
 
 class RingGpu implements Gpu {
@@ -86,43 +70,58 @@ class RingGpu implements Gpu {
   private lastTimeMs = nowMs();
   private readonly cache = createBindGroupCache();
   private readonly samplers;
+  private readonly surfaces = new Map<SurfaceCanvas, CanvasSurface>();
+  private advancing = false;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
 
-  constructor(readonly device: Device, readonly screen?: Target, private readonly resizeState?: ResizeState) {
+  constructor(readonly device: Device) {
     this.gpu = device.gpu;
     this.samplers = createSamplerCache(device);
-    const runner = new FrameRunner(() => new Frame(device, screen), () => this.advanceFrameState());
+    const runner = new FrameRunner(() => new Frame(device), () => this.advanceFrameState());
     this.frame = callableFrameRunner(runner);
   }
 
+  surface(canvas: SurfaceCanvas, opts: SurfaceOptions = {}): Surface {
+    const existing = this.surfaces.get(canvas);
+    if (existing && !existing.disposed) throw surfaceDuplicateError(existing.label);
+    const surface = new CanvasSurface(this.device, canvas, opts, (s) => {
+      if (this.surfaces.get(s.canvas) === s) this.surfaces.delete(s.canvas);
+    });
+    this.surfaces.set(canvas, surface);
+    return surface;
+  }
   pass(source: string | ShaderSource, opts: PassOptions = {}): Pass {
     if (hasMesh(opts)) throw unsupportedError("gpu.pass", "gpu.pass() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new InternalPass(this.device, toWgsl(source), opts, this.cache, this.screen);
+    return new InternalPass(this.device, toWgsl(source), opts, this.cache);
   }
   draw(opts: DrawOptions): Draw {
     const shader = toWgsl(opts.shader);
-    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache, this.screen);
+    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache);
   }
-  target(opts: TargetOptions = {}): Target { return new OffscreenTarget(this.device, opts); }
+  target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
   mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
-  onResize(cb: (size: readonly [number, number]) => void): () => void {
-    const callbacks = this.resizeState?.callbacks;
-    if (!callbacks) return () => undefined;
-    callbacks.add(cb);
-    return () => { callbacks.delete(cb); };
+  dispose(): void {
+    for (const surface of [...this.surfaces.values()]) surface.dispose();
+    this.cache.dispose();
+    this.device.dispose();
   }
-  dispose(): void { this.cache.dispose(); this.device.dispose(); }
   compute(source: string | ShaderSource, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, toWgsl(source), opts, this.cache); }
   storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
-  pingPong(width: number, height: number, opts: TargetOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
+  pingPong(width: number, height: number, opts: TargetTextureOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
   pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
   uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T> { return createSharedUniforms(this.device, values); }
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { return createBundle(this.device, opts, cb); }
 
   private advanceFrameState(): void {
-    this.advanceTime();
-    this.applyAutoResize();
+    if (this.advancing) throw frameReentrantError();
+    this.advancing = true;
+    try {
+      this.advanceTime();
+      for (const surface of this.surfaces.values()) surface.applyAutoResize();
+    } finally {
+      this.advancing = false;
+    }
   }
 
   private advanceTime(): void {
@@ -131,13 +130,6 @@ class RingGpu implements Gpu {
     this.time += this.deltaTime;
     this.lastTimeMs = next;
     this.frameCount += 1;
-  }
-
-  private applyAutoResize(): void {
-    if (!this.screen || !this.resizeState?.autoResize) return;
-    const nextSize = canvasSize(this.resizeState.canvas, this.resizeState.opts);
-    if (nextSize[0] === this.screen.size[0] && nextSize[1] === this.screen.size[1]) return;
-    this.screen.resize(nextSize);
   }
 }
 
@@ -164,41 +156,8 @@ async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   return new Device(gpuDevice, adapter.info ?? null);
 }
 
-function configureCanvasScreen(device: Device, canvas: HTMLCanvasElement | OffscreenCanvas, opts: InitOptions, resizeCallbacks: Set<(size: readonly [number, number]) => void>): Target {
-  const navGpu = (globalThis.navigator as (Navigator & { gpu?: GPU }) | undefined)?.gpu;
-  const context = canvas.getContext("webgpu") as GPUCanvasContext | null;
-  if (!context) throw unsupportedError("init", "El canvas no pudo crear contexto webgpu.");
-  const format = navGpu?.getPreferredCanvasFormat?.() ?? "bgra8unorm";
-  const size = canvasSize(canvas, opts);
-  setCanvasSize(canvas, size);
-  context.configure({ device: device.gpu, format, alphaMode: "premultiplied" });
-  return new ScreenTarget(context, device, format, (nextSize) => {
-    for (const cb of resizeCallbacks) cb(nextSize);
-  });
-}
-
-function canvasSize(canvas: HTMLCanvasElement | OffscreenCanvas, opts: InitOptions): readonly [number, number] {
-  if (opts.size) return opts.size;
-  const dpr = clampDpr(opts.dpr);
-  const anyCanvas = canvas as { clientWidth?: number; clientHeight?: number; width: number; height: number };
-  return [Math.max(1, Math.round((anyCanvas.clientWidth ?? anyCanvas.width) * dpr)), Math.max(1, Math.round((anyCanvas.clientHeight ?? anyCanvas.height) * dpr))];
-}
-
-function setCanvasSize(canvas: HTMLCanvasElement | OffscreenCanvas, size: readonly [number, number]): void {
-  (canvas as { width: number; height: number }).width = size[0];
-  (canvas as { width: number; height: number }).height = size[1];
-}
-
-
 function hasMesh(opts: PassOptions): boolean {
   return "mesh" in (opts as Record<string, unknown>);
 }
 
-function clampDpr(dpr: InitOptions["dpr"]): number {
-  const raw = globalThis.devicePixelRatio ?? 1;
-  if (Array.isArray(dpr)) return Math.min(dpr[1], Math.max(dpr[0], raw));
-  if (typeof dpr === "number") return dpr;
-  return raw;
-}
-function isCanvas(value: unknown): value is HTMLCanvasElement | OffscreenCanvas { return typeof value === "object" && value !== null && "getContext" in value; }
 function nowMs(): number { return globalThis.performance?.now?.() ?? Date.now(); }

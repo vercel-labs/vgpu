@@ -4,7 +4,7 @@ export const DEFAULT_SNAPSHOT_TIME = Math.PI / 4;
 export const DEFAULT_SNAPSHOT_SPEED = 2;
 
 export async function renderRepresentativeSnapshot(init) {
-  const gpu = await init({ size: SNAPSHOT_SIZE });
+  const gpu = await init();
   try {
     const target = gpu.target({ size: SNAPSHOT_SIZE, format: "rgba8unorm", label: "vgpu-snapshot-gradient" });
     const pass = gpu.pass(REPRESENTATIVE_GRADIENT_WGSL, {

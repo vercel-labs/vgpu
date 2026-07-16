@@ -28,7 +28,8 @@ pnpm add -D @webgpu/types
 ```ts
 import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
+const gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const wave = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
 gpu.frame.loop(() => {
   wave.set({ time: gpu.time });
@@ -41,8 +42,8 @@ gpu.frame.loop(() => {
 ```ts
 import { init } from "vgpu/node";
 
-const gpu = await init({ size: [256, 256] });
-const target = gpu.target({ format: "rgba8unorm" });
+const gpu = await init();
+const target = gpu.target({ size: [256, 256], format: "rgba8unorm" });
 const draw = gpu.draw({ shader: TRIANGLE_WGSL, targets: [target] });
 gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw)));
 const pixels = await target.read();

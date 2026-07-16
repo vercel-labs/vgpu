@@ -84,7 +84,7 @@ declare function createRenderBundle(device: { readonly gpu: GPUDevice }, opts: R
 import { init } from "vgpu/mock";
 import { createRenderBundle } from "vgpu/core";
 
-const gpu = await init({ size: [16, 16] });
+const gpu = await init();
 const bundle = createRenderBundle(gpu.device, {
   label: "empty",
   colorFormats: ["rgba8unorm"],
@@ -100,7 +100,7 @@ void bundle;
 import { init } from "vgpu/mock";
 import { createRenderBundle } from "vgpu/core";
 
-const gpu = await init({ size: [16, 16] });
+const gpu = await init();
 const target = gpu.target({ size: [16, 16] });
 const bundle = createRenderBundle(gpu.device, {
   colorFormats: target.colors.map((color) => color.format),

@@ -26,7 +26,7 @@ struct VertexOut {
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu instancing GPU acceptance", () => {
   test("instanced quads render more than one visible copy", async () => {
-    const gpu = await init({ size: [32, 16] });
+    const gpu = await init();
     try {
       const target = gpu.target({ size: [32, 16], format: "rgba8unorm" });
       const quads = gpu.draw({ shader: INSTANCED_QUADS, label: "instanced-quads", vertices: 6, instances: 2 });

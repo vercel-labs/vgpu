@@ -23,7 +23,7 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3
 `;
 
 export async function runSceneExample() {
-  const gpu = await init({ size: [32, 32] });
+  const gpu = await init();
   const target = gpu.target({ size: [32, 32], format: "rgba8unorm", depth: true });
   const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
   const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box({ size: 1 })), label: "cube", targets: [target] });

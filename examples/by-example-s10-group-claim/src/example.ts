@@ -16,7 +16,7 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 `;
 
 export async function runGroupClaimExample() {
-  const gpu = await init({ size: [8, 8] });
+  const gpu = await init();
   const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
   const draw = gpu.draw({ shader: CLAIMED, label: "claimed" });
   const layout = draw.layout(0, { dynamicOffsets: true });

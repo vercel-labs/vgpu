@@ -33,7 +33,7 @@ ${SHARED_CAMERA}
 `;
 
 export async function runSharingExample() {
-  const gpu = await init({ size: [16, 16] });
+  const gpu = await init();
   const target = gpu.target({ size: [16, 16], format: "rgba8unorm" });
   const camera = new Uniform(gpu.device, { size: 16, label: "camera" });
   camera.write(new Float32Array([1, 0, 0, 0]));

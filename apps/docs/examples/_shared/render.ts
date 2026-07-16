@@ -10,10 +10,11 @@ export interface FragmentExampleOptions {
 }
 
 export async function runFragmentExample(canvas: HTMLCanvasElement, options: FragmentExampleOptions): Promise<() => void> {
-  const gpu = await init(canvas, { dpr: [1, 2], autoResize: true });
+  const gpu = await init();
+  const surface = gpu.surface(canvas, { dpr: [1, 2] });
   const pass = gpu.pass(options.fragment);
-  const handle = gpu.frame.loop(() => {
-    const [width, height] = gpu.screen?.size ?? [canvas.width, canvas.height];
+  const handle = gpu.frame.loop((frame) => {
+    const [width, height] = surface.size;
     pass.set({
       uniforms: {
         time: gpu.time,
@@ -21,7 +22,7 @@ export async function runFragmentExample(canvas: HTMLCanvasElement, options: Fra
         ...(options.values?.(gpu.time, width, height) ?? {}),
       },
     });
-    pass.draw();
+    frame.pass({ target: surface }, (p) => p.draw(pass));
   });
 
   return () => {

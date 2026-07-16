@@ -16,7 +16,7 @@ gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 If the first visible frame stutters, pre-warm target signatures:
 
 ```text
-const hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const hdr = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
 const draw = gpu.draw({ shader: WGSL, mesh, targets: [hdr] });
 ```
 

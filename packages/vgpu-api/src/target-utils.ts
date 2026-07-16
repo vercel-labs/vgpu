@@ -1,5 +1,5 @@
-import { unsupportedError } from "./errors.ts";
-import type { TargetOptions } from "./target.ts";
+import { targetSizeRequiredError, unsupportedError } from "./errors.ts";
+import type { TargetOptions, TargetTextureOptions } from "./target.ts";
 
 export const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
 
@@ -7,19 +7,20 @@ export interface TargetDeviceCaps {
   readonly isCompatibilityMode?: boolean;
 }
 
-export function colorSpecsFor(options: TargetOptions): readonly { readonly format: GPUTextureFormat }[] {
+export function colorSpecsFor(options: TargetTextureOptions): readonly { readonly format: GPUTextureFormat }[] {
   return options.colors ?? [{ format: options.format ?? DEFAULT_FORMAT }];
 }
 
-export function depthFormatFor(options: TargetOptions): GPUTextureFormat | undefined {
+export function depthFormatFor(options: TargetTextureOptions): GPUTextureFormat | undefined {
   return options.depth === true ? "depth24plus" : options.depth || undefined;
 }
 
-export function sampleCountFor(options: TargetOptions): 1 | 4 {
+export function sampleCountFor(options: TargetTextureOptions): 1 | 4 {
   return options.msaa === true || options.msaa === 4 ? 4 : 1;
 }
 
-export function validateTargetOptions(options: TargetOptions, caps: TargetDeviceCaps): void {
+export function validateTargetOptions(options: Partial<TargetOptions> | undefined, caps: TargetDeviceCaps): void {
+  if (!options?.size) throw targetSizeRequiredError();
   if (sampleCountFor(options) !== 4) return;
   for (const spec of colorSpecsFor(options)) validateMsaaFormat(spec.format, caps);
 }

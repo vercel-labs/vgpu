@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe("compute storage aliasing", () => {
   test("writable storage aliasing throws the exact fix-it text", async () => {
-    gpu = await init({ size: [1, 1] });
+    gpu = await init();
     const sim = gpu.compute(ALIASING_SHADER, { label: "sim" });
     const buffer = gpu.storage(16);
     sim.set({ src: buffer, dst: buffer });
@@ -37,7 +37,7 @@ describe("compute storage aliasing", () => {
   });
 
   test("read + read aliasing passes without warnings", async () => {
-    gpu = await init({ size: [1, 1] });
+    gpu = await init();
     const sim = gpu.compute(READ_ONLY_SHADER, { label: "sim" });
     const buffer = gpu.storage(32, "read");
     const dst = gpu.storage(32);
@@ -46,7 +46,7 @@ describe("compute storage aliasing", () => {
   });
 
   test("storage access mode reflects in bind group layout entries", async () => {
-    gpu = await init({ size: [1, 1] });
+    gpu = await init();
     const device = gpu.device.gpu as GPUDevice;
     const spy = vi.spyOn(device, "createBindGroupLayout");
     gpu.compute(ALIASING_SHADER, { label: "sim" });

@@ -13,7 +13,7 @@ const shaderPath = join(dirname(fileURLToPath(import.meta.url)), "scene-lit-cube
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acceptance", () => {
   test("lit cube resolves std light imports and Lambert responds to light direction", async () => {
     const entry = await litCubeFixture();
-    const gpu = await init({ size: [48, 48] });
+    const gpu = await init();
     try {
       const shader = await resolveShader({ entry });
       expect(shader.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/light/index.wgsl"))).toBe(true);

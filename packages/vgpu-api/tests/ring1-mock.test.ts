@@ -30,7 +30,7 @@ struct Camera { value: f32 }
 `;
 
 test("set() writes lib-owned values in-place and keeps bind group stable on mock", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const wave = gpu.pass(WAVE, { label: "wave" });
   const target = gpu.target({ size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
@@ -46,7 +46,7 @@ test("set() writes lib-owned values in-place and keeps bind group stable on mock
 });
 
 test("creation-time set sugar is exactly an initial set()", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
   const target = gpu.target({ size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
@@ -60,7 +60,7 @@ test("creation-time set sugar is exactly an initial set()", async () => {
 });
 
 test("R1 ownership flip reports canonical fix-it text", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const wave = gpu.pass(WAVE, { label: "wave" });
   wave.set({ speed: 2 });
   const userBuffer = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
@@ -74,7 +74,7 @@ test("R1 ownership flip reports canonical fix-it text", async () => {
 });
 
 test("binding never set, including samplers, reports canonical no-phantom-resource error", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const lighting = gpu.pass(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
@@ -88,7 +88,7 @@ test("binding never set, including samplers, reports canonical no-phantom-resour
 });
 
 test("missing texture binding reports a texture-specific fix-it", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const post = gpu.pass(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
 
@@ -97,7 +97,7 @@ test("missing texture binding reports a texture-specific fix-it", async () => {
 });
 
 test("R2 cache hits when alternating between two user-owned resource identities", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const draw = gpu.pass(CAMERA_SHADER, { label: "cameraPass" });
   const target = gpu.target({ size: [4, 4] });
   const a = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
@@ -116,7 +116,7 @@ test("R2 cache hits when alternating between two user-owned resource identities"
 });
 
 test("bundle back-refs stale only on identity changes, never lib-owned in-place writes", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
   const events: unknown[] = [];
   registerDrawBundle(passDraw(wave), { id: "bundle", markStale: (event) => { events.push(event); } });
@@ -138,7 +138,7 @@ test("bundle back-refs stale only on identity changes, never lib-owned in-place 
 });
 
 test("set() accepts Targets as texture resources and uses target identity", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const post = gpu.pass(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
   const output = gpu.target({ size: [4, 4] });
@@ -152,7 +152,7 @@ test("set() accepts Targets as texture resources and uses target identity", asyn
 });
 
 test("set() validates resource kind against reflection before WebGPU bind-group creation", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const lighting = gpu.pass(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
@@ -161,23 +161,24 @@ test("set() validates resource kind against reflection before WebGPU bind-group 
 });
 
 
-test("screen resize reallocates canvas dimensions and notifies on explicit and auto resize", async () => {
+test("surface resize reallocates canvas dimensions and notifies on explicit and auto resize", async () => {
   const canvas = mockCanvas(10, 5);
-  const gpu = await initBrowser(canvas, { adapter: createMockAdapter(), dpr: 2 });
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const surface = gpu.surface(canvas, { dpr: 2 });
   const seen: readonly [number, number][] = [];
-  gpu.onResize((size) => { seen.push(size); });
+  surface.onResize(({ width, height }) => { seen.push([width, height]); });
 
-  expect(gpu.screen?.size).toEqual([20, 10]);
-  gpu.screen?.resize([30, 12]);
+  expect(surface.size).toEqual([20, 10]);
+  surface.resize([30, 12]);
   expect(canvas.width).toBe(30);
   expect(canvas.height).toBe(12);
-  expect(seen).toEqual([[30, 12]]);
+  expect(seen).toEqual([[20, 10], [30, 12]]);
 
   canvas.clientWidth = 20;
   canvas.clientHeight = 10;
   gpu.frame();
-  expect(gpu.screen?.size).toEqual([40, 20]);
-  expect(seen).toEqual([[30, 12], [40, 20]]);
+  expect(surface.size).toEqual([40, 20]);
+  expect(seen).toEqual([[20, 10], [30, 12], [40, 20]]);
   gpu.dispose();
 });
 

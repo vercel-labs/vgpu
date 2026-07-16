@@ -12,7 +12,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 `;
 
 export async function runComputeExample() {
-  const gpu = await init({ size: [1, 1] });
+  const gpu = await init();
   const src = gpu.device.createBuffer({ size: 16, usage: ["storage", "copy_dst", "copy_src"], label: "src" });
   const dst = gpu.device.createBuffer({ size: 16, usage: ["storage", "copy_dst", "copy_src"], label: "dst" });
   src.write(new Float32Array([1, 2, 3, 4]));

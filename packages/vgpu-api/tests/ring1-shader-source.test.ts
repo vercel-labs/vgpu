@@ -28,7 +28,7 @@ struct Params { value: f32 }
 `;
 
 test("gpu.pass accepts string and ShaderSource with identical reflection", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const fromString = gpu.pass(FRAGMENT, { label: "shader" });
   const fromArtifact = gpu.pass({ version: 1, wgsl: FRAGMENT }, { label: "shader" });
 
@@ -38,7 +38,7 @@ test("gpu.pass accepts string and ShaderSource with identical reflection", async
 });
 
 test("gpu.draw accepts ShaderSource and keeps Draw internals string-only", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const draw = gpu.draw({ shader: { version: 1, wgsl: DRAW }, label: "artifact-draw" });
 
   expect(drawReflection(draw).bindings[0]).toMatchObject({ name: "params", group: 0, binding: 0 });
@@ -46,7 +46,7 @@ test("gpu.draw accepts ShaderSource and keeps Draw internals string-only", async
 });
 
 test("gpu.compute accepts ShaderSource", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const compute = gpu.compute({ version: 1, wgsl: COMPUTE }, { label: "artifact-compute" });
 
   compute.set({ params: { value: 1 } });
@@ -54,7 +54,7 @@ test("gpu.compute accepts ShaderSource", async () => {
 });
 
 test("malformed ShaderSource without version throws VGPU-SHADER-SOURCE-INVALID", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
 
   expect(() => gpu.pass({ wgsl: FRAGMENT } as never)).toThrowError(
     /VGPU-SHADER-SOURCE-INVALID: se esperaba un WGSL string o un ShaderSource \{ version, wgsl \}, se recibió .*\nSi importás un \.wgsl, asegurate de tener configurado el loader \(@vgpu\/wgsl\/loader-vite o \/loader-webpack\)\./,
@@ -63,7 +63,7 @@ test("malformed ShaderSource without version throws VGPU-SHADER-SOURCE-INVALID",
 });
 
 test("unsupported ShaderSource version throws VGPU-SHADER-SOURCE-INVALID", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
 
   expect(() => gpu.pass({ version: 2, wgsl: FRAGMENT } as never)).toThrowError(
     "VGPU-SHADER-SOURCE-INVALID: ShaderSource version 2 no soportada por este runtime (soporta version: 1).\n" +

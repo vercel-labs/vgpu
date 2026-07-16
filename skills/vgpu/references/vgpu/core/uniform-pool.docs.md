@@ -86,7 +86,7 @@ declare class UniformPool {
 import { init } from "vgpu/mock";
 import { UniformPool, type UniformLayout } from "vgpu/core";
 
-const gpu = await init({ size: [32, 32] });
+const gpu = await init();
 const target = gpu.target({ size: [32, 32] });
 const draw = gpu.draw({ shader: `
   struct Object { model: mat4x4f }
@@ -120,7 +120,7 @@ gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw, { offsets:
 import { init } from "vgpu/mock";
 import { UniformPool, type UniformLayout } from "vgpu/core";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const pool = new UniformPool(gpu.device, { capacityBytes: 1024 });
 const layout: UniformLayout<Float32Array> = {
   size: 16,

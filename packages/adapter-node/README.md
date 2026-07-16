@@ -15,8 +15,8 @@ pnpm add vgpu
 ```ts
 import { init } from "vgpu/node";
 
-const gpu = await init({ size: [256, 256] });
-const target = gpu.target({ format: "rgba8unorm" });
+const gpu = await init();
+const target = gpu.target({ size: [256, 256], format: "rgba8unorm" });
 const draw = gpu.draw({ shader: TRIANGLE_WGSL, targets: [target] });
 gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw)));
 const rgba = await target.read();

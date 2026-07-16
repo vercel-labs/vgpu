@@ -1,12 +1,15 @@
 import type { Texture, ResourceDestroyCallback, ResourceIdentity, UnsubscribeResourceDestroy } from "@vgpu/core";
 
-export interface TargetOptions {
-  readonly size?: readonly [number, number];
+export interface TargetTextureOptions {
   readonly format?: GPUTextureFormat;
   readonly colors?: readonly { readonly format: GPUTextureFormat }[];
   readonly depth?: boolean | GPUTextureFormat;
   readonly msaa?: boolean | 4;
   readonly label?: string;
+}
+
+export interface TargetOptions extends TargetTextureOptions {
+  readonly size: readonly [number, number];
 }
 
 export interface Target {
@@ -26,4 +29,4 @@ export interface Target {
 }
 
 export { OffscreenTarget } from "./target-offscreen.ts";
-export { ScreenTarget } from "./target-screen.ts";
+export type { Surface, SurfaceOptions, SurfaceResizeEvent } from "./surface.ts";

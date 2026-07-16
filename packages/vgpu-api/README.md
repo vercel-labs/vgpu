@@ -22,7 +22,8 @@ pnpm add -D @webgpu/types
 ```ts
 import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
+const gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const wave = gpu.pass(/* wgsl */ `
 struct Params { time: f32, speed: f32 }
 @group(0) @binding(0) var<uniform> params: Params;
@@ -42,8 +43,8 @@ gpu.frame.loop(() => {
 ```ts
 import { init } from "vgpu/node";
 
-const gpu = await init({ size: [256, 256] });
-const target = gpu.target({ format: "rgba8unorm" });
+const gpu = await init();
+const target = gpu.target({ size: [256, 256], format: "rgba8unorm" });
 const tri = gpu.draw({ shader: TRIANGLE_WGSL });
 gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(tri)));
 const pixels = await target.read();

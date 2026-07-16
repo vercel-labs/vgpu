@@ -14,7 +14,7 @@ struct PostParams { texel: vec2f }
 `;
 
 export async function runHdrPostExample() {
-  const gpu = await init({ size: [8, 8] });
+  const gpu = await init();
   const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
   const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
   const solid = gpu.pass(SOLID, { label: "solid" });

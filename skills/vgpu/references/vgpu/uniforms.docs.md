@@ -34,7 +34,7 @@ interface SharedUniforms<T extends Record<string, unknown> = Record<string, unkn
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [64, 64] });
+const gpu = await init();
 const target = gpu.target({ size: [64, 64] });
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 const wave = gpu.pass(`
@@ -52,7 +52,7 @@ gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(wave)));
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [16, 16] });
+const gpu = await init();
 const globals = gpu.uniforms({ exposure: 1, tint: [1, 1, 1] });
 globals.set({ exposure: 1.25 });
 ```

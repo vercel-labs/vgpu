@@ -50,7 +50,7 @@ struct VertexOut {
 `;
 
 test("gpu.draw records storage-driven vertices and instances without vertex buffers", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const count = 8;
@@ -69,7 +69,7 @@ test("gpu.draw records storage-driven vertices and instances without vertex buff
 });
 
 test("instances zero is a valid no-instance draw", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "zero-dots", instances: 0, vertices: 6 });
@@ -85,7 +85,7 @@ test("instances zero is a valid no-instance draw", async () => {
 });
 
 test("per-call instances override draw defaults while vertices fall back to draw options", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "dots", instances: 10, vertices: 6, firstInstance: 2 });
@@ -101,7 +101,7 @@ test("per-call instances override draw defaults while vertices fall back to draw
 });
 
 test("mesh vertexCount wins over DrawOptions.vertices unless call vertices override it", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const mesh = { vertexCount: 5 };
@@ -124,7 +124,7 @@ test("mesh vertexCount wins over DrawOptions.vertices unless call vertices overr
 });
 
 test("bundle recording preserves per-call instance counts and replays the bundle", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const bundleDrawCalls = spyRenderBundleDraws(gpu.device.gpu);
   const bundleExecutions = spyRenderPassBundleExecutions(gpu.device.gpu);
   try {
@@ -160,7 +160,7 @@ test("draw count options reject negative and non-integer values with VGPU errors
   ];
 
   for (const testCase of cases) {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     try {
       const target = gpu.target({ size: [4, 4] });
       const draw = gpu.draw({ shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });

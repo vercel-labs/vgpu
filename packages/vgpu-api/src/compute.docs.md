@@ -56,7 +56,7 @@ interface StorageBuffer {
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const bytes = 4 * 16;
 const src = gpu.storage(bytes, "read");
 const dst = gpu.storage(bytes, "read-write");
@@ -77,7 +77,7 @@ sim.dispatch(4);
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const particles = gpu.pingPongStorage(1024);
 const step = gpu.compute(`
   @group(0) @binding(0) var<storage, read> src: array<u32>;

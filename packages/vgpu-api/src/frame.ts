@@ -5,10 +5,11 @@ import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import { passDraw, type Pass } from "./pass.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, missingScreenError } from "./errors.ts";
+import { claimedGroupNativeValidationError, frameReentrantError, targetRequiredError } from "./errors.ts";
+import { isSurfaceResizeCallbackActive } from "./surface.ts";
 
 export interface FramePassOptions {
-  readonly target?: Target;
+  readonly target: Target;
   readonly clear?: GPUColor | readonly [number, number, number, number];
 }
 
@@ -34,7 +35,7 @@ export class Frame {
 
   pass(opts: FramePassOptions, cb: (pass: FramePass) => void): void {
     const target = opts.target ?? this.defaultTarget;
-    if (!target) throw missingScreenError();
+    if (!target) throw targetRequiredError("Frame.pass");
     const encoder = this.encoder.beginRenderPass(target.renderPassDescriptor(opts.clear));
     try { cb(new FramePass(encoder, target, this.validations)); }
     catch (error) {
@@ -103,15 +104,22 @@ function encodeFrameDrawable(drawable: Draw | Pass, encoder: GPURenderPassEncode
 }
 
 export class FrameRunner {
+  private running = false;
   constructor(private readonly createFrame: () => Frame, private readonly advance: () => void) {}
   frame(cb?: (frame: Frame) => void): Frame {
-    this.advance();
-    const frame = this.createFrame();
-    if (cb) {
-      try { cb(frame); }
-      finally { frame.submit(); }
+    if (this.running || isSurfaceResizeCallbackActive()) throw frameReentrantError();
+    this.running = true;
+    try {
+      this.advance();
+      const frame = this.createFrame();
+      if (cb) {
+        try { cb(frame); }
+        finally { frame.submit(); }
+      }
+      return frame;
+    } finally {
+      this.running = false;
     }
-    return frame;
   }
   loop(cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
     let stopped = false;
@@ -124,9 +132,7 @@ export class FrameRunner {
       if (stopped) return;
       if (shouldRunFrame(timestamp, lastFrameMs, minIntervalMs)) {
         lastFrameMs = timestamp;
-        const frame = this.frame();
-        try { cb(frame); }
-        finally { frame.submit(); }
+        this.frame(cb);
       }
       id = request(tick);
     };

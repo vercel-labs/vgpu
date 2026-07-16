@@ -117,7 +117,7 @@ test("create browser-vite scaffolds a runnable Vite app shell", () => {
     const html = readFileSync(join(dir, "demo", "index.html"), "utf8");
     expect(html).toContain('<canvas aria-label="vgpu output"></canvas>');
     expect(html).toContain('src="/src/main.ts"');
-    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("init(canvas");
+    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("gpu.surface(canvas");
     const viteConfig = readFileSync(join(dir, "demo", "vite.config.mjs"), "utf8");
     expect(viteConfig).toContain("node:crypto");
     expect(viteConfig).toContain("vite-node-shims");

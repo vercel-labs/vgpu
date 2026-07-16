@@ -89,11 +89,12 @@ struct Params { time: f32, speed: f32 }
 async function main() {
   const canvas = document.querySelector("canvas");
   if (!canvas) throw new Error("Missing <canvas>.");
-  const gpu = await init(canvas, { dpr: [1, 2] });
+  const gpu = await init();
+  const surface = gpu.surface(canvas, { dpr: [1, 2] });
   const pass = gpu.pass(shader, { set: { speed: 2 } });
-  gpu.frame.loop(() => {
+  gpu.frame.loop((frame) => {
     pass.set({ time: gpu.time });
-    pass.draw();
+    frame.pass({ target: surface }, (p) => p.draw(pass));
   });
 }
 

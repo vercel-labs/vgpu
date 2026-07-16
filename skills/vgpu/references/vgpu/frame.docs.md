@@ -2,7 +2,7 @@
 
 # Frame
 
-`gpu.frame` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of render passes, then submits once.
+`gpu.frame` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of explicit-target render passes, then submits once.
 
 ## Import
 
@@ -16,7 +16,7 @@ import type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameRunner }
 import type { Bundle, Draw, DrawCallOptions, Pass, Target } from "vgpu";
 
 interface FramePassOptions {
-  readonly target?: Target;
+  readonly target: Target;
   readonly clear?: GPUColor | readonly [number, number, number, number];
 }
 
@@ -48,25 +48,25 @@ declare class FrameRunner {
 |---|---|---:|---|---|
 | gpu.frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If supplied, called and then `frame.submit()` runs in `finally`. If omitted, submit manually. |
 | frame.pass.opts | `FramePassOptions` | ✔ | — | Pass target and clear options. |
-| opts.target | `Target` | ✖ | Frame default target (`gpu.screen`) | Required if the `Gpu` has no screen. |
+| opts.target | `Target` | ✔ | — | Required explicitly. Use a `Surface` from `gpu.surface(canvas)` or an offscreen `Target` from `gpu.target({ size })`. |
 | opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue`; render passes always use `loadOp: "clear"`. |
 | frame.pass.cb | `(pass: FramePass) => void` | ✔ | — | Encodes draw and bundle commands for this render pass. |
 | pass.draw.drawable | `Draw \| Pass` | ✔ | — | A main API (`vgpu`) draw or fullscreen pass. |
 | pass.draw.opts | `DrawCallOptions` | ✖ | `{}` | Per-call counts and dynamic offsets. Target is the frame pass target. |
 | pass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Bundles recorded by `gpu.bundle({ target }, cb)`. |
-| runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame; frame is submitted in `finally`. |
+| runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame; frame is submitted in `finally`. Surface auto-resize runs before this callback. |
 | runner.loop.opts.fps | `number` | ✖ | `0` (uncapped) | Positive values cap by minimum frame interval `1000 / fps`; omitted or non-positive uses every rAF/timer tick. |
 
 **Returns:** `gpu.frame()` / `FrameRunner.frame()` return `Frame`; `Frame.pass()` and `Frame.submit()` return `void`; `FramePass.draw()` and `.bundles()` return `void`; `loop()` returns `FrameLoopHandle` with `stop()`.
 
-**Throws:** `VGPU-SCREEN-MISSING` when a pass needs a default target but no `gpu.screen` exists; `VGPU-R4-GROUP-VALIDATION` may be thrown or assigned to `frame.done` for native validation failures in raw claimed groups; `VGPU-R3-BUNDLE-STALE` or `VGPU-R3-BUNDLE-INVALID` when replaying invalid/stale bundles; draw/pass binding errors such as `VGPU-R1-BINDING-NEVER-SET` propagate during encoding.
+**Throws:** `VGPU-TARGET-REQUIRED` for runtime JS calls that omit a frame pass target; `VGPU-FRAME-REENTRANT` when a frame is started from another frame or from a surface resize callback; `VGPU-R4-GROUP-VALIDATION` may be thrown or assigned to `frame.done` for native validation failures in raw claimed groups; `VGPU-R3-BUNDLE-STALE` or `VGPU-R3-BUNDLE-INVALID` when replaying invalid/stale bundles; draw/pass binding errors such as `VGPU-R1-BINDING-NEVER-SET` propagate during encoding.
 
 ## Examples
 
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [64, 64] });
+const gpu = await init();
 const scene = gpu.target({ size: [64, 64], format: "rgba8unorm" });
 const draw = gpu.draw({ shader: `
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -84,7 +84,7 @@ gpu.frame((frame) => {
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [16, 16] });
+const gpu = await init();
 const target = gpu.target({ size: [16, 16] });
 const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 const handle = gpu.frame.loop((frame) => {
@@ -96,6 +96,6 @@ handle.stop();
 ## Notes
 
 - `Frame`, `FramePass`, and `FrameRunner` are type-only public exports. Create frames through `gpu.frame`, not `new Frame(...)`.
+- There is no default target and no implicit canvas target; every `frame.pass` names its target.
 - Always `await frame.done` or the `Draw.draw()` promise when using raw claimed bind groups and you need validation failures as normal control flow.
-- `gpu.frame.loop` uses `requestAnimationFrame` when available and a `setTimeout` fallback otherwise.
-- **See also:** `Gpu.frame`, `Pass`, `Draw`, `Bundle`, `Target`.
+- **See also:** `Gpu.frame`, `Surface`, `Pass`, `Draw`, `Bundle`, `Target`.

@@ -7,7 +7,7 @@ import { REPRESENTATIVE_GRADIENT_WGSL, SNAPSHOT_SIZE } from "../fixtures/represe
 const BASELINE = resolve(import.meta.dirname, "../__snapshots__/representative-gradient.png");
 
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("representative gradient matches committed pixel baseline", async () => {
-  const gpu = await init({ size: SNAPSHOT_SIZE });
+  const gpu = await init();
   try {
     const target = gpu.target({ size: SNAPSHOT_SIZE, format: "rgba8unorm", label: "representative-gradient" });
     const pass = gpu.pass(REPRESENTATIVE_GRADIENT_WGSL, { label: "representative-gradient", set: { speed: 2 } });

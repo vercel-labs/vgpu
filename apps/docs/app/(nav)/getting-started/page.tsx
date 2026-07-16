@@ -5,8 +5,8 @@ const installCode = `pnpm add vgpu
 pnpm add -D @webgpu/types`;
 const nodeTriangleCode = `import { init } from "vgpu/node";
 
-const gpu = await init({ size: [512, 512] });
-const target = gpu.target({ format: "rgba8unorm" });
+const gpu = await init();
+const target = gpu.target({ size: [512, 512], format: "rgba8unorm" });
 const triangle = gpu.draw({ shader: \`
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
   let p = array<vec2f, 3>(vec2f(0, .6), vec2f(-.6, -.6), vec2f(.6, -.6));
@@ -20,7 +20,8 @@ const pixels = await target.read();
 gpu.dispose();`;
 const browserCode = `import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
+const gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const wave = gpu.pass(\`
 struct Params { time: f32 }
 @group(0) @binding(0) var<uniform> params: Params;
@@ -35,7 +36,7 @@ gpu.frame.loop(() => {
 });`;
 const testCode = `import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [64, 64] });
+const gpu = await init();
 const buffer = gpu.storage(16);
 buffer.write(new Float32Array([1, 2, 3, 4]));
 await expect(buffer.read()).resolves.toBeInstanceOf(ArrayBuffer);

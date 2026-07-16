@@ -17,7 +17,7 @@ struct Globals { time: f32, mouse: vec2f }
 `;
 
 export async function runSharedUniformsExample() {
-  const gpu = await init({ size: [8, 8] });
+  const gpu = await init();
   const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
   const globals = gpu.uniforms({ time: 0.2, mouse: [0.4, 0.6] });
   const wave = gpu.pass(WAVE, { label: "wave", set: { globals } });

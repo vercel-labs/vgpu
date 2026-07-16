@@ -27,11 +27,12 @@ export interface NavSection {
 const publicApiRecords: DocsRecord[] = [
   doc(
     'init',
-    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init(canvas, { dpr: [1, 2] });\n```',
+    '# init\n\nCreate the public ring-1 `Gpu` context. Browser code imports `init` from `vgpu`; headless code imports from `vgpu/node`; deterministic tests import from `vgpu/mock`.\n\n```ts\nimport { init } from "vgpu";\n\nconst gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });\n```',
   ),
   doc(
     'Gpu',
-    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to ring-0 handles.\n\n```ts\nconst target = gpu.target({ format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
+    '# Gpu\n\nThe context owns device lifetime and exposes the public factories: `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`, `storage`, and ping-pong helpers. Prefer these factories before dropping to ring-0 handles.\n\n```ts\nconst target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\nconst shared = gpu.uniforms({ time: 0, texel: target.texelSize });\n```',
   ),
   doc(
     'pass',
@@ -55,7 +56,7 @@ const publicApiRecords: DocsRecord[] = [
   ),
   doc(
     'target',
-    '# target\n\nTargets own size, texel size, color formats, optional depth, and MSAA. Resize targets instead of threading resolution globals through shaders.\n\n```ts\nconst hdr = gpu.target({ format: "rgba16float", depth: true, msaa: true });\npass.set({ texel: hdr.texelSize });\n```',
+    '# target\n\nTargets own size, texel size, color formats, optional depth, and MSAA. Resize targets instead of threading resolution globals through shaders.\n\n```ts\nconst hdr = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });\npass.set({ texel: hdr.texelSize });\n```',
   ),
   doc(
     'uniforms',

@@ -16,7 +16,7 @@ pnpm add vgpu
 import { init } from "vgpu/mock";
 import { UniformPool } from "vgpu/core";
 
-const gpu = await init({ size: [64, 64] });
+const gpu = await init();
 const draw = gpu.draw({ shader: OBJ_WGSL });
 const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
 const slot = pool.alloc({ size: 64, bindGroupLayout: draw.layout(1, { dynamicOffsets: true }) });
