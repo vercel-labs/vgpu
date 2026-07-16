@@ -56,14 +56,16 @@ post.draw({ target: surface }); // invert it onto the canvas
 
 `post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
 
-## Update bindings before you draw
+## Updating bindings
 
-Effects do not create shader globals. If a shader needs time, resolution, or a texture, set those values on the effect before drawing.
+You can update bindings at any time by using `.set`.
 
 ```ts
 import { init } from "vgpu";
 
 const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
 
 // ---cut---
 const pulseSource = `
@@ -76,21 +78,48 @@ const pulseSource = `
   }
 `;
 
-const target = gpu.target({ size: [64, 64] });
 const pulse = gpu.effect(pulseSource, {
-  set: { params: { time: 0, width: target.size[0], height: target.size[1] } }, // initial uniform defaults
+  // initial uniform defaults
+  set: {
+    params: {
+      time: 0,
+      width: canvasSurface.size[0],
+      height: canvasSurface.size[1]
+    }
+  },
 });
 
 // update uniforms before drawing
 pulse.set({
   params: {
     time: gpu.time,
-    width: target.size[0],
-    height: target.size[1],
   },
 });
 
-pulse.draw({ target });
+pulse.draw({ target: canvasSurface });
 ```
 
-The first `set()` establishes binding ownership from the WGSL variable name. Keep JS values as JS values, and keep GPU resources as resources; vgpu validates that you do not flip ownership later.
+You should also only update uniforms when they need to change, for example, react to canvas size changes:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
+const pulse = gpu.effect(`
+  struct Params { time: f32, width: f32, height: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
+
+// ---cut---
+const unsubscribe = canvasSurface.onResize(({ width, height }) => {
+  pulse.set({ params: { width, height } }); // partial update: time keeps its value
+});
+```
+
+`onResize()` fires the callback once immediately with the current size, then again on every resize. It returns an `unsubscribe` function — call it when you tear the effect down.
