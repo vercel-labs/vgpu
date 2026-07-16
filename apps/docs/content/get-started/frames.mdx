@@ -17,15 +17,13 @@ A frame is one unit of GPU work. Inside it you open passes, each drawing into a 
 
 ## Render a single frame
 
-[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs synchronously and submits once when it returns. Calling `gpu.frame()` renders its callback immediately.
+[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs synchronously and renders immediately — every pass inside is encoded into one command encoder and submitted once. That single submit is what the frame is for:
 
 ```ts
 import { init } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-
-// ---cut---
 const canvasTarget = gpu.surface(canvas);
 const pulseEffect = gpu.effect(`
   struct Params { time: f32 }
@@ -35,11 +33,27 @@ const pulseEffect = gpu.effect(`
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
 `, { set: { params: { time: 0 } } });
+const postEffect = gpu.effect(`
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    return vec4f(1.0 - base.rgb, 1.0);
+  }
+`);
+
+// ---cut---
+const sceneTarget = gpu.target({ size: [canvasTarget.size[0], canvasTarget.size[1]] });
+postEffect.set({ src: sceneTarget });
 
 gpu.frame((frame) => {
-  frame.pass({ target: canvasTarget }, (pass) => pass.draw(pulseEffect));
-}); // renders immediately
+  frame.pass({ target: sceneTarget }, (pass) => pass.draw(pulseEffect));
+  frame.pass({ target: canvasTarget }, (pass) => pass.draw(postEffect));
+}); // two passes, one encoder, one submit
 ```
+
+A frame with a single pass buys you nothing: `pulseEffect.draw({ target: canvasTarget })` does the same GPU work with the same single submit. Reach for `gpu.frame()` when there is more than one pass to batch.
 
 > Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
 
