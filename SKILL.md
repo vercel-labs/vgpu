@@ -25,7 +25,7 @@ npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Fra
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.
 
 - **authoring-for-perf** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
-- **browser-testing** — Browser tests should exercise the same public API users copy: init(canvas), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
+- **browser-testing** — Browser tests should exercise the same public API users copy: init() + gpu.surface(canvas), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
 - **getting-started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
 - **measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
 - **optimize-pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`

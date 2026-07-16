@@ -73,8 +73,8 @@ interface Draw {
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
 | draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
 | draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |
-| draw.draw.opts | `DrawCallOptions` | ✖ | `{}` | One-shot draw into `opts.target` or `gpu.screen`. Prefer `gpu.frame()` for multiple passes. |
-| opts.target | `Target` | ✖ | `gpu.screen` | Required when no screen exists. |
+| draw.draw.opts | `DrawCallOptions` | ✖ | `{}` | One-shot draw options. `target` must be supplied explicitly. |
+| opts.target | `Target` | ✖ | — | Required at runtime for one-shot draws. Use a `Surface` or an offscreen `Target`. |
 | opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
 | opts.instances | `number` | ✖ | `DrawOptions.instances ?? 1` | Per-call instance count; integer `>= 0`. |
 | opts.vertices | `number` | ✖ | `mesh.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed meshes use `mesh.indexCount`. |
@@ -83,14 +83,14 @@ interface Draw {
 
 **Returns:** `gpu.draw()` returns `Draw`; `set()` and `group()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `Promise<void>` so raw claimed-group validation can be awaited.
 
-**Throws:** `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-RING1-UNSUPPORTED` when one-shot `draw()` has no target; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
+**Throws:** `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
 
 ## Examples
 
 ```ts
 import { init } from "vgpu/mock";
 
-const gpu = await init({ size: [64, 64] });
+const gpu = await init();
 const target = gpu.target({ size: [64, 64] });
 const tri = gpu.draw({
   label: "tri",
@@ -107,40 +107,9 @@ const tri = gpu.draw({
 await tri.draw({ target, vertices: 3, instances: 1 });
 ```
 
-```ts
-import { init } from "vgpu/mock";
-import { UniformPool, type UniformLayout } from "vgpu/core";
-
-const gpu = await init({ size: [32, 32] });
-const target = gpu.target({ size: [32, 32] });
-const draw = gpu.draw({ shader: `
-  struct Object { model: mat4x4f }
-  @group(0) @binding(0) var<uniform> object: Object;
-  @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-    var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
-    return object.model * vec4f(p[vi], 0, 1);
-  }
-  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-` });
-
-type ObjectUniforms = { model: Float32Array };
-const layout: UniformLayout<ObjectUniforms> = {
-  size: 64,
-  bindGroupLayout: draw.layout(0, { dynamicOffsets: true }),
-  encode(value, dst, byteOffset) { new Float32Array(dst, byteOffset, 16).set(value.model); },
-};
-const pool = new UniformPool(gpu.device);
-const slot = pool.alloc(layout);
-draw.group(0, slot.bindGroup);
-pool.beginFrame(gpu.frameCount);
-const offset = slot.push({ model: new Float32Array(16) });
-pool.endFrame();
-await draw.draw({ target, offsets: { 0: [offset] } });
-```
-
 ## Notes
 
 - Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
-- Indexed meshes ignore `vertices` and `firstVertex`; they draw `mesh.indexCount ?? 0` with first index/base vertex `0`.
+- One-shot `draw.draw()` has no implicit target. Prefer `gpu.frame((frame) => frame.pass({ target }, ...))` for multi-pass work.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
-- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `UniformPool`, `Target`, `SharedUniforms`.
+- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.

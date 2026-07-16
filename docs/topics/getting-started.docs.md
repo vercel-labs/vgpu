@@ -5,8 +5,9 @@ Start with the public `vgpu` package. A program has one `Gpu` context, explicit 
 ```text
 import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
-const screen = gpu.screen!;
+const gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });
+const screen = surface!;
 const gradient = gpu.pass(`
 struct Params { time: f32, texel: vec2f }
 @group(0) @binding(0) var<uniform> params: Params;

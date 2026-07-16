@@ -190,3 +190,7 @@ vgpu/scene OrbitOptions packages/vgpu-api/src/scene/orbit.docs.md
 @vgpu/render/edit KernelHandle packages/render/src/edit/edit.docs.md
 @vgpu/render/edit ScoredSelection packages/render/src/edit/edit.docs.md
 @vgpu/render/edit VertexView packages/render/src/edit/edit.docs.md
+vgpu Surface packages/vgpu-api/src/surface.docs.md
+vgpu SurfaceOptions packages/vgpu-api/src/surface.docs.md
+vgpu SurfaceResizeEvent packages/vgpu-api/src/surface.docs.md
+vgpu TargetTextureOptions packages/vgpu-api/src/target.docs.md

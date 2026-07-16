@@ -57,6 +57,8 @@ function router(docs) {
     "",
     "vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL reflection) → vgpu/scene (geometry/camera helpers). Lower layers are always accessible and interoperable.",
     "",
+    "Glossary: **Surface** means a canvas-backed render target (swapchain) created with `gpu.surface(canvas)`; do not confuse it with the general phrase ‘API surface’.",
+    "",
     "```sh",
     "npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols",
     "npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT",

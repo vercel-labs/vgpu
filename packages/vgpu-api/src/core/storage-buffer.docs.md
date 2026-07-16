@@ -61,7 +61,7 @@ declare class StorageBuffer {
 import { init } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const values = new StorageBuffer(gpu.device, { size: 4 * 16, label: "values" });
 values.write(new Float32Array(16));
 
@@ -77,7 +77,7 @@ sim.dispatch(1);
 import { init } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const draw = gpu.draw({ shader: `
   @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return positions[vi]; }

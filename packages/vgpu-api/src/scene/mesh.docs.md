@@ -496,7 +496,7 @@ interface SceneMesh {
 import { init } from "vgpu/mock";
 import { box, type SceneMesh } from "vgpu/scene";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const cube: SceneMesh = gpu.mesh(box());
 void cube.vertexBufferLayouts;
 ```

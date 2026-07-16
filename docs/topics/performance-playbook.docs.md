@@ -37,7 +37,7 @@ const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 ```
 After:
 ```text
-const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
 gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
@@ -173,7 +173,7 @@ Use for iterative effects. Ping-pong keeps two stable identities, so bind-group 
 Before:
 ```text
 gpu.frame.loop((f) => {
-  const tmp = gpu.target({ format: "rgba16float" });
+  const tmp = gpu.target({ size: [256, 256], format: "rgba16float" });
   sim.set({ src: previous.color });
   f.pass({ target: tmp }, (p) => p.draw(sim));
   previous = tmp;
@@ -201,12 +201,12 @@ Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and
 
 Before:
 ```text
-const scene = gpu.target({ format: "rgba8unorm" });
+const scene = gpu.target({ size: [256, 256], format: "rgba8unorm" });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 ```
 After:
 ```text
-const scene = gpu.target({ format: "rgba16float", depth: true, msaa: true });
+const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
 const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```

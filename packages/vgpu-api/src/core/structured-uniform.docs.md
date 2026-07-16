@@ -87,7 +87,7 @@ declare class StructuredUniform<S extends Record<string, WgslUniformType>> {
 import { init } from "vgpu/mock";
 import { StructuredUniform } from "vgpu/core";
 
-const gpu = await init({ size: [1, 1] });
+const gpu = await init();
 const params = new StructuredUniform(gpu.device, {
   label: "params",
   schema: { time: "f32", tint: "vec3f", viewProjection: "mat4x4f" },
@@ -105,7 +105,7 @@ void wgsl;
 import { init } from "vgpu/mock";
 import { StructuredUniform } from "vgpu/core";
 
-const gpu = await init({ size: [16, 16] });
+const gpu = await init();
 const params = new StructuredUniform(gpu.device, { schema: { value: "f32" } });
 const draw = gpu.draw({ shader: `
   struct Params { value: f32 }

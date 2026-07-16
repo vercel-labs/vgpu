@@ -16,9 +16,10 @@ New applications should use the public `vgpu` package. `@vgpu/render` remains as
 ```ts
 import { init } from "vgpu";
 
-const gpu = await init(canvas);
-const draw = gpu.draw({ shader: WGSL, targets: [gpu.screen!] });
-gpu.frame.loop((f) => f.pass({ target: gpu.screen! }, (p) => p.draw(draw)));
+const gpu = await init();
+const surface = gpu.surface(canvas);
+const draw = gpu.draw({ shader: WGSL, targets: [surface] });
+gpu.frame.loop((f) => f.pass({ target: surface }, (p) => p.draw(draw)));
 ```
 
 Keep performance-sensitive rendering in `vgpu`: use `gpu.bundle()` for static replay, `targets: [...]` for pipeline pre-warm, `gpu.uniforms()` for shared values, and `draw.group()` with dynamic offsets for many objects.
