@@ -12,7 +12,7 @@ struct Params { speed: f32 }
 `;
 
 export async function collectFixitMessages() {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   try {
     const missing = gpu.pass(NEEDS_SAMPLER, { label: "lighting" });
     const ownership = gpu.pass(SPEED, { label: "wave", set: { speed: 2 } });

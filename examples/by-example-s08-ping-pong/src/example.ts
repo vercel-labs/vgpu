@@ -13,7 +13,7 @@ struct Params { texel: vec2f }
 `;
 
 export async function runPingPongExample() {
-  const gpu = await init({ size: [8, 8] });
+  const gpu = await init();
   const buf = gpu.pingPong(8, 8, { format: "rgba8unorm" });
   const fill = gpu.pass(FILL, { label: "fill" });
   const copy = gpu.pass(COPY, { label: "copy" });

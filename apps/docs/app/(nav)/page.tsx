@@ -3,7 +3,8 @@ import { CodeBlock } from '@/components/code-block';
 
 const heroCode = `import { init } from "vgpu";
 
-const gpu = await init(canvas, { dpr: [1, 2] });
+const gpu = await init();
+const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const wave = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
 
 gpu.frame.loop(() => {

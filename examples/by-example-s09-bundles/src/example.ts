@@ -7,7 +7,7 @@ struct Params { fogDensity: f32 }
 `;
 
 export async function runBundlesExample() {
-  const gpu = await init({ size: [8, 8] });
+  const gpu = await init();
   const scene = gpu.target({ size: [8, 8], format: "rgba8unorm" });
   const floor = gpu.pass(FLOOR, { label: "floor", set: { fogDensity: 0.2 } });
   const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => { b.draw(floor); });
