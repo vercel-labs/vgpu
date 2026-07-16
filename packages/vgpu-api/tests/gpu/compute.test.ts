@@ -24,7 +24,7 @@ const PING_PONG_PASS = `
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping-pong", () => {
   test("§11 compute ping-pong storage sim updates Y velocity", async () => {
-    const gpu = await init({ size: [1, 1] });
+    const gpu = await init();
     try {
       const COUNT = 4;
       const dt = 0.125;
@@ -55,7 +55,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping
   });
 
   test("§8 ping-pong render feedback accumulates color on read target", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       const pingPong = gpu.pingPong(4, 4, { format: "rgba8unorm", label: "pingpong" });
       const feedback = gpu.pass(PING_PONG_PASS, { label: "feedback" });

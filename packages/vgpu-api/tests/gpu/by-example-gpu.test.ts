@@ -29,7 +29,7 @@ const dockerDawnCompatMode = process.platform === "linux";
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU acceptance", () => {
   test("by-example §2 fullscreen happy path renders via explicit time set", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
       const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
@@ -45,7 +45,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   });
 
   test("by-example §7 first half renders HDR target and post pass; rgba8unorm MSAA exercises resolve", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
       expect(scene.sampleCount).toBe(1);
@@ -80,7 +80,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   });
 
   test.skipIf(dockerDawnCompatMode)("by-example §7 exact HDR+MSAA path renders on devices capable of multisampling rgba16float", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "sceneHdrMsaa" });
       expect(scene.sampleCount).toBe(4);
@@ -102,7 +102,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   });
 
   test.skipIf(!dockerDawnCompatMode)("Dawn compat mode explicitly rejects rgba16float+msaa instead of silently degrading", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       expect(() => gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/Dawn compatibility mode/);
     } finally {

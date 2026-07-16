@@ -43,7 +43,7 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptance", () => {
   test("§9 bundle replay and dynamic draw coexist in one pass", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     try {
       const scene = gpu.target({ size: [8, 8], format: "rgba8unorm" });
       const floor = gpu.pass(SOLID_GREEN, { label: "floor" });
@@ -68,7 +68,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   });
 
   test("R4 wraps native async validation for raw claimed bind groups without metadata", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     try {
       const cube = gpu.draw({ shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
       const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
@@ -98,7 +98,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   });
 
   test("§10 UniformPool dynamic offsets can draw 1000 pushed objects and sample selected offsets", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     try {
       const cube = gpu.draw({ shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
       const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
@@ -126,7 +126,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   });
 
   test("§9 ping-pong with bundles uses two explicit recordings without staleness", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     try {
       let read = gpu.target({ size: [4, 4], format: "rgba8unorm" });
       let write = gpu.target({ size: [4, 4], format: "rgba8unorm" });

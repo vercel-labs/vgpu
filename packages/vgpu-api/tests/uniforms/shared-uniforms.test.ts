@@ -54,7 +54,7 @@ struct Globals { time: f32, mouse: vec2f }
 
 describe("gpu.uniforms() shared uniforms", () => {
   test("defers layout adoption and allocates only on first bind", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -69,7 +69,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("rejects incompatible later structs with the canonical fix-it text", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 
     gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
@@ -82,7 +82,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("rejects same named members when reflected byte layout differs", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 
     gpu.pass(PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
@@ -95,7 +95,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("one in-place write is visible to both consumers without reallocating buffers or bind groups", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
     const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     const blur = gpu.pass(BLUR_WGSL, { label: "BLUR_WGSL", set: { globals } });
@@ -133,7 +133,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("set() batches a partial update into one writeBuffer call", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
     gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     let writes = 0;
@@ -150,7 +150,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("binding name is chosen by each shader", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
     const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     const override = gpu.pass(OVERRIDE_NAME_WGSL, { label: "OVERRIDE_WGSL", set: { g: globals } });
@@ -162,7 +162,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   });
 
   test("storage address-space uses the same deferred-layout shared resource path", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
     const storage = gpu.pass(STORAGE_WGSL, { label: "STORAGE_WGSL", set: { globals } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);

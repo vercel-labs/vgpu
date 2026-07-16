@@ -21,7 +21,7 @@ fn globalsMouse() -> f32 { return g.mouse.x; }
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("gpu.uniforms() Docker GPU", () => {
   test("wave and blur share one animated globals object", async () => {
-    const gpu = await init({ size: [8, 8] });
+    const gpu = await init();
     const createBufferCount = countCreateBufferCalls(gpu.gpu);
     try {
       const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });

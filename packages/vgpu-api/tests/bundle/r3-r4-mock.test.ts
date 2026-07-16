@@ -29,7 +29,7 @@ struct Obj { value: f32 }
 `;
 
 test("R3 bundle replay stays valid after JS value writes and stales on bind-group identity changes", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const scene = gpu.target({ size: [4, 4] });
   const tex1 = gpu.target({ size: [4, 4] });
   const tex2 = gpu.target({ size: [4, 4] });
@@ -56,7 +56,7 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
 });
 
 test("R4 raw claim validation stays attributed when frames overlap", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
   const popResolvers: ((error: GPUError | null) => void)[] = [];
   const gpuDevice = gpu.device.gpu as GPUDevice & {
@@ -118,7 +118,7 @@ function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
 }
 
 test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", async () => {
-  const gpu = await init({ size: [4, 4] });
+  const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
   const cube = gpu.draw({ shader: OBJECTS, label: "cube", set: { globals: { tint: 1 } } });
   const offsets: readonly number[][] = [];

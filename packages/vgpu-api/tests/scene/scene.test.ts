@@ -12,7 +12,7 @@ const SIMPLE_DRAW = `
 
 describe("vgpu/scene", () => {
   test("gpu.mesh(box()) produces draw vertex-buffer layout", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const mesh = gpu.mesh(box({ size: 2 }));
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -52,7 +52,7 @@ describe("vgpu/scene", () => {
   });
 
   test("gpu.pass rejects mesh options and points to gpu.draw", async () => {
-    const gpu = await init({ size: [4, 4] });
+    const gpu = await init();
     const mesh = gpu.mesh(box());
     expect(() => gpu.pass(SIMPLE_DRAW, { mesh } as never)).toThrowError(/gpu\.pass\(\) nunca acepta vertex buffers; usá gpu\.draw/);
     gpu.dispose();

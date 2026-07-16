@@ -8,14 +8,15 @@ const SOLID = `
 }
 `;
 
-test("screen-target bundles do not stale just because getCurrentTexture returns a fresh wrapper", async () => {
-  const gpu = await initBrowser(mockCanvas(), { adapter: createMockAdapter(), size: [4, 4] });
-  const draw = gpu.pass(SOLID, { label: "screenStatic" });
+test("surface bundles do not stale just because getCurrentTexture returns a fresh wrapper", async () => {
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const surface = gpu.surface(mockCanvas(), { size: [4, 4] });
+  const draw = gpu.pass(SOLID, { label: "surfaceStatic" });
 
-  const bundle = gpu.bundle({ target: gpu.screen!, label: "screenBundle" }, (b) => b.draw(draw));
+  const bundle = gpu.bundle({ target: surface, label: "surfaceBundle" }, (b) => b.draw(draw));
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: gpu.screen! }, (p) => p.bundles(bundle)))).not.toThrow();
-  expect(() => gpu.frame((frame) => frame.pass({ target: gpu.screen! }, (p) => p.bundles(bundle)))).not.toThrow();
+  expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
+  expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
   gpu.dispose();
 });
 
@@ -28,6 +29,7 @@ function mockCanvas(): HTMLCanvasElement {
       return {
         canvas,
         configure() {},
+        unconfigure() {},
         getCurrentTexture() {
           return { createView: () => ({}) };
         },
