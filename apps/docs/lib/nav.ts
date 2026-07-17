@@ -88,6 +88,7 @@ export const navSections: NavSection[] = [
           { title: 'Effects', href: '/get-started/effects' },
           { title: 'Passes', href: '/get-started/passes' },
           { title: 'Frames', href: '/get-started/frames' },
+          { title: 'Render bundles', href: '/get-started/render-bundles' },
         ],
       },
     ],

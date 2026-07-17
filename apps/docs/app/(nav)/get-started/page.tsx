@@ -23,6 +23,7 @@ const coreIdeas = [
   { title: 'Effects', href: '/get-started/effects', description: 'Full-screen fragment shaders you can chain through targets.' },
   { title: 'Passes', href: '/get-started/passes', description: 'Each pass renders into one target inside a frame.' },
   { title: 'Frames', href: '/get-started/frames', description: 'Encode one frame and submit once, or loop for animation.' },
+  { title: 'Render bundles', href: '/get-started/render-bundles', description: 'Record passes once and replay them to save CPU.' },
 ];
 
 export default function GetStartedPage() {
@@ -49,7 +50,7 @@ export default function GetStartedPage() {
 
       <h2 className="mt-12 text-xl font-semibold text-gray-12">Core ideas</h2>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-10">
-        Four ideas cover every vgpu program. Read them in order — each page builds on the previous one.
+        Five ideas cover every vgpu program. Read them in order — each page builds on the previous one.
       </p>
 
       <div className="mt-6 grid gap-3">
