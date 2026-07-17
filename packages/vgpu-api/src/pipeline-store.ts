@@ -7,7 +7,7 @@ export interface ErrorCtx {
   readonly where: string;
 }
 
-export type ErrorSink = (error: VGPUError) => void;
+export type ErrorSink = (error: VGPUError) => void | Promise<void>;
 export type SettledSource = () => readonly Promise<unknown>[];
 export type RegisterSettledSource = (source: SettledSource) => () => void;
 
@@ -224,11 +224,11 @@ class DevicePipelineStore implements PipelineStore {
         if (!nativeError) return;
         const error = compileFailedError(ctx.where, nativeError);
         if (this.entries.get(key) === entry) this.entries.delete(key);
-        this.errorSink(error);
+        return this.errorSink(error);
       }, (cause) => {
         const error = compileFailedError(ctx.where, cause);
         if (this.entries.get(key) === entry) this.entries.delete(key);
-        this.errorSink(error);
+        return this.errorSink(error);
       });
     this.track(pop);
   }

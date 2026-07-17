@@ -47,8 +47,9 @@ test("device store dedupes byte-identical WGSL, layout, and signature across dra
   const a = gpu.draw({ shader: WGSL, label: "dedupe-a" });
   const b = gpu.draw({ shader: WGSL, label: "dedupe-b" });
 
-  await a.draw(target);
-  await b.draw(target);
+  a.draw(target);
+  b.draw(target);
+  await gpu.settled();
 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(mock.calls.createShaderModule).toBe(1);
@@ -63,8 +64,9 @@ test("different vertex buffer layouts do not collide", async () => {
   const a = gpu.draw({ shader: VERTEX_WGSL, label: "layout-a", mesh: { vertexBufferLayouts: [VERTEX_LAYOUT_A] } });
   const b = gpu.draw({ shader: VERTEX_WGSL, label: "layout-b", mesh: { vertexBufferLayouts: [VERTEX_LAYOUT_B] } });
 
-  await a.draw(target);
-  await b.draw(target);
+  a.draw(target);
+  b.draw(target);
+  await gpu.settled();
 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(mock.calls.createShaderModule).toBe(1);

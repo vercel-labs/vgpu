@@ -107,8 +107,9 @@ test("draw.draw accepts a bare target and keeps DrawCallOptions bags", async () 
     const target = gpu.target({ size: [4, 4] });
     const draw = gpu.draw({ shader: DRAW_SHADER, label: "draw-overload", vertices: 3 });
 
-    await draw.draw(target);
-    await draw.draw({ target, instances: 2 });
+    draw.draw(target);
+    draw.draw({ target, instances: 2 });
+    await gpu.settled();
 
     expect(drawCalls).toEqual([
       [3, 1, 0, 0],

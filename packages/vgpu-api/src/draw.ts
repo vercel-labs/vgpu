@@ -2,7 +2,7 @@ import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target, TargetSignature } from "./target.ts";
@@ -84,6 +84,8 @@ type DrawState = {
   readonly shaderModule: GPUShaderModule;
   readonly pipelineStore: PipelineStore;
   readonly pipelineLayouts: PipelineLayoutCache;
+  readonly errorSink?: ValidationErrorSink;
+  readonly trackSettled?: (promise: Promise<unknown>) => void;
   readonly resolvedPipelineKeys: Set<string>;
   readonly recordedIn: BundleBackReferenceRegistry;
 };
@@ -96,7 +98,7 @@ export interface Draw {
   set(values: SetBag): this;
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
-  draw(target?: Target | DrawCallOptions): Promise<void>;
+  draw(target?: Target | DrawCallOptions): void;
 }
 
 /** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
@@ -113,6 +115,8 @@ export class InternalDraw implements Draw {
     pipelineStore: PipelineStore = createPipelineStore(device),
     shaderModules: ShaderModuleCache = createShaderModuleCache(device),
     pipelineLayouts: PipelineLayoutCache = createPipelineLayoutCache(device),
+    errorSink?: ValidationErrorSink,
+    trackSettled?: (promise: Promise<unknown>) => void,
   ) {
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
@@ -121,7 +125,7 @@ export class InternalDraw implements Draw {
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
     const setCore = createSetCore({ device, label: this.label, drawId: id, reflection, bindGroupLayouts, cache });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, resolvedPipelineKeys: new Set(), recordedIn: createBundleRegistry() });
+    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn: createBundleRegistry() });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.pipelineFor(target);
   }
@@ -172,11 +176,10 @@ export class InternalDraw implements Draw {
   /**
    * Encodes and submits this draw as a one-shot render pass.
    *
-   * Await the returned promise when using raw claimed bind groups: native
-   * validation failures are reported asynchronously as `VGPU-R4-GROUP-VALIDATION`.
-   * Ignoring the promise can surface those failures as unhandled rejections.
+   * Raw claimed-bind-group validation failures are delivered asynchronously via
+   * `gpu.onError` as `VGPU-R4-GROUP-VALIDATION`.
    */
-  draw(arg: Target | DrawCallOptions = {}): Promise<void> {
+  draw(arg: Target | DrawCallOptions = {}): void {
     const opts = isTarget(arg) ? { target: arg } : arg;
     const state = drawState(this);
     const target = opts.target ?? state.defaultTarget;
@@ -201,7 +204,10 @@ export class InternalDraw implements Draw {
       discardClaimedGroupValidationResults(validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
-      if (context) throw claimedGroupNativeValidationError(context.label, context.group, error);
+      if (context) {
+        void reportDrawValidationError(state, context.label, context.group, error);
+        return;
+      }
       throw error;
     }
     if (finishContext) {
@@ -216,14 +222,20 @@ export class InternalDraw implements Draw {
       discardClaimedGroupValidationResults(validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
-      if (context) return Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      if (context) {
+        void reportDrawValidationError(state, context.label, context.group, error);
+        return;
+      }
       throw error;
     }
     if (submitContext) {
       const result = popLastClaimedGroupValidationScope(state.device);
       if (result) validations.push(result);
     }
-    return claimedGroupValidationDone(state.device, validations);
+    if (validations.length) {
+      const done = claimedGroupValidationDone(state.device, validations, { errorSink: state.errorSink });
+      state.trackSettled?.(done);
+    }
   }
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
@@ -363,6 +375,17 @@ function drawState(draw: Draw): DrawState {
   const state = drawStates.get(draw);
   if (!state) throw new TypeError("Invalid Draw instance");
   return state;
+}
+
+function reportDrawValidationError(state: DrawState, label: string, group: number, cause: unknown): Promise<void> {
+  const delivery = (async () => {
+    await submittedWorkDone(state.device);
+    const error = claimedGroupNativeValidationError(label, group, cause);
+    if (state.errorSink) await state.errorSink(error);
+    else console.error(error);
+  })();
+  state.trackSettled?.(delivery);
+  return delivery;
 }
 
 export function createBundleRegistry(): BundleBackReferenceRegistry {

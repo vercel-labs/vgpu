@@ -76,27 +76,35 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
   frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
   expect(popResolvers).toHaveLength(3); // cubeB reuses the device pipeline; only its R4 raw-claim scope is new.
 
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
+
   frameB.submit();
   frameA.submit();
-
-  const expectA = expect(frameA.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
-    where: "cubeA.draw",
-  });
-  const expectB = expect(frameB.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
-    where: "cubeB.draw",
-  });
 
   popResolvers[0]!(null);
   popResolvers[1]!({ message: "first frame validation" } as GPUError);
   popResolvers[2]!({ message: "second frame validation" } as GPUError);
   for (const resolve of popResolvers.slice(3)) resolve(null);
 
-  await expectA;
-  await expectB;
+  await frameA.done;
+  await frameB.done;
+  await gpu.settled();
+
+  expect(errors).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
+      where: "cubeA.draw",
+      detail: { drawLabel: "cubeA", group: 1 },
+    }),
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
+      where: "cubeB.draw",
+      detail: { drawLabel: "cubeB", group: 1 },
+    }),
+  ]));
 
   gpu.dispose();
 });

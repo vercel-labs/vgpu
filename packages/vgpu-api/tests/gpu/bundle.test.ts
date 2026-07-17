@@ -85,13 +85,19 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
 
       cube.layout(1, { dynamicOffsets: true });
       cube.group(1, rawBindGroup);
+      const errors: unknown[] = [];
+      gpu.onError((error) => errors.push(error));
       const frame = gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(cube, { offsets: { 1: [0] } })));
 
-      await expect(frame.done).rejects.toMatchObject({
-        code: "VGPU-R4-GROUP-VALIDATION",
-        message: expect.stringContaining("grupo 1 reclamado en draw 'cube'"),
-        where: "cube.draw",
-      });
+      await expect(frame.done).resolves.toBeUndefined();
+      expect(errors).toEqual([
+        expect.objectContaining({
+          code: "VGPU-R4-GROUP-VALIDATION",
+          message: expect.stringContaining("grupo 1 reclamado en draw 'cube'"),
+          where: "cube.draw",
+          detail: { drawLabel: "cube", group: 1 },
+        }),
+      ]);
     } finally {
       gpu.dispose();
     }

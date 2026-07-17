@@ -50,6 +50,7 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
     fix: `Verificá que el bind group haya sido creado con ${label}.layout(${group}) y que los offsets dinámicos viajen en p.draw(draw, { offsets: { ${group}: [...] } }).`,
     where: `${label}.draw`,
     cause,
+    detail: { drawLabel: label, group },
   });
 }
 
