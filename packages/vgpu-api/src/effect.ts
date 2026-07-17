@@ -5,7 +5,7 @@ import type { ClaimedGroupValidationResult, ValidationErrorSink } from "./claim-
 import type { BindGroupCache } from "./bind-cache.ts";
 import type { PipelineLayoutCache, PipelineStore, ShaderModuleCache } from "./pipeline-store.ts";
 import type { SetBag } from "./set-core.ts";
-import type { Target } from "./target.ts";
+import type { CompileTarget, Target } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
 
 export interface EffectOptions {
@@ -19,6 +19,8 @@ export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
+  compile(target?: CompileTarget): Promise<this>;
+  compileSync(target?: CompileTarget): this;
 }
 
 export class InternalEffect implements Effect {
@@ -32,6 +34,8 @@ export class InternalEffect implements Effect {
 
   set(values: SetBag): this { effectImpl(this).set(values); return this; }
   draw(target: Target | DrawCallOptions = {}): void { effectImpl(this).draw(isTarget(target) ? { target } : target); }
+  compile(target?: CompileTarget): Promise<this> { return effectImpl(this).compile(target).then(() => this); }
+  compileSync(target?: CompileTarget): this { effectImpl(this).compileSync(target); return this; }
 
   /** @internal FramePass delegates here; not part of the frozen public Effect surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {

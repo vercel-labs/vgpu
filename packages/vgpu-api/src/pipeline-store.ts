@@ -5,6 +5,7 @@ import { compileDisposedError, compileFailedError, compileSignatureInvalidError,
 
 export interface ErrorCtx {
   readonly where: string;
+  readonly signature?: string;
 }
 
 export type ErrorSink = (error: VGPUError) => void | Promise<void>;
@@ -56,8 +57,9 @@ export function normalizeSignature(arg: CompileTarget): TargetSignature {
       sampleCount: arg.sampleCount,
     };
   }
+  if (typeof arg !== "object" || arg === null) return { colors: [] };
   return {
-    colors: [...(arg.colors ?? [])],
+    colors: Array.isArray(arg.colors) ? [...arg.colors] : (arg.colors as TargetSignature["colors"] | undefined ?? []),
     depth: arg.depth,
     sampleCount: arg.sampleCount ?? 1,
   };
@@ -69,6 +71,9 @@ export function signatureKeyOf(sig: TargetSignature): string {
 
 export function validateTargetSignature(sig: TargetSignature, where: string): void {
   if (!Array.isArray(sig.colors) || sig.colors.length === 0) throw compileSignatureInvalidError(where, "colors debe ser un array no vacío.");
+  const invalidColor = sig.colors.find((format) => typeof format !== "string" || format.length === 0);
+  if (invalidColor !== undefined) throw compileSignatureInvalidError(where, `colors debe contener solo GPUTextureFormat strings; recibí ${String(invalidColor)}.`);
+  if (sig.depth !== undefined && (typeof sig.depth !== "string" || sig.depth.length === 0)) throw compileSignatureInvalidError(where, "depth debe ser un GPUTextureFormat string.");
   const sampleCount = sig.sampleCount ?? 1;
   if (sampleCount !== 1 && sampleCount !== 4) throw compileSignatureInvalidError(where, `sampleCount debe ser 1 o 4; recibí ${String(sampleCount)}.`);
 }
@@ -166,7 +171,7 @@ class DevicePipelineStore implements PipelineStore {
     try {
       native = create();
     } catch (cause) {
-      const error = compileFailedError(ctx.where, cause);
+      const error = compileFailedError(ctx.where, cause, ctx.signature);
       pending.reject(error);
       this.entries.delete(key);
       return pending.promise;
@@ -184,7 +189,7 @@ class DevicePipelineStore implements PipelineStore {
         if (this.entries.get(key) !== entry || entry.pipeline || entry.pending !== pending) return;
         entry.pending = undefined;
         this.entries.delete(key);
-        pending.reject(compileFailedError(ctx.where, cause));
+        pending.reject(compileFailedError(ctx.where, cause, ctx.signature));
       },
     );
     return pending.promise;
@@ -210,7 +215,7 @@ class DevicePipelineStore implements PipelineStore {
       return pipeline;
     } catch (cause) {
       if (scoped) this.suppressSyncErrorScopePop();
-      const error = compileFailedError(ctx.where, cause);
+      const error = compileFailedError(ctx.where, cause, ctx.signature);
       void this.errorSink(error);
       return undefined;
     }
@@ -220,11 +225,11 @@ class DevicePipelineStore implements PipelineStore {
     const pop = this.device.gpu.popErrorScope!()
       .then((nativeError) => {
         if (!nativeError) return;
-        const error = compileFailedError(ctx.where, nativeError);
+        const error = compileFailedError(ctx.where, nativeError, ctx.signature);
         if (this.entries.get(key) === entry) this.entries.delete(key);
         return this.errorSink(error);
       }, (cause) => {
-        const error = compileFailedError(ctx.where, cause);
+        const error = compileFailedError(ctx.where, cause, ctx.signature);
         if (this.entries.get(key) === entry) this.entries.delete(key);
         return this.errorSink(error);
       });

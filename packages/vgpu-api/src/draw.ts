@@ -5,8 +5,8 @@ import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
-import type { Target, TargetSignature } from "./target.ts";
-import { normalizeSignature, pipelineKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
+import type { CompileTarget, Target, TargetSignature } from "./target.ts";
+import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
 import { claimedGroupNativeValidationError, targetRequiredError, VGPUError } from "./errors.ts";
 
@@ -99,6 +99,8 @@ export interface Draw {
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
   draw(target?: Target | DrawCallOptions): void;
+  compile(target?: CompileTarget): Promise<this>;
+  compileSync(target?: CompileTarget): this;
 }
 
 /** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
@@ -136,7 +138,7 @@ export class InternalDraw implements Draw {
     });
     drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn });
     if (opts.set) this.set(opts.set);
-    for (const target of opts.targets ?? []) this.pipelineFor(target);
+    for (const target of opts.targets ?? []) this.compileSync(target);
   }
 
   get gpu(): GPURenderPipeline | undefined {
@@ -271,22 +273,49 @@ export class InternalDraw implements Draw {
     if (result) claimValidation(result);
   }
 
+  compile(target?: CompileTarget): Promise<this> {
+    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.compile`);
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey });
+    return promise.then(() => {
+      drawState(this).resolvedPipelineKeys.add(key);
+      return this;
+    });
+  }
+
+  compileSync(target?: CompileTarget): this {
+    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.compileSync`);
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.compileSync`, signature: signatureKey });
+    if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
+    return this;
+  }
+
   pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
-    const signature = normalizeSignature(target);
-    validateTargetSignature(signature, `${this.label}.pipelineFor`);
-    const key = this.pipelineKey(signature);
-    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.pipelineFor` });
+    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.pipelineFor`);
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
   }
 
   pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
-    const signature = normalizeSignature(target);
-    validateTargetSignature(signature, `${this.label}.pipelineForAsync`);
-    const key = this.pipelineKey(signature);
-    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync` });
+    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.pipelineForAsync`);
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey });
     void promise.then(() => drawState(this).resolvedPipelineKeys.add(key), () => undefined);
     return promise;
+  }
+
+  private compileKey(target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
+    const signature = this.signatureForKeyTarget(target, where);
+    const signatureKey = signatureKeyOf(signature);
+    return { signature, signatureKey, key: this.pipelineKey(signature) };
+  }
+
+  private signatureForKeyTarget(target: CompileTarget | undefined, where: string): TargetSignature {
+    const state = drawState(this);
+    const resolvedTarget = target ?? state.defaultTarget;
+    if (!resolvedTarget) throw targetRequiredError(where);
+    const signature = normalizeSignature(resolvedTarget);
+    validateTargetSignature(signature, where);
+    return signature;
   }
 
   private pipelineKey(signature: TargetSignature): string {

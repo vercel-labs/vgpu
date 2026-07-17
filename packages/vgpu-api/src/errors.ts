@@ -62,13 +62,14 @@ export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   });
 }
 
-export function compileFailedError(where: string, cause: unknown): VGPUError {
+export function compileFailedError(where: string, cause: unknown, signature?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",
     message: "falló la compilación nativa del pipeline WebGPU.",
     fix: "Revisá el WGSL, los vertex buffer layouts y la firma del target usados para compilar.",
     where,
     cause,
+    detail: signature ? { signature } : undefined,
   });
 }
 
