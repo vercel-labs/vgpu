@@ -12,6 +12,14 @@ export interface TargetOptions extends TargetTextureOptions {
   readonly size: readonly [number, number];
 }
 
+export interface TargetSignature {
+  readonly colors: readonly GPUTextureFormat[];
+  readonly depth?: GPUTextureFormat;
+  readonly sampleCount?: 1 | 4;
+}
+
+export type CompileTarget = Target | TargetSignature;
+
 export interface Target {
   readonly gpu: unknown;
   readonly size: readonly [number, number];

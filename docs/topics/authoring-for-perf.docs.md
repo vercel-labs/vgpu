@@ -22,11 +22,12 @@ struct Globals {
 
 ```text
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0], enabled: 1 });
-const draw = gpu.draw({ shader: WGSL, targets: [target], set: { globals } });
+const draw = gpu.draw({ shader: WGSL, set: { globals } });
+await draw.compile(target);
 gpu.frame.loop((f) => {
   globals.set({ time: gpu.time, mouse });
   f.pass({ target }, (p) => p.draw(draw));
 });
 ```
 
-Use the performance playbook before writing a new shader: bundles for static draws, `targets:` for pre-warm, `draw.group()` for many objects, `gpu.uniforms()` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.
+Use the performance playbook before writing a new shader: bundles for static draws, `compile()` for pre-warm, `draw.group()` for many objects, `gpu.uniforms()` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.

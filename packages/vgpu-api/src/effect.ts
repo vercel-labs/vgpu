@@ -1,10 +1,11 @@
 import type { Device } from "@vgpu/core";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { InternalDraw, encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
-import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
+import type { ClaimedGroupValidationResult, ValidationErrorSink } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
+import type { PipelineLayoutCache, PipelineStore, ShaderModuleCache } from "./pipeline-store.ts";
 import type { SetBag } from "./set-core.ts";
-import type { Target } from "./target.ts";
+import type { CompileTarget, Target } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
 
 export interface EffectOptions {
@@ -18,20 +19,23 @@ export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
+  compile(target?: CompileTarget): Promise<this>;
+  compileSync(target?: CompileTarget): this;
 }
 
 export class InternalEffect implements Effect {
-  readonly gpu: GPURenderPipeline | undefined;
+  get gpu(): GPURenderPipeline | undefined { return effectImpl(this).gpu; }
 
-  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
+  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
     const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget);
+    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
     effectImpls.set(this, impl);
-    this.gpu = impl.gpu;
   }
 
   set(values: SetBag): this { effectImpl(this).set(values); return this; }
   draw(target: Target | DrawCallOptions = {}): void { effectImpl(this).draw(isTarget(target) ? { target } : target); }
+  compile(target?: CompileTarget): Promise<this> { return effectImpl(this).compile(target).then(() => this); }
+  compileSync(target?: CompileTarget): this { effectImpl(this).compileSync(target); return this; }
 
   /** @internal FramePass delegates here; not part of the frozen public Effect surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {

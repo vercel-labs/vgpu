@@ -60,7 +60,7 @@ cube.set({
   model: { model: orbit(0) },
 });
 
-await cube.draw(target);
+cube.draw(target);
 ```
 
 Everything works like the rest of vgpu: bindings are reflected from the WGSL, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets.
@@ -109,7 +109,7 @@ const smokeShader = `
 const smoke = gpu.draw({ shader: smokeShader, instances: 10_000 });
 
 smoke.set({ params: { time: 2.5 } }); // drive with gpu.time in a frame loop
-await smoke.draw(surface);
+smoke.draw(surface);
 ```
 
 One draw call, 10,000 smoke puffs, zero buffers — each particle derives its position, size, and fade from `instance_index` and `time`. Counts can also change per call: `smoke.draw({ target: surface, instances: 500 })`.

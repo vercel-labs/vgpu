@@ -16,6 +16,7 @@ export interface SetCoreOptions {
   readonly reflection: Reflection;
   readonly bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>;
   readonly cache: BindGroupCache;
+  readonly onIdentityChange?: (change: BindingIdentityChange) => void;
 }
 
 export interface BindingIdentityChange {
@@ -54,6 +55,7 @@ type MutableBindingState = {
   resource?: GPUBindingResource;
   identity?: BindGroupIdentityPart;
   unsubscribe?: UnsubscribeResourceDestroy;
+  unsubscribeRecreate?: () => void;
 };
 
 /** Creates the per-Draw binding state machine used by Effect/Draw.set(). */
@@ -108,10 +110,27 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function setUserOwned(state: MutableBindingState, value: unknown): void {
     const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
+    state.unsubscribe?.();
+    state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
     state.identity = normalized.identity;
+    state.unsubscribe = normalized.unsubscribe?.(() => { if (state.identity) options.cache.evictIdentity(state.identity); });
+    state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
+  }
+
+  function rebindRecreatedResource(state: MutableBindingState, value: unknown): void {
+    const beforeIdentity = identityString(state.identity);
+    if (state.identity) options.cache.evictIdentity(state.identity);
+    const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
     state.unsubscribe?.();
-    state.unsubscribe = normalized.unsubscribe?.(() => options.cache.evictIdentity(normalized.identity));
+    state.unsubscribeRecreate?.();
+    state.resource = normalized.resource;
+    state.identity = normalized.identity;
+    state.unsubscribe = normalized.unsubscribe?.(() => { if (state.identity) options.cache.evictIdentity(state.identity); });
+    // Refresh the recreation subscription on every re-normalization so the lifecycle
+    // stays explicit even if a future target signal implementation becomes one-shot.
+    state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
+    for (const change of identityChangeFor(state, beforeIdentity)) options.onIdentityChange?.(change);
   }
 
   function claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined {

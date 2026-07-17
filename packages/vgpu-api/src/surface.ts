@@ -50,6 +50,7 @@ export class CanvasSurface implements Surface {
   readonly format: GPUTextureFormat;
   private readonly destroySignal = new DestroySignal<Target>();
   private readonly callbacks = new Set<(event: SurfaceResizeEvent) => void>();
+  private readonly texturesRecreatedCallbacks = new Set<() => void>();
   private currentDpr: number;
   private isDisposed = false;
   private notifying = false;
@@ -123,6 +124,7 @@ export class CanvasSurface implements Surface {
 
   async read(): Promise<Uint8Array> { this.assertLive(); return this.color.read(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { this.assertLive(); return this.destroySignal.onDestroy(this, cb); }
+  onTexturesRecreated(cb: () => void): () => void { this.assertLive(); this.texturesRecreatedCallbacks.add(cb); return () => { this.texturesRecreatedCallbacks.delete(cb); }; }
 
   renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1]): GPURenderPassDescriptor {
     this.assertLive();
@@ -135,6 +137,7 @@ export class CanvasSurface implements Surface {
     try { this.context.unconfigure?.(); } catch { /* ignore native cleanup failures */ }
     this.unregister(this);
     this.callbacks.clear();
+    this.texturesRecreatedCallbacks.clear();
     this.destroySignal.emit(this);
   }
 
@@ -143,7 +146,12 @@ export class CanvasSurface implements Surface {
     this.currentDpr = dpr;
     if (!changed) return;
     setCanvasSize(this.canvas, size);
+    this.emitTexturesRecreated();
     if (notify) this.notify();
+  }
+
+  private emitTexturesRecreated(): void {
+    for (const cb of [...this.texturesRecreatedCallbacks]) cb();
   }
 
   private notify(): void {

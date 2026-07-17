@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationResult } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
@@ -20,17 +20,22 @@ export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
   /**
-   * Resolves after submit-time validation for raw claimed bind groups has been checked.
+   * Resolves after submitted GPU work completes and raw claimed-bind-group
+   * validation has been delivered to `gpu.onError`.
    *
-   * Consume this promise when encoding raw claimed bind groups; otherwise native
-   * validation failures may surface as unhandled promise rejections. Metadata-backed
-   * claims bypass this path and add no validation-scope work.
+   * This is a completion/timing signal only; it never rejects and is not an error
+   * channel.
    */
   done: Promise<void> = Promise.resolve();
   private readonly encoder: GPUCommandEncoder;
   private readonly validations: ClaimedGroupValidationResult[] = [];
   private submitted = false;
-  constructor(private readonly device: Device, private readonly defaultTarget?: Target) {
+  constructor(
+    private readonly device: Device,
+    private readonly defaultTarget?: Target,
+    private readonly errorSink?: ValidationErrorSink,
+    private readonly trackSettled?: (promise: Promise<unknown>) => void,
+  ) {
     this.encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
@@ -64,12 +69,12 @@ export class Frame {
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
       if (!context) throw error;
-      this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      this.done = this.trackDone(this.deliverValidationError(context.label, context.group, error));
       return;
     }
     if (finishContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations.push(result);
+      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
     }
     const submitContext = this.validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
@@ -80,14 +85,26 @@ export class Frame {
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
       if (!context) throw error;
-      this.done = Promise.reject(claimedGroupNativeValidationError(context.label, context.group, error));
+      this.done = this.trackDone(this.deliverValidationError(context.label, context.group, error));
       return;
     }
     if (submitContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations.push(result);
+      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
     }
-    this.done = claimedGroupValidationDone(this.device, this.validations);
+    this.done = this.trackDone(claimedGroupValidationDone(this.device, this.validations, { errorSink: this.errorSink }));
+  }
+
+  private async deliverValidationError(label: string, group: number, cause: unknown): Promise<void> {
+    await submittedWorkDone(this.device);
+    const error = claimedGroupNativeValidationError(label, group, cause);
+    if (this.errorSink) await this.errorSink(error);
+    else console.error(error);
+  }
+
+  private trackDone(promise: Promise<void>): Promise<void> {
+    this.trackSettled?.(promise);
+    return promise;
   }
 }
 

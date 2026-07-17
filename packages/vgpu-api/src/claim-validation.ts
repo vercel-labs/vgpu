@@ -11,6 +11,12 @@ export interface ClaimedGroupValidationResult {
   readonly error: Promise<GPUError | null>;
 }
 
+export type ValidationErrorSink = (error: VGPUError) => void | Promise<void>;
+
+export interface ClaimedGroupValidationDoneOptions {
+  readonly errorSink?: ValidationErrorSink;
+}
+
 const pendingScopes = new WeakMap<GPUDevice, ClaimedGroupValidationContext[]>();
 
 /**
@@ -33,8 +39,8 @@ export function pushClaimedGroupValidationScope(device: Device, context: Claimed
 /**
  * Pops the most recent raw-claim scope in native LIFO order and returns its promise.
  *
- * The returned promise is stored by `Frame` / `Draw.draw()` and awaited after
- * submit. Popping immediately keeps the device-global WebGPU scope stack from
+ * The returned promise is delivered through `gpu.onError` and tracked by
+ * `Frame.done` / `gpu.settled()` after submit. Popping immediately keeps the device-global WebGPU scope stack from
  * being shared accidentally by overlapping frames or one-shot draws.
  */
 export function popLastClaimedGroupValidationScope(device: Device): ClaimedGroupValidationResult | undefined {
@@ -88,32 +94,60 @@ export function discardClaimedGroupValidationResults(results: readonly ClaimedGr
 }
 
 /**
+ * Resolves after the device queue reports submitted work completion, when supported.
+ *
+ * This is feature-guarded because the mock and some compatibility environments
+ * may omit `onSubmittedWorkDone`.
+ */
+export function submittedWorkDone(device: Device): Promise<void> {
+  return device.gpu.queue.onSubmittedWorkDone?.() ?? Promise.resolve();
+}
+
+/**
  * Awaits raw claimed-bind-group validation collected during encode.
  *
  * No scopes remain open here: native scopes were already popped in LIFO order
- * immediately after each protected encode operation. This promise may reject
- * with `VGPU-R4-GROUP-VALIDATION`; callers must consume `Frame.done` or the
- * `Draw.draw()` return value to avoid unhandled promise rejections.
+ * immediately after each protected encode operation. Validation errors are
+ * delivered to the supplied device-level error sink as `VGPU-R4-GROUP-VALIDATION`;
+ * this promise resolves after delivery and never rejects.
  */
-export function claimedGroupValidationDone(device: Device, results: readonly ClaimedGroupValidationResult[] = []): Promise<void> {
-  if (!results.length) return Promise.resolve();
-  return settleClaimedGroupValidations(device, results);
+export function claimedGroupValidationDone(device: Device, results: readonly ClaimedGroupValidationResult[] = [], opts: ClaimedGroupValidationDoneOptions = {}): Promise<void> {
+  return settleClaimedGroupValidations(device, results, opts.errorSink ?? defaultErrorSink);
 }
 
-async function settleClaimedGroupValidations(device: Device, results: readonly ClaimedGroupValidationResult[]): Promise<void> {
-  await device.gpu.queue.onSubmittedWorkDone?.();
-  const errors: VGPUError[] = [];
+export function preferClaimedGroupValidationResult(preferred: ClaimedGroupValidationResult, fallback: ClaimedGroupValidationResult): ClaimedGroupValidationResult {
+  return {
+    context: preferred.context,
+    error: preferValidationError(preferred.error, fallback.error),
+  };
+}
+
+async function preferValidationError(preferred: Promise<GPUError | null>, fallback: Promise<GPUError | null>): Promise<GPUError | null> {
+  const results = await Promise.allSettled([preferred, fallback]);
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) return result.value;
+  }
+  const rejection = results.find((result) => result.status === "rejected");
+  if (rejection?.status === "rejected") throw rejection.reason;
+  return null;
+}
+
+async function settleClaimedGroupValidations(device: Device, results: readonly ClaimedGroupValidationResult[], errorSink: ValidationErrorSink): Promise<void> {
+  await submittedWorkDone(device);
   for (const result of results) {
     try {
       const error = await result.error;
-      if (error) errors.push(claimedGroupNativeValidationError(result.context.label, result.context.group, error));
+      if (error) await errorSink(claimedGroupNativeValidationError(result.context.label, result.context.group, error));
     } catch (error) {
-      errors.push(claimedGroupNativeValidationError(result.context.label, result.context.group, error));
+      await errorSink(claimedGroupNativeValidationError(result.context.label, result.context.group, error));
     }
   }
-  if (errors[0]) throw errors[0];
 }
 
 function suppressClaimedGroupValidationResult(result: ClaimedGroupValidationResult): void {
   void result.error.catch(() => undefined);
+}
+
+function defaultErrorSink(error: VGPUError): void {
+  console.error(error);
 }

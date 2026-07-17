@@ -75,10 +75,11 @@
     "wgpu-matrix": "^3.4.2",
     "@webgpu/types": "^0.1.69"
   },
+  "vgpuExportBundleBudgetNote": "Wave 1 device pipeline store, gpu.onError/settled, and resize invalidation require a 26KB gzip budget for primary API entrypoints.",
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 24576,
-    "./node": 24576,
-    "./mock": 24576,
+    ".": 26624,
+    "./node": 26624,
+    "./mock": 26624,
     "./scene": 14336,
     "./client": 1024,
     "./core": 4096

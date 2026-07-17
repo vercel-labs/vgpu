@@ -25,6 +25,6 @@ export async function runGroupClaimExample() {
   const bindGroup = gpu.gpu.createBindGroup({ label: "claimed-bg", layout, entries: [{ binding: 0, resource: { buffer: buffer.gpu, offset: 0, size: 16 } }] });
   draw.group(0, bindGroup);
   const frame = gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw, { offsets: { 0: [0] } })));
-  await frame.done;
+  await frame.done; // completion signal before callers inspect/read the target
   return { gpu, target };
 }

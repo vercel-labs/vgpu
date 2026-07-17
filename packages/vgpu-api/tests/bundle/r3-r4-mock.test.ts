@@ -55,6 +55,37 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   gpu.dispose();
 });
 
+test("R3 bundle sampling a repeatedly resized target stales through binding identity each time", async () => {
+  const gpu = await init();
+  const scene = gpu.target({ size: [4, 4] });
+  const source = gpu.target({ size: [4, 4] });
+  const post = gpu.effect(WALLS, { label: "post", set: { detail: source } });
+  const recordBundle = (label: string) => gpu.bundle({ target: scene, label }, (b) => {
+    b.draw(post);
+  });
+
+  const firstBundle = recordBundle("postBundleA");
+  source.resize([8, 8]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
+    "bundle 'postBundleA' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
+      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
+      "  Fix: re-grabalo → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
+      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+  );
+
+  const secondBundle = recordBundle("postBundleB");
+  source.resize([16, 16]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
+    "bundle 'postBundleB' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
+      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
+      "  Fix: re-grabalo → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
+      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+  );
+  gpu.dispose();
+});
+
 test("R4 raw claim validation stays attributed when frames overlap", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
@@ -71,31 +102,40 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 
   const frameA = gpu.frame();
   frameA.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(1);
+  expect(popResolvers).toHaveLength(2); // pipeline sync-create scope, then R4 raw-claim scope.
   const frameB = gpu.frame();
   frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(2);
+  expect(popResolvers).toHaveLength(3); // cubeB reuses the device pipeline; only its R4 raw-claim scope is new.
+
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
 
   frameB.submit();
   frameA.submit();
 
-  const expectA = expect(frameA.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
-    where: "cubeA.draw",
-  });
-  const expectB = expect(frameB.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
-    where: "cubeB.draw",
-  });
+  popResolvers[0]!(null);
+  popResolvers[1]!({ message: "first frame validation" } as GPUError);
+  popResolvers[2]!({ message: "second frame validation" } as GPUError);
+  for (const resolve of popResolvers.slice(3)) resolve(null);
 
-  popResolvers[0]!({ message: "first frame validation" } as GPUError);
-  popResolvers[1]!({ message: "second frame validation" } as GPUError);
-  for (const resolve of popResolvers.slice(2)) resolve(null);
+  await frameA.done;
+  await frameB.done;
+  await gpu.settled();
 
-  await expectA;
-  await expectB;
+  expect(errors).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
+      where: "cubeA.draw",
+      detail: { drawLabel: "cubeA", group: 1 },
+    }),
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
+      where: "cubeB.draw",
+      detail: { drawLabel: "cubeB", group: 1 },
+    }),
+  ]));
 
   gpu.dispose();
 });

@@ -1,5 +1,11 @@
 export type VGPUErrorSeverity = "error" | "warning" | "info";
 
+export interface VGPUErrorDetail {
+  readonly drawLabel?: string;
+  readonly group?: number;
+  readonly signature?: string;
+}
+
 export interface VGPUErrorData {
   readonly code: string;
   readonly message: string;
@@ -7,6 +13,7 @@ export interface VGPUErrorData {
   readonly fix?: string;
   readonly where?: string;
   readonly cause?: unknown;
+  readonly detail?: VGPUErrorDetail;
 }
 
 export class VGPUError extends Error {
@@ -15,6 +22,7 @@ export class VGPUError extends Error {
   readonly fix?: string;
   readonly where?: string;
   override readonly cause?: unknown;
+  readonly detail?: VGPUErrorDetail;
 
   constructor(data: VGPUErrorData) {
     super(data.message, { cause: data.cause });
@@ -24,6 +32,7 @@ export class VGPUError extends Error {
     this.fix = data.fix;
     this.where = data.where;
     this.cause = data.cause;
+    this.detail = data.detail;
   }
 }
 

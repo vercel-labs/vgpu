@@ -50,6 +50,7 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
     fix: `Verificá que el bind group haya sido creado con ${label}.layout(${group}) y que los offsets dinámicos viajen en p.draw(draw, { offsets: { ${group}: [...] } }).`,
     where: `${label}.draw`,
     cause,
+    detail: { drawLabel: label, group },
   });
 }
 
@@ -57,6 +58,34 @@ export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-REQUIRED",
     message: "esta operación necesita un target explícito. Fix: effect.draw({ target }) — creá una surface con gpu.surface(canvas) o un gpu.target({ size }) y pasalo.",
+    where,
+  });
+}
+
+export function compileFailedError(where: string, cause: unknown, signature?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-FAILED",
+    message: "falló la compilación nativa del pipeline WebGPU.",
+    fix: "Revisá el WGSL, los vertex buffer layouts y la firma del target usados para compilar.",
+    where,
+    cause,
+    detail: signature ? { signature } : undefined,
+  });
+}
+
+export function compileDisposedError(where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-DISPOSED",
+    message: "la GPU fue disposed mientras había compilaciones de pipeline pendientes.",
+    where,
+  });
+}
+
+export function compileSignatureInvalidError(where: string, reason: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-SIGNATURE-INVALID",
+    message: `TargetSignature inválida: ${reason}`,
+    fix: "Pasá { colors: [format], depth?: format, sampleCount?: 1 | 4 } o un Target concreto.",
     where,
   });
 }
