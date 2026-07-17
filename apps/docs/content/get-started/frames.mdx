@@ -48,12 +48,12 @@ const sceneTarget = gpu.target({ size: [canvasTarget.size[0], canvasTarget.size[
 postEffect.set({ src: sceneTarget });
 
 gpu.frame((frame) => {
-  frame.pass({ target: sceneTarget }, (pass) => pass.draw(pulseEffect));
-  frame.pass({ target: canvasTarget }, (pass) => pass.draw(postEffect));
+  frame.pass(sceneTarget, pulseEffect);
+  frame.pass(canvasTarget, postEffect);
 }); // two passes, one encoder, one submit
 ```
 
-A frame is an optimization, not a requirement. Back-to-back one-shot draws also work — same passes, same order, just one submit each — and a frame with a single pass buys you nothing over `pulseEffect.draw({ target: canvasTarget })`. Reach for `gpu.frame()` when batching many passes into one submit starts to matter: heavy frames, or a render loop.
+One-shot draws like `pulseEffect.draw(canvasTarget)` are the simple default for a single pass. Multi-pass hot paths should use `gpu.frame()` to batch passes into one command encoder and one submit. One-shot draws never join a surrounding frame; inside `gpu.frame()`, always go through `frame.pass()`.
 
 > Warning: one-shot `draw()` calls do not join a surrounding frame — inside a frame callback they submit on their own immediately. Inside `gpu.frame()`, always draw through `frame.pass()`.
 
@@ -81,7 +81,7 @@ const pulseEffect = gpu.effect(`
 // ---cut---
 const handle = gpu.frame.loop((frame) => {
   pulseEffect.set({ params: { time: gpu.time } }); // update uniforms every tick
-  frame.pass({ target: canvasTarget }, (pass) => pass.draw(pulseEffect));
+  frame.pass(canvasTarget, pulseEffect);
 }, { fps: 30 });
 
 handle.stop(); // call it when your component unmounts
@@ -109,7 +109,7 @@ const pulseEffect = gpu.effect(`
 // ---cut---
 function tick() {
   pulseEffect.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
-  pulseEffect.draw({ target: canvasTarget });
+  pulseEffect.draw(canvasTarget);
   requestAnimationFrame(tick); // and the scheduling
 }
 requestAnimationFrame(tick);

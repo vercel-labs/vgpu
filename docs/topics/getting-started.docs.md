@@ -18,7 +18,7 @@ struct Params { time: f32, texel: vec2f }
 
 gpu.frame.loop((f) => {
   gradient.set({ time: gpu.time, texel: screen.texelSize });
-  f.pass({ target: screen }, (p) => p.draw(gradient));
+  f.pass(screen, gradient);
 });
 ```
 
@@ -26,7 +26,7 @@ gpu.frame.loop((f) => {
 
 - Use `gpu.effect()` for fullscreen fragment work.
 - Use `gpu.draw()` for vertex shaders, meshes, storage-driven vertices, instancing, MRT, and depth.
-- Use `gpu.frame((f) => ...)` for explicit one-shot work and `gpu.frame.loop(...)` only for animation.
+- Use `effect.draw(target)` for simple single-pass draws; use `gpu.frame((f) => ...)` to batch multi-pass work and `gpu.frame.loop(...)` for animation.
 - Use `set()` for every binding declared in WGSL; missing bindings fail with `VGPU-R1-BINDING-NEVER-SET`.
 - Keep plain JS values plain from their first `set()`; if you need user-owned lifetime, pass a resource from the first `set()`.
 

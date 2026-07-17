@@ -5,6 +5,7 @@ import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
 import type { SetBag } from "./set-core.ts";
 import type { Target } from "./target.ts";
+import { isTarget } from "./target-utils.ts";
 
 export interface EffectOptions {
   readonly set?: SetBag;
@@ -16,7 +17,7 @@ const effectImpls = new WeakMap<Effect, InternalDraw>();
 export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
-  draw(opts?: DrawCallOptions & { readonly target?: Target }): void;
+  draw(target?: Target | DrawCallOptions): void;
 }
 
 export class InternalEffect implements Effect {
@@ -30,7 +31,7 @@ export class InternalEffect implements Effect {
   }
 
   set(values: SetBag): this { effectImpl(this).set(values); return this; }
-  draw(opts: DrawCallOptions & { readonly target?: Target } = {}): void { effectImpl(this).draw(opts); }
+  draw(target: Target | DrawCallOptions = {}): void { effectImpl(this).draw(isTarget(target) ? { target } : target); }
 
   /** @internal FramePass delegates here; not part of the frozen public Effect surface. */
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {

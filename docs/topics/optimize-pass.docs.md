@@ -11,7 +11,7 @@ const effectBundle = gpu.bundle({ target }, (b) => {
   b.draw(background);
   b.draw(grid);
 });
-gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(effectBundle)));
+gpu.frame.loop((f) => f.pass(target, (p) => p.bundles(effectBundle)));
 ```
 
 ## 2. Animated scalar/vector values
@@ -22,7 +22,7 @@ Keep the pass object and write values in place:
 const effect = gpu.effect(WGSL, { set: { time: 0, exposure: 1 } });
 gpu.frame.loop(() => {
   effect.set({ time: gpu.time });
-  effect.draw({ target });
+  effect.draw(target);
 });
 ```
 
@@ -34,7 +34,7 @@ Use ping-pong rather than allocating a new target or storage buffer:
 const state = gpu.pingPong(512, 512, { format: "rgba16float" });
 gpu.frame.loop((f) => {
   step.set({ src: state.read.color });
-  f.pass({ target: state.write }, (p) => p.draw(step));
+  f.pass(state.write, step);
   state.swap();
 });
 ```

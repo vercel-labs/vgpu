@@ -7,6 +7,7 @@ import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, frameReentrantError, targetRequiredError } from "./errors.ts";
 import { isSurfaceResizeCallbackActive } from "./surface.ts";
+import { isTarget } from "./target-utils.ts";
 
 export interface FramePassOptions {
   readonly target: Target;
@@ -33,11 +34,13 @@ export class Frame {
     this.encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
-  pass(opts: FramePassOptions, cb: (pass: FramePass) => void): void {
-    const target = opts.target ?? this.defaultTarget;
-    if (!target) throw targetRequiredError("Frame.pass");
-    const encoder = this.encoder.beginRenderPass(target.renderPassDescriptor(opts.clear));
-    try { cb(new FramePass(encoder, target, this.validations)); }
+  pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
+    const opts = isTarget(target) ? { target } : target;
+    const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
+    const resolvedTarget = opts.target ?? this.defaultTarget;
+    if (!resolvedTarget) throw targetRequiredError("Frame.pass");
+    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(opts.clear));
+    try { cb(new FramePass(encoder, resolvedTarget, this.validations)); }
     catch (error) {
       discardClaimedGroupValidationResults(this.validations);
       this.validations.length = 0;

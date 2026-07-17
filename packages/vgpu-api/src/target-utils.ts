@@ -1,5 +1,5 @@
 import { targetSizeRequiredError, unsupportedError } from "./errors.ts";
-import type { TargetOptions, TargetTextureOptions } from "./target.ts";
+import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 
 export const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
 
@@ -54,4 +54,11 @@ export function colorValue(clear: GPUColor | readonly [number, number, number, n
 
 export function sameSize(a: readonly [number, number], b: readonly [number, number]): boolean {
   return a[0] === b[0] && a[1] === b[1];
+}
+
+
+/** Internal normalization guard: `renderPassDescriptor` is required on Target and never on options bags. */
+export function isTarget(value: unknown): value is Target {
+  return typeof value === "object" && value !== null
+    && typeof (value as Target).renderPassDescriptor === "function";
 }

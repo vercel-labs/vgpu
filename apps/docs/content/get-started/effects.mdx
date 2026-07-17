@@ -50,8 +50,8 @@ const sceneEffect = gpu.effect(sceneSource);
 const post = gpu.effect(postSource);
 post.set({ src: scene }); // the offscreen result becomes the post input
 
-sceneEffect.draw({ target: scene }); // render the scene offscreen
-post.draw({ target: surface }); // invert it onto the canvas
+sceneEffect.draw(scene); // render the scene offscreen
+post.draw(surface); // invert it onto the canvas
 ```
 
 `post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
@@ -96,7 +96,7 @@ pulse.set({
   },
 });
 
-pulse.draw({ target: canvasSurface });
+pulse.draw(canvasSurface);
 ```
 
 You should also only update uniforms when they need to change, for example, react to canvas size changes:

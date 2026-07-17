@@ -107,7 +107,7 @@ gpu.frame((frame) => {
   });
 });
 
-postprocessing.draw({ target: canvasSurface }); // rendering an effect creates a pass
+postprocessing.draw(canvasSurface); // rendering an effect creates a pass
 ```
 
 The one-shot `draw()` runs after the frame has submitted, so the scene is already rendered when postprocessing reads it. Under the hood it creates an encoder, opens a render pass on `canvasSurface`, encodes the draw, and submits — the same GPU work you would write by hand with `frame.pass`.

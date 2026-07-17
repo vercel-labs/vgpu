@@ -42,7 +42,7 @@ const gradientSource = `
 const gpu = await init();
 const target = gpu.target({ size: [256, 256] });
 
-gpu.effect(gradientSource).draw({ target });
+gpu.effect(gradientSource).draw(target);
 const pixels = await target.read(); // RGBA bytes
 
 const png = new PNG({ width: target.size[0], height: target.size[1] });
@@ -68,7 +68,7 @@ test("gradient renders", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [64, 64] });
 
-  gpu.effect(gradientSource).draw({ target });
+  gpu.effect(gradientSource).draw(target);
   const pixels = await target.read();
 
   // center pixel: blue is the constant 0.4 (~102 of 255), alpha is 1.0

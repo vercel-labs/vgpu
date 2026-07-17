@@ -6,6 +6,7 @@ import { claimedGroupValidationDone, discardClaimedGroupValidationResults, disca
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target } from "./target.ts";
+import { isTarget } from "./target-utils.ts";
 import { claimedGroupNativeValidationError, targetRequiredError, unsupportedError, VGPUError } from "./errors.ts";
 
 export interface DrawOptions {
@@ -91,7 +92,7 @@ export interface Draw {
   set(values: SetBag): this;
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
-  draw(opts?: DrawCallOptions): Promise<void>;
+  draw(target?: Target | DrawCallOptions): Promise<void>;
 }
 
 /** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
@@ -157,7 +158,8 @@ export class InternalDraw implements Draw {
    * validation failures are reported asynchronously as `VGPU-R4-GROUP-VALIDATION`.
    * Ignoring the promise can surface those failures as unhandled rejections.
    */
-  draw(opts: DrawCallOptions = {}): Promise<void> {
+  draw(arg: Target | DrawCallOptions = {}): Promise<void> {
+    const opts = isTarget(arg) ? { target: arg } : arg;
     const state = drawState(this);
     const target = opts.target ?? state.defaultTarget;
     if (!target) throw targetRequiredError(`${this.label}.draw`);

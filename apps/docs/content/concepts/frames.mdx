@@ -92,8 +92,8 @@ const sceneEffect = gpu.effect(sceneSource);
 const post = gpu.effect(postSource);
 post.set({ src: scene }); // the offscreen result becomes the post input
 
-sceneEffect.draw({ target: scene }); // render the scene offscreen
-post.draw({ target: surface }); // invert it onto the canvas
+sceneEffect.draw(scene); // render the scene offscreen
+post.draw(surface); // invert it onto the canvas
 ```
 
 `post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
@@ -141,15 +141,13 @@ gpu.frame((frame) => {
   });
 
   // 2. post-process the scene texture onto the canvas
-  frame.pass({ target: surface }, (pass) => {
-    pass.draw(post);
-  });
+  frame.pass(surface, post);
 });
 ```
 
 The last pass targets the canvas [`Surface`](/reference/vgpu/surface#surface), which is what puts pixels on screen.
 
-> Good to know: one-shot `draw()` calls and a frame produce the same GPU work here — the difference is CPU-side. A frame batches every pass into one submit; ten passes in a frame are still one submit.
+> Good to know: one-shot draws like `effect.draw(target)` are simple and default for a single pass. Multi-pass hot paths should use `gpu.frame()` to batch work into one submit. One-shot draws never join a surrounding frame; inside `gpu.frame()`, always draw through `frame.pass()`.
 
 [`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.effect()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
 
@@ -188,9 +186,7 @@ gpu.frame((frame) => {
     },
   });
 
-  frame.pass({ target }, (pass) => {
-    pass.draw(pulse);
-  });
+  frame.pass(target, pulse);
 });
 ```
 
@@ -224,7 +220,7 @@ const draw = gpu.effect(drawSource, {
 
 const handle = gpu.frame.loop((frame) => {
   draw.set({ params: { time: gpu.time } }); // update uniforms every tick
-  frame.pass({ target }, (pass) => pass.draw(draw));
+  frame.pass(target, draw);
 }, { fps: 30 });
 
 handle.stop();
