@@ -172,6 +172,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm run build
       - name: Regenerate docs manifest + skill
         run: node packages/vgpu/lib/docs/generate/cli.js
       - name: Build docs app
