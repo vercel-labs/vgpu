@@ -132,18 +132,6 @@ export const navSections: NavSection[] = [
     href: '/reference',
     groups: [...referenceGroups.map(referenceGroupToNavGroup)],
   },
-  {
-    title: 'Old drafts',
-    groups: [
-      {
-        title: '',
-        items: [
-          { title: 'Introduction', href: '/' },
-          { title: 'Installation & First Frame', href: '/getting-started' },
-        ],
-      },
-    ],
-  },
 ];
 
 export const flatNavItems: FlatNavItem[] = flattenNavSections(navSections);
@@ -253,7 +241,7 @@ function normalizePathname(pathname: string) {
 
 function sectionOverviewHref(section: string) {
   if (section === 'Get started') return '/get-started';
-  if (section === 'Getting Started') return '/getting-started';
+  if (section === 'Getting Started') return '/get-started';
   if (section === 'Concepts') return '/concepts';
   if (section === 'Core Concepts') return '/concepts';
   if (section === 'Guides') return '/guides';

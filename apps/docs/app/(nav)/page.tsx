@@ -13,12 +13,9 @@ gpu.frame.loop(() => {
 });`;
 
 const features = [
-  ['One context', 'Use `init()` to get a Gpu with pass, draw, compute, frame, bundle, target, and uniforms.'],
-  ['Explicit WGSL', 'Shaders declare bindings; vgpu reflects them and `set()` binds by name.'],
-  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns are documented as defaults.'],
   ['Browser and Node', 'Use the same Gpu API from `vgpu`, `vgpu/node`, and `vgpu/mock`.'],
-  ['Native escape hatches', 'Drop to `vgpu/core` for native handles, buffers, textures, and bind groups when you need them.'],
-  ['Scene helpers', 'Pure geometry and camera utilities live in `vgpu/scene` without a retained scene graph.'],
+  ['WGSL modules', 'import/export wgsl modules just like in typescript.'],
+  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns are documented as defaults.'],
 ];
 
 export default function HomePage() {
@@ -28,7 +25,7 @@ export default function HomePage() {
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-12 mb-6 tracking-tight">vgpu</h1>
         <p className="text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">Agentic-first WebGPU for shaders that should be correct and fast the first time.</p>
         <div className="flex flex-wrap justify-center gap-4 mb-16">
-          <Link href="/getting-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
+          <Link href="/get-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
           <Link href="/reference" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Reference</Link>
         </div>
         <div className="text-left max-w-2xl mx-auto"><CodeBlock code={heroCode} language="typescript" /></div>
@@ -49,7 +46,7 @@ export default function HomePage() {
         <h2 className="text-2xl md:text-3xl font-semibold text-gray-12 text-center mb-12">Explore the Docs</h2>
         <div className="grid md:grid-cols-2 gap-4">
           {[
-            ['/getting-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
+            ['/get-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
             ['/concepts', 'Core Concepts', 'Learn Gpu, set(), targets, frames, bundles, and adapters.'],
             ['/reference', 'API Reference', 'Package map and generated topic pages.'],
             ['/examples', 'Examples', 'Live WebGPU demos with read-only source views.'],

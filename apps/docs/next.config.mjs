@@ -53,6 +53,7 @@ const nextConfig = {
       { source: '/packages/vgpu/Pass', destination: '/reference/vgpu/effect#effect', permanent: true },
       { source: '/packages/vgpu/PassOptions', destination: '/reference/vgpu/effect#effectoptions', permanent: true },
       { source: '/reference/vgpu/pass', destination: '/reference/vgpu/effect', permanent: true },
+      { source: '/getting-started', destination: '/get-started', permanent: true },
       ...packageRedirects,
       ...symbolRedirects,
     ];
