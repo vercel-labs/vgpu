@@ -85,7 +85,9 @@ if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 async function renderOne(renderers, exampleSources, slug, size, metaThumb, output) {
   const gpu = await init(slug === 'triangle-particles'
     ? { requiredLimits: { maxStorageBuffersInVertexStage: 2 } }
-    : undefined);
+    : slug === 'fluid'
+      ? { requiredLimits: { maxStorageBuffersInVertexStage: 1 } }
+      : undefined);
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     if (slug === 'triangle-particles') {
@@ -97,7 +99,6 @@ async function renderOne(renderers, exampleSources, slug, size, metaThumb, outpu
       renderers.fluid(gpu, target, {
         frames: metaThumb.warmupFrames ?? 180,
         dt: metaThumb.dt ?? 1 / 60,
-        fragment: sourceFor(exampleSources, slug, 'display.wgsl'),
       });
     } else {
       const fragmentFile = fragmentFiles[slug];
