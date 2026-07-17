@@ -7,6 +7,7 @@ export interface MockGPUDeviceInstrumentation {
     createBindGroup: number;
     createCommandEncoder: number;
     createRenderBundleEncoder: number;
+    createShaderModule: number;
     createRenderPipeline: number;
     createRenderPipelineAsync: number;
     createComputePipeline: number;
@@ -54,7 +55,10 @@ export function createMockGPUDevice(): GPUDevice {
       // Mock WebGPU texture: only fields touched by core/render tests are implemented.
       } as unknown as MockGPUTexture;
     },
-    createShaderModule: () => ({}) as GPUShaderModule,
+    createShaderModule(): GPUShaderModule {
+      instrumentation.calls.createShaderModule += 1;
+      return {} as GPUShaderModule;
+    },
     createBindGroupLayout: () => ({}) as GPUBindGroupLayout,
     createPipelineLayout: () => ({}) as GPUPipelineLayout,
     createBindGroup(desc: GPUBindGroupDescriptor): GPUBindGroup {
@@ -140,6 +144,7 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
       createBindGroup: 0,
       createCommandEncoder: 0,
       createRenderBundleEncoder: 0,
+      createShaderModule: 0,
       createRenderPipeline: 0,
       createRenderPipelineAsync: 0,
       createComputePipeline: 0,

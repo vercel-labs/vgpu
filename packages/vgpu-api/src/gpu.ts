@@ -16,6 +16,7 @@ import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
 import { toWgsl } from "./shader-source.ts";
 import { createSharedUniforms } from "./uniforms.ts";
 import { CanvasSurface, type Surface, type SurfaceCanvas, type SurfaceOptions } from "./surface.ts";
+import { createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 
 export interface InitOptions {
   readonly adapter?: VGPUAdapter;
@@ -69,6 +70,9 @@ class RingGpu implements Gpu {
   frameCount = 0;
   private lastTimeMs = nowMs();
   private readonly cache = createBindGroupCache();
+  private readonly pipelineStore: PipelineStore;
+  private readonly shaderModules: ShaderModuleCache;
+  private readonly pipelineLayouts: PipelineLayoutCache;
   private readonly samplers;
   private readonly surfaces = new Map<SurfaceCanvas, CanvasSurface>();
   private advancing = false;
@@ -76,6 +80,9 @@ class RingGpu implements Gpu {
 
   constructor(readonly device: Device) {
     this.gpu = device.gpu;
+    this.pipelineStore = createPipelineStore(device);
+    this.shaderModules = createShaderModuleCache(device);
+    this.pipelineLayouts = createPipelineLayoutCache(device);
     this.samplers = createSamplerCache(device);
     const runner = new FrameRunner(() => new Frame(device), () => this.advanceFrameState());
     this.frame = callableFrameRunner(runner);
@@ -92,17 +99,20 @@ class RingGpu implements Gpu {
   }
   effect(source: string | ShaderSource, opts: EffectOptions = {}): Effect {
     if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new InternalEffect(this.device, toWgsl(source), opts, this.cache);
+    return new InternalEffect(this.device, toWgsl(source), opts, this.cache, undefined, this.pipelineStore, this.shaderModules, this.pipelineLayouts);
   }
   draw(opts: DrawOptions): Draw {
     const shader = toWgsl(opts.shader);
-    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache);
+    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache, undefined, this.pipelineStore, this.shaderModules, this.pipelineLayouts);
   }
   target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
   mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
   dispose(): void {
     for (const surface of [...this.surfaces.values()]) surface.dispose();
+    this.pipelineStore.dispose();
+    this.shaderModules.dispose();
+    this.pipelineLayouts.dispose();
     this.cache.dispose();
     this.device.dispose();
   }

@@ -3,6 +3,7 @@ import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { InternalDraw, encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import type { ClaimedGroupValidationResult } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
+import type { PipelineLayoutCache, PipelineStore, ShaderModuleCache } from "./pipeline-store.ts";
 import type { SetBag } from "./set-core.ts";
 import type { Target } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
@@ -21,13 +22,12 @@ export interface Effect {
 }
 
 export class InternalEffect implements Effect {
-  readonly gpu: GPURenderPipeline | undefined;
+  get gpu(): GPURenderPipeline | undefined { return effectImpl(this).gpu; }
 
-  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target) {
+  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache) {
     const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget);
+    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts);
     effectImpls.set(this, impl);
-    this.gpu = impl.gpu;
   }
 
   set(values: SetBag): this { effectImpl(this).set(values); return this; }

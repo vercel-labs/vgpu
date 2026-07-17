@@ -61,6 +61,33 @@ export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   });
 }
 
+export function compileFailedError(where: string, cause: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-FAILED",
+    message: "falló la compilación nativa del pipeline WebGPU.",
+    fix: "Revisá el WGSL, los vertex buffer layouts y la firma del target usados para compilar.",
+    where,
+    cause,
+  });
+}
+
+export function compileDisposedError(where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-DISPOSED",
+    message: "la GPU fue disposed mientras había compilaciones de pipeline pendientes.",
+    where,
+  });
+}
+
+export function compileSignatureInvalidError(where: string, reason: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPILE-SIGNATURE-INVALID",
+    message: `TargetSignature inválida: ${reason}`,
+    fix: "Pasá { colors: [format], depth?: format, sampleCount?: 1 | 4 } o un Target concreto.",
+    where,
+  });
+}
+
 export function targetSizeRequiredError(): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-SIZE-REQUIRED",

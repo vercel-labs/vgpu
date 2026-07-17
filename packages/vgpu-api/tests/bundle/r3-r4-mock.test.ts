@@ -71,10 +71,10 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 
   const frameA = gpu.frame();
   frameA.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(1);
+  expect(popResolvers).toHaveLength(2); // pipeline sync-create scope, then R4 raw-claim scope.
   const frameB = gpu.frame();
   frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(2);
+  expect(popResolvers).toHaveLength(3); // cubeB reuses the device pipeline; only its R4 raw-claim scope is new.
 
   frameB.submit();
   frameA.submit();
@@ -90,9 +90,10 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
     where: "cubeB.draw",
   });
 
-  popResolvers[0]!({ message: "first frame validation" } as GPUError);
-  popResolvers[1]!({ message: "second frame validation" } as GPUError);
-  for (const resolve of popResolvers.slice(2)) resolve(null);
+  popResolvers[0]!(null);
+  popResolvers[1]!({ message: "first frame validation" } as GPUError);
+  popResolvers[2]!({ message: "second frame validation" } as GPUError);
+  for (const resolve of popResolvers.slice(3)) resolve(null);
 
   await expectA;
   await expectB;

@@ -4,10 +4,11 @@ import { reflectSource, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
-import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, pipelineLayoutFor, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
-import type { Target } from "./target.ts";
+import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
+import type { Target, TargetSignature } from "./target.ts";
+import { normalizeSignature, pipelineKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
-import { claimedGroupNativeValidationError, targetRequiredError, unsupportedError, VGPUError } from "./errors.ts";
+import { claimedGroupNativeValidationError, targetRequiredError, VGPUError } from "./errors.ts";
 
 export interface DrawOptions {
   readonly shader: string | ShaderSource;
@@ -81,6 +82,9 @@ type DrawState = {
   readonly bindGroupLayouts: Map<number, GPUBindGroupLayout>;
   pipelineLayout: GPUPipelineLayout;
   readonly shaderModule: GPUShaderModule;
+  readonly pipelineStore: PipelineStore;
+  readonly pipelineLayouts: PipelineLayoutCache;
+  readonly resolvedPipelineKeys: Set<string>;
   readonly recordedIn: BundleBackReferenceRegistry;
 };
 
@@ -99,22 +103,37 @@ export interface Draw {
 export class InternalDraw implements Draw {
   readonly label: string;
   private readonly dynamicBindGroupLayouts = new Map<number, GPUBindGroupLayout>();
-  private readonly pipelineCache = new Map<string, GPURenderPipeline>();
 
-  constructor(device: Device, readonly source: string, opts: DrawOptions, cache: BindGroupCache = createBindGroupCache(), defaultTarget?: Target) {
+  constructor(
+    device: Device,
+    readonly source: string,
+    opts: DrawOptions,
+    cache: BindGroupCache = createBindGroupCache(),
+    defaultTarget?: Target,
+    pipelineStore: PipelineStore = createPipelineStore(device),
+    shaderModules: ShaderModuleCache = createShaderModuleCache(device),
+    pipelineLayouts: PipelineLayoutCache = createPipelineLayoutCache(device),
+  ) {
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
     const reflection = reflectSource(source, `${this.label}.wgsl`);
     const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
-    const pipelineLayout = pipelineLayoutFor(device, bindGroupLayouts);
-    const shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });
+    const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
+    const shaderModule = shaderModules.get(source, `${this.label}.shader`);
     const setCore = createSetCore({ device, label: this.label, drawId: id, reflection, bindGroupLayouts, cache });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, recordedIn: createBundleRegistry() });
+    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, resolvedPipelineKeys: new Set(), recordedIn: createBundleRegistry() });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.pipelineFor(target);
   }
 
-  get gpu(): GPURenderPipeline | undefined { return this.pipelineCache.values().next().value; }
+  get gpu(): GPURenderPipeline | undefined {
+    const state = drawState(this);
+    for (const key of state.resolvedPipelineKeys) {
+      const pipeline = state.pipelineStore.getReady(key);
+      if (pipeline) return pipeline;
+    }
+    return undefined;
+  }
   get targets(): readonly Target[] | undefined { return drawState(this).opts.targets; }
 
   set(values: SetBag): this {
@@ -146,8 +165,7 @@ export class InternalDraw implements Draw {
     const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
     this.dynamicBindGroupLayouts.set(group, layout);
     state.bindGroupLayouts.set(group, layout);
-    state.pipelineLayout = pipelineLayoutFor(state.device, state.bindGroupLayouts);
-    this.pipelineCache.clear();
+    state.pipelineLayout = state.pipelineLayouts.get(state.bindGroupLayouts);
     return layout;
   }
 
@@ -230,13 +248,27 @@ export class InternalDraw implements Draw {
     if (result) claimValidation(result);
   }
 
-  pipelineFor(target: Target): GPURenderPipeline {
-    const key = `${target.colors.map((color) => color.format).join(",")}:${target.depth?.format ?? "none"}:${target.sampleCount}`;
-    let pipeline = this.pipelineCache.get(key);
-    if (pipeline) return pipeline;
-    pipeline = this.createPipeline(target);
-    this.pipelineCache.set(key, pipeline);
+  pipelineFor(target: Target | TargetSignature): GPURenderPipeline {
+    const signature = normalizeSignature(target);
+    validateTargetSignature(signature, `${this.label}.pipelineFor`);
+    const key = this.pipelineKey(signature);
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.pipelineFor` });
+    drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
+  }
+
+  pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
+    const signature = normalizeSignature(target);
+    validateTargetSignature(signature, `${this.label}.pipelineForAsync`);
+    const key = this.pipelineKey(signature);
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync` });
+    void promise.then(() => drawState(this).resolvedPipelineKeys.add(key), () => undefined);
+    return promise;
+  }
+
+  private pipelineKey(signature: TargetSignature): string {
+    const state = drawState(this);
+    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.opts.mesh?.vertexBufferLayouts, signature });
   }
 
   private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
@@ -249,7 +281,7 @@ export class InternalDraw implements Draw {
     pass.drawIndexed(mesh.indexCount ?? 0, counts.instanceCount, 0, 0, counts.firstInstance);
   }
 
-  private createPipeline(target: Target): GPURenderPipeline {
+  private createPipeline(signature: TargetSignature): GPURenderPipeline {
     const state = drawState(this);
     const entries = state.reflection.entryPoints;
     const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
@@ -258,10 +290,26 @@ export class InternalDraw implements Draw {
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
       vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
-      fragment: { module: state.shaderModule, entryPoint: fragment, targets: target.colors.map((color) => ({ format: color.format })) },
+      fragment: { module: state.shaderModule, entryPoint: fragment, targets: signature.colors.map((format) => ({ format })) },
       primitive: { topology: "triangle-list" },
-      depthStencil: target.depth ? { format: target.depth.format, depthWriteEnabled: true, depthCompare: "less" } : undefined,
-      multisample: { count: target.sampleCount },
+      depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
+      multisample: { count: signature.sampleCount ?? 1 },
+    });
+  }
+
+  private createPipelineAsync(signature: TargetSignature): Promise<GPURenderPipeline> {
+    const state = drawState(this);
+    const entries = state.reflection.entryPoints;
+    const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
+    const fragment = entries.find((entry) => entry.stage === "fragment")?.name ?? "fs_main";
+    return state.device.gpu.createRenderPipelineAsync({
+      label: `${this.label}.pipeline`,
+      layout: state.pipelineLayout,
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      fragment: { module: state.shaderModule, entryPoint: fragment, targets: signature.colors.map((format) => ({ format })) },
+      primitive: { topology: "triangle-list" },
+      depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
+      multisample: { count: signature.sampleCount ?? 1 },
     });
   }
 }
