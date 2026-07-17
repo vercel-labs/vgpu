@@ -137,7 +137,7 @@ test("bundle back-refs stale only on identity changes, never lib-owned in-place 
   gpu.dispose();
 });
 
-test("set() accepts Targets as texture resources and uses target identity", async () => {
+test("set() accepts Targets as texture resources and uses color texture identity", async () => {
   const gpu = await init();
   const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
@@ -148,6 +148,67 @@ test("set() accepts Targets as texture resources and uses target identity", asyn
   gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
 
   expect(mock.calls.createBindGroup).toBe(1);
+  gpu.dispose();
+});
+
+test("plain draws sampling a resized target rebind with a fresh bind group and no pipeline creates", async () => {
+  const gpu = await init();
+  const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
+  const source = gpu.target({ size: [4, 4] });
+  const output = gpu.target({ size: [4, 4] });
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+
+  post.set({ src: source });
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  const bindGroupsBeforeResize = mock.calls.createBindGroup;
+  const pipelinesBeforeResize = mock.calls.createRenderPipeline;
+  const asyncPipelinesBeforeResize = mock.calls.createRenderPipelineAsync;
+
+  source.resize([8, 8]);
+
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 1);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.dispose();
+});
+
+test("target recreation subscriptions are removed when a binding is re-set", async () => {
+  const gpu = await init();
+  const post = gpu.draw({ shader: TEXTURE_SHADER, label: "post" });
+  const sourceA = gpu.target({ size: [4, 4] });
+  const sourceB = gpu.target({ size: [4, 4] });
+  const events: unknown[] = [];
+
+  post.set({ src: sourceA });
+  registerDrawBundle(post, { id: "bundle", markStale: (event) => { events.push(event); } });
+  post.set({ src: sourceB });
+  events.length = 0;
+
+  sourceA.resize([8, 8]);
+  expect(events).toEqual([]);
+
+  sourceB.resize([8, 8]);
+  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" })]);
+  gpu.dispose();
+});
+
+test("resizing a target only drawn onto does not emit bind-group stale events", async () => {
+  const gpu = await init();
+  const post = gpu.draw({ shader: TEXTURE_SHADER, label: "post" });
+  const sampled = gpu.target({ size: [4, 4] });
+  const output = gpu.target({ size: [4, 4] });
+  const events: unknown[] = [];
+
+  post.set({ src: sampled });
+  registerDrawBundle(post, { id: "bundle", markStale: (event) => { events.push(event); } });
+  output.resize([8, 8]);
+
+  expect(events).toEqual([]);
   gpu.dispose();
 });
 

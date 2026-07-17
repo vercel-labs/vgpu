@@ -55,6 +55,27 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   gpu.dispose();
 });
 
+test("R3 bundle sampling a resized target stales through binding identity", async () => {
+  const gpu = await init();
+  const scene = gpu.target({ size: [4, 4] });
+  const source = gpu.target({ size: [4, 4] });
+  const post = gpu.effect(WALLS, { label: "post", set: { detail: source } });
+
+  const bundle = gpu.bundle({ target: scene, label: "postBundle" }, (b) => {
+    b.draw(post);
+  });
+
+  source.resize([8, 8]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(bundle)))).toThrowError(
+    "bundle 'postBundle' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
+      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
+      "  Fix: re-grabalo → postBundle = gpu.bundle({ target: scene }, ...)\n" +
+      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+  );
+  gpu.dispose();
+});
+
 test("R4 raw claim validation stays attributed when frames overlap", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });

@@ -124,8 +124,17 @@ export class InternalDraw implements Draw {
     const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
-    const setCore = createSetCore({ device, label: this.label, drawId: id, reflection, bindGroupLayouts, cache });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn: createBundleRegistry() });
+    const recordedIn = createBundleRegistry();
+    const setCore = createSetCore({
+      device,
+      label: this.label,
+      drawId: id,
+      reflection,
+      bindGroupLayouts,
+      cache,
+      onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
+    });
+    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.pipelineFor(target);
   }

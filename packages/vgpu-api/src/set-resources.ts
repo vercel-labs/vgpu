@@ -9,6 +9,7 @@ export interface NormalizedBindingResource {
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;
   readonly unsubscribe?: (cb: () => void) => UnsubscribeResourceDestroy;
+  readonly onRecreate?: (cb: () => void) => () => void;
 }
 
 export interface ResourceNormalizationContext {
@@ -60,7 +61,11 @@ function normalizeBufferResource(binding: BindingInfo, value: unknown, context: 
 
 function normalizeTextureResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
   const target = asTarget(value);
-  if (target) return { resource: target.color.createView(), identity: target.resourceIdentity, unsubscribe: (cb) => target.onDestroy(cb) };
+  if (target) {
+    const color = target.color;
+    const onTexturesRecreated = target.onTexturesRecreated?.bind(target);
+    return { resource: color.createView(), identity: color.resourceIdentity, unsubscribe: (cb) => target.onDestroy(cb), onRecreate: onTexturesRecreated ? (cb) => onTexturesRecreated(cb) : undefined };
+  }
   if (value instanceof Texture) {
     validateTextureUsage(binding, value.usage);
     return { resource: value.createView(), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
@@ -92,11 +97,13 @@ function validateTextureUsage(binding: BindingInfo, usage: readonly string[]): v
   }
 }
 
-function asTarget(value: unknown): Target | undefined {
+type RecreatingTarget = Target & { readonly onTexturesRecreated?: (cb: () => void) => () => void };
+
+function asTarget(value: unknown): RecreatingTarget | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Partial<Target>;
+  const record = value as Partial<RecreatingTarget>;
   if (!record.resourceIdentity || !record.color || typeof record.onDestroy !== "function") return undefined;
-  return record as Target;
+  return record as RecreatingTarget;
 }
 
 function hasAnyResourceShape(value: object): boolean {

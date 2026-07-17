@@ -6,6 +6,7 @@ import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sample
 export class OffscreenTarget implements Target {
   readonly resourceIdentity = createResourceIdentity("render-target");
   private readonly destroySignal = new DestroySignal<Target>();
+  private readonly texturesRecreatedCallbacks = new Set<() => void>();
   private currentSize: readonly [number, number];
   private currentColors: [Texture, ...Texture[]];
   private currentMsaaColors?: [Texture, ...Texture[]];
@@ -37,7 +38,8 @@ export class OffscreenTarget implements Target {
 
   async read(): Promise<Uint8Array> { return this.color.read(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { return this.destroySignal.onDestroy(this, cb); }
-  destroy(): void { this.destroySignal.emit(this); this.destroyTextures(); }
+  onTexturesRecreated(cb: () => void): () => void { this.texturesRecreatedCallbacks.add(cb); return () => { this.texturesRecreatedCallbacks.delete(cb); }; }
+  destroy(): void { this.destroySignal.emit(this); this.texturesRecreatedCallbacks.clear(); this.destroyTextures(); }
 
   renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1]): GPURenderPassDescriptor {
     return {
@@ -52,6 +54,11 @@ export class OffscreenTarget implements Target {
     this.currentColors = this.createResolvedColors();
     this.currentMsaaColors = this.sampleCount === 4 ? this.createMsaaColors() : undefined;
     this.currentDepth = this.createDepth();
+    this.emitTexturesRecreated();
+  }
+
+  private emitTexturesRecreated(): void {
+    for (const cb of [...this.texturesRecreatedCallbacks]) cb();
   }
 
   private destroyTextures(): void {
