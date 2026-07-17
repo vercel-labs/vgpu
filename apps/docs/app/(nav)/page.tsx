@@ -13,9 +13,9 @@ gpu.frame.loop(() => {
 });`;
 
 const features = [
-  ['Browser and Node', 'Use the same Gpu API from `vgpu`, `vgpu/node`, and `vgpu/mock`.'],
-  ['WGSL modules', 'import/export wgsl modules just like in typescript.'],
-  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns are documented as defaults.'],
+  ['Browser and Node', 'Render shaders on a website, write tests or render on the server. vgpu just works.'],
+  ['WGSL modules', 'import/export wgsl code just like typescript modules.'],
+  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns.'],
 ];
 
 export default function HomePage() {
@@ -23,7 +23,7 @@ export default function HomePage() {
     <div className="px-6 py-16 lg:px-12 lg:py-20">
       <section className="max-w-4xl mx-auto text-center mb-24">
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-12 mb-6 tracking-tight">vgpu</h1>
-        <p className="text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">Agentic-first WebGPU for shaders that should be correct and fast the first time.</p>
+        <p className="text-balance text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">The low-level WebGPU library, designed for agents.</p>
         <div className="flex flex-wrap justify-center gap-4 mb-16">
           <Link href="/get-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
           <Link href="/reference" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Reference</Link>
