@@ -22,7 +22,7 @@ export type PipelineEntry = {
 
 export interface PipelineStore {
   getReady(key: string): GPURenderPipeline | undefined;
-  getSync(key: string, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline;
+  getSync(key: string, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined;
   getAsync(key: string, create: () => Promise<GPURenderPipeline>, ctx: ErrorCtx): Promise<GPURenderPipeline>;
   dispose(): void;
 }
@@ -134,23 +134,21 @@ class DevicePipelineStore implements PipelineStore {
     return this.entries.get(key)?.pipeline;
   }
 
-  getSync(key: string, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline {
+  getSync(key: string, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined {
     this.assertUsable(ctx.where);
     const existing = this.entries.get(key);
     if (existing?.pipeline) return existing.pipeline;
     const entry = existing ?? {};
     if (!existing) this.entries.set(key, entry);
-    try {
-      const pipeline = this.createSyncPipeline(key, entry, create, ctx);
-      entry.pipeline = pipeline;
-      entry.pending?.resolve(pipeline);
-      entry.pending = undefined;
-      return pipeline;
-    } catch (error) {
-      entry.pending?.reject(error);
-      this.entries.delete(key);
-      throw error;
+    const pipeline = this.createSyncPipeline(key, entry, create, ctx);
+    if (!pipeline) {
+      if (!entry.pending) this.entries.delete(key);
+      return undefined;
     }
+    entry.pipeline = pipeline;
+    entry.pending?.resolve(pipeline);
+    entry.pending = undefined;
+    return pipeline;
   }
 
   getAsync(key: string, create: () => Promise<GPURenderPipeline>, ctx: ErrorCtx): Promise<GPURenderPipeline> {
@@ -202,7 +200,7 @@ class DevicePipelineStore implements PipelineStore {
     this.unregisterSettledSource?.();
   }
 
-  private createSyncPipeline(key: string, entry: PipelineEntry, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline {
+  private createSyncPipeline(key: string, entry: PipelineEntry, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined {
     const gpu = this.device.gpu as GPUDevice & { pushErrorScope?: GPUDevice["pushErrorScope"]; popErrorScope?: GPUDevice["popErrorScope"] };
     const scoped = typeof gpu.pushErrorScope === "function" && typeof gpu.popErrorScope === "function";
     if (scoped) gpu.pushErrorScope("validation");
@@ -213,8 +211,8 @@ class DevicePipelineStore implements PipelineStore {
     } catch (cause) {
       if (scoped) this.suppressSyncErrorScopePop();
       const error = compileFailedError(ctx.where, cause);
-      this.errorSink(error);
-      throw error;
+      void this.errorSink(error);
+      return undefined;
     }
   }
 

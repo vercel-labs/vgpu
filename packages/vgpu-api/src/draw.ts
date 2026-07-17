@@ -248,7 +248,9 @@ export class InternalDraw implements Draw {
   }
 
   encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
-    pass.setPipeline(this.pipelineFor(target));
+    const pipeline = this.pipelineFor(target);
+    if (!pipeline) return;
+    pass.setPipeline(pipeline);
     for (const binding of drawState(this).setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
     this.encodeMesh(pass, opts);
   }
@@ -269,12 +271,12 @@ export class InternalDraw implements Draw {
     if (result) claimValidation(result);
   }
 
-  pipelineFor(target: Target | TargetSignature): GPURenderPipeline {
+  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
     const signature = normalizeSignature(target);
     validateTargetSignature(signature, `${this.label}.pipelineFor`);
     const key = this.pipelineKey(signature);
     const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.pipelineFor` });
-    drawState(this).resolvedPipelineKeys.add(key);
+    if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
   }
 

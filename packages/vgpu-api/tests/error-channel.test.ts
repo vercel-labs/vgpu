@@ -141,6 +141,27 @@ test("gpu.settled snapshots pending validation deliveries", async () => {
   gpu.dispose();
 });
 
+test("sync pipeline creation throws are delivered once through gpu.onError", async () => {
+  const gpu = await init();
+  const target = gpu.target({ size: [4, 4] });
+  const draw = gpu.draw({ shader: SIMPLE_SHADER, label: "syncThrow" });
+  const nativeError = new Error("native createRenderPipeline failed");
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
+  vi.spyOn(gpu.device.gpu, "createRenderPipeline").mockImplementation(() => { throw nativeError; });
+
+  expect(() => draw.draw(target)).not.toThrow();
+  await gpu.settled();
+
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toMatchObject({
+    code: "VGPU-COMPILE-FAILED",
+    where: "syncThrow.pipelineFor",
+    cause: nativeError,
+  });
+  gpu.dispose();
+});
+
 test("Frame.done awaits queue.onSubmittedWorkDone even without claimed groups", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
