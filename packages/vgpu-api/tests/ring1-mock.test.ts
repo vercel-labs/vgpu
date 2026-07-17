@@ -151,7 +151,7 @@ test("set() accepts Targets as texture resources and uses color texture identity
   gpu.dispose();
 });
 
-test("plain draws sampling a resized target rebind with a fresh bind group and no pipeline creates", async () => {
+test("plain draws sampling a resized target rebind with fresh bind groups across repeated resizes and no pipeline creates", async () => {
   const gpu = await init();
   const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
   const source = gpu.target({ size: [4, 4] });
@@ -165,23 +165,34 @@ test("plain draws sampling a resized target rebind with a fresh bind group and n
   const asyncPipelinesBeforeResize = mock.calls.createRenderPipelineAsync;
 
   source.resize([8, 8]);
-
   expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
   expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
-
   gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
-
   expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 1);
+
+  source.resize([16, 16]);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 2);
+
+  post.set({ src: source });
+  source.resize([32, 32]);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 3);
   expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
   expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
   gpu.dispose();
 });
 
-test("target recreation subscriptions are removed when a binding is re-set", async () => {
+test("target recreation subscriptions refresh across repeated resizes and are removed on re-set", async () => {
   const gpu = await init();
   const post = gpu.draw({ shader: TEXTURE_SHADER, label: "post" });
   const sourceA = gpu.target({ size: [4, 4] });
   const sourceB = gpu.target({ size: [4, 4] });
+  const sourceC = gpu.target({ size: [4, 4] });
   const events: unknown[] = [];
 
   post.set({ src: sourceA });
@@ -193,7 +204,24 @@ test("target recreation subscriptions are removed when a binding is re-set", asy
   expect(events).toEqual([]);
 
   sourceB.resize([8, 8]);
+  sourceB.resize([16, 16]);
+  expect(events).toEqual([
+    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
+    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
+  ]);
+
+  post.set({ src: sourceC });
+  events.length = 0;
+  sourceB.resize([32, 32]);
+  expect(events).toEqual([]);
+
+  sourceC.resize([8, 8]);
   expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" })]);
+
+  events.length = 0;
+  sourceC.destroy();
+  sourceC.resize([16, 16]);
+  expect(events).toEqual([]);
   gpu.dispose();
 });
 

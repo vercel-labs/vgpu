@@ -55,22 +55,32 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   gpu.dispose();
 });
 
-test("R3 bundle sampling a resized target stales through binding identity", async () => {
+test("R3 bundle sampling a repeatedly resized target stales through binding identity each time", async () => {
   const gpu = await init();
   const scene = gpu.target({ size: [4, 4] });
   const source = gpu.target({ size: [4, 4] });
   const post = gpu.effect(WALLS, { label: "post", set: { detail: source } });
-
-  const bundle = gpu.bundle({ target: scene, label: "postBundle" }, (b) => {
+  const recordBundle = (label: string) => gpu.bundle({ target: scene, label }, (b) => {
     b.draw(post);
   });
 
+  const firstBundle = recordBundle("postBundleA");
   source.resize([8, 8]);
 
-  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(bundle)))).toThrowError(
-    "bundle 'postBundle' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
+    "bundle 'postBundleA' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
       "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
-      "  Fix: re-grabalo → postBundle = gpu.bundle({ target: scene }, ...)\n" +
+      "  Fix: re-grabalo → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
+      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+  );
+
+  const secondBundle = recordBundle("postBundleB");
+  source.resize([16, 16]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
+    "bundle 'postBundleB' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
+      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
+      "  Fix: re-grabalo → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
       "  (la re-grabación es siempre tuya; la lib solo detecta).",
   );
   gpu.dispose();

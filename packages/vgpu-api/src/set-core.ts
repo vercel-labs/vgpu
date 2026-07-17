@@ -122,10 +122,14 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const beforeIdentity = identityString(state.identity);
     if (state.identity) options.cache.evictIdentity(state.identity);
     const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
+    state.unsubscribe?.();
+    state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
     state.identity = normalized.identity;
-    state.unsubscribe?.();
     state.unsubscribe = normalized.unsubscribe?.(() => { if (state.identity) options.cache.evictIdentity(state.identity); });
+    // Refresh the recreation subscription on every re-normalization so the lifecycle
+    // stays explicit even if a future target signal implementation becomes one-shot.
+    state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
     for (const change of identityChangeFor(state, beforeIdentity)) options.onIdentityChange?.(change);
   }
 
