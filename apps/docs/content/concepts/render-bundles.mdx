@@ -51,9 +51,50 @@ gpu.frame.loop((frame) => {
 });
 ```
 
-Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay. Pre-warm the draws it records as described in [Compilation](/concepts/compilation) so recording never waits on pipeline creation.
+Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay.
 
 > Good to know: draws inside a bundle can use different shaders and pipelines. What a bundle freezes is the target's render signature — color formats, depth format, sample count — plus bind groups, not a material or a target size.
+
+## Compilation at record time
+
+`gpu.bundle()` encodes right when you call it, so it needs every pipeline immediately: any draw whose pipeline isn't cached yet for the recording signature compiles synchronously, on the spot. That's the one place vgpu still blocks on pipeline creation — and the reason to [pre-warm](/concepts/compilation) before recording. If one of those synchronous creates fails, the error reports through `gpu.onError`, like any lazy compile.
+
+The `target` option also takes a plain signature, so you can pre-warm and record during load, before the real target exists:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const ocean = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.1, 0.3, 0.6, 1.0);
+  }
+`);
+const boat = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.6, 0.4, 0.2, 1.0);
+  }
+`);
+
+// ---cut---
+await Promise.all([
+  ocean.compile({ colors: ['bgra8unorm'] }),
+  boat.compile({ colors: ['bgra8unorm'] }),
+]);
+
+const scene = gpu.bundle({ target: { colors: ['bgra8unorm'] } }, (b) => {
+  b.draw(ocean);
+  b.draw(boat);
+}); // everything was pre-warmed — recording creates nothing
+
+gpu.frame.loop((frame) => {
+  frame.pass(canvasTarget, (pass) => pass.bundles(scene));
+});
+```
+
+Two caveats. Bindings must be `set()` before recording — the signature relaxes the target requirement, not the resources. And replay targets must match the recorded signature exactly: when they don't, the error prints both keys, which is how you catch a platform surface-format surprise (`bgra8unorm` recorded, `rgba8unorm` actual).
 
 ## Mix recorded and dynamic draws
 

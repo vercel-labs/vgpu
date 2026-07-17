@@ -121,4 +121,4 @@ The lazy path is different: since `draw()` returns immediately, a pipeline that 
 
 ## Render bundles
 
-[Bundles](/concepts/render-bundles) freeze the same signature tuple. Record with a signature after pre-warming every draw — `gpu.bundle(signature, ...)` then finds all pipelines in cache and records without any synchronous pipeline creation. If a bundle replays against a target whose signature doesn't match the recording, the error prints both keys, which is how you catch the `bgra8unorm` vs `rgba8unorm` surprise.
+Recording a [bundle](/concepts/render-bundles) needs every pipeline immediately, so anything you didn't pre-warm compiles synchronously at record time. See [compilation at record time](/concepts/render-bundles#compilation-at-record-time) for that flow.
