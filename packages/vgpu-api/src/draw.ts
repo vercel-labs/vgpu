@@ -2,7 +2,7 @@ import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
 import type { Target, TargetSignature } from "./target.ts";
@@ -221,7 +221,7 @@ export class InternalDraw implements Draw {
     }
     if (finishContext) {
       const result = popLastClaimedGroupValidationScope(state.device);
-      if (result) validations.push(result);
+      if (result) validations[0] = validations[0] ? preferClaimedGroupValidationResult(result, validations[0]) : result;
     }
     const submitContext = validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(state.device, submitContext);
@@ -239,7 +239,7 @@ export class InternalDraw implements Draw {
     }
     if (submitContext) {
       const result = popLastClaimedGroupValidationScope(state.device);
-      if (result) validations.push(result);
+      if (result) validations[0] = validations[0] ? preferClaimedGroupValidationResult(result, validations[0]) : result;
     }
     if (validations.length) {
       const done = claimedGroupValidationDone(state.device, validations, { errorSink: state.errorSink });

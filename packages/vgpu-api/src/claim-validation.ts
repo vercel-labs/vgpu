@@ -115,6 +115,23 @@ export function claimedGroupValidationDone(device: Device, results: readonly Cla
   return settleClaimedGroupValidations(device, results, opts.errorSink ?? defaultErrorSink);
 }
 
+export function preferClaimedGroupValidationResult(preferred: ClaimedGroupValidationResult, fallback: ClaimedGroupValidationResult): ClaimedGroupValidationResult {
+  return {
+    context: preferred.context,
+    error: preferValidationError(preferred.error, fallback.error),
+  };
+}
+
+async function preferValidationError(preferred: Promise<GPUError | null>, fallback: Promise<GPUError | null>): Promise<GPUError | null> {
+  const results = await Promise.allSettled([preferred, fallback]);
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) return result.value;
+  }
+  const rejection = results.find((result) => result.status === "rejected");
+  if (rejection?.status === "rejected") throw rejection.reason;
+  return null;
+}
+
 async function settleClaimedGroupValidations(device: Device, results: readonly ClaimedGroupValidationResult[], errorSink: ValidationErrorSink): Promise<void> {
   await submittedWorkDone(device);
   for (const result of results) {

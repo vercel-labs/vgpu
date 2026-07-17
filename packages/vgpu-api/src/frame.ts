@@ -1,5 +1,5 @@
 import type { Device } from "@vgpu/core";
-import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
+import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
@@ -74,7 +74,7 @@ export class Frame {
     }
     if (finishContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations.push(result);
+      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
     }
     const submitContext = this.validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
@@ -90,7 +90,7 @@ export class Frame {
     }
     if (submitContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations.push(result);
+      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
     }
     this.done = this.trackDone(claimedGroupValidationDone(this.device, this.validations, { errorSink: this.errorSink }));
   }

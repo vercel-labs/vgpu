@@ -42,7 +42,7 @@ test("Draw.draw returns void while claimed group validation errors go to gpu.onE
   gpu.dispose();
 });
 
-test("Frame.done resolves after R4 validation is delivered through gpu.onError", async () => {
+test("Frame.done resolves after R4 validation is delivered exactly once through gpu.onError", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
   const { draw, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "frameDone");
@@ -52,9 +52,11 @@ test("Frame.done resolves after R4 validation is delivered through gpu.onError",
   const frame = gpu.frame((f) => f.pass({ target }, (p) => p.draw(draw, { offsets: { 1: [0] } })));
   const done = expect(frame.done).resolves.toBeUndefined();
 
-  resolveRawClaimFailure(popResolvers, "frame raw group mismatch");
+  resolveRawAndFinalizeFailures(popResolvers, "frame raw group mismatch");
   await done;
+  await gpu.settled();
 
+  expect(errors).toHaveLength(1);
   expect(errors).toEqual([
     expect.objectContaining({
       code: "VGPU-R4-GROUP-VALIDATION",
@@ -164,9 +166,16 @@ test("Frame.done awaits queue.onSubmittedWorkDone even without claimed groups", 
 });
 
 function resolveRawClaimFailure(popResolvers: ((error: GPUError | null) => void)[], message: string): void {
-  expect(popResolvers.length).toBeGreaterThan(0);
-  for (const resolve of popResolvers.slice(0, -1)) resolve(null);
-  popResolvers.at(-1)!({ message } as GPUError);
+  expect(popResolvers.length).toBeGreaterThan(1);
+  popResolvers[0]!(null);
+  popResolvers[1]!({ message } as GPUError);
+  for (const resolve of popResolvers.slice(2)) resolve(null);
+}
+
+function resolveRawAndFinalizeFailures(popResolvers: ((error: GPUError | null) => void)[], message: string): void {
+  expect(popResolvers.length).toBeGreaterThan(1);
+  popResolvers[0]!(null);
+  for (const resolve of popResolvers.slice(1)) resolve({ message } as GPUError);
 }
 
 function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>, label: string) {
