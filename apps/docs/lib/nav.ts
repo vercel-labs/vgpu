@@ -84,11 +84,22 @@ export const navSections: NavSection[] = [
         items: [
           { title: 'Web', href: '/get-started/web' },
           { title: 'Node.js', href: '/get-started/node' },
-          { title: 'Context', href: '/get-started/context' },
-          { title: 'Effects', href: '/get-started/effects' },
-          { title: 'Passes', href: '/get-started/passes' },
-          { title: 'Frames', href: '/get-started/frames' },
-          { title: 'Render bundles', href: '/get-started/render-bundles' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Concepts',
+    href: '/concepts',
+    groups: [
+      {
+        title: '',
+        items: [
+          { title: 'Context', href: '/concepts/context' },
+          { title: 'Effects', href: '/concepts/effects' },
+          { title: 'Passes', href: '/concepts/passes' },
+          { title: 'Frames', href: '/concepts/frames' },
+          { title: 'Render bundles', href: '/concepts/render-bundles' },
         ],
       },
     ],
@@ -127,8 +138,6 @@ export const navSections: NavSection[] = [
         items: [
           { title: 'Introduction', href: '/' },
           { title: 'Installation & First Frame', href: '/getting-started' },
-          { title: 'Core Concepts', href: '/concepts' },
-          { title: 'Frames & Passes', href: '/concepts/frames' },
         ],
       },
     ],
@@ -243,6 +252,7 @@ function normalizePathname(pathname: string) {
 function sectionOverviewHref(section: string) {
   if (section === 'Get started') return '/get-started';
   if (section === 'Getting Started') return '/getting-started';
+  if (section === 'Concepts') return '/concepts';
   if (section === 'Core Concepts') return '/concepts';
   if (section === 'Guides') return '/guides';
   if (section === 'Examples') return '/examples';

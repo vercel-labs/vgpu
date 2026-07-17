@@ -18,14 +18,6 @@ const platforms = [
   },
 ];
 
-const coreIdeas = [
-  { title: 'Context', href: '/get-started/context', description: 'init() creates the Gpu context everything else comes from.' },
-  { title: 'Effects', href: '/get-started/effects', description: 'Full-screen fragment shaders you can chain through targets.' },
-  { title: 'Passes', href: '/get-started/passes', description: 'Each pass renders into one target inside a frame.' },
-  { title: 'Frames', href: '/get-started/frames', description: 'Encode one frame and submit once, or loop for animation.' },
-  { title: 'Render bundles', href: '/get-started/render-bundles', description: 'Record passes once and replay them to save CPU.' },
-];
-
 export default function GetStartedPage() {
   return (
     <article className="px-4 py-8 lg:px-8 lg:py-12 max-w-6xl mx-auto">
@@ -48,23 +40,18 @@ export default function GetStartedPage() {
         ))}
       </div>
 
-      <h2 className="mt-12 text-xl font-semibold text-gray-12">Core ideas</h2>
+      <h2 className="mt-12 text-xl font-semibold text-gray-12">Next: the concepts</h2>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-10">
-        Five ideas cover every vgpu program. Read them in order — each page builds on the previous one.
+        Once you can render on your platform, learn the ideas every vgpu program is built from.
       </p>
 
-      <div className="mt-6 grid gap-3">
-        {coreIdeas.map((idea) => (
-          <Link
-            key={idea.href}
-            href={idea.href}
-            className="flex flex-col gap-1 rounded-lg border border-gray-4 bg-gray-1 p-4 transition-colors hover:border-gray-5 hover:bg-gray-2 sm:flex-row sm:items-baseline sm:gap-3"
-          >
-            <span className="font-medium text-gray-12">{idea.title}</span>
-            <span className="text-sm text-gray-10">{idea.description}</span>
-          </Link>
-        ))}
-      </div>
+      <Link
+        href="/concepts"
+        className="mt-6 block rounded-lg border border-gray-4 bg-gray-1 p-4 transition-colors hover:border-gray-5 hover:bg-gray-2"
+      >
+        <span className="font-medium text-gray-12">Concepts</span>
+        <span className="ml-3 text-sm text-gray-10">Context, effects, passes, frames, and render bundles — in reading order.</span>
+      </Link>
     </article>
   );
 }

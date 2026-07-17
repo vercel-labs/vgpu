@@ -1,238 +1,121 @@
 ---
-title: Frames & Passes
-summary: Build a frame by naming targets, opening passes, and encoding draws before vgpu submits once.
+title: Frames
+summary: gpu.frame() encodes your passes and submits once; gpu.frame.loop() drives animation.
 relatedSymbols:
   - Frame
-  - FramePass
   - FrameRunner
-  - Effect
-  - Draw
-  - Target
+  - FrameLoopHandle
 prevNext:
   prev:
-    title: Surfaces & Targets
-    href: /concepts/targets
+    title: Passes
+    href: /concepts/passes
   next:
-    title: Drawing
-    href: /concepts/drawing
+    title: Render bundles
+    href: /concepts/render-bundles
 ---
 
-# Frames & Passes
-
-Build a frame by naming targets, opening passes, and encoding draws before vgpu submits once.
-
-## What you'll learn
-
-- Create an explicit `Target` for a frame.
-- Use `gpu.frame()` to encode one frame and submit it automatically.
-- Chain effects by binding a target as another effect's texture input.
-- Open one or more `FramePass` sections and draw `Effect` or `Draw` objects into them.
-- Switch to `gpu.frame.loop()` when you need continuous animation.
+# Frames
 
 A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
 
-## Create resources once, draw every frame
+## Render a single frame
 
-Create the GPU context, canvas surface, and renderable unit outside the frame callback. The frame should encode work, not rebuild long-lived resources every tick.
-
-```ts
-import { init } from "vgpu";
-import gradientSource from "./gradient.wgsl";
-
-const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-const gradient = gpu.effect(gradientSource);
-
-gpu.frame((frame) => {
-  frame.pass({ target: surface, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(gradient);
-  });
-}); // renders immediately
-```
-
-[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs your callback synchronously and submits once in a `finally` block when it returns. After that, nothing keeps drawing: vgpu never redraws on its own and does not watch your state for changes. To redraw after an event — a resize, a slider, a click — call `gpu.frame()` again from your handler.
-
-> Good to know: `frame.pass()` always needs a target. Use a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)` or an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })`.
-
-## Effects
-
-An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `gpu.effect(source)`. Its pipeline compiles at creation, and every draw fills the whole target — you only write the fragment.
-
-Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
+[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs synchronously and renders immediately — every pass inside is encoded into one command encoder and submitted once. That single submit is what the frame is for:
 
 ```ts
 import { init } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-
-// ---cut---
-const sceneSource = `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 1.0, 1.0);
-  }
-`;
-
-// Post-processing: reads the scene texture and inverts its colors.
-const postSource = `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let dims = vec2f(textureDimensions(src));
-    let base = textureLoad(src, vec2u(uv * dims), 0);
-    return vec4f(1.0 - base.rgb, 1.0);
-  }
-`;
-
-const scene = gpu.target({ size: [1280, 720] });
-
-const sceneEffect = gpu.effect(sceneSource);
-const post = gpu.effect(postSource);
-post.set({ src: scene }); // the offscreen result becomes the post input
-
-sceneEffect.draw(scene); // render the scene offscreen
-post.draw(surface); // invert it onto the canvas
-```
-
-`post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
-
-## Think in passes
-
-A pass is a render-pass section inside the frame. It has one target, one clear color, and any number of draw calls or render bundles. Use separate passes when you need separate targets or when a later pass reads the result of an earlier one.
-
-Here is the same effect chain inside one frame — the GPU encodes the same two render passes, but everything submits once:
-
-```ts
-import { init } from "vgpu";
-
-const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-
-const sceneSource = `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 1.0, 1.0);
-  }
-`;
-
-const postSource = `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let dims = vec2f(textureDimensions(src));
-    let base = textureLoad(src, vec2u(uv * dims), 0);
-    return vec4f(1.0 - base.rgb, 1.0);
-  }
-`;
-
-const scene = gpu.target({ size: [1280, 720] });
-
-const sceneEffect = gpu.effect(sceneSource);
-const post = gpu.effect(postSource);
-post.set({ src: scene });
-
-// ---cut---
-gpu.frame((frame) => {
-  // 1. render the scene into the offscreen target
-  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
-    pass.draw(sceneEffect);
-  });
-
-  // 2. post-process the scene texture onto the canvas
-  frame.pass(surface, post);
-});
-```
-
-The last pass targets the canvas [`Surface`](/reference/vgpu/surface#surface), which is what puts pixels on screen.
-
-> Good to know: one-shot draws like `effect.draw(target)` are simple and default for a single pass. Multi-pass hot paths should use `gpu.frame()` to batch work into one submit. One-shot draws never join a surrounding frame; inside `gpu.frame()`, always draw through `frame.pass()`.
-
-[`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.effect()` for fragment-only fullscreen work. Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
-
-## Update bindings before you draw
-
-Frames do not create shader globals. If a shader needs time, resolution, or a texture, set those values on the renderable before encoding the draw.
-
-```ts
-import { init } from "vgpu";
-
-const gpu = await init();
-
-// ---cut---
-const pulseSource = `
-  struct Params { time: f32, width: f32, height: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let glow = sin(params.time) * 0.5 + 0.5;
-    return vec4f(uv.x, uv.y, glow, 1.0);
-  }
-`;
-
-const target = gpu.target({ size: [64, 64] });
-const pulse = gpu.effect(pulseSource, {
-  set: { params: { time: 0, width: target.size[0], height: target.size[1] } }, // initial uniform defaults
-});
-
-gpu.frame((frame) => {
-  // update uniforms for this frame before encoding the draw
-  pulse.set({
-    params: {
-      time: gpu.time,
-      width: target.size[0],
-      height: target.size[1],
-    },
-  });
-
-  frame.pass(target, pulse);
-});
-```
-
-The first `set()` establishes binding ownership from the WGSL variable name. Keep JS values as JS values, and keep GPU resources as resources; vgpu validates that you do not flip ownership later.
-
-> Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
-
-## Loop when the scene changes over time
-
-Use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) for animation. The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, runs surface auto-resize before your callback, and submits each frame.
-
-```ts
-import { init } from "vgpu";
-
-const gpu = await init();
-
-// ---cut---
-const drawSource = `
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
-`;
+`, { set: { params: { time: 0 } } });
+const postEffect = gpu.effect(`
+  @group(0) @binding(0) var src: texture_2d<f32>;
 
-const target = gpu.target({ size: [32, 32] });
-const draw = gpu.effect(drawSource, {
-  set: { params: { time: 0 } }, // initial uniform defaults
-});
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    return vec4f(1.0 - base.rgb, 1.0);
+  }
+`);
 
-const handle = gpu.frame.loop((frame) => {
-  draw.set({ params: { time: gpu.time } }); // update uniforms every tick
-  frame.pass(target, draw);
-}, { fps: 30 });
+// ---cut---
+const sceneTarget = gpu.target({ size: [canvasTarget.size[0], canvasTarget.size[1]] });
+postEffect.set({ src: sceneTarget });
 
-handle.stop();
+gpu.frame((frame) => {
+  frame.pass(sceneTarget, pulseEffect);
+  frame.pass(canvasTarget, postEffect);
+}); // two passes, one encoder, one submit
 ```
 
-> Good to know: you never call `requestAnimationFrame` yourself. `gpu.frame.loop()` drives it internally — falling back to a ~16 ms timer where rAF is unavailable — and the optional `fps` option throttles ticks.
+One-shot draws like `pulseEffect.draw(canvasTarget)` are the simple default for a single pass. Multi-pass hot paths should use `gpu.frame()` to batch passes into one command encoder and one submit. One-shot draws never join a surrounding frame; inside `gpu.frame()`, always go through `frame.pass()`.
 
-Use the returned [`FrameLoopHandle`](/reference/vgpu/frame#frameloophandle) to stop the loop when a component unmounts, a test finishes, or a preview is no longer visible.
+> Warning: one-shot `draw()` calls do not join a surrounding frame — inside a frame callback they submit on their own immediately. Inside `gpu.frame()`, always draw through `frame.pass()`.
 
-## Next steps
+> Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
 
-- Read the [`Frame`](/reference/vgpu/frame#frame), [`FramePass`](/reference/vgpu/frame#framepass), and [`FrameRunner`](/reference/vgpu/frame#framerunner) reference.
-- Learn how fullscreen [`Effect`](/reference/vgpu/effect#effect) and explicit [`Draw`](/reference/vgpu/draw#draw) objects differ in the Drawing concept.
-- Review [`Target`](/reference/vgpu/target#target) and [`Surface`](/reference/vgpu/surface#surface) when a frame needs offscreen rendering or a canvas.
-- Open the [gradient example](/examples/gradient) for a minimal fullscreen effect, or the [triangle particles example](/examples/triangle-particles) for a frame that combines compute and render work.
+## Render loops
+
+For animation, use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) — it runs your frame every tick:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0 } } });
+
+// ---cut---
+const handle = gpu.frame.loop((frame) => {
+  pulseEffect.set({ params: { time: gpu.time } }); // update uniforms every tick
+  frame.pass(canvasTarget, pulseEffect);
+}, { fps: 30 });
+
+handle.stop(); // call it when your component unmounts
+```
+
+The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, and runs surface auto-resize before each tick. The optional `fps` throttles it.
+
+This is what the same loop looks like by hand with `requestAnimationFrame`:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const pulseEffect = gpu.effect(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0 } } });
+
+// ---cut---
+function tick() {
+  pulseEffect.set({ params: { time: performance.now() / 1000 } }); // you own the clock now
+  pulseEffect.draw(canvasTarget);
+  requestAnimationFrame(tick); // and the scheduling
+}
+requestAnimationFrame(tick);
+```
+
+Both work. `gpu.frame.loop()` is the same loop with the clock, throttling, and resize handling done for you.
