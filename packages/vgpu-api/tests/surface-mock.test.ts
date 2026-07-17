@@ -225,14 +225,14 @@ test("bloom pattern immediate same-size resize does not recreate derived target 
   gpu.dispose();
 });
 
-test("surface bundle stale on resize, and re-recording from onResize is usable in the same frame", async () => {
+test("surface bundle survives resize, and re-recording from onResize is usable in the same frame", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const manual = gpu.surface(canvasLike(10, 10), { autoResize: false });
   const effect = gpu.effect(SOLID);
-  const staleBundle = gpu.bundle({ target: manual, label: "surfaceBundle" }, (b) => b.draw(effect));
+  const resizeBundle = gpu.bundle({ target: manual, label: "surfaceBundle" }, (b) => b.draw(effect));
 
   manual.resize([12, 12]);
-  expect(() => gpu.frame((f) => f.pass({ target: manual }, (p) => p.bundles(staleBundle)))).toThrowError(/VGPU-R3-BUNDLE-STALE|stale/);
+  expect(() => gpu.frame((f) => f.pass({ target: manual }, (p) => p.bundles(resizeBundle)))).not.toThrow();
 
   const canvas = canvasLike(10, 10);
   const surface = gpu.surface(canvas);
