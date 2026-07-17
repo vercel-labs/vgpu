@@ -27,7 +27,17 @@ export default function GetStartedPage() {
         and Node.js, where Dawn renders headless for scripts, servers, and tests.
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <Link
+        href="/get-started/agents"
+        className="mt-8 block rounded-lg border border-gray-4 bg-gray-1 p-6 transition-colors hover:border-gray-5 hover:bg-gray-2"
+      >
+        <h2 className="text-lg font-semibold text-gray-12">Agents</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-10">
+          vgpu is agent-first — the full documentation ships inside the package. Point your agent at <code>npx vgpu docs</code>.
+        </p>
+      </Link>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {platforms.map((platform) => (
           <Link
             key={platform.href}

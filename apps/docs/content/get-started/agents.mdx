@@ -1,0 +1,51 @@
+---
+title: Agents
+summary: vgpu is agent-first — the full documentation ships inside the package, built for npx vgpu docs.
+relatedSymbols: []
+prevNext:
+  prev:
+    title: Get started
+    href: /get-started
+  next:
+    title: Web
+    href: /get-started/web
+---
+
+# Agents
+
+vgpu is an agent-first library. The entire documentation ships inside the npm package, so a coding agent can discover, learn, and verify the API without leaving the terminal — no browsing, no stale docs.
+
+## The agent get-started
+
+If an agent is writing your vgpu code, point it here first:
+
+```bash
+npx vgpu docs cat getting-started.md
+```
+
+That prints the agent version of this Get Started: one `Gpu` context, explicit WGSL bindings, explicit frames — with runnable code.
+
+## Explore, search, resolve
+
+`npx vgpu docs` is a small query tool over the bundled docs:
+
+```bash
+npx vgpu docs ls                      # list packages and doc paths
+npx vgpu docs cat /vgpu/frame.docs.md # print reference docs for a symbol
+npx vgpu docs grep -i bundle-stale    # search everything, error codes included
+npx vgpu docs find effect             # find symbols and doc paths by substring
+npx vgpu docs symbols                 # list every indexed symbol
+```
+
+Every reference page, guide, and error code (`VGPU-…`) is plain markdown, greppable, and versioned with the package you installed — the docs always match the API in your `node_modules`, and they work offline.
+
+## Verify without a browser
+
+Agents don't just read — they check their work. vgpu renders headless in Node.js through Dawn (`vgpu/node`) and fully mocked (`vgpu/mock`), so an agent can draw, read pixels back, and assert on them in a test. The CLI helps too:
+
+```bash
+npx vgpu check shader.wgsl   # validate and reflect a WGSL file as JSON
+npx vgpu create my-app       # scaffold a minimal vgpu project
+```
+
+This site is the human mirror of the same content. Everything an agent learns from `npx vgpu docs`, you can read here.

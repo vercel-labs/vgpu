@@ -82,6 +82,7 @@ export const navSections: NavSection[] = [
       {
         title: '',
         items: [
+          { title: 'Agents', href: '/get-started/agents' },
           { title: 'Web', href: '/get-started/web' },
           { title: 'Node.js', href: '/get-started/node' },
         ],
