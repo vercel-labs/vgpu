@@ -98,6 +98,7 @@ export const navSections: NavSection[] = [
         items: [
           { title: 'Context', href: '/concepts/context' },
           { title: 'Draws', href: '/concepts/draws' },
+          { title: 'Compilation', href: '/concepts/compilation' },
           { title: 'Effects', href: '/concepts/effects' },
           { title: 'Passes', href: '/concepts/passes' },
           { title: 'Frames', href: '/concepts/frames' },

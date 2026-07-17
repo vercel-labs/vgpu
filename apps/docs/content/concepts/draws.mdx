@@ -10,8 +10,8 @@ prevNext:
     title: Context
     href: /concepts/context
   next:
-    title: Effects
-    href: /concepts/effects
+    title: Compilation
+    href: /concepts/compilation
 ---
 
 # Draws
@@ -63,7 +63,7 @@ cube.set({
 cube.draw(target);
 ```
 
-Everything works like the rest of vgpu: bindings are reflected from the WGSL, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets.
+Everything works like the rest of vgpu: bindings are reflected from the WGSL, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets. See [Compilation](/concepts/compilation) to pre-warm each signature before the first draw.
 
 Two details specific to geometry:
 

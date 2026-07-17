@@ -6,7 +6,7 @@ export const metadata = {
   description: 'The core ideas behind every vgpu program, in reading order.',
 };
 
-const order = ['context', 'draws', 'effects', 'passes', 'frames', 'render-bundles'];
+const order = ['context', 'draws', 'compilation', 'effects', 'passes', 'frames', 'render-bundles'];
 
 export default function ConceptsPage() {
   const pages = order

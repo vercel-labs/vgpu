@@ -51,7 +51,7 @@ gpu.frame.loop((frame) => {
 });
 ```
 
-Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay.
+Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay. Pre-warm the draws it records as described in [Compilation](/concepts/compilation) so recording never waits on pipeline creation.
 
 > Good to know: draws inside a bundle can use different shaders and pipelines. What a bundle freezes is the target's render signature — color formats, depth format, sample count — plus bind groups, not a material or a target size.
 
