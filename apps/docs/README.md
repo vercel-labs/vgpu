@@ -10,11 +10,9 @@
 
 1. Create `apps/docs/examples/<slug>/` with:
    - `meta.ts` describing the example. Include a `thumb` object so the renderer knows how to drive the scene (see below).
-   - `example.ts` exporting `run(canvas)`; it can use helpers from `examples/_shared` or your own code.
+   - `example.ts` exporting `run(canvas)` as a self-contained example. Import only from `vgpu` packages and files in the example's own folder.
    - Any WGSL or helper files referenced by the example.
-2. Fragment-only examples can usually rely on `_shared/render.ts`:
-   - Export `thumb: { time: number }` in `meta.ts` so `renderFragmentThumb` samples a deterministic moment.
-   - Avoid sampling `gpu.time` inside `renderThumb`; use the provided `time` argument instead.
+2. Fragment-only examples should use the inline `run()` pattern: initialize vgpu, create a surface, create an effect, update `time` and `resolution` uniforms in `gpu.frame.loop`, draw the effect, and return cleanup that stops the loop and disposes the GPU. Export `thumb: { time: number }` in `meta.ts` so the script-local fragment thumbnail renderer samples a deterministic moment.
 3. Compute-heavy or multi-pass examples should expose a custom `renderThumb(gpu, target, options)` that advances a fixed number of frames:
    - Set `thumb: { warmupFrames: number, dt: number }` (see `triangle-particles`) so the Docker runner can pass `{ frames, dt }` into your renderer.
    - Keep the warm-up deterministic: fixed timesteps and seeded randomness only.
