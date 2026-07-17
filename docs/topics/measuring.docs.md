@@ -13,11 +13,12 @@ gpu.frame.loop((f) => f.pass({ target }, (p) => p.bundles(staticScene)));
 
 ## First-frame hitches
 
-If the first visible frame stutters, pre-warm target signatures:
+If the first visible frame stutters, pre-warm target signatures with `compile()`:
 
 ```text
 const hdr = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const draw = gpu.draw({ shader: WGSL, mesh, targets: [hdr] });
+const draw = gpu.draw({ shader: WGSL, mesh });
+await draw.compile(hdr);
 ```
 
 ## Binding churn

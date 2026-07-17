@@ -39,8 +39,8 @@ export function pushClaimedGroupValidationScope(device: Device, context: Claimed
 /**
  * Pops the most recent raw-claim scope in native LIFO order and returns its promise.
  *
- * The returned promise is stored by `Frame` / `Draw.draw()` and awaited after
- * submit. Popping immediately keeps the device-global WebGPU scope stack from
+ * The returned promise is delivered through `gpu.onError` and tracked by
+ * `Frame.done` / `gpu.settled()` after submit. Popping immediately keeps the device-global WebGPU scope stack from
  * being shared accidentally by overlapping frames or one-shot draws.
  */
 export function popLastClaimedGroupValidationScope(device: Device): ClaimedGroupValidationResult | undefined {

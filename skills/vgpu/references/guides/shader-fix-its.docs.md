@@ -59,7 +59,7 @@ struct Params { enabled: u32 }
 
 ## Bundle stale
 
-`VGPU-R3-BUNDLE-STALE` means a bundle was recorded against an old target or bind-group identity. Re-record after resize or resource identity changes. Plain JS `set()` updates are safe because buffers are written in place.
+`VGPU-R3-BUNDLE-STALE` means a bundle was recorded for a different render signature or an old bind-group/resource identity. A bundle survives resizing the target it draws onto when formats/depth/sample count match; re-record after resource identity changes, including sampling a resized target. Plain JS `set()` updates are safe because buffers are written in place.
 
 ## Manual bind-group claims
 

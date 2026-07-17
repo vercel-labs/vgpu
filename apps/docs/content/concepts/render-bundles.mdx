@@ -53,7 +53,7 @@ gpu.frame.loop((frame) => {
 
 Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay.
 
-> Good to know: draws inside a bundle can use different shaders and pipelines. What a bundle freezes is the target's shape — color formats, depth format, sample count, size — not a material.
+> Good to know: draws inside a bundle can use different shaders and pipelines. What a bundle freezes is the target's render signature — color formats, depth format, sample count — plus bind groups, not a material or a target size.
 
 ## Mix recorded and dynamic draws
 
@@ -89,9 +89,9 @@ gpu.frame.loop((frame) => {
 });
 ```
 
-## Resizes invalidate a bundle
+## Resizes and sampled targets
 
-A bundle snapshots the target's size and formats when recorded. Replaying after a resize throws `VGPU-R3-BUNDLE-STALE` — re-record instead:
+A bundle matches replay targets by render signature, not size, so drawing onto a resized surface keeps working:
 
 ```ts
 import { init } from "vgpu";
@@ -111,7 +111,7 @@ function recordScene() {
 }
 
 let scene = recordScene();
-canvasTarget.onResize(() => { scene = recordScene(); }); // stale bundles throw on replay
+canvasTarget.onResize(() => { scene = recordScene(); }); // needed only if the bundle samples resized resources
 
 gpu.frame.loop((frame) => {
   frame.pass(canvasTarget, (pass) => pass.bundles(scene));

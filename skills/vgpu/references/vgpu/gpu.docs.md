@@ -14,7 +14,7 @@ import { init } from "vgpu/mock";
 ## Signature
 
 ```ts
-import type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawOptions, Frame, FrameRunner, Effect, EffectOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions } from "vgpu";
+import type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawOptions, Frame, FrameRunner, Effect, EffectOptions, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions } from "vgpu";
 import type { Device } from "vgpu/core";
 import type { ShaderSource } from "vgpu";
 
@@ -38,6 +38,8 @@ interface Gpu {
   pingPongStorage(bytes: number): PingPongStorage;
   uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T>;
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle;
+  onError(cb: GpuErrorListener): () => void;
+  settled(): Promise<void>;
 }
 ```
 
@@ -65,8 +67,9 @@ interface Gpu {
 | pingPong.opts | `TargetTextureOptions` | ✖ | `{}` | Texture/attachment options only; size comes from positional width/height. |
 | pingPongStorage.bytes | `number` | ✔ | — | Creates two `"read-write"` storage buffers. |
 | uniforms.values | `Record<string, unknown>` | ✔ | — | Cloned initial JS values; WGSL layout is adopted when first bound. |
-| bundle.opts | `BundleOptions` | ✔ | — | Requires `target`. |
+| bundle.opts | `BundleOptions` | ✔ | — | Requires a `target` or target signature. |
 | bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Records bundle commands immediately. |
+| onError.cb | `GpuErrorListener` | ✔ | — | Receives asynchronous vgpu errors; returns an unsubscribe function. |
 
 **Returns:** `Gpu` methods return the resources named in their signatures. `dispose()` and frame/pass callbacks return `void`.
 
@@ -87,6 +90,7 @@ const draw = gpu.draw({
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0, 1, 1); }
   `,
+  // optional sync pre-warm; `await draw.compile(target)` is preferred during browser load
   targets: [target],
 });
 
@@ -108,6 +112,12 @@ gpu.frame.loop((frame) => {
   frame.pass({ target: surface }, (pass) => pass.draw(wave));
 });
 ```
+
+## Error delivery
+
+`gpu.onError(cb)` subscribes to asynchronous vgpu errors and returns an unsubscribe function. Listeners run in subscription order; removing one stops future deliveries; a throwing listener is reported to `console.error` without stopping the rest. If no listener is registered, vgpu reports the error to `console.error` by default.
+
+`gpu.settled()` resolves after the current snapshot of pending error deliveries and in-flight pipeline work settles. It never rejects, so it is safe for deterministic tests and teardown.
 
 ## Notes
 

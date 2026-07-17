@@ -150,10 +150,7 @@ const surface = gpu.surface(canvas);
 const draw = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 let statics = gpu.bundle({ target: surface }, (bundle) => bundle.draw(draw));
 
-surface.onResize(() => {
-  statics = gpu.bundle({ target: surface }, (bundle) => bundle.draw(draw));
-});
-
+// Drawing onto a resized surface keeps the same bundle valid as long as the render signature matches.
 gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.bundles(statics)));
 ```
 

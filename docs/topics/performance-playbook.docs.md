@@ -27,9 +27,9 @@ gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
 ```
 Default: bundle static work once and replay with `p.bundles(...)`.
 
-## 2. Pipeline pre-warm (`targets: [...]`)
+## 2. Pipeline pre-warm (`compile`)
 
-Use before the first visible frame or route transition. This compiles render pipelines for the target color/depth/MSAA signature at construction time.
+Use before the first visible frame or route transition. This compiles render pipelines for the target color/depth/MSAA signature before the hitch-sensitive frame.
 
 Before:
 ```text
@@ -38,10 +38,11 @@ const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
+const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+await cube.compile(scene);
 gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
-Default: pass every target a draw will hit through `targets:` before the hitch-sensitive frame.
+Default: `await draw.compile(target)` for every target signature a draw will hit before the hitch-sensitive frame. `targets: [target]` remains synchronous creation-time sugar when blocking is acceptable.
 
 ## 3. Manual group claim + dynamic offsets (`draw.group`)
 
@@ -137,7 +138,8 @@ for (let i = 0; i < COUNT; i++) {
 ```
 After:
 ```text
-const particles = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6, targets: [scene] });
+const particles = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
+await particles.compile(scene);
 particles.set({ particleBuffer });
 gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles)));
 ```
@@ -207,7 +209,8 @@ const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), targets: [scene] });
+const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+await cube.compile(scene);
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
 Default: put depth/MSAA on the target; do not invent global render settings.

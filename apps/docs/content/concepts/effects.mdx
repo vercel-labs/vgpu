@@ -15,7 +15,7 @@ prevNext:
 
 # Effects
 
-An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `gpu.effect(source)`. Its pipeline compiles at creation, and every draw fills the whole target — you only write the fragment.
+An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `gpu.effect(source)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. Every draw fills the whole target — you only write the fragment.
 
 Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
 

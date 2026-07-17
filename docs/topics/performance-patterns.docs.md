@@ -8,7 +8,7 @@ Use `gpu.bundle({ target }, recorder)` and replay with `p.bundles(bundle)`.
 
 ## First-frame stability
 
-Use `gpu.draw({ shader, mesh, targets: [surfaceOrTarget] })` so pipeline compilation happens before the transition frame; pass a canvas `surface` or an offscreen `target` explicitly.
+Use `await draw.compile(surfaceOrTarget)` so pipeline compilation happens before the transition frame; pass a canvas `surface` or an offscreen `target` explicitly.
 
 ## Animated uniforms
 
@@ -28,4 +28,4 @@ Use `gpu.pingPong()` for targets or `gpu.pingPongStorage()` for compute. Do not 
 
 ## 3D targets
 
-Create targets with `depth: true` and `msaa: true` when needed; pass those targets through `targets:` at draw creation.
+Create targets with `depth: true` and `msaa: true` when needed; pre-warm those signatures with `await draw.compile(target)`.
