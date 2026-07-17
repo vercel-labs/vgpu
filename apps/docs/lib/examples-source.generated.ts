@@ -9,14 +9,9 @@ export interface ExampleSourceFile {
 export const exampleSources = {
   "alien-planet": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'alien-planet',\n  title: 'Alien Planet',\n  description: 'A procedural planet with atmosphere, terrain bands, and stars.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -26,14 +21,9 @@ export const exampleSources = {
   ],
   "color-cycle": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'color-cycle',\n  title: 'Color Cycle',\n  description: 'Smooth animated bands built from sine-wave color palettes.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -43,36 +33,26 @@ export const exampleSources = {
   ],
   "fluid": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fluid',\n  title: 'Fluid Simulation',\n  description: 'Compute-driven dye flow with ping-pong storage textures and a vgpu display pass.',\n  thumb: { warmupFrames: 180, dt: 1 / 60, note: 'Rendered at a converged synthetic time for a stable poster.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'display.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample, renderFragmentThumb } from '../_shared/render';\nimport type { Gpu, Target } from 'vgpu';\nimport fragment from './display.wgsl';\n\nexport interface FluidThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n  readonly fragment?: string;\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt, fragment: fragmentSource = fragment }: FluidThumbOptions): void {\n  renderFragmentThumb(gpu, target, { fragment: fragmentSource }, { time: frames * dt });\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init, type Gpu, type Target } from 'vgpu';\nimport computeSource from './compute.wgsl';\nimport displaySource from './display.wgsl';\n\nconst GRID = [1280, 720] as const;\nconst WORKGROUP_SIZE = 8;\n\nexport interface FluidThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n}\n\nfunction createFluid(gpu: Gpu) {\n  // TODO(vgpu): pre-warm compute + display pipelines with compile() once compile()/compileSync lands.\n  const dye = gpu.storage(GRID[0] * GRID[1] * 16, 'read-write');\n  const sim = gpu.compute(computeSource, { set: { dye } });\n  const display = gpu.effect(displaySource);\n  display.set({ dye });\n  return { sim, display };\n}\n\nfunction stepFluid(scene: ReturnType<typeof createFluid>, time: number, frame: number): void {\n  scene.sim.set({\n    sim: {\n      resolution: GRID,\n      time,\n      frame,\n    },\n  });\n  scene.sim.dispatch(Math.ceil(GRID[0] / WORKGROUP_SIZE), Math.ceil(GRID[1] / WORKGROUP_SIZE));\n}\n\nfunction setDisplayTarget(scene: ReturnType<typeof createFluid>, target: Target): void {\n  scene.display.set({ uniforms: { resolution: target.size, grid: GRID } });\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt }: FluidThumbOptions): void {\n  const scene = createFluid(gpu);\n  let time = 0;\n  for (let frame = 0; frame < frames; frame++) {\n    time += dt;\n    stepFluid(scene, time, frame);\n  }\n  setDisplayTarget(scene, target);\n  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(scene.display)));\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init({ requiredLimits: { maxStorageBuffersInVertexStage: 1 } });\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const scene = createFluid(gpu);\n  const handle = gpu.frame.loop((frame) => {\n    stepFluid(scene, gpu.time, gpu.frameCount);\n    setDisplayTarget(scene, surface);\n    frame.pass({ target: surface }, (p) => p.draw(scene.display));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "compute.wgsl",
       "lang": "wgsl",
-      "code": "struct SimUniforms {\n  resolution: vec2f,\n  time: f32,\n  frame: f32,\n};\n\n@group(0) @binding(0) var<uniform> sim: SimUniforms;\n@group(0) @binding(1) var dye: texture_storage_2d<rgba8unorm, write>;\n\nfn hash(p: vec2f) -> f32 {\n  return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);\n}\n\nfn noise(p: vec2f) -> f32 {\n  let i = floor(p);\n  let f = fract(p);\n  let u = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash(i), hash(i + vec2f(1.0, 0.0)), u.x), mix(hash(i + vec2f(0.0, 1.0)), hash(i + vec2f(1.0, 1.0)), u.x), u.y);\n}\n\nfn fbm(p0: vec2f) -> f32 {\n  var p = p0;\n  var a = 0.5;\n  var v = 0.0;\n  for (var i = 0; i < 5; i++) {\n    v += a * noise(p);\n    p = mat2x2f(1.62, 1.18, -1.18, 1.62) * p;\n    a *= 0.52;\n  }\n  return v;\n}\n\n@compute @workgroup_size(8, 8)\nfn cs_main(@builtin(global_invocation_id) id: vec3u) {\n  let size = textureDimensions(dye);\n  if (id.x >= size.x || id.y >= size.y) { return; }\n\n  let uv = (vec2f(id.xy) + 0.5) / vec2f(size);\n  let p = (uv - 0.5) * vec2f(sim.resolution.x / sim.resolution.y, 1.0);\n  let t = sim.time;\n  let swirl = atan2(p.y, p.x) + length(p) * 5.0 - t * 0.7;\n  let flow = fbm(p * 3.0 + vec2f(cos(swirl), sin(swirl)) * 0.5 + vec2f(t * 0.08, -t * 0.04));\n  let plume = exp(-dot(p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4)), p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4))) * 6.0);\n  let color = mix(vec3f(0.02, 0.04, 0.12), vec3f(0.05, 0.85, 1.0), flow) + plume * vec3f(1.0, 0.22, 0.06);\n  textureStore(dye, vec2i(id.xy), vec4f(pow(color / (1.0 + color), vec3f(0.45)), 1.0));\n}\n"
+      "code": "struct SimUniforms {\n  resolution: vec2f,\n  time: f32,\n  frame: f32,\n};\n\n@group(0) @binding(0) var<uniform> sim: SimUniforms;\n@group(0) @binding(1) var<storage, read_write> dye: array<vec4f>;\n\nfn hash(p: vec2f) -> f32 {\n  return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);\n}\n\nfn noise(p: vec2f) -> f32 {\n  let i = floor(p);\n  let f = fract(p);\n  let u = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash(i), hash(i + vec2f(1.0, 0.0)), u.x), mix(hash(i + vec2f(0.0, 1.0)), hash(i + vec2f(1.0, 1.0)), u.x), u.y);\n}\n\nfn fbm(p0: vec2f) -> f32 {\n  var p = p0;\n  var a = 0.5;\n  var v = 0.0;\n  for (var i = 0; i < 5; i++) {\n    v += a * noise(p);\n    p = mat2x2f(1.62, 1.18, -1.18, 1.62) * p;\n    a *= 0.52;\n  }\n  return v;\n}\n\n@compute @workgroup_size(8, 8)\nfn cs_main(@builtin(global_invocation_id) id: vec3u) {\n  let size = vec2u(sim.resolution);\n  if (id.x >= size.x || id.y >= size.y) { return; }\n\n  let uv = (vec2f(id.xy) + 0.5) / sim.resolution;\n  let p = (uv - 0.5) * vec2f(sim.resolution.x / sim.resolution.y, 1.0);\n  let t = sim.time;\n  let swirl = atan2(p.y, p.x) + length(p) * 5.0 - t * 0.7;\n  let flow = fbm(p * 3.0 + vec2f(cos(swirl), sin(swirl)) * 0.5 + vec2f(t * 0.08, -t * 0.04));\n  let plume = exp(-dot(p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4)), p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4))) * 6.0);\n  let color = mix(vec3f(0.02, 0.04, 0.12), vec3f(0.05, 0.85, 1.0), flow) + plume * vec3f(1.0, 0.22, 0.06);\n  dye[id.y * size.x + id.x] = vec4f(pow(color / (1.0 + color), vec3f(0.45)), 1.0);\n}\n"
     },
     {
       "name": "display.wgsl",
       "lang": "wgsl",
-      "code": "struct Uniforms {\n  time: f32,\n  resolution: vec2f,\n};\n@group(0) @binding(0) var<uniform> uniforms: Uniforms;\n\nfn hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }\nfn noise(p: vec2f) -> f32 {\n  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash(i), hash(i + vec2f(1.0, 0.0)), u.x), mix(hash(i + vec2f(0.0, 1.0)), hash(i + vec2f(1.0, 1.0)), u.x), u.y);\n}\nfn fbm(p0: vec2f) -> f32 {\n  var p = p0; var a = 0.5; var v = 0.0;\n  for (var i = 0; i < 5; i++) { v += a * noise(p); p = mat2x2f(1.62, 1.18, -1.18, 1.62) * p; a *= 0.52; }\n  return v;\n}\n@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {\n  let p = (uv - 0.5) * vec2f(uniforms.resolution.x / uniforms.resolution.y, 1.0);\n  let t = uniforms.time;\n  let swirl = atan2(p.y, p.x) + length(p) * 5.0 - t * 0.7;\n  let flow = fbm(p * 3.0 + vec2f(cos(swirl), sin(swirl)) * 0.5 + vec2f(t * 0.08, -t * 0.04));\n  let plume = exp(-dot(p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4)), p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4))) * 6.0);\n  let color = mix(vec3f(0.02, 0.04, 0.12), vec3f(0.05, 0.85, 1.0), flow) + plume * vec3f(1.0, 0.22, 0.06);\n  return vec4f(pow(color / (1.0 + color), vec3f(0.45)), 1.0);\n}\n"
+      "code": "struct Uniforms {\n  resolution: vec2f,\n  grid: vec2f,\n};\n\n@group(0) @binding(0) var<uniform> uniforms: Uniforms;\n@group(0) @binding(1) var<storage, read> dye: array<vec4f>;\n\n@fragment\nfn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {\n  let grid = vec2u(uniforms.grid);\n  let pixel = min(vec2u(floor(uv * uniforms.grid)), grid - vec2u(1u));\n  return dye[pixel.y * grid.x + pixel.x];\n}\n"
     }
   ],
   "fractal": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fractal',\n  title: 'Fractal Explorer',\n  description: 'Animated Mandelbrot-style fractal coloring on the GPU.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -82,14 +62,9 @@ export const exampleSources = {
   ],
   "gradient": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'gradient',\n  title: 'Simple Gradient',\n  description: 'Map screen coordinates to color with a tiny fullscreen fragment shader.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -99,14 +74,9 @@ export const exampleSources = {
   ],
   "metaballs": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'metaballs',\n  title: 'Metaballs',\n  description: 'Moving fields merge into soft glowing blobs.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -116,14 +86,9 @@ export const exampleSources = {
   ],
   "noise": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'noise',\n  title: 'Procedural Noise',\n  description: 'Layered value noise creates drifting clouds of color.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -133,14 +98,9 @@ export const exampleSources = {
   ],
   "raymarching": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'raymarching',\n  title: 'Raymarching',\n  description: 'A shaded signed-distance sphere rendered entirely in WGSL.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({ uniforms: { time: gpu.time, resolution: surface.size } });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",
@@ -150,14 +110,9 @@ export const exampleSources = {
   ],
   "triangle-particles": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'triangle-particles',\n  title: 'Triangle Particles',\n  description: 'A compute-updated particle field emitted from a glowing triangle.',\n  thumb: { warmupFrames: 90, dt: 1 / 60, note: 'Compute warm-up with a synthetic fixed-step clock.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'render.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { init, type Gpu, type Target } from 'vgpu';\nimport computeSource from './compute.wgsl';\nimport renderSource from './render.wgsl';\n\nconst PARTICLE_COUNT = 24000;\nconst WORKGROUP_SIZE = 64;\n\nexport interface TriangleParticlesThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n}\n\nfunction createTriangleParticles(gpu: Gpu) {\n  const positions = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  const velocities = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  initializeParticles(positions, velocities);\n  const sim = gpu.compute(computeSource, { set: { positions, velocities } });\n  const draw = gpu.draw({ shader: renderSource, set: { positions, velocities }, instances: PARTICLE_COUNT, vertices: 3 });\n  return { sim, draw };\n}\n\nfunction initializeParticles(\n  positions: ReturnType<Gpu['storage']>,\n  velocities: ReturnType<Gpu['storage']>,\n): void {\n  const positionData = new Float32Array(PARTICLE_COUNT * 4);\n  const velocityData = new Float32Array(PARTICLE_COUNT * 4);\n  const vertices = [\n    [0, 1.28],\n    [-1.1, -0.64],\n    [1.1, -0.64],\n  ] as const;\n\n  for (let i = 0; i < PARTICLE_COUNT; i++) {\n    let a = random01(i * 4 + 1);\n    let b = random01(i * 4 + 2);\n    if (a + b > 1) {\n      a = 1 - a;\n      b = 1 - b;\n    }\n    const c = 1 - a - b;\n    const ox = vertices[0][0] * a + vertices[1][0] * b + vertices[2][0] * c;\n    const oy = vertices[0][1] * a + vertices[1][1] * b + vertices[2][1] * c;\n    const angle = random01(i * 4 + 3) * Math.PI * 2;\n    const speed = 0.08 + random01(i * 4 + 4) * 0.22;\n    const offset = i * 4;\n    positionData[offset] = ox;\n    positionData[offset + 1] = oy;\n    positionData[offset + 2] = ox;\n    positionData[offset + 3] = oy;\n    velocityData[offset] = Math.cos(angle) * speed;\n    velocityData[offset + 1] = Math.sin(angle) * speed;\n    velocityData[offset + 2] = 0.6 + random01(i * 4 + 5) * 4.8;\n    velocityData[offset + 3] = random01(i * 4 + 6) * 10000;\n  }\n\n  positions.write(positionData);\n  velocities.write(velocityData);\n}\n\nfunction random01(seed: number): number {\n  const x = Math.sin(seed * 12.9898) * 43758.5453;\n  return x - Math.floor(x);\n}\n\nfunction stepTriangleParticles(scene: ReturnType<typeof createTriangleParticles>, size: readonly [number, number], time: number, deltaTime: number): void {\n  scene.sim.set({\n    sim: {\n      time,\n      deltaTime,\n      aspect: size[0] / Math.max(size[1], 1),\n      count: PARTICLE_COUNT,\n      mouse: [0, 0],\n      mouseStrength: 0,\n      pad: 0,\n    },\n  });\n  scene.sim.dispatch(Math.ceil(PARTICLE_COUNT / WORKGROUP_SIZE));\n}\n\nfunction drawTriangleParticles(gpu: Gpu, scene: ReturnType<typeof createTriangleParticles>, target: Target, time: number): void {\n  scene.draw.set({ renderUniforms: { resolution: target.size, time, count: PARTICLE_COUNT } });\n  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(scene.draw)));\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt }: TriangleParticlesThumbOptions): void {\n  const scene = createTriangleParticles(gpu);\n  let time = 0;\n  for (let frame = 0; frame < frames; frame++) {\n    time += dt;\n    stepTriangleParticles(scene, target.size, time, dt);\n  }\n  drawTriangleParticles(gpu, scene, target, time);\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const scene = createTriangleParticles(gpu);\n  const handle = gpu.frame.loop((frame) => {\n    const size = surface.size;\n    stepTriangleParticles(scene, size, gpu.time, gpu.deltaTime);\n    scene.draw.set({ renderUniforms: { resolution: size, time: gpu.time, count: PARTICLE_COUNT } });\n    frame.pass({ target: surface }, (p) => p.draw(scene.draw));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
+      "code": "import { init, type Gpu, type Target } from 'vgpu';\nimport computeSource from './compute.wgsl';\nimport renderSource from './render.wgsl';\n\nconst PARTICLE_COUNT = 24000;\nconst WORKGROUP_SIZE = 64;\n\nexport interface TriangleParticlesThumbOptions {\n  readonly frames: number;\n  readonly dt: number;\n}\n\nfunction createTriangleParticles(gpu: Gpu) {\n  // TODO(vgpu): pre-warm pipelines with compile() once compile()/compileSync lands.\n  const positions = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  const velocities = gpu.storage(PARTICLE_COUNT * 16, 'read-write');\n  initializeParticles(positions, velocities);\n  const sim = gpu.compute(computeSource, { set: { positions, velocities } });\n  const draw = gpu.draw({ shader: renderSource, set: { positions, velocities }, instances: PARTICLE_COUNT, vertices: 3 });\n  return { sim, draw };\n}\n\nfunction initializeParticles(\n  positions: ReturnType<Gpu['storage']>,\n  velocities: ReturnType<Gpu['storage']>,\n): void {\n  const positionData = new Float32Array(PARTICLE_COUNT * 4);\n  const velocityData = new Float32Array(PARTICLE_COUNT * 4);\n  const vertices = [\n    [0, 1.28],\n    [-1.1, -0.64],\n    [1.1, -0.64],\n  ] as const;\n\n  for (let i = 0; i < PARTICLE_COUNT; i++) {\n    let a = random01(i * 4 + 1);\n    let b = random01(i * 4 + 2);\n    if (a + b > 1) {\n      a = 1 - a;\n      b = 1 - b;\n    }\n    const c = 1 - a - b;\n    const ox = vertices[0][0] * a + vertices[1][0] * b + vertices[2][0] * c;\n    const oy = vertices[0][1] * a + vertices[1][1] * b + vertices[2][1] * c;\n    const angle = random01(i * 4 + 3) * Math.PI * 2;\n    const speed = 0.08 + random01(i * 4 + 4) * 0.22;\n    const offset = i * 4;\n    positionData[offset] = ox;\n    positionData[offset + 1] = oy;\n    positionData[offset + 2] = ox;\n    positionData[offset + 3] = oy;\n    velocityData[offset] = Math.cos(angle) * speed;\n    velocityData[offset + 1] = Math.sin(angle) * speed;\n    velocityData[offset + 2] = 0.6 + random01(i * 4 + 5) * 4.8;\n    velocityData[offset + 3] = random01(i * 4 + 6) * 10000;\n  }\n\n  positions.write(positionData);\n  velocities.write(velocityData);\n}\n\nfunction random01(seed: number): number {\n  const x = Math.sin(seed * 12.9898) * 43758.5453;\n  return x - Math.floor(x);\n}\n\nfunction stepTriangleParticles(scene: ReturnType<typeof createTriangleParticles>, size: readonly [number, number], time: number, deltaTime: number): void {\n  scene.sim.set({\n    sim: {\n      time,\n      deltaTime,\n      aspect: size[0] / Math.max(size[1], 1),\n      count: PARTICLE_COUNT,\n      mouse: [0, 0],\n      mouseStrength: 0,\n      pad: 0,\n    },\n  });\n  scene.sim.dispatch(Math.ceil(PARTICLE_COUNT / WORKGROUP_SIZE));\n}\n\nfunction drawTriangleParticles(gpu: Gpu, scene: ReturnType<typeof createTriangleParticles>, target: Target, time: number): void {\n  scene.draw.set({ renderUniforms: { resolution: target.size, time, count: PARTICLE_COUNT } });\n  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(scene.draw)));\n}\n\nexport function renderThumb(gpu: Gpu, target: Target, { frames, dt }: TriangleParticlesThumbOptions): void {\n  const scene = createTriangleParticles(gpu);\n  let time = 0;\n  for (let frame = 0; frame < frames; frame++) {\n    time += dt;\n    stepTriangleParticles(scene, target.size, time, dt);\n  }\n  drawTriangleParticles(gpu, scene, target, time);\n}\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const scene = createTriangleParticles(gpu);\n  const handle = gpu.frame.loop((frame) => {\n    const size = surface.size;\n    stepTriangleParticles(scene, size, gpu.time, gpu.deltaTime);\n    scene.draw.set({ renderUniforms: { resolution: size, time: gpu.time, count: PARTICLE_COUNT } });\n    frame.pass({ target: surface }, (p) => p.draw(scene.draw));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "compute.wgsl",
@@ -172,14 +127,9 @@ export const exampleSources = {
   ],
   "wave": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'wave',\n  title: 'Animated Wave',\n  description: 'A bright sine wave animated by time and custom uniforms.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
-      "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, {\n    fragment,\n    uniforms: { amplitude: 'f32', frequency: 'f32', color: 'vec3f' },\n    values: () => ({ amplitude: 0.28, frequency: 8.0, color: [0.2, 0.8, 1.0] }),\n  });\n}\n"
+      "code": "import { init } from 'vgpu';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  const gpu = await init();\n  const surface = gpu.surface(canvas, { dpr: [1, 2] });\n  const effect = gpu.effect(fragment);\n  // TODO(vgpu): pre-warm the pipeline with effect.compile() once compile()/compileSync lands.\n  const handle = gpu.frame.loop((frame) => {\n    effect.set({\n      uniforms: {\n        time: gpu.time,\n        resolution: surface.size,\n        amplitude: 0.28,\n        frequency: 8.0,\n        color: [0.2, 0.8, 1.0],\n      },\n    });\n    frame.pass({ target: surface }, (p) => p.draw(effect));\n  });\n  return () => { handle.stop(); gpu.dispose(); };\n}\n"
     },
     {
       "name": "shader.wgsl",

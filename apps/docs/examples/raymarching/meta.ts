@@ -3,5 +3,5 @@ export const meta = {
   title: 'Raymarching',
   description: 'A shaded signed-distance sphere rendered entirely in WGSL.',
   thumb: { time: Math.PI / 4 },
-  files: ['meta.ts', 'example.ts', 'shader.wgsl'],
+  files: ['example.ts', 'shader.wgsl'],
 } as const;

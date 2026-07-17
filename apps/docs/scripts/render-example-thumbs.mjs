@@ -40,6 +40,19 @@ const fragmentValueFactories = {
   wave: () => ({ amplitude: 0.28, frequency: 8.0, color: [0.2, 0.8, 1.0] }),
 };
 
+function renderFragmentThumb(gpu, target, options, { time }) {
+  const effect = gpu.effect(options.fragment);
+  const [width, height] = target.size;
+  effect.set({
+    uniforms: {
+      time,
+      resolution: [width, height],
+      ...(options.values?.(time, width, height) ?? {}),
+    },
+  });
+  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
+}
+
 const args = parseArgs(process.argv.slice(2));
 await mkdir(outDir, { recursive: true });
 const [renderers, docsData] = await Promise.all([loadRenderers(), loadDocsData()]);
@@ -72,7 +85,9 @@ if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 async function renderOne(renderers, exampleSources, slug, size, metaThumb, output) {
   const gpu = await init(slug === 'triangle-particles'
     ? { requiredLimits: { maxStorageBuffersInVertexStage: 2 } }
-    : undefined);
+    : slug === 'fluid'
+      ? { requiredLimits: { maxStorageBuffersInVertexStage: 1 } }
+      : undefined);
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     if (slug === 'triangle-particles') {
@@ -84,12 +99,11 @@ async function renderOne(renderers, exampleSources, slug, size, metaThumb, outpu
       renderers.fluid(gpu, target, {
         frames: metaThumb.warmupFrames ?? 180,
         dt: metaThumb.dt ?? 1 / 60,
-        fragment: sourceFor(exampleSources, slug, 'display.wgsl'),
       });
     } else {
       const fragmentFile = fragmentFiles[slug];
       if (!fragmentFile) throw new Error(`No headless renderer configured for '${slug}'.`);
-      renderers.renderFragmentThumb(
+      renderFragmentThumb(
         gpu,
         target,
         {
@@ -132,7 +146,6 @@ function lumaVariance(bytes) {
 async function loadRenderers() {
   await mkdir(cacheDir, { recursive: true });
   await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `
-    export { renderFragmentThumb } from '../examples/_shared/render';
     export { renderThumb as fluid } from '../examples/fluid/example';
     export { renderThumb as triangleParticles } from '../examples/triangle-particles/example';
   `));

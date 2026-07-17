@@ -7,7 +7,7 @@ const examplesDir = path.join(docsDir, 'examples');
 const publicExamplesDir = path.join(docsDir, 'public', 'examples');
 const sourcesOutFile = path.join(docsDir, 'lib', 'examples-source.generated.ts');
 const thumbsOutFile = path.join(docsDir, 'lib', 'example-thumbs.generated.ts');
-const ignoredFolders = new Set(['_shared']);
+const ignoredFolders = new Set();
 
 function langFor(file) {
   if (file.endsWith('.wgsl')) return 'wgsl';
