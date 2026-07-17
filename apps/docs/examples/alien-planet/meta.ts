@@ -3,5 +3,5 @@ export const meta = {
   title: 'Alien Planet',
   description: 'A procedural planet with atmosphere, terrain bands, and stars.',
   thumb: { time: Math.PI / 4 },
-  files: ['meta.ts', 'example.ts', 'shader.wgsl'],
+  files: ['example.ts', 'shader.wgsl'],
 } as const;

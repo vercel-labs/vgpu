@@ -9,11 +9,6 @@ export interface ExampleSourceFile {
 export const exampleSources = {
   "alien-planet": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'alien-planet',\n  title: 'Alien Planet',\n  description: 'A procedural planet with atmosphere, terrain bands, and stars.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
       "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
@@ -26,11 +21,6 @@ export const exampleSources = {
   ],
   "color-cycle": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'color-cycle',\n  title: 'Color Cycle',\n  description: 'Smooth animated bands built from sine-wave color palettes.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
       "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
@@ -42,11 +32,6 @@ export const exampleSources = {
     }
   ],
   "fluid": [
-    {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fluid',\n  title: 'Fluid Simulation',\n  description: 'Compute-driven dye flow with ping-pong storage textures and a vgpu display pass.',\n  thumb: { warmupFrames: 180, dt: 1 / 60, note: 'Rendered at a converged synthetic time for a stable poster.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'display.wgsl'],\n} as const;\n"
-    },
     {
       "name": "example.ts",
       "lang": "typescript",
@@ -65,11 +50,6 @@ export const exampleSources = {
   ],
   "fractal": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'fractal',\n  title: 'Fractal Explorer',\n  description: 'Animated Mandelbrot-style fractal coloring on the GPU.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
       "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
@@ -81,11 +61,6 @@ export const exampleSources = {
     }
   ],
   "gradient": [
-    {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'gradient',\n  title: 'Simple Gradient',\n  description: 'Map screen coordinates to color with a tiny fullscreen fragment shader.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
     {
       "name": "example.ts",
       "lang": "typescript",
@@ -99,11 +74,6 @@ export const exampleSources = {
   ],
   "metaballs": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'metaballs',\n  title: 'Metaballs',\n  description: 'Moving fields merge into soft glowing blobs.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
       "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
@@ -115,11 +85,6 @@ export const exampleSources = {
     }
   ],
   "noise": [
-    {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'noise',\n  title: 'Procedural Noise',\n  description: 'Layered value noise creates drifting clouds of color.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
     {
       "name": "example.ts",
       "lang": "typescript",
@@ -133,11 +98,6 @@ export const exampleSources = {
   ],
   "raymarching": [
     {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'raymarching',\n  title: 'Raymarching',\n  description: 'A shaded signed-distance sphere rendered entirely in WGSL.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
-    {
       "name": "example.ts",
       "lang": "typescript",
       "code": "import { runFragmentExample } from '../_shared/render';\nimport fragment from './shader.wgsl';\n\nexport async function run(canvas: HTMLCanvasElement): Promise<() => void> {\n  return runFragmentExample(canvas, { fragment });\n}\n"
@@ -149,11 +109,6 @@ export const exampleSources = {
     }
   ],
   "triangle-particles": [
-    {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'triangle-particles',\n  title: 'Triangle Particles',\n  description: 'A compute-updated particle field emitted from a glowing triangle.',\n  thumb: { warmupFrames: 90, dt: 1 / 60, note: 'Compute warm-up with a synthetic fixed-step clock.' },\n  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'render.wgsl'],\n} as const;\n"
-    },
     {
       "name": "example.ts",
       "lang": "typescript",
@@ -171,11 +126,6 @@ export const exampleSources = {
     }
   ],
   "wave": [
-    {
-      "name": "meta.ts",
-      "lang": "typescript",
-      "code": "export const meta = {\n  slug: 'wave',\n  title: 'Animated Wave',\n  description: 'A bright sine wave animated by time and custom uniforms.',\n  thumb: { time: Math.PI / 4 },\n  files: ['meta.ts', 'example.ts', 'shader.wgsl'],\n} as const;\n"
-    },
     {
       "name": "example.ts",
       "lang": "typescript",

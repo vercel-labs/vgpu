@@ -3,5 +3,5 @@ export const meta = {
   title: 'Procedural Noise',
   description: 'Layered value noise creates drifting clouds of color.',
   thumb: { time: Math.PI / 4 },
-  files: ['meta.ts', 'example.ts', 'shader.wgsl'],
+  files: ['example.ts', 'shader.wgsl'],
 } as const;

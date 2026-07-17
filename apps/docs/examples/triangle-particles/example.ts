@@ -11,6 +11,7 @@ export interface TriangleParticlesThumbOptions {
 }
 
 function createTriangleParticles(gpu: Gpu) {
+  // TODO(vgpu): pre-warm pipelines with compile() once compile()/compileSync lands.
   const positions = gpu.storage(PARTICLE_COUNT * 16, 'read-write');
   const velocities = gpu.storage(PARTICLE_COUNT * 16, 'read-write');
   initializeParticles(positions, velocities);
