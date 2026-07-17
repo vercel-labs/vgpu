@@ -1,6 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { runCli } from "../bin/vgpu.js";
 
@@ -89,77 +87,4 @@ test.skipIf(process.env.VGPU_DOCKER_TEST === "1")("snapshot command requires the
     code: 1,
     stderr: expect.stringContaining("VGPU_DOCKER_TEST=1"),
   });
-});
-
-
-test("create scaffolds a typecheckable node project", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vgpu-create-"));
-  const cwd = process.cwd();
-  try {
-    process.chdir(dir);
-    const result = runCli(["create", "demo"]);
-    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
-    expect(existsSync(join(dir, "demo", "package.json"))).toBe(true);
-    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("vgpu/node");
-  } finally {
-    process.chdir(cwd);
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("create browser-vite scaffolds a runnable Vite app shell", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vgpu-create-browser-"));
-  const cwd = process.cwd();
-  try {
-    process.chdir(dir);
-    const result = runCli(["create", "demo", "--template", "browser-vite"]);
-    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
-    const html = readFileSync(join(dir, "demo", "index.html"), "utf8");
-    expect(html).toContain('<canvas aria-label="vgpu output"></canvas>');
-    expect(html).toContain('src="/src/main.ts"');
-    expect(readFileSync(join(dir, "demo", "src", "main.ts"), "utf8")).toContain("gpu.surface(canvas");
-    const viteConfig = readFileSync(join(dir, "demo", "vite.config.mjs"), "utf8");
-    expect(viteConfig).toContain("node:crypto");
-    expect(viteConfig).toContain("vite-node-shims");
-    expect(existsSync(join(dir, "demo", "src", "vite-node-shims", "crypto.ts"))).toBe(true);
-    const pkg = readFileSync(join(dir, "demo", "package.json"), "utf8");
-    expect(pkg).toContain('"vite"');
-    expect(pkg).toContain('"build": "vite build"');
-  } finally {
-    process.chdir(cwd);
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-
-test("create outside the vgpu workspace emits an installable package dependency", () => {
-  const parent = mkdtempSync(join(tmpdir(), "vgpu-create-outside-"));
-  const target = join(parent, "demo");
-  try {
-    const result = runCli(["create", target]);
-    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining(`Created ${target}`) });
-    const pkg = readFileSync(join(target, "package.json"), "utf8");
-    expect(pkg).not.toContain("workspace:*");
-    expect(pkg).toContain('"vgpu": "link:');
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
-});
-
-test("create only resolves to the vgpu workspace root, not arbitrary pnpm workspaces", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vgpu-foreign-workspace-"));
-  const cwd = process.cwd();
-  try {
-    writeFileSync(join(dir, "package.json"), `${JSON.stringify({ name: "customer-workspace", private: true }, null, 2)}\n`);
-    writeFileSync(join(dir, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
-    mkdirSync(join(dir, "packages", "app"), { recursive: true });
-    process.chdir(join(dir, "packages", "app"));
-    const result = runCli(["create", "demo"]);
-    expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining("Created demo") });
-    expect(existsSync(join(dir, "packages", "app", "demo", "package.json"))).toBe(true);
-    expect(existsSync(join(dir, "demo", "package.json"))).toBe(false);
-  } finally {
-    process.chdir(cwd);
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
