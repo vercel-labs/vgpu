@@ -1,7 +1,10 @@
 ---
 title: Render bundles
-summary: Placeholder for render bundle docs.
-relatedSymbols: []
+summary: gpu.bundle() records draws once; replaying them each frame skips re-encoding.
+relatedSymbols:
+  - Bundle
+  - BundleOptions
+  - BundleRecorder
 prevNext:
   prev:
     title: Frames
@@ -9,3 +12,112 @@ prevNext:
 ---
 
 # Render bundles
+
+A render loop re-encodes every pipeline, bind group, and draw on every tick — even when nothing changed. A bundle records those commands once; replaying it each frame costs almost nothing.
+
+## Record once, replay every frame
+
+[`gpu.bundle()`](/reference/vgpu/bundle#bundle) records draws against a target and returns a [`Bundle`](/reference/vgpu/bundle#bundle). Replay it inside a pass with `pass.bundles()`:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const ocean = gpu.effect(`
+  struct Params { time: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.1, 0.3, sin(params.time + uv.y) * 0.2 + 0.6, 1.0);
+  }
+`, { set: { params: { time: 0 } } });
+const boat = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.6, 0.4, 0.2, step(distance(uv, vec2f(0.5, 0.6)), 0.1));
+  }
+`);
+
+// ---cut---
+const scene = gpu.bundle({ target: canvasTarget }, (b) => {
+  b.draw(ocean);
+  b.draw(boat);
+}); // encoded once, right here
+
+gpu.frame.loop((frame) => {
+  ocean.set({ params: { time: gpu.time } }); // uniforms still animate
+  frame.pass(canvasTarget, (pass) => pass.bundles(scene)); // replay — no re-encoding
+});
+```
+
+Record what doesn't change, `set()` what does: the bundle references your buffers, so uniform updates flow through on every replay.
+
+> Good to know: draws inside a bundle can use different shaders and pipelines. What a bundle freezes is the target's shape — color formats, depth format, sample count, size — not a material.
+
+## Mix recorded and dynamic draws
+
+A pass can replay bundles and encode fresh draws side by side:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const ocean = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.1, 0.3, 0.6, 1.0);
+  }
+`);
+const cursor = gpu.effect(`
+  struct Params { pos: vec2f }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(1.0, 1.0, 1.0, step(distance(uv, params.pos), 0.02));
+  }
+`, { set: { params: { pos: [0.5, 0.5] } } });
+const scene = gpu.bundle({ target: canvasTarget }, (b) => b.draw(ocean));
+
+// ---cut---
+gpu.frame.loop((frame) => {
+  frame.pass(canvasTarget, (pass) => {
+    pass.bundles(scene); // the static part, replayed
+    pass.draw(cursor); // the dynamic part, encoded fresh on top
+  });
+});
+```
+
+## Resizes invalidate a bundle
+
+A bundle snapshots the target's size and formats when recorded. Replaying after a resize throws `VGPU-R3-BUNDLE-STALE` — re-record instead:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = gpu.surface(canvas);
+const ocean = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(0.1, 0.3, 0.6, 1.0);
+  }
+`);
+
+// ---cut---
+function recordScene() {
+  return gpu.bundle({ target: canvasTarget }, (b) => b.draw(ocean));
+}
+
+let scene = recordScene();
+canvasTarget.onResize(() => { scene = recordScene(); }); // stale bundles throw on replay
+
+gpu.frame.loop((frame) => {
+  frame.pass(canvasTarget, (pass) => pass.bundles(scene));
+});
+```
+
+## When not to bother
+
+Recording is not free, and a couple of draws per frame cost almost nothing to encode. Bundles pay off with many draws in a hot loop. The full ladder: `effect.draw(target)` for a single pass, `gpu.frame()` to batch passes into one submit, `gpu.bundle()` to skip re-encoding what never changes.
