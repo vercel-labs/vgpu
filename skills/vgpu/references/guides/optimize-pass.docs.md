@@ -20,9 +20,9 @@ Keep the pass object and write values in place:
 
 ```text
 const effect = gpu.effect(WGSL, { set: { time: 0, exposure: 1 } });
-gpu.frame.loop(() => {
+gpu.frame.loop((f) => {
   effect.set({ time: gpu.time });
-  effect.draw(target);
+  f.pass(target, effect);
 });
 ```
 

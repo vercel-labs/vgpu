@@ -57,7 +57,7 @@ export function sameSize(a: readonly [number, number], b: readonly [number, numb
 }
 
 
-/** Internal normalization guard: `renderPassDescriptor` is required on Target and never on options bags. */
+/** @internal Internal normalization guard: `renderPassDescriptor` is required on Target and never on options bags. */
 export function isTarget(value: unknown): value is Target {
   return typeof value === "object" && value !== null
     && typeof (value as Target).renderPassDescriptor === "function";

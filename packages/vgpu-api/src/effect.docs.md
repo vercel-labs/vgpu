@@ -79,6 +79,7 @@ copy.draw(target);
 ## Notes
 
 - A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle.
+- One-shot `effect.draw()` does not join a surrounding frame. Inside `gpu.frame()`, draw through `frame.pass()`.
 - There is no implicit screen target. Browser code should create a `Surface` and pass it as `target`.
 - Do not rely on implicit uniforms like time or resolution; pass `gpu.time`, `target.size`, or `target.texelSize` explicitly through `set()`.
 - **See also:** `Gpu.effect`, `Draw`, `FramePass.draw`, `Surface`, `Target`, `SharedUniforms`.
