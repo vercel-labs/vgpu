@@ -1,0 +1,21 @@
+export const meta = {
+  slug: 'triangle-led-god-rays',
+  title: 'Triangle LED God Rays',
+  description: 'A multipass WebGPU port of the Vercel homepage triangle hero with cascaded radiance, bloom, and additive god rays.',
+  thumb: { warmupFrames: 60, dt: 1 / 60 },
+  files: [
+    'example.ts',
+    'renderer.ts',
+    'led-buffer.ts',
+    'settings.ts',
+    'shaders/light-sources.wgsl',
+    'shaders/cascade-build.wgsl',
+    'shaders/cascade-merge.wgsl',
+    'shaders/radiance-field.wgsl',
+    'shaders/main-scene-floor.wgsl',
+    'shaders/main-scene-triangle.wgsl',
+    'shaders/main-scene-god-rays.wgsl',
+    'shaders/bloom.wgsl',
+    'shaders/composite.wgsl',
+  ],
+} as const;
