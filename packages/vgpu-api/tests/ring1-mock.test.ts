@@ -66,9 +66,9 @@ test("R1 ownership flip reports canonical fix-it text", async () => {
   const userBuffer = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
 
   expect(() => wave.set({ speed: userBuffer })).toThrowError(
-    "`speed` es lib-owned desde su primer set() (valor JS). No se puede cambiar el ownership\n" +
-      "  de un binding. Si necesitás compartir el buffer entre passes, creá un recurso ring-0 y pasalo desde\n" +
-      "  el inicio:  const speed = new Uniform(gpu.device, { size: 4 });  wave.set({ speed });",
+    "`speed` is lib-owned since its first set() (JS value). Binding ownership cannot be changed.\n" +
+      "  If you need to share the buffer between passes, create a ring-0 resource and pass it from\n" +
+      "  the start:  const speed = new Uniform(gpu.device, { size: 4 });  wave.set({ speed });",
   );
   gpu.dispose();
 });
@@ -79,10 +79,10 @@ test("binding never set, including samplers, reports canonical no-phantom-resour
   const target = gpu.target({ size: [4, 4] });
 
   expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(lighting)))).toThrowError(
-    "el binding `samp` (@group(0) @binding(0), sampler) de 'lighting' nunca fue seteado. Opciones:\n" +
-      "    lighting.set({ samp: gpu.sampler() })            // valor canónico cacheado\n" +
-      "    lighting.group(0, miBindGroup)                   // o reclamá el grupo entero\n" +
-      "  Nunca se crean recursos fantasma por vos.",
+    "binding `samp` (@group(0) @binding(0), sampler) of 'lighting' was never set. Options:\n" +
+      "    lighting.set({ samp: gpu.sampler() })            // canonical cached value\n" +
+      "    lighting.group(0, myBindGroup)                   // or claim the entire group\n" +
+      "  Phantom resources are never created for you.",
   );
   gpu.dispose();
 });
@@ -245,7 +245,7 @@ test("set() validates resource kind against reflection before WebGPU bind-group 
   const lighting = gpu.effect(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
-  expect(() => lighting.set({ samp: target })).toThrowError(/esperaba sampler/);
+  expect(() => lighting.set({ samp: target })).toThrowError(/expected sampler/);
   gpu.dispose();
 });
 

@@ -75,8 +75,8 @@ describe("gpu.uniforms() shared uniforms", () => {
     gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
 
     expect(() => gpu.effect(BLUR_BAD_WGSL, { label: "BLUR_WGSL", set: { globals } })).toThrowError(
-      "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de WAVE_WGSL);\n" +
-        "  BLUR_WGSL declara { time: vec2f, ... } — alineá los structs o usá dos uniforms distintos.",
+      "shared uniforms 'globals' already have layout { time: f32, mouse: vec2f } (adopted from WAVE_WGSL);\n" +
+        "  BLUR_WGSL declares { time: vec2f, ... } — align the structs or use two different uniforms.",
     );
     gpu.dispose();
   });
@@ -88,8 +88,8 @@ describe("gpu.uniforms() shared uniforms", () => {
     gpu.effect(PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
 
     expect(() => gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } })).toThrowError(
-      "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de PADDED_WGSL);\n" +
-        "  WAVE_WGSL declara { time: f32, ... } — alineá los structs o usá dos uniforms distintos.",
+      "shared uniforms 'globals' already have layout { time: f32, mouse: vec2f } (adopted from PADDED_WGSL);\n" +
+        "  WAVE_WGSL declares { time: f32, ... } — align the structs or use two different uniforms.",
     );
     gpu.dispose();
   });

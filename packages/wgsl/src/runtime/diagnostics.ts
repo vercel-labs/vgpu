@@ -1,8 +1,8 @@
 import { wgslError, type WGSLError } from "./errors.ts";
 
 export const ARRAY_LENGTH_FIXIT = "literal length required for auto layout; use draw.group(n, bg) manual binding";
-export const BOOL_HOST_SHAREABLE_FIXIT = "VGPUError: `bool` no es host-shareable en uniform/storage. Fix: usá `u32` (0 | 1) → struct Params { enabled: u32 }";
-export const MANUAL_GROUP_FIXIT = "usá group claim manual (`draw.group(n, bg)`)";
+export const BOOL_HOST_SHAREABLE_FIXIT = "VGPUError: `bool` is not host-shareable in uniform/storage. Fix: use `u32` (0 | 1) → struct Params { enabled: u32 }";
+export const MANUAL_GROUP_FIXIT = "use a manual group claim (`draw.group(n, bg)`)";
 
 export function arrayLengthError(line = 1, column = 1): WGSLError {
   return wgslError("VGPU-WGSL-REFLECT-ARRAY-LENGTH", ARRAY_LENGTH_FIXIT, line, column);

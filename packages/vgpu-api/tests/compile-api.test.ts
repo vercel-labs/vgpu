@@ -109,8 +109,8 @@ test("compile validates signatures and missing default targets synchronously", a
   const gpu = await init();
   const draw = gpu.draw({ shader: WGSL, label: "invalid" });
 
-  expect(() => draw.compile()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
-  expect(() => draw.compileSync()).toThrowError(/VGPU-TARGET-REQUIRED|target explícito/);
+  expect(() => draw.compile()).toThrowError(/VGPU-TARGET-REQUIRED|explicit target/);
+  expect(() => draw.compileSync()).toThrowError(/VGPU-TARGET-REQUIRED|explicit target/);
   expect(() => draw.compile({ colors: [] })).toThrowError(/VGPU-COMPILE-SIGNATURE-INVALID|colors/);
   expect(() => draw.compileSync({ colors: ["rgba8unorm"], sampleCount: 2 as never })).toThrowError(/VGPU-COMPILE-SIGNATURE-INVALID|sampleCount/);
   expect(() => draw.compileSync({ colors: ["rgba8unorm"], depth: { format: "depth24plus" } as never })).toThrowError(/VGPU-COMPILE-SIGNATURE-INVALID|depth/);

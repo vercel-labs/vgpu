@@ -63,5 +63,5 @@ export function wrapStorageBuffer(buffer: Buffer, access: StorageAccess): RingSt
 function asWriteData(data: BufferSource): BufferWriteData {
   if (data instanceof ArrayBuffer) return data;
   if (ArrayBuffer.isView(data)) return data;
-  throw new TypeError("StorageBuffer.write() requiere ArrayBuffer o ArrayBufferView.");
+  throw new TypeError("StorageBuffer.write() requires ArrayBuffer or ArrayBufferView.");
 }

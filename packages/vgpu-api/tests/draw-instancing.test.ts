@@ -166,7 +166,7 @@ test("draw count options reject negative and non-integer values with VGPU errors
       const draw = gpu.draw({ shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });
 
       expect(() => gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw, testCase.callOpts)))).toThrowError(
-        /VGPU-R1-DRAW-COUNT|debe ser un entero >= 0/,
+        /VGPU-R1-DRAW-COUNT|must be an integer >= 0/,
       );
     } finally {
       gpu.dispose();

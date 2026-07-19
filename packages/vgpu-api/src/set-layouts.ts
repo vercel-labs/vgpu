@@ -54,13 +54,13 @@ function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLay
 
 function requiredLayout(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>, group: number): GPUBindGroupLayout {
   const layout = bindGroupLayouts.get(group);
-  if (!layout) throw unsupportedError("pipelineLayout", `Los grupos de bind deben ser contiguos para pipeline layout; falta group(${group}).`);
+  if (!layout) throw unsupportedError("pipelineLayout", `Bind groups must be contiguous for pipeline layout; missing group(${group}).`);
   return layout;
 }
 
 function layoutEntry(binding: BindingInfo): Omit<GPUBindGroupLayoutEntry, "binding" | "visibility"> {
   const reflected = binding.bindingLayout;
-  if (!reflected) throw unsupportedError("bindGroupLayout", `Binding '${binding.name}' no tiene bindingLayout reflejado.`);
+  if (!reflected) throw unsupportedError("bindGroupLayout", `Binding '${binding.name}' does not have a reflected bindingLayout.`);
   return reflectedToWebGPU(reflected);
 }
 

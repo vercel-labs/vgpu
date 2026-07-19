@@ -41,9 +41,9 @@ export function normalizeResource(binding: BindingInfo, value: unknown, context:
     case "buffer": return normalizeBufferResource(binding, value, context);
     case "texture": return normalizeTextureResource(binding, value);
     case "sampler": return normalizeSamplerResource(binding, value);
-    case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pasá una textura storage-compatible; Lane C congela el helper storage texture.");
-    case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pasá un GPUExternalTexture compatible con el binding reflejado.");
-    default: throw incompatibleResourceError(binding, "recurso reflejado", "La reflection no expuso bindingLayout para validar este recurso.");
+    case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pass a storage-compatible texture; Lane C freezes the storage texture helper.");
+    case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pass a GPUExternalTexture compatible with the reflected binding.");
+    default: throw incompatibleResourceError(binding, "reflected resource", "Reflection did not expose bindingLayout to validate this resource.");
   }
 }
 
@@ -56,7 +56,7 @@ function normalizeBufferResource(binding: BindingInfo, value: unknown, context: 
   if (isUniformLike(value)) return { resource: { buffer: value.gpu, offset: 0, size: value.size }, identity: value.buffer.resourceIdentity, unsubscribe: (cb) => value.buffer.onDestroy(cb) };
   if (isGPUBufferBinding(value)) return { resource: value, identity: syntheticIdentity(value.buffer) };
   if (isRawGPUBuffer(value)) return { resource: { buffer: value }, identity: syntheticIdentity(value) };
-  throw incompatibleResourceError(binding, "buffer", `Pasá un Buffer/Uniform compatible: ${binding.name}.set({ ${binding.name}: gpu.device.createBuffer(...) }).`);
+  throw incompatibleResourceError(binding, "buffer", `Pass a compatible Buffer/Uniform: ${binding.name}.set({ ${binding.name}: gpu.device.createBuffer(...) }).`);
 }
 
 function normalizeTextureResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
@@ -71,12 +71,12 @@ function normalizeTextureResource(binding: BindingInfo, value: unknown): Normali
     return { resource: value.createView(), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }
   if (isTextureLike(value)) return { resource: value.createView(), identity: value.resourceIdentity ?? syntheticIdentity(value) };
-  throw incompatibleResourceError(binding, "texture/target", `Pasá una Texture o Target: ${binding.name}.set({ ${binding.name}: scene.color }) o set({ ${binding.name}: scene }).`);
+  throw incompatibleResourceError(binding, "texture/target", `Pass a Texture or Target: ${binding.name}.set({ ${binding.name}: scene.color }) or set({ ${binding.name}: scene }).`);
 }
 
 function normalizeSamplerResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
   if (isSamplerLike(value)) return { resource: value, identity: syntheticIdentity(value) };
-  throw incompatibleResourceError(binding, "sampler", `Usá el sampler cacheado: set({ ${binding.name}: gpu.sampler() }).`);
+  throw incompatibleResourceError(binding, "sampler", `Use the cached sampler: set({ ${binding.name}: gpu.sampler() }).`);
 }
 
 function isSamplerLike(value: unknown): value is GPUSampler {
@@ -87,13 +87,13 @@ function isSamplerLike(value: unknown): value is GPUSampler {
 
 function validateBufferUsage(binding: BindingInfo, usage: readonly string[]): void {
   const expected = binding.bindingLayout?.kind === "buffer" ? binding.bindingLayout.buffer.type : undefined;
-  if (expected === "uniform" && !usage.includes("uniform")) throw incompatibleResourceError(binding, "uniform buffer", "Creá el buffer con usage: ['uniform', 'copy_dst'].");
-  if ((expected === "storage" || expected === "read-only-storage") && !usage.includes("storage")) throw incompatibleResourceError(binding, "storage buffer", "Creá el buffer con usage: ['storage', 'copy_dst'].");
+  if (expected === "uniform" && !usage.includes("uniform")) throw incompatibleResourceError(binding, "uniform buffer", "Create the buffer with usage: ['uniform', 'copy_dst'].");
+  if ((expected === "storage" || expected === "read-only-storage") && !usage.includes("storage")) throw incompatibleResourceError(binding, "storage buffer", "Create the buffer with usage: ['storage', 'copy_dst'].");
 }
 
 function validateTextureUsage(binding: BindingInfo, usage: readonly string[]): void {
   if (!usage.includes("texture_binding") && !usage.includes("render_attachment")) {
-    throw incompatibleResourceError(binding, "sampled texture", "Creá la textura con usage: ['texture_binding'] o pasá un Target/color texture sampleable.");
+    throw incompatibleResourceError(binding, "sampled texture", "Create the texture with usage: ['texture_binding'] or pass a sampleable Target/color texture.");
   }
 }
 

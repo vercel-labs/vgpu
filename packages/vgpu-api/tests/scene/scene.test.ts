@@ -54,7 +54,7 @@ describe("vgpu/scene", () => {
   test("gpu.effect rejects mesh options and points to gpu.draw", async () => {
     const gpu = await init();
     const mesh = gpu.mesh(box());
-    expect(() => gpu.effect(SIMPLE_DRAW, { mesh } as never)).toThrowError(/gpu\.effect\(\) nunca acepta vertex buffers; usá gpu\.draw/);
+    expect(() => gpu.effect(SIMPLE_DRAW, { mesh } as never)).toThrowError(/gpu\.effect\(\) never accepts vertex buffers; use gpu\.draw/);
     gpu.dispose();
   });
 });

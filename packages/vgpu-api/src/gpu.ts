@@ -105,7 +105,7 @@ class RingGpu implements Gpu {
     return surface;
   }
   effect(source: string | ShaderSource, opts: EffectOptions = {}): Effect {
-    if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() nunca acepta vertex buffers; usá gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
+    if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() never accepts vertex buffers; use gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
     return new InternalEffect(this.device, toWgsl(source), opts, this.cache, undefined, this.pipelineStore, this.shaderModules, this.pipelineLayouts, (error) => this.reportError(error), (promise) => this.trackDelivery(promise));
   }
   draw(opts: DrawOptions): Draw {
@@ -197,7 +197,7 @@ class RingGpu implements Gpu {
 async function createDevice(entry: "browser" | "node" | "mock", opts: InitOptions, adapterFactory?: AdapterFactory): Promise<Device> {
   if (opts.adapter || adapterFactory) return (opts.adapter ?? adapterFactory!()).requestDevice(opts);
   if (entry === "browser") return requestBrowserDevice(opts);
-  throw unsupportedError("init", `init(${entry}) requiere adapterFactory.`);
+  throw unsupportedError("init", `init(${entry}) requires adapterFactory.`);
 }
 
 function callableFrameRunner(runner: FrameRunner): FrameRunner & ((cb?: (frame: Frame) => void) => Frame) {
@@ -212,7 +212,7 @@ function callableFrameRunner(runner: FrameRunner): FrameRunner & ((cb?: (frame: 
 async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   const nav = globalThis.navigator as Navigator & { gpu?: GPU };
   const adapter = await nav.gpu?.requestAdapter({ powerPreference: opts.powerPreference });
-  if (!adapter) throw unsupportedError("init", "navigator.gpu.requestAdapter() devolvió null.");
+  if (!adapter) throw unsupportedError("init", "navigator.gpu.requestAdapter() returned null.");
   const gpuDevice = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
   return new Device(gpuDevice, adapter.info ?? null);
 }
