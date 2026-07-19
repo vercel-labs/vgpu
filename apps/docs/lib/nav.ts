@@ -63,15 +63,6 @@ const guideGroups = [
 
 const exampleItems: NavItem[] = [
   { title: 'Simple Gradient', href: '/examples/gradient' },
-  { title: 'Animated Wave', href: '/examples/wave' },
-  { title: 'Color Cycle', href: '/examples/color-cycle' },
-  { title: 'Raymarching', href: '/examples/raymarching' },
-  { title: 'Procedural Noise', href: '/examples/noise' },
-  { title: 'Metaballs', href: '/examples/metaballs' },
-  { title: 'Fractal Explorer', href: '/examples/fractal' },
-  { title: 'Alien Planet', href: '/examples/alien-planet' },
-  { title: 'Fluid Simulation', href: '/examples/fluid' },
-  { title: 'Triangle Particles', href: '/examples/triangle-particles' },
 ];
 
 export const navSections: NavSection[] = [

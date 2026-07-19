@@ -14,7 +14,7 @@
    - Any WGSL or helper files referenced by the example.
 2. Fragment-only examples should use the inline `run()` pattern: initialize vgpu, create a surface, create an effect, update `time` and `resolution` uniforms in `gpu.frame.loop`, draw the effect, and return cleanup that stops the loop and disposes the GPU. Export `thumb: { time: number }` in `meta.ts` so the script-local fragment thumbnail renderer samples a deterministic moment.
 3. Compute-heavy or multi-pass examples should expose a custom `renderThumb(gpu, target, options)` that advances a fixed number of frames:
-   - Set `thumb: { warmupFrames: number, dt: number }` (see `triangle-particles`) so the Docker runner can pass `{ frames, dt }` into your renderer.
+   - Set `thumb: { warmupFrames: number, dt: number }` so the Docker runner can pass `{ frames, dt }` into your renderer.
    - Keep the warm-up deterministic: fixed timesteps and seeded randomness only.
 4. Run `pnpm thumbs:docker -- --only <slug>` until both PNGs look right, then commit them.
 5. `apps/docs/scripts/ingest-examples.mjs` (wired to `predev`/`prebuild`) regenerates:

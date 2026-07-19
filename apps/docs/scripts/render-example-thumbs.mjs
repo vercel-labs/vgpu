@@ -8,8 +8,6 @@ import { comparePngSnapshot } from '@vgpu/cli/lib/snapshot/png.js';
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(docsDir, 'public', 'examples');
 const cacheDir = path.join(docsDir, '.thumbs-cache');
-const rendererEntry = path.join(cacheDir, 'renderers-entry.ts');
-const rendererBundle = path.join(cacheDir, 'renderers.mjs');
 const docsDataEntry = path.join(cacheDir, 'docs-data-entry.ts');
 const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 
@@ -25,29 +23,13 @@ const compareOptions = {
   maxDiffRatio: 0.02,
 };
 
-const fragmentFiles = {
-  'alien-planet': 'shader.wgsl',
-  'color-cycle': 'shader.wgsl',
-  fractal: 'shader.wgsl',
-  gradient: 'shader.wgsl',
-  metaballs: 'shader.wgsl',
-  noise: 'shader.wgsl',
-  raymarching: 'shader.wgsl',
-  wave: 'shader.wgsl',
-};
-
-const fragmentValueFactories = {
-  wave: () => ({ amplitude: 0.28, frequency: 8.0, color: [0.2, 0.8, 1.0] }),
-};
-
-function renderFragmentThumb(gpu, target, options, { time }) {
-  const effect = gpu.effect(options.fragment);
+function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
+  const effect = gpu.effect(fragmentSource);
   const [width, height] = target.size;
   effect.set({
     uniforms: {
       time,
       resolution: [width, height],
-      ...(options.values?.(time, width, height) ?? {}),
     },
   });
   gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
@@ -55,8 +37,7 @@ function renderFragmentThumb(gpu, target, options, { time }) {
 
 const args = parseArgs(process.argv.slice(2));
 await mkdir(outDir, { recursive: true });
-const [renderers, docsData] = await Promise.all([loadRenderers(), loadDocsData()]);
-const { examples, exampleSources } = docsData;
+const { examples, exampleSources } = await loadDocsData();
 
 let failures = 0;
 const selected = examples.filter((example) => !args.only || example.meta.slug === args.only);
@@ -72,7 +53,7 @@ for (const example of selected) {
 
   for (const [kind, size] of Object.entries(sizes)) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
-    const result = await renderOne(renderers, exampleSources, slug, size, metaThumb, output);
+    const result = await renderOne(example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
     console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}`);
     if (['missing', 'different'].includes(result.compare.status)) failures++;
@@ -82,37 +63,20 @@ for (const example of selected) {
 await rm(cacheDir, { recursive: true, force: true });
 if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
-async function renderOne(renderers, exampleSources, slug, size, metaThumb, output) {
-  const gpu = await init(slug === 'triangle-particles'
-    ? { requiredLimits: { maxStorageBuffersInVertexStage: 2 } }
-    : slug === 'fluid'
-      ? { requiredLimits: { maxStorageBuffersInVertexStage: 1 } }
-      : undefined);
+async function renderOne(example, exampleSources, size, metaThumb, output) {
+  const slug = example.meta.slug;
+  const gpu = await init();
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
-    if (slug === 'triangle-particles') {
-      renderers.triangleParticles(gpu, target, {
-        frames: metaThumb.warmupFrames ?? 90,
-        dt: metaThumb.dt ?? 1 / 60,
-      });
-    } else if (slug === 'fluid') {
-      renderers.fluid(gpu, target, {
-        frames: metaThumb.warmupFrames ?? 180,
-        dt: metaThumb.dt ?? 1 / 60,
-      });
-    } else {
-      const fragmentFile = fragmentFiles[slug];
-      if (!fragmentFile) throw new Error(`No headless renderer configured for '${slug}'.`);
-      renderFragmentThumb(
-        gpu,
-        target,
-        {
-          fragment: sourceFor(exampleSources, slug, fragmentFile),
-          values: fragmentValueFactories[slug],
-        },
-        { time: metaThumb.time ?? defaultFragmentTime },
-      );
-    }
+    const fragmentFile = resolveFragmentFile(example, exampleSources);
+    if (!fragmentFile) throw new Error(`No fragment shader found for '${slug}'.`);
+    const fragmentSource = sourceFor(exampleSources, slug, fragmentFile);
+    renderFragmentThumb(
+      gpu,
+      target,
+      fragmentSource,
+      { time: metaThumb.time ?? defaultFragmentTime },
+    );
     const pixels = await target.read();
     const variance = lumaVariance(pixels);
     if (variance < minLumaVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${minLumaVariance}.`);
@@ -122,6 +86,16 @@ async function renderOne(renderers, exampleSources, slug, size, metaThumb, outpu
   } finally {
     gpu.dispose();
   }
+}
+
+function resolveFragmentFile(example, exampleSources) {
+  const slug = example.meta.slug;
+  const preferred = example.meta.thumb?.fragmentFile;
+  if (preferred) return preferred;
+  const metaListed = example.meta.files?.find((file) => file.endsWith('.wgsl'));
+  if (metaListed) return metaListed;
+  const generated = exampleSources[slug]?.find((item) => item.lang === 'wgsl');
+  return generated?.name;
 }
 
 function sourceFor(exampleSources, slug, fileName) {
@@ -141,26 +115,6 @@ function lumaVariance(bytes) {
   }
   const mean = sum / count;
   return sumSq / count - mean * mean;
-}
-
-async function loadRenderers() {
-  await mkdir(cacheDir, { recursive: true });
-  await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `
-    export { renderThumb as fluid } from '../examples/fluid/example';
-    export { renderThumb as triangleParticles } from '../examples/triangle-particles/example';
-  `));
-  await build({
-    entryPoints: [rendererEntry],
-    outfile: rendererBundle,
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    sourcemap: false,
-    external: ['vgpu', 'vgpu/node'],
-    loader: { '.wgsl': 'text' },
-    logLevel: 'silent',
-  });
-  return import(pathToFileURL(rendererBundle).href);
 }
 
 async function loadDocsData() {
