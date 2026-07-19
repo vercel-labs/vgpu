@@ -21,8 +21,10 @@ const LED_EMITTER_VERTEX_FLOATS = 6;
 
 export interface LightSourcesRaw {
   readonly texture: Texture | GPUTexture;
+  readonly view: GPUTextureView;
   readonly ready?: Promise<void>;
   encode(args: {
+    frame: any;
     brush: BrushState;
     time: number;
     tunables: LightTunables;
@@ -169,8 +171,9 @@ export function createLightSourcesRaw(
 
   return {
     texture,
+    view: textureView,
     ready,
-    encode({ brush, time, tunables, renderBlackOccluder = true }) {
+    encode({ frame, brush, time, tunables, renderBlackOccluder = true }) {
       const uniformData = lightSourcesUniform(
         simSize,
         brush,
@@ -181,55 +184,81 @@ export function createLightSourcesRaw(
         triangle,
         renderBlackOccluder,
       );
-      uniform.write(uniformData.buffer as ArrayBuffer);
+      uniform.write(uniformData as ArrayBufferView<ArrayBuffer>);
       const bakeKey = `${renderBlackOccluder ? 1 : 0}:${uniformData[25]}`;
-      const encoder = gpu.gpu.createCommandEncoder();
 
       if (bakeKey !== lastBakeKey) {
         lastBakeKey = bakeKey;
-        const pass = encoder.beginRenderPass({
-          label: 'triangle-led-front-light-sources-prepass',
-          colorAttachments: [
-            {
+        frame.pass(
+          {
+            target: renderPassTarget({
+              label: 'triangle-led-front-light-sources-prepass',
               view: textureView,
               loadOp: 'clear',
-              storeOp: 'store',
               clearValue: [0, 0, 0, 1000],
-            },
-          ],
-        });
-        pass.setPipeline(lightSourcesPipeline);
-        pass.setBindGroup(0, bindGroup);
-        pass.draw(3);
-        pass.setPipeline(ledEmittersPipeline);
-        pass.setBindGroup(0, bindGroup);
-        pass.setVertexBuffer(0, ledVertexBuffer.gpu);
-        pass.draw(ledVertexCount);
-        pass.end();
+            }),
+          },
+          (framePass: any) => {
+            const pass = framePass.encoder as GPURenderPassEncoder;
+            pass.setPipeline(lightSourcesPipeline);
+            pass.setBindGroup(0, bindGroup);
+            pass.draw(3);
+            pass.setPipeline(ledEmittersPipeline);
+            pass.setBindGroup(0, bindGroup);
+            pass.setVertexBuffer(0, ledVertexBuffer.gpu);
+            pass.draw(ledVertexCount);
+          },
+        );
       } else {
-        const pass = encoder.beginRenderPass({
-          label: 'triangle-led-front-led-emitters-pass',
-          colorAttachments: [
-            {
+        frame.pass(
+          {
+            target: renderPassTarget({
+              label: 'triangle-led-front-led-emitters-pass',
               view: textureView,
               loadOp: 'load',
-              storeOp: 'store',
-            },
-          ],
-        });
-        pass.setPipeline(ledEmittersPipeline);
-        pass.setBindGroup(0, bindGroup);
-        pass.setVertexBuffer(0, ledVertexBuffer.gpu);
-        pass.draw(ledVertexCount);
-        pass.end();
+            }),
+          },
+          (framePass: any) => {
+            const pass = framePass.encoder as GPURenderPassEncoder;
+            pass.setPipeline(ledEmittersPipeline);
+            pass.setBindGroup(0, bindGroup);
+            pass.setVertexBuffer(0, ledVertexBuffer.gpu);
+            pass.draw(ledVertexCount);
+          },
+        );
       }
-
-      gpu.gpu.queue.submit([encoder.finish()]);
     },
     destroy() {
       texture.gpu.destroy();
       uniform.gpu.destroy();
       ledVertexBuffer.gpu.destroy();
+    },
+  };
+}
+
+function renderPassTarget(opts: {
+  label: string;
+  view: GPUTextureView;
+  loadOp: GPULoadOp;
+  clearValue?: GPUColor | readonly [number, number, number, number];
+}) {
+  return {
+    size: [1, 1] as const,
+    format: LIGHT_SOURCES_FORMAT,
+    sampleCount: 1 as const,
+    renderPassDescriptor(): GPURenderPassDescriptor {
+      const attachment: GPURenderPassColorAttachment = {
+        view: opts.view,
+        loadOp: opts.loadOp,
+        storeOp: 'store',
+      };
+      if (opts.loadOp === 'clear') {
+        attachment.clearValue = opts.clearValue ?? [0, 0, 0, 0];
+      }
+      return {
+        label: opts.label,
+        colorAttachments: [attachment],
+      };
     },
   };
 }

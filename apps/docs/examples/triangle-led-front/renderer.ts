@@ -102,9 +102,12 @@ interface RendererParts {
   ledStorage: GPUBuffer;
   lightSourcesRaw: LightSourcesRaw;
   raycastTarget: any;
+  raycastPipeline: GPURenderPipeline;
+  raycastBindGroup: GPUBindGroup;
   raycastUniform: GPUBuffer;
   floorUniform: GPUBuffer;
   lightGlowUniform: GPUBuffer;
+  darkFloorBindGroup: GPUBindGroup;
   floorGate: FloorUniformGate;
 }
 
@@ -128,9 +131,27 @@ export function createHeroRenderer(
     label: 'triangle-led-front-floor-noise',
   });
   const noiseDraw = gpu.draw({ shader: floorNoiseWgsl, vertices: 3 });
-  const raycastDraw = gpu.draw({ shader: raycastWgsl, vertices: 3 });
-  const darkFloorDraw = gpu.draw({ shader: darkFloorWgsl, vertices: 3 });
   const lightFloorDraw = gpu.draw({ shader: lightFloorWgsl, vertices: 3 });
+  const darkFloorModule = gpu.device.createShader(darkFloorWgsl).gpu;
+  const darkFloorBindGroupLayout = gpu.gpu.createBindGroupLayout({
+    label: 'triangle-led-front-dark-floor-layout',
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' },
+      },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+      { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+    ],
+  });
+  const darkFloorPipelineLayout = gpu.gpu.createPipelineLayout({
+    label: 'triangle-led-front-dark-floor-pipeline-layout',
+    bindGroupLayouts: [darkFloorBindGroupLayout],
+  });
+  const darkFloorPipelines = new Map<string, GPURenderPipeline>();
 
   // Bake the time-invariant floor-noise target once. It is rebuilt only if this renderer is rebuilt.
   gpu.frame((frame: any) => {
@@ -170,22 +191,25 @@ export function createHeroRenderer(
         },
       });
 
-      // Frame graph order mirrors SRC/core/renderer.ts:595-618. The raw submit MUST be queued
-      // before facade passes, so it is called before any frame.pass records work.
+      // Frame graph order mirrors SRC/core/renderer.ts:595-618. Light sources,
+      // raycast, and floor are recorded into this facade frame so WebGPU inserts
+      // the required render_attachment -> texture_binding barriers in one submit.
       currentParts.lightSourcesRaw.encode({
+        frame,
         brush: resolved.brush,
         time: args.time,
         tunables: resolved.tunables,
         renderBlackOccluder: options.renderBlackOccluder ?? true,
       });
 
-      raycastDraw.set({
-        cfg: currentParts.raycastUniform,
-        light_sources_tex: currentParts.lightSourcesRaw.texture,
-      });
       frame.pass(
         { target: currentParts.raycastTarget, clear: [0, 0, 0, 1] },
-        (pass: any) => pass.draw(raycastDraw),
+        (framePass: any) => {
+          const pass = framePass.encoder as GPURenderPassEncoder;
+          pass.setPipeline(currentParts.raycastPipeline);
+          pass.setBindGroup(0, currentParts.raycastBindGroup);
+          pass.draw(3);
+        },
       );
 
       if (currentTheme === 'light') {
@@ -226,16 +250,14 @@ export function createHeroRenderer(
           (pass: any) => pass.draw(lightFloorDraw),
         );
       } else {
-        darkFloorDraw.set({
-          cfg: currentParts.floorUniform,
-          radiance_tex: currentParts.raycastTarget,
-          light_sources_tex: currentParts.lightSourcesRaw.texture,
-          linear_samp: sampler,
-          floor_noise_tex: noiseTarget,
-        });
         frame.pass(
           { target: outputTarget, clear: [0, 0, 0, 1] },
-          (pass: any) => pass.draw(darkFloorDraw),
+          (framePass: any) => {
+            const pass = framePass.encoder as GPURenderPassEncoder;
+            pass.setPipeline(darkFloorPipelineFor(outputTarget));
+            pass.setBindGroup(0, currentParts.darkFloorBindGroup);
+            pass.draw(3);
+          },
         );
       }
     },
@@ -264,8 +286,6 @@ export function createHeroRenderer(
       if (!target) return;
       const ready = (parts.lightSourcesRaw as { ready?: Promise<unknown> }).ready;
       await Promise.all([
-        raycastDraw.compile(parts.raycastTarget),
-        darkFloorDraw.compile(target),
         lightFloorDraw.compile(target),
         noiseDraw.compile(noiseTarget),
         ready ?? Promise.resolve(),
@@ -279,6 +299,28 @@ export function createHeroRenderer(
   };
 
   return api;
+
+  function darkFloorPipelineFor(target: any): GPURenderPipeline {
+    const key = `${target.format}:${target.sampleCount ?? 1}`;
+    let pipeline = darkFloorPipelines.get(key);
+    if (!pipeline) {
+      const created: GPURenderPipeline = gpu.gpu.createRenderPipeline({
+        label: 'triangle-led-front-dark-floor-pass',
+        layout: darkFloorPipelineLayout,
+        vertex: { module: darkFloorModule, entryPoint: 'vs_main' },
+        fragment: {
+          module: darkFloorModule,
+          entryPoint: 'fs_main',
+          targets: [{ format: target.format }],
+        },
+        primitive: { topology: 'triangle-list' },
+        multisample: { count: target.sampleCount ?? 1 },
+      });
+      darkFloorPipelines.set(key, created);
+      pipeline = created;
+    }
+    return pipeline;
+  }
 
   function buildParts(css: HeroRendererCss, previousLeds?: LedGeometryState): RendererParts {
     // Deliberate simplification for docs: resize rebuilds synchronously and may hitch one frame;
@@ -347,6 +389,54 @@ export function createHeroRenderer(
       ledRadius: triangleLedRadius(simulationSize),
       ledShape: triangleLedShapeDimensions(simulationSize, LEDS_PER_EDGE),
     });
+    const raycastBindGroupLayout = gpu.gpu.createBindGroupLayout({
+      label: 'triangle-led-front-direct-triangle-raycast-layout',
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: 'uniform' },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: 'unfilterable-float' },
+        },
+      ],
+    });
+    const raycastPipeline = gpu.gpu.createRenderPipeline({
+      label: 'triangle-led-front-direct-triangle-raycast-pass',
+      layout: gpu.gpu.createPipelineLayout({
+        label: 'triangle-led-front-direct-triangle-raycast-pipeline-layout',
+        bindGroupLayouts: [raycastBindGroupLayout],
+      }),
+      vertex: { module: gpu.device.createShader(raycastWgsl).gpu, entryPoint: 'vs_main' },
+      fragment: {
+        module: gpu.device.createShader(raycastWgsl).gpu,
+        entryPoint: 'fs_main',
+        targets: [{ format: 'rgba16float' }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+    const raycastBindGroup = gpu.gpu.createBindGroup({
+      label: 'triangle-led-front-direct-triangle-raycast-bind-group',
+      layout: raycastBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: raycastUniform } },
+        { binding: 1, resource: lightSourcesRaw.view },
+      ],
+    });
+    const darkFloorBindGroup = gpu.gpu.createBindGroup({
+      label: 'triangle-led-front-dark-floor-bind-group',
+      layout: darkFloorBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: floorUniform } },
+        { binding: 1, resource: currentTextureView(raycastTarget) },
+        { binding: 2, resource: lightSourcesRaw.view },
+        { binding: 3, resource: sampler },
+        { binding: 4, resource: currentTextureView(noiseTarget) },
+      ],
+    });
 
     return {
       simulationSize,
@@ -358,9 +448,12 @@ export function createHeroRenderer(
       ledStorage,
       lightSourcesRaw,
       raycastTarget,
+      raycastPipeline,
+      raycastBindGroup,
       raycastUniform,
       floorUniform,
       lightGlowUniform,
+      darkFloorBindGroup,
       floorGate: createFloorUniformGate(),
     };
   }
@@ -374,6 +467,12 @@ export function createHeroRenderer(
     const raycastTexture = p.raycastTarget?.color?.gpu ?? p.raycastTarget?.gpu;
     raycastTexture?.destroy?.();
   }
+}
+
+function currentTextureView(target: any): GPUTextureView {
+  const texture = target?.color ?? target;
+  if (texture?.view) return texture.view;
+  return texture.createView();
 }
 
 function directTriangleRaycastUniformData(simulationSize: RenderSize) {
