@@ -609,6 +609,7 @@ export function createRadianceRenderer(
 }
 
 export const createTriangleLedStripRenderer = createRadianceRenderer;
+
 async function createStaticResources(
   device: Device,
   format: GPUTextureFormat,

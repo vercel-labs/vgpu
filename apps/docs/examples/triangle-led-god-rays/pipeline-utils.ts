@@ -1,8 +1,14 @@
 import type { Device } from 'vgpu';
 import { compile } from '@vgpu/wgsl';
 
-export function shaderModule(device: Device, source: string): GPUShaderModule {
-  return device.createShader(compile(source)).gpu;
+type ShaderAsset = string | { readonly wgsl: string };
+
+export function shaderModule(device: Device, source: ShaderAsset): GPUShaderModule {
+  return device.createShader(compile(shaderText(source))).gpu;
+}
+
+function shaderText(source: ShaderAsset): string {
+  return typeof source === 'string' ? source : source.wgsl;
 }
 
 export function renderPipelineDescriptor(

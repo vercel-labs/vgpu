@@ -1,9 +1,10 @@
-import { mkdir, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { init } from 'vgpu/node';
 import { comparePngSnapshot } from '@vgpu/cli/lib/snapshot/png.js';
+import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(docsDir, 'public', 'examples');
@@ -142,10 +143,24 @@ async function loadRenderers() {
     format: 'esm',
     sourcemap: false,
     external: ['vgpu', 'vgpu/node'],
-    loader: { '.wgsl': 'text' },
+    plugins: [wgslPlugin()],
     logLevel: 'silent',
   });
   return import(pathToFileURL(rendererBundle).href);
+}
+
+
+function wgslPlugin() {
+  return {
+    name: 'docs-wgsl',
+    setup(build) {
+      build.onLoad({ filter: /\.wgsl$/ }, async (args) => {
+        const source = await readFile(args.path, 'utf8');
+        const result = await transformWgsl({ source, id: args.path });
+        return { contents: result.code, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+    },
+  };
 }
 
 async function loadDocsData() {

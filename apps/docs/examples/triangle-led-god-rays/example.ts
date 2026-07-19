@@ -80,15 +80,30 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   let theme: 'dark' | 'light' = 'dark';
 
   let disposed = false;
-  let warming = renderer.warmup(surface.size[0], surface.size[1]);
+  let ready = false;
+  let fatalError: unknown;
+  let warmupToken = 0;
+  const scheduleWarmup = (width: number, height: number) => {
+    ready = false;
+    const token = ++warmupToken;
+    renderer.warmup(width, height).then(
+      () => {
+        if (!disposed && token === warmupToken) ready = true;
+      },
+      (error: unknown) => {
+        if (token !== warmupToken) return;
+        fatalError = error;
+        console.error(error);
+      },
+    );
+  };
+  scheduleWarmup(surface.size[0], surface.size[1]);
   const removeResize = surface.onResize(({ width, height }) => {
-    warming = renderer.warmup(width, height);
+    scheduleWarmup(width, height);
   });
 
-  warming.catch((error) => console.error(error));
   const handle = gpu.frame.loop(() => {
-    if (disposed) return;
-    warming.catch((error) => console.error(error));
+    if (disposed || fatalError || !ready) return;
     renderer.render(
       surface.color.view,
       surface.size[0],
