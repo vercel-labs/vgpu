@@ -1,4 +1,4 @@
-import type { Device, Texture } from '@vgpu/core';
+import type { Target } from 'vgpu';
 
 import lightSourcesWgsl from './shaders/light-sources.wgsl';
 import ledEmittersWgsl from './shaders/led-emitters.wgsl';
@@ -20,8 +20,7 @@ const LIGHT_SOURCES_FORMAT: GPUTextureFormat = 'rgba16float';
 const LED_EMITTER_VERTEX_FLOATS = 6;
 
 export interface LightSourcesRaw {
-  readonly texture: Texture | GPUTexture;
-  readonly view: GPUTextureView;
+  readonly texture: Target;
   readonly ready?: Promise<void>;
   encode(args: {
     frame: any;
@@ -35,14 +34,14 @@ export interface LightSourcesRaw {
 
 interface CreateLightSourcesRawOptions {
   size: readonly [number, number];
-  ledStorage: GPUBuffer;
+  ledStorage: unknown;
   ledRadius?: number;
   ledShape?: ReturnType<typeof triangleLedShapeDimensions>;
   triangle?: ReturnType<typeof canonicalTriangleGeometry>;
 }
 
 export function createLightSourcesRaw(
-  gpu: { device: Device; gpu: GPUDevice },
+  gpu: any,
   opts: CreateLightSourcesRawOptions,
 ): LightSourcesRaw {
   const device = gpu.device;
@@ -52,13 +51,11 @@ export function createLightSourcesRaw(
   const ledShape =
     opts.ledShape ?? triangleLedShapeDimensions(simSize, LEDS_PER_EDGE);
 
-  const texture = device.createTexture({
+  const target = gpu.target({
     size: [simSize.width, simSize.height],
     format: LIGHT_SOURCES_FORMAT,
-    usage: ['render_attachment', 'texture_binding', 'copy_src'],
     label: 'triangle-led-front-light-sources',
   });
-  const textureView = texture.createView();
 
   const uniform = device.createBuffer({
     size: 112,
@@ -78,47 +75,18 @@ export function createLightSourcesRaw(
   ledVertexBuffer.write(ledVertices.buffer as ArrayBuffer);
   const ledVertexCount = ledVertices.length / LED_EMITTER_VERTEX_FLOATS;
 
-  const bindGroupLayout = device.gpu.createBindGroupLayout({
-    label: 'triangle-led-front-light-sources-layout',
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        buffer: { type: 'uniform' },
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.FRAGMENT,
-        buffer: { type: 'read-only-storage' },
-      },
-    ],
-  });
-  const pipelineLayout = device.gpu.createPipelineLayout({
-    label: 'triangle-led-front-light-sources-pipeline-layout',
-    bindGroupLayouts: [bindGroupLayout],
-  });
-
-  const lightSourcesModule = device.createShader(lightSourcesWgsl).gpu;
-  const ledEmittersModule = device.createShader(ledEmittersWgsl).gpu;
-
-  const lightSourcesPipelineDesc: GPURenderPipelineDescriptor = {
+  const lightSourcesDraw = gpu.draw({
+    shader: lightSourcesWgsl,
     label: 'triangle-led-front-light-sources-pass',
-    layout: pipelineLayout,
-    vertex: { module: lightSourcesModule, entryPoint: 'vs_main' },
-    fragment: {
-      module: lightSourcesModule,
-      entryPoint: 'fs_main',
-      targets: [{ format: LIGHT_SOURCES_FORMAT }],
-    },
-    primitive: { topology: 'triangle-list' },
-  };
-  const ledEmittersPipelineDesc: GPURenderPipelineDescriptor = {
+    vertices: 3,
+    set: { cfg: uniform, leds: opts.ledStorage },
+  });
+  const ledEmittersDraw = gpu.draw({
+    shader: ledEmittersWgsl,
     label: 'triangle-led-front-led-emitters-pass',
-    layout: pipelineLayout,
-    vertex: {
-      module: ledEmittersModule,
-      entryPoint: 'vs_main',
-      buffers: [
+    mesh: {
+      vertexBuffers: [ledVertexBuffer.gpu],
+      vertexBufferLayouts: [
         {
           arrayStride: 24,
           attributes: [
@@ -128,50 +96,25 @@ export function createLightSourcesRaw(
           ],
         },
       ],
+      vertexCount: ledVertexCount,
     },
-    fragment: {
-      module: ledEmittersModule,
-      entryPoint: 'fs_main',
-      targets: [
-        {
-          format: LIGHT_SOURCES_FORMAT,
-          blend: {
-            color: { srcFactor: 'one', dstFactor: 'zero', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'min' },
-          },
-          writeMask: 0x7,
-        },
-      ],
+    blend: {
+      color: { src: 'one', dst: 'zero' },
+      alpha: { src: 'one', dst: 'one', op: 'min' },
     },
-    primitive: { topology: 'triangle-list' },
-  };
-
-  const lightSourcesPipeline = device.gpu.createRenderPipeline(
-    lightSourcesPipelineDesc,
-  );
-  const ledEmittersPipeline = device.gpu.createRenderPipeline(
-    ledEmittersPipelineDesc,
-  );
+    writeMask: ['r', 'g', 'b'],
+    set: { cfg: uniform, leds: opts.ledStorage },
+  });
 
   const ready = Promise.all([
-    device.gpu.createRenderPipelineAsync(lightSourcesPipelineDesc),
-    device.gpu.createRenderPipelineAsync(ledEmittersPipelineDesc),
+    lightSourcesDraw.compile(target),
+    ledEmittersDraw.compile(target),
   ]).then(() => undefined);
-
-  const bindGroup = device.gpu.createBindGroup({
-    label: 'triangle-led-front-light-sources-bind-group',
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: uniform.gpu } },
-      { binding: 1, resource: { buffer: opts.ledStorage } },
-    ],
-  });
 
   let lastBakeKey: string | undefined;
 
   return {
-    texture,
-    view: textureView,
+    texture: target,
     ready,
     encode({ frame, brush, time, tunables, renderBlackOccluder = true }) {
       const uniformData = lightSourcesUniform(
@@ -190,75 +133,23 @@ export function createLightSourcesRaw(
       if (bakeKey !== lastBakeKey) {
         lastBakeKey = bakeKey;
         frame.pass(
-          {
-            target: renderPassTarget({
-              label: 'triangle-led-front-light-sources-prepass',
-              view: textureView,
-              loadOp: 'clear',
-              clearValue: [0, 0, 0, 1000],
-            }),
-          },
-          (framePass: any) => {
-            const pass = framePass.encoder as GPURenderPassEncoder;
-            pass.setPipeline(lightSourcesPipeline);
-            pass.setBindGroup(0, bindGroup);
-            pass.draw(3);
-            pass.setPipeline(ledEmittersPipeline);
-            pass.setBindGroup(0, bindGroup);
-            pass.setVertexBuffer(0, ledVertexBuffer.gpu);
-            pass.draw(ledVertexCount);
+          { target, clear: [0, 0, 0, 1000] },
+          (pass: any) => {
+            pass.draw(lightSourcesDraw);
+            pass.draw(ledEmittersDraw);
           },
         );
       } else {
         frame.pass(
-          {
-            target: renderPassTarget({
-              label: 'triangle-led-front-led-emitters-pass',
-              view: textureView,
-              loadOp: 'load',
-            }),
-          },
-          (framePass: any) => {
-            const pass = framePass.encoder as GPURenderPassEncoder;
-            pass.setPipeline(ledEmittersPipeline);
-            pass.setBindGroup(0, bindGroup);
-            pass.setVertexBuffer(0, ledVertexBuffer.gpu);
-            pass.draw(ledVertexCount);
-          },
+          { target, load: true },
+          (pass: any) => pass.draw(ledEmittersDraw),
         );
       }
     },
     destroy() {
-      texture.gpu.destroy();
+      (target as { destroy?: () => void }).destroy?.();
       uniform.gpu.destroy();
       ledVertexBuffer.gpu.destroy();
-    },
-  };
-}
-
-function renderPassTarget(opts: {
-  label: string;
-  view: GPUTextureView;
-  loadOp: GPULoadOp;
-  clearValue?: GPUColor | readonly [number, number, number, number];
-}) {
-  return {
-    size: [1, 1] as const,
-    format: LIGHT_SOURCES_FORMAT,
-    sampleCount: 1 as const,
-    renderPassDescriptor(): GPURenderPassDescriptor {
-      const attachment: GPURenderPassColorAttachment = {
-        view: opts.view,
-        loadOp: opts.loadOp,
-        storeOp: 'store',
-      };
-      if (opts.loadOp === 'clear') {
-        attachment.clearValue = opts.clearValue ?? [0, 0, 0, 0];
-      }
-      return {
-        label: opts.label,
-        colorAttachments: [attachment],
-      };
     },
   };
 }

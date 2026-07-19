@@ -99,15 +99,12 @@ interface RendererParts {
   probeDensity: number;
   cascadeFit: CascadeFitRect;
   leds: LedGeometryState;
-  ledStorage: GPUBuffer;
+  ledStorage: any;
   lightSourcesRaw: LightSourcesRaw;
   raycastTarget: any;
-  raycastPipeline: GPURenderPipeline;
-  raycastBindGroup: GPUBindGroup;
-  raycastUniform: GPUBuffer;
-  floorUniform: GPUBuffer;
-  lightGlowUniform: GPUBuffer;
-  darkFloorBindGroup: GPUBindGroup;
+  raycastUniform: any;
+  floorUniform: any;
+  lightGlowUniform: any;
   floorGate: FloorUniformGate;
 }
 
@@ -127,31 +124,13 @@ export function createHeroRenderer(
   const sampler = gpu.sampler({ minFilter: 'linear', magFilter: 'linear' });
   const noiseTarget = gpu.target({
     size: [500, 500],
-    format: 'rgba8unorm',
+    format: 'rgba16float',
     label: 'triangle-led-front-floor-noise',
   });
   const noiseDraw = gpu.draw({ shader: floorNoiseWgsl, vertices: 3 });
   const lightFloorDraw = gpu.draw({ shader: lightFloorWgsl, vertices: 3 });
-  const darkFloorModule = gpu.device.createShader(darkFloorWgsl).gpu;
-  const darkFloorBindGroupLayout = gpu.gpu.createBindGroupLayout({
-    label: 'triangle-led-front-dark-floor-layout',
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        buffer: { type: 'uniform' },
-      },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-    ],
-  });
-  const darkFloorPipelineLayout = gpu.gpu.createPipelineLayout({
-    label: 'triangle-led-front-dark-floor-pipeline-layout',
-    bindGroupLayouts: [darkFloorBindGroupLayout],
-  });
-  const darkFloorPipelines = new Map<string, GPURenderPipeline>();
+  const darkFloorDraw = gpu.draw({ shader: darkFloorWgsl, vertices: 3 });
+  const raycastDraw = gpu.draw({ shader: raycastWgsl, vertices: 3 });
 
   // Bake the time-invariant floor-noise target once. It is rebuilt only if this renderer is rebuilt.
   gpu.frame((frame: any) => {
@@ -186,7 +165,7 @@ export function createHeroRenderer(
           );
           // CPU LED upload mirrors SRC/core/renderer.ts:561-566. The raw storage buffer is owned
           // here and consumed only by Stage 2's light-sources escape hatch.
-          gpu.gpu.queue.writeBuffer(currentParts.ledStorage, 0, currentParts.leds.data);
+          currentParts.ledStorage.write(currentParts.leds.data);
           return transition;
         },
       });
@@ -202,20 +181,17 @@ export function createHeroRenderer(
         renderBlackOccluder: options.renderBlackOccluder ?? true,
       });
 
+      raycastDraw.set({
+        cfg: currentParts.raycastUniform,
+        light_sources_tex: currentParts.lightSourcesRaw.texture,
+      });
       frame.pass(
         { target: currentParts.raycastTarget, clear: [0, 0, 0, 1] },
-        (framePass: any) => {
-          const pass = framePass.encoder as GPURenderPassEncoder;
-          pass.setPipeline(currentParts.raycastPipeline);
-          pass.setBindGroup(0, currentParts.raycastBindGroup);
-          pass.draw(3);
-        },
+        (pass: any) => pass.draw(raycastDraw),
       );
 
       if (currentTheme === 'light') {
-        gpu.gpu.queue.writeBuffer(
-          currentParts.lightGlowUniform,
-          0,
+        currentParts.lightGlowUniform.write(
           lightGlowUniformData(resolved.lightGlow, resolved.colorMix),
         );
       }
@@ -250,14 +226,16 @@ export function createHeroRenderer(
           (pass: any) => pass.draw(lightFloorDraw),
         );
       } else {
+        darkFloorDraw.set({
+          cfg: currentParts.floorUniform,
+          radiance_tex: currentParts.raycastTarget,
+          light_sources_tex: currentParts.lightSourcesRaw.texture,
+          linear_samp: sampler,
+          floor_noise_tex: noiseTarget,
+        });
         frame.pass(
           { target: outputTarget, clear: [0, 0, 0, 1] },
-          (framePass: any) => {
-            const pass = framePass.encoder as GPURenderPassEncoder;
-            pass.setPipeline(darkFloorPipelineFor(outputTarget));
-            pass.setBindGroup(0, currentParts.darkFloorBindGroup);
-            pass.draw(3);
-          },
+          (pass: any) => pass.draw(darkFloorDraw),
         );
       }
     },
@@ -287,6 +265,8 @@ export function createHeroRenderer(
       const ready = (parts.lightSourcesRaw as { ready?: Promise<unknown> }).ready;
       await Promise.all([
         lightFloorDraw.compile(target),
+        darkFloorDraw.compile(target),
+        raycastDraw.compile(parts.raycastTarget),
         noiseDraw.compile(noiseTarget),
         ready ?? Promise.resolve(),
       ]);
@@ -300,27 +280,6 @@ export function createHeroRenderer(
 
   return api;
 
-  function darkFloorPipelineFor(target: any): GPURenderPipeline {
-    const key = `${target.format}:${target.sampleCount ?? 1}`;
-    let pipeline = darkFloorPipelines.get(key);
-    if (!pipeline) {
-      const created: GPURenderPipeline = gpu.gpu.createRenderPipeline({
-        label: 'triangle-led-front-dark-floor-pass',
-        layout: darkFloorPipelineLayout,
-        vertex: { module: darkFloorModule, entryPoint: 'vs_main' },
-        fragment: {
-          module: darkFloorModule,
-          entryPoint: 'fs_main',
-          targets: [{ format: target.format }],
-        },
-        primitive: { topology: 'triangle-list' },
-        multisample: { count: target.sampleCount ?? 1 },
-      });
-      darkFloorPipelines.set(key, created);
-      pipeline = created;
-    }
-    return pipeline;
-  }
 
   function buildParts(css: HeroRendererCss, previousLeds?: LedGeometryState): RendererParts {
     // Deliberate simplification for docs: resize rebuilds synchronously and may hitch one frame;
@@ -346,12 +305,12 @@ export function createHeroRenderer(
     void count; // Kept for parity with the source size derivation; direct raycast uses full fit.
     const fit = cascadeFitRect(simulationSize, probeDensity);
     const leds = buildLedGeometry(simulationSize, previousLeds);
-    const ledStorage = gpu.gpu.createBuffer({
+    const ledStorage = gpu.device.createBuffer({
       size: 72 * 8 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      usage: ['storage', 'copy_dst'],
       label: 'triangle-led-front-led-storage',
     });
-    gpu.gpu.queue.writeBuffer(ledStorage, 0, leds.data);
+    ledStorage.write(leds.data);
 
     const raycastSize = directTriangleTargetSize(simulationSize);
     const raycastTarget = gpu.target({
@@ -359,25 +318,21 @@ export function createHeroRenderer(
       format: 'rgba16float',
       label: 'triangle-led-front-direct-triangle-raycast',
     });
-    const raycastUniform = gpu.gpu.createBuffer({
+    const raycastUniform = gpu.device.createBuffer({
       size: 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-direct-triangle-raycast-uniform',
     });
-    gpu.gpu.queue.writeBuffer(
-      raycastUniform,
-      0,
-      directTriangleRaycastUniformData(simulationSize),
-    );
+    raycastUniform.write(directTriangleRaycastUniformData(simulationSize));
 
-    const floorUniform = gpu.gpu.createBuffer({
+    const floorUniform = gpu.device.createBuffer({
       size: 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-main-scene-floor-uniform',
     });
-    const lightGlowUniform = gpu.gpu.createBuffer({
+    const lightGlowUniform = gpu.device.createBuffer({
       size: 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-light-glow-uniform',
     });
 
@@ -389,55 +344,6 @@ export function createHeroRenderer(
       ledRadius: triangleLedRadius(simulationSize),
       ledShape: triangleLedShapeDimensions(simulationSize, LEDS_PER_EDGE),
     });
-    const raycastBindGroupLayout = gpu.gpu.createBindGroupLayout({
-      label: 'triangle-led-front-direct-triangle-raycast-layout',
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: 'uniform' },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: 'unfilterable-float' },
-        },
-      ],
-    });
-    const raycastPipeline = gpu.gpu.createRenderPipeline({
-      label: 'triangle-led-front-direct-triangle-raycast-pass',
-      layout: gpu.gpu.createPipelineLayout({
-        label: 'triangle-led-front-direct-triangle-raycast-pipeline-layout',
-        bindGroupLayouts: [raycastBindGroupLayout],
-      }),
-      vertex: { module: gpu.device.createShader(raycastWgsl).gpu, entryPoint: 'vs_main' },
-      fragment: {
-        module: gpu.device.createShader(raycastWgsl).gpu,
-        entryPoint: 'fs_main',
-        targets: [{ format: 'rgba16float' }],
-      },
-      primitive: { topology: 'triangle-list' },
-    });
-    const raycastBindGroup = gpu.gpu.createBindGroup({
-      label: 'triangle-led-front-direct-triangle-raycast-bind-group',
-      layout: raycastBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: raycastUniform } },
-        { binding: 1, resource: lightSourcesRaw.view },
-      ],
-    });
-    const darkFloorBindGroup = gpu.gpu.createBindGroup({
-      label: 'triangle-led-front-dark-floor-bind-group',
-      layout: darkFloorBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: floorUniform } },
-        { binding: 1, resource: currentTextureView(raycastTarget) },
-        { binding: 2, resource: lightSourcesRaw.view },
-        { binding: 3, resource: sampler },
-        { binding: 4, resource: currentTextureView(noiseTarget) },
-      ],
-    });
-
     return {
       simulationSize,
       presentationSize,
@@ -448,12 +354,9 @@ export function createHeroRenderer(
       ledStorage,
       lightSourcesRaw,
       raycastTarget,
-      raycastPipeline,
-      raycastBindGroup,
       raycastUniform,
       floorUniform,
       lightGlowUniform,
-      darkFloorBindGroup,
       floorGate: createFloorUniformGate(),
     };
   }
@@ -469,11 +372,6 @@ export function createHeroRenderer(
   }
 }
 
-function currentTextureView(target: any): GPUTextureView {
-  const texture = target?.color ?? target;
-  if (texture?.view) return texture.view;
-  return texture.createView();
-}
 
 function directTriangleRaycastUniformData(simulationSize: RenderSize) {
   const size = directTriangleTargetSize(simulationSize);
@@ -631,7 +529,7 @@ function createFloorUniformGate(): FloorUniformGate {
 }
 
 function writeFloorUniformIfNeeded(
-  queue: GPUQueue,
+  _queue: GPUQueue,
   parts: RendererParts,
   inputs: FloorUniformInputs,
 ): void {
@@ -695,9 +593,7 @@ function writeFloorUniformIfNeeded(
     showForegroundTriangle !== gate.currentShowForegroundTriangle;
   if (!floorUniformChanged) return;
 
-  queue.writeBuffer(
-    parts.floorUniform,
-    0,
+  parts.floorUniform.write(
     floorUniformData(
       width,
       height,
