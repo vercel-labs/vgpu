@@ -16,6 +16,7 @@ import type { Bundle, Draw, DrawCallOptions, Effect, Target } from "vgpu";
 interface FramePassOptions {
   readonly target: Target;
   readonly clear?: GPUColor | readonly [number, number, number, number];
+  readonly load?: boolean;
 }
 
 interface FrameLoopHandle { stop(): void; }
@@ -45,9 +46,10 @@ declare class FrameRunner {
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
 | gpu.frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If supplied, called and then `frame.submit()` runs in `finally`. If omitted, submit manually. |
-| frame.pass.target | `Target \| FramePassOptions` | ✔ | — | Pass a bare target for the common case, or `{ target, clear }` when customizing clear. |
+| frame.pass.target | `Target \| FramePassOptions` | ✔ | — | Pass a bare target for the common case, or `{ target, clear }` / `{ target, load: true }` when customizing pass load behavior. |
 | opts.target | `Target` | ✔ | — | Required inside `FramePassOptions`. Use a `Surface` from `gpu.surface(canvas)` or an offscreen `Target` from `gpu.target({ size })`. |
-| opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue`; render passes always use `loadOp: "clear"`. |
+| opts.clear | `GPUColor \| readonly [number, number, number, number]` | ✖ | `[0, 0, 0, 1]` | Converted to `clearValue` when clearing. Mutually exclusive with `load: true`. |
+| opts.load | `boolean` | ✖ | `false` | When `true`, preserves existing color and depth contents with `loadOp: "load"` / `depthLoadOp: "load"`. Not supported on MSAA targets. |
 | frame.pass.body | `Effect \| Draw \| ((pass: FramePass) => void)` | ✔ | — | Pass a drawable directly for a single draw, or a callback to encode multiple draw and bundle commands. |
 | pass.draw.drawable | `Draw \| Effect` | ✔ | — | A main API (`vgpu`) draw or fullscreen effect. |
 | pass.draw.opts | `DrawCallOptions` | ✖ | `{}` | Per-call counts and dynamic offsets. Target is the frame pass target. |
@@ -57,7 +59,7 @@ declare class FrameRunner {
 
 **Returns:** `gpu.frame()` / `FrameRunner.frame()` return `Frame`; `Frame.pass()` and `Frame.submit()` return `void`; `FramePass.draw()` and `.bundles()` return `void`; `loop()` returns `FrameLoopHandle` with `stop()`.
 
-**Throws:** `VGPU-TARGET-REQUIRED` for runtime JS calls that omit a frame pass target; `VGPU-FRAME-REENTRANT` when a frame is started from another frame or from a surface resize callback; `VGPU-R3-BUNDLE-STALE` or `VGPU-R3-BUNDLE-INVALID` when replaying invalid/stale bundles; draw/pass binding errors such as `VGPU-R1-BINDING-NEVER-SET` propagate during encoding. Raw claimed-group validation is delivered asynchronously through `gpu.onError`.
+**Throws:** `VGPU-TARGET-REQUIRED` for runtime JS calls that omit a frame pass target; `VGPU-PASS-LOAD-CONFLICT` when `load: true` and `clear` are both set; `VGPU-PASS-LOAD-MSAA` when loading an MSAA target; `VGPU-FRAME-REENTRANT` when a frame is started from another frame or from a surface resize callback; `VGPU-R3-BUNDLE-STALE` or `VGPU-R3-BUNDLE-INVALID` when replaying invalid/stale bundles; draw/pass binding errors such as `VGPU-R1-BINDING-NEVER-SET` propagate during encoding. Raw claimed-group validation is delivered asynchronously through `gpu.onError`.
 
 ## Examples
 
@@ -95,6 +97,8 @@ handle.stop();
 
 - `Frame`, `FramePass`, and `FrameRunner` are type-only public exports. Create frames through `gpu.frame`, not `new Frame(...)`.
 - There is no default target and no implicit canvas target; every `frame.pass` names its target.
+- `load: true` preserves color and depth contents within the same target. On `Surface`, repeated passes in one frame layer onto the same current texture; the first loaded surface pass of a new browser frame reads the swapchain's fresh contents, not the previous frame's image.
+- MSAA targets cannot be loaded because their multisample attachments use `storeOp: "discard"`; render accumulation/load passes into a non-MSAA target instead.
 - `frame.done` is resolve-only. Await it as a completion/timing signal for readbacks, benchmarks, deterministic tests, or teardown; use `gpu.onError` plus `await gpu.settled()` for asynchronous errors.
 - Do not `await frame.done` inside a RAF/frame loop. Schedule the next frame as soon as `gpu.frame()` returns, or you serialize CPU and GPU work.
 - **See also:** `Gpu.frame`, `Surface`, `Effect`, `Draw`, `Bundle`, `Target`.

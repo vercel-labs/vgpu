@@ -17,9 +17,15 @@ import type { DrawCallOptions, Target, TargetSignature } from "vgpu";
 
 type SetBag = Record<string, unknown>;
 
+type BlendPreset = "alpha" | "additive" | "premultiplied";
+interface BlendComponentOptions { readonly src: GPUBlendFactor; readonly dst: GPUBlendFactor; readonly op?: GPUBlendOperation; }
+interface BlendOptions { readonly color: BlendComponentOptions; readonly alpha?: BlendComponentOptions; }
+
 interface EffectOptions {
   readonly set?: SetBag;
   readonly label?: string;
+  readonly blend?: BlendPreset | BlendOptions;
+  readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
 
 interface Effect {
@@ -39,13 +45,15 @@ interface Effect {
 | gpu.effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; effects have no vertex buffers. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes first-set binding ownership and validates reflected bindings. |
 | opts.label | `string` | ✖ | `"effect"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |
+| opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state passed through to the fullscreen draw. Presets and defaults match `DrawOptions.blend`; omitted explicit `alpha` copies `color`, and `op` defaults to `"add"`. |
+| opts.writeMask | `readonly ("r" \| "g" \| "b" \| "a")[]` | ✖ | all channels | Constructor-only color channel mask. Omit for RGBA; `[]` writes no channels; `["r","g","b"]` skips alpha. |
 | effect.set.values | `Record<string, unknown>` | ✔ | — | Binding values by WGSL variable name. JS values are lib-owned; resources are user-owned. |
 | effect.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot render pass. Pass a bare target for the common case, or an options bag when setting per-call draw options. |
 | opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
 
 **Returns:** `gpu.effect()` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
 
-**Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-RING1-UNSUPPORTED` when `gpu.effect()` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership. Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
+**Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `gpu.effect()` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership. Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
 
 ## Examples
 
@@ -87,6 +95,7 @@ Effects compile lazily for the target signature they draw into. Use `await effec
 ## Notes
 
 - A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle.
+- `blend` and `writeMask` are immutable pipeline state, fixed at `gpu.effect()` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
 - One-shot `effect.draw()` does not join a surrounding frame. Inside `gpu.frame()`, draw through `frame.pass()`.
 - There is no implicit screen target. Browser code should create a `Surface` and pass it as `target`.
 - Do not rely on implicit uniforms like time or resolution; pass `gpu.time`, `target.size`, or `target.texelSize` explicitly through `set()`.

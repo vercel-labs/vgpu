@@ -34,18 +34,21 @@ function validateMsaaFormat(format: GPUTextureFormat, caps: TargetDeviceCaps): v
   );
 }
 
-export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: GPUColor | readonly [number, number, number, number]): GPURenderPassColorAttachment {
-  return {
+export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: GPUColor | readonly [number, number, number, number], load?: boolean): GPURenderPassColorAttachment {
+  const attachment: GPURenderPassColorAttachment = {
     view: (msaa ?? resolved).createView(),
     resolveTarget: msaa ? resolved.createView() : undefined,
-    loadOp: "clear",
+    loadOp: load ? "load" : "clear",
     storeOp: msaa ? "discard" : "store",
-    clearValue: colorValue(clear),
   };
+  if (!load) attachment.clearValue = colorValue(clear);
+  return attachment;
 }
 
-export function depthAttachment(depth: { createView(): GPUTextureView }): GPURenderPassDepthStencilAttachment {
-  return { view: depth.createView(), depthLoadOp: "clear", depthStoreOp: "store", depthClearValue: 1 };
+export function depthAttachment(depth: { createView(): GPUTextureView }, load?: boolean): GPURenderPassDepthStencilAttachment {
+  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: load ? "load" : "clear", depthStoreOp: "store" };
+  if (!load) attachment.depthClearValue = 1;
+  return attachment;
 }
 
 export function colorValue(clear: GPUColor | readonly [number, number, number, number]): GPUColor {

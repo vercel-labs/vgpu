@@ -79,6 +79,8 @@ class ExplicitBundleRecorder implements BundleRecorder {
   constructor(private readonly bundle: RecordedBundle, private readonly encoder: GPURenderPassEncoder) {}
 
   draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
+    // Blend/writeMask are constructor-only draw pipeline state. If they ever become mutable or per-call,
+    // bundles need a new staleness dimension beyond the target signature checked at replay.
     const draw = drawable instanceof InternalEffect ? effectDraw(drawable) : drawable as InternalDraw;
     this.bundle.remember(draw);
     encodeDraw(draw, this.encoder, this.bundle.signature, opts);

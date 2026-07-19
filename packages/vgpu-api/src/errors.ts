@@ -57,6 +57,43 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
   });
 }
 
+
+export function blendInvalidError(label: string, value: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-BLEND-INVALID",
+    message: `blend '${String(value)}' of '${label}' is not a preset or a valid blend object.`,
+    fix: `Use "alpha" | "additive" | "premultiplied" or { color: { src, dst, op? }, alpha?: { src, dst, op? } }.`,
+    where: "gpu.draw",
+  });
+}
+
+export function writeMaskInvalidError(label: string, preview: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-WRITEMASK-INVALID",
+    message: `writeMask of '${label}' must be an array of "r" | "g" | "b" | "a"; received ${preview}.`,
+    fix: `Omit writeMask to write all channels; use ["r","g","b"] to skip alpha.`,
+    where: "gpu.draw",
+  });
+}
+
+export function passLoadConflictError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-PASS-LOAD-CONFLICT",
+    message: "pass options set both load: true and clear.",
+    fix: "Choose one: load preserves the target's existing contents; clear overwrites them.",
+    where: "Frame.pass",
+  });
+}
+
+export function passLoadMsaaError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-PASS-LOAD-MSAA",
+    message: `load: true is not supported on MSAA targets: multisample attachments use storeOp "discard", so there are no contents to load.`,
+    fix: "Render load/accumulate passes into a non-MSAA target (gpu.target({ size, format })).",
+    where: "Frame.pass",
+  });
+}
+
 export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-REQUIRED",

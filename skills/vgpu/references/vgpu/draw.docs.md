@@ -17,6 +17,10 @@ import type { ShaderSource, Target, TargetSignature } from "vgpu";
 
 type SetBag = Record<string, unknown>;
 
+type BlendPreset = "alpha" | "additive" | "premultiplied";
+interface BlendComponentOptions { readonly src: GPUBlendFactor; readonly dst: GPUBlendFactor; readonly op?: GPUBlendOperation; }
+interface BlendOptions { readonly color: BlendComponentOptions; readonly alpha?: BlendComponentOptions; }
+
 interface DrawOptions {
   readonly shader: string | ShaderSource;
   readonly mesh?: MeshLike;
@@ -26,6 +30,8 @@ interface DrawOptions {
   readonly instances?: number;
   readonly vertices?: number;
   readonly firstInstance?: number;
+  readonly blend?: BlendPreset | BlendOptions;
+  readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
 
 interface DrawCallOptions {
@@ -72,6 +78,8 @@ interface Draw {
 | opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
 | opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
 | opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
+| opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state applied uniformly to every color target. Presets resolve at construction; explicit components use `src`/`dst` and optional `op` (`"add"` default). Omitted `alpha` copies `color`. |
+| opts.writeMask | `readonly ("r" \| "g" \| "b" \| "a")[]` | ✖ | all channels | Constructor-only color channel mask applied uniformly to every color target. Omit to write RGBA; `[]` writes no channels; `["r","g","b"]` skips alpha. |
 | draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
 | draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
@@ -87,7 +95,7 @@ interface Draw {
 
 **Returns:** `gpu.draw()` returns `Draw`; `set()`, `group()`, and `compileSync()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `void`; `compile()` returns `Promise<this>`.
 
-**Throws:** `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
+**Throws:** `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
 
 ## Examples
 
@@ -120,6 +128,8 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 ## Notes
 
 - Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
+- Blend and write masks are immutable pipeline state, fixed at `gpu.draw()` construction. They apply to all color targets; per-target MRT blend can be added later without changing this shape.
+- Blend presets: `"alpha"` uses source alpha over, `"premultiplied"` uses premultiplied source over, and `"additive"` uses one-plus-one additive blending for color and alpha. In explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
 - One-shot `draw.draw()` has no implicit target and returns `void`; raw claimed-group validation errors are delivered through `gpu.onError`, and tests can `await gpu.settled()`.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
 - **See also:** `Effect`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.

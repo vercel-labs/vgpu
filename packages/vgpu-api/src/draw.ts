@@ -8,7 +8,22 @@ import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSe
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
-import { claimedGroupNativeValidationError, targetRequiredError, VGPUError } from "./errors.ts";
+import { blendInvalidError, claimedGroupNativeValidationError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+
+export type BlendPreset = "alpha" | "additive" | "premultiplied";
+
+export interface BlendComponentOptions {
+  readonly src: GPUBlendFactor;
+  readonly dst: GPUBlendFactor;
+  /** Defaults to "add". */
+  readonly op?: GPUBlendOperation;
+}
+
+export interface BlendOptions {
+  readonly color: BlendComponentOptions;
+  /** Defaults to the color component. */
+  readonly alpha?: BlendComponentOptions;
+}
 
 export interface DrawOptions {
   readonly shader: string | ShaderSource;
@@ -22,6 +37,10 @@ export interface DrawOptions {
   readonly vertices?: number;
   /** Default firstInstance for every draw call. Overridden by per-call opts. */
   readonly firstInstance?: number;
+  /** Blend state applied to every color target of this draw's pipelines. Preset or explicit components. Immutable after construction. */
+  readonly blend?: BlendPreset | BlendOptions;
+  /** Channels written to color targets. Omit to write all (rgba). Empty array writes nothing. */
+  readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
 
 export interface DrawCallOptions {
@@ -88,6 +107,9 @@ type DrawState = {
   readonly trackSettled?: (promise: Promise<unknown>) => void;
   readonly resolvedPipelineKeys: Set<string>;
   readonly recordedIn: BundleBackReferenceRegistry;
+  readonly blendState?: GPUBlendState;
+  readonly writeMask?: number;
+  readonly fragmentKey?: string;
 };
 
 const drawStates = new WeakMap<Draw, DrawState>();
@@ -127,6 +149,7 @@ export class InternalDraw implements Draw {
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
     const recordedIn = createBundleRegistry();
+    const fragmentState = normalizeFragmentState(this.label, opts);
     const setCore = createSetCore({
       device,
       label: this.label,
@@ -136,7 +159,7 @@ export class InternalDraw implements Draw {
       cache,
       onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
     });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn });
+    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -320,7 +343,7 @@ export class InternalDraw implements Draw {
 
   private pipelineKey(signature: TargetSignature): string {
     const state = drawState(this);
-    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.opts.mesh?.vertexBufferLayouts, signature });
+    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.opts.mesh?.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey });
   }
 
   private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
@@ -342,7 +365,7 @@ export class InternalDraw implements Draw {
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
       vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
-      fragment: { module: state.shaderModule, entryPoint: fragment, targets: signature.colors.map((format) => ({ format })) },
+      fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
       primitive: { topology: "triangle-list" },
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
@@ -358,7 +381,7 @@ export class InternalDraw implements Draw {
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
       vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
-      fragment: { module: state.shaderModule, entryPoint: fragment, targets: signature.colors.map((format) => ({ format })) },
+      fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
       primitive: { topology: "triangle-list" },
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
@@ -372,6 +395,15 @@ type DrawCounts = {
   readonly vertexCount: number;
   readonly firstVertex: number;
 };
+
+function fragmentTargets(signature: TargetSignature, state: DrawState): GPUColorTargetState[] {
+  return signature.colors.map((format) => {
+    const target: GPUColorTargetState = { format };
+    if (state.blendState) target.blend = state.blendState;
+    if (state.writeMask !== undefined) target.writeMask = state.writeMask;
+    return target;
+  });
+}
 
 function resolveDrawCounts(label: string, mesh: MeshLike | undefined, drawOpts: DrawOptions, callOpts: DrawCallOptions): DrawCounts {
   validateOptionalDrawCount(label, "DrawOptions.instances", drawOpts.instances);
@@ -399,6 +431,70 @@ function validateOptionalDrawCount(label: string, field: string, value: number |
     message: `${field} of '${label}' must be an integer >= 0; received ${String(value)}. Use 0 only when you want to issue a valid draw with no vertices/instances.`,
     where: `${label}.draw`,
   });
+}
+
+type NormalizedFragmentState = {
+  readonly blendState?: GPUBlendState;
+  readonly writeMask?: number;
+  readonly fragmentKey?: string;
+};
+
+function normalizeFragmentState(label: string, opts: DrawOptions): NormalizedFragmentState {
+  const blendState = opts.blend === undefined ? undefined : normalizeBlend(label, opts.blend);
+  const writeMask = opts.writeMask === undefined ? undefined : normalizeWriteMask(label, opts.writeMask);
+  const fragmentKey = blendState || writeMask !== undefined ? fragmentKeyFor(blendState, writeMask) : undefined;
+  return { blendState, writeMask, fragmentKey };
+}
+
+function normalizeBlend(label: string, value: BlendPreset | BlendOptions): GPUBlendState {
+  if (value === "alpha") return blendState({ src: "src-alpha", dst: "one-minus-src-alpha" }, { src: "one", dst: "one-minus-src-alpha" });
+  if (value === "premultiplied") return blendState({ src: "one", dst: "one-minus-src-alpha" }, { src: "one", dst: "one-minus-src-alpha" });
+  if (value === "additive") return blendState({ src: "one", dst: "one" }, { src: "one", dst: "one" });
+  if (typeof value !== "object" || value === null || !validBlendComponent(value.color)) throw blendInvalidError(label, value);
+  const color = value.color;
+  const alpha = value.alpha;
+  if (alpha !== undefined && !validBlendComponent(alpha)) throw blendInvalidError(label, value);
+  return blendState(color, alpha ?? color);
+}
+
+function validBlendComponent(value: unknown): value is BlendComponentOptions {
+  return typeof value === "object" && value !== null
+    && typeof (value as BlendComponentOptions).src === "string"
+    && typeof (value as BlendComponentOptions).dst === "string";
+}
+
+function blendState(color: BlendComponentOptions, alpha: BlendComponentOptions): GPUBlendState {
+  return { color: blendComponent(color), alpha: blendComponent(alpha) };
+}
+
+function blendComponent(component: BlendComponentOptions): GPUBlendComponent {
+  return { srcFactor: component.src, dstFactor: component.dst, operation: component.op ?? "add" };
+}
+
+function normalizeWriteMask(label: string, value: readonly ("r" | "g" | "b" | "a")[]): number {
+  if (!Array.isArray(value)) throw writeMaskInvalidError(label, preview(value));
+  let mask = 0;
+  for (const channel of value) {
+    if (channel === "r") mask |= 1;
+    else if (channel === "g") mask |= 2;
+    else if (channel === "b") mask |= 4;
+    else if (channel === "a") mask |= 8;
+    else throw writeMaskInvalidError(label, preview(channel));
+  }
+  return mask;
+}
+
+function fragmentKeyFor(blend: GPUBlendState | undefined, mask: number | undefined): string {
+  const writeMask = mask ?? 15;
+  if (!blend) return `none;none;${writeMask}`;
+  const c = blend.color;
+  const a = blend.alpha;
+  return `${c.srcFactor},${c.dstFactor},${c.operation};${a.srcFactor},${a.dstFactor},${a.operation};${writeMask}`;
+}
+
+function preview(value: unknown): string {
+  if (typeof value === "string") return `"${value}"`;
+  try { return JSON.stringify(value) ?? String(value); } catch { return String(value); }
 }
 
 export function drawReflection(draw: Draw): Reflection { return drawState(draw).reflection; }

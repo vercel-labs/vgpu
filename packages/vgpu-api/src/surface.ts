@@ -126,9 +126,11 @@ export class CanvasSurface implements Surface {
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { this.assertLive(); return this.destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.assertLive(); this.texturesRecreatedCallbacks.add(cb); return () => { this.texturesRecreatedCallbacks.delete(cb); }; }
 
-  renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1]): GPURenderPassDescriptor {
+  renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1], load?: boolean): GPURenderPassDescriptor {
     this.assertLive();
-    return { colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: colorValue(clear) }] };
+    const attachment: GPURenderPassColorAttachment = { view: this.context.getCurrentTexture().createView(), loadOp: load ? "load" : "clear", storeOp: "store" };
+    if (!load) attachment.clearValue = colorValue(clear);
+    return { colorAttachments: [attachment] };
   }
 
   dispose(): void {

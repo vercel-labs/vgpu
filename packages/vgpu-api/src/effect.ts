@@ -1,6 +1,6 @@
 import type { Device } from "@vgpu/core";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
-import { InternalDraw, encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
+import { InternalDraw, encodeDraw, type BlendOptions, type BlendPreset, type Draw, type DrawCallOptions } from "./draw.ts";
 import type { ClaimedGroupValidationResult, ValidationErrorSink } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
 import type { PipelineLayoutCache, PipelineStore, ShaderModuleCache } from "./pipeline-store.ts";
@@ -11,6 +11,10 @@ import { isTarget } from "./target-utils.ts";
 export interface EffectOptions {
   readonly set?: SetBag;
   readonly label?: string;
+  /** Blend state applied to every color target of this effect's pipelines. Preset or explicit components. Immutable after construction. */
+  readonly blend?: BlendPreset | BlendOptions;
+  /** Channels written to color targets. Omit to write all (rgba). Empty array writes nothing. */
+  readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
 
 const effectImpls = new WeakMap<Effect, InternalDraw>();
@@ -28,7 +32,7 @@ export class InternalEffect implements Effect {
 
   constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
     const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect" }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
+    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect", blend: opts.blend, writeMask: opts.writeMask }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
     effectImpls.set(this, impl);
   }
 

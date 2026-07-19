@@ -5,13 +5,15 @@ import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, frameReentrantError, targetRequiredError } from "./errors.ts";
+import { claimedGroupNativeValidationError, frameReentrantError, passLoadConflictError, passLoadMsaaError, targetRequiredError } from "./errors.ts";
 import { isSurfaceResizeCallbackActive } from "./surface.ts";
 import { isTarget } from "./target-utils.ts";
 
 export interface FramePassOptions {
   readonly target: Target;
   readonly clear?: GPUColor | readonly [number, number, number, number];
+  /** Preserve existing target contents instead of clearing (loadOp: "load", color and depth). Mutually exclusive with clear. */
+  readonly load?: boolean;
 }
 
 export interface FrameLoopHandle { stop(): void }
@@ -44,7 +46,9 @@ export class Frame {
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = opts.target ?? this.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError("Frame.pass");
-    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(opts.clear));
+    if (opts.load === true && opts.clear !== undefined) throw passLoadConflictError();
+    if (opts.load === true && resolvedTarget.sampleCount === 4) throw passLoadMsaaError();
+    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(opts.clear, opts.load === true));
     try { cb(new FramePass(encoder, resolvedTarget, this.validations)); }
     catch (error) {
       discardClaimedGroupValidationResults(this.validations);

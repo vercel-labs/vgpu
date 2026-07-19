@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init } from "../src/mock.ts";
 import { InternalDraw } from "../src/draw.ts";
-import { createPipelineStore, createShaderModuleCache, signatureKeyOf } from "../src/pipeline-store.ts";
+import { createPipelineStore, createShaderModuleCache, pipelineKeyOf, signatureKeyOf } from "../src/pipeline-store.ts";
 
 const WGSL = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -86,6 +86,35 @@ test("dynamic layout swap changes the pipeline key without clearing the store", 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(mock.calls.createRenderPipeline).toBe(2);
   gpu.dispose();
+});
+
+test("blend and writeMask participate in shared pipeline cache keys", async () => {
+  const gpu = await init();
+  const target = gpu.target({ size: [2, 2] });
+  const a = gpu.draw({ shader: WGSL, label: "blend-a", blend: "alpha" });
+  const b = gpu.draw({ shader: WGSL, label: "blend-b", blend: "additive" });
+  const c = gpu.draw({ shader: WGSL, label: "blend-c", blend: "alpha" });
+  const mask = gpu.draw({ shader: WGSL, label: "mask", writeMask: ["r", "g", "b"] });
+
+  a.draw(target);
+  b.draw(target);
+  c.draw(target);
+  mask.draw(target);
+
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  expect(mock.calls.createShaderModule).toBe(1);
+  expect(mock.calls.createRenderPipeline).toBe(3);
+  gpu.dispose();
+});
+
+test("pipelineKeyOf appends fragmentKey only when present", () => {
+  const module = {} as GPUShaderModule;
+  const pipelineLayout = {} as GPUPipelineLayout;
+  const parts = { module, pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+  const base = pipelineKeyOf(parts);
+
+  expect(pipelineKeyOf({ ...parts, fragmentKey: undefined })).toBe(base);
+  expect(pipelineKeyOf({ ...parts, fragmentKey: "none;none;7" })).toBe(`${base}|none;none;7`);
 });
 
 test("sync pipeline creation wins a pending async create and suppresses late native rejection", async () => {
