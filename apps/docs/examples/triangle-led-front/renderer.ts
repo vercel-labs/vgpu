@@ -1,3 +1,6 @@
+import { Uniform } from 'vgpu';
+import type { Bundle, Frame, FramePass, Gpu, StorageBuffer, Target } from 'vgpu';
+
 import type { CascadeFitRect, RenderSize } from './settings';
 import {
   DARK_FLOOR_DEFAULTS,
@@ -79,9 +82,9 @@ export interface HeroRenderFrameArgs {
 
 export interface HeroRenderer {
   /** Encode the fixed frame graph into an existing facade frame. */
-  renderFrame(frame: any, args: HeroRenderFrameArgs): void;
+  renderFrame(frame: Frame, args: HeroRenderFrameArgs): void;
   /** Surface or offscreen Target. The same floor pass path renders into either. */
-  setOutputTarget(target: any): void;
+  setOutputTarget(target: Target): void;
   /** Synchronous docs-only resize rebuild (may hitch one frame versus production's async holder). */
   rebuild(css: HeroRendererCss): void;
   setBrush(b: Partial<BrushState>): void;
@@ -99,18 +102,31 @@ interface RendererParts {
   probeDensity: number;
   cascadeFit: CascadeFitRect;
   leds: LedGeometryState;
-  ledStorage: any;
+  ledStorage: DestroyableStorageBuffer;
   lightSourcesRaw: LightSourcesRaw;
-  raycastTarget: any;
-  raycastUniform: any;
-  floorUniform: any;
-  lightGlowUniform: any;
+  raycastTarget: Target;
+  raycastUniform: Uniform;
+  raycastBundle: Bundle;
+  floorUniform: Uniform;
+  lightGlowUniform: Uniform;
   floorGate: FloorUniformGate;
+  floorBundles?: FloorBundles;
+}
+
+type DestroyableStorageBuffer = StorageBuffer & {
+  readonly buffer?: { destroy(): void };
+  destroy?: () => void;
+};
+
+interface FloorBundles {
+  readonly target: Target;
+  readonly light: Bundle;
+  readonly dark: Bundle;
 }
 
 export function createHeroRenderer(
-  gpu: any,
-  opts: { theme?: FrameTheme; css: HeroRendererCss; target?: any },
+  gpu: Gpu,
+  opts: { theme?: FrameTheme; css: HeroRendererCss; target?: Target },
 ): HeroRenderer {
   const theme = opts.theme ?? 'dark';
   const heroFrameState = createHeroFrameState();
@@ -121,6 +137,7 @@ export function createHeroRenderer(
   let outputTarget = opts.target;
   let destroyed = false;
 
+  const { device } = gpu;
   const sampler = gpu.sampler({ minFilter: 'linear', magFilter: 'linear' });
   const noiseTarget = gpu.target({
     size: [500, 500],
@@ -133,11 +150,12 @@ export function createHeroRenderer(
   const raycastDraw = gpu.draw({ shader: raycastWgsl, vertices: 3 });
 
   // Bake the time-invariant floor-noise target once. It is rebuilt only if this renderer is rebuilt.
-  gpu.frame((frame: any) => {
-    frame.pass({ target: noiseTarget }, (pass: any) => pass.draw(noiseDraw));
+  gpu.frame((frame: Frame) => {
+    frame.pass({ target: noiseTarget }, (pass: FramePass) => pass.draw(noiseDraw));
   });
 
   let parts = buildParts(opts.css);
+  if (outputTarget) recordFloorBundles(parts, outputTarget);
 
   const api: HeroRenderer = {
     hero,
@@ -163,9 +181,9 @@ export function createHeroRenderer(
             ctx.brush,
             ctx.theme,
           );
-          // CPU LED upload mirrors SRC/core/renderer.ts:561-566. The raw storage buffer is owned
-          // here and consumed only by Stage 2's light-sources escape hatch.
-          currentParts.ledStorage.write(currentParts.leds.data);
+          // CPU LED upload mirrors SRC/core/renderer.ts:561-566. The facade storage buffer is owned
+          // here and consumed by Stage 2's light-sources pass.
+          currentParts.ledStorage.write(currentParts.leds.data.buffer as ArrayBuffer);
           return transition;
         },
       });
@@ -181,13 +199,9 @@ export function createHeroRenderer(
         renderBlackOccluder: options.renderBlackOccluder ?? true,
       });
 
-      raycastDraw.set({
-        cfg: currentParts.raycastUniform,
-        light_sources_tex: currentParts.lightSourcesRaw.texture,
-      });
       frame.pass(
         { target: currentParts.raycastTarget, clear: [0, 0, 0, 1] },
-        (pass: any) => pass.draw(raycastDraw),
+        (pass: FramePass) => pass.bundles(currentParts.raycastBundle),
       );
 
       if (currentTheme === 'light') {
@@ -197,7 +211,6 @@ export function createHeroRenderer(
       }
 
       writeFloorUniformIfNeeded(
-        gpu.gpu.queue,
         currentParts,
         {
           width: currentParts.presentationSize.width,
@@ -213,34 +226,17 @@ export function createHeroRenderer(
         },
       );
 
-      if (currentTheme === 'light') {
-        lightFloorDraw.set({
-          cfg: currentParts.floorUniform,
-          radiance_tex: currentParts.raycastTarget,
-          light_sources_tex: currentParts.lightSourcesRaw.texture,
-          linear_samp: sampler,
-          lg: currentParts.lightGlowUniform,
-        });
-        frame.pass(
-          { target: outputTarget, clear: [0, 0, 0, 1] },
-          (pass: any) => pass.draw(lightFloorDraw),
-        );
-      } else {
-        darkFloorDraw.set({
-          cfg: currentParts.floorUniform,
-          radiance_tex: currentParts.raycastTarget,
-          light_sources_tex: currentParts.lightSourcesRaw.texture,
-          linear_samp: sampler,
-          floor_noise_tex: noiseTarget,
-        });
-        frame.pass(
-          { target: outputTarget, clear: [0, 0, 0, 1] },
-          (pass: any) => pass.draw(darkFloorDraw),
-        );
-      }
+      const floorBundles = currentParts.floorBundles ?? recordFloorBundles(currentParts, outputTarget);
+      frame.pass(
+        { target: outputTarget, clear: [0, 0, 0, 1] },
+        (pass: FramePass) => pass.bundles(
+          currentTheme === 'light' ? floorBundles.light : floorBundles.dark,
+        ),
+      );
     },
     setOutputTarget(target) {
       outputTarget = target;
+      recordFloorBundles(parts, target);
     },
     rebuild(css) {
       if (destroyed) return;
@@ -249,6 +245,7 @@ export function createHeroRenderer(
       const next = buildParts(css, parts.leds);
       destroyParts(parts);
       parts = next;
+      if (outputTarget) recordFloorBundles(parts, outputTarget);
     },
     setBrush(b) {
       Object.assign(brush, b);
@@ -262,7 +259,7 @@ export function createHeroRenderer(
     async prewarm() {
       const target = outputTarget;
       if (!target) return;
-      const ready = (parts.lightSourcesRaw as { ready?: Promise<unknown> }).ready;
+      const ready = parts.lightSourcesRaw.ready;
       await Promise.all([
         lightFloorDraw.compile(target),
         darkFloorDraw.compile(target),
@@ -280,6 +277,36 @@ export function createHeroRenderer(
 
   return api;
 
+
+  function recordFloorBundles(currentParts: RendererParts, target: Target): FloorBundles {
+    lightFloorDraw.set({
+      cfg: currentParts.floorUniform,
+      radiance_tex: currentParts.raycastTarget,
+      light_sources_tex: currentParts.lightSourcesRaw.texture,
+      linear_samp: sampler,
+      lg: currentParts.lightGlowUniform,
+    });
+    darkFloorDraw.set({
+      cfg: currentParts.floorUniform,
+      radiance_tex: currentParts.raycastTarget,
+      light_sources_tex: currentParts.lightSourcesRaw.texture,
+      linear_samp: sampler,
+      floor_noise_tex: noiseTarget,
+    });
+    const floorBundles: FloorBundles = {
+      target,
+      light: gpu.bundle(
+        { target, label: 'triangle-led-front-light-floor' },
+        (bundle) => bundle.draw(lightFloorDraw),
+      ),
+      dark: gpu.bundle(
+        { target, label: 'triangle-led-front-dark-floor' },
+        (bundle) => bundle.draw(darkFloorDraw),
+      ),
+    };
+    currentParts.floorBundles = floorBundles;
+    return floorBundles;
+  }
 
   function buildParts(css: HeroRendererCss, previousLeds?: LedGeometryState): RendererParts {
     // Deliberate simplification for docs: resize rebuilds synchronously and may hitch one frame;
@@ -305,12 +332,8 @@ export function createHeroRenderer(
     void count; // Kept for parity with the source size derivation; direct raycast uses full fit.
     const fit = cascadeFitRect(simulationSize, probeDensity);
     const leds = buildLedGeometry(simulationSize, previousLeds);
-    const ledStorage = gpu.device.createBuffer({
-      size: 72 * 8 * 4,
-      usage: ['storage', 'copy_dst'],
-      label: 'triangle-led-front-led-storage',
-    });
-    ledStorage.write(leds.data);
+    const ledStorage = gpu.storage(72 * 8 * 4) as DestroyableStorageBuffer;
+    ledStorage.write(leds.data.buffer as ArrayBuffer);
 
     const raycastSize = directTriangleTargetSize(simulationSize);
     const raycastTarget = gpu.target({
@@ -318,21 +341,18 @@ export function createHeroRenderer(
       format: 'rgba16float',
       label: 'triangle-led-front-direct-triangle-raycast',
     });
-    const raycastUniform = gpu.device.createBuffer({
+    const raycastUniform = new Uniform(device, {
       size: 256,
-      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-direct-triangle-raycast-uniform',
     });
     raycastUniform.write(directTriangleRaycastUniformData(simulationSize));
 
-    const floorUniform = gpu.device.createBuffer({
+    const floorUniform = new Uniform(device, {
       size: 256,
-      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-main-scene-floor-uniform',
     });
-    const lightGlowUniform = gpu.device.createBuffer({
+    const lightGlowUniform = new Uniform(device, {
       size: 256,
-      usage: ['uniform', 'copy_dst'],
       label: 'triangle-led-front-light-glow-uniform',
     });
 
@@ -344,6 +364,14 @@ export function createHeroRenderer(
       ledRadius: triangleLedRadius(simulationSize),
       ledShape: triangleLedShapeDimensions(simulationSize, LEDS_PER_EDGE),
     });
+    raycastDraw.set({
+      cfg: raycastUniform,
+      light_sources_tex: lightSourcesRaw.texture,
+    });
+    const raycastBundle = gpu.bundle(
+      { target: raycastTarget, label: 'triangle-led-front-raycast' },
+      (bundle) => bundle.draw(raycastDraw),
+    );
     return {
       simulationSize,
       presentationSize,
@@ -355,6 +383,7 @@ export function createHeroRenderer(
       lightSourcesRaw,
       raycastTarget,
       raycastUniform,
+      raycastBundle,
       floorUniform,
       lightGlowUniform,
       floorGate: createFloorUniformGate(),
@@ -363,7 +392,8 @@ export function createHeroRenderer(
 
   function destroyParts(p: RendererParts): void {
     p.lightSourcesRaw.destroy();
-    p.ledStorage.destroy();
+    p.ledStorage.destroy?.();
+    p.ledStorage.buffer?.destroy();
     p.raycastUniform.destroy();
     p.floorUniform.destroy();
     p.lightGlowUniform.destroy();
@@ -529,7 +559,6 @@ function createFloorUniformGate(): FloorUniformGate {
 }
 
 function writeFloorUniformIfNeeded(
-  _queue: GPUQueue,
   parts: RendererParts,
   inputs: FloorUniformInputs,
 ): void {

@@ -54,7 +54,9 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
     if (disposed) return;
     renderer.rebuild(cssSizeOf(canvas, dpr));
     renderer.setOutputTarget(surface);
-    void renderer.prewarm();
+    void renderer.prewarm().catch((error) => {
+      console.error('triangle-led-front prewarm failed', error);
+    });
   });
 
   const leave = () => {

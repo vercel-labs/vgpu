@@ -1,4 +1,5 @@
-import type { Target } from 'vgpu';
+import { Uniform } from 'vgpu';
+import type { Bundle, Frame, FramePass, Gpu, Target } from 'vgpu';
 
 import lightSourcesWgsl from './shaders/light-sources.wgsl';
 import ledEmittersWgsl from './shaders/led-emitters.wgsl';
@@ -23,7 +24,7 @@ export interface LightSourcesRaw {
   readonly texture: Target;
   readonly ready?: Promise<void>;
   encode(args: {
-    frame: any;
+    frame: Frame;
     brush: BrushState;
     time: number;
     tunables: LightTunables;
@@ -41,7 +42,7 @@ interface CreateLightSourcesRawOptions {
 }
 
 export function createLightSourcesRaw(
-  gpu: any,
+  gpu: Gpu,
   opts: CreateLightSourcesRawOptions,
 ): LightSourcesRaw {
   const device = gpu.device;
@@ -57,9 +58,8 @@ export function createLightSourcesRaw(
     label: 'triangle-led-front-light-sources',
   });
 
-  const uniform = device.createBuffer({
+  const uniform = new Uniform(device, {
     size: 112,
-    usage: ['uniform', 'copy_dst'],
     label: 'triangle-led-front-light-sources-uniform',
   });
 
@@ -111,12 +111,29 @@ export function createLightSourcesRaw(
     ledEmittersDraw.compile(target),
   ]).then(() => undefined);
 
+  const recordClearBundle = (): Bundle => gpu.bundle(
+    { target, label: 'triangle-led-front-light-sources-clear' },
+    (bundle) => {
+      bundle.draw(lightSourcesDraw);
+      bundle.draw(ledEmittersDraw);
+    },
+  );
+  const emittersBundle = gpu.bundle(
+    { target, label: 'triangle-led-front-led-emitters' },
+    (bundle) => bundle.draw(ledEmittersDraw),
+  );
+  let clearBundle = recordClearBundle();
   let lastBakeKey: string | undefined;
 
   return {
     texture: target,
     ready,
     encode({ frame, brush, time, tunables, renderBlackOccluder = true }) {
+      const sanitizedClipInset = sanitizeTunablePx(
+        tunables.ledRaycastClipInsetPx,
+        TUNABLE_RANGES.ledRaycastClipInsetPx,
+        TUNABLE_DEFAULTS.ledRaycastClipInsetPx,
+      );
       const uniformData = lightSourcesUniform(
         simSize,
         brush,
@@ -126,29 +143,28 @@ export function createLightSourcesRaw(
         ledShape,
         triangle,
         renderBlackOccluder,
+        sanitizedClipInset,
       );
       uniform.write(uniformData as ArrayBufferView<ArrayBuffer>);
-      const bakeKey = `${renderBlackOccluder ? 1 : 0}:${uniformData[25]}`;
+      const bakeKey = `${renderBlackOccluder ? 1 : 0}:${sanitizedClipInset}`;
 
       if (bakeKey !== lastBakeKey) {
+        clearBundle = recordClearBundle();
         lastBakeKey = bakeKey;
         frame.pass(
           { target, clear: [0, 0, 0, 1000] },
-          (pass: any) => {
-            pass.draw(lightSourcesDraw);
-            pass.draw(ledEmittersDraw);
-          },
+          (pass: FramePass) => pass.bundles(clearBundle),
         );
       } else {
         frame.pass(
           { target, clear: false },
-          (pass: any) => pass.draw(ledEmittersDraw),
+          (pass: FramePass) => pass.bundles(emittersBundle),
         );
       }
     },
     destroy() {
       (target as { destroy?: () => void }).destroy?.();
-      uniform.gpu.destroy();
+      uniform.destroy();
       ledVertexBuffer.gpu.destroy();
     },
   };
@@ -163,6 +179,7 @@ function lightSourcesUniform(
   ledShape: ReturnType<typeof triangleLedShapeDimensions>,
   triangle: ReturnType<typeof canonicalTriangleGeometry>,
   renderBlackOccluder: boolean,
+  sanitizedClipInset: number,
 ): Float32Array {
   const out = new Float32Array(28);
   out.set([size.width, size.height, time, tunables.darkFloorAlbedo], 0);
@@ -198,11 +215,7 @@ function lightSourcesUniform(
   out.set(
     [
       LED_SDF_CROP_EXPANSION_PX,
-      sanitizeTunablePx(
-        tunables.ledRaycastClipInsetPx,
-        TUNABLE_RANGES.ledRaycastClipInsetPx,
-        TUNABLE_DEFAULTS.ledRaycastClipInsetPx,
-      ),
+      sanitizedClipInset,
       0,
       0,
     ],

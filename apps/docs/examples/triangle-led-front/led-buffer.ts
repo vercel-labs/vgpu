@@ -1,4 +1,5 @@
-import { type Buffer, type Device } from '@vgpu/core';
+import type { Device } from '@vgpu/core';
+import { StorageBuffer } from 'vgpu/core';
 import {
   HERO_CANVAS_MAX_CSS,
   HERO_STATE_MODES,
@@ -197,7 +198,7 @@ export interface LedGeometryState {
  * passes read. `updateLeds` writes `data` into this buffer each frame.
  */
 export interface LedBufferState extends LedGeometryState {
-  buffer: Buffer;
+  buffer: StorageBuffer;
 }
 
 export interface LedTransitionFrame {
@@ -337,9 +338,8 @@ export function createLedBuffer(
   previous?: LedBufferState,
 ): LedBufferState {
   const geometry = buildLedGeometry(size, previous);
-  const buffer = device.createBuffer({
+  const buffer = new StorageBuffer(device, {
     size: geometry.data.byteLength,
-    usage: ['storage', 'copy_dst'],
     label: 'triangle-led-4-leds',
   });
   // `data` carries an ArrayBuffer (never a SharedArrayBuffer); the interface's widened
@@ -664,7 +664,7 @@ export function computeLeds(
  * filled `leds.data` to the storage buffer the simulation passes read.
  */
 export function updateLeds(
-  device: Device,
+  _device: Device,
   leds: LedBufferState,
   time: number,
   tunables: SceneTunables,
@@ -682,7 +682,7 @@ export function updateLeds(
     brush,
     theme,
   );
-  device.queue.writeBuffer(leds.buffer.gpu, 0, leds.data.buffer as ArrayBuffer);
+  leds.buffer.write(leds.data.buffer as ArrayBuffer);
   return transition;
 }
 
