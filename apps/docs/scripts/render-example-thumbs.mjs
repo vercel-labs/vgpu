@@ -14,6 +14,10 @@ const rendererBundle = path.join(cacheDir, 'renderers.mjs');
 const docsDataEntry = path.join(cacheDir, 'docs-data-entry.ts');
 const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 
+/** @typedef {{ slug: string; module: string; exportName: string }} CustomRendererEntry */
+/** @type {CustomRendererEntry[]} */
+const customRendererEntries = [];
+
 const sizes = {
   card: [1280, 720],
   hero: [1600, 900],
@@ -72,8 +76,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
   const gpu = await init();
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
-    if (slug === 'triangle-led-god-rays') {
-      await renderers.triangleLedGodRays(gpu, target, {
+    const renderer = renderers[slug];
+    if (renderer) {
+      await renderer(gpu, target, {
         warmupFrames: metaThumb.warmupFrames ?? 60,
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
@@ -129,12 +134,13 @@ function lumaVariance(bytes) {
   return sumSq / count - mean * mean;
 }
 
-
 async function loadRenderers() {
+  if (customRendererEntries.length === 0) return {};
   await mkdir(cacheDir, { recursive: true });
-  await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `
-    export { renderThumb as triangleLedGodRays } from '../examples/triangle-led-god-rays/example';
-  `));
+  const contents = customRendererEntries
+    .map((entry) => `export { ${entry.exportName} as ${entry.slug} } from '${entry.module}';`)
+    .join('\n');
+  await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `${contents}\n`));
   await build({
     entryPoints: [rendererEntry],
     outfile: rendererBundle,
@@ -146,9 +152,16 @@ async function loadRenderers() {
     plugins: [wgslPlugin()],
     logLevel: 'silent',
   });
-  return import(pathToFileURL(rendererBundle).href);
+  const module = await import(pathToFileURL(rendererBundle).href);
+  return customRendererEntries.reduce((acc, entry) => {
+    const renderer = module[entry.slug];
+    if (typeof renderer !== 'function') {
+      throw new Error(`Renderer export for '${entry.slug}' was not found.`);
+    }
+    acc[entry.slug] = renderer;
+    return acc;
+  }, /** @type {Record<string, Function>} */ ({}));
 }
-
 
 function wgslPlugin() {
   return {
