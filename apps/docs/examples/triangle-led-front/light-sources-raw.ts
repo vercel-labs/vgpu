@@ -86,7 +86,7 @@ export function createLightSourcesRaw(
       },
       {
         binding: 1,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        visibility: GPUShaderStage.FRAGMENT,
         buffer: { type: 'read-only-storage' },
       },
     ],

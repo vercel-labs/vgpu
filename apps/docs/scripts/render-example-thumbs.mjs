@@ -16,7 +16,9 @@ const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 
 /** @typedef {{ slug: string; module: string; exportName: string }} CustomRendererEntry */
 /** @type {CustomRendererEntry[]} */
-const customRendererEntries = [];
+const customRendererEntries = [
+  { slug: 'triangle-led-front', module: '../examples/triangle-led-front/example.ts', exportName: 'renderThumb' },
+];
 
 const sizes = {
   card: [1280, 720],
@@ -138,7 +140,7 @@ async function loadRenderers() {
   if (customRendererEntries.length === 0) return {};
   await mkdir(cacheDir, { recursive: true });
   const contents = customRendererEntries
-    .map((entry) => `export { ${entry.exportName} as ${entry.slug} } from '${entry.module}';`)
+    .map((entry, index) => `export { ${entry.exportName} as renderer_${index} } from '${entry.module}';`)
     .join('\n');
   await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `${contents}\n`));
   await build({
@@ -153,8 +155,8 @@ async function loadRenderers() {
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);
-  return customRendererEntries.reduce((acc, entry) => {
-    const renderer = module[entry.slug];
+  return customRendererEntries.reduce((acc, entry, index) => {
+    const renderer = module[`renderer_${index}`];
     if (typeof renderer !== 'function') {
       throw new Error(`Renderer export for '${entry.slug}' was not found.`);
     }

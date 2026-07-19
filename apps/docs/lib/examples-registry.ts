@@ -2,6 +2,7 @@ import { exampleSources, type ExampleSourceFile } from './examples-source.genera
 import { exampleThumbs } from './example-thumbs.generated';
 
 import { meta as gradientMeta } from '../examples/gradient/meta';
+import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
 
 export interface ExampleThumbOptions {
   readonly warmupFrames?: number;
@@ -29,6 +30,7 @@ export interface ExampleRecord {
 
 const rawMetas = [
   gradientMeta,
+  triangleLedFrontMeta,
 ] as const satisfies readonly ExampleMeta[];
 
 const metas = rawMetas.map((meta) => ({

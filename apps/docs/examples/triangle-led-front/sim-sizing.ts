@@ -83,7 +83,7 @@ export function brushState(
 
 export function simulationBrushState(
   brush: BrushSettings,
-  pointer: Pick<WorkerPointerState, 'x' | 'y' | 'active' | 'inside'>,
+  pointer: Pick<WorkerPointerState, 'x' | 'y' | 'active' | 'inside' | 'isMouse'>,
   cssHeight: number,
 ): WorkerBrushState {
   const factor = simulationFloorFactor(cssHeight);
