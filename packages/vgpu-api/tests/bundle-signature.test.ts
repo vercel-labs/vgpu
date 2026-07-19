@@ -33,11 +33,11 @@ test("bundle replay target signature mismatches throw R3 stale with recorded and
   const bundle = gpu.bundle({ target: { colors: ["rgba8unorm"] }, label: "signatureMismatch" }, (b) => b.draw(effect));
 
   expect(() => gpu.frame((frame) => frame.pass({ target: scene }, (p) => p.bundles(bundle)))).toThrowError(
-    "bundle 'signatureMismatch' está stale: la firma del target de replay no coincide con la firma grabada. Los bundles congelan formato/depth/sampleCount y bind groups.\n" +
-      "  Firma grabada: rgba8unorm:none:1\n" +
-      "  Firma actual: bgra8unorm:none:1\n" +
-      "  Fix: re-grabá el bundle para este target → signatureMismatch = gpu.bundle({ target: scene }, ...)\n" +
-      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+    "bundle 'signatureMismatch' is stale: the replay target signature does not match the recorded signature. Bundles freeze format/depth/sampleCount and bind groups.\n" +
+      "  Recorded signature: rgba8unorm:none:1\n" +
+      "  Actual signature: bgra8unorm:none:1\n" +
+      "  Fix: re-record the bundle for this target → signatureMismatch = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
 });
@@ -83,7 +83,7 @@ test("signature bundle recording still requires draw resources to be set", async
   const gpu = await init();
   const post = gpu.effect(TEXTURE, { label: "post" });
 
-  expect(() => gpu.bundle({ target: { colors: ["rgba8unorm"] }, label: "unsetTextureBundle" }, (b) => b.draw(post))).toThrowError(/VGPU-R1-BINDING-NEVER-SET|nunca fue seteado/);
+  expect(() => gpu.bundle({ target: { colors: ["rgba8unorm"] }, label: "unsetTextureBundle" }, (b) => b.draw(post))).toThrowError(/VGPU-R1-BINDING-NEVER-SET|was never set/);
   gpu.dispose();
 });
 

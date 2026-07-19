@@ -47,10 +47,10 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
 
   walls.set({ detail: tex2 });
   expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).toThrowError(
-    "bundle 'staticScene' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
-      "  'walls' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
-      "  Fix: re-grabalo → staticScene = gpu.bundle({ target: scene }, ...)\n" +
-      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+    "bundle 'staticScene' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'walls' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → staticScene = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
 });
@@ -68,20 +68,20 @@ test("R3 bundle sampling a repeatedly resized target stales through binding iden
   source.resize([8, 8]);
 
   expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
-    "bundle 'postBundleA' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
-      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
-      "  Fix: re-grabalo → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
-      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+    "bundle 'postBundleA' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
   );
 
   const secondBundle = recordBundle("postBundleB");
   source.resize([16, 16]);
 
   expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
-    "bundle 'postBundleB' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
-      "  'post' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
-      "  Fix: re-grabalo → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
-      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+    "bundle 'postBundleB' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
 });
@@ -125,13 +125,13 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
   expect(errors).toEqual(expect.arrayContaining([
     expect.objectContaining({
       code: "VGPU-R4-GROUP-VALIDATION",
-      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
+      message: expect.stringContaining("group 1 claimed in draw 'cubeA'"),
       where: "cubeA.draw",
       detail: { drawLabel: "cubeA", group: 1 },
     }),
     expect.objectContaining({
       code: "VGPU-R4-GROUP-VALIDATION",
-      message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
+      message: expect.stringContaining("group 1 claimed in draw 'cubeB'"),
       where: "cubeB.draw",
       detail: { drawLabel: "cubeB", group: 1 },
     }),
@@ -197,12 +197,12 @@ test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", a
     entries: [bind.resource(0, staticBuffer)],
   });
   expect(() => cube.group(1, staticBindGroup)).toThrowError(
-    "el grupo 1 reclamado en draw 'cube' no es compatible: @binding(0) no coincide con el layout reflejado.",
+    "group 1 claimed in draw 'cube' is incompatible: @binding(0) does not match the reflected layout.",
   );
 
   cube.group(1, slot.bindGroup);
   expect(() => cube.set({ obj: { value: 1 } })).toThrowError(
-    "el grupo 1 de 'cube' fue reclamado con group(1, bindGroup); no se puede usar set() sobre ese grupo.",
+    "group 1 of 'cube' was claimed with group(1, bindGroup); set() cannot be used on that group.",
   );
 
   pool.beginFrame(1);

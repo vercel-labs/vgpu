@@ -70,12 +70,12 @@ export function signatureKeyOf(sig: TargetSignature): string {
 }
 
 export function validateTargetSignature(sig: TargetSignature, where: string): void {
-  if (!Array.isArray(sig.colors) || sig.colors.length === 0) throw compileSignatureInvalidError(where, "colors debe ser un array no vacío.");
+  if (!Array.isArray(sig.colors) || sig.colors.length === 0) throw compileSignatureInvalidError(where, "colors must be a non-empty array.");
   const invalidColor = sig.colors.find((format) => typeof format !== "string" || format.length === 0);
-  if (invalidColor !== undefined) throw compileSignatureInvalidError(where, `colors debe contener solo GPUTextureFormat strings; recibí ${String(invalidColor)}.`);
-  if (sig.depth !== undefined && (typeof sig.depth !== "string" || sig.depth.length === 0)) throw compileSignatureInvalidError(where, "depth debe ser un GPUTextureFormat string.");
+  if (invalidColor !== undefined) throw compileSignatureInvalidError(where, `colors must contain only GPUTextureFormat strings; received ${String(invalidColor)}.`);
+  if (sig.depth !== undefined && (typeof sig.depth !== "string" || sig.depth.length === 0)) throw compileSignatureInvalidError(where, "depth must be a GPUTextureFormat string.");
   const sampleCount = sig.sampleCount ?? 1;
-  if (sampleCount !== 1 && sampleCount !== 4) throw compileSignatureInvalidError(where, `sampleCount debe ser 1 o 4; recibí ${String(sampleCount)}.`);
+  if (sampleCount !== 1 && sampleCount !== 4) throw compileSignatureInvalidError(where, `sampleCount must be 1 or 4; received ${String(sampleCount)}.`);
 }
 
 export function pipelineKeyOf(parts: {

@@ -74,7 +74,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const direct = bindings.get(name);
     if (direct) return setBinding(direct, name, value);
     const member = findMemberBinding(name, bindings, options.label);
-    if (!member) throw unsupportedError(`${options.label}.set`, `Binding '${name}' no existe en '${options.label}'.`);
+    if (!member) throw unsupportedError(`${options.label}.set`, `Binding '${name}' does not exist in '${options.label}'.`);
     return setBindingMember(member, name, value);
   }
 
@@ -93,7 +93,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const ownership = ownershipFor(state.info, value);
     latchBindingOwnership(state, memberName, ownership);
     latchMemberOwnership(state, memberName, ownership);
-    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' no puede recibir recursos; seteá el binding completo '${state.info.name}'.`);
+    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' cannot receive resources; set the complete binding '${state.info.name}'.`);
     const before = identityString(state.identity);
     setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
     return identityChangeFor(state, before);
@@ -143,7 +143,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function layout(group: number): GPUBindGroupLayout {
     const bgl = options.bindGroupLayouts.get(group);
-    if (!bgl) throw unsupportedError(`${options.label}.layout`, `No existe @group(${group}) en '${options.label}'.`);
+    if (!bgl) throw unsupportedError(`${options.label}.layout`, `@group(${group}) does not exist in '${options.label}'.`);
     return bgl;
   }
 
@@ -198,7 +198,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function requiredLibLayout(state: MutableBindingState): NonNullable<BindingInfo["layout"]> & { readonly size: number } {
-    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' no acepta valores JS planos; pasá un recurso compatible.`);
+    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' does not accept plain JS values; pass a compatible resource.`);
     return state.info.layout as NonNullable<BindingInfo["layout"]> & { readonly size: number };
   }
 
@@ -228,7 +228,7 @@ function findMemberBinding(memberName: string, bindings: ReadonlyMap<string, Mut
   let match: MutableBindingState | undefined;
   for (const state of bindings.values()) {
     if (!state.info.layout?.members?.some((member) => member.name === memberName)) continue;
-    if (match) throw unsupportedError(`${label}.set`, `Binding member '${memberName}' es ambiguo en '${label}'; seteá el binding completo.`);
+    if (match) throw unsupportedError(`${label}.set`, `Binding member '${memberName}' is ambiguous in '${label}'; set the complete binding.`);
     match = state;
   }
   return match;
@@ -259,13 +259,13 @@ function validateClaimedGroup(label: string, group: number, bindGroup: GPUBindGr
 }
 
 function layoutMismatchReason(expected: readonly GPUBindGroupLayoutEntry[], claimed: readonly GPUBindGroupLayoutEntry[]): string | undefined {
-  if (expected.length !== claimed.length) return `esperaba ${expected.length} bindings y recibió ${claimed.length}`;
+  if (expected.length !== claimed.length) return `expected ${expected.length} bindings and received ${claimed.length}`;
   const expectedByBinding = entriesByBinding(expected);
   const claimedByBinding = entriesByBinding(claimed);
   for (const [binding, entry] of expectedByBinding) {
     const claimedEntry = claimedByBinding.get(binding);
-    if (!claimedEntry) return `falta @binding(${binding})`;
-    if (entrySignature(entry) !== entrySignature(claimedEntry)) return `@binding(${binding}) no coincide con el layout reflejado`;
+    if (!claimedEntry) return `missing @binding(${binding})`;
+    if (entrySignature(entry) !== entrySignature(claimedEntry)) return `@binding(${binding}) does not match the reflected layout`;
   }
   return undefined;
 }

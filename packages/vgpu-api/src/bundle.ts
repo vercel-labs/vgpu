@@ -92,14 +92,14 @@ function normalizeBundleSignature(target: CompileTarget): TargetSignature {
 }
 
 function targetSignatureStaleMessage(id: string, recordedKey: string, actualKey: string): string {
-  return `bundle '${id}' está stale: la firma del target de replay no coincide con la firma grabada. Los bundles congelan formato/depth/sampleCount y bind groups.\n  Firma grabada: ${recordedKey}\n  Firma actual: ${actualKey}\n  Fix: re-grabá el bundle para este target → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+  return `bundle '${id}' is stale: the replay target signature does not match the recorded signature. Bundles freeze format/depth/sampleCount and bind groups.\n  Recorded signature: ${recordedKey}\n  Actual signature: ${actualKey}\n  Fix: re-record the bundle for this target → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function staleEventMessage(id: string, event: BundleStaleEvent): string {
   if (event.kind === "group-claim") {
-    return `bundle '${id}' está stale: el grupo ${event.group} del draw\n  '${event.drawLabel}' cambió de bind group después de la grabación. Los bundles congelan comandos y bind groups.\n  Fix: re-grabalo → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+    return `bundle '${id}' is stale: group ${event.group} of draw\n  '${event.drawLabel}' changed bind group after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
   }
-  return `bundle '${id}' está stale: el binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) del draw\n  '${event.drawLabel}' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n  Fix: re-grabalo → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+  return `bundle '${id}' is stale: binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) of draw\n  '${event.drawLabel}' changed resource after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function bundleStaleError(id: string, message: string): VGPUError {
@@ -114,5 +114,5 @@ export function replayBundles(target: Target, bundles: readonly Bundle[], execut
 
 function assertRecordedBundle(bundle: Bundle): RecordedBundle {
   if (bundle instanceof RecordedBundle) return bundle;
-  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() esperaba bundles creados por gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
+  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() expected bundles created by gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
 }

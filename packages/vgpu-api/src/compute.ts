@@ -83,6 +83,6 @@ export class ComputePipeline implements Compute {
 
 function computeEntryPoint(reflection: Reflection, label: string): string {
   const entry = reflection.entryPoints.find((item) => item.stage === "compute");
-  if (!entry) throw unsupportedError(`${label}.compute`, "El shader compute requiere un entry point @compute.");
+  if (!entry) throw unsupportedError(`${label}.compute`, "The compute shader requires a @compute entry point.");
   return entry.name;
 }

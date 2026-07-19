@@ -29,8 +29,8 @@ function validateMsaaFormat(format: GPUTextureFormat, caps: TargetDeviceCaps): v
   if (!(caps.isCompatibilityMode && format === "rgba16float")) return;
   throw unsupportedError(
     "gpu.target",
-    "msaa: true con formato rgba16float no está soportado por Dawn compatibility mode en este device.",
-    "En este entorno usá rgba16float sin msaa, o usá un formato MSAA-compatible como rgba8unorm para ejercitar resolve. En devices WebGPU capaces, rgba16float+msaa queda soportado.",
+    "msaa: true with rgba16float format is not supported by Dawn compatibility mode on this device.",
+    "In this environment, use rgba16float without msaa, or use an MSAA-compatible format such as rgba8unorm to exercise resolve. On capable WebGPU devices, rgba16float+msaa remains supported.",
   );
 }
 

@@ -396,7 +396,7 @@ function validateOptionalDrawCount(label: string, field: string, value: number |
   if (Number.isInteger(value) && value >= 0) return;
   throw new VGPUError({
     code: "VGPU-R1-DRAW-COUNT",
-    message: `${field} de '${label}' debe ser un entero >= 0; recibí ${String(value)}. Usá 0 solo cuando quieras emitir un draw válido sin vértices/instancias.`,
+    message: `${field} of '${label}' must be an integer >= 0; received ${String(value)}. Use 0 only when you want to issue a valid draw with no vertices/instances.`,
     where: `${label}.draw`,
   });
 }

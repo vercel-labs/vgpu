@@ -12,4 +12,4 @@ No Docker GPU harness is required for this example because the mock entrypoint i
 
 ## What to expect
 
-The test collects thrown messages and asserts they name the missing binding case (`nunca fue seteado`) and the ownership-flip case (`No se puede cambiar el ownership`). The example should fail loudly if those fix-its regress.
+The test collects thrown messages and asserts they name the missing binding case (`was never set`) and the ownership-flip case (`Binding ownership cannot be changed`). The example should fail loudly if those fix-its regress.
