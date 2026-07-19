@@ -1,3 +1,4 @@
+import type { ClearColor } from "./target-utils.ts";
 import type { Texture, ResourceDestroyCallback, ResourceIdentity, UnsubscribeResourceDestroy } from "@vgpu/core";
 
 export interface TargetTextureOptions {
@@ -33,7 +34,7 @@ export interface Target {
   resize(size: readonly [number, number]): void;
   read(): Promise<Uint8Array>;
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy;
-  renderPassDescriptor(clear?: GPUColor | readonly [number, number, number, number], load?: boolean): GPURenderPassDescriptor;
+  renderPassDescriptor(clear?: ClearColor, preserve?: boolean): GPURenderPassDescriptor;
 }
 
 export { OffscreenTarget } from "./target-offscreen.ts";

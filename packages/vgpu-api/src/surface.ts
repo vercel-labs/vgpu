@@ -1,5 +1,5 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import { colorValue, sameSize } from "./target-utils.ts";
+import { colorValue, sameSize, type ClearColor } from "./target-utils.ts";
 import type { Target } from "./target.ts";
 import {
   surfaceAutoResizeUnsupportedError,
@@ -126,10 +126,10 @@ export class CanvasSurface implements Surface {
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { this.assertLive(); return this.destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.assertLive(); this.texturesRecreatedCallbacks.add(cb); return () => { this.texturesRecreatedCallbacks.delete(cb); }; }
 
-  renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1], load?: boolean): GPURenderPassDescriptor {
+  renderPassDescriptor(clear: ClearColor = [0, 0, 0, 1], preserve?: boolean): GPURenderPassDescriptor {
     this.assertLive();
-    const attachment: GPURenderPassColorAttachment = { view: this.context.getCurrentTexture().createView(), loadOp: load ? "load" : "clear", storeOp: "store" };
-    if (!load) attachment.clearValue = colorValue(clear);
+    const attachment: GPURenderPassColorAttachment = { view: this.context.getCurrentTexture().createView(), loadOp: preserve ? "load" : "clear", storeOp: "store" };
+    if (!preserve) attachment.clearValue = colorValue(clear);
     return { colorAttachments: [attachment] };
   }
 

@@ -9,13 +9,14 @@ import { InternalEffect, type Effect, type EffectOptions } from "./effect.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
 import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
-import { frameReentrantError, surfaceDuplicateError, unsupportedError, type VGPUError } from "./errors.ts";
+import { frameReentrantError, surfaceDuplicateError, unsupportedError, VGPUError } from "./errors.ts";
 import { ComputePipeline } from "./compute.ts";
 import { createStorageBuffer } from "./storage.ts";
 import { createPingPongStorage, createPingPongTargets } from "./ping-pong.ts";
 import { toWgsl } from "./shader-source.ts";
 import { createSharedUniforms } from "./uniforms.ts";
 import { CanvasSurface, type Surface, type SurfaceCanvas, type SurfaceOptions } from "./surface.ts";
+import type { ClearColor } from "./target-utils.ts";
 import { createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type SettledSource, type ShaderModuleCache } from "./pipeline-store.ts";
 
 export interface InitOptions {
@@ -41,6 +42,7 @@ export interface Gpu {
   time: number;
   deltaTime: number;
   frameCount: number;
+  clearColor: ClearColor;
   surface(canvas: SurfaceCanvas, opts?: SurfaceOptions): Surface;
   effect(source: string | ShaderSource, opts?: EffectOptions): Effect;
   draw(opts: DrawOptions): Draw;
@@ -83,6 +85,7 @@ class RingGpu implements Gpu {
   private readonly settledSources = new Set<SettledSource>();
   private disposed = false;
   private advancing = false;
+  private clearColorValue: ClearColor = [0, 0, 0, 1];
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
 
   constructor(readonly device: Device) {
@@ -91,8 +94,15 @@ class RingGpu implements Gpu {
     this.shaderModules = createShaderModuleCache(device);
     this.pipelineLayouts = createPipelineLayoutCache(device);
     this.samplers = createSamplerCache(device);
-    const runner = new FrameRunner(() => new Frame(device, undefined, (error) => this.reportError(error), (promise) => this.trackDelivery(promise)), () => this.advanceFrameState());
+    const runner = new FrameRunner(() => new Frame(device, undefined, (error) => this.reportError(error), (promise) => this.trackDelivery(promise), () => this.clearColorValue), () => this.advanceFrameState());
     this.frame = callableFrameRunner(runner);
+  }
+
+  get clearColor(): ClearColor { return this.clearColorValue; }
+  set clearColor(value: ClearColor) {
+    const o = value as any, n = Array.isArray(value) ? value : [o?.r, o?.g, o?.b, o?.a];
+    if (n.length !== 4 || !n.every(Number.isFinite)) throw new VGPUError({ code: "VGPU-CLEAR-COLOR-INVALID", message: "invalid gpu.clearColor.", where: "gpu.clearColor" });
+    this.clearColorValue = value;
   }
 
   surface(canvas: SurfaceCanvas, opts: SurfaceOptions = {}): Surface {

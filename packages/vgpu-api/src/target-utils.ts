@@ -2,6 +2,7 @@ import { targetSizeRequiredError, unsupportedError } from "./errors.ts";
 import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 
 export const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
+export type ClearColor = GPUColor | readonly [number, number, number, number];
 
 export interface TargetDeviceCaps {
   readonly isCompatibilityMode?: boolean;
@@ -34,24 +35,24 @@ function validateMsaaFormat(format: GPUTextureFormat, caps: TargetDeviceCaps): v
   );
 }
 
-export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: GPUColor | readonly [number, number, number, number], load?: boolean): GPURenderPassColorAttachment {
+export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: ClearColor, preserve?: boolean): GPURenderPassColorAttachment {
   const attachment: GPURenderPassColorAttachment = {
     view: (msaa ?? resolved).createView(),
     resolveTarget: msaa ? resolved.createView() : undefined,
-    loadOp: load ? "load" : "clear",
+    loadOp: preserve ? "load" : "clear",
     storeOp: msaa ? "discard" : "store",
   };
-  if (!load) attachment.clearValue = colorValue(clear);
+  if (!preserve) attachment.clearValue = colorValue(clear);
   return attachment;
 }
 
-export function depthAttachment(depth: { createView(): GPUTextureView }, load?: boolean): GPURenderPassDepthStencilAttachment {
-  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: load ? "load" : "clear", depthStoreOp: "store" };
-  if (!load) attachment.depthClearValue = 1;
+export function depthAttachment(depth: { createView(): GPUTextureView }, preserve?: boolean): GPURenderPassDepthStencilAttachment {
+  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: preserve ? "load" : "clear", depthStoreOp: "store" };
+  if (!preserve) attachment.depthClearValue = 1;
   return attachment;
 }
 
-export function colorValue(clear: GPUColor | readonly [number, number, number, number]): GPUColor {
+export function colorValue(clear: ClearColor): GPUColor {
   return Array.isArray(clear) ? { r: clear[0], g: clear[1], b: clear[2], a: clear[3] } : clear;
 }
 

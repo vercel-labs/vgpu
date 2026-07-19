@@ -1,6 +1,6 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
-import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions } from "./target-utils.ts";
+import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions, type ClearColor } from "./target-utils.ts";
 
 /** Offscreen render target. MSAA targets render into sampleCount=4 attachments and resolve into `.color`. */
 export class OffscreenTarget implements Target {
@@ -41,10 +41,10 @@ export class OffscreenTarget implements Target {
   onTexturesRecreated(cb: () => void): () => void { this.texturesRecreatedCallbacks.add(cb); return () => { this.texturesRecreatedCallbacks.delete(cb); }; }
   destroy(): void { this.destroySignal.emit(this); this.texturesRecreatedCallbacks.clear(); this.destroyTextures(); }
 
-  renderPassDescriptor(clear: GPUColor | readonly [number, number, number, number] = [0, 0, 0, 1], load?: boolean): GPURenderPassDescriptor {
+  renderPassDescriptor(clear: ClearColor = [0, 0, 0, 1], preserve?: boolean): GPURenderPassDescriptor {
     return {
-      colorAttachments: this.currentColors.map((resolved, index) => colorAttachment(resolved, this.currentMsaaColors?.[index], clear, load)),
-      depthStencilAttachment: this.currentDepth ? depthAttachment(this.currentDepth, load) : undefined,
+      colorAttachments: this.currentColors.map((resolved, index) => colorAttachment(resolved, this.currentMsaaColors?.[index], clear, preserve)),
+      depthStencilAttachment: this.currentDepth ? depthAttachment(this.currentDepth, preserve) : undefined,
     };
   }
 

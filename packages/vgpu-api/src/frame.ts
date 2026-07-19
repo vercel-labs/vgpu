@@ -5,15 +5,14 @@ import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, frameReentrantError, passLoadConflictError, passLoadMsaaError, targetRequiredError } from "./errors.ts";
+import { claimedGroupNativeValidationError, frameReentrantError, passPreserveMsaaError, targetRequiredError } from "./errors.ts";
 import { isSurfaceResizeCallbackActive } from "./surface.ts";
-import { isTarget } from "./target-utils.ts";
+import { isTarget, type ClearColor } from "./target-utils.ts";
 
 export interface FramePassOptions {
   readonly target: Target;
-  readonly clear?: GPUColor | readonly [number, number, number, number];
-  /** Preserve existing target contents instead of clearing (loadOp: "load", color and depth). Mutually exclusive with clear. */
-  readonly load?: boolean;
+  /** Omit or pass true to clear with gpu.clearColor; pass false to preserve color/depth; pass a color to clear with it. */
+  readonly clear?: boolean | ClearColor;
 }
 
 export interface FrameLoopHandle { stop(): void }
@@ -37,18 +36,22 @@ export class Frame {
     private readonly defaultTarget?: Target,
     private readonly errorSink?: ValidationErrorSink,
     private readonly trackSettled?: (promise: Promise<unknown>) => void,
+    private readonly defaultClearColor: () => ClearColor = () => [0, 0, 0, 1],
   ) {
     this.encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
+  pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
+  pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
-    const opts = isTarget(target) ? { target } : target;
+    const targetOnly = isTarget(target);
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
-    const resolvedTarget = opts.target ?? this.defaultTarget;
+    const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError("Frame.pass");
-    if (opts.load === true && opts.clear !== undefined) throw passLoadConflictError();
-    if (opts.load === true && resolvedTarget.sampleCount === 4) throw passLoadMsaaError();
-    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(opts.clear, opts.load === true));
+    const clear = targetOnly ? undefined : target.clear;
+    const preserve = clear === false;
+    if (preserve && resolvedTarget.sampleCount === 4) throw passPreserveMsaaError();
+    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(clear === undefined || clear === true || clear === false ? this.defaultClearColor() : clear, preserve));
     try { cb(new FramePass(encoder, resolvedTarget, this.validations)); }
     catch (error) {
       discardClaimedGroupValidationResults(this.validations);

@@ -56,14 +56,14 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("writeMask can preserve alpha 
   }
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("load preserves offscreen target contents across passes and frames", async () => {
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("clear false preserves offscreen target contents across passes and frames", async () => {
   const gpu = await init();
   try {
     const target = gpu.target({ size: [4, 2], format: "rgba8unorm" });
     const halfGreen = gpu.effect(HALF_GREEN, { label: "half-green" });
 
     gpu.frame((frame) => frame.pass({ target, clear: [1, 0, 0, 1] }, () => undefined));
-    gpu.frame((frame) => frame.pass({ target, load: true }, (pass) => pass.draw(halfGreen)));
+    gpu.frame((frame) => frame.pass({ target, clear: false }, (pass) => pass.draw(halfGreen)));
 
     const px = await target.read();
     const left = 0;

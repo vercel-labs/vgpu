@@ -141,7 +141,7 @@ export function createLightSourcesRaw(
         );
       } else {
         frame.pass(
-          { target, load: true },
+          { target, clear: false },
           (pass: any) => pass.draw(ledEmittersDraw),
         );
       }

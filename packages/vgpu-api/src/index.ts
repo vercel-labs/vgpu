@@ -1,6 +1,6 @@
 import { createGpu, type InitOptions } from "./init.ts";
 
-export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, GpuErrorListener, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent } from "./init.ts";
+export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, ClearColor, GpuErrorListener, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent } from "./init.ts";
 export type { BlendComponentOptions, BlendOptions, BlendPreset, Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } from "./draw.ts";
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "./frame.ts";
 export type { Effect, EffectOptions } from "./effect.ts";

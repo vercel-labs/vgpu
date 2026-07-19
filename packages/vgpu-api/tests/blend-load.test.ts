@@ -70,12 +70,12 @@ test("effect options pass blend and writeMask through to the fullscreen draw", a
   gpu.dispose();
 });
 
-test("frame.pass load preserves color and depth attachments", async () => {
+test("frame.pass clear false preserves color and depth attachments", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
   const target = gpu.target({ size: [2, 2], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target, load: true }, () => undefined));
+  gpu.frame((frame) => frame.pass({ target, clear: false }, () => undefined));
 
   expect(descriptors[0]?.colorAttachments?.[0]).toMatchObject({ loadOp: "load", storeOp: "store" });
   expect(descriptors[0]?.colorAttachments?.[0]?.clearValue).toBeUndefined();
@@ -85,21 +85,43 @@ test("frame.pass load preserves color and depth attachments", async () => {
   vi.restoreAllMocks();
 });
 
-test("frame.pass rejects load with clear and MSAA targets", async () => {
+test("frame.pass rejects clear false with MSAA targets", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
   const msaa = gpu.target({ size: [2, 2], msaa: true });
-  expect(() => gpu.frame((frame) => frame.pass({ target, load: true, clear: [0, 0, 0, 1] }, () => undefined))).toThrowError(/VGPU-PASS-LOAD-CONFLICT|both load/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, load: true }, () => undefined))).toThrowError(/VGPU-PASS-LOAD-MSAA|MSAA targets/);
+  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, clear: false }, () => undefined))).toThrowError(/VGPU-PASS-PRESERVE-MSAA|MSAA targets/);
   gpu.dispose();
 });
 
-test("surface render pass descriptors honor load within a frame", async () => {
+test("gpu.clearColor defaults, assigns, and drives omitted or true pass clear", async () => {
+  const gpu = await init();
+  const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
+  const a = gpu.target({ size: [2, 2] });
+  const b = gpu.target({ size: [2, 2] });
+
+  expect(gpu.clearColor).toEqual([0, 0, 0, 1]);
+  gpu.frame((frame) => frame.pass(a, () => undefined));
+  gpu.clearColor = { r: 0.25, g: 0.5, b: 0.75, a: 1 };
+  gpu.frame((frame) => frame.pass({ target: b, clear: true }, () => undefined));
+
+  expect(descriptors[0]?.colorAttachments?.[0]?.clearValue).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+  expect(descriptors[1]?.colorAttachments?.[0]?.clearValue).toEqual({ r: 0.25, g: 0.5, b: 0.75, a: 1 });
+  gpu.dispose();
+  vi.restoreAllMocks();
+});
+
+test("gpu.clearColor validates assignments", async () => {
+  const gpu = await init();
+  expect(() => { gpu.clearColor = [0, 0, Number.NaN, 1] as never; }).toThrowError(/VGPU-CLEAR-COLOR-INVALID|gpu\.clearColor/);
+  expect(() => { gpu.clearColor = { r: 0, g: 0, b: 0 } as never; }).toThrowError(/VGPU-CLEAR-COLOR-INVALID|gpu\.clearColor/);
+  gpu.dispose();
+});
+
+test("surface render pass descriptors honor clear false within a frame", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
   const surface = gpu.surface(canvasLike());
 
-  gpu.frame((frame) => frame.pass({ target: surface, load: true }, () => undefined));
+  gpu.frame((frame) => frame.pass({ target: surface, clear: false }, () => undefined));
 
   expect(descriptors[0]?.colorAttachments?.[0]).toMatchObject({ loadOp: "load", storeOp: "store" });
   expect(descriptors[0]?.colorAttachments?.[0]?.clearValue).toBeUndefined();

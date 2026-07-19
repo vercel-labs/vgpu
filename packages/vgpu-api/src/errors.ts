@@ -76,23 +76,15 @@ export function writeMaskInvalidError(label: string, preview: string): VGPUError
   });
 }
 
-export function passLoadConflictError(): VGPUError {
+export function passPreserveMsaaError(): VGPUError {
   return new VGPUError({
-    code: "VGPU-PASS-LOAD-CONFLICT",
-    message: "pass options set both load: true and clear.",
-    fix: "Choose one: load preserves the target's existing contents; clear overwrites them.",
+    code: "VGPU-PASS-PRESERVE-MSAA",
+    message: "clear:false cannot preserve MSAA targets.",
+    fix: "Use a non-MSAA target for accumulation.",
     where: "Frame.pass",
   });
 }
 
-export function passLoadMsaaError(): VGPUError {
-  return new VGPUError({
-    code: "VGPU-PASS-LOAD-MSAA",
-    message: `load: true is not supported on MSAA targets: multisample attachments use storeOp "discard", so there are no contents to load.`,
-    fix: "Render load/accumulate passes into a non-MSAA target (gpu.target({ size, format })).",
-    where: "Frame.pass",
-  });
-}
 
 export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
