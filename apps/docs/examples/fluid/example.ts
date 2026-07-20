@@ -8,12 +8,10 @@ import advectDyeWgsl from './advect-dye.wgsl';
 import updateParticlesWgsl from './update-particles.wgsl';
 import displayWgsl from './display.wgsl';
 import particlesWgsl from './particles.wgsl';
+import { FIXED_STEP as STEP, GRID_HEIGHT as HEIGHT, GRID_WIDTH as WIDTH, fixedStepCount, idleEmitters } from './math';
 
-const WIDTH = 128;
-const HEIGHT = 72;
 const CELLS = WIDTH * HEIGHT;
 const TRACERS = 8192;
-const STEP = 1 / 60;
 const CLEAR = [0.003, 0.005, 0.014, 1] as const;
 
 type Output = Surface | Target;
@@ -41,6 +39,11 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   const state = createState(gpu);
   const input = installStirInput(canvas);
   await prepareRenderer(state, surface);
+  let sawInitialResize = false;
+  const unsubscribeResize = surface.onResize(() => {
+    if (!sawInitialResize) { sawInitialResize = true; return; }
+    void prepareRenderer(state, surface);
+  });
   let disposed = false;
   let raf = 0;
   let accumulator = 0;
@@ -49,10 +52,9 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   const tick = (now: number) => {
     if (disposed) return;
     if (!document.hidden) {
-      accumulator += Math.min((now - previous) / 1000, 1 / 30);
-      let count = 0;
-      while (accumulator >= STEP && count < 2) { simulate(state, input); accumulator -= STEP; count++; }
-      if (count === 2) accumulator = 0;
+      const fixed = fixedStepCount(accumulator, (now - previous) / 1000);
+      accumulator = fixed.accumulator;
+      for (let i = 0; i < fixed.steps; i++) simulate(state, input);
       render(state, surface);
     }
     previous = now;
@@ -64,6 +66,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(raf);
+    unsubscribeResize();
     input.dispose();
     state.mesh.destroy();
     state.tracer.destroy();
@@ -72,14 +75,18 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   };
 }
 
-export async function renderThumb(gpu: Gpu, target: Target, opts: { warmupFrames?: number } = {}): Promise<void> {
+export interface FluidValidationStats { steps: number; finite: boolean; maxSpeed: number; maxDye: number; averageDye: number }
+
+export async function renderThumb(gpu: Gpu, target: Target, opts: { warmupFrames?: number; scriptedDrag?: boolean; onStateValidated?: (stats: FluidValidationStats) => void } = {}): Promise<void> {
   const state = createState(gpu);
   await prepareRenderer(state, target);
   const steps = Math.max(0, opts.warmupFrames ?? 120);
-  for (let i = 0; i < steps; i++) simulate(state);
+  const scriptedInput = opts.scriptedDrag ? createScriptedDrag() : undefined;
+  for (let i = 0; i < steps; i++) simulate(state, scriptedInput);
   render(state, target);
   await gpu.gpu.queue.onSubmittedWorkDone();
   await gpu.settled();
+  if (opts.onStateValidated) opts.onStateValidated(await readValidationStats(state));
   state.mesh.destroy();
   state.tracer.destroy();
 }
@@ -151,21 +158,49 @@ function simUniforms(state: FluidState, input?: StirInput) {
   const ramp = Math.min(1, (state.step + 1) / 24);
   const since = state.step - state.lastInputStep;
   const idle = since < 90 ? .15 : .15 + .85 * Math.min(1, (since - 90) / 60);
-  const a: [number, number] = [.5 + .28 * Math.sin(.73 * t), .5 + .22 * Math.sin(1.09 * t + .4)];
-  const b: [number, number] = [.5 + .26 * Math.sin(.61 * t + Math.PI), .5 + .24 * Math.sin(.97 * t + 2.1)];
+  const [a, b] = idleEmitters(state.step);
   let velocity: [number, number] = input?.velocity ?? [0, 0];
   if (input?.active && Math.hypot(...velocity) < .02) velocity = [.16 * Math.cos(t * 5), .16 * Math.sin(t * 5)];
   const colors = [[.05, .55, 1, 1], [.65, .15, 1, 1], [1, .22, .12, 1]] as const;
   return { size: [WIDTH, HEIGHT], step: state.step, pointer_active: input?.active ? 1 : 0, pointer_from: input?.from ?? [.5, .5], pointer_to: input?.to ?? [.5, .5], pointer_velocity: velocity, pointer_color: colors[((Math.floor(state.step / 90) + (input?.stroke ?? 0)) % colors.length)]!, idle_a: [...a, ramp * idle, .085], idle_b: [...b, ramp * idle, .08], output_size: [1, 1], _pad: [0, 0] };
 }
 
-function initialTracers(): Float32Array {
-  const data = new Float32Array(TRACERS * 8);
+function createScriptedDrag(): StirInput {
+  let step = 0;
+  const point = (n: number): [number, number] => [.5 + .28 * Math.cos(-1.2 + n / 29 * 2.4), .5 + .24 * Math.sin(-1.2 + n / 29 * 2.4)];
+  return {
+    get active() { return step < 32; },
+    get from() { return point(Math.max(0, Math.min(29, step - 1))); },
+    get to() { return point(Math.max(0, Math.min(29, step))); },
+    get velocity() { const a = point(Math.max(0, Math.min(29, step - 1))); const b = point(Math.max(0, Math.min(29, step))); return [(b[0] - a[0]) * 60, (b[1] - a[1]) * 60] as [number, number]; },
+    stroke: 1,
+    consumeStep() { step++; },
+    dispose() {},
+  };
+}
+
+async function readValidationStats(state: FluidState): Promise<FluidValidationStats> {
+  const [velocityBytes, dyeBytes] = await Promise.all([state.velocity.read.read(), state.dye.read.read()]);
+  const velocity = new Float32Array(velocityBytes);
+  const dye = new Float32Array(dyeBytes);
+  let finite = true; let maxSpeed = 0; let maxDye = 0; let dyeSum = 0;
+  for (let i = 0; i < velocity.length; i += 2) {
+    const x = velocity[i]!; const y = velocity[i + 1]!;
+    finite &&= Number.isFinite(x) && Number.isFinite(y);
+    maxSpeed = Math.max(maxSpeed, Math.hypot(x, y));
+  }
+  for (let i = 0; i < dye.length; i++) { const value = dye[i]!; finite &&= Number.isFinite(value); maxDye = Math.max(maxDye, value); dyeSum += value; }
+  return { steps: state.step, finite, maxSpeed, maxDye, averageDye: dyeSum / dye.length };
+}
+
+function initialTracers(): ArrayBuffer {
+  const buffer = new ArrayBuffer(TRACERS * 32);
+  const data = new Float32Array(buffer);
   for (let i = 0; i < TRACERS; i++) {
     const a = hash(i * 3 + 1) * Math.PI * 2; const r = Math.sqrt(hash(i * 3 + 2)) * .28;
     const k = i * 8; data[k] = .5 + Math.cos(a) * r; data[k + 1] = .5 + Math.sin(a) * r;
     data[k + 2] = .08; data[k + 3] = .2; data[k + 4] = .4; data[k + 5] = .18; data[k + 6] = .0025; data[k + 7] = hash(i * 3 + 3) * 5;
   }
-  return data;
+  return buffer;
 }
 function hash(value: number): number { let x = value | 0; x = Math.imul(x ^ (x >>> 16), 0x7feb352d); x = Math.imul(x ^ (x >>> 15), 0x846ca68b); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; }

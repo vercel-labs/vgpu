@@ -16,14 +16,17 @@ export function installStirInput(canvas: HTMLCanvasElement, showOverlay = true):
   let lastTime = 0;
   let decay = 0;
   let stroke = 0;
+  const previousTouchAction = canvas.style.touchAction;
+  const parent = canvas.parentElement;
+  const previousParentPosition = parent?.style.position ?? '';
+  let changedParentPosition = false;
   canvas.style.touchAction = 'none';
 
   const overlay = showOverlay ? document.createElement('div') : undefined;
   if (overlay) {
     overlay.textContent = 'drag to stir';
     Object.assign(overlay.style, { position: 'absolute', left: '50%', bottom: '18px', transform: 'translateX(-50%)', color: 'rgba(255,255,255,.8)', font: '500 12px system-ui', letterSpacing: '.08em', textTransform: 'uppercase', pointerEvents: 'none', transition: 'opacity 400ms', zIndex: '2' });
-    const parent = canvas.parentElement;
-    if (parent) { if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; parent.append(overlay); }
+    if (parent) { if (getComputedStyle(parent).position === 'static') { parent.style.position = 'relative'; changedParentPosition = true; } parent.append(overlay); }
   }
 
   const point = (event: PointerEvent): [number, number] => {
@@ -46,6 +49,6 @@ export function installStirInput(canvas: HTMLCanvasElement, showOverlay = true):
   return {
     get active() { return active || decay > 0; }, get from() { return from; }, get to() { return to; }, get velocity() { return velocity; }, get stroke() { return stroke; },
     consumeStep() { from = to; if (!active && decay > 0) { velocity = [velocity[0] * .45, velocity[1] * .45]; decay--; } },
-    dispose() { canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up); overlay?.remove(); canvas.style.touchAction = ''; },
+    dispose() { canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up); overlay?.remove(); canvas.style.touchAction = previousTouchAction; if (changedParentPosition && parent) parent.style.position = previousParentPosition; },
   };
 }

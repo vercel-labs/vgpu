@@ -69,7 +69,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
     if (['missing', 'different'].includes(result.compare.status)) failures++;
   }
 }
@@ -84,6 +84,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
+    let fluidState;
     if (renderer) {
       await renderer(gpu, target, {
         warmupFrames: metaThumb.warmupFrames ?? 60,
@@ -92,7 +93,10 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
         onModeRendered: aaModePixels
           ? (mode, pixels) => aaModePixels.set(mode, pixels.slice())
           : undefined,
+        scriptedDrag: slug === 'fluid' && args.fluidDrag,
+        onStateValidated: slug === 'fluid' ? (stats) => { fluidState = stats; } : undefined,
       });
+      if (fluidState) assertFluidState(fluidState);
     } else {
       const fragmentFile = resolveFragmentFile(example, exampleSources);
       if (!fragmentFile) throw new Error(`No fragment shader found for '${slug}'.`);
@@ -115,7 +119,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     if (variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
     const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update });
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, fluidMetrics };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
   }
@@ -148,6 +152,13 @@ function lumaVariance(bytes) {
   }
   const mean = sum / count;
   return sumSq / count - mean * mean;
+}
+
+function assertFluidState(stats) {
+  if (!stats.finite) throw new Error(`Fluid state contains NaN/Infinity after ${stats.steps} steps.`);
+  if (stats.maxSpeed > 2.5001) throw new Error(`Fluid speed ${stats.maxSpeed} exceeds 2.5001 after ${stats.steps} steps.`);
+  if (stats.maxDye > 4.0001) throw new Error(`Fluid dye ${stats.maxDye} exceeds 4.0001 after ${stats.steps} steps.`);
+  if (stats.steps >= 120 && (stats.averageDye < .01 || stats.averageDye > 2.5)) throw new Error(`Fluid average dye ${stats.averageDye} is outside [.01, 2.5].`);
 }
 
 function assertFluidMetrics(pixels, width, height) {
@@ -329,13 +340,14 @@ async function loadDocsData() {
 }
 
 function parseArgs(argv) {
-  const parsed = { update: false, check: false, only: undefined };
+  const parsed = { update: false, check: false, only: undefined, fluidDrag: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
     else if (arg === '--update') parsed.update = true;
     else if (arg === '--check') parsed.check = true;
     else if (arg === '--only') parsed.only = argv[++i];
+    else if (arg === '--fluid-drag') parsed.fluidDrag = true;
     else throw new Error(`Unknown argument '${arg}'.`);
   }
   if (parsed.update && parsed.check) throw new Error('Use either --update or --check, not both.');
