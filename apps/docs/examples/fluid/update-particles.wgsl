@@ -1,0 +1,9 @@
+import { Sim, index_of } from "./fluid-common.wgsl";
+@group(0) @binding(0) var<uniform> sim:Sim;
+@group(0) @binding(1) var<storage,read> velocity:array<vec2f>;
+@group(0) @binding(2) var<storage,read> dye:array<vec4f>;
+// Eight tightly-packed f32 values match the 32-byte instance vertex record.
+@group(0) @binding(3) var<storage,read_write> particles:array<f32>;
+fn hash(x:u32)->f32{var v=x;v^=v>>16u;v*=2246822519u;v^=v>>13u;v*=3266489917u;v^=v>>16u;return f32(v&0x00ffffffu)/16777216.0;}
+fn sample_u(p:vec2f)->vec2f{let g=clamp(p*vec2f(sim.size)-.5,vec2f(0),vec2f(sim.size)-1.0);let a=vec2i(floor(g));let f=fract(g);return mix(mix(velocity[index_of(a,sim.size)],velocity[index_of(a+vec2i(1,0),sim.size)],f.x),mix(velocity[index_of(a+vec2i(0,1),sim.size)],velocity[index_of(a+vec2i(1,1),sim.size)],f.x),f.y);}
+@compute @workgroup_size(128) fn main(@builtin(global_invocation_id) id:vec3u){if(id.x>=8192u){return;}let k=id.x*8u;var pos=vec2f(particles[k],particles[k+1u]);var age=particles[k+7u];let u=sample_u(pos);pos+=sample_u(clamp(pos+u/120.0,vec2f(.001),vec2f(.999)))/60.0;age+=1.0/60.0;let outside=any(pos<vec2f(.002))||any(pos>vec2f(.998));if(outside||age>5.0){let generation=u32(floor(age/5.0))+sim.step/300u;let choose=hash(id.x+generation*7919u);let e=select(sim.idle_a.xy,sim.idle_b.xy,choose>.5);let angle=hash(id.x*17u+generation)*6.2831853;let r=sqrt(hash(id.x*31u+generation*7u))*.045;pos=clamp(e+r*vec2f(cos(angle),sin(angle)),vec2f(.003),vec2f(.997));age=hash(id.x+41u)*2.0;}let q=vec2i(clamp(pos*vec2f(sim.size),vec2f(0),vec2f(sim.size)-1.0));let c=dye[index_of(q,sim.size)];let color=clamp(c.rgb*.55+vec3f(.08,.16,.28),vec3f(0),vec3f(1.6));particles[k]=pos.x;particles[k+1u]=pos.y;particles[k+2u]=color.r;particles[k+3u]=color.g;particles[k+4u]=color.b;particles[k+5u]=clamp(.2+dot(c.rgb,vec3f(.25,.5,.25))*.3,.15,.85);particles[k+6u]=.0022+clamp(length(u)*.0012,0.0,.003);particles[k+7u]=age;}

@@ -5,6 +5,7 @@ import { meta as gradientMeta } from '../examples/gradient/meta';
 import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
 import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
 import { meta as postProcessingMeta } from '../examples/post-processing/meta';
+import { meta as fluidMeta } from '../examples/fluid/meta';
 
 export interface ExampleThumbOptions {
   readonly warmupFrames?: number;
@@ -35,6 +36,7 @@ const rawMetas = [
   triangleLedFrontMeta,
   antiAliasingMeta,
   postProcessingMeta,
+  fluidMeta,
 ] as const satisfies readonly ExampleMeta[];
 
 const metas = rawMetas.map((meta) => ({
