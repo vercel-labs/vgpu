@@ -3,11 +3,13 @@ import type { VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
 import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
-import { InternalDraw, type Draw, type DrawOptions, type MeshLike } from "./draw.ts";
+import { InternalDraw, type Draw, type DrawOptions } from "./draw.ts";
 import { Frame, FrameRunner } from "./frame.ts";
 import { InternalEffect, type Effect, type EffectOptions } from "./effect.ts";
 import { createSamplerCache } from "./sampler.ts";
 import { mesh as createSceneMesh } from "./scene/mesh.ts";
+import { Mesh, type MeshOptions } from "./scene/mesh-descriptor.ts";
+import type { SceneGeometry } from "./scene/geometry.ts";
 import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
 import { frameReentrantError, surfaceDuplicateError, unsupportedError, VGPUError } from "./errors.ts";
 import { ComputePipeline } from "./compute.ts";
@@ -49,7 +51,8 @@ export interface Gpu {
   target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;
-  mesh(geometry: unknown): MeshLike;
+  mesh(geometry: SceneGeometry): Mesh;
+  mesh(options: MeshOptions): Mesh;
   dispose(): void;
   compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
   storage(bytes: number, access?: StorageAccess): StorageBuffer;
@@ -124,7 +127,11 @@ class RingGpu implements Gpu {
   }
   target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
-  mesh(geometry: unknown): MeshLike { return createSceneMesh(this.device, geometry as never); }
+  mesh(geometry: SceneGeometry): Mesh;
+  mesh(options: MeshOptions): Mesh;
+  mesh(input: SceneGeometry | MeshOptions): Mesh {
+    return isMeshOptions(input) ? new Mesh(this.device, input) : createSceneMesh(this.device, input);
+  }
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -229,6 +236,10 @@ async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
 
 function hasMesh(opts: EffectOptions): boolean {
   return "mesh" in (opts as Record<string, unknown>);
+}
+
+function isMeshOptions(value: SceneGeometry | MeshOptions): value is MeshOptions {
+  return typeof value === "object" && value !== null && "buffers" in value;
 }
 
 function nowMs(): number { return globalThis.performance?.now?.() ?? Date.now(); }

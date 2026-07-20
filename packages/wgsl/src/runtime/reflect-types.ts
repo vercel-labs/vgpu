@@ -46,11 +46,18 @@ export interface BindingInfo {
   readonly bindingLayout?: ReflectedBindingLayout;
 }
 
+export interface EntryPointInputInfo {
+  readonly name: string;
+  readonly location: number;
+  readonly type: WGSLType;
+}
+
 export interface EntryPointInfo {
   readonly name: string;
   readonly mangledName: string;
   readonly stage: "vertex" | "fragment" | "compute";
   readonly workgroupSize?: readonly [number, number, number];
+  readonly inputs?: readonly EntryPointInputInfo[];
 }
 
 export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly defaultValue?: string }
@@ -121,14 +128,17 @@ export interface LayoutMember {
 }
 
 /** Internal helper describing type information extracted from `parseDeclarations`. */
-export type ParsedStruct = StructInfo & { readonly path: string; readonly originalName: string };
+export type ParsedStructMember = StructMemberInfo & { readonly attrs: readonly Attr[] };
+export type ParsedStruct = Omit<StructInfo, "members"> & { readonly path: string; readonly originalName: string; readonly members: readonly ParsedStructMember[] };
 export type ParsedAlias = AliasInfo & { readonly path: string; readonly originalName: string };
+export type EntryPointParam = { readonly name: string; readonly attrs: readonly Attr[]; readonly type: WGSLType };
+export type ParsedEntryPoint = EntryPointInfo & { readonly path: string; readonly params: readonly EntryPointParam[] };
 
 export type ParsedDecls = {
   readonly structs: readonly ParsedStruct[];
   readonly aliases: readonly ParsedAlias[];
   readonly vars: readonly VarDecl[];
-  readonly entries: readonly EntryPointInfo[];
+  readonly entries: readonly ParsedEntryPoint[];
   readonly overrides: readonly OverrideInfo[];
   readonly features: readonly string[];
 };
@@ -174,7 +184,7 @@ export interface ParseVarResult {
 }
 
 export interface ParseEntryPointResult {
-  readonly item?: EntryPointInfo;
+  readonly item?: ParsedEntryPoint;
   readonly next: number;
 }
 

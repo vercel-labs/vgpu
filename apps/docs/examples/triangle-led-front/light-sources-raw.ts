@@ -17,7 +17,6 @@ import {
 import type { BrushState, SceneTunables as LightTunables } from './light-sources-pass';
 
 const LIGHT_SOURCES_FORMAT: GPUTextureFormat = 'rgba16float';
-const LED_EMITTER_VERTEX_FLOATS = 6;
 
 export interface LightSourcesRaw {
   readonly texture: Target;
@@ -44,7 +43,6 @@ export function createLightSourcesRaw(
   gpu: Gpu,
   opts: CreateLightSourcesRawOptions,
 ): LightSourcesRaw {
-  const device = gpu.device;
   const simSize: RenderSize = { width: opts.size[0], height: opts.size[1] };
   const triangle = opts.triangle ?? canonicalTriangleGeometry(simSize);
   const ledRadius = opts.ledRadius ?? triangleLedRadius(simSize);
@@ -61,13 +59,18 @@ export function createLightSourcesRaw(
     simSize,
     LED_EMITTER_MESH_EXPANSION_PX,
   );
-  const ledVertexBuffer = device.createBuffer({
-    size: ledVertices.byteLength,
-    usage: ['vertex', 'copy_dst'],
-    label: 'triangle-led-front-led-emitters-vertices',
+  const ledMesh = gpu.mesh({
+    label: 'triangle-led-front-led-emitters',
+    buffers: [{
+      data: ledVertices,
+      stride: 24,
+      attributes: {
+        position: 'float32x2',
+        local: 'float32x2',
+        led_index: 'float32',
+      },
+    }],
   });
-  ledVertexBuffer.write(ledVertices.buffer as ArrayBuffer);
-  const ledVertexCount = ledVertices.length / LED_EMITTER_VERTEX_FLOATS;
 
   const lightSourcesDraw = gpu.draw({
     shader: lightSourcesWgsl,
@@ -78,20 +81,7 @@ export function createLightSourcesRaw(
   const ledEmittersDraw = gpu.draw({
     shader: ledEmittersWgsl,
     label: 'triangle-led-front-led-emitters-pass',
-    mesh: {
-      vertexBuffers: [ledVertexBuffer.gpu],
-      vertexBufferLayouts: [
-        {
-          arrayStride: 24,
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x2' },
-            { shaderLocation: 1, offset: 8, format: 'float32x2' },
-            { shaderLocation: 2, offset: 16, format: 'float32' },
-          ],
-        },
-      ],
-      vertexCount: ledVertexCount,
-    },
+    mesh: ledMesh,
     blend: {
       color: { src: 'one', dst: 'zero' },
       alpha: { src: 'one', dst: 'one', op: 'min' },
@@ -159,7 +149,7 @@ export function createLightSourcesRaw(
     },
     destroy() {
       (target as { destroy?: () => void }).destroy?.();
-      ledVertexBuffer.gpu.destroy();
+      ledMesh.destroy();
     },
   };
 }

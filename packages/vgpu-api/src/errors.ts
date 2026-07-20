@@ -94,6 +94,41 @@ export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   });
 }
 
+function meshError(code: string, where: string, message: string, fix: string): VGPUError {
+  return new VGPUError({ code, message: `${code}: ${message}`, fix, where });
+}
+
+export function meshLayoutInvalidError(where: string, message: string): VGPUError {
+  return meshError("VGPU-MESH-LAYOUT-INVALID", where, message, "Use record attributes { name: format | { format, offset?, location? } }, non-numeric keys, stride <= 2048 aligned to 4, and valid GPUVertexFormat offsets.");
+}
+export function meshLimitExceededError(where: string, message: string): VGPUError {
+  return meshError("VGPU-MESH-LIMIT-EXCEEDED", where, message, "Use at most 8 vertex buffers and 16 vertex attributes, matching WebGPU limits.");
+}
+export function meshLocationConflictError(where: string, location: number): VGPUError {
+  return meshError("VGPU-MESH-LOCATION-CONFLICT", where, `Multiple mesh attributes declare @location(${location}).`, "Give each explicit location a unique shader location, or leave names for shader reflection matching.");
+}
+export function meshDataMisalignedError(where: string, message: string): VGPUError {
+  return meshError("VGPU-MESH-DATA-MISALIGNED", where, message, "Pass an explicit stride matching your data, repack the data, or provide an explicit count for caller-owned buffers.");
+}
+export function meshRangeInvalidError(where: string, message: string): VGPUError {
+  return meshError("VGPU-MESH-RANGE-INVALID", where, message, "Use indexed range fields only with indexed meshes, vertex range fields only with non-indexed meshes, and keep ranges inside mesh counts.");
+}
+export function meshWriteRangeError(where: string, message: string): VGPUError {
+  return meshError("VGPU-MESH-WRITE-RANGE", where, message, "Writes cannot resize a mesh. Create a larger mesh or write within the existing buffer byte length.");
+}
+export function meshAttributeUnmatchedError(where: string, name: string, available: readonly string[] = []): VGPUError {
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' does not match a vertex shader input.`, `Use an attribute name from the shader${available.length ? ` (${available.join(", ")})` : ""}, or set { location: n } explicitly.`);
+}
+export function meshAttributeAmbiguousError(where: string, name: string, locations: readonly number[]): VGPUError {
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' ambiguously matches shader locations ${locations.join(", ")}.`, "Rename the shader inputs or set { location: n } explicitly.");
+}
+export function meshInputMissingError(where: string, name: string, available: readonly string[] = []): VGPUError {
+  return meshError("VGPU-MESH-INPUT-MISSING", where, `Vertex shader input '${name}' is not provided by the mesh.`, `Add a mesh attribute for the shader input or remove it from the shader. Mesh attributes: ${available.join(", ") || "none"}.`);
+}
+export function meshFormatMismatchError(where: string, name: string, meshFormat: string, shaderType: string): VGPUError {
+  return meshError("VGPU-MESH-FORMAT-MISMATCH", where, `Mesh attribute '${name}' format ${meshFormat} is incompatible with shader type ${shaderType}.`, "Use matching float/sint/uint vertex format base types. Width differences are allowed by WebGPU.");
+}
+
 export function compileFailedError(where: string, cause: unknown, signature?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",

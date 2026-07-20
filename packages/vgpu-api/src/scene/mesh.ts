@@ -18,10 +18,10 @@ import {
   type MeshPrimitive,
   type VertexAttributes,
 } from "./geometry-src/index.ts";
-import type { MeshLike } from "../draw.ts";
 import type { SceneGeometry } from "./geometry.ts";
+import { Mesh, type MeshOptions } from "./mesh-descriptor.ts";
 
-export type SceneMesh = MeshLike;
+export type SceneMesh = Mesh;
 
 type MeshFactory = (device: Device, geometry: SceneGeometry) => MeshPrimitive;
 
@@ -46,34 +46,29 @@ const meshFactories: { readonly [K in SceneGeometry["kind"]]: MeshFactory } = {
 /** Converts a pure scene geometry descriptor into the vertex/index buffer contract consumed by gpu.draw(). */
 export function mesh(device: Device, geometry: SceneGeometry): SceneMesh {
   const primitive = primitiveMesh(device, geometry);
-  return Object.freeze({
-    vertexCount: primitive.vertexCount,
-    indexCount: primitive.indexCount,
-    vertexBuffers: [primitive.gpu?.vertexBuffer ?? primitive.vertexBuffer.gpu],
-    indexBuffer: primitive.gpu?.indexBuffer ?? primitive.indexBuffer?.gpu,
-    indexFormat: primitive.indexFormat,
-    vertexBufferLayouts: [vertexBufferLayout(primitive.attributes)],
-  });
+  return new Mesh(device, primitiveMeshOptions(primitive));
 }
 
 function primitiveMesh(device: Device, geometry: SceneGeometry): MeshPrimitive {
   return meshFactories[geometry.kind](device, geometry);
 }
 
-function vertexBufferLayout(attributes: VertexAttributes): GPUVertexBufferLayout {
-  return {
-    arrayStride: attributes.stride,
-    attributes: vertexAttributes(attributes),
+function primitiveMeshOptions(primitive: MeshPrimitive): MeshOptions {
+  const attrs = primitive.attributes;
+  const attributes: Record<string, GPUVertexFormat | { readonly format: GPUVertexFormat; readonly offset?: number; readonly location?: number }> = {
+    position: { ...attrs.position, location: 0 },
   };
-}
-
-function vertexAttributes(attributes: VertexAttributes): GPUVertexAttribute[] {
-  const entries: GPUVertexAttribute[] = [attribute(0, attributes.position)];
-  if (attributes.normal) entries.push(attribute(1, attributes.normal));
-  if (attributes.uv) entries.push(attribute(2, attributes.uv));
-  return entries;
-}
-
-function attribute(shaderLocation: number, source: { readonly offset: number; readonly format: GPUVertexFormat }): GPUVertexAttribute {
-  return { shaderLocation, offset: source.offset, format: source.format };
+  if (attrs.normal) attributes.normal = { ...attrs.normal, location: 1 };
+  if (attrs.uv) attributes.uv = { ...attrs.uv, location: 2 };
+  return {
+    buffers: [{
+      buffer: primitive.gpu?.vertexBuffer ?? primitive.vertexBuffer.gpu,
+      stride: attrs.stride,
+      attributes,
+    }],
+    vertexCount: primitive.vertexCount,
+    indexBuffer: primitive.gpu?.indexBuffer ?? primitive.indexBuffer?.gpu,
+    indexFormat: primitive.indexFormat,
+    indexCount: primitive.indexCount,
+  };
 }

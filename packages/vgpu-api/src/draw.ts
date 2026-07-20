@@ -8,7 +8,8 @@ import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSe
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
-import { blendInvalidError, claimedGroupNativeValidationError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { meshLayoutResolver, type MeshLayoutResolvable } from "./scene/mesh-descriptor.ts";
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
 
@@ -46,12 +47,18 @@ export interface DrawOptions {
 export interface DrawCallOptions {
   readonly target?: Target;
   readonly offsets?: readonly number[] | Partial<Record<number, readonly number[]>>;
-  /** Instance count precedence: per-call > DrawOptions.instances > 1. Use 0 for a valid no-instance draw. */
+  /** Instance count precedence: per-call > DrawOptions.instances > mesh.instanceCount > 1. Use 0 for a valid no-instance draw. */
   readonly instances?: number;
   /** Vertex count precedence for non-indexed draws: per-call > mesh.vertexCount > DrawOptions.vertices > 3. Indexed meshes ignore it and use MeshLike.indexCount. */
   readonly vertices?: number;
-  /** Starting vertex for non-indexed draws. Defaults to 0; indexed meshes ignore it and use firstIndex/baseVertex = 0. */
+  /** Indexed draw count precedence: per-call > mesh.indexCount. */
+  readonly indices?: number;
+  /** Starting vertex for non-indexed draws. Defaults to mesh.firstVertex or 0. */
   readonly firstVertex?: number;
+  /** Indexed first index precedence: per-call > mesh.firstIndex > 0. */
+  readonly firstIndex?: number;
+  /** Indexed base vertex precedence: per-call > mesh.baseVertex > 0. */
+  readonly baseVertex?: number;
   /** First instance precedence: per-call > DrawOptions.firstInstance > 0. */
   readonly firstInstance?: number;
 }
@@ -63,10 +70,16 @@ export interface DrawLayoutOptions {
 export interface MeshLike {
   readonly vertexCount?: number;
   readonly indexCount?: number;
+  readonly instanceCount?: number;
   readonly vertexBuffers?: readonly GPUBuffer[];
   readonly indexBuffer?: GPUBuffer;
   readonly indexFormat?: GPUIndexFormat;
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
+  readonly topology?: GPUPrimitiveTopology;
+  readonly stripIndexFormat?: GPUIndexFormat;
+  readonly firstIndex?: number;
+  readonly baseVertex?: number;
+  readonly firstVertex?: number;
 }
 
 type BindGroupBinding = { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: ClaimedGroupValidationContext };
@@ -94,6 +107,7 @@ type DrawState = {
   readonly id: number;
   readonly device: Device;
   readonly opts: DrawOptions;
+  readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
   readonly cache: BindGroupCache;
   readonly defaultTarget?: Target;
   readonly reflection: Reflection;
@@ -145,6 +159,9 @@ export class InternalDraw implements Draw {
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
     const reflection = reflectSource(source, `${this.label}.wgsl`);
+    const mesh = opts.mesh as (MeshLike & Partial<MeshLayoutResolvable>) | undefined;
+    const inputs = reflection.entryPoints.find((entry) => entry.stage === "vertex")?.inputs ?? [];
+    const vertexBufferLayouts = mesh && meshLayoutResolver in mesh ? mesh[meshLayoutResolver]!(inputs, `${this.label}.mesh`) : mesh?.vertexBufferLayouts;
     const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
@@ -159,7 +176,7 @@ export class InternalDraw implements Draw {
       cache,
       onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
     });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
+    drawStates.set(this, { id, device, opts, vertexBufferLayouts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -343,7 +360,8 @@ export class InternalDraw implements Draw {
 
   private pipelineKey(signature: TargetSignature): string {
     const state = drawState(this);
-    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.opts.mesh?.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey });
+    const mesh = state.opts.mesh;
+    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: mesh?.topology, stripIndexFormat: mesh?.stripIndexFormat });
   }
 
   private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
@@ -351,9 +369,8 @@ export class InternalDraw implements Draw {
     if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
     const counts = resolveDrawCounts(this.label, mesh, drawState(this).opts, callOpts);
     if (!mesh?.indexBuffer) return pass.draw(counts.vertexCount, counts.instanceCount, counts.firstVertex, counts.firstInstance);
-    // Indexed meshes intentionally use their indexCount with firstIndex/baseVertex = 0; vertices/firstVertex only apply to non-indexed draws.
     pass.setIndexBuffer(mesh.indexBuffer, mesh.indexFormat ?? "uint32");
-    pass.drawIndexed(mesh.indexCount ?? 0, counts.instanceCount, 0, 0, counts.firstInstance);
+    pass.drawIndexed(counts.indexCount, counts.instanceCount, counts.firstIndex, counts.baseVertex, counts.firstInstance);
   }
 
   private createPipeline(signature: TargetSignature): GPURenderPipeline {
@@ -364,9 +381,9 @@ export class InternalDraw implements Draw {
     return state.device.gpu.createRenderPipeline({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
       fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
-      primitive: { topology: "triangle-list" },
+      primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
     });
@@ -380,9 +397,9 @@ export class InternalDraw implements Draw {
     return state.device.gpu.createRenderPipelineAsync({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
       fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
-      primitive: { topology: "triangle-list" },
+      primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
     });
@@ -394,6 +411,9 @@ type DrawCounts = {
   readonly firstInstance: number;
   readonly vertexCount: number;
   readonly firstVertex: number;
+  readonly indexCount: number;
+  readonly firstIndex: number;
+  readonly baseVertex: number;
 };
 
 function fragmentTargets(signature: TargetSignature, state: DrawState): GPUColorTargetState[] {
@@ -410,17 +430,54 @@ function resolveDrawCounts(label: string, mesh: MeshLike | undefined, drawOpts: 
   validateOptionalDrawCount(label, "DrawOptions.vertices", drawOpts.vertices);
   validateOptionalDrawCount(label, "DrawOptions.firstInstance", drawOpts.firstInstance);
   validateOptionalDrawCount(label, "DrawCallOptions.instances", callOpts.instances);
-  validateOptionalDrawCount(label, "DrawCallOptions.vertices", callOpts.vertices);
-  validateOptionalDrawCount(label, "DrawCallOptions.firstVertex", callOpts.firstVertex);
+  validateOptionalMeshRange(label, "DrawCallOptions.vertices", callOpts.vertices);
+  validateOptionalMeshRange(label, "DrawCallOptions.indices", callOpts.indices);
+  validateOptionalMeshRange(label, "DrawCallOptions.firstVertex", callOpts.firstVertex);
+  validateOptionalMeshRange(label, "DrawCallOptions.firstIndex", callOpts.firstIndex);
+  validateOptionalMeshRange(label, "DrawCallOptions.baseVertex", callOpts.baseVertex);
   validateOptionalDrawCount(label, "DrawCallOptions.firstInstance", callOpts.firstInstance);
   validateOptionalDrawCount(label, "MeshLike.vertexCount", mesh?.vertexCount);
   validateOptionalDrawCount(label, "MeshLike.indexCount", mesh?.indexCount);
+  validateOptionalDrawCount(label, "MeshLike.instanceCount", mesh?.instanceCount);
+  validateOptionalMeshRange(label, "MeshLike.firstVertex", mesh?.firstVertex);
+  validateOptionalMeshRange(label, "MeshLike.firstIndex", mesh?.firstIndex);
+  validateOptionalMeshRange(label, "MeshLike.baseVertex", mesh?.baseVertex);
+  const indexed = !!mesh?.indexBuffer;
+  const sliceParent = (mesh as (MeshLike & { readonly mesh?: MeshLike }) | undefined)?.mesh;
+  const parent = sliceParent ?? (mesh && meshLayoutResolver in mesh ? mesh : undefined);
+  const firstVertex = callOpts.firstVertex ?? mesh?.firstVertex ?? 0;
+  const vertexCount = callOpts.vertices ?? mesh?.vertexCount ?? drawOpts.vertices ?? 3;
+  const firstIndex = callOpts.firstIndex ?? mesh?.firstIndex ?? 0;
+  const indexCount = callOpts.indices ?? mesh?.indexCount ?? 0;
+  const baseVertex = callOpts.baseVertex ?? mesh?.baseVertex ?? 0;
+  if (indexed) validateDrawInterval(label, "index", firstIndex, indexCount, parent?.indexCount);
+  else if (callOpts.indices !== undefined || callOpts.firstIndex !== undefined || callOpts.baseVertex !== undefined) throw meshRangeInvalidError(`${label}.draw`, "Indexed range overrides require an indexed mesh.");
+  if (!indexed) validateDrawInterval(label, "vertex", firstVertex, vertexCount, parent?.vertexCount);
   return {
-    instanceCount: callOpts.instances ?? drawOpts.instances ?? 1,
+    instanceCount: callOpts.instances ?? drawOpts.instances ?? mesh?.instanceCount ?? 1,
     firstInstance: callOpts.firstInstance ?? drawOpts.firstInstance ?? 0,
-    vertexCount: callOpts.vertices ?? mesh?.vertexCount ?? drawOpts.vertices ?? 3,
-    firstVertex: callOpts.firstVertex ?? 0,
+    vertexCount,
+    firstVertex,
+    indexCount,
+    firstIndex,
+    baseVertex,
   };
+}
+
+function primitiveState(mesh: MeshLike | undefined): GPUPrimitiveState {
+  const topology = mesh?.topology ?? "triangle-list";
+  const stripIndexFormat = mesh?.stripIndexFormat ?? (topology.endsWith("strip") ? mesh?.indexFormat : undefined);
+  return stripIndexFormat ? { topology, stripIndexFormat } : { topology };
+}
+
+function validateDrawInterval(label: string, kind: "index" | "vertex", first: number, count: number, max: number | undefined): void {
+  if (max === undefined || first + count <= max) return;
+  throw meshRangeInvalidError(`${label}.draw`, `${kind} range [${first}, ${first + count}) exceeds parent mesh ${kind} count ${max}.`);
+}
+
+function validateOptionalMeshRange(label: string, field: string, value: number | undefined): void {
+  if (value === undefined || (Number.isInteger(value) && value >= 0)) return;
+  throw meshRangeInvalidError(`${label}.draw`, `${field} must be an integer >= 0; received ${String(value)}.`);
 }
 
 function validateOptionalDrawCount(label: string, field: string, value: number | undefined): void {

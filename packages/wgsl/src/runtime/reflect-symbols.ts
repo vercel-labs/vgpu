@@ -45,7 +45,7 @@ export function buildRegistry(parsed: readonly ParsedDecls[], symbols: ReadonlyM
       const value: StructInfo = {
         name: item.name,
         mangledName: item.mangledName,
-        members: item.members.map((member) => ({ ...member, type: resolveType(member.type, item.path, symbols, empty) })),
+        members: item.members.map((member) => ({ name: member.name, type: resolveType(member.type, item.path, symbols, empty), align: member.align, size: member.size })),
       };
       structs.set(item.mangledName, value);
       byMangled.set(item.mangledName, value);

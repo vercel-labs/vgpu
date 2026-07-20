@@ -84,9 +84,12 @@ export function pipelineKeyOf(parts: {
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
   readonly signature: TargetSignature;
   readonly fragmentKey?: string;
+  readonly topology?: GPUPrimitiveTopology;
+  readonly stripIndexFormat?: GPUIndexFormat;
 }): string {
   const base = `${idFor(shaderModuleIds, parts.module, () => nextShaderModuleId++)}|${idFor(pipelineLayoutIds, parts.pipelineLayout, () => nextPipelineLayoutId++)}|${vertexLayoutHash(parts.vertexBufferLayouts ?? [])}|${signatureKeyOf(parts.signature)}`;
-  return parts.fragmentKey ? `${base}|${parts.fragmentKey}` : base;
+  const primitive = parts.topology || parts.stripIndexFormat ? `${base}|${parts.topology ?? "triangle-list"}|${parts.stripIndexFormat ?? "none"}` : base;
+  return parts.fragmentKey ? `${primitive}|${parts.fragmentKey}` : primitive;
 }
 
 export function createShaderModuleCache(device: Device): ShaderModuleCache {

@@ -10,6 +10,7 @@ export type {
   BindingInfo,
   BindingKind,
   EntryPointInfo,
+  EntryPointInputInfo,
   HostShareableLayout,
   LayoutMember,
   LayoutMode,
