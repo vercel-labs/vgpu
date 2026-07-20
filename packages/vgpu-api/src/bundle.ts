@@ -33,12 +33,12 @@ export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOp
 
 class RecordedBundle implements Bundle, BundleBackReference {
   gpu!: GPURenderBundle;
-  private staleEvent?: BundleStaleEvent;
-  private readonly signatureKey: string;
-  private readonly draws = new Set<InternalDraw>();
+  #staleEvent?: BundleStaleEvent;
+  readonly #signatureKey: string;
+  readonly #draws = new Set<InternalDraw>();
 
   constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly signature: TargetSignature) {
-    this.signatureKey = signatureKeyOf(signature);
+    this.#signatureKey = signatureKeyOf(signature);
   }
 
   record(record: (recorder: BundleRecorder) => void): void {
@@ -47,28 +47,28 @@ class RecordedBundle implements Bundle, BundleBackReference {
       colorFormats: this.signature.colors,
       depthStencilFormat: this.signature.depth,
       sampleCount: this.signature.sampleCount ?? 1,
-      record: (recorder) => this.recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
+      record: (recorder) => this.#recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
     });
-    for (const draw of this.draws) registerDrawBundle(draw, this);
+    for (const draw of this.#draws) registerDrawBundle(draw, this);
   }
 
   markStale(event: BundleStaleEvent): void {
     if (recordingDepth > 0) return;
-    this.staleEvent ??= event;
+    this.#staleEvent ??= event;
   }
 
   assertReplayable(target: Target): void {
     const actual = normalizeBundleSignature(target);
     const actualKey = signatureKeyOf(actual);
-    if (this.signatureKey !== actualKey) throw bundleStaleError(this.id, targetSignatureStaleMessage(this.id, this.signatureKey, actualKey));
-    if (this.staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.staleEvent));
+    if (this.#signatureKey !== actualKey) throw bundleStaleError(this.id, targetSignatureStaleMessage(this.id, this.#signatureKey, actualKey));
+    if (this.#staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.#staleEvent));
   }
 
   remember(draw: InternalDraw): void {
-    this.draws.add(draw);
+    this.#draws.add(draw);
   }
 
-  private recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
+  #recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
     recordingDepth += 1;
     try { record(new ExplicitBundleRecorder(this, encoder)); }
     finally { recordingDepth -= 1; }

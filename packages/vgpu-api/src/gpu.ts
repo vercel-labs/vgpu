@@ -76,74 +76,74 @@ class RingGpu implements Gpu {
   time = 0;
   deltaTime = 0;
   frameCount = 0;
-  private lastTimeMs = nowMs();
-  private readonly cache = createBindGroupCache();
-  private readonly pipelineStore: PipelineStore;
-  private readonly shaderModules: ShaderModuleCache;
-  private readonly pipelineLayouts: PipelineLayoutCache;
-  private readonly samplers;
-  private readonly surfaces = new Map<SurfaceCanvas, CanvasSurface>();
-  private readonly errorListeners = new Set<GpuErrorListener>();
-  private readonly pendingDeliveries = new Set<Promise<void>>();
-  private readonly settledSources = new Set<SettledSource>();
-  private disposed = false;
-  private advancing = false;
-  private clearColorValue: ClearColor = [0, 0, 0, 1];
+  #lastTimeMs = nowMs();
+  readonly #cache = createBindGroupCache();
+  readonly #pipelineStore: PipelineStore;
+  readonly #shaderModules: ShaderModuleCache;
+  readonly #pipelineLayouts: PipelineLayoutCache;
+  readonly #samplers;
+  readonly #surfaces = new Map<SurfaceCanvas, CanvasSurface>();
+  readonly #errorListeners = new Set<GpuErrorListener>();
+  readonly #pendingDeliveries = new Set<Promise<void>>();
+  readonly #settledSources = new Set<SettledSource>();
+  #disposed = false;
+  #advancing = false;
+  #clearColorValue: ClearColor = [0, 0, 0, 1];
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
 
   constructor(readonly device: Device) {
     this.gpu = device.gpu;
-    this.pipelineStore = createPipelineStore(device, { errorSink: (error) => this.reportError(error), registerSettledSource: (source) => this.registerSettledSource(source) });
-    this.shaderModules = createShaderModuleCache(device);
-    this.pipelineLayouts = createPipelineLayoutCache(device);
-    this.samplers = createSamplerCache(device);
-    const runner = new FrameRunner(() => new Frame(device, undefined, (error) => this.reportError(error), (promise) => this.trackDelivery(promise), () => this.clearColorValue), () => this.advanceFrameState());
+    this.#pipelineStore = createPipelineStore(device, { errorSink: (error) => this.#reportError(error), registerSettledSource: (source) => this.#registerSettledSource(source) });
+    this.#shaderModules = createShaderModuleCache(device);
+    this.#pipelineLayouts = createPipelineLayoutCache(device);
+    this.#samplers = createSamplerCache(device);
+    const runner = new FrameRunner(() => new Frame(device, undefined, (error) => this.#reportError(error), (promise) => this.#trackDelivery(promise), () => this.#clearColorValue), () => this.#advanceFrameState());
     this.frame = callableFrameRunner(runner);
   }
 
-  get clearColor(): ClearColor { return this.clearColorValue; }
+  get clearColor(): ClearColor { return this.#clearColorValue; }
   set clearColor(value: ClearColor) {
     const o = value as any, n = Array.isArray(value) ? value : [o?.r, o?.g, o?.b, o?.a];
     if (n.length !== 4 || !n.every(Number.isFinite)) throw new VGPUError({ code: "VGPU-CLEAR-COLOR-INVALID", message: "invalid gpu.clearColor.", where: "gpu.clearColor" });
-    this.clearColorValue = value;
+    this.#clearColorValue = value;
   }
 
   surface(canvas: SurfaceCanvas, opts: SurfaceOptions = {}): Surface {
-    const existing = this.surfaces.get(canvas);
+    const existing = this.#surfaces.get(canvas);
     if (existing && !existing.disposed) throw surfaceDuplicateError(existing.label);
     const surface = new CanvasSurface(this.device, canvas, opts, (s) => {
-      if (this.surfaces.get(s.canvas) === s) this.surfaces.delete(s.canvas);
+      if (this.#surfaces.get(s.canvas) === s) this.#surfaces.delete(s.canvas);
     });
-    this.surfaces.set(canvas, surface);
+    this.#surfaces.set(canvas, surface);
     return surface;
   }
   effect(source: string | ShaderSource, opts: EffectOptions = {}): Effect {
     if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() never accepts vertex buffers; use gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
-    return new InternalEffect(this.device, toWgsl(source), opts, this.cache, undefined, this.pipelineStore, this.shaderModules, this.pipelineLayouts, (error) => this.reportError(error), (promise) => this.trackDelivery(promise));
+    return new InternalEffect(this.device, toWgsl(source), opts, this.#cache, undefined, this.#pipelineStore, this.#shaderModules, this.#pipelineLayouts, (error) => this.#reportError(error), (promise) => this.#trackDelivery(promise));
   }
   draw(opts: DrawOptions): Draw {
     const shader = toWgsl(opts.shader);
-    return new InternalDraw(this.device, shader, { ...opts, shader }, this.cache, undefined, this.pipelineStore, this.shaderModules, this.pipelineLayouts, (error) => this.reportError(error), (promise) => this.trackDelivery(promise));
+    return new InternalDraw(this.device, shader, { ...opts, shader }, this.#cache, undefined, this.#pipelineStore, this.#shaderModules, this.#pipelineLayouts, (error) => this.#reportError(error), (promise) => this.#trackDelivery(promise));
   }
   target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
-  sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.samplers.sampler(desc); }
+  sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.#samplers.sampler(desc); }
   mesh(geometry: SceneGeometry): Mesh;
   mesh(options: MeshOptions): Mesh;
   mesh(input: SceneGeometry | MeshOptions): Mesh {
     return isMeshOptions(input) ? new Mesh(this.device, input) : createSceneMesh(this.device, input);
   }
   dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    for (const surface of [...this.surfaces.values()]) surface.dispose();
-    this.pipelineStore.dispose();
-    this.shaderModules.dispose();
-    this.pipelineLayouts.dispose();
-    this.cache.dispose();
-    this.settledSources.clear();
+    if (this.#disposed) return;
+    this.#disposed = true;
+    for (const surface of [...this.#surfaces.values()]) surface.dispose();
+    this.#pipelineStore.dispose();
+    this.#shaderModules.dispose();
+    this.#pipelineLayouts.dispose();
+    this.#cache.dispose();
+    this.#settledSources.clear();
     this.device.dispose();
   }
-  compute(source: string | ShaderSource, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, toWgsl(source), opts, this.cache); }
+  compute(source: string | ShaderSource, opts: ComputeOptions = {}): Compute { return new ComputePipeline(this.device, toWgsl(source), opts, this.#cache); }
   storage(bytes: number, access: StorageAccess = "read-write"): StorageBuffer { return createStorageBuffer(this.device, bytes, access); }
   pingPong(width: number, height: number, opts: TargetTextureOptions = {}): PingPongTargets { return createPingPongTargets(this.device, width, height, opts); }
   pingPongStorage(bytes: number): PingPongStorage { return createPingPongStorage(this.device, bytes); }
@@ -151,27 +151,27 @@ class RingGpu implements Gpu {
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { return createBundle(this.device, opts, cb); }
 
   onError(cb: GpuErrorListener): () => void {
-    this.errorListeners.add(cb);
-    return () => { this.errorListeners.delete(cb); };
+    this.#errorListeners.add(cb);
+    return () => { this.#errorListeners.delete(cb); };
   }
 
   async settled(): Promise<void> {
     const snapshot = [
-      ...this.pendingDeliveries,
-      ...[...this.settledSources].flatMap((source) => source()),
+      ...this.#pendingDeliveries,
+      ...[...this.#settledSources].flatMap((source) => source()),
     ];
     await Promise.allSettled(snapshot);
   }
 
-  private registerSettledSource(source: SettledSource): () => void {
-    this.settledSources.add(source);
-    return () => { this.settledSources.delete(source); };
+  #registerSettledSource(source: SettledSource): () => void {
+    this.#settledSources.add(source);
+    return () => { this.#settledSources.delete(source); };
   }
 
-  private reportError(error: VGPUError): Promise<void> {
-    if (this.disposed) return Promise.resolve();
+  #reportError(error: VGPUError): Promise<void> {
+    if (this.#disposed) return Promise.resolve();
     const delivery = Promise.resolve().then(() => {
-      const listeners = [...this.errorListeners];
+      const listeners = [...this.#errorListeners];
       if (!listeners.length) {
         console.error(error);
         return;
@@ -181,32 +181,32 @@ class RingGpu implements Gpu {
         catch (listenerError) { console.error(listenerError); }
       }
     });
-    return this.trackDelivery(delivery);
+    return this.#trackDelivery(delivery);
   }
 
-  private trackDelivery(promise: Promise<unknown>): Promise<void> {
+  #trackDelivery(promise: Promise<unknown>): Promise<void> {
     const tracked = Promise.resolve(promise).then(() => undefined, (error) => { console.error(error); });
-    this.pendingDeliveries.add(tracked);
-    void tracked.finally(() => this.pendingDeliveries.delete(tracked));
+    this.#pendingDeliveries.add(tracked);
+    void tracked.finally(() => this.#pendingDeliveries.delete(tracked));
     return tracked;
   }
 
-  private advanceFrameState(): void {
-    if (this.advancing) throw frameReentrantError();
-    this.advancing = true;
+  #advanceFrameState(): void {
+    if (this.#advancing) throw frameReentrantError();
+    this.#advancing = true;
     try {
-      this.advanceTime();
-      for (const surface of this.surfaces.values()) surface.applyAutoResize();
+      this.#advanceTime();
+      for (const surface of this.#surfaces.values()) surface.applyAutoResize();
     } finally {
-      this.advancing = false;
+      this.#advancing = false;
     }
   }
 
-  private advanceTime(): void {
+  #advanceTime(): void {
     const next = nowMs();
-    this.deltaTime = Math.max(0, (next - this.lastTimeMs) / 1000);
+    this.deltaTime = Math.max(0, (next - this.#lastTimeMs) / 1000);
     this.time += this.deltaTime;
-    this.lastTimeMs = next;
+    this.#lastTimeMs = next;
     this.frameCount += 1;
   }
 }

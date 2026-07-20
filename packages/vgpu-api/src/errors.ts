@@ -7,22 +7,19 @@ export function neverSetError(drawLabel: string, binding: BindingInfo): VGPUErro
   const fix = missingBindingFix(drawLabel, binding);
   return new VGPUError({
     code: "VGPU-R1-BINDING-NEVER-SET",
-    message: `binding \`${binding.name}\` (@group(${binding.group}) @binding(${binding.binding}), ${binding.kind}) of '${drawLabel}' was never set. Options:
-    ${fix}
-    ${drawLabel}.group(${binding.group}, myBindGroup)                   // or claim the entire group
-  Phantom resources are never created for you.`,
+    message: `Unset \`${binding.name}\` @group(${binding.group}) @binding(${binding.binding}) in '${drawLabel}'. Fix: ${fix}; or ${drawLabel}.group(${binding.group}, bindGroup).`,
     where: `${drawLabel}.draw`,
   });
 }
 
 export function ownershipFlipError(name: string, previous: "lib" | "user"): VGPUError {
-  const previousText = previous === "lib" ? "lib-owned since its first set() (JS value)" : "user-owned since its first set() (resource)";
+  const previousText = previous === "lib" ? "lib-owned by its first JS set()" : "user-owned by its first resource set()";
   const fix = previous === "lib"
-    ? `If you need to share the buffer between passes, create a ring-0 resource and pass it from\n  the start:  const ${name} = new Uniform(gpu.device, { size: 4 });  wave.set({ ${name} });`
-    : `If you want the library to pack it, pass JS values from the first set():\n  wave.set({ ${name}: jsValue });`;
+    ? `Fix: pass a resource from the start: wave.set({ ${name}: new Uniform(gpu.device, { size: 4 }) }).`
+    : `Fix: pass JS values from the first set(): wave.set({ ${name}: jsValue }).`;
   return new VGPUError({
     code: "VGPU-R1-OWNERSHIP-FLIP",
-    message: `\`${name}\` is ${previousText}. Binding ownership cannot be changed.\n  ${fix}`,
+    message: `\`${name}\` is ${previousText}; ownership cannot change. ${fix}`,
     where: "set",
   });
 }
@@ -30,8 +27,8 @@ export function ownershipFlipError(name: string, previous: "lib" | "user"): VGPU
 export function claimedGroupSetError(label: string, group: number): VGPUError {
   return new VGPUError({
     code: "VGPU-R4-GROUP-CLAIMED",
-    message: `group ${group} of '${label}' was claimed with group(${group}, bindGroup); set() cannot be used on that group.`,
-    fix: `Use set() before claiming the group, or build a bind group compatible with ${label}.layout(${group}); dynamic offsets travel via p.draw(draw, { offsets }).`,
+    message: `group ${group} of '${label}' is claimed; set() cannot update it.`,
+    fix: `Call set() first, or build from ${label}.layout(${group}); pass dynamic offsets to p.draw().`,
     where: `${label}.set`,
   });
 }
@@ -39,8 +36,8 @@ export function claimedGroupSetError(label: string, group: number): VGPUError {
 export function claimedGroupIncompatibleError(label: string, group: number, reason: string, cause?: unknown): VGPUError {
   return new VGPUError({
     code: "VGPU-R4-GROUP-INCOMPATIBLE",
-    message: `group ${group} claimed in draw '${label}' is incompatible: ${reason}.`,
-    fix: `Build the bind group with ${label}.layout(${group}) or ${label}.layout(${group}, { dynamicOffsets: true }) if you need dynamic offsets; then use ${label}.group(${group}, bindGroup).`,
+    message: `claimed group ${group} in '${label}' is incompatible: ${reason}.`,
+    fix: `Build from ${label}.layout(${group}, { dynamicOffsets? }) then call ${label}.group(${group}, bindGroup).`,
     where: `${label}.group`,
     cause,
   });
@@ -49,8 +46,8 @@ export function claimedGroupIncompatibleError(label: string, group: number, reas
 export function claimedGroupNativeValidationError(label: string, group: number, cause: unknown): VGPUError {
   return new VGPUError({
     code: "VGPU-R4-GROUP-VALIDATION",
-    message: `native WebGPU validation failed for group ${group} claimed in draw '${label}'.`,
-    fix: `Verify that the bind group was created with ${label}.layout(${group}) and that dynamic offsets travel via p.draw(draw, { offsets: { ${group}: [...] } }).`,
+    message: `WebGPU rejected claimed group ${group} in '${label}'.`,
+    fix: `Build from ${label}.layout(${group}); pass offsets via p.draw(draw, { offsets: { ${group}: [...] } }).`,
     where: `${label}.draw`,
     cause,
     detail: { drawLabel: label, group },
@@ -61,8 +58,8 @@ export function claimedGroupNativeValidationError(label: string, group: number, 
 export function blendInvalidError(label: string, value: unknown): VGPUError {
   return new VGPUError({
     code: "VGPU-BLEND-INVALID",
-    message: `blend '${String(value)}' of '${label}' is not a preset or a valid blend object.`,
-    fix: `Use "alpha" | "additive" | "premultiplied" or { color: { src, dst, op? }, alpha?: { src, dst, op? } }.`,
+    message: `Invalid blend '${String(value)}' in '${label}'.`,
+    fix: `Use "alpha", "additive", "premultiplied", or { color, alpha? } components.`,
     where: "gpu.draw",
   });
 }
@@ -70,8 +67,8 @@ export function blendInvalidError(label: string, value: unknown): VGPUError {
 export function writeMaskInvalidError(label: string, preview: string): VGPUError {
   return new VGPUError({
     code: "VGPU-WRITEMASK-INVALID",
-    message: `writeMask of '${label}' must be an array of "r" | "g" | "b" | "a"; received ${preview}.`,
-    fix: `Omit writeMask to write all channels; use ["r","g","b"] to skip alpha.`,
+    message: `Invalid writeMask ${preview} in '${label}'.`,
+    fix: `Use an array of r/g/b/a; omit it for all channels.`,
     where: "gpu.draw",
   });
 }
@@ -79,8 +76,8 @@ export function writeMaskInvalidError(label: string, preview: string): VGPUError
 export function passPreserveMsaaError(): VGPUError {
   return new VGPUError({
     code: "VGPU-PASS-PRESERVE-MSAA",
-    message: "clear:false cannot preserve MSAA targets.",
-    fix: "Use a non-MSAA target for accumulation.",
+    message: "clear:false cannot preserve MSAA; use a non-MSAA target.",
+    fix: "Use non-MSAA for accumulation.",
     where: "Frame.pass",
   });
 }
@@ -89,7 +86,7 @@ export function passPreserveMsaaError(): VGPUError {
 export function targetRequiredError(where = "Gpu.frame"): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-REQUIRED",
-    message: "this operation requires an explicit target. Fix: effect.draw({ target }) — create a surface with gpu.surface(canvas) or a gpu.target({ size }) and pass it in.",
+    message: "Target required. Fix: pass gpu.surface(canvas) or gpu.target({ size }) as { target }.",
     where,
   });
 }
@@ -99,41 +96,41 @@ function meshError(code: string, where: string, message: string, fix: string): V
 }
 
 export function meshLayoutInvalidError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-LAYOUT-INVALID", where, message, "Use record attributes { name: format | { format, offset?, location? } }, non-numeric keys, stride <= 2048 aligned to 4, and valid GPUVertexFormat offsets.");
+  return meshError("VGPU-MESH-LAYOUT-INVALID", where, message, "Fix attributes/formats/offsets; use non-numeric names and 4-aligned stride <= 2048.");
 }
 export function meshLimitExceededError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-LIMIT-EXCEEDED", where, message, "Use at most 8 vertex buffers and 16 vertex attributes, matching WebGPU limits.");
+  return meshError("VGPU-MESH-LIMIT-EXCEEDED", where, message, "Use <= 8 buffers and <= 16 attributes (or the device limits).");
 }
 export function meshLocationConflictError(where: string, location: number): VGPUError {
-  return meshError("VGPU-MESH-LOCATION-CONFLICT", where, `Multiple mesh attributes declare @location(${location}).`, "Give each explicit location a unique shader location, or leave names for shader reflection matching.");
+  return meshError("VGPU-MESH-LOCATION-CONFLICT", where, `Duplicate mesh @location(${location}).`, "Use unique locations, or omit them for name matching.");
 }
 export function meshDataMisalignedError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-DATA-MISALIGNED", where, message, "Pass an explicit stride matching your data, repack the data, or provide an explicit count for caller-owned buffers.");
+  return meshError("VGPU-MESH-DATA-MISALIGNED", where, message, "Fix: repack data, set matching stride, or give raw buffers an explicit count.");
 }
 export function meshRangeInvalidError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-RANGE-INVALID", where, message, "Use indexed range fields only with indexed meshes, vertex range fields only with non-indexed meshes, and keep ranges inside mesh counts.");
+  return meshError("VGPU-MESH-RANGE-INVALID", where, message, "Use index ranges for indexed meshes, vertex ranges otherwise, within mesh counts.");
 }
 export function meshWriteRangeError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-WRITE-RANGE", where, message, "Writes cannot resize a mesh. Create a larger mesh or write within the existing buffer byte length.");
+  return meshError("VGPU-MESH-WRITE-RANGE", where, message, "Write within the buffer byteLength, or create a larger mesh.");
 }
 export function meshAttributeUnmatchedError(where: string, name: string, available: readonly string[] = []): VGPUError {
-  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' does not match a vertex shader input.`, `Use an attribute name from the shader${available.length ? ` (${available.join(", ")})` : ""}, or set { location: n } explicitly.`);
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' has no shader input.`, `Use shader name${available.length ? ` (${available.join(",")})` : ""} or { location:n }.`);
 }
 export function meshAttributeAmbiguousError(where: string, name: string, locations: readonly number[]): VGPUError {
-  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' ambiguously matches shader locations ${locations.join(", ")}.`, "Rename the shader inputs or set { location: n } explicitly.");
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' matches locations ${locations.join(",")}.`, "Rename inputs or set { location:n }.");
 }
 export function meshInputMissingError(where: string, name: string, available: readonly string[] = []): VGPUError {
-  return meshError("VGPU-MESH-INPUT-MISSING", where, `Vertex shader input '${name}' is not provided by the mesh.`, `Add a mesh attribute for the shader input or remove it from the shader. Mesh attributes: ${available.join(", ") || "none"}.`);
+  return meshError("VGPU-MESH-INPUT-MISSING", where, `Mesh lacks shader input '${name}'.`, `Add/remove it. Mesh attributes: ${available.join(",") || "none"}.`);
 }
 export function meshFormatMismatchError(where: string, name: string, meshFormat: string, shaderType: string): VGPUError {
-  return meshError("VGPU-MESH-FORMAT-MISMATCH", where, `Mesh attribute '${name}' format ${meshFormat} is incompatible with shader type ${shaderType}.`, "Use matching float/sint/uint vertex format base types. Width differences are allowed by WebGPU.");
+  return meshError("VGPU-MESH-FORMAT-MISMATCH", where, `Attribute '${name}' ${meshFormat} != shader ${shaderType}.`, "Match the float/sint/uint shader base type; widths may differ.");
 }
 
 export function compileFailedError(where: string, cause: unknown, signature?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",
-    message: "native WebGPU pipeline compilation failed.",
-    fix: "Check the WGSL, vertex buffer layouts, and the target signature used for compilation.",
+    message: "WebGPU pipeline compilation failed.",
+    fix: "Check WGSL, vertex layouts, and target signature.",
     where,
     cause,
     detail: signature ? { signature } : undefined,
@@ -143,7 +140,7 @@ export function compileFailedError(where: string, cause: unknown, signature?: st
 export function compileDisposedError(where: string): VGPUError {
   return new VGPUError({
     code: "VGPU-COMPILE-DISPOSED",
-    message: "the GPU was disposed while pipeline compilations were pending.",
+    message: "GPU disposed during pipeline compilation.",
     where,
   });
 }
@@ -152,7 +149,7 @@ export function compileSignatureInvalidError(where: string, reason: string): VGP
   return new VGPUError({
     code: "VGPU-COMPILE-SIGNATURE-INVALID",
     message: `Invalid TargetSignature: ${reason}`,
-    fix: "Pass { colors: [format], depth?: format, sampleCount?: 1 | 4 } or a concrete Target.",
+    fix: "Pass { colors, depth?, sampleCount?:1|4 } or a Target.",
     where,
   });
 }
@@ -160,7 +157,7 @@ export function compileSignatureInvalidError(where: string, reason: string): VGP
 export function targetSizeRequiredError(): VGPUError {
   return new VGPUError({
     code: "VGPU-TARGET-SIZE-REQUIRED",
-    message: "gpu.target() requires an explicit size. Fix: gpu.target({ size: [w, h] }) — for surface-derived targets, derive the initial size from surface.size and update it in surface.onResize.",
+    message: "Target size required. Fix: gpu.target({ size: [w,h] }); update surface-derived targets in onResize.",
     where: "gpu.target",
   });
 }
@@ -168,7 +165,7 @@ export function targetSizeRequiredError(): VGPUError {
 export function surfaceContextError(): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-CONTEXT",
-    message: "the canvas could not create a WebGPU context. Fix: verify WebGPU support (navigator.gpu) and that the canvas does not already have another context (2d/webgl).",
+    message: "Canvas WebGPU context failed. Fix: check navigator.gpu and remove any existing 2d/webgl context.",
     where: "gpu.surface",
   });
 }
@@ -176,7 +173,7 @@ export function surfaceContextError(): VGPUError {
 export function surfaceDuplicateError(label?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-DUPLICATE",
-    message: `there is already a surface for this canvas${label ? ` ('${label}')` : ""}. Fix: reuse that instance or call surface.dispose() before creating another.`,
+    message: `Canvas already has surface${label ? ` '${label}'` : ""}. Fix: reuse or dispose it.`,
     where: "gpu.surface",
   });
 }
@@ -184,7 +181,7 @@ export function surfaceDuplicateError(label?: string): VGPUError {
 export function surfaceDisposedError(label?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-DISPOSED",
-    message: `surface '${label ?? "surface"}' was disposed. Fix: create a new one with gpu.surface(canvas).`,
+    message: `Surface '${label ?? "surface"}' is disposed. Fix: call gpu.surface(canvas).`,
     where: "surface",
   });
 }
@@ -192,7 +189,7 @@ export function surfaceDisposedError(label?: string): VGPUError {
 export function surfaceAutoResizeUnsupportedError(): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-AUTORESIZE-UNSUPPORTED",
-    message: "autoResize requires a canvas with layout (clientWidth). An OffscreenCanvas must be sized manually: surface.resize([w, h]) — onResize still fires.",
+    message: "autoResize needs clientWidth. Fix: call surface.resize([w,h]) for OffscreenCanvas; onResize still fires.",
     where: "gpu.surface",
   });
 }
@@ -200,7 +197,7 @@ export function surfaceAutoResizeUnsupportedError(): VGPUError {
 export function surfaceResizeReentrantError(label?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-RESIZE-REENTRANT",
-    message: `surface.resize() cannot be called from an onResize handler of the same surface${label ? ` ('${label}')` : ""}. Fix: resize other surfaces or derived targets instead.`,
+    message: `Cannot resize this surface${label ? ` '${label}'` : ""} in onResize. Fix: resize derived targets only.`,
     where: "surface.resize",
   });
 }
@@ -208,7 +205,7 @@ export function surfaceResizeReentrantError(label?: string): VGPUError {
 export function frameReentrantError(): VGPUError {
   return new VGPUError({
     code: "VGPU-FRAME-REENTRANT",
-    message: "gpu.frame() cannot be called inside onResize or another frame. Fix: queue the work for the next frame.",
+    message: "Nested gpu.frame() is invalid. Fix: queue work for the next frame.",
     where: "gpu.frame",
   });
 }
@@ -216,7 +213,7 @@ export function frameReentrantError(): VGPUError {
 export function incompatibleResourceError(binding: BindingInfo, expected: string, fix?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE",
-    message: `binding \`${binding.name}\` (@group(${binding.group}) @binding(${binding.binding}), ${binding.kind}) expected ${expected}.`,
+    message: `binding \`${binding.name}\` @group(${binding.group}) @binding(${binding.binding}) needs ${expected}.`,
     fix,
     where: "set",
   });
@@ -230,15 +227,13 @@ export function malformedShaderSourceError(input: unknown): VGPUError {
   if (hasVersion(input) && input.version !== 1) {
     return new VGPUError({
       code: "VGPU-SHADER-SOURCE-INVALID",
-      message: `VGPU-SHADER-SOURCE-INVALID: ShaderSource version ${String(input.version)} is not supported by this runtime (supported version: 1).\n` +
-        "Update @vgpu/vgpu-api or regenerate the artifact with a compatible loader.",
+      message: `VGPU-SHADER-SOURCE-INVALID: unsupported ShaderSource v${String(input.version)}; expected v1. Fix: update vgpu or regenerate it.`,
       where: "shader source",
     });
   }
   return new VGPUError({
     code: "VGPU-SHADER-SOURCE-INVALID",
-    message: `VGPU-SHADER-SOURCE-INVALID: expected a WGSL string or a ShaderSource { version, wgsl }, received ${previewShaderSource(input)}.\n` +
-      "If you import a .wgsl, make sure the loader is configured (@vgpu/wgsl/loader-vite or /loader-webpack).",
+    message: `VGPU-SHADER-SOURCE-INVALID: expected WGSL or { version, wgsl }, got ${previewShaderSource(input)}. Fix: configure @vgpu/wgsl loader-vite or loader-webpack.`,
     where: "shader source",
   });
 }
@@ -246,7 +241,7 @@ export function malformedShaderSourceError(input: unknown): VGPUError {
 export function writableStorageAliasingError(where: string): VGPUError {
   return new VGPUError({
     code: "VGPU-R1-STORAGE-ALIASING",
-    message: "`src` and `dst` point to the SAME buffer and `dst` is read_write (writable-storage aliasing,\n  forbidden by WebGPU). Fix: use gpu.pingPongStorage() and alternate read/write.",
+    message: "`src` and writable `dst` alias. Fix: alternate them with gpu.pingPongStorage().",
     where,
   });
 }
@@ -260,7 +255,7 @@ export function sharedUniformLayoutMismatchError(opts: {
 }): VGPUError {
   return new VGPUError({
     code: "VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH",
-    message: `shared uniforms '${opts.bindingName}' already have layout ${opts.adoptedLayout} (adopted from ${opts.adoptedSource});\n  ${opts.incomingSource} declares ${opts.incomingLayout} — align the structs or use two different uniforms.`,
+    message: `Uniform '${opts.bindingName}' layout ${opts.adoptedLayout} from ${opts.adoptedSource} != ${opts.incomingLayout} from ${opts.incomingSource}. Fix: align structs or split uniforms.`,
     where: "gpu.uniforms",
   });
 }
@@ -281,11 +276,11 @@ function previewShaderSource(input: unknown): string {
 
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {
   switch (binding.kind) {
-    case "sampler": return `${drawLabel}.set({ ${binding.name}: gpu.sampler() })            // canonical cached value`;
-    case "texture": return `${drawLabel}.set({ ${binding.name}: scene.color })              // explicit texture/target`;
+    case "sampler": return `${drawLabel}.set({${binding.name}:gpu.sampler()})`;
+    case "texture": return `${drawLabel}.set({${binding.name}:scene.color})`;
     case "buffer": return binding.addressSpace === "uniform"
-      ? `${drawLabel}.set({ ${binding.name}: { /* values */ } })              // uniform lib-owned, or Buffer/Uniform resource`
-      : `${drawLabel}.set({ ${binding.name}: buffer })                    // storage/user-owned resource`;
-    default: return `${drawLabel}.set({ ${binding.name}: resource })`;
+      ? `${drawLabel}.set({${binding.name}:{ /* values */ }})`
+      : `${drawLabel}.set({${binding.name}:buffer})`;
+    default: return `${drawLabel}.set({${binding.name}:resource})`;
   }
 }

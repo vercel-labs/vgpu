@@ -59,5 +59,5 @@ function validate(width: number, height: number, widthSegments: number, heightSe
   if (widthSegments < 1) throw invalidUsage("Mesh.plane", "Width segments must be at least 1.");
   if (heightSegments < 1) throw invalidUsage("Mesh.plane", "Height segments must be at least 1.");
   const vertexCount = (widthSegments + 1) * (heightSegments + 1);
-  if (vertexCount > 65535) throw invalidUsage("Mesh.plane", `Segment counts (widthSegments=${widthSegments}, heightSegments=${heightSegments}) produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segment counts.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.plane", `Segments ${widthSegments}x${heightSegments} make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

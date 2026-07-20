@@ -142,7 +142,7 @@ export interface Draw {
 /** Renderable shader unit with explicit bind layouts, set() ownership, pipeline cache, and R4 group hooks. */
 export class InternalDraw implements Draw {
   readonly label: string;
-  private readonly dynamicBindGroupLayouts = new Map<number, GPUBindGroupLayout>();
+  readonly #dynamicBindGroupLayouts = new Map<number, GPUBindGroupLayout>();
 
   constructor(
     device: Device,
@@ -199,7 +199,7 @@ export class InternalDraw implements Draw {
 
   group(n: number, bindGroup: GPUBindGroup): this {
     const state = drawState(this);
-    const expectedLayout = this.dynamicBindGroupLayouts.get(n) ?? this.layout(n);
+    const expectedLayout = this.#dynamicBindGroupLayouts.get(n) ?? this.layout(n);
     const previousIdentity = state.setCore.claimGroup(n, bindGroup, expectedLayout);
     state.recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
     return this;
@@ -207,18 +207,18 @@ export class InternalDraw implements Draw {
 
   layout(n: number, opts: DrawLayoutOptions = {}): GPUBindGroupLayout {
     if (!opts.dynamicOffsets) return drawState(this).setCore.layout(n);
-    return this.dynamicLayout(n);
+    return this.#dynamicLayout(n);
   }
 
-  private dynamicLayout(group: number): GPUBindGroupLayout {
+  #dynamicLayout(group: number): GPUBindGroupLayout {
     const state = drawState(this);
     state.setCore.layout(group);
-    const existing = this.dynamicBindGroupLayouts.get(group);
+    const existing = this.#dynamicBindGroupLayouts.get(group);
     if (existing) return existing;
     const entries = dynamicEntries(this, group);
     const rawLayout = state.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
     const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
-    this.dynamicBindGroupLayouts.set(group, layout);
+    this.#dynamicBindGroupLayouts.set(group, layout);
     state.bindGroupLayouts.set(group, layout);
     state.pipelineLayout = state.pipelineLayouts.get(state.bindGroupLayouts);
     return layout;
@@ -293,11 +293,11 @@ export class InternalDraw implements Draw {
     const pipeline = this.pipelineFor(target);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
-    for (const binding of drawState(this).setCore.bindGroups()) this.setBindGroup(pass, binding, opts, claimValidation);
-    this.encodeMesh(pass, opts);
+    for (const binding of drawState(this).setCore.bindGroups()) this.#setBindGroup(pass, binding, opts, claimValidation);
+    this.#encodeMesh(pass, opts);
   }
 
-  private setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
+  #setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
     if (!binding.claimValidation || !claimValidation) {
       pass.setBindGroup(binding.group, binding.bindGroup, offsets);
@@ -314,8 +314,8 @@ export class InternalDraw implements Draw {
   }
 
   compile(target?: CompileTarget): Promise<this> {
-    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.compile`);
-    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey });
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compile`);
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey });
     return promise.then(() => {
       drawState(this).resolvedPipelineKeys.add(key);
       return this;
@@ -323,33 +323,33 @@ export class InternalDraw implements Draw {
   }
 
   compileSync(target?: CompileTarget): this {
-    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.compileSync`);
-    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.compileSync`, signature: signatureKey });
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compileSync`);
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.compileSync`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return this;
   }
 
   pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
-    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.pipelineFor`);
-    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`);
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
   }
 
   pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
-    const { key, signature, signatureKey } = this.compileKey(target, `${this.label}.pipelineForAsync`);
-    const promise = drawState(this).pipelineStore.getAsync(key, () => this.createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey });
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineForAsync`);
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey });
     void promise.then(() => drawState(this).resolvedPipelineKeys.add(key), () => undefined);
     return promise;
   }
 
-  private compileKey(target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
-    const signature = this.signatureForKeyTarget(target, where);
+  #compileKey(target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
+    const signature = this.#signatureForKeyTarget(target, where);
     const signatureKey = signatureKeyOf(signature);
-    return { signature, signatureKey, key: this.pipelineKey(signature) };
+    return { signature, signatureKey, key: this.#pipelineKey(signature) };
   }
 
-  private signatureForKeyTarget(target: CompileTarget | undefined, where: string): TargetSignature {
+  #signatureForKeyTarget(target: CompileTarget | undefined, where: string): TargetSignature {
     const state = drawState(this);
     const resolvedTarget = target ?? state.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError(where);
@@ -358,13 +358,13 @@ export class InternalDraw implements Draw {
     return signature;
   }
 
-  private pipelineKey(signature: TargetSignature): string {
+  #pipelineKey(signature: TargetSignature): string {
     const state = drawState(this);
     const mesh = state.opts.mesh;
     return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: mesh?.topology, stripIndexFormat: mesh?.stripIndexFormat });
   }
 
-  private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
+  #encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
     const mesh = drawState(this).opts.mesh;
     if (mesh?.vertexBuffers) mesh.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
     const counts = resolveDrawCounts(this.label, mesh, drawState(this).opts, callOpts);
@@ -373,7 +373,7 @@ export class InternalDraw implements Draw {
     pass.drawIndexed(counts.indexCount, counts.instanceCount, counts.firstIndex, counts.baseVertex, counts.firstInstance);
   }
 
-  private createPipeline(signature: TargetSignature): GPURenderPipeline {
+  #createPipeline(signature: TargetSignature): GPURenderPipeline {
     const state = drawState(this);
     const entries = state.reflection.entryPoints;
     const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
@@ -389,7 +389,7 @@ export class InternalDraw implements Draw {
     });
   }
 
-  private createPipelineAsync(signature: TargetSignature): Promise<GPURenderPipeline> {
+  #createPipelineAsync(signature: TargetSignature): Promise<GPURenderPipeline> {
     const state = drawState(this);
     const entries = state.reflection.entryPoints;
     const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
@@ -451,7 +451,7 @@ function resolveDrawCounts(label: string, mesh: MeshLike | undefined, drawOpts: 
   const indexCount = callOpts.indices ?? mesh?.indexCount ?? 0;
   const baseVertex = callOpts.baseVertex ?? mesh?.baseVertex ?? 0;
   if (indexed) validateDrawInterval(label, "index", firstIndex, indexCount, parent?.indexCount);
-  else if (callOpts.indices !== undefined || callOpts.firstIndex !== undefined || callOpts.baseVertex !== undefined) throw meshRangeInvalidError(`${label}.draw`, "Indexed range overrides require an indexed mesh.");
+  else if (callOpts.indices !== undefined || callOpts.firstIndex !== undefined || callOpts.baseVertex !== undefined) throw meshRangeInvalidError(`${label}.draw`, "Index range needs an indexed mesh.");
   if (!indexed) validateDrawInterval(label, "vertex", firstVertex, vertexCount, parent?.vertexCount);
   return {
     instanceCount: callOpts.instances ?? drawOpts.instances ?? mesh?.instanceCount ?? 1,

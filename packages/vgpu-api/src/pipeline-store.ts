@@ -129,30 +129,30 @@ export function createPipelineStore(device: Device, opts: PipelineStoreOptions =
 }
 
 class DevicePipelineStore implements PipelineStore {
-  private readonly entries = new Map<string, PipelineEntry>();
-  private readonly tracked = new Set<Promise<unknown>>();
-  private readonly errorSink: ErrorSink;
-  private readonly unregisterSettledSource?: () => void;
-  private disposed = false;
+  readonly #entries = new Map<string, PipelineEntry>();
+  readonly #tracked = new Set<Promise<unknown>>();
+  readonly #errorSink: ErrorSink;
+  readonly #unregisterSettledSource?: () => void;
+  #disposed = false;
 
   constructor(private readonly device: Device, opts: PipelineStoreOptions) {
-    this.errorSink = opts.errorSink ?? (() => undefined);
-    this.unregisterSettledSource = opts.registerSettledSource?.(() => [...this.tracked]);
+    this.#errorSink = opts.errorSink ?? (() => undefined);
+    this.#unregisterSettledSource = opts.registerSettledSource?.(() => [...this.#tracked]);
   }
 
   getReady(key: string): GPURenderPipeline | undefined {
-    return this.entries.get(key)?.pipeline;
+    return this.#entries.get(key)?.pipeline;
   }
 
   getSync(key: string, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined {
-    this.assertUsable(ctx.where);
-    const existing = this.entries.get(key);
+    this.#assertUsable(ctx.where);
+    const existing = this.#entries.get(key);
     if (existing?.pipeline) return existing.pipeline;
     const entry = existing ?? {};
-    if (!existing) this.entries.set(key, entry);
-    const pipeline = this.createSyncPipeline(key, entry, create, ctx);
+    if (!existing) this.#entries.set(key, entry);
+    const pipeline = this.#createSyncPipeline(key, entry, create, ctx);
     if (!pipeline) {
-      if (!entry.pending) this.entries.delete(key);
+      if (!entry.pending) this.#entries.delete(key);
       return undefined;
     }
     entry.pipeline = pipeline;
@@ -162,15 +162,15 @@ class DevicePipelineStore implements PipelineStore {
   }
 
   getAsync(key: string, create: () => Promise<GPURenderPipeline>, ctx: ErrorCtx): Promise<GPURenderPipeline> {
-    this.assertUsable(ctx.where);
-    const existing = this.entries.get(key);
+    this.#assertUsable(ctx.where);
+    const existing = this.#entries.get(key);
     if (existing?.pipeline) return Promise.resolve(existing.pipeline);
     if (existing?.pending) return existing.pending.promise;
 
     const entry: PipelineEntry = {};
     const pending = createDeferred();
     entry.pending = pending;
-    this.entries.set(key, entry);
+    this.#entries.set(key, entry);
 
     let native: Promise<GPURenderPipeline>;
     try {
@@ -178,22 +178,22 @@ class DevicePipelineStore implements PipelineStore {
     } catch (cause) {
       const error = compileFailedError(ctx.where, cause, ctx.signature);
       pending.reject(error);
-      this.entries.delete(key);
+      this.#entries.delete(key);
       return pending.promise;
     }
 
-    this.track(native);
+    this.#track(native);
     native.then(
       (pipeline) => {
-        if (this.entries.get(key) !== entry || entry.pipeline || entry.pending !== pending) return;
+        if (this.#entries.get(key) !== entry || entry.pipeline || entry.pending !== pending) return;
         entry.pipeline = pipeline;
         entry.pending = undefined;
         pending.resolve(pipeline);
       },
       (cause) => {
-        if (this.entries.get(key) !== entry || entry.pipeline || entry.pending !== pending) return;
+        if (this.#entries.get(key) !== entry || entry.pipeline || entry.pending !== pending) return;
         entry.pending = undefined;
-        this.entries.delete(key);
+        this.#entries.delete(key);
         pending.reject(compileFailedError(ctx.where, cause, ctx.signature));
       },
     );
@@ -201,59 +201,59 @@ class DevicePipelineStore implements PipelineStore {
   }
 
   dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
+    if (this.#disposed) return;
+    this.#disposed = true;
     const error = compileDisposedError("gpu.dispose");
-    for (const entry of this.entries.values()) entry.pending?.reject(error);
-    this.entries.clear();
-    this.tracked.clear();
-    this.unregisterSettledSource?.();
+    for (const entry of this.#entries.values()) entry.pending?.reject(error);
+    this.#entries.clear();
+    this.#tracked.clear();
+    this.#unregisterSettledSource?.();
   }
 
-  private createSyncPipeline(key: string, entry: PipelineEntry, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined {
+  #createSyncPipeline(key: string, entry: PipelineEntry, create: () => GPURenderPipeline, ctx: ErrorCtx): GPURenderPipeline | undefined {
     const gpu = this.device.gpu as GPUDevice & { pushErrorScope?: GPUDevice["pushErrorScope"]; popErrorScope?: GPUDevice["popErrorScope"] };
     const scoped = typeof gpu.pushErrorScope === "function" && typeof gpu.popErrorScope === "function";
     if (scoped) gpu.pushErrorScope("validation");
     try {
       const pipeline = create();
-      if (scoped) this.trackSyncErrorScope(key, entry, ctx);
+      if (scoped) this.#trackSyncErrorScope(key, entry, ctx);
       return pipeline;
     } catch (cause) {
-      if (scoped) this.suppressSyncErrorScopePop();
+      if (scoped) this.#suppressSyncErrorScopePop();
       const error = compileFailedError(ctx.where, cause, ctx.signature);
-      void this.errorSink(error);
+      void this.#errorSink(error);
       return undefined;
     }
   }
 
-  private trackSyncErrorScope(key: string, entry: PipelineEntry, ctx: ErrorCtx): void {
+  #trackSyncErrorScope(key: string, entry: PipelineEntry, ctx: ErrorCtx): void {
     const pop = this.device.gpu.popErrorScope!()
       .then((nativeError) => {
         if (!nativeError) return;
         const error = compileFailedError(ctx.where, nativeError, ctx.signature);
-        if (this.entries.get(key) === entry) this.entries.delete(key);
-        return this.errorSink(error);
+        if (this.#entries.get(key) === entry) this.#entries.delete(key);
+        return this.#errorSink(error);
       }, (cause) => {
         const error = compileFailedError(ctx.where, cause, ctx.signature);
-        if (this.entries.get(key) === entry) this.entries.delete(key);
-        return this.errorSink(error);
+        if (this.#entries.get(key) === entry) this.#entries.delete(key);
+        return this.#errorSink(error);
       });
-    this.track(pop);
+    this.#track(pop);
   }
 
-  private suppressSyncErrorScopePop(): void {
+  #suppressSyncErrorScopePop(): void {
     const pop = this.device.gpu.popErrorScope?.();
     if (pop) void pop.catch(() => undefined);
   }
 
-  private assertUsable(where: string): void {
-    if (!this.disposed) return;
+  #assertUsable(where: string): void {
+    if (!this.#disposed) return;
     throw compileDisposedError(where);
   }
 
-  private track(promise: Promise<unknown>): void {
-    this.tracked.add(promise);
-    void promise.catch(() => undefined).then(() => this.tracked.delete(promise), () => this.tracked.delete(promise));
+  #track(promise: Promise<unknown>): void {
+    this.#tracked.add(promise);
+    void promise.catch(() => undefined).then(() => this.#tracked.delete(promise), () => this.#tracked.delete(promise));
   }
 }
 

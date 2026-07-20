@@ -33,7 +33,7 @@ describe("compute storage aliasing", () => {
     const sim = gpu.compute(ALIASING_SHADER, { label: "sim" });
     const buffer = gpu.storage(16);
     sim.set({ src: buffer, dst: buffer });
-    expect(() => sim.dispatch(1)).toThrowError("`src` and `dst` point to the SAME buffer and `dst` is read_write (writable-storage aliasing,\n  forbidden by WebGPU). Fix: use gpu.pingPongStorage() and alternate read/write.");
+    expect(() => sim.dispatch(1)).toThrowError("`src` and writable `dst` alias. Fix: alternate them with gpu.pingPongStorage().");
   });
 
   test("read + read aliasing passes without warnings", async () => {

@@ -41,9 +41,9 @@ export function normalizeResource(binding: BindingInfo, value: unknown, context:
     case "buffer": return normalizeBufferResource(binding, value, context);
     case "texture": return normalizeTextureResource(binding, value);
     case "sampler": return normalizeSamplerResource(binding, value);
-    case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pass a storage-compatible texture; Lane C freezes the storage texture helper.");
-    case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pass a GPUExternalTexture compatible with the reflected binding.");
-    default: throw incompatibleResourceError(binding, "reflected resource", "Reflection did not expose bindingLayout to validate this resource.");
+    case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pass a storage-compatible texture.");
+    case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pass a compatible GPUExternalTexture.");
+    default: throw incompatibleResourceError(binding, "reflected resource", "Fix shader reflection bindingLayout.");
   }
 }
 
@@ -87,13 +87,13 @@ function isSamplerLike(value: unknown): value is GPUSampler {
 
 function validateBufferUsage(binding: BindingInfo, usage: readonly string[]): void {
   const expected = binding.bindingLayout?.kind === "buffer" ? binding.bindingLayout.buffer.type : undefined;
-  if (expected === "uniform" && !usage.includes("uniform")) throw incompatibleResourceError(binding, "uniform buffer", "Create the buffer with usage: ['uniform', 'copy_dst'].");
-  if ((expected === "storage" || expected === "read-only-storage") && !usage.includes("storage")) throw incompatibleResourceError(binding, "storage buffer", "Create the buffer with usage: ['storage', 'copy_dst'].");
+  if (expected === "uniform" && !usage.includes("uniform")) throw incompatibleResourceError(binding, "uniform buffer", "Create with usage: ['uniform','copy_dst'].");
+  if ((expected === "storage" || expected === "read-only-storage") && !usage.includes("storage")) throw incompatibleResourceError(binding, "storage buffer", "Create with usage: ['storage','copy_dst'].");
 }
 
 function validateTextureUsage(binding: BindingInfo, usage: readonly string[]): void {
   if (!usage.includes("texture_binding") && !usage.includes("render_attachment")) {
-    throw incompatibleResourceError(binding, "sampled texture", "Create the texture with usage: ['texture_binding'] or pass a sampleable Target/color texture.");
+    throw incompatibleResourceError(binding, "sampled texture", "Use texture_binding usage or a sampleable Target.");
   }
 }
 

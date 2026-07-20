@@ -86,7 +86,7 @@ test("immediate onResize callback also guards frame reentrancy", async () => {
 
   surface.onResize(() => {
     checked = true;
-    expect(() => gpu.frame()).toThrowError(/VGPU-FRAME-REENTRANT|cannot be called/);
+    expect(() => gpu.frame()).toThrowError(/VGPU-FRAME-REENTRANT|Nested gpu.frame/);
   });
 
   expect(checked).toBe(true);
@@ -138,7 +138,7 @@ test("buffer-only surfaces default autoResize false, reject explicit autoResize 
   for (let i = 0; i < 10; i += 1) gpu.frame();
   expect(surface.size).toEqual([16, 8]);
 
-  expect(() => gpu.surface(canvasLike(1, 1, false), { autoResize: true })).toThrowError(/VGPU-SURFACE-AUTORESIZE-UNSUPPORTED|autoResize requires/);
+  expect(() => gpu.surface(canvasLike(1, 1, false), { autoResize: true })).toThrowError(/VGPU-SURFACE-AUTORESIZE-UNSUPPORTED|autoResize needs/);
   gpu.dispose();
 });
 
@@ -166,7 +166,7 @@ test("surface lifecycle rejects duplicates, disposes, unregisters, and allows re
   const canvas = canvasLike(10, 10);
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const surface = gpu.surface(canvas, { label: "main" });
-  expect(() => gpu.surface(canvas)).toThrowError(/VGPU-SURFACE-DUPLICATE|there is already a surface/);
+  expect(() => gpu.surface(canvas)).toThrowError(/VGPU-SURFACE-DUPLICATE|already has surface/);
   surface.dispose();
   expect(contextOf(canvas).unconfigure).toHaveBeenCalledTimes(1);
   expect(() => surface.resize([1, 1])).toThrowError(/VGPU-SURFACE-DISPOSED|disposed/);
@@ -184,8 +184,8 @@ test("resize and frame reentrancy are guarded, but resizing another surface and 
   a.onResize(() => undefined);
   a.onResize(() => { expect(() => gpu.target({ size: [2, 2] })).not.toThrow(); });
   a.onResize(() => { b.resize([12, 12]); });
-  a.onResize(() => { expect(() => a.resize([20, 20])).toThrowError(/VGPU-SURFACE-RESIZE-REENTRANT|cannot be called/); });
-  a.onResize(() => { expect(() => gpu.frame()).toThrowError(/VGPU-FRAME-REENTRANT|cannot be called/); });
+  a.onResize(() => { expect(() => a.resize([20, 20])).toThrowError(/VGPU-SURFACE-RESIZE-REENTRANT|Cannot resize/); });
+  a.onResize(() => { expect(() => gpu.frame()).toThrowError(/VGPU-FRAME-REENTRANT|Nested gpu.frame/); });
   expect(() => a.resize([11, 11])).not.toThrow();
   expect(b.size).toEqual([12, 12]);
   gpu.dispose();
@@ -198,13 +198,13 @@ test("target is required for frame and one-shot draws, and target size is requir
   expect(() => {
     // @ts-expect-error Frame.pass requires an explicit target; this asserts the runtime JS error.
     gpu.frame((frame) => frame.pass({}, (p) => p.draw(effect)));
-  }).toThrowError(/VGPU-TARGET-REQUIRED|explicit target/);
-  expect(() => effect.draw()).toThrowError(/VGPU-TARGET-REQUIRED|explicit target/);
-  expect(() => draw.draw()).toThrowError(/VGPU-TARGET-REQUIRED|explicit target/);
+  }).toThrowError(/VGPU-TARGET-REQUIRED|Target required/);
+  expect(() => effect.draw()).toThrowError(/VGPU-TARGET-REQUIRED|Target required/);
+  expect(() => draw.draw()).toThrowError(/VGPU-TARGET-REQUIRED|Target required/);
   expect(() => {
     // @ts-expect-error gpu.target requires size; this asserts the runtime JS error.
     gpu.target({});
-  }).toThrowError(/VGPU-TARGET-SIZE-REQUIRED|requires an explicit size/);
+  }).toThrowError(/VGPU-TARGET-SIZE-REQUIRED|Target size required/);
   const pp = gpu.pingPong(
     8,
     8,

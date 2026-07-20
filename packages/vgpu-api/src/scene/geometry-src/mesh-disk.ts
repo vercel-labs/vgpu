@@ -53,5 +53,5 @@ function validate(radius: number, segments: number): void {
   if (radius <= 0) throw invalidUsage("Mesh.disk", "Radius must be greater than 0.");
   if (segments < 3) throw invalidUsage("Mesh.disk", "Segments must be at least 3.");
   const vertexCount = segments + 2;
-  if (vertexCount > 65535) throw invalidUsage("Mesh.disk", `Segment count ${segments} produces ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segments.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.disk", `Segments ${segments} make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

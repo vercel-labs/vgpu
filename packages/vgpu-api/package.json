@@ -75,13 +75,13 @@
     "wgpu-matrix": "^3.4.2",
     "@webgpu/types": "^0.1.69"
   },
-  "vgpuExportBundleBudgetNote": "Author-approved 2026-07: mesh v2 reflection matching, slices, draw ranges, topology, and public scene exports use 30KB primary and 16.5KB scene gzip ceilings.",
+  "vgpuExportBundleBudgetNote": "Bundle-diet ceilings use 512-byte granularity with one rounded safety step above measured gzip sizes.",
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 30720,
-    "./node": 30720,
-    "./mock": 30720,
-    "./scene": 16896,
-    "./client": 1024,
-    "./core": 4096
+    ".": 29696,
+    "./node": 29696,
+    "./mock": 29696,
+    "./scene": 5632,
+    "./client": 512,
+    "./core": 3584
   }
 }
