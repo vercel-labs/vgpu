@@ -41,7 +41,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   const controls = installControls(canvas);
   let disposed = false;
 
-  prewarm(effects, targets, surface);
+  await prewarm(effects, targets, surface);
 
   let sawInitialResize = false;
   const unsubscribeResize = surface.onResize(() => {
@@ -52,7 +52,6 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
     if (disposed) return;
     destroyTargets(targets);
     targets = createTargets(gpu, surface.size, 'post-processing-live');
-    prewarm(effects, targets, surface);
   });
 
   const handle = gpu.frame.loop((frame) => {
@@ -81,7 +80,7 @@ export async function renderThumb(
 ): Promise<void> {
   const effects = createEffects(gpu);
   const targets = createTargets(gpu, target.size, 'post-processing-thumb');
-  prewarm(effects, targets, target);
+  await prewarm(effects, targets, target);
 
   const warmupFrames = opts.warmupFrames ?? 60;
   const dt = opts.dt ?? 1 / 60;
@@ -97,6 +96,7 @@ export async function renderThumb(
   }
 
   await gpu.gpu.queue.onSubmittedWorkDone();
+  await gpu.settled();
   destroyTargets(targets);
 }
 
@@ -123,12 +123,14 @@ function createTargets(gpu: Gpu, size: readonly [number, number], label: string)
   };
 }
 
-function prewarm(effects: EffectChain, targets: ChainTargets, output: Surface | Target): void {
-  effects.scene.compileSync(targets.scene);
-  effects.threshold.compileSync(targets.bright);
-  effects.blurH.compileSync(targets.blurA);
-  effects.blurV.compileSync(targets.blurB);
-  effects.grade.compileSync(output);
+async function prewarm(effects: EffectChain, targets: ChainTargets, output: Surface | Target): Promise<void> {
+  await Promise.all([
+    effects.scene.compile(targets.scene),
+    effects.threshold.compile(targets.bright),
+    effects.blurH.compile(targets.blurA),
+    effects.blurV.compile(targets.blurB),
+    effects.grade.compile(output),
+  ]);
 }
 
 function renderChain(
