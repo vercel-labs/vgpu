@@ -5,6 +5,8 @@ import { unsupportedError } from "./errors.ts";
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
 export type BindingVisibilityFn = (binding: BindingInfo) => GPUShaderStageFlags;
 
+const bindGroupLayoutCaches = new WeakMap<GPUDevice, Map<string, GPUBindGroupLayout>>();
+
 export function visibilityForEntries(bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[]): BindingVisibilityFn {
   const masks = new Map<string, number>();
   for (const entry of entries) {
@@ -53,8 +55,14 @@ function createBindGroupLayout(
   visibility: BindingVisibilityFn = defaultVisibility,
 ): GPUBindGroupLayout {
   const entries = bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility);
-  const layout = device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries });
-  return attachBindGroupLayoutMetadata(layout, { entries });
+  let cache = bindGroupLayoutCaches.get(device.gpu);
+  if (!cache) { cache = new Map(); bindGroupLayoutCaches.set(device.gpu, cache); }
+  const key = JSON.stringify(entries);
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const layout = attachBindGroupLayoutMetadata(device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries }), { entries });
+  cache.set(key, layout);
+  return layout;
 }
 
 function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>): GPUBindGroupLayout[] {
