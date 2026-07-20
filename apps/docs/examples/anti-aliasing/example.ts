@@ -1,4 +1,4 @@
-import type { Effect, Frame, Gpu, Surface, Target } from 'vgpu';
+import type { Draw, Effect, Frame, Gpu, Surface, Target } from 'vgpu';
 import {
   AA_MODE_FXAA,
   AA_MODE_MSAA_4X,
@@ -15,10 +15,12 @@ interface ThumbOptions {
   warmupFrames?: number;
   dt?: number;
   time?: number;
+  onModeRendered?: (mode: AaMode, pixels: Uint8Array, size: readonly [number, number]) => void | Promise<void>;
 }
 
 interface AaEffects {
-  readonly scene: Effect;
+  readonly scene: Draw;
+  readonly vertexBuffer: GPUBuffer;
   readonly resolve: Effect;
   readonly fxaa: Effect;
   readonly sampler: GPUSampler;
@@ -66,6 +68,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
     handle.stop();
     unsubscribeResize();
     controls.dispose();
+    destroyEffects(effects);
     destroyTargets(targets);
     surface.dispose();
     gpu.dispose();
@@ -88,6 +91,8 @@ export async function renderThumb(
   // all lazily-selected pipelines (including the 4x sample-count variant) and bindings.
   for (const mode of ALL_MODES) {
     gpu.frame((frame) => renderMode(frame, effects, targets, target, mode, time));
+    await gpu.gpu.queue.onSubmittedWorkDone();
+    await opts.onModeRendered?.(mode, await target.read(), target.size);
   }
 
   const warmupFrames = Math.max(1, opts.warmupFrames ?? 60);
@@ -98,12 +103,36 @@ export async function renderThumb(
 
   await gpu.gpu.queue.onSubmittedWorkDone();
   await gpu.settled();
+  destroyEffects(effects);
   destroyTargets(targets);
 }
 
 function createEffects(gpu: Gpu, label: string): AaEffects {
+  const vertices = createSpokeVertices();
+  const buffer = gpu.device.createBuffer({
+    size: vertices.byteLength,
+    usage: ['vertex', 'copy_dst'],
+    label: `${label}-geometry`,
+  });
+  buffer.write(vertices.buffer as ArrayBuffer);
+
   return {
-    scene: gpu.effect(sceneWgsl, { label: `${label}-scene` }),
+    scene: gpu.draw({
+      shader: sceneWgsl,
+      label: `${label}-scene`,
+      mesh: {
+        vertexBuffers: [buffer.gpu],
+        vertexBufferLayouts: [{
+          arrayStride: 12,
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: 'float32x2' },
+            { shaderLocation: 1, offset: 8, format: 'float32' },
+          ],
+        }],
+        vertexCount: vertices.length / 3,
+      },
+    }),
+    vertexBuffer: buffer.gpu,
     resolve: gpu.effect(resolveWgsl, { label: `${label}-resolve` }),
     fxaa: gpu.effect(fxaaWgsl, { label: `${label}-fxaa` }),
     sampler: gpu.sampler({
@@ -162,7 +191,7 @@ function renderMode(
   }
 
   if (mode === AA_MODE_MSAA_4X) {
-    setScene(effects.scene, time, targets.msaa.size);
+    setScene(effects.scene, time, output.size);
     setResolve(effects.resolve, targets.msaa, output.size, 0);
     frame.pass({ target: targets.msaa, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
     frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.resolve));
@@ -170,25 +199,25 @@ function renderMode(
   }
 
   if (mode === AA_MODE_SSAA_2X) {
-    setScene(effects.scene, time, targets.ssaa.size);
+    setScene(effects.scene, time, output.size);
     setResolve(effects.resolve, targets.ssaa, output.size, 1);
     frame.pass({ target: targets.ssaa, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
     frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.resolve));
     return;
   }
 
-  setScene(effects.scene, time, targets.ldr.size);
+  setScene(effects.scene, time, output.size);
   setFxaa(effects.fxaa, targets.ldr, output.size, effects.sampler);
   frame.pass({ target: targets.ldr, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
   frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.fxaa));
 }
 
 function setScene(
-  scene: Effect,
+  scene: Draw,
   time: number,
   resolution: readonly [number, number],
 ): void {
-  scene.set({ uniforms: { time, resolution, _pad: 0 } });
+  scene.set({ uniforms: { time, logical_resolution: resolution, _pad: 0 } });
 }
 
 function setResolve(
@@ -224,8 +253,32 @@ function setFxaa(
   });
 }
 
+function createSpokeVertices(): Float32Array {
+  const data: number[] = [];
+  const spokeCount = 44;
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = (i / spokeCount) * Math.PI * 2;
+    const direction: readonly [number, number] = [Math.cos(angle), Math.sin(angle)];
+    const normal: readonly [number, number] = [-direction[1], direction[0]];
+    const inner = i % 4 === 0 ? 0.06 : 0.13;
+    const outer = i % 5 === 0 ? 0.88 : 0.72 + (i % 3) * 0.055;
+    const halfWidth = i % 5 === 0 ? 0.009 : 0.0045;
+    const accent = (i % 7) / 6;
+    const a: readonly [number, number] = [direction[0] * inner + normal[0] * halfWidth, direction[1] * inner + normal[1] * halfWidth];
+    const b: readonly [number, number] = [direction[0] * inner - normal[0] * halfWidth, direction[1] * inner - normal[1] * halfWidth];
+    const c: readonly [number, number] = [direction[0] * outer - normal[0] * halfWidth, direction[1] * outer - normal[1] * halfWidth];
+    const d: readonly [number, number] = [direction[0] * outer + normal[0] * halfWidth, direction[1] * outer + normal[1] * halfWidth];
+    for (const point of [a, b, c, a, c, d]) data.push(point[0], point[1], accent);
+  }
+  return new Float32Array(data);
+}
+
 function normalizedSize(size: readonly [number, number]): [number, number] {
   return [Math.max(1, Math.floor(size[0])), Math.max(1, Math.floor(size[1]))];
+}
+
+function destroyEffects(effects: AaEffects): void {
+  effects.vertexBuffer.destroy();
 }
 
 function destroyTargets(targets: AaTargets): void {

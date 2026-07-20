@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { init } from 'vgpu/node';
-import { comparePngSnapshot } from '@vgpu/cli/lib/snapshot/png.js';
+import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,6 +33,7 @@ const compareOptions = {
   pixelmatchThreshold: 0.1,
   maxDiffRatio: 0.02,
 };
+const aaModeNames = new Map([[0, 'off'], [1, 'msaa-4x'], [2, 'ssaa-2x'], [3, 'fxaa']]);
 
 function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
   const effect = gpu.effect(fragmentSource);
@@ -67,7 +68,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}`);
     if (['missing', 'different'].includes(result.compare.status)) failures++;
   }
 }
@@ -81,11 +82,15 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];
+    const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
     if (renderer) {
       await renderer(gpu, target, {
         warmupFrames: metaThumb.warmupFrames ?? 60,
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
+        onModeRendered: aaModePixels
+          ? (mode, pixels) => aaModePixels.set(mode, pixels.slice())
+          : undefined,
       });
     } else {
       const fragmentFile = resolveFragmentFile(example, exampleSources);
@@ -99,11 +104,15 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       );
     }
     const pixels = await target.read();
+    const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
+    if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
+      await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
+    }
     const variance = lumaVariance(pixels);
     if (variance < minLumaVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${minLumaVariance}.`);
     const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update });
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0 };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics };
   } finally {
     gpu.dispose();
   }
@@ -136,6 +145,95 @@ function lumaVariance(bytes) {
   }
   const mean = sum / count;
   return sumSq / count - mean * mean;
+}
+
+function assertAaMetrics(modePixels, width, height) {
+  for (const mode of aaModeNames.keys()) {
+    if (!modePixels.has(mode)) throw new Error(`Anti-aliasing validation did not capture mode ${mode}.`);
+  }
+  const off = modePixels.get(0);
+  const edgeMask = dilatedEdgeMask(off, width, height);
+  const msaa = compareAaPair(off, modePixels.get(1), edgeMask);
+  const ssaa = compareAaPair(off, modePixels.get(2), edgeMask);
+  const fxaa = compareAaPair(off, modePixels.get(3), edgeMask);
+  const silhouette = silhouetteDice(off, modePixels.get(2));
+  const metrics = { msaa, ssaa, fxaa, silhouette };
+
+  const problems = [];
+  if (msaa.diffRatio <= 0.003) problems.push(`Off/MSAA changed only ${(msaa.diffRatio * 100).toFixed(3)}% of pixels (need >0.300%)`);
+  if (msaa.edgeConcentration < 0.8) problems.push(`Off/MSAA edge concentration ${(msaa.edgeConcentration * 100).toFixed(1)}% (need >=80%)`);
+  if (silhouette < 0.95) problems.push(`Off/SSAA silhouette Dice ${(silhouette * 100).toFixed(2)}% (need >=95%)`);
+  if (ssaa.diffRatio <= 0.003) problems.push(`Off/SSAA changed only ${(ssaa.diffRatio * 100).toFixed(3)}% of pixels (need >0.300%)`);
+  if (ssaa.edgeConcentration < 0.75) problems.push(`Off/SSAA edge concentration ${(ssaa.edgeConcentration * 100).toFixed(1)}% (need >=75%)`);
+  if (fxaa.diffRatio <= 0.003) problems.push(`Off/FXAA changed only ${(fxaa.diffRatio * 100).toFixed(3)}% of pixels (need >0.300%)`);
+  if (fxaa.edgeConcentration < 0.7) problems.push(`Off/FXAA edge concentration ${(fxaa.edgeConcentration * 100).toFixed(1)}% (need >=70%)`);
+  if (problems.length) throw new Error([
+    `Anti-aliasing semantic validation failed (${width}x${height}):`,
+    ...problems.map((problem) => `- ${problem}`),
+    'Run pnpm thumbs:docker -- --only anti-aliasing and inspect the per-mode captures.',
+  ].join('\n'));
+  return metrics;
+}
+
+function compareAaPair(a, b, edgeMask) {
+  let changed = 0;
+  let changedOnEdge = 0;
+  const count = a.length / 4;
+  for (let pixel = 0; pixel < count; pixel++) {
+    const i = pixel * 4;
+    const delta = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+    if (delta < 8) continue;
+    changed++;
+    if (edgeMask[pixel]) changedOnEdge++;
+  }
+  return { diffRatio: changed / count, edgeConcentration: changed ? changedOnEdge / changed : 0 };
+}
+
+function dilatedEdgeMask(bytes, width, height) {
+  const luma = new Float32Array(width * height);
+  for (let pixel = 0; pixel < luma.length; pixel++) {
+    const i = pixel * 4;
+    luma[pixel] = 0.2126 * bytes[i] + 0.7152 * bytes[i + 1] + 0.0722 * bytes[i + 2];
+  }
+  const edges = new Uint8Array(luma.length);
+  for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+    const i = y * width + x;
+    const delta = Math.max(Math.abs(luma[i] - luma[i - 1]), Math.abs(luma[i] - luma[i + 1]), Math.abs(luma[i] - luma[i - width]), Math.abs(luma[i] - luma[i + width]));
+    if (delta >= 20) edges[i] = 1;
+  }
+  const dilated = new Uint8Array(edges.length);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    for (let oy = -2; oy <= 2 && !dilated[y * width + x]; oy++) for (let ox = -2; ox <= 2; ox++) {
+      const sx = x + ox;
+      const sy = y + oy;
+      if (sx >= 0 && sx < width && sy >= 0 && sy < height && edges[sy * width + sx]) { dilated[y * width + x] = 1; break; }
+    }
+  }
+  return dilated;
+}
+
+function silhouetteDice(a, b) {
+  let intersection = 0;
+  let total = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const aOn = 0.2126 * a[i] + 0.7152 * a[i + 1] + 0.0722 * a[i + 2] >= 64;
+    const bOn = 0.2126 * b[i] + 0.7152 * b[i + 1] + 0.0722 * b[i + 2] >= 64;
+    if (aOn) total++;
+    if (bOn) total++;
+    if (aOn && bOn) intersection++;
+  }
+  return total ? (2 * intersection) / total : 1;
+}
+
+function formatAaMetrics(metrics) {
+  const pair = (name, value) => `${name} diff=${(value.diffRatio * 100).toFixed(3)}% edge=${(value.edgeConcentration * 100).toFixed(1)}%`;
+  return `${pair('MSAA', metrics.msaa)}, ${pair('SSAA', metrics.ssaa)}, silhouette=${(metrics.silhouette * 100).toFixed(2)}%, ${pair('FXAA', metrics.fxaa)}`;
+}
+
+async function writeAaModePngs(modePixels, size, kind) {
+  const dir = process.env.VGPU_AA_MODE_OUTPUT_DIR;
+  await mkdir(dir, { recursive: true });
+  await Promise.all([...aaModeNames].map(([mode, name]) => writePng(path.join(dir, `${kind}-${name}.png`), modePixels.get(mode), size[0], size[1])));
 }
 
 async function loadRenderers() {
