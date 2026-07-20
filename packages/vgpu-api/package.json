@@ -75,7 +75,7 @@
     "wgpu-matrix": "^3.4.2",
     "@webgpu/types": "^0.1.69"
   },
-  "vgpuExportBundleBudgetNote": "Mesh v2 reflection matching, slices, draw ranges, topology, and public scene exports require author-approved 30KB primary and 16.5KB scene gzip ceilings.",
+  "vgpuExportBundleBudgetNote": "Author-approved 2026-07: mesh v2 reflection matching, slices, draw ranges, topology, and public scene exports use 30KB primary and 16.5KB scene gzip ceilings.",
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 30720,
     "./node": 30720,

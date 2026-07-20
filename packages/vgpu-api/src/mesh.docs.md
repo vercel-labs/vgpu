@@ -81,6 +81,29 @@ interface Mesh {
   writeIndices(data: Uint16Array | Uint32Array, byteOffset?: number): void;
   destroy(): void;
 }
+
+interface MeshSlice extends MeshLike {
+  readonly mesh: Mesh;
+  readonly firstIndex?: number;
+  readonly indexCount?: number;
+  readonly baseVertex?: number;
+  readonly firstVertex?: number;
+  readonly vertexCount?: number;
+  readonly instanceCount?: number;
+}
+
+interface DrawCallOptions {
+  /** Non-indexed count. Precedence: call > slice > mesh > DrawOptions > 3. */
+  readonly vertices?: number;
+  /** Non-indexed start. Precedence: call > slice > 0. */
+  readonly firstVertex?: number;
+  /** Indexed count. Precedence: call > slice > mesh. */
+  readonly indices?: number;
+  /** Indexed start. Precedence: call > slice > 0. */
+  readonly firstIndex?: number;
+  /** Indexed base vertex. Precedence: call > slice > 0. */
+  readonly baseVertex?: number;
+}
 ```
 
 ## Parameters

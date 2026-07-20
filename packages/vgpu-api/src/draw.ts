@@ -430,27 +430,29 @@ function resolveDrawCounts(label: string, mesh: MeshLike | undefined, drawOpts: 
   validateOptionalDrawCount(label, "DrawOptions.vertices", drawOpts.vertices);
   validateOptionalDrawCount(label, "DrawOptions.firstInstance", drawOpts.firstInstance);
   validateOptionalDrawCount(label, "DrawCallOptions.instances", callOpts.instances);
-  validateOptionalDrawCount(label, "DrawCallOptions.vertices", callOpts.vertices);
-  validateOptionalDrawCount(label, "DrawCallOptions.indices", callOpts.indices);
-  validateOptionalDrawCount(label, "DrawCallOptions.firstVertex", callOpts.firstVertex);
-  validateOptionalDrawCount(label, "DrawCallOptions.firstIndex", callOpts.firstIndex);
-  validateOptionalDrawCount(label, "DrawCallOptions.baseVertex", callOpts.baseVertex);
+  validateOptionalMeshRange(label, "DrawCallOptions.vertices", callOpts.vertices);
+  validateOptionalMeshRange(label, "DrawCallOptions.indices", callOpts.indices);
+  validateOptionalMeshRange(label, "DrawCallOptions.firstVertex", callOpts.firstVertex);
+  validateOptionalMeshRange(label, "DrawCallOptions.firstIndex", callOpts.firstIndex);
+  validateOptionalMeshRange(label, "DrawCallOptions.baseVertex", callOpts.baseVertex);
   validateOptionalDrawCount(label, "DrawCallOptions.firstInstance", callOpts.firstInstance);
   validateOptionalDrawCount(label, "MeshLike.vertexCount", mesh?.vertexCount);
   validateOptionalDrawCount(label, "MeshLike.indexCount", mesh?.indexCount);
   validateOptionalDrawCount(label, "MeshLike.instanceCount", mesh?.instanceCount);
-  validateOptionalDrawCount(label, "MeshLike.firstVertex", mesh?.firstVertex);
-  validateOptionalDrawCount(label, "MeshLike.firstIndex", mesh?.firstIndex);
-  validateOptionalDrawCount(label, "MeshLike.baseVertex", mesh?.baseVertex);
+  validateOptionalMeshRange(label, "MeshLike.firstVertex", mesh?.firstVertex);
+  validateOptionalMeshRange(label, "MeshLike.firstIndex", mesh?.firstIndex);
+  validateOptionalMeshRange(label, "MeshLike.baseVertex", mesh?.baseVertex);
   const indexed = !!mesh?.indexBuffer;
+  const sliceParent = (mesh as (MeshLike & { readonly mesh?: MeshLike }) | undefined)?.mesh;
+  const parent = sliceParent ?? (mesh && meshLayoutResolver in mesh ? mesh : undefined);
   const firstVertex = callOpts.firstVertex ?? mesh?.firstVertex ?? 0;
   const vertexCount = callOpts.vertices ?? mesh?.vertexCount ?? drawOpts.vertices ?? 3;
   const firstIndex = callOpts.firstIndex ?? mesh?.firstIndex ?? 0;
   const indexCount = callOpts.indices ?? mesh?.indexCount ?? 0;
   const baseVertex = callOpts.baseVertex ?? mesh?.baseVertex ?? 0;
-  if (indexed) validateDrawCountRange(label, "indices", indexCount, mesh?.indexCount);
+  if (indexed) validateDrawInterval(label, "index", firstIndex, indexCount, parent?.indexCount);
   else if (callOpts.indices !== undefined || callOpts.firstIndex !== undefined || callOpts.baseVertex !== undefined) throw meshRangeInvalidError(`${label}.draw`, "Indexed range overrides require an indexed mesh.");
-  if (!indexed) validateDrawCountRange(label, "vertices", vertexCount, mesh?.vertexCount);
+  if (!indexed) validateDrawInterval(label, "vertex", firstVertex, vertexCount, parent?.vertexCount);
   return {
     instanceCount: callOpts.instances ?? drawOpts.instances ?? mesh?.instanceCount ?? 1,
     firstInstance: callOpts.firstInstance ?? drawOpts.firstInstance ?? 0,
@@ -468,10 +470,14 @@ function primitiveState(mesh: MeshLike | undefined): GPUPrimitiveState {
   return stripIndexFormat ? { topology, stripIndexFormat } : { topology };
 }
 
-function validateDrawCountRange(label: string, kind: "indices" | "vertices", count: number, max: number | undefined): void {
-  if (max === undefined) return;
-  if (count <= max) return;
-  throw meshRangeInvalidError(`${label}.draw`, `${kind} count ${count} exceeds mesh ${kind} count ${max}.`);
+function validateDrawInterval(label: string, kind: "index" | "vertex", first: number, count: number, max: number | undefined): void {
+  if (max === undefined || first + count <= max) return;
+  throw meshRangeInvalidError(`${label}.draw`, `${kind} range [${first}, ${first + count}) exceeds parent mesh ${kind} count ${max}.`);
+}
+
+function validateOptionalMeshRange(label: string, field: string, value: number | undefined): void {
+  if (value === undefined || (Number.isInteger(value) && value >= 0)) return;
+  throw meshRangeInvalidError(`${label}.draw`, `${field} must be an integer >= 0; received ${String(value)}.`);
 }
 
 function validateOptionalDrawCount(label: string, field: string, value: number | undefined): void {

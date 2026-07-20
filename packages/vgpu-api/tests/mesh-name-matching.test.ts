@@ -3,9 +3,9 @@ import { getMockGPUDeviceInstrumentation, init, VGPUError } from "../src/mock.ts
 
 const FS = `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`;
 
-function codeOf(fn: () => unknown): string | undefined {
-  try { fn(); } catch (error) { return error instanceof VGPUError ? error.code : undefined; }
-  return undefined;
+function errorOf(fn: () => unknown): VGPUError {
+  try { fn(); } catch (error) { if (error instanceof VGPUError) return error; throw error; }
+  throw new Error("Expected a VGPUError");
 }
 
 test("named mesh attributes resolve to reflected vertex locations at gpu.draw construction", async () => {
@@ -45,10 +45,12 @@ test("draw construction reports unmatched, ambiguous, missing, and format mismat
   const gpu = await init();
   try {
     const named = (attributes: Record<string, GPUVertexFormat | { format: GPUVertexFormat; location?: number }>) => gpu.mesh({ buffers: [{ data: new Float32Array(4), stride: 16, attributes }] });
-    expect(codeOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0); } ${FS}`, mesh: named({ color: "float32x4" }) }))).toBe("VGPU-MESH-ATTRIBUTE-UNMATCHED");
-    expect(codeOf(() => gpu.draw({ shader: `struct In { @location(0) value: vec2f } @vertex fn vs_main(input: In, @location(1) value: vec2f) -> @builtin(position) vec4f { return vec4f(input.value + value, 0.0, 1.0); } ${FS}`, mesh: named({ value: "float32x2" }) }))).toBe("VGPU-MESH-ATTRIBUTE-UNMATCHED");
-    expect(codeOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(position + uv, 0.0, 1.0); } ${FS}`, mesh: named({ position: "float32x2" }) }))).toBe("VGPU-MESH-INPUT-MISSING");
-    expect(codeOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2u) -> @builtin(position) vec4f { return vec4f(position); } ${FS}`, mesh: named({ position: "float32x2" }) }))).toBe("VGPU-MESH-FORMAT-MISMATCH");
+    const unmatched = errorOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0); } ${FS}`, mesh: named({ color: "float32x4" }) }));
+    const ambiguous = errorOf(() => gpu.draw({ shader: `struct In { @location(0) value: vec2f } @vertex fn vs_main(input: In, @location(1) value: vec2f) -> @builtin(position) vec4f { return vec4f(input.value + value, 0.0, 1.0); } ${FS}`, mesh: named({ value: "float32x2" }) }));
+    const missing = errorOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(position + uv, 0.0, 1.0); } ${FS}`, mesh: named({ position: "float32x2" }) }));
+    const mismatch = errorOf(() => gpu.draw({ shader: `@vertex fn vs_main(@location(0) position: vec2u) -> @builtin(position) vec4f { return vec4f(position); } ${FS}`, mesh: named({ position: "float32x2" }) }));
+    expect([unmatched.code, ambiguous.code, missing.code, mismatch.code]).toEqual(["VGPU-MESH-ATTRIBUTE-UNMATCHED", "VGPU-MESH-ATTRIBUTE-UNMATCHED", "VGPU-MESH-INPUT-MISSING", "VGPU-MESH-FORMAT-MISMATCH"]);
+    for (const error of [unmatched, ambiguous, missing, mismatch]) expect(error.fix).toBeTruthy();
   } finally { gpu.dispose(); }
 });
 

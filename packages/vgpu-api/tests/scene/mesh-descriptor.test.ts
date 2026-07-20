@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { getMockGPUDeviceInstrumentation, init } from "../../src/mock.ts";
+import { getMockGPUDeviceInstrumentation, init, VGPUError } from "../../src/mock.ts";
+
+function meshErrorOf(fn: () => unknown): VGPUError {
+  try { fn(); } catch (error) { if (error instanceof VGPUError) return error; throw error; }
+  throw new Error("Expected a VGPUError");
+}
 
 test("gpu.mesh normalizes record attributes, derives counts, and freezes slice layout identity", async () => {
   const gpu = await init();
@@ -63,6 +68,105 @@ test("gpu.mesh derives tight auto stride, stepMode instance count, and rejects i
       .toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
     expect(() => gpu.mesh({ buffers: [{ data: new Float32Array([1, 2, 3, 4]), attributes: { a: { format: "float32x2", location: 0 }, b: { format: "float32x2", location: 0 } } }] }))
       .toThrowError(/VGPU-MESH-LOCATION-CONFLICT/);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("gpu.mesh validates locations, enums, and tight auto-stride eagerly", async () => {
+  const gpu = await init();
+  try {
+    const base = { data: new Float32Array([0]), attributes: { value: { format: "float32" as const, location: 0 } } };
+    for (const location of [-1, 1.5, Number.NaN, gpu.device.gpu.limits.maxVertexAttributes]) {
+      expect(() => gpu.mesh({ buffers: [{ ...base, attributes: { value: { format: "float32", location } } }] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    }
+    expect(() => gpu.mesh({ topology: "bogus" as GPUPrimitiveTopology, buffers: [base] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    expect(() => gpu.mesh({ buffers: [{ ...base, stepMode: "bogus" as GPUVertexStepMode }] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    for (const format of ["float16", "float16x3", "unorm8x3", "uint8x3"] as GPUVertexFormat[]) {
+      expect(() => gpu.mesh({ buffers: [{ data: new Uint8Array(12), attributes: { value: { format, location: 0 } } }] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    }
+    expect(() => gpu.mesh({ buffers: [{ data: new Float32Array(5), attributes: { value: { format: "float32", offset: 16, location: 0 } } }] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    const padded = gpu.mesh({ buffers: [{ data: new Float32Array(5), stride: 20, attributes: { value: { format: "float32", offset: 16, location: 0 } } }] });
+    expect(padded.vertexBufferLayouts[0]?.arrayStride).toBe(20);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("caller-owned buffers require explicit counts and a complete index trio", async () => {
+  const gpu = await init();
+  try {
+    const vertex = gpu.device.gpu.createBuffer({ size: 64, usage: 32 });
+    const index = gpu.device.gpu.createBuffer({ size: 64, usage: 16 });
+    const raw = { buffer: vertex, attributes: { pos: { format: "float32x2" as const, location: 0 } } };
+    expect(() => gpu.mesh({ buffers: [raw] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    expect(gpu.mesh({ buffers: [raw], vertexCount: 3 }).vertexCount).toBe(3);
+    expect(() => gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    expect(() => gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index, indexFormat: "uint16" })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    expect(gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index, indexFormat: "uint16", indexCount: 4 }).indexCount).toBe(4);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("owned counts cannot exceed data capacity and mesh layout properties are immutable", async () => {
+  const gpu = await init();
+  try {
+    const descriptor = { buffers: [{ data: new Float32Array([0, 0]), attributes: { pos: { format: "float32x2" as const, location: 0 } } }] };
+    expect(() => gpu.mesh({ ...descriptor, vertexCount: 2 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+    expect(() => gpu.mesh({ ...descriptor, indices: new Uint16Array([0, 0]), indexCount: 3 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+    expect(() => gpu.mesh({ ...descriptor, indices: new Uint16Array([0, 0]), indexFormat: "uint32" })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
+    const planar = [{ data: new Float32Array(6), attributes: { pos: { format: "float32x2" as const, location: 0 } } }, { data: new Float32Array(2), attributes: { uv: { format: "float32x2" as const, location: 1 } } }];
+    expect(gpu.mesh({ buffers: planar }).vertexCount).toBe(1);
+    expect(() => gpu.mesh({ buffers: planar, vertexCount: 2 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+    const instances = planar.map((buffer) => ({ ...buffer, stepMode: "instance" as const }));
+    expect(gpu.mesh({ buffers: instances }).instanceCount).toBe(1);
+    expect(() => gpu.mesh({ buffers: instances, instanceCount: 2 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+    const mesh = gpu.mesh(descriptor);
+    expect(() => { (mesh as { topology: string }).topology = "line-list"; }).toThrow(TypeError);
+    expect(mesh.topology).toBe("triangle-list");
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("mesh writes enforce WebGPU alignment and stay structured after destroy", async () => {
+  const gpu = await init();
+  try {
+    const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0]), attributes: { pos: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1]) });
+    expect(() => mesh.write(new Uint8Array(2))).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+    expect(() => mesh.write(new Uint32Array([1]), 2)).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+    expect(() => mesh.writeIndices(new Uint16Array([0]), 0)).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+    mesh.destroy();
+    expect(() => mesh.write(new Uint32Array([1]))).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+    expect(() => mesh.writeIndices(new Uint32Array([1]))).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("mesh construction-time error codes include actionable fix hints", async () => {
+  const gpu = await init();
+  try {
+    const buffer = () => ({ data: new Float32Array([0, 0]), attributes: { pos: { format: "float32x2" as const, location: 0 } } });
+    const valid = gpu.mesh({ buffers: [buffer()] });
+    const errors = [
+      meshErrorOf(() => gpu.mesh({ buffers: [{ ...buffer(), stride: 3 }] })),
+      meshErrorOf(() => gpu.mesh({ buffers: Array.from({ length: 9 }, buffer) })),
+      meshErrorOf(() => gpu.mesh({ buffers: [{ data: new Float32Array(4), attributes: { a: { format: "float32x2", location: 0 }, b: { format: "float32x2", location: 0 } } }] })),
+      meshErrorOf(() => gpu.mesh({ buffers: [{ data: new Float32Array(3), attributes: { pos: { format: "float32x2", location: 0 } } }] })),
+      meshErrorOf(() => valid.slice({ firstVertex: 1, vertexCount: 1 })),
+      meshErrorOf(() => valid.write(new Uint8Array(2))),
+    ];
+    expect(errors.map((error) => error.code)).toEqual([
+      "VGPU-MESH-LAYOUT-INVALID",
+      "VGPU-MESH-LIMIT-EXCEEDED",
+      "VGPU-MESH-LOCATION-CONFLICT",
+      "VGPU-MESH-DATA-MISALIGNED",
+      "VGPU-MESH-RANGE-INVALID",
+      "VGPU-MESH-WRITE-RANGE",
+    ]);
+    for (const error of errors) expect(error.fix).toBeTruthy();
   } finally {
     gpu.dispose();
   }
