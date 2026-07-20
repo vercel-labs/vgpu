@@ -65,12 +65,17 @@ for (const example of selected) {
     continue;
   }
 
-  for (const [kind, size] of Object.entries(sizes)) {
+  const selectedSizes = args.fluidSoak && slug === 'fluid' ? { card: sizes.card } : sizes;
+  for (const [kind, size] of Object.entries(selectedSizes)) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
     console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
-    if (['missing', 'different'].includes(result.compare.status)) failures++;
+    if (args.fluidSoak && slug === 'fluid') {
+      // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
+    } else if (args.fluidDrag && slug === 'fluid') {
+      if ((result.compare.ratio ?? 0) < .08) throw new Error(`Fluid scripted drag changed only ${((result.compare.ratio ?? 0) * 100).toFixed(2)}% of pixels; need >=8%.`);
+    } else if (['missing', 'different'].includes(result.compare.status)) failures++;
   }
 }
 
@@ -94,6 +99,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
           ? (mode, pixels) => aaModePixels.set(mode, pixels.slice())
           : undefined,
         scriptedDrag: slug === 'fluid' && args.fluidDrag,
+        soak: slug === 'fluid' && args.fluidSoak,
         onStateValidated: slug === 'fluid' ? (stats) => { fluidState = stats; } : undefined,
       });
       if (fluidState) assertFluidState(fluidState);
@@ -110,7 +116,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     const pixels = await target.read();
     const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
-    const fluidMetrics = slug === 'fluid' ? assertFluidMetrics(pixels, size[0], size[1]) : undefined;
+    const fluidMetrics = slug === 'fluid' && !args.fluidSoak ? assertFluidMetrics(pixels, size[0], size[1]) : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
@@ -340,7 +346,7 @@ async function loadDocsData() {
 }
 
 function parseArgs(argv) {
-  const parsed = { update: false, check: false, only: undefined, fluidDrag: false };
+  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
@@ -348,6 +354,7 @@ function parseArgs(argv) {
     else if (arg === '--check') parsed.check = true;
     else if (arg === '--only') parsed.only = argv[++i];
     else if (arg === '--fluid-drag') parsed.fluidDrag = true;
+    else if (arg === '--fluid-soak') parsed.fluidSoak = true;
     else throw new Error(`Unknown argument '${arg}'.`);
   }
   if (parsed.update && parsed.check) throw new Error('Use either --update or --check, not both.');

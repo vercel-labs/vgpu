@@ -77,12 +77,23 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
 
 export interface FluidValidationStats { steps: number; finite: boolean; maxSpeed: number; maxDye: number; averageDye: number }
 
-export async function renderThumb(gpu: Gpu, target: Target, opts: { warmupFrames?: number; scriptedDrag?: boolean; onStateValidated?: (stats: FluidValidationStats) => void } = {}): Promise<void> {
+export async function renderThumb(gpu: Gpu, target: Target, opts: { warmupFrames?: number; scriptedDrag?: boolean; soak?: boolean; onStateValidated?: (stats: FluidValidationStats) => void } = {}): Promise<void> {
   const state = createState(gpu);
   await prepareRenderer(state, target);
-  const steps = Math.max(0, opts.warmupFrames ?? 120);
-  const scriptedInput = opts.scriptedDrag ? createScriptedDrag() : undefined;
-  for (let i = 0; i < steps; i++) simulate(state, scriptedInput);
+  if (opts.soak) {
+    const aggressive = createAggressiveInput();
+    for (let i = 0; i < 12_000; i++) {
+      simulate(state, i < 10_000 ? undefined : aggressive);
+      if ((i + 1) % 1_000 === 0) {
+        await gpu.gpu.queue.onSubmittedWorkDone();
+        opts.onStateValidated?.(await readValidationStats(state));
+      }
+    }
+  } else {
+    const steps = Math.max(0, opts.warmupFrames ?? 120);
+    const scriptedInput = opts.scriptedDrag ? createScriptedDrag() : undefined;
+    for (let i = 0; i < steps; i++) simulate(state, scriptedInput);
+  }
   render(state, target);
   await gpu.gpu.queue.onSubmittedWorkDone();
   await gpu.settled();
@@ -174,6 +185,20 @@ function createScriptedDrag(): StirInput {
     get to() { return point(Math.max(0, Math.min(29, step))); },
     get velocity() { const a = point(Math.max(0, Math.min(29, step - 1))); const b = point(Math.max(0, Math.min(29, step))); return [(b[0] - a[0]) * 60, (b[1] - a[1]) * 60] as [number, number]; },
     stroke: 1,
+    consumeStep() { step++; },
+    dispose() {},
+  };
+}
+
+function createAggressiveInput(): StirInput {
+  let step = 0;
+  const point = (n: number): [number, number] => [.5 + .42 * Math.sin(n * .37), .5 + .4 * Math.sin(n * .61 + 1.2)];
+  return {
+    active: true,
+    get from() { return point(step - 1); },
+    get to() { return point(step); },
+    get velocity() { const a = point(step - 1); const b = point(step); return [(b[0] - a[0]) * 60, (b[1] - a[1]) * 60]; },
+    stroke: 2,
     consumeStep() { step++; },
     dispose() {},
   };
