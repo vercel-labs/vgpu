@@ -93,7 +93,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       expect(errors).toEqual([
         expect.objectContaining({
           code: "VGPU-R4-GROUP-VALIDATION",
-          message: expect.stringContaining("group 1 claimed in draw 'cube'"),
+          message: expect.stringContaining("WebGPU rejected claimed group 1 in 'cube'"),
           where: "cube.draw",
           detail: { drawLabel: "cube", group: 1 },
         }),

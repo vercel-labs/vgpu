@@ -19,83 +19,83 @@ export class UniformPool {
   readonly maxUniformBindingSize: number;
   readonly cpuMirror: ArrayBuffer;
   readonly gpu: GPUBuffer;
-  private readonly bytes: Uint8Array;
-  private head = 0;
-  private hasUnflushedPushes = false;
-  private isDisposed = false;
+  readonly #bytes: Uint8Array;
+  #head = 0;
+  #hasUnflushedPushes = false;
+  #isDisposed = false;
 
   constructor(readonly device: Device, opts: UniformPoolOptions = {}) {
     this.capacityBytes = opts.capacityBytes ?? defaultCapacityBytes;
     this.minOffsetAlignment = deviceLimit(device, "minUniformBufferOffsetAlignment", defaultMinOffsetAlignment);
     this.maxUniformBindingSize = deviceLimit(device, "maxUniformBufferBindingSize", defaultMaxUniformBindingSize);
     this.cpuMirror = new ArrayBuffer(this.capacityBytes);
-    this.bytes = new Uint8Array(this.cpuMirror);
+    this.#bytes = new Uint8Array(this.cpuMirror);
     this.gpu = device.gpu.createBuffer({ label: "vgpu UniformPool", size: this.capacityBytes, usage: uniformUsage | copyDstUsage });
   }
 
-  get usedBytes(): number { return this.head; }
-  get disposed(): boolean { return this.isDisposed; }
+  get usedBytes(): number { return this.#head; }
+  get disposed(): boolean { return this.#isDisposed; }
 
   alloc<T>(layout: UniformLayout<T>): UniformSlot<T> {
-    this.assertUsable("UniformPool.alloc");
-    this.assertLayoutFits(layout);
+    this.#assertUsable("UniformPool.alloc");
+    this.#assertLayoutFits(layout);
     return new PoolSlot(this, layout, roundUp(layout.size, this.minOffsetAlignment));
   }
 
   push<T>(slot: UniformSlot<T>, value: T): number {
-    this.assertOwnsSlot(slot, "UniformPool.push");
-    return this.write(slot.layout.size, slot.stride, (offset) => slot.layout.encode(value, this.cpuMirror, offset));
+    this.#assertOwnsSlot(slot, "UniformPool.push");
+    return this.#write(slot.layout.size, slot.stride, (offset) => slot.layout.encode(value, this.cpuMirror, offset));
   }
 
   pushBytes(slot: UniformSlot<unknown>, bytes: ArrayBufferView<ArrayBuffer>): number {
-    this.assertOwnsSlot(slot, "UniformPool.pushBytes");
+    this.#assertOwnsSlot(slot, "UniformPool.pushBytes");
     if (bytes.byteLength !== slot.layout.size) {
       throw invalidUsage("UniformSlot.pushBytes", `Uniform bytes must match layout size ${slot.layout.size}.`);
     }
-    return this.write(slot.layout.size, slot.stride, (offset) => this.bytes.set(viewBytes(bytes), offset));
+    return this.#write(slot.layout.size, slot.stride, (offset) => this.#bytes.set(viewBytes(bytes), offset));
   }
 
   beginFrame(_frameIndex: number): void {
-    this.assertUsable("UniformPool.beginFrame");
-    this.head = 0;
-    this.hasUnflushedPushes = false;
+    this.#assertUsable("UniformPool.beginFrame");
+    this.#head = 0;
+    this.#hasUnflushedPushes = false;
   }
 
   endFrame(): void {
-    this.assertUsable("UniformPool.endFrame");
-    if (this.hasUnflushedPushes) this.device.gpu.queue.writeBuffer(this.gpu, 0, this.cpuMirror, 0, this.head);
-    this.hasUnflushedPushes = false;
+    this.#assertUsable("UniformPool.endFrame");
+    if (this.#hasUnflushedPushes) this.device.gpu.queue.writeBuffer(this.gpu, 0, this.cpuMirror, 0, this.#head);
+    this.#hasUnflushedPushes = false;
   }
 
   assertReadyForSubmit(where: string): void {
-    this.assertUsable(where);
-    if (!this.hasUnflushedPushes) return;
+    this.#assertUsable(where);
+    if (!this.#hasUnflushedPushes) return;
     throw invalidUsage(where, "UniformPool has unflushed pushes; call endFrame() before submitting.");
   }
 
   dispose(): void {
-    if (this.isDisposed) return;
-    this.isDisposed = true;
+    if (this.#isDisposed) return;
+    this.#isDisposed = true;
     this.gpu.destroy();
   }
 
-  private assertOwnsSlot(slot: UniformSlot<unknown>, where: string): void {
+  #assertOwnsSlot(slot: UniformSlot<unknown>, where: string): void {
     if (slot.pool === this) return;
     throw invalidUsage(where, "UniformSlot was allocated by a different UniformPool.");
   }
 
-  private write(layoutSize: number, stride: number, encode: (byteOffset: number) => void): number {
-    this.assertUsable("UniformSlot.push");
-    this.assertCanPush(layoutSize, stride);
-    const offset = this.head;
+  #write(layoutSize: number, stride: number, encode: (byteOffset: number) => void): number {
+    this.#assertUsable("UniformSlot.push");
+    this.#assertCanPush(layoutSize, stride);
+    const offset = this.#head;
     encode(offset);
-    this.head += stride;
-    this.hasUnflushedPushes = true;
+    this.#head += stride;
+    this.#hasUnflushedPushes = true;
     return offset;
   }
 
-  private assertCanPush(layoutSize: number, stride: number): void {
-    if (this.head + stride <= this.capacityBytes) return;
+  #assertCanPush(layoutSize: number, stride: number): void {
+    if (this.#head + stride <= this.capacityBytes) return;
     throw new VGPUError({
       code: "VGPU-UNIFORM-POOL-OVERFLOW",
       message: `UniformPool capacity ${this.capacityBytes} bytes is exceeded by a ${layoutSize}-byte layout.`,
@@ -103,7 +103,7 @@ export class UniformPool {
     });
   }
 
-  private assertLayoutFits(layout: UniformLayout<unknown>): void {
+  #assertLayoutFits(layout: UniformLayout<unknown>): void {
     if (layout.size <= this.capacityBytes && layout.size <= this.maxUniformBindingSize) return;
     throw new VGPUError({
       code: "VGPU-UNIFORM-LAYOUT-OVERSIZED",
@@ -112,8 +112,8 @@ export class UniformPool {
     });
   }
 
-  private assertUsable(where: string): void {
-    if (!this.isDisposed) return;
+  #assertUsable(where: string): void {
+    if (!this.#isDisposed) return;
     throw invalidUsage(where, "UniformPool has been disposed.");
   }
 }

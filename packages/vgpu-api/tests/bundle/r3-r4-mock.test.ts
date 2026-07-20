@@ -125,13 +125,13 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
   expect(errors).toEqual(expect.arrayContaining([
     expect.objectContaining({
       code: "VGPU-R4-GROUP-VALIDATION",
-      message: expect.stringContaining("group 1 claimed in draw 'cubeA'"),
+      message: expect.stringContaining("WebGPU rejected claimed group 1 in 'cubeA'"),
       where: "cubeA.draw",
       detail: { drawLabel: "cubeA", group: 1 },
     }),
     expect.objectContaining({
       code: "VGPU-R4-GROUP-VALIDATION",
-      message: expect.stringContaining("group 1 claimed in draw 'cubeB'"),
+      message: expect.stringContaining("WebGPU rejected claimed group 1 in 'cubeB'"),
       where: "cubeB.draw",
       detail: { drawLabel: "cubeB", group: 1 },
     }),
@@ -197,12 +197,12 @@ test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", a
     entries: [bind.resource(0, staticBuffer)],
   });
   expect(() => cube.group(1, staticBindGroup)).toThrowError(
-    "group 1 claimed in draw 'cube' is incompatible: @binding(0) does not match the reflected layout.",
+    "claimed group 1 in 'cube' is incompatible: @binding(0) does not match the reflected layout.",
   );
 
   cube.group(1, slot.bindGroup);
   expect(() => cube.set({ obj: { value: 1 } })).toThrowError(
-    "group 1 of 'cube' was claimed with group(1, bindGroup); set() cannot be used on that group.",
+    "group 1 of 'cube' is claimed; set() cannot update it.",
   );
 
   pool.beginFrame(1);

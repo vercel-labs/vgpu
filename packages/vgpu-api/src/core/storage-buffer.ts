@@ -75,7 +75,7 @@ export class StorageBuffer {
   readonly buffer: Buffer;
   readonly bindGroupLayout: GPUBindGroupLayout;
   readonly bindGroup: GPUBindGroup;
-  private destroyed = false;
+  #destroyed = false;
 
   constructor(readonly device: Device, opts: StorageBufferOptions) {
     this.size = opts.size;
@@ -110,8 +110,8 @@ export class StorageBuffer {
   }
 
   destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+    if (this.#destroyed) return;
+    this.#destroyed = true;
     this.buffer.destroy();
   }
 

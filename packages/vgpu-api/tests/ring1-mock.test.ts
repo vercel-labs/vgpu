@@ -66,9 +66,8 @@ test("R1 ownership flip reports canonical fix-it text", async () => {
   const userBuffer = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
 
   expect(() => wave.set({ speed: userBuffer })).toThrowError(
-    "`speed` is lib-owned since its first set() (JS value). Binding ownership cannot be changed.\n" +
-      "  If you need to share the buffer between passes, create a ring-0 resource and pass it from\n" +
-      "  the start:  const speed = new Uniform(gpu.device, { size: 4 });  wave.set({ speed });",
+    "`speed` is lib-owned by its first JS set(); ownership cannot change. Fix: pass a resource from the start: " +
+      "wave.set({ speed: new Uniform(gpu.device, { size: 4 }) }).",
   );
   gpu.dispose();
 });
@@ -79,10 +78,8 @@ test("binding never set, including samplers, reports canonical no-phantom-resour
   const target = gpu.target({ size: [4, 4] });
 
   expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(lighting)))).toThrowError(
-    "binding `samp` (@group(0) @binding(0), sampler) of 'lighting' was never set. Options:\n" +
-      "    lighting.set({ samp: gpu.sampler() })            // canonical cached value\n" +
-      "    lighting.group(0, myBindGroup)                   // or claim the entire group\n" +
-      "  Phantom resources are never created for you.",
+    "Unset `samp` @group(0) @binding(0) in 'lighting'. Fix: lighting.set({samp:gpu.sampler()}); " +
+      "or lighting.group(0, bindGroup).",
   );
   gpu.dispose();
 });
@@ -92,7 +89,7 @@ test("missing texture binding reports a texture-specific fix-it", async () => {
   const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(post)))).toThrowError(/post\.set\(\{ src: scene\.color \}\)/);
+  expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(post)))).toThrowError(/post\.set\(\{src:scene\.color\}\)/);
   gpu.dispose();
 });
 
@@ -245,7 +242,7 @@ test("set() validates resource kind against reflection before WebGPU bind-group 
   const lighting = gpu.effect(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
-  expect(() => lighting.set({ samp: target })).toThrowError(/expected sampler/);
+  expect(() => lighting.set({ samp: target })).toThrowError(/needs sampler/);
   gpu.dispose();
 });
 

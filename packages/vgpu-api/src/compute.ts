@@ -23,7 +23,7 @@ export class ComputePipeline implements Compute {
   readonly pipelineLayout: GPUPipelineLayout;
   readonly shaderModule: GPUShaderModule;
   readonly pipeline: GPUComputePipeline;
-  private readonly storageBindings: readonly BindingInfo[];
+  readonly #storageBindings: readonly BindingInfo[];
 
   constructor(
     private readonly device: Device,
@@ -43,7 +43,7 @@ export class ComputePipeline implements Compute {
       compute: { module: this.shaderModule, entryPoint: this.entryPoint },
     });
     this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
-    this.storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage");
+    this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage");
     if (opts.set) this.set(opts.set);
   }
 
@@ -53,7 +53,7 @@ export class ComputePipeline implements Compute {
   }
 
   dispatch(x: number, y = 1, z = 1): void {
-    this.preflightAliasing();
+    this.#preflightAliasing();
     const encoder = this.device.gpu.createCommandEncoder({ label: `${this.label}.encoder` });
     const pass = encoder.beginComputePass({ label: `${this.label}.pass` });
     pass.setPipeline(this.pipeline);
@@ -63,10 +63,10 @@ export class ComputePipeline implements Compute {
     this.device.gpu.queue.submit([encoder.finish()]);
   }
 
-  private preflightAliasing(): void {
-    if (!this.storageBindings.length) return;
+  #preflightAliasing(): void {
+    if (!this.#storageBindings.length) return;
     const buckets = new Map<string, { identity: BindGroupIdentityPart; writable: boolean }[]>();
-    for (const binding of this.storageBindings) {
+    for (const binding of this.#storageBindings) {
       const state = this.setCore.bindingState(binding.name);
       if (!state) continue;
       const key = identityKey(state.identity);

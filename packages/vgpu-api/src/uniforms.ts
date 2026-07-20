@@ -20,28 +20,28 @@ interface SharedUniformLayoutState {
  * the first shader that binds this object, keeping the backing buffer identity stable.
  */
 export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T> {
-  private readonly values: Record<string, unknown>;
-  private state?: SharedUniformLayoutState;
-  private bufferRef?: Buffer;
+  readonly #values: Record<string, unknown>;
+  #state?: SharedUniformLayoutState;
+  #bufferRef?: Buffer;
 
   constructor(private readonly device: Device, initialValues: T) {
-    this.values = cloneRecord(initialValues);
+    this.#values = cloneRecord(initialValues);
   }
 
-  get buffer(): Buffer | undefined { return this.bufferRef; }
-  get gpu(): GPUBuffer | undefined { return this.bufferRef?.gpu; }
-  get size(): number | undefined { return this.state?.layout.size; }
+  get buffer(): Buffer | undefined { return this.#bufferRef; }
+  get gpu(): GPUBuffer | undefined { return this.#bufferRef?.gpu; }
+  get size(): number | undefined { return this.#state?.layout.size; }
 
   set(values: Partial<T>): void {
-    mergeInto(this.values, values as Record<string, unknown>);
-    this.writeCurrentValues();
+    mergeInto(this.#values, values as Record<string, unknown>);
+    this.#writeCurrentValues();
   }
 
   /** Adopts or validates the reflected binding layout, then returns a user-owned resource. */
   asBindingResource(binding: BindingInfo, sourceHint: string): NormalizedBindingResource {
     ensureBufferBinding(binding);
-    const adopted = this.ensureLayout(binding, sourceHint);
-    const buffer = this.requiredBuffer();
+    const adopted = this.#ensureLayout(binding, sourceHint);
+    const buffer = this.#requiredBuffer();
     return {
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
       identity: buffer.resourceIdentity,
@@ -49,16 +49,16 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     };
   }
 
-  private ensureLayout(binding: BindingInfo, sourceHint: string): SharedUniformLayoutState {
+  #ensureLayout(binding: BindingInfo, sourceHint: string): SharedUniformLayoutState {
     const layout = staticBindingLayout(binding);
     const addressSpace = normalizeAddressSpace(binding.addressSpace);
-    if (!this.state) return this.adoptLayout(binding, layout, addressSpace, sourceHint);
-    this.assertCompatibleLayout(binding, layout, addressSpace, sourceHint);
-    return this.state;
+    if (!this.#state) return this.#adoptLayout(binding, layout, addressSpace, sourceHint);
+    this.#assertCompatibleLayout(binding, layout, addressSpace, sourceHint);
+    return this.#state;
   }
 
-  private adoptLayout(binding: BindingInfo, layout: HostShareableLayout & { readonly size: number }, addressSpace: "uniform" | "storage", sourceHint: string): SharedUniformLayoutState {
-    this.state = {
+  #adoptLayout(binding: BindingInfo, layout: HostShareableLayout & { readonly size: number }, addressSpace: "uniform" | "storage", sourceHint: string): SharedUniformLayoutState {
+    this.#state = {
       layout,
       layoutSignature: sharedUniformLayoutSignature(layout),
       layoutText: formatSharedUniformLayout(layout),
@@ -66,17 +66,17 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
       bindingName: binding.name,
       addressSpace,
     };
-    this.bufferRef = this.device.createBuffer({
+    this.#bufferRef = this.device.createBuffer({
       size: layout.size,
       usage: addressSpace === "storage" ? ["storage", "copy_dst"] : ["uniform", "copy_dst"],
       label: `${binding.name}.sharedUniform`,
     });
-    this.writeCurrentValues();
-    return this.state;
+    this.#writeCurrentValues();
+    return this.#state;
   }
 
-  private assertCompatibleLayout(binding: BindingInfo, layout: HostShareableLayout, addressSpace: "uniform" | "storage", sourceHint: string): void {
-    const state = this.state!;
+  #assertCompatibleLayout(binding: BindingInfo, layout: HostShareableLayout, addressSpace: "uniform" | "storage", sourceHint: string): void {
+    const state = this.#state!;
     if (state.addressSpace !== addressSpace) {
       throw unsupportedError("gpu.uniforms", `shared uniforms '${state.bindingName}' already adopted address space ${state.addressSpace}; '${binding.name}' uses ${addressSpace}.`);
     }
@@ -90,14 +90,14 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     });
   }
 
-  private writeCurrentValues(): void {
-    if (!this.state || !this.bufferRef) return;
-    this.bufferRef.write(writeLayoutValue(this.state.layout, this.values), 0);
+  #writeCurrentValues(): void {
+    if (!this.#state || !this.#bufferRef) return;
+    this.#bufferRef.write(writeLayoutValue(this.#state.layout, this.#values), 0);
   }
 
-  private requiredBuffer(): Buffer {
-    if (!this.bufferRef) throw unsupportedError("gpu.uniforms", "shared uniforms have not adopted a layout yet.");
-    return this.bufferRef;
+  #requiredBuffer(): Buffer {
+    if (!this.#bufferRef) throw unsupportedError("gpu.uniforms", "shared uniforms have not adopted a layout yet.");
+    return this.#bufferRef;
   }
 }
 

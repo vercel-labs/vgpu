@@ -93,7 +93,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const ownership = ownershipFor(state.info, value);
     latchBindingOwnership(state, memberName, ownership);
     latchMemberOwnership(state, memberName, ownership);
-    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' cannot receive resources; set the complete binding '${state.info.name}'.`);
+    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Member '${memberName}' needs a JS value; set resource '${state.info.name}' instead.`);
     const before = identityString(state.identity);
     setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
     return identityChangeFor(state, before);
@@ -198,7 +198,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function requiredLibLayout(state: MutableBindingState): NonNullable<BindingInfo["layout"]> & { readonly size: number } {
-    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' does not accept plain JS values; pass a compatible resource.`);
+    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' needs a compatible resource, not JS.`);
     return state.info.layout as NonNullable<BindingInfo["layout"]> & { readonly size: number };
   }
 

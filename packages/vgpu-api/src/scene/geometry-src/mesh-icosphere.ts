@@ -53,5 +53,5 @@ function validate(radius: number, subdivisions: number, shading: "flat" | "smoot
   if (subdivisions >= 7) throw invalidUsage("Mesh.icosphere", "Subdivisions must be 6 or less for uint16 indices.");
   const smoothCount = 10 * 4 ** subdivisions + 2;
   const vertexCount = shading === "flat" ? 20 * 4 ** subdivisions * 3 : smoothCount;
-  if (vertexCount > 65535) throw invalidUsage("Mesh.icosphere", `Subdivisions produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce subdivisions.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.icosphere", `Subdivisions make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

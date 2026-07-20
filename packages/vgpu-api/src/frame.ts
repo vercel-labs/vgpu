@@ -28,9 +28,9 @@ export class Frame {
    * channel.
    */
   done: Promise<void> = Promise.resolve();
-  private readonly encoder: GPUCommandEncoder;
-  private readonly validations: ClaimedGroupValidationResult[] = [];
-  private submitted = false;
+  readonly #encoder: GPUCommandEncoder;
+  readonly #validations: ClaimedGroupValidationResult[] = [];
+  #submitted = false;
   constructor(
     private readonly device: Device,
     private readonly defaultTarget?: Target,
@@ -38,7 +38,7 @@ export class Frame {
     private readonly trackSettled?: (promise: Promise<unknown>) => void,
     private readonly defaultClearColor: () => ClearColor = () => [0, 0, 0, 1],
   ) {
-    this.encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
+    this.#encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
@@ -51,65 +51,65 @@ export class Frame {
     const clear = targetOnly ? undefined : target.clear;
     const preserve = clear === false;
     if (preserve && resolvedTarget.sampleCount === 4) throw passPreserveMsaaError();
-    const encoder = this.encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(clear === undefined || clear === true || clear === false ? this.defaultClearColor() : clear, preserve));
-    try { cb(new FramePass(encoder, resolvedTarget, this.validations)); }
+    const encoder = this.#encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(clear === undefined || clear === true || clear === false ? this.defaultClearColor() : clear, preserve));
+    try { cb(new FramePass(encoder, resolvedTarget, this.#validations)); }
     catch (error) {
-      discardClaimedGroupValidationResults(this.validations);
-      this.validations.length = 0;
+      discardClaimedGroupValidationResults(this.#validations);
+      this.#validations.length = 0;
       discardClaimedGroupValidationScopes(this.device);
       try { encoder.end(); } catch { /* ignore cleanup failure after encode failure */ }
       throw error;
     }
-    endRenderPassWithClaimValidation(this.device, encoder, this.validations);
+    endRenderPassWithClaimValidation(this.device, encoder, this.#validations);
   }
 
   submit(): void {
-    if (this.submitted) return;
-    this.submitted = true;
+    if (this.#submitted) return;
+    this.#submitted = true;
     let commandBuffer: GPUCommandBuffer;
-    const finishContext = this.validations[0]?.context;
+    const finishContext = this.#validations[0]?.context;
     if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
-    try { commandBuffer = this.encoder.finish(); }
+    try { commandBuffer = this.#encoder.finish(); }
     catch (error) {
       const result = finishContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
-      discardClaimedGroupValidationResults(this.validations);
+      discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
       if (!context) throw error;
-      this.done = this.trackDone(this.deliverValidationError(context.label, context.group, error));
+      this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
     if (finishContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
+      if (result) this.#validations[0] = this.#validations[0] ? preferClaimedGroupValidationResult(result, this.#validations[0]) : result;
     }
-    const submitContext = this.validations[0]?.context;
+    const submitContext = this.#validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
     try { this.device.gpu.queue.submit([commandBuffer]); }
     catch (error) {
       const result = submitContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
-      discardClaimedGroupValidationResults(this.validations);
+      discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
       if (!context) throw error;
-      this.done = this.trackDone(this.deliverValidationError(context.label, context.group, error));
+      this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
     if (submitContext) {
       const result = popLastClaimedGroupValidationScope(this.device);
-      if (result) this.validations[0] = this.validations[0] ? preferClaimedGroupValidationResult(result, this.validations[0]) : result;
+      if (result) this.#validations[0] = this.#validations[0] ? preferClaimedGroupValidationResult(result, this.#validations[0]) : result;
     }
-    this.done = this.trackDone(claimedGroupValidationDone(this.device, this.validations, { errorSink: this.errorSink }));
+    this.done = this.#trackDone(claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }));
   }
 
-  private async deliverValidationError(label: string, group: number, cause: unknown): Promise<void> {
+  async #deliverValidationError(label: string, group: number, cause: unknown): Promise<void> {
     await submittedWorkDone(this.device);
     const error = claimedGroupNativeValidationError(label, group, cause);
     if (this.errorSink) await this.errorSink(error);
     else console.error(error);
   }
 
-  private trackDone(promise: Promise<void>): Promise<void> {
+  #trackDone(promise: Promise<void>): Promise<void> {
     this.trackSettled?.(promise);
     return promise;
   }
@@ -131,11 +131,11 @@ function encodeFrameDrawable(drawable: Draw | Effect, encoder: GPURenderPassEnco
 }
 
 export class FrameRunner {
-  private running = false;
+  #running = false;
   constructor(private readonly createFrame: () => Frame, private readonly advance: () => void) {}
   frame(cb?: (frame: Frame) => void): Frame {
-    if (this.running || isSurfaceResizeCallbackActive()) throw frameReentrantError();
-    this.running = true;
+    if (this.#running || isSurfaceResizeCallbackActive()) throw frameReentrantError();
+    this.#running = true;
     try {
       this.advance();
       const frame = this.createFrame();
@@ -145,7 +145,7 @@ export class FrameRunner {
       }
       return frame;
     } finally {
-      this.running = false;
+      this.#running = false;
     }
   }
   loop(cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {

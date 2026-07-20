@@ -55,5 +55,5 @@ function validate(innerRadius: number, outerRadius: number, segments: number): v
   if (outerRadius <= innerRadius) throw invalidUsage("Mesh.ring", "Outer radius must be greater than inner radius.");
   if (segments < 3) throw invalidUsage("Mesh.ring", "Segments must be at least 3.");
   const vertexCount = 2 * (segments + 1);
-  if (vertexCount > 65535) throw invalidUsage("Mesh.ring", `Segment count ${segments} produces ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segments.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.ring", `Segments ${segments} make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }
