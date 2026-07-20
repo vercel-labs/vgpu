@@ -56,6 +56,27 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("writeMask can preserve alpha 
   }
 });
 
+test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("MSAA target resolves additive blend", async () => {
+  const gpu = await init();
+  try {
+    const target = gpu.target({ size: [2, 2], format: "rgba8unorm", msaa: true });
+    const additive = gpu.effect(FULLSCREEN_RED, { label: "msaa-additive", blend: "additive" });
+
+    gpu.frame((frame) => frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => {
+      pass.draw(additive);
+      pass.draw(additive);
+    }));
+
+    const px = await target.read();
+    expect(px[0]).toBeGreaterThanOrEqual(126);
+    expect(px[0]).toBeLessThanOrEqual(129);
+    expect(px[1]).toBe(0);
+    expect(px[2]).toBe(0);
+  } finally {
+    gpu.dispose();
+  }
+});
+
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("clear false preserves offscreen target contents across passes and frames", async () => {
   const gpu = await init();
   try {

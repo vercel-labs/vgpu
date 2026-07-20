@@ -17,7 +17,13 @@ export function depthFormatFor(options: TargetTextureOptions): GPUTextureFormat 
 }
 
 export function sampleCountFor(options: TargetTextureOptions): 1 | 4 {
-  return options.msaa === true || options.msaa === 4 ? 4 : 1;
+  const msaa = options.msaa as unknown;
+  if (msaa === true || msaa === 4) return 4;
+  if (msaa === undefined || msaa === false) return 1;
+  const e = targetSizeRequiredError();
+  (e as { code: string }).code = "VGPU-TARGET-MSAA-INVALID";
+  e.message = `msaa received ${msaa}; WebGPU 1|4; use true`;
+  throw e;
 }
 
 export function validateTargetOptions(options: Partial<TargetOptions> | undefined, caps: TargetDeviceCaps): void {
@@ -30,8 +36,8 @@ function validateMsaaFormat(format: GPUTextureFormat, caps: TargetDeviceCaps): v
   if (!(caps.isCompatibilityMode && format === "rgba16float")) return;
   throw unsupportedError(
     "gpu.target",
-    "msaa: true with rgba16float format is not supported by Dawn compatibility mode on this device.",
-    "In this environment, use rgba16float without msaa, or use an MSAA-compatible format such as rgba8unorm to exercise resolve. On capable WebGPU devices, rgba16float+msaa remains supported.",
+    "Dawn compatibility mode does not support rgba16float+msaa.",
+    "Use rgba8unorm for MSAA here, or disable msaa.",
   );
 }
 
@@ -46,8 +52,8 @@ export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa
   return attachment;
 }
 
-export function depthAttachment(depth: { createView(): GPUTextureView }, preserve?: boolean): GPURenderPassDepthStencilAttachment {
-  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: preserve ? "load" : "clear", depthStoreOp: "store" };
+export function depthAttachment(depth: { createView(): GPUTextureView; readonly sampleCount?: number }, preserve?: boolean): GPURenderPassDepthStencilAttachment {
+  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: preserve ? "load" : "clear", depthStoreOp: depth.sampleCount! > 1 ? "discard" : "store" };
   if (!preserve) attachment.depthClearValue = 1;
   return attachment;
 }

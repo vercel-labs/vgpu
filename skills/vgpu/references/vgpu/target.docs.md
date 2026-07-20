@@ -57,7 +57,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 | opts.format | `GPUTextureFormat` | ✖ | `"rgba8unorm"` | Used for single-color targets when `colors` is omitted. |
 | opts.colors | `readonly { format: GPUTextureFormat }[]` | ✖ | `[{ format: opts.format ?? "rgba8unorm" }]` | MRT color attachments. `target.color` is `colors[0]`. |
 | opts.depth | `boolean \| GPUTextureFormat` | ✖ | `undefined` | `true` means `"depth24plus"`; a string uses that depth format; omitted means no depth. |
-| opts.msaa | `boolean \| 4` | ✖ | `false` / sample count `1` | `true` or `4` creates MSAA color/depth attachments with sample count `4` and resolves to sampleable `.color(s)`. |
+| opts.msaa | `boolean \| 4` | ✖ | `false` / sample count `1` | Only `true` or `4` enables MSAA, creating color/depth attachments with sample count `4` and resolving to sampleable `.color(s)`. |
 | opts.label | `string` | ✖ | `undefined` | Prefix for created texture labels. |
 | target.resize.size | `readonly [number, number]` | ✔ | — | Recreates offscreen textures unless size is unchanged. |
 | target.read | — | — | — | No parameters; reads `target.color` and returns RGBA bytes. `bgra8unorm` / `bgra8unorm-srgb` are supported and swizzled to RGBA, matching canvas preferred formats on platforms such as macOS. |
@@ -71,7 +71,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 
 **Returns:** `gpu.target()` returns `Target`; `resize()` returns `void`; `read()` returns `Promise<Uint8Array>`; `renderPassDescriptor(clear?, preserve?)` returns a WebGPU render pass descriptor; `gpu.pingPong()` returns `PingPongTargets`; `gpu.pingPongStorage()` returns `PingPongStorage`.
 
-**Throws:** `VGPU-TARGET-SIZE-REQUIRED` when runtime JS calls `gpu.target()` without `size`; `VGPU-RING1-UNSUPPORTED` when `msaa: true` / `4` with `rgba16float` is used on a Dawn compatibility-mode device; underlying core texture/readback operations can throw native WebGPU validation errors.
+**Throws:** `VGPU-TARGET-SIZE-REQUIRED` when runtime JS calls `gpu.target()` without `size`; `VGPU-TARGET-MSAA-INVALID` when runtime JS passes an unsupported `msaa` value (only `true` / `4` are accepted); `VGPU-RING1-UNSUPPORTED` when `msaa: true` / `4` with `rgba16float` is used on a Dawn compatibility-mode device; underlying core texture/readback operations can throw native WebGPU validation errors.
 
 ## Examples
 
