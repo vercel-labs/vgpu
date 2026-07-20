@@ -13,10 +13,18 @@ function success(args) {
 
 test("preserves root help, version, and placeholders", () => {
   expect(success(["--help"])).toContain("snapshot");
+  expect(success(["--help"])).toContain("install-dawn");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
   expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
   expect(runCli(["wgsl"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
+});
+
+test("exposes the manual Dawn installer command", async () => {
+  await expect(Promise.resolve(runCli(["install-dawn", "--help"]))).resolves.toMatchObject({
+    code: 0,
+    stdout: expect.stringContaining("VGPU_CACHE_DIR"),
+  });
 });
 
 test("supports docs help and path listing", () => {
