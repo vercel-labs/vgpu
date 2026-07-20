@@ -9,6 +9,7 @@ export type {
   AliasInfo,
   BindingInfo,
   BindingKind,
+  BindingRef,
   EntryPointInfo,
   EntryPointInputInfo,
   HostShareableLayout,

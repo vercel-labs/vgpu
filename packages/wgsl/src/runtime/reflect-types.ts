@@ -52,12 +52,19 @@ export interface EntryPointInputInfo {
   readonly type: WGSLType;
 }
 
+export interface BindingRef {
+  readonly group: number;
+  readonly binding: number;
+}
+
 export interface EntryPointInfo {
   readonly name: string;
   readonly mangledName: string;
   readonly stage: "vertex" | "fragment" | "compute";
   readonly workgroupSize?: readonly [number, number, number];
   readonly inputs?: readonly EntryPointInputInfo[];
+  /** Resource bindings statically used by this entry point and its transitive callees. */
+  readonly bindings?: readonly BindingRef[];
 }
 
 export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly defaultValue?: string }

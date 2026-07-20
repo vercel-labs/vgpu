@@ -25,7 +25,7 @@ export interface InitOptions {
   readonly adapter?: VGPUAdapter;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: Record<string, number>;
+  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
   readonly label?: string;
 }
 

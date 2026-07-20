@@ -1,7 +1,7 @@
 import { scan, type Token } from "./scanner.ts";
 
 export type ScopeKind = "module" | "function" | "block" | "for-init";
-export type DeclarationKind = "function" | "param" | "let" | "var" | "const";
+export type DeclarationKind = "function" | "global" | "param" | "let" | "var" | "const";
 export type PreserveReason = "attribute" | "member" | "type" | "directive" | "struct" | "global" | "unknown";
 
 export interface ScopeFrameInfo {
@@ -139,7 +139,7 @@ class ScopeWalker {
       if (depth !== 0) continue;
 
       if (token.text === "@") { i = this.preserveAttribute(i); continue; }
-      if (token.text === "enable" || token.text === "requires" || token.text === "diagnostic") { i = this.preserveStatement(i, "directive"); continue; }
+      if (token.text === "enable" || token.text === "requires" || token.text === "diagnostic" || token.text === "const_assert") { i = this.preserveStatement(i, "directive"); continue; }
       if (token.text === "export") continue;
       if (token.text === "struct") { i = this.collectStruct(i); continue; }
       if (token.text === "fn") { i = this.collectFunction(i); continue; }
@@ -221,7 +221,10 @@ class ScopeWalker {
       }
     }
     const name = this.findNextIdent(i);
-    if (name !== undefined) this.preserveToken(name, "global");
+    if (name !== undefined) {
+      this.preserveToken(name, "global");
+      this.addDeclaration(this.tokens[name]!.text, "global", name, this.moduleScopeId, undefined, false);
+    }
     const end = this.findStatementEnd(index);
     for (let j = index; j <= end; j++) if (this.tokens[j]?.kind === "ident") this.preserveToken(j, "global");
     return end;
@@ -250,8 +253,6 @@ class ScopeWalker {
       if (token.text === "@") { i = this.preserveAttribute(i); continue; }
       if (token.text === ".") { const member = this.nextSig(i); if (member !== undefined && this.tokens[member]?.kind === "ident") this.preserveToken(member, "member"); continue; }
       if (token.text === "enable" || token.text === "requires" || token.text === "diagnostic") { i = this.preserveStatement(i, "directive"); continue; }
-      if (token.text === "continuing") this.functionFallback(fn, "loop continuing block", i);
-
       if (token.text === "for") {
         const forScopeId = pushScope("for-init", i);
         const paren = this.nextSig(i);

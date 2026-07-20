@@ -21,7 +21,7 @@ export interface BufferOptions {
 export interface CreateDeviceOptions {
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: Record<string, number>;
+  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
   readonly label?: string;
 }
 

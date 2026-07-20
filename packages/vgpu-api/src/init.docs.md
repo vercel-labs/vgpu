@@ -22,7 +22,7 @@ interface InitOptions {
   readonly adapter?: VGPUAdapter;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: Record<string, number>;
+  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
   readonly label?: string;
 }
 ```
@@ -35,7 +35,7 @@ interface InitOptions {
 | options.adapter | `VGPUAdapter` | ✖ | `undefined` | Explicit adapter. If omitted in `vgpu`, `navigator.gpu.requestAdapter()` is used; `vgpu/node` and `vgpu/mock` provide adapter factories. |
 | options.powerPreference | `GPUPowerPreference` | ✖ | `undefined` | Forwarded to `navigator.gpu.requestAdapter({ powerPreference })`. |
 | options.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. |
-| options.requiredLimits | `Record<string, number>` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. Use for limits such as storage buffers in vertex stage. |
+| options.requiredLimits | `GPUDeviceDescriptor["requiredLimits"]` | ✖ | `undefined` | Forwarded unchanged to `adapter.requestDevice`. Unsupported names/values reject device creation. |
 | options.label | `string` | ✖ | `undefined` | Reserved public option; current main API (`vgpu`) device creation does not use it as a debug label. |
 
 **Returns:** `Promise<Gpu>` — resolves to the main API facade with `surface`, `target`, `pass`, `draw`, `compute`, `frame`, buffers, uniforms, and bundles.
@@ -65,7 +65,10 @@ import { init } from "vgpu";
 
 declare const canvas: HTMLCanvasElement;
 
-const gpu = await init();
+const gpu = await init({
+  // Request only when a vertex entry actually reads storage and the adapter supports it.
+  requiredLimits: { maxStorageBuffersInVertexStage: 1 },
+});
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
 const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 

@@ -1,9 +1,21 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
-import type { BindingInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
+import type { BindingInfo, EntryPointInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
 export type BindingVisibilityFn = (binding: BindingInfo) => GPUShaderStageFlags;
+
+export function visibilityForEntries(bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[]): BindingVisibilityFn {
+  const masks = new Map<string, number>();
+  for (const entry of entries) {
+    const stage = entry.stage === "vertex" ? 1 : entry.stage === "fragment" ? 2 : 4;
+    for (const binding of entry.bindings ?? bindings) {
+      const key = `${binding.group}:${binding.binding}`;
+      masks.set(key, (masks.get(key) ?? 0) | stage);
+    }
+  }
+  return (binding) => masks.get(`${binding.group}:${binding.binding}`) ?? 0;
+}
 
 export function bindGroupLayoutEntriesForGroup(
   bindings: readonly BindingInfo[],

@@ -1,12 +1,12 @@
 import type { Device } from "@vgpu/core";
-import { reflectSource, type BindingInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
+import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, pipelineLayoutFor, type SetBag, type SetCore } from "./set-core.ts";
+import { visibilityForEntries } from "./set-layouts.ts";
 import type { Compute, ComputeOptions } from "./gpu.ts";
 import { unsupportedError, writableStorageAliasingError } from "./errors.ts";
 
 let nextComputeId = 1;
-const COMPUTE_STAGE = (globalThis.GPUShaderStage as unknown as Record<string, number> | undefined)?.COMPUTE ?? 4;
 
 /**
  * Internal Ring-1 compute implementation behind `Gpu.compute()`.
@@ -33,8 +33,9 @@ export class ComputePipeline implements Compute {
   ) {
     this.label = opts.label ?? "compute";
     this.reflection = reflectSource(source, `${this.label}.wgsl`);
-    this.entryPoint = computeEntryPoint(this.reflection, this.label);
-    this.bindGroupLayouts = bindGroupLayoutsForReflection(device, this.label, this.reflection, () => COMPUTE_STAGE);
+    const entry = computeEntryPoint(this.reflection, this.label);
+    this.entryPoint = entry.name;
+    this.bindGroupLayouts = bindGroupLayoutsForReflection(device, this.label, this.reflection, visibilityForEntries(this.reflection.bindings, [entry]));
     this.pipelineLayout = pipelineLayoutFor(device, this.bindGroupLayouts);
     this.shaderModule = device.gpu.createShaderModule({ label: `${this.label}.shader`, code: source });
     this.pipeline = device.gpu.createComputePipeline({
@@ -81,8 +82,8 @@ export class ComputePipeline implements Compute {
   }
 }
 
-function computeEntryPoint(reflection: Reflection, label: string): string {
+function computeEntryPoint(reflection: Reflection, label: string): EntryPointInfo {
   const entry = reflection.entryPoints.find((item) => item.stage === "compute");
   if (!entry) throw unsupportedError(`${label}.compute`, "The compute shader requires a @compute entry point.");
-  return entry.name;
+  return entry;
 }

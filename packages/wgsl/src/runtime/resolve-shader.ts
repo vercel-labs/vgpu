@@ -53,6 +53,11 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const pathOf = (from: string, imp: ImportDecl) => resolvePath(imp.from, from, opts, diagnostics);
   const emittedWgsl = eliminateDeadDeclarations(modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n"));
   const reflection = reflect(modules);
+  const emittedReflection = reflectSource(emittedWgsl, entry);
+  for (const reflectedEntry of reflection.entryPoints) {
+    const emittedEntry = emittedReflection.entryPoints.find((item) => item.name === reflectedEntry.mangledName);
+    if (emittedEntry?.bindings) Object.defineProperty(reflectedEntry, "bindings", { value: emittedEntry.bindings, enumerable: false });
+  }
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);
   if (opts.validate !== false) await validateWGSL(emittedWgsl);
