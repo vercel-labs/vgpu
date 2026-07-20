@@ -1,6 +1,12 @@
 import type { Buffer as CoreBuffer, Device } from "@vgpu/core";
+import type { EntryPointInputInfo, WGSLType } from "@vgpu/wgsl/reflect-source";
 import type { MeshLike } from "../draw.ts";
-import { meshDataMisalignedError, meshLayoutInvalidError, meshLimitExceededError, meshLocationConflictError, meshRangeInvalidError, meshWriteRangeError } from "../errors.ts";
+import { meshAttributeAmbiguousError, meshAttributeUnmatchedError, meshDataMisalignedError, meshFormatMismatchError, meshInputMissingError, meshLayoutInvalidError, meshLimitExceededError, meshLocationConflictError, meshRangeInvalidError, meshWriteRangeError } from "../errors.ts";
+
+export const meshLayoutResolver = Symbol("vgpu.mesh.layoutResolver");
+export interface MeshLayoutResolvable {
+  [meshLayoutResolver](inputs: readonly EntryPointInputInfo[], where: string): readonly GPUVertexBufferLayout[];
+}
 
 export type MeshData = ArrayBuffer | ArrayBufferView<ArrayBuffer>;
 
@@ -60,6 +66,7 @@ export interface MeshSlice extends MeshLike {
 type AttrMeta = { readonly name: string; readonly format: GPUVertexFormat; readonly location?: number };
 type NormalizedBuffer = {
   readonly layout: GPUVertexBufferLayout;
+  readonly attributes: readonly AttrMeta[];
   readonly stride: number;
   readonly stepMode: GPUVertexStepMode;
   readonly byteLength?: number;
@@ -80,6 +87,8 @@ export class Mesh implements MeshLike {
   readonly buffers: readonly MeshBuffer[];
   private readonly indexOwned?: CoreBuffer;
   private readonly indexByteLength?: number;
+  private readonly normalized: readonly NormalizedBuffer[];
+  private readonly resolvedLayouts = new Map<string, readonly GPUVertexBufferLayout[]>();
   private destroyed = false;
 
   constructor(device: Device, opts: MeshOptions) {
@@ -89,10 +98,11 @@ export class Mesh implements MeshLike {
     const locations = new Set<number>();
     const normalized = opts.buffers.map((buffer, i) => {
       const n = normalizeBuffer(device, buffer, `${where}.buffers[${i}]`);
-      attrCount += [...n.layout.attributes].length;
-      for (const attr of n.layout.attributes) {
-        if (locations.has(attr.shaderLocation)) throw meshLocationConflictError(`${where}.buffers[${i}]`, attr.shaderLocation);
-        locations.add(attr.shaderLocation);
+      attrCount += n.attributes.length;
+      for (const attr of n.attributes) {
+        if (attr.location === undefined) continue;
+        if (locations.has(attr.location)) throw meshLocationConflictError(`${where}.buffers[${i}]`, attr.location);
+        locations.add(attr.location);
       }
       return n;
     });
@@ -101,6 +111,7 @@ export class Mesh implements MeshLike {
     const index = normalizeIndex(device, opts, where);
     this.topology = opts.topology ?? "triangle-list";
     this.stripIndexFormat = this.topology.endsWith("strip") ? (index.format ?? opts.indexFormat) : undefined;
+    this.normalized = normalized;
     this.vertexBufferLayouts = Object.freeze(normalized.map((n) => n.layout));
     this.vertexBuffers = Object.freeze(normalized.map((n) => n.gpu));
     this.buffers = Object.freeze(normalized.map((n, i) => new InternalMeshBuffer(`${where}.buffers[${i}]`, n)));
@@ -111,6 +122,34 @@ export class Mesh implements MeshLike {
     this.indexCount = opts.indexCount ?? index.count;
     this.indexOwned = index.owned;
     this.indexByteLength = index.byteLength;
+  }
+
+  [meshLayoutResolver](inputs: readonly EntryPointInputInfo[], where: string): readonly GPUVertexBufferLayout[] {
+    if (this.destroyed) throw meshLayoutInvalidError(where, "Cannot construct a draw from a destroyed mesh.");
+    const key = inputs.map((input) => `${input.name}:${input.location}:${shaderTypeBase(input.type)}`).join("|");
+    const cached = this.resolvedLayouts.get(key);
+    if (cached) return cached;
+    const covered = new Set<number>();
+    const names = this.normalized.flatMap((buffer) => buffer.attributes.map((attribute) => attribute.name));
+    const layouts = this.normalized.map((buffer) => {
+      const source = [...buffer.layout.attributes];
+      const attributes = buffer.attributes.map((attribute, index) => {
+        const matches = attribute.location === undefined ? inputs.filter((input) => input.name === attribute.name) : [];
+        if (attribute.location === undefined && matches.length === 0) throw meshAttributeUnmatchedError(where, attribute.name, inputs.map((input) => input.name));
+        if (matches.length > 1) throw meshAttributeAmbiguousError(where, attribute.name, matches.map((input) => input.location));
+        const location = attribute.location ?? matches[0]!.location;
+        if (covered.has(location)) throw meshLocationConflictError(where, location);
+        covered.add(location);
+        const input = inputs.find((candidate) => candidate.location === location);
+        if (input && vertexFormatBase(attribute.format) !== shaderTypeBase(input.type)) throw meshFormatMismatchError(where, attribute.name, attribute.format, shaderTypeBase(input.type));
+        return Object.freeze({ ...source[index]!, shaderLocation: location });
+      });
+      return Object.freeze({ arrayStride: buffer.layout.arrayStride, ...(buffer.layout.stepMode ? { stepMode: buffer.layout.stepMode } : {}), attributes: Object.freeze(attributes) });
+    });
+    for (const input of inputs) if (!covered.has(input.location)) throw meshInputMissingError(where, input.name, names);
+    const result = Object.freeze(layouts);
+    this.resolvedLayouts.set(key, result);
+    return result;
   }
 
   slice(opts: MeshSliceOptions = {}): MeshSlice {
@@ -169,6 +208,7 @@ class InternalMeshSlice implements MeshSlice {
   readonly firstIndex?: number;
   readonly baseVertex?: number;
   readonly firstVertex?: number;
+  [meshLayoutResolver](inputs: readonly EntryPointInputInfo[], where: string): readonly GPUVertexBufferLayout[] { return this.mesh[meshLayoutResolver](inputs, where); }
   constructor(mesh: Mesh, opts: MeshSliceOptions) {
     this.mesh = mesh;
     this.vertexBuffers = mesh.vertexBuffers;
@@ -246,7 +286,7 @@ function normalizeBuffer(device: Device, opts: MeshBufferOptions, where: string)
   const owned = opts.data !== undefined ? device.createBuffer({ label: opts.label, size: Math.max(4, bytes ?? 0), usage: ["vertex", "copy_dst"] }) : undefined;
   if (owned && opts.data) owned.write(opts.data);
   const layout = Object.freeze({ arrayStride: stride, ...(opts.stepMode ? { stepMode } : {}), attributes: Object.freeze(attrs) as readonly GPUVertexAttribute[] });
-  return { layout, stride, stepMode, byteLength: bytes ?? rawSize(opts.buffer), gpu: owned?.gpu ?? requiredBuffer(opts.buffer, where), owned };
+  return { layout, attributes: Object.freeze(metas), stride, stepMode, byteLength: bytes ?? rawSize(opts.buffer), gpu: owned?.gpu ?? requiredBuffer(opts.buffer, where), owned };
 }
 
 function normalizeIndex(device: Device, opts: MeshOptions, where: string): { readonly gpu?: GPUBuffer; readonly owned?: CoreBuffer; readonly format?: GPUIndexFormat; readonly count?: number; readonly byteLength?: number } {
@@ -278,4 +318,14 @@ function validateWriteRange(where: string, capacity: number, length: number, off
 }
 function validateRange(where: string, field: string, value: number, max: number): void {
   if (!Number.isInteger(value) || value < 0 || value > max) throw meshRangeInvalidError(where, `${field} must be an integer in [0, ${max}], received ${String(value)}.`);
+}
+function vertexFormatBase(format: GPUVertexFormat): "f32" | "i32" | "u32" {
+  if (format.startsWith("sint")) return "i32";
+  if (format.startsWith("uint")) return "u32";
+  return "f32";
+}
+function shaderTypeBase(type: WGSLType): string {
+  if (type.kind === "scalar") return type.name;
+  if (type.kind === "vector" || type.kind === "matrix" || type.kind === "atomic") return shaderTypeBase(type.element);
+  return type.kind;
 }

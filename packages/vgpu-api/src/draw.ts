@@ -9,6 +9,7 @@ import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
 import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { meshLayoutResolver, type MeshLayoutResolvable } from "./scene/mesh-descriptor.ts";
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
 
@@ -106,6 +107,7 @@ type DrawState = {
   readonly id: number;
   readonly device: Device;
   readonly opts: DrawOptions;
+  readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
   readonly cache: BindGroupCache;
   readonly defaultTarget?: Target;
   readonly reflection: Reflection;
@@ -157,6 +159,9 @@ export class InternalDraw implements Draw {
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
     const reflection = reflectSource(source, `${this.label}.wgsl`);
+    const mesh = opts.mesh as (MeshLike & Partial<MeshLayoutResolvable>) | undefined;
+    const inputs = reflection.entryPoints.find((entry) => entry.stage === "vertex")?.inputs ?? [];
+    const vertexBufferLayouts = mesh && meshLayoutResolver in mesh ? mesh[meshLayoutResolver]!(inputs, `${this.label}.mesh`) : mesh?.vertexBufferLayouts;
     const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
@@ -171,7 +176,7 @@ export class InternalDraw implements Draw {
       cache,
       onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
     });
-    drawStates.set(this, { id, device, opts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
+    drawStates.set(this, { id, device, opts, vertexBufferLayouts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -356,7 +361,7 @@ export class InternalDraw implements Draw {
   private pipelineKey(signature: TargetSignature): string {
     const state = drawState(this);
     const mesh = state.opts.mesh;
-    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: mesh?.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: mesh?.topology, stripIndexFormat: mesh?.stripIndexFormat });
+    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: mesh?.topology, stripIndexFormat: mesh?.stripIndexFormat });
   }
 
   private encodeMesh(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
@@ -376,7 +381,7 @@ export class InternalDraw implements Draw {
     return state.device.gpu.createRenderPipeline({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
       fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
       primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
@@ -392,7 +397,7 @@ export class InternalDraw implements Draw {
     return state.device.gpu.createRenderPipelineAsync({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.opts.mesh?.vertexBufferLayouts ?? [])] },
+      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
       fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
       primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,

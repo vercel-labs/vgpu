@@ -119,6 +119,9 @@ export function meshWriteRangeError(where: string, message: string): VGPUError {
 export function meshAttributeUnmatchedError(where: string, name: string, available: readonly string[] = []): VGPUError {
   return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' does not match a vertex shader input.`, `Use an attribute name from the shader${available.length ? ` (${available.join(", ")})` : ""}, or set { location: n } explicitly.`);
 }
+export function meshAttributeAmbiguousError(where: string, name: string, locations: readonly number[]): VGPUError {
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' ambiguously matches shader locations ${locations.join(", ")}.`, "Rename the shader inputs or set { location: n } explicitly.");
+}
 export function meshInputMissingError(where: string, name: string, available: readonly string[] = []): VGPUError {
   return meshError("VGPU-MESH-INPUT-MISSING", where, `Vertex shader input '${name}' is not provided by the mesh.`, `Add a mesh attribute for the shader input or remove it from the shader. Mesh attributes: ${available.join(", ") || "none"}.`);
 }
