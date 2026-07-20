@@ -1,4 +1,3 @@
-import { Uniform } from 'vgpu';
 import type { Bundle, Frame, FramePass, Gpu, StorageBuffer, Target } from 'vgpu';
 
 import type { CascadeFitRect, RenderSize } from './settings';
@@ -105,11 +104,10 @@ interface RendererParts {
   ledStorage: DestroyableStorageBuffer;
   lightSourcesRaw: LightSourcesRaw;
   raycastTarget: Target;
-  raycastUniform: Uniform;
   raycastBundle: Bundle;
-  floorUniform: Uniform;
-  lightGlowUniform: Uniform;
   floorGate: FloorUniformGate;
+  floorUniformReady: boolean;
+  lightGlowUniformReady: boolean;
   floorBundles?: FloorBundles;
 }
 
@@ -137,7 +135,6 @@ export function createHeroRenderer(
   let outputTarget = opts.target;
   let destroyed = false;
 
-  const { device } = gpu;
   const sampler = gpu.sampler({ minFilter: 'linear', magFilter: 'linear' });
   const noiseTarget = gpu.target({
     size: [500, 500],
@@ -205,12 +202,13 @@ export function createHeroRenderer(
       );
 
       if (currentTheme === 'light') {
-        currentParts.lightGlowUniform.write(
-          lightGlowUniformData(resolved.lightGlow, resolved.colorMix),
-        );
+        lightFloorDraw.set({
+          lg: lightGlowUniformData(resolved.lightGlow, resolved.colorMix),
+        });
+        currentParts.lightGlowUniformReady = true;
       }
 
-      writeFloorUniformIfNeeded(
+      const floorData = writeFloorUniformIfNeeded(
         currentParts,
         {
           width: currentParts.presentationSize.width,
@@ -225,6 +223,11 @@ export function createHeroRenderer(
           showForegroundTriangle: options.showForegroundTriangle ?? true,
         },
       );
+      if (floorData) {
+        lightFloorDraw.set({ cfg: floorData });
+        darkFloorDraw.set({ cfg: floorData });
+        currentParts.floorUniformReady = true;
+      }
 
       const floorBundles = currentParts.floorBundles ?? recordFloorBundles(currentParts, outputTarget);
       frame.pass(
@@ -279,20 +282,29 @@ export function createHeroRenderer(
 
 
   function recordFloorBundles(currentParts: RendererParts, target: Target): FloorBundles {
-    lightFloorDraw.set({
-      cfg: currentParts.floorUniform,
+    const lightSet: Record<string, unknown> = {
       radiance_tex: currentParts.raycastTarget,
       light_sources_tex: currentParts.lightSourcesRaw.texture,
       linear_samp: sampler,
-      lg: currentParts.lightGlowUniform,
-    });
-    darkFloorDraw.set({
-      cfg: currentParts.floorUniform,
+    };
+    const darkSet: Record<string, unknown> = {
       radiance_tex: currentParts.raycastTarget,
       light_sources_tex: currentParts.lightSourcesRaw.texture,
       linear_samp: sampler,
       floor_noise_tex: noiseTarget,
-    });
+    };
+    if (!currentParts.floorUniformReady) {
+      const initialFloor = initialFloorUniformData();
+      lightSet.cfg = initialFloor;
+      darkSet.cfg = initialFloor;
+      currentParts.floorUniformReady = true;
+    }
+    if (!currentParts.lightGlowUniformReady) {
+      lightSet.lg = initialLightGlowUniformData();
+      currentParts.lightGlowUniformReady = true;
+    }
+    lightFloorDraw.set(lightSet);
+    darkFloorDraw.set(darkSet);
     const floorBundles: FloorBundles = {
       target,
       light: gpu.bundle(
@@ -341,21 +353,6 @@ export function createHeroRenderer(
       format: 'rgba16float',
       label: 'triangle-led-front-direct-triangle-raycast',
     });
-    const raycastUniform = new Uniform(device, {
-      size: 256,
-      label: 'triangle-led-front-direct-triangle-raycast-uniform',
-    });
-    raycastUniform.write(directTriangleRaycastUniformData(simulationSize));
-
-    const floorUniform = new Uniform(device, {
-      size: 256,
-      label: 'triangle-led-front-main-scene-floor-uniform',
-    });
-    const lightGlowUniform = new Uniform(device, {
-      size: 256,
-      label: 'triangle-led-front-light-glow-uniform',
-    });
-
     const triangle = canonicalTriangleGeometry(simulationSize);
     const lightSourcesRaw = createLightSourcesRaw(gpu, {
       size: [simulationSize.width, simulationSize.height] as const,
@@ -365,7 +362,7 @@ export function createHeroRenderer(
       ledShape: triangleLedShapeDimensions(simulationSize, LEDS_PER_EDGE),
     });
     raycastDraw.set({
-      cfg: raycastUniform,
+      cfg: directTriangleRaycastUniformData(simulationSize),
       light_sources_tex: lightSourcesRaw.texture,
     });
     const raycastBundle = gpu.bundle(
@@ -382,11 +379,10 @@ export function createHeroRenderer(
       ledStorage,
       lightSourcesRaw,
       raycastTarget,
-      raycastUniform,
       raycastBundle,
-      floorUniform,
-      lightGlowUniform,
       floorGate: createFloorUniformGate(),
+      floorUniformReady: false,
+      lightGlowUniformReady: false,
     };
   }
 
@@ -394,9 +390,6 @@ export function createHeroRenderer(
     p.lightSourcesRaw.destroy();
     p.ledStorage.destroy?.();
     p.ledStorage.buffer?.destroy();
-    p.raycastUniform.destroy();
-    p.floorUniform.destroy();
-    p.lightGlowUniform.destroy();
     const raycastTexture = p.raycastTarget?.color?.gpu ?? p.raycastTarget?.gpu;
     raycastTexture?.destroy?.();
   }
@@ -410,12 +403,8 @@ function directTriangleRaycastUniformData(simulationSize: RenderSize) {
   // full-size occluder, sampling LED/background inconsistently and serrating the glow.
   const triangle = ledMeshGeometry(simulationSize);
   // 20 floats (5 vec4f), all static — written once below.
-  const data = new Float32Array(20);
-  data.set(
-    [triangle.top.x, triangle.top.y, triangle.left.x, triangle.left.y],
-    0,
-  );
-  data.set([triangle.right.x, triangle.right.y, size.width, size.height], 4);
+  const tri_a_b = [triangle.top.x, triangle.top.y, triangle.left.x, triangle.left.y];
+  const tri_c_target = [triangle.right.x, triangle.right.y, size.width, size.height];
   // size_steps.z/w (min ray step + edge hit threshold) are absolute sim px. On a short sim a
   // fixed px is a LARGER fraction of the scene, so near-edge pixels skip the nearest LED hit
   // (min-step cutoff) and instead pick up a more distant, different-hued LED — over-mixing hues
@@ -424,39 +413,30 @@ function directTriangleRaycastUniformData(simulationSize: RenderSize) {
   // geometric falloff (target_info.y) and the per-px absorption (params.x) already do.
   const pxStepScale =
     Math.min(simulationSize.height, HERO_CANVAS_MAX_CSS) / HERO_CANVAS_MAX_CSS;
-  data.set(
-    [
-      simulationSize.width,
-      simulationSize.height,
-      DIRECT_TRIANGLE_MIN_STEP_PX * pxStepScale,
-      DIRECT_TRIANGLE_HIT_THRESHOLD_PX * pxStepScale,
-    ],
-    8,
-  );
-  data.set(
-    [
-      // params.x: Beer-Lambert absorption per sim px (extinction-over-sim-height / height).
-      DIRECT_TRIANGLE_ABSORPTION / simulationSize.height,
-      DIRECT_TRIANGLE_FALLOFF_POWER,
-      DIRECT_TRIANGLE_INTENSITY_SCALE,
-      DIRECT_TRIANGLE_MIN_SOURCE_LUMA,
-    ],
-    12,
-  );
+  const size_steps = [
+    simulationSize.width,
+    simulationSize.height,
+    DIRECT_TRIANGLE_MIN_STEP_PX * pxStepScale,
+    DIRECT_TRIANGLE_HIT_THRESHOLD_PX * pxStepScale,
+  ];
+  const params = [
+    // params.x: Beer-Lambert absorption per sim px (extinction-over-sim-height / height).
+    DIRECT_TRIANGLE_ABSORPTION / simulationSize.height,
+    DIRECT_TRIANGLE_FALLOFF_POWER,
+    DIRECT_TRIANGLE_INTENSITY_SCALE,
+    DIRECT_TRIANGLE_MIN_SOURCE_LUMA,
+  ];
   // target_info.y: geometric-falloff distance scale = reference height / sim height, so the
   // pow(distance) falloff depends on distance as a FRACTION of the scene size (resolution-
   // independent radiance) instead of raw sim px. Anchored to HERO_CANVAS_MAX_CSS so the
   // desktop look is unchanged; shorter render targets no longer read brighter/whiter.
-  data.set(
-    [
-      DIRECT_TRIANGLE_TARGET_SCALE,
-      HERO_CANVAS_MAX_CSS / Math.max(simulationSize.height, 1),
-      0,
-      0,
-    ],
-    16,
-  );
-  return data;
+  const target_info = [
+    DIRECT_TRIANGLE_TARGET_SCALE,
+    HERO_CANVAS_MAX_CSS / Math.max(simulationSize.height, 1),
+    0,
+    0,
+  ];
+  return { tri_a_b, tri_c_target, size_steps, params, target_info };
 }
 
 interface FloorUniformInputs {
@@ -561,7 +541,7 @@ function createFloorUniformGate(): FloorUniformGate {
 function writeFloorUniformIfNeeded(
   parts: RendererParts,
   inputs: FloorUniformInputs,
-): void {
+): ReturnType<typeof floorUniformData> | undefined {
   const gate = parts.floorGate;
   const {
     width,
@@ -620,26 +600,25 @@ function writeFloorUniformIfNeeded(
     darkPostprocess.contrast !== gate.currentDarkPostprocessContrast ||
     darkPostprocess.exposure !== gate.currentDarkPostprocessExposure ||
     showForegroundTriangle !== gate.currentShowForegroundTriangle;
-  if (!floorUniformChanged) return;
+  if (!floorUniformChanged) return undefined;
 
-  parts.floorUniform.write(
-    floorUniformData(
-      width,
-      height,
-      parts.simulationSize,
-      parts.presentationSize,
-      parts.pixelRatio,
-      parts.cascadeFit,
-      tunables,
-      probeDiscard,
-      theme,
-      lightAo,
-      radianceDebug,
-      darkFloor,
-      darkPostprocess,
-      showForegroundTriangle,
-    ),
+  const data = floorUniformData(
+    width,
+    height,
+    parts.simulationSize,
+    parts.presentationSize,
+    parts.pixelRatio,
+    parts.cascadeFit,
+    tunables,
+    probeDiscard,
+    theme,
+    lightAo,
+    radianceDebug,
+    darkFloor,
+    darkPostprocess,
+    showForegroundTriangle,
   );
+
   gate.currentFloorWidth = width;
   gate.currentFloorHeight = height;
   gate.currentFloorTheme = theme;
@@ -681,6 +660,51 @@ function writeFloorUniformIfNeeded(
   gate.currentDarkPostprocessContrast = darkPostprocess.contrast;
   gate.currentDarkPostprocessExposure = darkPostprocess.exposure;
   gate.currentShowForegroundTriangle = showForegroundTriangle;
+  return data;
+}
+
+function initialFloorUniformData() {
+  const zero = [0, 0, 0, 0];
+  return {
+    screen: zero,
+    light_sources: zero,
+    tunables: zero,
+    triangle: zero,
+    culling: zero,
+    radiance_fit: zero,
+    light_ao: zero,
+    radiance_debug: zero,
+    sim_transform: zero,
+    dark_floor: zero,
+    dark_glow: zero,
+    dark_near: zero,
+    dark_middle: zero,
+    dark_toggles: zero,
+    dark_circle: zero,
+    dark_noise: zero,
+  };
+}
+
+function initialLightGlowUniformData() {
+  const zero = [0, 0, 0, 0];
+  return {
+    near: zero,
+    middle: zero,
+    glow: zero,
+    params: zero,
+    toggles: zero,
+    ao: zero,
+    ao2: zero,
+    ao3: zero,
+    edgeRed: zero,
+    edgeGreen: zero,
+    edgeBlue: zero,
+    nearColor: zero,
+    middleColor: zero,
+    glowColor: zero,
+    paramsColor: zero,
+    togglesColor: zero,
+  };
 }
 
 // Packs the light-glow settings into the binding-4 uniform read by the light floor.
@@ -697,77 +721,53 @@ function rgbToOklab(c: { r: number; g: number; b: number }): {
 }
 
 function lightGlowUniformData(g: LightGlowSettings, colorMix: number) {
-  const out = new Float32Array(64);
-  out.set(
-    [g.nearDistanceScale, g.nearIntensity, g.nearMapMin, g.nearMapMax],
-    0,
-  );
-  out.set([g.middlePower, g.middleIntensity, g.highlightNoise, 0], 4);
-  out.set([g.farIntensity, colorMix, g.farMapMin, g.farMapMax], 8);
-  out.set([g.nearPower, g.middleOuterScale, g.farPower, g.fadeInner], 12);
-  out.set(
-    [
+  const invOverlap = 1 / Math.max(g.edgeOverlap, 0.01);
+  const labR = rgbToOklab(g.edgeRedRgb);
+  const labG = rgbToOklab(g.edgeGreenRgb);
+  const labB = rgbToOklab(g.edgeBlueRgb);
+  return {
+    near: [g.nearDistanceScale, g.nearIntensity, g.nearMapMin, g.nearMapMax],
+    middle: [g.middlePower, g.middleIntensity, g.highlightNoise, 0],
+    glow: [g.farIntensity, colorMix, g.farMapMin, g.farMapMax],
+    params: [g.nearPower, g.middleOuterScale, g.farPower, g.fadeInner],
+    toggles: [
       g.nearEnabled ? 1 : 0,
       g.middleEnabled ? 1 : 0,
       g.farEnabled ? 1 : 0,
       g.contrast,
     ],
-    16,
-  );
-  out.set([g.aoStrength, g.aoRadiusScale, g.aoPower, g.aoEnabled ? 1 : 0], 20);
-  out.set(
-    [g.ao2Strength, g.ao2RadiusScale, g.ao2Power, g.ao2Enabled ? 1 : 0],
-    24,
-  );
-  out.set(
-    [g.ao3Strength, g.ao3RadiusScale, g.ao3Power, g.ao3Enabled ? 1 : 0],
-    28,
-  );
-  const invOverlap = 1 / Math.max(g.edgeOverlap, 0.01);
-  const labR = rgbToOklab(g.edgeRedRgb);
-  const labG = rgbToOklab(g.edgeGreenRgb);
-  const labB = rgbToOklab(g.edgeBlueRgb);
-  out.set([labR.r, labR.g, labR.b, invOverlap], 32);
-  out.set([labG.r, labG.g, labG.b, 0], 36);
-  out.set([labB.r, labB.g, labB.b, 0], 40);
-  out.set(
-    [
+    ao: [g.aoStrength, g.aoRadiusScale, g.aoPower, g.aoEnabled ? 1 : 0],
+    ao2: [g.ao2Strength, g.ao2RadiusScale, g.ao2Power, g.ao2Enabled ? 1 : 0],
+    ao3: [g.ao3Strength, g.ao3RadiusScale, g.ao3Power, g.ao3Enabled ? 1 : 0],
+    edgeRed: [labR.r, labR.g, labR.b, invOverlap],
+    edgeGreen: [labG.r, labG.g, labG.b, 0],
+    edgeBlue: [labB.r, labB.g, labB.b, 0],
+    nearColor: [
       g.nearDistanceScaleColor,
       g.nearIntensityColor,
       g.nearMapMinColor,
       g.nearMapMaxColor,
     ],
-    44,
-  );
-  out.set([g.middlePowerColor, g.middleIntensityColor, 0, 0], 48);
-  out.set(
-    [
+    middleColor: [g.middlePowerColor, g.middleIntensityColor, 0, 0],
+    glowColor: [
       g.farIntensityColor,
       g.highlightDebug ? 1 : 0,
       g.farMapMinColor,
       g.farMapMaxColor,
     ],
-    52,
-  );
-  out.set(
-    [
+    paramsColor: [
       g.nearPowerColor,
       g.middleOuterScaleColor,
       g.farPowerColor,
       g.fadeInnerColor,
     ],
-    56,
-  );
-  out.set(
-    [
+    togglesColor: [
       g.nearEnabledColor ? 1 : 0,
       g.middleEnabledColor ? 1 : 0,
       g.farEnabledColor ? 1 : 0,
       g.contrastColor,
     ],
-    60,
-  );
-  return out;
+  };
 }
 
 function floorUniformData(
@@ -786,7 +786,6 @@ function floorUniformData(
   darkPostprocess: DarkPostprocessSettings,
   showForegroundTriangle: boolean,
 ) {
-  const out = new Float32Array(64);
   const transform = presentationSimulationTransform(
     simulationSize,
     presentationSize,
@@ -797,127 +796,89 @@ function floorUniformData(
   const contactAoSize = theme === 'light' ? lightAo.contactSize : 0;
   const floorAlbedo =
     theme === 'light' ? tunables.lightFloorAlbedo : tunables.darkFloorAlbedo;
-  out.set([width, height, isLightTheme, pixelRatio], 0);
-  out.set(
-    [
-      simulationSize.width,
-      simulationSize.height,
-      0,
-      contactAoStrength,
-    ],
-    4,
-  );
-  out.set(
-    [tunables.ledIntensity, floorAlbedo, lightAo.radiance, contactAoSize],
-    8,
-  );
-  out.set(
-    [
-      triangle.centerX,
-      triangle.centerY,
-      triangle.circumradiusY,
-      triangle.halfSideX,
-    ],
-    12,
-  );
-  out.set(
-    [
-      probeDiscard.lightAabbPadding * triangle.scaleX,
-      probeDiscard.lightAabbPadding * triangle.scaleY,
-      showForegroundTriangle ? 1 : 0,
-      0,
-    ],
-    16,
-  );
-  out.set(
-    [
-      transform.originX + cascadeFit.originSceneX * transform.scale,
-      transform.originY + cascadeFit.originSceneY * transform.scale,
-      cascadeFit.widthScene * transform.scale,
-      cascadeFit.heightScene * transform.scale,
-    ],
-    20,
-  );
-  out.set(
-    [
-      lightAo.contactFalloffPower,
-      lightAo.highlightPower,
-      lightAo.highlightStrength,
-      0,
-    ],
-    24,
-  );
-  out.set(
-    [
-      radianceDebug.enabled ? 1 : 0,
-      radianceDebug.redMultiplier,
-      radianceDebug.greenMultiplier,
-      radianceDebug.blueMultiplier,
-    ],
-    28,
-  );
-  out.set(
-    [
-      transform.originX,
-      transform.originY,
-      transform.scale,
-      getHeroEdgeFadeFrac(),
-    ],
-    32,
-  );
-  out.set(
-    [
-      darkFloor.sdfFadeDistanceScale,
-      darkFloor.sdfFadeEdgePx,
-      darkFloor.nearFalloffPower,
-      darkFloor.tailPower,
-    ],
-    36,
-  );
-  out.set(
-    [
-      darkFloor.tailIntensity,
-      darkFloor.vibrancy,
-      darkFloor.tailMapMin,
-      darkFloor.tailMapMax,
-    ],
-    40,
-  );
-  out.set(
-    [
-      darkFloor.nearFalloffDistanceScale,
-      darkFloor.nearFalloffIntensity,
-      darkFloor.nearFalloffMapMin,
-      darkFloor.nearFalloffMapMax,
-    ],
-    44,
-  );
   const referencePresentationHeight =
     HERO_CANVAS_MAX_CSS * Math.max(pixelRatio, 1e-4);
   const radianceJitterNorm =
     Math.min(presentationSize.height, referencePresentationHeight) /
     referencePresentationHeight;
-  out.set(
-    [
+  return {
+    screen: [width, height, isLightTheme, pixelRatio],
+    light_sources: [
+      simulationSize.width,
+      simulationSize.height,
+      0,
+      contactAoStrength,
+    ],
+    tunables: [tunables.ledIntensity, floorAlbedo, lightAo.radiance, contactAoSize],
+    triangle: [
+      triangle.centerX,
+      triangle.centerY,
+      triangle.circumradiusY,
+      triangle.halfSideX,
+    ],
+    culling: [
+      probeDiscard.lightAabbPadding * triangle.scaleX,
+      probeDiscard.lightAabbPadding * triangle.scaleY,
+      showForegroundTriangle ? 1 : 0,
+      0,
+    ],
+    radiance_fit: [
+      transform.originX + cascadeFit.originSceneX * transform.scale,
+      transform.originY + cascadeFit.originSceneY * transform.scale,
+      cascadeFit.widthScene * transform.scale,
+      cascadeFit.heightScene * transform.scale,
+    ],
+    light_ao: [
+      lightAo.contactFalloffPower,
+      lightAo.highlightPower,
+      lightAo.highlightStrength,
+      0,
+    ],
+    radiance_debug: [
+      radianceDebug.enabled ? 1 : 0,
+      radianceDebug.redMultiplier,
+      radianceDebug.greenMultiplier,
+      radianceDebug.blueMultiplier,
+    ],
+    sim_transform: [
+      transform.originX,
+      transform.originY,
+      transform.scale,
+      getHeroEdgeFadeFrac(),
+    ],
+    dark_floor: [
+      darkFloor.sdfFadeDistanceScale,
+      darkFloor.sdfFadeEdgePx,
+      darkFloor.nearFalloffPower,
+      darkFloor.tailPower,
+    ],
+    dark_glow: [
+      darkFloor.tailIntensity,
+      darkFloor.vibrancy,
+      darkFloor.tailMapMin,
+      darkFloor.tailMapMax,
+    ],
+    dark_near: [
+      darkFloor.nearFalloffDistanceScale,
+      darkFloor.nearFalloffIntensity,
+      darkFloor.nearFalloffMapMin,
+      darkFloor.nearFalloffMapMax,
+    ],
+    dark_middle: [
       darkFloor.middleFalloffPower,
       darkFloor.middleFalloffIntensity,
       darkFloor.radianceJitterPx,
       radianceJitterNorm,
     ],
-    48,
-  );
-  out.set(
-    [
+    dark_toggles: [
       darkFloor.nearFalloffEnabled ? 1 : 0,
       darkFloor.middleFalloffEnabled ? 1 : 0,
       darkFloor.farFalloffEnabled ? 1 : 0,
       darkPostprocess.contrast,
     ],
-    52,
-  );
-  out.set([getHeroEdgeFadeFrac(), darkPostprocess.exposure, 0, 0], 56);
-  out.set([darkFloor.noiseEnabled ? 1 : 0, 0, 0, 0], 60);
-  return out;
+    dark_circle: [getHeroEdgeFadeFrac(), darkPostprocess.exposure, 0, 0],
+    dark_noise: [darkFloor.noiseEnabled ? 1 : 0, 0, 0, 0],
+  };
 }
 
 interface PresentationSimulationTransform {

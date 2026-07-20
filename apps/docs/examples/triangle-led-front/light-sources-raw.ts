@@ -1,4 +1,3 @@
-import { Uniform } from 'vgpu';
 import type { Bundle, Frame, FramePass, Gpu, Target } from 'vgpu';
 
 import lightSourcesWgsl from './shaders/light-sources.wgsl';
@@ -58,11 +57,6 @@ export function createLightSourcesRaw(
     label: 'triangle-led-front-light-sources',
   });
 
-  const uniform = new Uniform(device, {
-    size: 112,
-    label: 'triangle-led-front-light-sources-uniform',
-  });
-
   const ledVertices = ledEmitterVertexData(
     simSize,
     LED_EMITTER_MESH_EXPANSION_PX,
@@ -79,7 +73,7 @@ export function createLightSourcesRaw(
     shader: lightSourcesWgsl,
     label: 'triangle-led-front-light-sources-pass',
     vertices: 3,
-    set: { cfg: uniform, leds: opts.ledStorage },
+    set: { cfg: initialLightSourcesUniform(), leds: opts.ledStorage },
   });
   const ledEmittersDraw = gpu.draw({
     shader: ledEmittersWgsl,
@@ -103,7 +97,7 @@ export function createLightSourcesRaw(
       alpha: { src: 'one', dst: 'one', op: 'min' },
     },
     writeMask: ['r', 'g', 'b'],
-    set: { cfg: uniform, leds: opts.ledStorage },
+    set: { cfg: initialLightSourcesUniform(), leds: opts.ledStorage },
   });
 
   const ready = Promise.all([
@@ -145,7 +139,8 @@ export function createLightSourcesRaw(
         renderBlackOccluder,
         sanitizedClipInset,
       );
-      uniform.write(uniformData as ArrayBufferView<ArrayBuffer>);
+      lightSourcesDraw.set({ cfg: uniformData });
+      ledEmittersDraw.set({ cfg: uniformData });
       const bakeKey = `${renderBlackOccluder ? 1 : 0}:${sanitizedClipInset}`;
 
       if (bakeKey !== lastBakeKey) {
@@ -164,7 +159,6 @@ export function createLightSourcesRaw(
     },
     destroy() {
       (target as { destroy?: () => void }).destroy?.();
-      uniform.destroy();
       ledVertexBuffer.gpu.destroy();
     },
   };
@@ -180,48 +174,52 @@ function lightSourcesUniform(
   triangle: ReturnType<typeof canonicalTriangleGeometry>,
   renderBlackOccluder: boolean,
   sanitizedClipInset: number,
-): Float32Array {
-  const out = new Float32Array(28);
-  out.set([size.width, size.height, time, tunables.darkFloorAlbedo], 0);
-  out.set([brush.x, brush.y, brush.active ? 1 : 0, brush.radius], 4);
-  out.set([brush.colour.r, brush.colour.g, brush.colour.b, 0], 8);
-  out.set(
-    [
+) {
+  return {
+    resolution: [size.width, size.height],
+    time,
+    floor_albedo: tunables.darkFloorAlbedo,
+    brush: [brush.x, brush.y, brush.active ? 1 : 0, brush.radius],
+    colour: [brush.colour.r, brush.colour.g, brush.colour.b, 0],
+    tunables: [
       tunables.ledIntensity,
       tunables.brightnessMin,
       tunables.brightnessMax,
       ledRadius,
     ],
-    12,
-  );
-  out.set(
-    [
+    triangle: [
       triangle.center.x,
       triangle.center.y,
       triangle.circumradius,
       triangle.sideLength * 0.5,
     ],
-    16,
-  );
-  out.set(
-    [
+    options: [
       renderBlackOccluder ? 1 : 0,
       tunables.ledHitThreshold,
       ledShape.tangentHalfLength,
       ledShape.normalHalfThickness,
     ],
-    20,
-  );
-  out.set(
-    [
+    led_clip: [
       LED_SDF_CROP_EXPANSION_PX,
       sanitizedClipInset,
       0,
       0,
     ],
-    24,
-  );
-  return out;
+  };
+}
+
+function initialLightSourcesUniform() {
+  return {
+    resolution: [0, 0],
+    time: 0,
+    floor_albedo: 0,
+    brush: [0, 0, 0, 0],
+    colour: [0, 0, 0, 0],
+    tunables: [0, 0, 0, 0],
+    triangle: [0, 0, 0, 0],
+    options: [0, 0, 0, 0],
+    led_clip: [0, 0, 0, 0],
+  };
 }
 
 function sanitizeTunablePx(

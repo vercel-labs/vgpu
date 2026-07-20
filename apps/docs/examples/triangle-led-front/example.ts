@@ -165,7 +165,7 @@ export async function renderThumb(
     time += dt;
     gpu.frame((frame) => renderer.renderFrame(frame, { time, dt }));
   }
-  await gpu.gpu.queue.onSubmittedWorkDone();
+  await gpu.settled();
 }
 
 function cssSizeOf(canvas: HTMLCanvasElement, dpr: Surface['dpr']): CssSize {
