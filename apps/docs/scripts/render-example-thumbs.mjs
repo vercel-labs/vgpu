@@ -100,9 +100,8 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
           : undefined,
         scriptedDrag: slug === 'fluid' && args.fluidDrag,
         soak: slug === 'fluid' && args.fluidSoak,
-        onStateValidated: slug === 'fluid' ? (stats) => { fluidState = stats; } : undefined,
+        onStateValidated: slug === 'fluid' ? (stats) => { assertFluidState(stats); fluidState = stats; } : undefined,
       });
-      if (fluidState) assertFluidState(fluidState);
     } else {
       const fragmentFile = resolveFragmentFile(example, exampleSources);
       if (!fragmentFile) throw new Error(`No fragment shader found for '${slug}'.`);
@@ -123,7 +122,8 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const variance = lumaVariance(pixels);
     const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
     if (variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
-    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update });
+    const diagnosticMode = args.fluidDrag || args.fluidSoak;
+    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     const info = await stat(output).catch(() => undefined);
     return { compare, variance, bytes: info?.size ?? 0, aaMetrics, fluidMetrics, fluidState };
   } finally {
