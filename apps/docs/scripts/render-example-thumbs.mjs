@@ -20,6 +20,7 @@ const customRendererEntries = [
   { slug: 'triangle-led-front', module: '../examples/triangle-led-front/example.ts', exportName: 'renderThumb' },
   { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
   { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
+  { slug: 'fluid', module: '../examples/fluid/validation.ts', exportName: 'renderThumb' },
 ];
 
 const sizes = {
@@ -64,12 +65,17 @@ for (const example of selected) {
     continue;
   }
 
-  for (const [kind, size] of Object.entries(sizes)) {
+  const selectedSizes = args.fluidSoak && slug === 'fluid' ? { card: sizes.card } : sizes;
+  for (const [kind, size] of Object.entries(selectedSizes)) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}`);
-    if (['missing', 'different'].includes(result.compare.status)) failures++;
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    if (args.fluidSoak && slug === 'fluid') {
+      // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
+    } else if (args.fluidDrag && slug === 'fluid') {
+      if ((result.compare.ratio ?? 0) < .08) throw new Error(`Fluid scripted drag changed only ${((result.compare.ratio ?? 0) * 100).toFixed(2)}% of pixels; need >=8%.`);
+    } else if (['missing', 'different'].includes(result.compare.status)) failures++;
   }
 }
 
@@ -78,11 +84,12 @@ if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
 async function renderOne(renderers, example, exampleSources, size, metaThumb, output) {
   const slug = example.meta.slug;
-  const gpu = await init({ requiredLimits: { maxStorageBuffersInVertexStage: 1 } });
+  const gpu = await init();
   try {
     const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
+    let fluidState;
     if (renderer) {
       await renderer(gpu, target, {
         warmupFrames: metaThumb.warmupFrames ?? 60,
@@ -91,6 +98,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
         onModeRendered: aaModePixels
           ? (mode, pixels) => aaModePixels.set(mode, pixels.slice())
           : undefined,
+        scriptedDrag: slug === 'fluid' && args.fluidDrag,
+        soak: slug === 'fluid' && args.fluidSoak,
+        onStateValidated: slug === 'fluid' ? (stats) => { assertFluidState(stats); fluidState = stats; } : undefined,
       });
     } else {
       const fragmentFile = resolveFragmentFile(example, exampleSources);
@@ -105,14 +115,19 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     const pixels = await target.read();
     const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
+    const fluidMetrics = slug === 'fluid' && !args.fluidSoak && !args.fluidDrag
+      ? assertFluidMetrics(pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
     const variance = lumaVariance(pixels);
-    if (variance < minLumaVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${minLumaVariance}.`);
-    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update });
+    const diagnosticMode = args.fluidDrag || args.fluidSoak;
+    const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
+    if (!diagnosticMode && variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
+    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
   }
@@ -145,6 +160,34 @@ function lumaVariance(bytes) {
   }
   const mean = sum / count;
   return sumSq / count - mean * mean;
+}
+
+function assertFluidState(stats) {
+  if (!stats.finite) throw new Error(`Fluid state contains NaN/Infinity after ${stats.steps} steps.`);
+  if (stats.maxSpeed > 2.5001) throw new Error(`Fluid speed ${stats.maxSpeed} exceeds 2.5001 after ${stats.steps} steps.`);
+  if (stats.maxDye > 4.0001) throw new Error(`Fluid dye ${stats.maxDye} exceeds 4.0001 after ${stats.steps} steps.`);
+  if (stats.steps >= 120 && (stats.averageDye < .01 || stats.averageDye > 2.5)) throw new Error(`Fluid average dye ${stats.averageDye} is outside [.01, 2.5].`);
+}
+
+function assertFluidMetrics(pixels, width, height) {
+  let background = 0, cyan = 0, magenta = 0, clipped = 0;
+  const count = pixels.length / 4;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    const bright = Math.max(r, g, b) > 18;
+    if (!bright) background++;
+    if (b > r * 1.12 && (g > r || b > 80)) cyan++;
+    if (r > g * 1.2 && b > g * 1.08 && r > 60) magenta++;
+    if (r >= 254 || g >= 254 || b >= 254) clipped++;
+  }
+  const metrics = { coverage: 1 - background / count, cyan: cyan / count, magenta: magenta / count, clipped: clipped / count };
+  const problems = [];
+  if (metrics.coverage < .08 || metrics.coverage > .60) problems.push(`coverage ${(metrics.coverage * 100).toFixed(1)}% (need 8–60%)`);
+  if (metrics.cyan < .05) problems.push(`cyan ${(metrics.cyan * 100).toFixed(1)}% (need >=5%)`);
+  if (metrics.magenta < .02) problems.push(`magenta/coral ${(metrics.magenta * 100).toFixed(1)}% (need >=2%)`);
+  if (metrics.clipped > .02) problems.push(`clipped ${(metrics.clipped * 100).toFixed(1)}% (need <=2%)`);
+  if (problems.length) throw new Error(`Fluid poster validation failed (${width}x${height}):\n${problems.map((x) => `- ${x}`).join('\n')}`);
+  return metrics;
 }
 
 function assertAaMetrics(modePixels, width, height) {
@@ -299,13 +342,15 @@ async function loadDocsData() {
 }
 
 function parseArgs(argv) {
-  const parsed = { update: false, check: false, only: undefined };
+  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
     else if (arg === '--update') parsed.update = true;
     else if (arg === '--check') parsed.check = true;
     else if (arg === '--only') parsed.only = argv[++i];
+    else if (arg === '--fluid-drag') parsed.fluidDrag = true;
+    else if (arg === '--fluid-soak') parsed.fluidSoak = true;
     else throw new Error(`Unknown argument '${arg}'.`);
   }
   if (parsed.update && parsed.check) throw new Error('Use either --update or --check, not both.');
