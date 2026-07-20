@@ -33,7 +33,7 @@ export async function renderThumb(
       }
     }
   } else {
-    const pointer = options.scriptedDrag ? scriptedInput(0.08, 0.28, 0.24, 32) : undefined;
+    const pointer = options.scriptedDrag ? scriptedInput(0.08, 0.28, 0.24, 40) : undefined;
     for (let i = 0; i < (options.warmupFrames ?? 120); i++) stepFluid(fluid, pointer);
   }
 

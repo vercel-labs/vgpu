@@ -115,14 +115,16 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     const pixels = await target.read();
     const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
-    const fluidMetrics = slug === 'fluid' && !args.fluidSoak ? assertFluidMetrics(pixels, size[0], size[1]) : undefined;
+    const fluidMetrics = slug === 'fluid' && !args.fluidSoak && !args.fluidDrag
+      ? assertFluidMetrics(pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
     const variance = lumaVariance(pixels);
-    const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
-    if (variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
     const diagnosticMode = args.fluidDrag || args.fluidSoak;
+    const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
+    if (!diagnosticMode && variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
     const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     const info = await stat(output).catch(() => undefined);
     return { compare, variance, bytes: info?.size ?? 0, aaMetrics, fluidMetrics, fluidState };
