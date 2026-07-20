@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export interface ConceptNavLink {
   title: string;
@@ -31,6 +31,16 @@ export interface ConceptPage {
 
 const contentRoot = join(process.cwd(), 'content');
 
+export const CONCEPT_FILES = {
+  context: '../../docs/topics/concepts-context.docs.md',
+  draws: '../../docs/topics/concepts-draws.docs.md',
+  compilation: '../../docs/topics/concepts-compilation.docs.md',
+  effects: '../../docs/topics/concepts-effects.docs.md',
+  passes: '../../docs/topics/concepts-passes.docs.md',
+  frames: '../../docs/topics/concepts-frames.docs.md',
+  'render-bundles': '../../docs/topics/concepts-render-bundles.docs.md',
+} as const;
+
 export function collectionSlugs(collection: string) {
   return readdirSync(join(contentRoot, collection))
     .filter((file) => file.endsWith('.mdx'))
@@ -56,11 +66,24 @@ export function getContentPage(collection: string, slug: string): ConceptPage | 
 }
 
 export function conceptSlugs() {
-  return collectionSlugs('concepts');
+  return Object.keys(CONCEPT_FILES);
 }
 
 export function getConceptPage(slug: string): ConceptPage | null {
-  return getContentPage('concepts', slug);
+  if (!Object.hasOwn(CONCEPT_FILES, slug)) return null;
+
+  try {
+    const source = readFileSync(resolve(process.cwd(), CONCEPT_FILES[slug as keyof typeof CONCEPT_FILES]), 'utf8');
+    const { frontmatter, content } = parseConceptSource(source);
+    return {
+      slug,
+      frontmatter,
+      content,
+      headings: extractHeadings(content),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function parseConceptSource(source: string) {

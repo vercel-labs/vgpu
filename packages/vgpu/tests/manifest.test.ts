@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 import { buildIndex } from "../lib/docs/index.js";
 import { resolveDocsTarget } from "../lib/docs/commands/resolve.js";
 import { createManifest, parseAllowlist, serializeManifest, virtualPathFor } from "../lib/docs/generate/manifest.js";
+import { buildSkill } from "../lib/docs/generate/skill.js";
 import { docsManifest } from "../lib/generated/docs-manifest.generated.js";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -99,4 +100,53 @@ test("getting-started cat references resolve against the docs index", () => {
     expect(resolved, ref).toBeDefined();
     expect(Array.isArray(resolved), ref).toBe(false);
   }
+});
+
+test("concept guides preserve canonical title and numeric website order", () => {
+  const slugs = ["context", "draws", "compilation", "effects", "passes", "frames", "render-bundles"];
+  const guides = slugs.map((slug) => `docs/topics/concepts-${slug}.docs.md`);
+  const manifest = createManifest("", {
+    exists: () => true,
+    read: (path) => readFileSync(resolve(root, path), "utf8"),
+    guides,
+  });
+
+  expect(manifest.records.map((record) => ({
+    symbol: record.symbol,
+    repoPath: record.repoPath,
+    virtualPath: record.virtualPath,
+    topicTitle: record.topicTitle,
+    order: record.order,
+  }))).toEqual([
+    ["compilation", "Compilation", 30],
+    ["context", "Context", 10],
+    ["draws", "Draws", 20],
+    ["effects", "Effects", 40],
+    ["frames", "Frames", 60],
+    ["passes", "Passes", 50],
+    ["render-bundles", "Render bundles", 70],
+  ].map(([slug, title, order]) => ({
+    symbol: `concepts-${slug}`,
+    repoPath: `docs/topics/concepts-${slug}.docs.md`,
+    virtualPath: `/guides/concepts-${slug}.docs.md`,
+    topicTitle: title,
+    order,
+  })));
+
+  const router = buildSkill(manifest).get("SKILL.md");
+  expect(router).toBeDefined();
+  const concepts = router?.slice(router.indexOf("## Core concepts"), router.indexOf("## Performance guides"));
+  expect([...concepts?.matchAll(/^- \*\*([^*]+)\*\*/gmu) ?? []].map((match) => match[1])).toEqual([
+    "Context", "Draws", "Compilation", "Effects", "Passes", "Frames", "Render bundles",
+  ]);
+  expect(concepts).toContain("**Context** — Everything in vgpu starts from one call.");
+  expect(concepts).not.toContain("— ---");
+});
+
+test("rejects a non-numeric guide order", () => {
+  expect(() => createManifest("", {
+    exists: () => true,
+    read: () => "---\ntitle: Bad order\norder: first\n---\n\nBody.\n",
+    guides: ["docs/topics/bad.docs.md"],
+  })).toThrow("Invalid numeric order in docs/topics/bad.docs.md: first");
 });
