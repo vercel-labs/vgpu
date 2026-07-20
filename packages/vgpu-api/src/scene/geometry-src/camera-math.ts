@@ -2,9 +2,9 @@ import type { Mat4, Vec3 } from "./camera.ts";
 
 /** Minimal camera-only matrix math, kept local so scene users do not load all of wgpu-matrix. */
 export function viewProjection(projection: Mat4, eye: Vec3, target: Vec3, up: Vec3): Mat4 {
-  const z = normalize(eye[0] - target[0], eye[1] - target[1], eye[2] - target[2]);
-  const x = normalize(up[1] * z[2] - up[2] * z[1], up[2] * z[0] - up[0] * z[2], up[0] * z[1] - up[1] * z[0]);
-  const y = normalize(z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]);
+  const z = normalize(Math.fround(eye[0] - target[0]), Math.fround(eye[1] - target[1]), Math.fround(eye[2] - target[2]));
+  const x = normalize(Math.fround(up[1] * z[2] - up[2] * z[1]), Math.fround(up[2] * z[0] - up[0] * z[2]), Math.fround(up[0] * z[1] - up[1] * z[0]));
+  const y = normalize(Math.fround(z[1] * x[2] - z[2] * x[1]), Math.fround(z[2] * x[0] - z[0] * x[2]), Math.fround(z[0] * x[1] - z[1] * x[0]));
   const view = new Float32Array([
     x[0], y[0], z[0], 0,
     x[1], y[1], z[1], 0,
