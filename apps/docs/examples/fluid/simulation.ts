@@ -2,6 +2,8 @@ import type { Bundle, Gpu, Surface, Target } from 'vgpu';
 import type { StirInput } from './controls';
 import { GRID_HEIGHT, GRID_WIDTH, idleEmitters } from './math';
 import advectVelocityWgsl from './advect-velocity.wgsl';
+import curlWgsl from './curl.wgsl';
+import vorticityWgsl from './vorticity.wgsl';
 import divergenceWgsl from './divergence.wgsl';
 import pressureWgsl from './pressure.wgsl';
 import projectWgsl from './project.wgsl';
@@ -9,6 +11,9 @@ import advectDyeWgsl from './advect-dye.wgsl';
 import displayWgsl from './display.wgsl';
 
 const CELLS = GRID_WIDTH * GRID_HEIGHT;
+const DYE_WIDTH = GRID_WIDTH * 4;
+const DYE_HEIGHT = GRID_HEIGHT * 4;
+const DYE_CELLS = DYE_WIDTH * DYE_HEIGHT;
 const CLEAR = [0.003, 0.005, 0.014, 1] as const;
 type Output = Surface | Target;
 type StoragePair = ReturnType<Gpu['pingPongStorage']>;
@@ -19,6 +24,7 @@ export interface Fluid {
   dye: StoragePair;
   pressure: StoragePair;
   divergence: ReturnType<Gpu['storage']>;
+  curl: ReturnType<Gpu['storage']>;
   passes: ReturnType<typeof createPasses>;
   bundles?: [Bundle, Bundle];
   output?: Output;
@@ -28,15 +34,19 @@ export interface Fluid {
 
 export function createFluid(gpu: Gpu): Fluid {
   const velocity = gpu.pingPongStorage(CELLS * 8);
-  const dye = gpu.pingPongStorage(CELLS * 16);
+  const dye = gpu.pingPongStorage(DYE_CELLS * 16);
   const pressure = gpu.pingPongStorage(CELLS * 4);
   const divergence = gpu.storage(CELLS * 4, 'read-write');
-  return { gpu, velocity, dye, pressure, divergence, passes: createPasses(gpu), step: 0, lastInputStep: -1000 };
+  const curl = gpu.storage(CELLS * 4, 'read-write');
+  const passes = createPasses(gpu);
+  return { gpu, velocity, dye, pressure, divergence, curl, passes, step: 0, lastInputStep: -1000 };
 }
 
 function createPasses(gpu: Gpu) {
   return {
     advectVelocity: gpu.compute(advectVelocityWgsl),
+    curl: gpu.compute(curlWgsl),
+    vorticity: gpu.compute(vorticityWgsl),
     divergence: gpu.compute(divergenceWgsl),
     pressure: gpu.compute(pressureWgsl),
     project: gpu.compute(projectWgsl),
@@ -46,9 +56,24 @@ function createPasses(gpu: Gpu) {
 }
 
 export async function prepareFluid(fluid: Fluid, output: Output): Promise<void> {
-  const sim = { ...uniforms(fluid), output_size: output.size };
-  fluid.passes.display[0].set({ sim, dye: fluid.dye.read });
-  fluid.passes.display[1].set({ sim, dye: fluid.dye.write });
+  const grid = {
+    size: [GRID_WIDTH, GRID_HEIGHT],
+    dye_size: [DYE_WIDTH, DYE_HEIGHT],
+    aspect: output.size[0] / Math.max(1, output.size[1]),
+    _pad0: 0,
+    _pad1: [0, 0],
+  };
+  fluid.passes.advectVelocity.set({ grid });
+  fluid.passes.curl.set({ grid });
+  fluid.passes.vorticity.set({ grid });
+  fluid.passes.divergence.set({ grid });
+  fluid.passes.pressure.set({ grid });
+  fluid.passes.project.set({ grid });
+  fluid.passes.advectDye.set({ grid });
+
+  const config = { dye_size: [DYE_WIDTH, DYE_HEIGHT], output_size: output.size };
+  fluid.passes.display[0].set({ config, dye: fluid.dye.read });
+  fluid.passes.display[1].set({ config, dye: fluid.dye.write });
   await Promise.all(fluid.passes.display.map((display) => display.compile(output)));
   fluid.bundles = [0, 1].map((parity) => fluid.gpu.bundle({ target: output }, (bundle) => {
     bundle.draw(fluid.passes.display[parity]!);
@@ -58,22 +83,32 @@ export async function prepareFluid(fluid: Fluid, output: Output): Promise<void> 
 
 export function stepFluid(fluid: Fluid, input?: StirInput): void {
   if (input?.active) fluid.lastInputStep = fluid.step;
-  const sim = uniforms(fluid, input);
+  const dynamic = inputUniforms(fluid, input);
   const p = fluid.passes;
 
-  p.advectVelocity.set({ sim, src: fluid.velocity.read, dst: fluid.velocity.write }).dispatch(16, 9);
+  p.advectVelocity.set({ input: dynamic, src: fluid.velocity.read, dst: fluid.velocity.write }).dispatch(16, 9);
   fluid.velocity.swap();
 
-  p.divergence.set({ sim, velocity: fluid.velocity.read, divergence: fluid.divergence }).dispatch(16, 9);
-  for (let i = 0; i < 8; i++) {
-    p.pressure.set({ sim, src: fluid.pressure.read, divergence: fluid.divergence, dst: fluid.pressure.write }).dispatch(16, 9);
+  // Confinement restores the small rotating details lost by semi-Lagrangian advection.
+  p.curl.set({ velocity: fluid.velocity.read, curl: fluid.curl }).dispatch(16, 9);
+  p.vorticity.set({ src: fluid.velocity.read, curl: fluid.curl, dst: fluid.velocity.write }).dispatch(16, 9);
+  fluid.velocity.swap();
+
+  p.divergence.set({ velocity: fluid.velocity.read, divergence: fluid.divergence }).dispatch(16, 9);
+  for (let i = 0; i < 3; i++) {
+    p.pressure.set({
+      params: { decay: i === 0 ? 0.8 : 1, _pad: [0, 0, 0] },
+      src: fluid.pressure.read,
+      divergence: fluid.divergence,
+      dst: fluid.pressure.write,
+    }).dispatch(16, 9);
     fluid.pressure.swap();
   }
 
-  p.project.set({ sim, src: fluid.velocity.read, pressure: fluid.pressure.read, dst: fluid.velocity.write }).dispatch(16, 9);
+  p.project.set({ src: fluid.velocity.read, pressure: fluid.pressure.read, dst: fluid.velocity.write }).dispatch(16, 9);
   fluid.velocity.swap();
 
-  p.advectDye.set({ sim, src: fluid.dye.read, velocity: fluid.velocity.read, dst: fluid.dye.write }).dispatch(16, 9);
+  p.advectDye.set({ input: dynamic, src: fluid.dye.read, velocity: fluid.velocity.read, dst: fluid.dye.write }).dispatch(64, 36);
   fluid.dye.swap();
   fluid.step++;
   input?.consumeStep();
@@ -86,7 +121,7 @@ export function renderFluid(fluid: Fluid, output: Output): void {
   }));
 }
 
-function uniforms(fluid: Fluid, input?: StirInput) {
+function inputUniforms(fluid: Fluid, input?: StirInput) {
   const time = fluid.step / 60;
   const [a, b] = idleEmitters(fluid.step);
   const sinceInput = fluid.step - fluid.lastInputStep;
@@ -96,14 +131,19 @@ function uniforms(fluid: Fluid, input?: StirInput) {
   if (input?.active && Math.hypot(...pointerVelocity) < 0.02) {
     pointerVelocity = [0.16 * Math.cos(time * 5), 0.16 * Math.sin(time * 5)];
   }
-  const colors = [[0.05, 0.55, 1, 1], [0.65, 0.15, 1, 1], [1, 0.22, 0.12, 1]] as const;
+  const speed = Math.hypot(...pointerVelocity);
+  const direction = speed > 1e-4 ? [pointerVelocity[0] / speed, pointerVelocity[1] / speed] : [0, 0];
   return {
-    size: [GRID_WIDTH, GRID_HEIGHT], step: fluid.step,
+    step: fluid.step,
     pointer_active: input?.active ? 1 : 0,
-    pointer_from: input?.from ?? [0.5, 0.5], pointer_to: input?.to ?? [0.5, 0.5],
+    _pad0: [0, 0],
+    pointer_from: input?.from ?? [0.5, 0.5],
+    pointer_to: input?.to ?? [0.5, 0.5],
     pointer_velocity: pointerVelocity,
-    pointer_color: colors[(Math.floor(fluid.step / 90) + (input?.stroke ?? 0)) % colors.length]!,
-    idle_a: [...a, ramp * idle, 0.085], idle_b: [...b, ramp * idle, 0.08],
-    output_size: [1, 1], _pad: [0, 0],
+    _pad1: [0, 0],
+    // Like the reference, splat color comes from movement direction, with blue held high.
+    pointer_color: [0.5 + 0.5 * direction[0]!, 0.5 + 0.5 * direction[1]!, 1, 1],
+    idle_a: [...a, ramp * idle, 0.006],
+    idle_b: [...b, ramp * idle, 0.0055],
   };
 }

@@ -180,9 +180,9 @@ function assertFluidMetrics(pixels, width, height) {
   }
   const metrics = { coverage: 1 - background / count, cyan: cyan / count, magenta: magenta / count, clipped: clipped / count };
   const problems = [];
-  if (metrics.coverage < .15 || metrics.coverage > .70) problems.push(`coverage ${(metrics.coverage * 100).toFixed(1)}% (need 15–70%)`);
+  if (metrics.coverage < .08 || metrics.coverage > .60) problems.push(`coverage ${(metrics.coverage * 100).toFixed(1)}% (need 8–60%)`);
   if (metrics.cyan < .05) problems.push(`cyan ${(metrics.cyan * 100).toFixed(1)}% (need >=5%)`);
-  if (metrics.magenta < .03) problems.push(`magenta/coral ${(metrics.magenta * 100).toFixed(1)}% (need >=3%)`);
+  if (metrics.magenta < .02) problems.push(`magenta/coral ${(metrics.magenta * 100).toFixed(1)}% (need >=2%)`);
   if (metrics.clipped > .02) problems.push(`clipped ${(metrics.clipped * 100).toFixed(1)}% (need <=2%)`);
   if (problems.length) throw new Error(`Fluid poster validation failed (${width}x${height}):\n${problems.map((x) => `- ${x}`).join('\n')}`);
   return metrics;
