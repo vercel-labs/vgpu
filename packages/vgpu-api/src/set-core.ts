@@ -154,7 +154,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
-    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
+    const active = new Set(bindGroupLayoutMetadata(layout(group))?.entries.map((entry) => entry.binding));
+    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
     const entries = bindGroupEntries(groupBindings);
     const identities = identitiesFor(groupBindings);
     const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({

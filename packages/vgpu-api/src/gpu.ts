@@ -1,5 +1,5 @@
 import type { ShaderSource } from "@vgpu/wgsl";
-import type { VGPUAdapter } from "@vgpu/core";
+import type { RequiredDeviceLimits, VGPUAdapter } from "@vgpu/core";
 import { Device } from "@vgpu/core";
 import { createBindGroupCache } from "./bind-cache.ts";
 import { createBundle, type Bundle, type BundleOptions, type BundleRecorder } from "./bundle.ts";
@@ -25,7 +25,7 @@ export interface InitOptions {
   readonly adapter?: VGPUAdapter;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
+  readonly requiredLimits?: RequiredDeviceLimits;
   readonly label?: string;
 }
 

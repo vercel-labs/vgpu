@@ -109,6 +109,7 @@ class ScopeWalker {
   private readonly preserved = new Map<number, PreserveReason>();
   private readonly symbolsByScope = new Map<number, Map<string, number>>();
   private readonly moduleFallbackReasons: string[] = [];
+  private readonly pendingSymbols: { name: string; id: number; scopeId: number; activateAfter: number }[] = [];
   private readonly moduleScopeId: number;
 
   constructor(private readonly tokens: readonly Token[]) {
@@ -248,6 +249,7 @@ class ScopeWalker {
     pushScope("block", fn.bodyStartToken);
     let blockDepth = 1;
     for (let i = fn.bodyStartToken + 1; i < fn.bodyEndToken; i++) {
+      this.activatePendingSymbols(i);
       const token = this.tokens[i]!;
       if (isTrivia(token)) continue;
       if (token.text === "@") { i = this.preserveAttribute(i); continue; }
@@ -317,19 +319,33 @@ class ScopeWalker {
     }
     const nameIndex = this.findNextIdent(cursor);
     if (nameIndex === undefined || nameIndex >= fn.bodyEndToken) { this.functionFallback(fn, `${kind} without identifier`, index); return index; }
-    this.addDeclaration(this.tokens[nameIndex]!.text, kind, nameIndex, scopeId, fn.id, true);
+    this.addDeclaration(this.tokens[nameIndex]!.text, kind, nameIndex, scopeId, fn.id, true, this.findStatementEnd(index));
     const afterName = this.nextSig(nameIndex);
     if (afterName !== undefined && this.tokens[afterName]?.text === ":") return this.preserveTypeFrom(afterName + 1, ["=", ";", ",", ")"], fn.bodyEndToken);
     return nameIndex;
   }
 
-  private addDeclaration(name: string, kind: DeclarationKind, tokenIndex: number, scopeId: number, functionId: number | undefined, safeToRename: boolean): number {
+  private addDeclaration(name: string, kind: DeclarationKind, tokenIndex: number, scopeId: number, functionId: number | undefined, safeToRename: boolean, activateAfter?: number): number {
     const id = this.declarations.length;
     this.declarations.push({ id, name, kind, tokenIndex, scopeId, functionId, safeToRename });
+    if (activateAfter !== undefined) this.pendingSymbols.push({ name, id, scopeId, activateAfter });
+    else this.activateSymbol(name, id, scopeId);
+    return id;
+  }
+
+  private activatePendingSymbols(tokenIndex: number): void {
+    for (let i = this.pendingSymbols.length - 1; i >= 0; i--) {
+      const pending = this.pendingSymbols[i]!;
+      if (pending.activateAfter >= tokenIndex) continue;
+      this.activateSymbol(pending.name, pending.id, pending.scopeId);
+      this.pendingSymbols.splice(i, 1);
+    }
+  }
+
+  private activateSymbol(name: string, id: number, scopeId: number): void {
     let symbols = this.symbolsByScope.get(scopeId);
     if (!symbols) { symbols = new Map(); this.symbolsByScope.set(scopeId, symbols); }
     if (!symbols.has(name)) symbols.set(name, id);
-    return id;
   }
 
   private resolve(name: string, scopeStack: readonly number[]): number | undefined {

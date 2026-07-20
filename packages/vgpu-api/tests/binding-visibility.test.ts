@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
+import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { init } from "../src/mock.ts";
 
 const RENDER = `
@@ -28,18 +29,18 @@ function entries(gpu: Awaited<ReturnType<typeof init>>, label: string): readonly
 test("render visibility unions only selected entry static uses and retains unused bindings", async () => {
   const gpu = await init();
   const draw = gpu.draw({ shader: RENDER, label: "visible" });
-  expect(entries(gpu, "visible").map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 2], [1, 1], [2, 3], [3, 0]]);
+  expect(entries(gpu, "visible").map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 2], [1, 1], [2, 3]]);
 
   draw.layout(0, { dynamicOffsets: true });
   const dynamic = getMockGPUDeviceInstrumentation(gpu.device.gpu).createBindGroupLayoutDescriptors.find((item) => item.label === "visible.group0.dynamic.bgl")!;
-  expect([...dynamic.entries].map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 2], [1, 1], [2, 3], [3, 0]]);
+  expect([...dynamic.entries].map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 2], [1, 1], [2, 3]]);
   gpu.dispose();
 });
 
 test("compute visibility is selected-entry driven and leaves unused declarations at zero", async () => {
   const gpu = await init();
   gpu.compute(COMPUTE, { label: "compute-visible" });
-  expect(entries(gpu, "compute-visible").map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 4], [1, 0]]);
+  expect(entries(gpu, "compute-visible").map(({ binding, visibility }) => [binding, visibility])).toEqual([[0, 4]]);
   gpu.dispose();
 });
 
@@ -66,6 +67,54 @@ test("true vertex storage throws structured error before native BGL creation", a
     detail: { stage: "vertex", entryPoint: "vs", count: 1, limit: 0, bindings: [{ name: "positions", group: 0, binding: 0 }] },
   }));
   expect(mock.calls.createBindGroupLayout).toBe(0);
+  gpu.dispose();
+});
+
+test("unused declarations stay reflected but are omitted from layouts and never required", async () => {
+  const gpu = await init();
+  const shader = `
+    @group(0) @binding(0) var<storage, read> unused: array<u32>;
+    @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+    @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
+  `;
+  const draw = gpu.draw({ shader, label: "unused-layout" });
+  const reflection = reflectSource(shader);
+  expect(reflection.bindings.map(({ name }) => name)).toEqual(["unused"]);
+  expect(reflection.entryPoints.map(({ bindings }) => bindings)).toEqual([[], []]);
+  expect(entries(gpu, "unused-layout")).toEqual([]);
+  const target = gpu.target({ size: [1, 1] });
+  expect(() => gpu.frame((frame) => frame.pass(target, (pass) => pass.draw(draw)))).not.toThrow();
+  gpu.dispose();
+});
+
+test("two used storage buffers exceed a limit of one while unused storage does not count", async () => {
+  const gpu = await init();
+  Object.defineProperty(gpu.device.gpu, "limits", { value: { ...gpu.device.limits, maxStorageBuffersInVertexStage: 1 } });
+  const shader = `
+    @group(0) @binding(0) var<storage, read> a: array<vec4f>;
+    @group(0) @binding(1) var<storage, read> b: array<vec4f>;
+    @group(0) @binding(2) var<storage, read> unused: array<vec4f>;
+    @vertex fn vs() -> @builtin(position) vec4f { return a[0] + b[0]; }
+    @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
+  `;
+  expect(() => gpu.draw({ shader, label: "two-storage" })).toThrow(expect.objectContaining({
+    code: "VGPU-LIMIT-STORAGE-VERTEX",
+    message: "Vertex entry 'vs' in 'two-storage' uses 2 storage buffer(s), but device limit maxStorageBuffersInVertexStage is 1.",
+    fix: "Request init({ requiredLimits: { maxStorageBuffersInVertexStage: 2 } }) if the adapter supports it, or move vertex data to gpu.mesh(...) vertex streams.",
+    detail: expect.objectContaining({ count: 2, limit: 1, bindings: [
+      { name: "a", group: 0, binding: 0 }, { name: "b", group: 0, binding: 1 },
+    ] }),
+  }));
+  gpu.dispose();
+});
+
+test("stage-specific missing limits fall back to maxStorageBuffersPerShaderStage", async () => {
+  const gpu = await init();
+  Object.defineProperty(gpu.device.gpu, "limits", { value: { maxStorageBuffersPerShaderStage: 0 } });
+  expect(() => gpu.draw({ shader: RENDER, label: "fallback-limit" })).toThrow(expect.objectContaining({
+    code: "VGPU-LIMIT-STORAGE-FRAGMENT",
+    detail: expect.objectContaining({ limit: 0 }),
+  }));
   gpu.dispose();
 });
 

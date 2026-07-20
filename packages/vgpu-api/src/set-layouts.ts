@@ -22,11 +22,11 @@ export function bindGroupLayoutEntriesForGroup(
   group: number,
   visibility: BindingVisibilityFn = defaultVisibility,
 ): GPUBindGroupLayoutEntry[] {
-  return bindings.filter((binding) => binding.group === group).map((binding) => ({
-    binding: binding.binding,
-    visibility: visibility(binding),
-    ...layoutEntry(binding),
-  }));
+  return bindings.flatMap((binding) => {
+    if (binding.group !== group) return [];
+    const mask = visibility(binding);
+    return mask === 0 ? [] : [{ binding: binding.binding, visibility: mask, ...layoutEntry(binding) }];
+  });
 }
 
 export function bindGroupLayoutsForReflection(

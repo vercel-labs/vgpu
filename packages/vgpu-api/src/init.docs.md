@@ -14,7 +14,7 @@ Browser code imports from `vgpu`; Node GPU tests import from `vgpu/node`; determ
 
 ```ts
 import type { Gpu } from "vgpu";
-import type { VGPUAdapter } from "vgpu/core";
+import type { RequiredDeviceLimits, VGPUAdapter } from "vgpu/core";
 
 declare function init(options?: InitOptions): Promise<Gpu>;
 
@@ -22,7 +22,7 @@ interface InitOptions {
   readonly adapter?: VGPUAdapter;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
+  readonly requiredLimits?: RequiredDeviceLimits;
   readonly label?: string;
 }
 ```
@@ -35,7 +35,7 @@ interface InitOptions {
 | options.adapter | `VGPUAdapter` | ✖ | `undefined` | Explicit adapter. If omitted in `vgpu`, `navigator.gpu.requestAdapter()` is used; `vgpu/node` and `vgpu/mock` provide adapter factories. |
 | options.powerPreference | `GPUPowerPreference` | ✖ | `undefined` | Forwarded to `navigator.gpu.requestAdapter({ powerPreference })`. |
 | options.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. |
-| options.requiredLimits | `GPUDeviceDescriptor["requiredLimits"]` | ✖ | `undefined` | Forwarded unchanged to `adapter.requestDevice`. Unsupported names/values reject device creation. |
+| options.requiredLimits | `RequiredDeviceLimits` | ✖ | `undefined` | Forwarded unchanged to `adapter.requestDevice`. Unsupported names/values reject device creation. |
 | options.label | `string` | ✖ | `undefined` | Reserved public option; current main API (`vgpu`) device creation does not use it as a debug label. |
 
 **Returns:** `Promise<Gpu>` — resolves to the main API facade with `surface`, `target`, `pass`, `draw`, `compute`, `frame`, buffers, uniforms, and bundles.

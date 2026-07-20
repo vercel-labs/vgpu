@@ -16,7 +16,7 @@ import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
-export type { BindingInfo, BindingKind, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
+export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";
 export interface ResolveOptions {

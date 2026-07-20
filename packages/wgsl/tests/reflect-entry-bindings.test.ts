@@ -20,6 +20,16 @@ test("entry binding reflection follows direct and transitive static use", () => 
   });
 });
 
+test("local declaration initializers resolve before the local enters scope", () => {
+  expect(refs(`
+    @group(0) @binding(0) var<storage, read> data: array<u32>;
+    @vertex fn vs() -> @builtin(position) vec4f {
+      let data = data[0];
+      return vec4f(f32(data));
+    }
+  `)).toEqual({ vs: [{ group: 0, binding: 0 }] });
+});
+
 test("uncalled helpers and shadowed parameters do not count globals", () => {
   expect(refs(`
     @group(0) @binding(0) var<storage, read> data: array<u32>;
@@ -38,6 +48,15 @@ test("diamond call graphs deduplicate and sort binding coordinates", () => {
     fn right() -> u32 { return leaf(); }
     @compute @workgroup_size(1) fn main() { let x = left() + right(); }
   `)).toEqual({ main: [{ group: 0, binding: 3 }, { group: 1, binding: 2 }] });
+});
+
+test("same-stage entry points retain disjoint binding sets", () => {
+  expect(refs(`
+    @group(0) @binding(0) var<uniform> first: vec4f;
+    @group(0) @binding(1) var<uniform> second: vec4f;
+    @vertex fn one() -> @builtin(position) vec4f { return first; }
+    @vertex fn two() -> @builtin(position) vec4f { return second; }
+  `)).toEqual({ one: [{ group: 0, binding: 0 }], two: [{ group: 0, binding: 1 }] });
 });
 
 test("valid module assertions and continuing blocks preserve precise use", () => {

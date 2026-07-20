@@ -18,10 +18,12 @@ export interface BufferOptions {
   readonly label?: string;
 }
 
+export type RequiredDeviceLimits = Partial<{ readonly [K in keyof GPUSupportedLimits]: GPUSize64 }>;
+
 export interface CreateDeviceOptions {
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: GPUDeviceDescriptor["requiredLimits"];
+  readonly requiredLimits?: RequiredDeviceLimits;
   readonly label?: string;
 }
 
