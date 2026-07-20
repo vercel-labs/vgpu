@@ -61,13 +61,18 @@ type MutableBindingState = {
 /** Creates the per-Draw binding state machine used by Effect/Draw.set(). */
 export function createSetCore(options: SetCoreOptions): SetCore {
   const bindings = initializeBindings(options.reflection);
-  const groups = reflectedGroups(options.reflection);
+  const groups = [...options.bindGroupLayouts.keys()].sort((a, b) => a - b);
   const claimedGroups = new Map<number, GPUBindGroup>();
 
   function set(values: SetBag): readonly BindingIdentityChange[] {
     const changes: BindingIdentityChange[] = [];
     for (const [name, value] of Object.entries(values)) changes.push(...setNamedValue(name, value));
     return changes;
+  }
+
+  function bindingIsActive(state: MutableBindingState): boolean {
+    const layout = options.bindGroupLayouts.get(state.info.group);
+    return !!layout && !!bindGroupLayoutMetadata(layout)?.entries.some((entry) => entry.binding === state.info.binding);
   }
 
   function setNamedValue(name: string, value: unknown): readonly BindingIdentityChange[] {
@@ -85,7 +90,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const before = identityString(state.identity);
     if (ownership === "lib") setLibOwned(state, mergeLibValue(state.libValue, value));
     else setUserOwned(state, value);
-    return identityChangeFor(state, before);
+    return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setBindingMember(state: MutableBindingState, memberName: string, value: unknown): readonly BindingIdentityChange[] {
@@ -93,10 +98,10 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const ownership = ownershipFor(state.info, value);
     latchBindingOwnership(state, memberName, ownership);
     latchMemberOwnership(state, memberName, ownership);
-    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Binding member '${memberName}' cannot receive resources; set the complete binding '${state.info.name}'.`);
+    if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Member '${memberName}' needs a JS value; set resource '${state.info.name}' instead.`);
     const before = identityString(state.identity);
     setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
-    return identityChangeFor(state, before);
+    return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setLibOwned(state: MutableBindingState, value: unknown): void {
@@ -130,7 +135,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     // Refresh the recreation subscription on every re-normalization so the lifecycle
     // stays explicit even if a future target signal implementation becomes one-shot.
     state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
-    for (const change of identityChangeFor(state, beforeIdentity)) options.onIdentityChange?.(change);
+    if (bindingIsActive(state)) for (const change of identityChangeFor(state, beforeIdentity)) options.onIdentityChange?.(change);
   }
 
   function claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined {
@@ -154,7 +159,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
-    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group);
+    const active = new Set(bindGroupLayoutMetadata(layout(group))?.entries.map((entry) => entry.binding));
+    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
     const entries = bindGroupEntries(groupBindings);
     const identities = identitiesFor(groupBindings);
     const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
@@ -198,7 +204,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function requiredLibLayout(state: MutableBindingState): NonNullable<BindingInfo["layout"]> & { readonly size: number } {
-    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' does not accept plain JS values; pass a compatible resource.`);
+    if (state.info.kind !== "buffer" || !state.info.layout?.size) throw unsupportedError(`${options.label}.set`, `Binding '${state.info.name}' needs a compatible resource, not JS.`);
     return state.info.layout as NonNullable<BindingInfo["layout"]> & { readonly size: number };
   }
 

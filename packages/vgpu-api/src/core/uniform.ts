@@ -43,7 +43,7 @@ export class Uniform {
   readonly buffer: Buffer;
   readonly bindGroupLayout: GPUBindGroupLayout;
   readonly bindGroup: GPUBindGroup;
-  private destroyed = false;
+  #destroyed = false;
 
   constructor(readonly device: Device, opts: UniformOptions) {
     this.size = opts.size;
@@ -73,8 +73,8 @@ export class Uniform {
   }
 
   destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+    if (this.#destroyed) return;
+    this.#destroyed = true;
     this.buffer.destroy();
   }
 

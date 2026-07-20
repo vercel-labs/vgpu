@@ -83,7 +83,7 @@ test("signature bundle recording still requires draw resources to be set", async
   const gpu = await init();
   const post = gpu.effect(TEXTURE, { label: "post" });
 
-  expect(() => gpu.bundle({ target: { colors: ["rgba8unorm"] }, label: "unsetTextureBundle" }, (b) => b.draw(post))).toThrowError(/VGPU-R1-BINDING-NEVER-SET|was never set/);
+  expect(() => gpu.bundle({ target: { colors: ["rgba8unorm"] }, label: "unsetTextureBundle" }, (b) => b.draw(post))).toThrowError(/VGPU-R1-BINDING-NEVER-SET|Unset/);
   gpu.dispose();
 });
 

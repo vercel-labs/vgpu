@@ -2,7 +2,8 @@ import { init } from "vgpu/mock";
 
 const NEEDS_SAMPLER = /* wgsl */ `
 @group(0) @binding(0) var samp: sampler;
-@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.0, 1.0); }
+fn useSampler(value: sampler) {}
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { useSampler(samp); return vec4f(uv, 0.0, 1.0); }
 `;
 
 const SPEED = /* wgsl */ `

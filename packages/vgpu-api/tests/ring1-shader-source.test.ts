@@ -57,7 +57,7 @@ test("malformed ShaderSource without version throws VGPU-SHADER-SOURCE-INVALID",
   const gpu = await init();
 
   expect(() => gpu.effect({ wgsl: FRAGMENT } as never)).toThrowError(
-    /VGPU-SHADER-SOURCE-INVALID: expected a WGSL string or a ShaderSource \{ version, wgsl \}, received .*\nIf you import a \.wgsl, make sure the loader is configured \(@vgpu\/wgsl\/loader-vite or \/loader-webpack\)\./,
+    /VGPU-SHADER-SOURCE-INVALID: expected WGSL or \{ version, wgsl \}, got .* Fix: configure @vgpu\/wgsl loader-vite or loader-webpack\./,
   );
   gpu.dispose();
 });
@@ -66,8 +66,7 @@ test("unsupported ShaderSource version throws VGPU-SHADER-SOURCE-INVALID", async
   const gpu = await init();
 
   expect(() => gpu.effect({ version: 2, wgsl: FRAGMENT } as never)).toThrowError(
-    "VGPU-SHADER-SOURCE-INVALID: ShaderSource version 2 is not supported by this runtime (supported version: 1).\n" +
-      "Update @vgpu/vgpu-api or regenerate the artifact with a compatible loader.",
+    "VGPU-SHADER-SOURCE-INVALID: unsupported ShaderSource v2; expected v1. Fix: update vgpu or regenerate it.",
   );
   gpu.dispose();
 });

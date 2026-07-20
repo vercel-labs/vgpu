@@ -4,6 +4,7 @@ import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock
 export interface MockGPUDeviceInstrumentation {
   readonly calls: {
     createBuffer: number;
+    createBindGroupLayout: number;
     createBindGroup: number;
     createCommandEncoder: number;
     createRenderBundleEncoder: number;
@@ -13,6 +14,7 @@ export interface MockGPUDeviceInstrumentation {
     createComputePipeline: number;
   };
   readonly createBufferDescriptors: GPUBufferDescriptor[];
+  readonly createBindGroupLayoutDescriptors: GPUBindGroupLayoutDescriptor[];
   readonly createBindGroupDescriptors: GPUBindGroupDescriptor[];
   readonly createCommandEncoderDescriptors: GPUCommandEncoderDescriptor[];
   readonly createRenderBundleEncoderDescriptors: GPURenderBundleEncoderDescriptor[];
@@ -59,7 +61,11 @@ export function createMockGPUDevice(): GPUDevice {
       instrumentation.calls.createShaderModule += 1;
       return {} as GPUShaderModule;
     },
-    createBindGroupLayout: () => ({}) as GPUBindGroupLayout,
+    createBindGroupLayout(desc: GPUBindGroupLayoutDescriptor): GPUBindGroupLayout {
+      instrumentation.calls.createBindGroupLayout += 1;
+      instrumentation.createBindGroupLayoutDescriptors.push(desc);
+      return {} as GPUBindGroupLayout;
+    },
     createPipelineLayout: () => ({}) as GPUPipelineLayout,
     createBindGroup(desc: GPUBindGroupDescriptor): GPUBindGroup {
       instrumentation.calls.createBindGroup += 1;
@@ -141,6 +147,7 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
   return {
     calls: {
       createBuffer: 0,
+      createBindGroupLayout: 0,
       createBindGroup: 0,
       createCommandEncoder: 0,
       createRenderBundleEncoder: 0,
@@ -150,6 +157,7 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
       createComputePipeline: 0,
     },
     createBufferDescriptors: [],
+    createBindGroupLayoutDescriptors: [],
     createBindGroupDescriptors: [],
     createCommandEncoderDescriptors: [],
     createRenderBundleEncoderDescriptors: [],

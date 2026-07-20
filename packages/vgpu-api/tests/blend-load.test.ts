@@ -51,10 +51,10 @@ test("custom blend defaults op and alpha; writeMask normalizes arrays", async ()
 
 test("invalid blend and writeMask options fail at draw construction", async () => {
   const gpu = await init();
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badBlend", blend: "screen" as never })).toThrowError(/VGPU-BLEND-INVALID|not a preset/);
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badObject", blend: { alpha: { src: "one", dst: "zero" } } as never })).toThrowError(/VGPU-BLEND-INVALID|valid blend object/);
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badMask", writeMask: "rgb" as never })).toThrowError(/VGPU-WRITEMASK-INVALID|must be an array/);
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badChannel", writeMask: ["r", "x"] as never })).toThrowError(/VGPU-WRITEMASK-INVALID|must be an array/);
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badBlend", blend: "screen" as never })).toThrowError(/VGPU-BLEND-INVALID|Invalid blend/);
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badObject", blend: { alpha: { src: "one", dst: "zero" } } as never })).toThrowError(/VGPU-BLEND-INVALID|Invalid blend/);
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badMask", writeMask: "rgb" as never })).toThrowError(/VGPU-WRITEMASK-INVALID|Invalid writeMask/);
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "badChannel", writeMask: ["r", "x"] as never })).toThrowError(/VGPU-WRITEMASK-INVALID|Invalid writeMask/);
   gpu.dispose();
 });
 
@@ -88,7 +88,7 @@ test("frame.pass clear false preserves color and depth attachments", async () =>
 test("frame.pass rejects clear false with MSAA targets", async () => {
   const gpu = await init();
   const msaa = gpu.target({ size: [2, 2], msaa: true });
-  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, clear: false }, () => undefined))).toThrowError(/VGPU-PASS-PRESERVE-MSAA|MSAA targets/);
+  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, clear: false }, () => undefined))).toThrowError(/VGPU-PASS-PRESERVE-MSAA|preserve MSAA/);
   gpu.dispose();
 });
 

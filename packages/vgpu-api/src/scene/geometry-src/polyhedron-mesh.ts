@@ -42,5 +42,5 @@ export function validatePolyhedron(name: string, radius: number, vertexCount: nu
 
 function validate(name: string, radius: number, vertexCount: number): void {
   if (radius <= 0) throw invalidUsage(`Mesh.${name}`, "Radius must be greater than 0.");
-  if (vertexCount > 65535) throw invalidUsage(`Mesh.${name}`, `Geometry produces ${vertexCount} vertices, exceeding the uint16 index limit of 65,535.`);
+  if (vertexCount > 65535) throw invalidUsage(`Mesh.${name}`, `Geometry has ${vertexCount} vertices > uint16 limit 65535; reduce detail.`);
 }

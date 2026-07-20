@@ -92,7 +92,7 @@ Effects compile lazily for the target signature they draw into. Use `await effec
 
 ## Notes
 
-- A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle.
+- A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle. Fragment-only resources receive fragment visibility only, so storage does not consume `maxStorageBuffersInVertexStage`.
 - `blend` and `writeMask` are immutable pipeline state, fixed at `gpu.effect()` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
 - One-shot `effect.draw()` does not join a surrounding frame. Inside `gpu.frame()`, draw through `frame.pass()`.
 - There is no implicit screen target. Browser code should create a `Surface` and pass it as `target`.
