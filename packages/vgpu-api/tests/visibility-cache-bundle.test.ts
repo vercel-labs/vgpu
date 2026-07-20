@@ -36,6 +36,43 @@ test("unused bindings may be set and are ignored by the omitted layout", async (
   gpu.dispose();
 });
 
+test("changing an omitted binding does not stale a recorded bundle", async () => {
+  const gpu = await init();
+  const shader = `
+    @group(0) @binding(0) var<uniform> used: vec4f;
+    @group(0) @binding(1) var<storage, read> unused: array<u32>;
+    @vertex fn vs() -> @builtin(position) vec4f { return used; }
+    @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
+  `;
+  const draw = gpu.draw({ shader, label: "inactive-bundle", set: { used: [0, 0, 0, 1], unused: gpu.storage(16, "read") } });
+  const target = gpu.target({ size: [1, 1] });
+  const bundle = gpu.bundle({ target, label: "inactive-bundle-recording" }, (recorder) => recorder.draw(draw));
+  draw.set({ unused: gpu.storage(16, "read") });
+  expect(() => gpu.frame((frame) => frame.pass(target, (pass) => pass.bundles(bundle)))).not.toThrow();
+  gpu.dispose();
+});
+
+test("unused-only high groups require no pipeline layouts", async () => {
+  const gpu = await init();
+  const shader = `
+    @group(1) @binding(0) var<storage, read> unused: array<u32>;
+    @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+    @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
+  `;
+  const draw = gpu.draw({ shader, label: "unused-group-one" });
+  const target = gpu.target({ size: [1, 1] });
+  expect(() => gpu.frame((frame) => frame.pass(target, (pass) => pass.draw(draw)))).not.toThrow();
+  gpu.dispose();
+});
+
+test("equal dynamic descriptors reuse layout identity", async () => {
+  const gpu = await init();
+  const a = gpu.draw({ shader: vertexShader("a"), label: "dynamic-a" });
+  const b = gpu.draw({ shader: vertexShader("b"), label: "dynamic-b" });
+  expect(a.layout(0, { dynamicOffsets: true })).toBe(b.layout(0, { dynamicOffsets: true }));
+  gpu.dispose();
+});
+
 test("bundle recording and mesh slices share narrowed pipeline layouts", async () => {
   const gpu = await init();
   const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }] });

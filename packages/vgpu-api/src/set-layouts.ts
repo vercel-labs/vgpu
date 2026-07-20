@@ -38,8 +38,9 @@ export function bindGroupLayoutsForReflection(
   visibility: (binding: BindingInfo) => GPUShaderStageFlags = defaultVisibility,
 ): ReadonlyMap<number, GPUBindGroupLayout> {
   const map = new Map<number, GPUBindGroupLayout>();
-  const groups = [...new Set(reflection.bindings.map((binding) => binding.group))].sort((a, b) => a - b);
-  for (const group of groups) map.set(group, createBindGroupLayout(device, label, reflection, group, visibility));
+  const activeGroups = reflection.bindings.filter((binding) => visibility(binding) !== 0).map((binding) => binding.group);
+  const maxGroup = Math.max(-1, ...activeGroups);
+  for (let group = 0; group <= maxGroup; group++) map.set(group, createBindGroupLayout(device, label, reflection, group, visibility));
   return map;
 }
 
@@ -54,13 +55,16 @@ function createBindGroupLayout(
   group: number,
   visibility: BindingVisibilityFn = defaultVisibility,
 ): GPUBindGroupLayout {
-  const entries = bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility);
+  return cachedBindGroupLayout(device, `${label}.group${group}.bgl`, bindGroupLayoutEntriesForGroup(reflection.bindings, group, visibility));
+}
+
+export function cachedBindGroupLayout(device: Device, label: string, entries: readonly GPUBindGroupLayoutEntry[]): GPUBindGroupLayout {
   let cache = bindGroupLayoutCaches.get(device.gpu);
   if (!cache) { cache = new Map(); bindGroupLayoutCaches.set(device.gpu, cache); }
   const key = JSON.stringify(entries);
   const cached = cache.get(key);
   if (cached) return cached;
-  const layout = attachBindGroupLayoutMetadata(device.gpu.createBindGroupLayout({ label: `${label}.group${group}.bgl`, entries }), { entries });
+  const layout = attachBindGroupLayoutMetadata(device.gpu.createBindGroupLayout({ label, entries }), { entries });
   cache.set(key, layout);
   return layout;
 }

@@ -81,7 +81,7 @@ test("unused declarations stay reflected but are omitted from layouts and never 
   const reflection = reflectSource(shader);
   expect(reflection.bindings.map(({ name }) => name)).toEqual(["unused"]);
   expect(reflection.entryPoints.map(({ bindings }) => bindings)).toEqual([[], []]);
-  expect(entries(gpu, "unused-layout")).toEqual([]);
+  expect(getMockGPUDeviceInstrumentation(gpu.device.gpu).createBindGroupLayoutDescriptors.find((item) => item.label === "unused-layout.group0.bgl")).toBeUndefined();
   const target = gpu.target({ size: [1, 1] });
   expect(() => gpu.frame((frame) => frame.pass(target, (pass) => pass.draw(draw)))).not.toThrow();
   gpu.dispose();

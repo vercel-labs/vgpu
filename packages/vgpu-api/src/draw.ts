@@ -1,11 +1,11 @@
-import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
+import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
-import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, visibilityForEntries, type BindingVisibilityFn } from "./set-layouts.ts";
+import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, cachedBindGroupLayout, visibilityForEntries, type BindingVisibilityFn } from "./set-layouts.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
@@ -225,8 +225,7 @@ export class InternalDraw implements Draw {
     const existing = this.#dynamicBindGroupLayouts.get(group);
     if (existing) return existing;
     const entries = dynamicEntries(this, group);
-    const rawLayout = state.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
-    const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
+    const layout = cachedBindGroupLayout(state.device, `${this.label}.group${group}.dynamic.bgl`, entries);
     this.#dynamicBindGroupLayouts.set(group, layout);
     state.bindGroupLayouts.set(group, layout);
     state.pipelineLayout = state.pipelineLayouts.get(state.bindGroupLayouts);

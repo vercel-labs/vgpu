@@ -44,7 +44,8 @@ export class ComputePipeline implements Compute {
       compute: { module: this.shaderModule, entryPoint: this.entryPoint },
     });
     this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
-    this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage");
+    const active = new Set((entry.bindings ?? this.reflection.bindings).map((binding) => `${binding.group}:${binding.binding}`));
+    this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage" && active.has(`${binding.group}:${binding.binding}`));
     if (opts.set) this.set(opts.set);
   }
 
