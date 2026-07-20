@@ -48,6 +48,10 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
 
   // Compile every target signature before the frame loop so mode changes never compile lazily.
   await prewarm(effects, targets, surface);
+  setStaticBindings(effects, targets);
+  setResolutionBindings(effects, surface);
+  let mode = controls.getMode();
+  setModeBindings(effects, targets, mode);
 
   const unsubscribeResize = surface.onResize(() => {
     if (!sawInitialResize) {
@@ -56,10 +60,16 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
     }
     if (disposed) return;
     resizeTargets(targets, surface.size);
+    setResolutionBindings(effects, surface);
   });
 
   const handle = gpu.frame.loop((frame) => {
-    renderMode(frame, effects, targets, surface, controls.getMode(), gpu.time);
+    const nextMode = controls.getMode();
+    if (nextMode !== mode) {
+      mode = nextMode;
+      setModeBindings(effects, targets, mode);
+    }
+    renderMode(frame, effects, targets, surface, mode, gpu.time);
   });
 
   return () => {
@@ -83,6 +93,14 @@ export async function renderThumb(
   const effects = createEffects(gpu, 'anti-aliasing-thumb');
   const targets = createTargets(gpu, target.size, 'anti-aliasing-thumb');
   await prewarm(effects, targets, target);
+  setStaticBindings(effects, targets);
+  setResolutionBindings(effects, target);
+  let configuredMode: AaMode | undefined;
+  const configureMode = (mode: AaMode) => {
+    if (mode === configuredMode) return;
+    configuredMode = mode;
+    setModeBindings(effects, targets, mode);
+  };
 
   const dt = opts.dt ?? 1 / 60;
   let time = opts.time ?? 1.2;
@@ -90,6 +108,7 @@ export async function renderThumb(
   // The gallery normally ends on FXAA, but exercise every mode first so Docker validates
   // all lazily-selected pipelines (including the 4x sample-count variant) and bindings.
   for (const mode of ALL_MODES) {
+    configureMode(mode);
     gpu.frame((frame) => renderMode(frame, effects, targets, target, mode, time));
     await gpu.gpu.queue.onSubmittedWorkDone();
     await opts.onModeRendered?.(mode, await target.read(), target.size);
@@ -98,6 +117,7 @@ export async function renderThumb(
   const warmupFrames = Math.max(1, opts.warmupFrames ?? 60);
   for (let i = 0; i < warmupFrames; i++) {
     time += dt;
+    configureMode(AA_MODE_FXAA);
     gpu.frame((frame) => renderMode(frame, effects, targets, target, AA_MODE_FXAA, time));
   }
 
@@ -176,6 +196,35 @@ async function prewarm(
   ]);
 }
 
+function setStaticBindings(effects: AaEffects, targets: AaTargets): void {
+  effects.fxaa.set({
+    uniforms: {
+      edge_threshold: 0.166,
+      edge_threshold_min: 0.0833,
+      subpix: 0.75,
+      _pad0: 0,
+      _pad1: 0,
+      _pad2: 0,
+    },
+    scene_tex: targets.ldr,
+    linear_samp: effects.sampler,
+  });
+}
+
+function setResolutionBindings(effects: AaEffects, output: Surface | Target): void {
+  effects.scene.set({ logical_resolution: output.size, _pad: 0 });
+  effects.resolve.set({ resolution: output.size, _pad: 0 });
+  effects.fxaa.set({ resolution: output.size });
+}
+
+function setModeBindings(effects: AaEffects, targets: AaTargets, mode: AaMode): void {
+  if (mode === AA_MODE_MSAA_4X) {
+    effects.resolve.set({ kind: 0, scene_tex: targets.msaa });
+  } else if (mode === AA_MODE_SSAA_2X) {
+    effects.resolve.set({ kind: 1, scene_tex: targets.ssaa });
+  }
+}
+
 function renderMode(
   frame: Frame,
   effects: AaEffects,
@@ -184,73 +233,27 @@ function renderMode(
   mode: AaMode,
   time: number,
 ): void {
+  effects.scene.set({ time });
+
   if (mode === AA_MODE_OFF) {
-    setScene(effects.scene, time, output.size);
     frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
     return;
   }
 
   if (mode === AA_MODE_MSAA_4X) {
-    setScene(effects.scene, time, output.size);
-    setResolve(effects.resolve, targets.msaa, output.size, 0);
     frame.pass({ target: targets.msaa, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
     frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.resolve));
     return;
   }
 
   if (mode === AA_MODE_SSAA_2X) {
-    setScene(effects.scene, time, output.size);
-    setResolve(effects.resolve, targets.ssaa, output.size, 1);
     frame.pass({ target: targets.ssaa, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
     frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.resolve));
     return;
   }
 
-  setScene(effects.scene, time, output.size);
-  setFxaa(effects.fxaa, targets.ldr, output.size, effects.sampler);
   frame.pass({ target: targets.ldr, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.scene));
   frame.pass({ target: output, clear: CLEAR_BLACK }, (pass) => pass.draw(effects.fxaa));
-}
-
-function setScene(
-  scene: Draw,
-  time: number,
-  resolution: readonly [number, number],
-): void {
-  scene.set({ uniforms: { time, logical_resolution: resolution, _pad: 0 } });
-}
-
-function setResolve(
-  resolve: Effect,
-  source: Target,
-  resolution: readonly [number, number],
-  kind: 0 | 1,
-): void {
-  resolve.set({
-    uniforms: { resolution, kind, _pad: 0 },
-    scene_tex: source,
-  });
-}
-
-function setFxaa(
-  fxaa: Effect,
-  source: Target,
-  resolution: readonly [number, number],
-  sampler: GPUSampler,
-): void {
-  fxaa.set({
-    uniforms: {
-      resolution,
-      edge_threshold: 0.166,
-      edge_threshold_min: 0.0833,
-      subpix: 0.75,
-      _pad0: 0,
-      _pad1: 0,
-      _pad2: 0,
-    },
-    scene_tex: source,
-    linear_samp: sampler,
-  });
 }
 
 function createSpokeVertices(): Float32Array {

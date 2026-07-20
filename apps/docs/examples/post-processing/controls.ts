@@ -7,6 +7,7 @@ export interface PostProcessingFlags {
 export interface PostProcessingControls {
   readonly host: HTMLElement;
   getFlags(): PostProcessingFlags;
+  onFlagsChange(listener: (flags: PostProcessingFlags) => void): () => void;
   dispose(): void;
 }
 
@@ -76,13 +77,22 @@ export function installControls(canvas: HTMLCanvasElement): PostProcessingContro
     document.body.append(host);
   }
 
+  const getFlags = (): PostProcessingFlags => ({
+    bloom: inputs.get('bloom')?.checked ?? true,
+    ca: inputs.get('ca')?.checked ?? true,
+    grain: inputs.get('grain')?.checked ?? true,
+  });
+
   return {
     host,
     getFlags() {
-      return {
-        bloom: inputs.get('bloom')?.checked ?? true,
-        ca: inputs.get('ca')?.checked ?? true,
-        grain: inputs.get('grain')?.checked ?? true,
+      return getFlags();
+    },
+    onFlagsChange(listener) {
+      const onChange = () => listener(getFlags());
+      for (const input of inputs.values()) input.addEventListener('change', onChange);
+      return () => {
+        for (const input of inputs.values()) input.removeEventListener('change', onChange);
       };
     },
     dispose() {
