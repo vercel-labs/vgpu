@@ -1,231 +1,44 @@
-import type { Bundle, Gpu, Surface, Target } from 'vgpu';
-import { installStirInput, type StirInput } from './controls';
-import advectVelocityWgsl from './advect-velocity.wgsl';
-import divergenceWgsl from './divergence.wgsl';
-import pressureWgsl from './pressure.wgsl';
-import projectWgsl from './project.wgsl';
-import advectDyeWgsl from './advect-dye.wgsl';
-import updateParticlesWgsl from './update-particles.wgsl';
-import displayWgsl from './display.wgsl';
-import particlesWgsl from './particles.wgsl';
-import { FIXED_STEP as STEP, GRID_HEIGHT as HEIGHT, GRID_WIDTH as WIDTH, fixedStepCount, idleEmitters } from './math';
-
-const CELLS = WIDTH * HEIGHT;
-const TRACERS = 8192;
-const CLEAR = [0.003, 0.005, 0.014, 1] as const;
-
-type Output = Surface | Target;
-type StoragePair = ReturnType<Gpu['pingPongStorage']>;
-
-interface FluidState {
-  readonly gpu: Gpu;
-  readonly velocity: StoragePair;
-  readonly dye: StoragePair;
-  readonly pressure: StoragePair;
-  readonly divergence: ReturnType<Gpu['storage']>;
-  readonly tracer: ReturnType<Gpu['device']['createBuffer']>;
-  readonly mesh: ReturnType<Gpu['mesh']>;
-  readonly passes: ReturnType<typeof createPasses>;
-  step: number;
-  lastInputStep: number;
-  bundles: [Bundle, Bundle] | undefined;
-  bundleOutput: Output | undefined;
-}
+import { installStirInput } from './controls';
+import { fixedStepCount } from './math';
+import { createFluid, prepareFluid, renderFluid, stepFluid } from './simulation';
 
 export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   const { init } = await import('vgpu');
   const gpu = await init();
   const surface = gpu.surface(canvas, { dpr: [1, 2] });
-  const state = createState(gpu);
+  const fluid = createFluid(gpu);
   const input = installStirInput(canvas);
-  await prepareRenderer(state, surface);
+  await prepareFluid(fluid, surface);
+
+  let disposed = false;
+  let animationFrame = 0;
+  let accumulator = 0;
+  let previous = performance.now();
   let sawInitialResize = false;
   const unsubscribeResize = surface.onResize(() => {
     if (!sawInitialResize) { sawInitialResize = true; return; }
-    void prepareRenderer(state, surface);
+    void prepareFluid(fluid, surface);
   });
-  let disposed = false;
-  let raf = 0;
-  let accumulator = 0;
-  let previous = performance.now();
 
   const tick = (now: number) => {
     if (disposed) return;
     if (!document.hidden) {
       const fixed = fixedStepCount(accumulator, (now - previous) / 1000);
       accumulator = fixed.accumulator;
-      for (let i = 0; i < fixed.steps; i++) simulate(state, input);
-      render(state, surface);
+      for (let i = 0; i < fixed.steps; i++) stepFluid(fluid, input);
+      renderFluid(fluid, surface);
     }
     previous = now;
-    raf = requestAnimationFrame(tick);
+    animationFrame = requestAnimationFrame(tick);
   };
-  raf = requestAnimationFrame(tick);
+  animationFrame = requestAnimationFrame(tick);
 
   return () => {
-    if (disposed) return;
     disposed = true;
-    cancelAnimationFrame(raf);
+    cancelAnimationFrame(animationFrame);
     unsubscribeResize();
     input.dispose();
-    state.mesh.destroy();
-    state.tracer.destroy();
     surface.dispose();
     gpu.dispose();
   };
 }
-
-export interface FluidValidationStats { steps: number; finite: boolean; maxSpeed: number; maxDye: number; averageDye: number }
-
-export async function renderThumb(gpu: Gpu, target: Target, opts: { warmupFrames?: number; scriptedDrag?: boolean; soak?: boolean; onStateValidated?: (stats: FluidValidationStats) => void } = {}): Promise<void> {
-  const state = createState(gpu);
-  await prepareRenderer(state, target);
-  if (opts.soak) {
-    const aggressive = createAggressiveInput();
-    for (let i = 0; i < 12_000; i++) {
-      simulate(state, i < 10_000 ? undefined : aggressive);
-      if ((i + 1) % 1_000 === 0) {
-        await gpu.gpu.queue.onSubmittedWorkDone();
-        opts.onStateValidated?.(await readValidationStats(state));
-      }
-    }
-  } else {
-    const steps = Math.max(0, opts.warmupFrames ?? 120);
-    const scriptedInput = opts.scriptedDrag ? createScriptedDrag() : undefined;
-    for (let i = 0; i < steps; i++) simulate(state, scriptedInput);
-  }
-  render(state, target);
-  await gpu.gpu.queue.onSubmittedWorkDone();
-  await gpu.settled();
-  if (opts.onStateValidated) opts.onStateValidated(await readValidationStats(state));
-  state.mesh.destroy();
-  state.tracer.destroy();
-}
-
-function createState(gpu: Gpu): FluidState {
-  const velocity = gpu.pingPongStorage(CELLS * 8);
-  const dye = gpu.pingPongStorage(CELLS * 16);
-  const pressure = gpu.pingPongStorage(CELLS * 4);
-  const divergence = gpu.storage(CELLS * 4, 'read-write');
-  const tracer = gpu.device.createBuffer({ size: TRACERS * 32, usage: ['vertex', 'storage', 'copy_dst'], label: 'fluid-tracer-records' });
-  tracer.write(initialTracers());
-  const mesh = gpu.mesh({
-    label: 'fluid-passive-tracers',
-    instanceCount: TRACERS,
-    buffers: [
-      { data: new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), stride: 8, attributes: { local: 'float32x2' } },
-      { buffer: tracer.gpu, stride: 32, stepMode: 'instance', attributes: { particle_position: 'float32x2', particle_color: 'float32x4', particle_radius: 'float32', particle_age: 'float32' } },
-    ],
-  });
-  return { gpu, velocity, dye, pressure, divergence, tracer, mesh, passes: createPasses(gpu, mesh), step: 0, lastInputStep: -1000, bundles: undefined, bundleOutput: undefined };
-}
-
-function createPasses(gpu: Gpu, mesh: ReturnType<Gpu['mesh']>) {
-  const advectVelocity = gpu.compute(advectVelocityWgsl, { label: 'fluid-advect-velocity' });
-  const divergence = gpu.compute(divergenceWgsl, { label: 'fluid-divergence' });
-  const pressure = gpu.compute(pressureWgsl, { label: 'fluid-pressure-jacobi' });
-  const project = gpu.compute(projectWgsl, { label: 'fluid-project' });
-  const advectDye = gpu.compute(advectDyeWgsl, { label: 'fluid-advect-dye' });
-  const particles = gpu.compute(updateParticlesWgsl, { label: 'fluid-update-tracers' });
-  const display = [gpu.effect(displayWgsl, { label: 'fluid-display-even' }), gpu.effect(displayWgsl, { label: 'fluid-display-odd' })] as const;
-  const tracers = gpu.draw({ shader: particlesWgsl, label: 'fluid-tracers', mesh, blend: { color: { src: 'one', dst: 'one' }, alpha: { src: 'one', dst: 'one' } } });
-  return { advectVelocity, divergence, pressure, project, advectDye, particles, display, tracers };
-}
-
-async function prepareRenderer(state: FluidState, output: Output): Promise<void> {
-  const base = { ...simUniforms(state, undefined), output_size: output.size };
-  state.passes.display[0].set({ sim: base, dye: state.dye.read });
-  state.passes.display[1].set({ sim: base, dye: state.dye.write });
-  state.passes.tracers.set({ config: { aspect: output.size[0] / Math.max(1, output.size[1]), _pad: [0, 0, 0] } });
-  await Promise.all([state.passes.display[0].compile(output), state.passes.display[1].compile(output), state.passes.tracers.compile(output)]);
-  state.bundles = [0, 1].map((parity) => state.gpu.bundle({ target: output, label: `fluid-${parity ? 'odd' : 'even'}-bundle` }, (bundle) => { bundle.draw(state.passes.display[parity]!); bundle.draw(state.passes.tracers); })) as [Bundle, Bundle];
-  state.bundleOutput = output;
-}
-
-function simulate(state: FluidState, input?: StirInput): void {
-  if (input?.active) state.lastInputStep = state.step;
-  const sim = simUniforms(state, input);
-  const p = state.passes;
-  p.advectVelocity.set({ sim, src: state.velocity.read, dst: state.velocity.write }).dispatch(16, 9);
-  state.velocity.swap();
-  p.divergence.set({ sim, velocity: state.velocity.read, divergence: state.divergence }).dispatch(16, 9);
-  for (let i = 0; i < 8; i++) { p.pressure.set({ sim, src: state.pressure.read, divergence: state.divergence, dst: state.pressure.write }).dispatch(16, 9); state.pressure.swap(); }
-  p.project.set({ sim, src: state.velocity.read, pressure: state.pressure.read, dst: state.velocity.write }).dispatch(16, 9);
-  state.velocity.swap();
-  p.advectDye.set({ sim, src: state.dye.read, velocity: state.velocity.read, dst: state.dye.write }).dispatch(16, 9);
-  state.dye.swap();
-  p.particles.set({ sim, velocity: state.velocity.read, dye: state.dye.read, particles: state.tracer }).dispatch(64);
-  state.step++;
-  input?.consumeStep();
-}
-
-function render(state: FluidState, output: Output): void {
-  if (!state.bundles || state.bundleOutput !== output) return;
-  state.gpu.frame((frame) => frame.pass({ target: output, clear: CLEAR }, (pass) => pass.bundles(state.bundles![state.step & 1])));
-}
-
-function simUniforms(state: FluidState, input?: StirInput) {
-  const t = state.step / 60;
-  const ramp = Math.min(1, (state.step + 1) / 24);
-  const since = state.step - state.lastInputStep;
-  const idle = since < 90 ? .15 : .15 + .85 * Math.min(1, (since - 90) / 60);
-  const [a, b] = idleEmitters(state.step);
-  let velocity: [number, number] = input?.velocity ?? [0, 0];
-  if (input?.active && Math.hypot(...velocity) < .02) velocity = [.16 * Math.cos(t * 5), .16 * Math.sin(t * 5)];
-  const colors = [[.05, .55, 1, 1], [.65, .15, 1, 1], [1, .22, .12, 1]] as const;
-  return { size: [WIDTH, HEIGHT], step: state.step, pointer_active: input?.active ? 1 : 0, pointer_from: input?.from ?? [.5, .5], pointer_to: input?.to ?? [.5, .5], pointer_velocity: velocity, pointer_color: colors[((Math.floor(state.step / 90) + (input?.stroke ?? 0)) % colors.length)]!, idle_a: [...a, ramp * idle, .085], idle_b: [...b, ramp * idle, .08], output_size: [1, 1], _pad: [0, 0] };
-}
-
-function createScriptedDrag(): StirInput {
-  let step = 0;
-  const point = (n: number): [number, number] => [.5 + .28 * Math.cos(-1.2 + n / 29 * 2.4), .5 + .24 * Math.sin(-1.2 + n / 29 * 2.4)];
-  return {
-    get active() { return step < 32; },
-    get from() { return point(Math.max(0, Math.min(29, step - 1))); },
-    get to() { return point(Math.max(0, Math.min(29, step))); },
-    get velocity() { const a = point(Math.max(0, Math.min(29, step - 1))); const b = point(Math.max(0, Math.min(29, step))); return [(b[0] - a[0]) * 60, (b[1] - a[1]) * 60] as [number, number]; },
-    stroke: 1,
-    consumeStep() { step++; },
-    dispose() {},
-  };
-}
-
-function createAggressiveInput(): StirInput {
-  let step = 0;
-  const point = (n: number): [number, number] => [.5 + .42 * Math.sin(n * .37), .5 + .4 * Math.sin(n * .61 + 1.2)];
-  return {
-    active: true,
-    get from() { return point(step - 1); },
-    get to() { return point(step); },
-    get velocity() { const a = point(step - 1); const b = point(step); return [(b[0] - a[0]) * 60, (b[1] - a[1]) * 60]; },
-    stroke: 2,
-    consumeStep() { step++; },
-    dispose() {},
-  };
-}
-
-async function readValidationStats(state: FluidState): Promise<FluidValidationStats> {
-  const [velocityBytes, dyeBytes] = await Promise.all([state.velocity.read.read(), state.dye.read.read()]);
-  const velocity = new Float32Array(velocityBytes);
-  const dye = new Float32Array(dyeBytes);
-  let finite = true; let maxSpeed = 0; let maxDye = 0; let dyeSum = 0;
-  for (let i = 0; i < velocity.length; i += 2) {
-    const x = velocity[i]!; const y = velocity[i + 1]!;
-    finite &&= Number.isFinite(x) && Number.isFinite(y);
-    maxSpeed = Math.max(maxSpeed, Math.hypot(x, y));
-  }
-  for (let i = 0; i < dye.length; i++) { const value = dye[i]!; finite &&= Number.isFinite(value); maxDye = Math.max(maxDye, value); dyeSum += value; }
-  return { steps: state.step, finite, maxSpeed, maxDye, averageDye: dyeSum / dye.length };
-}
-
-function initialTracers(): ArrayBuffer {
-  const buffer = new ArrayBuffer(TRACERS * 32);
-  const data = new Float32Array(buffer);
-  for (let i = 0; i < TRACERS; i++) {
-    const a = hash(i * 3 + 1) * Math.PI * 2; const r = Math.sqrt(hash(i * 3 + 2)) * .28;
-    const k = i * 8; data[k] = .5 + Math.cos(a) * r; data[k + 1] = .5 + Math.sin(a) * r;
-    data[k + 2] = .08; data[k + 3] = .2; data[k + 4] = .4; data[k + 5] = .18; data[k + 6] = .0025; data[k + 7] = hash(i * 3 + 3) * 5;
-  }
-  return buffer;
-}
-function hash(value: number): number { let x = value | 0; x = Math.imul(x ^ (x >>> 16), 0x7feb352d); x = Math.imul(x ^ (x >>> 15), 0x846ca68b); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; }
