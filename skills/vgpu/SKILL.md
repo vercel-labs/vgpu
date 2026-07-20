@@ -24,19 +24,29 @@ npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Fra
 
 Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bake example thumbnails with `pnpm thumbs:docker` / `pnpm --filter docs thumbs:check` (pass `-- --only <slug>` for a single example).
 
+## Core concepts
+
+- **Context** — Everything in vgpu starts from one call.  `references/guides/concepts-context.docs.md`
+- **Draws** — A Draw renders geometry with custom vertex buffers: you write both the vertex and the fragment stage, and a mesh supplies the buffers.  `references/guides/concepts-draws.docs.md`
+- **Compilation** — Pipelines compile lazily: the first draw() against a new target pays the pipeline creation cost, and that cost lands inside your frame.  `references/guides/concepts-compilation.docs.md`
+- **Effects** — An Effect is a full-screen fragment shader created with gpu.effect(source).  `references/guides/concepts-effects.docs.md`
+- **Passes** — A pass is a render-pass section inside a frame.  `references/guides/concepts-passes.docs.md`
+- **Frames** — A frame is one unit of GPU work.  `references/guides/concepts-frames.docs.md`
+- **Render bundles** — A render loop re-encodes every pipeline, bind group, and draw on every tick — even when nothing changed.  `references/guides/concepts-render-bundles.docs.md`
+
 ## Performance guides
 
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.
 
-- **authoring-for-perf** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
-- **browser-testing** — Browser tests should exercise the same public API users copy: init(), gpu.surface(canvas, opts), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
-- **getting-started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
-- **measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
-- **optimize-pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
-- **performance-model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
-- **performance-patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
-- **performance-playbook** — This guide is for LLMs and humans writing shaders.  `references/guides/performance-playbook.docs.md`
-- **shader-fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
+- **Authoring shaders for performance** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
+- **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), gpu.surface(canvas, opts), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
+- **Getting started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
+- **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
+- **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
+- **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
+- **Performance patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
+- **Performance playbook: write fast vgpu by default** — This guide is for LLMs and humans writing shaders.  `references/guides/performance-playbook.docs.md`
+- **Shader diagnostics and fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
 
 ## API reference
 

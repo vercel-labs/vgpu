@@ -72,6 +72,7 @@ function enrichRecord(record) {
     anchor,
     topic,
     topicTitle,
+    ...(frontmatter.order === undefined ? {} : { order: parseOrder(frontmatter.order, record.repoPath) }),
     symbolKind: frontmatter.symbolKind ?? inferSymbolKind(record.symbol),
   };
 }
@@ -87,6 +88,15 @@ function parseFrontmatter(markdown) {
     frontmatter[key] = rawValue.trim().replace(/^['"]|['"]$/gu, "");
   }
   return { body: markdown.slice(match[0].length), frontmatter };
+}
+
+function parseOrder(value, repoPath) {
+  if (!/^-?\d+(?:\.\d+)?$/u.test(value)) {
+    throw new Error(`Invalid numeric order in ${repoPath}: ${value}`);
+  }
+  const order = Number(value);
+  if (!Number.isFinite(order)) throw new Error(`Invalid numeric order in ${repoPath}: ${value}`);
+  return order;
 }
 
 function topicForRecord(record) {

@@ -10,8 +10,7 @@
     "start": "next start --port 3001",
     "thumbs": "node scripts/render-example-thumbs.mjs --update",
     "thumbs:check": "node scripts/render-example-thumbs.mjs --check",
-    "typecheck": "tsc --noEmit",
-    "verify-concepts-snippets": "node scripts/verify-concepts-snippets.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",

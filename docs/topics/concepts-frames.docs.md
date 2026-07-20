@@ -12,6 +12,7 @@ prevNext:
   next:
     title: Render bundles
     href: /concepts/render-bundles
+order: 60
 ---
 
 # Frames
