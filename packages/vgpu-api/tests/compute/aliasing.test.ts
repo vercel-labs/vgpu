@@ -45,6 +45,19 @@ describe("compute storage aliasing", () => {
     expect(() => sim.dispatch(1)).not.toThrow();
   });
 
+  test("unused writable storage bindings do not participate in aliasing", async () => {
+    gpu = await init();
+    const shader = `
+      @group(0) @binding(0) var<storage, read> used: array<vec4f>;
+      @group(0) @binding(1) var<storage, read_write> unused: array<vec4f>;
+      @compute @workgroup_size(1) fn main() { let value = used[0]; }
+    `;
+    const sim = gpu.compute(shader, { label: "inactive-alias" });
+    const buffer = gpu.storage(16);
+    sim.set({ used: buffer, unused: buffer });
+    expect(() => sim.dispatch(1)).not.toThrow();
+  });
+
   test("storage access mode reflects in bind group layout entries", async () => {
     gpu = await init();
     const device = gpu.device.gpu as GPUDevice;

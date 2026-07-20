@@ -3,6 +3,7 @@ import type {
   BufferOptions,
   BufferPingPong,
   Device,
+  CreateDeviceOptions,
   TextureOptions,
   TexturePingPong,
 } from "../src/index.ts";
@@ -22,3 +23,9 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B 
 type _TextureOverload = Expect<Equal<typeof texturePair, TexturePingPong>>;
 type _BufferOverload = Expect<Equal<typeof bufferPair, BufferPingPong>>;
 type _UnionOverload = Expect<Equal<typeof unionPair, TexturePingPong | BufferPingPong>>;
+
+const validDeviceOptions: CreateDeviceOptions = { requiredLimits: { maxStorageBuffersInVertexStage: 2 } };
+void validDeviceOptions;
+// @ts-expect-error misspelled WebGPU limit names are rejected
+const invalidDeviceOptions: CreateDeviceOptions = { requiredLimits: { maxStorageBufferInVertexStage: 2 } };
+void invalidDeviceOptions;

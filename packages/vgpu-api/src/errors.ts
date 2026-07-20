@@ -3,6 +3,21 @@ import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 
+export function storageStageLimitError(label: string, stage: "vertex" | "fragment", entryPoint: string, count: number, limit: number, bindings: readonly BindingInfo[]): VGPUError {
+  const title = stage === "vertex" ? "Vertex" : "Fragment";
+  const suffix = stage === "vertex" ? "VERTEX" : "FRAGMENT";
+  const limitName = `maxStorageBuffersIn${title}Stage`;
+  return new VGPUError({
+    code: `VGPU-LIMIT-STORAGE-${suffix}`,
+    message: `${title} entry '${entryPoint}' in '${label}' uses ${count} storage buffer(s), but device limit ${limitName} is ${limit}.`,
+    fix: stage === "vertex"
+      ? `Request init({ requiredLimits: { ${limitName}: ${count} } }) if the adapter supports it, or move vertex data to gpu.mesh(...) vertex streams.`
+      : `Request init({ requiredLimits: { ${limitName}: ${count} } }) if the adapter supports it, or reduce fragment storage buffers.`,
+    where: `${label}.pipelineLayout`,
+    detail: { stage, entryPoint, count, limit, bindings: bindings.map(({ name, group, binding }) => ({ name, group, binding })) },
+  });
+}
+
 export function neverSetError(drawLabel: string, binding: BindingInfo): VGPUError {
   const fix = missingBindingFix(drawLabel, binding);
   return new VGPUError({

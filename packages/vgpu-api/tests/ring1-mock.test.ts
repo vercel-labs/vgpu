@@ -15,7 +15,8 @@ struct Params { time: f32, speed: f32 }
 
 const SAMPLER_SHADER = `
 @group(0) @binding(0) var samp: sampler;
-@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.0, 1.0); }
+fn useSampler(value: sampler) {}
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { useSampler(samp); return vec4f(uv, 0.0, 1.0); }
 `;
 
 const TEXTURE_SHADER = `

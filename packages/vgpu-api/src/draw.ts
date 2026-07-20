@@ -1,14 +1,15 @@
-import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
+import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { reflectSource, type Reflection } from "@vgpu/wgsl/reflect-source";
+import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
-import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
+import { createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
+import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, cachedBindGroupLayout, visibilityForEntries, type BindingVisibilityFn } from "./set-layouts.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
-import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, storageStageLimitError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { meshLayoutResolver, type MeshLayoutResolvable } from "./scene/mesh-descriptor.ts";
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
@@ -111,6 +112,9 @@ type DrawState = {
   readonly cache: BindGroupCache;
   readonly defaultTarget?: Target;
   readonly reflection: Reflection;
+  readonly visibility: BindingVisibilityFn;
+  readonly vertexEntry: string;
+  readonly fragmentEntry: string;
   readonly setCore: SetCore;
   readonly bindGroupLayouts: Map<number, GPUBindGroupLayout>;
   pipelineLayout: GPUPipelineLayout;
@@ -159,10 +163,15 @@ export class InternalDraw implements Draw {
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
     const reflection = reflectSource(source, `${this.label}.wgsl`);
+    const vertexEntry = reflection.entryPoints.find((entry) => entry.stage === "vertex");
+    const fragmentEntry = reflection.entryPoints.find((entry) => entry.stage === "fragment");
+    const selectedEntries = [vertexEntry, fragmentEntry].filter((entry): entry is EntryPointInfo => !!entry);
+    const visibility = visibilityForEntries(reflection.bindings, selectedEntries);
+    validateStorageStageLimits(device, this.label, reflection.bindings, selectedEntries, visibility);
     const mesh = opts.mesh as (MeshLike & Partial<MeshLayoutResolvable>) | undefined;
-    const inputs = reflection.entryPoints.find((entry) => entry.stage === "vertex")?.inputs ?? [];
+    const inputs = vertexEntry?.inputs ?? [];
     const vertexBufferLayouts = mesh && meshLayoutResolver in mesh ? mesh[meshLayoutResolver]!(inputs, `${this.label}.mesh`) : mesh?.vertexBufferLayouts;
-    const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection));
+    const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection, visibility));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
     const recordedIn = createBundleRegistry();
@@ -176,7 +185,7 @@ export class InternalDraw implements Draw {
       cache,
       onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
     });
-    drawStates.set(this, { id, device, opts, vertexBufferLayouts, cache, defaultTarget, reflection, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
+    drawStates.set(this, { id, device, opts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState });
     if (opts.set) this.set(opts.set);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -216,8 +225,7 @@ export class InternalDraw implements Draw {
     const existing = this.#dynamicBindGroupLayouts.get(group);
     if (existing) return existing;
     const entries = dynamicEntries(this, group);
-    const rawLayout = state.device.gpu.createBindGroupLayout({ label: `${this.label}.group${group}.dynamic.bgl`, entries });
-    const layout = attachBindGroupLayoutMetadata(rawLayout, { entries });
+    const layout = cachedBindGroupLayout(state.device, `${this.label}.group${group}.dynamic.bgl`, entries);
     this.#dynamicBindGroupLayouts.set(group, layout);
     state.bindGroupLayouts.set(group, layout);
     state.pipelineLayout = state.pipelineLayouts.get(state.bindGroupLayouts);
@@ -375,14 +383,11 @@ export class InternalDraw implements Draw {
 
   #createPipeline(signature: TargetSignature): GPURenderPipeline {
     const state = drawState(this);
-    const entries = state.reflection.entryPoints;
-    const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
-    const fragment = entries.find((entry) => entry.stage === "fragment")?.name ?? "fs_main";
     return state.device.gpu.createRenderPipeline({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
-      fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
+      vertex: { module: state.shaderModule, entryPoint: state.vertexEntry, buffers: [...(state.vertexBufferLayouts ?? [])] },
+      fragment: { module: state.shaderModule, entryPoint: state.fragmentEntry, targets: fragmentTargets(signature, state) },
       primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
@@ -391,18 +396,26 @@ export class InternalDraw implements Draw {
 
   #createPipelineAsync(signature: TargetSignature): Promise<GPURenderPipeline> {
     const state = drawState(this);
-    const entries = state.reflection.entryPoints;
-    const vertex = entries.find((entry) => entry.stage === "vertex")?.name ?? "vs_main";
-    const fragment = entries.find((entry) => entry.stage === "fragment")?.name ?? "fs_main";
     return state.device.gpu.createRenderPipelineAsync({
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: vertex, buffers: [...(state.vertexBufferLayouts ?? [])] },
-      fragment: { module: state.shaderModule, entryPoint: fragment, targets: fragmentTargets(signature, state) },
+      vertex: { module: state.shaderModule, entryPoint: state.vertexEntry, buffers: [...(state.vertexBufferLayouts ?? [])] },
+      fragment: { module: state.shaderModule, entryPoint: state.fragmentEntry, targets: fragmentTargets(signature, state) },
       primitive: primitiveState(state.opts.mesh),
       depthStencil: signature.depth ? { format: signature.depth, depthWriteEnabled: true, depthCompare: "less" } : undefined,
       multisample: { count: signature.sampleCount ?? 1 },
     });
+  }
+}
+
+function validateStorageStageLimits(device: Device, label: string, bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[], visibility: BindingVisibilityFn): void {
+  const limits = device.limits as unknown as Record<string, number | undefined>;
+  for (const [stage, flag, limitName] of [["vertex", 1, "maxStorageBuffersInVertexStage"], ["fragment", 2, "maxStorageBuffersInFragmentStage"]] as const) {
+    const entry = entries.find((item) => item.stage === stage);
+    if (!entry) continue;
+    const used = bindings.filter((binding) => binding.bindingLayout?.kind === "buffer" && binding.bindingLayout.buffer.type !== "uniform" && (visibility(binding) & flag));
+    const limit = limits[limitName] ?? limits.maxStorageBuffersPerShaderStage;
+    if (limit !== undefined && used.length > limit) throw storageStageLimitError(label, stage, entry.name, used.length, limit, used);
   }
 }
 
@@ -599,7 +612,8 @@ function offsetsForGroup(offsets: DrawCallOptions["offsets"], group: number, fal
 }
 
 function dynamicEntries(draw: InternalDraw, group: number): GPUBindGroupLayoutEntry[] {
-  return bindGroupLayoutEntriesForGroup(drawState(draw).reflection.bindings, group).map(dynamicEntry);
+  const state = drawState(draw);
+  return bindGroupLayoutEntriesForGroup(state.reflection.bindings, group, state.visibility).map(dynamicEntry);
 }
 
 function dynamicEntry(entry: GPUBindGroupLayoutEntry): GPUBindGroupLayoutEntry {

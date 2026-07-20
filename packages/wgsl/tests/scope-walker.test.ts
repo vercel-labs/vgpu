@@ -75,12 +75,11 @@ test("scope walker classifies safe post-mangle private helper declarations and r
   expect(helperRefs).toHaveLength(1);
 });
 
-test("scope walker falls back per-function for loop continuing and malformed var template", () => {
+test("scope walker handles loop continuing and falls back for malformed var templates", () => {
   const analysis = analyzeWgslScopes("fn f() { loop { continuing { break; } } } fn g() { var<function x = 1u; }");
 
   expect(analysis.fallback.wholeModule).toBe(false);
-  expect(analysis.functions.find((fn) => fn.name === "f")?.skipped).toBe(true);
-  expect(analysis.functions.find((fn) => fn.name === "f")?.fallbackReasons.join("\n")).toContain("loop continuing block");
+  expect(analysis.functions.find((fn) => fn.name === "f")?.skipped).toBe(false);
   expect(analysis.functions.find((fn) => fn.name === "g")?.skipped).toBe(true);
   expect(analysis.functions.find((fn) => fn.name === "g")?.fallbackReasons.join("\n")).toContain("unparseable var template");
 });

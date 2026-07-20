@@ -23,6 +23,7 @@ export type {
   TextureOptions,
   TextureUsageName,
   CreateDeviceOptions,
+  RequiredDeviceLimits,
   VGPUAdapter,
 } from "./types.ts";
 export type {

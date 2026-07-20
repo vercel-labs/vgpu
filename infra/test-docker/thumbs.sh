@@ -19,6 +19,7 @@ trap cleanup EXIT INT TERM
 cleanup
 
 docker build --platform linux/arm64 -t "$IMAGE_TAG" -f "$ROOT_DIR/infra/test-docker/Dockerfile" "$ROOT_DIR"
+docker image prune -f --filter "label=vgpu-test=1" >/dev/null
 
 docker run \
   --rm \
