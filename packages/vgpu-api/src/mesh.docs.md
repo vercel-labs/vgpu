@@ -104,7 +104,7 @@ interface Mesh {
 | options.topology | `GPUPrimitiveTopology` | ✖ | `"triangle-list"` | Pipeline-affecting mesh topology. Strip topologies derive `stripIndexFormat` from `indexFormat`. |
 | mesh.slice.opts | `MeshSliceOptions` | ✖ | full range | Frozen range view sharing buffers and layout identity with the parent mesh. |
 | mesh.write.data | `MeshData` | ✔ | — | Writes to buffer 0 using `queue.writeBuffer`. No resize. |
-| mesh.writeIndices.data | `Uint16Array \| Uint32Array` | ✔ | — | Writes to the owned or escape-hatch index buffer. No resize. |
+| mesh.writeIndices.data | `Uint16Array \| Uint32Array` | ✔ | — | Writes to an index buffer owned from `options.indices`. Write caller-owned `indexBuffer` objects directly. No resize. |
 
 **Returns:** `gpu.mesh()` returns `Mesh`; `mesh.slice()` returns `MeshSlice`; `write()`, `writeIndices()`, and `destroy()` return `void`.
 
@@ -143,6 +143,10 @@ const triangle = gpu.mesh({
 ```
 
 ```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const ledVertices = new Float32Array(6 * 6);
 const ledMesh = gpu.mesh({
   label: "triangle-led-front-led-emitters",
   buffers: [{
@@ -158,6 +162,11 @@ const ledMesh = gpu.mesh({
 ```
 
 ```ts
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const quadCorners = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+const instanceData = new Float32Array(4 * 10);
 const particles = gpu.mesh({
   topology: "triangle-strip",
   buffers: [
@@ -171,24 +180,47 @@ const particles = gpu.mesh({
 ```
 
 ```ts
-const gltfMesh = gpu.mesh({ buffers: streams, indices: allIndices });
+import { init } from "vgpu/mock";
+
+const gpu = await init();
+const vertexData = new Float32Array(3 * 4500);
+const allIndices = new Uint32Array(4500);
+const gltfMesh = gpu.mesh({
+  buffers: [{ data: vertexData, attributes: { position: "float32x3" } }],
+  indices: allIndices,
+});
 const hull = gltfMesh.slice({ firstIndex: 0, indexCount: 3600 });
 const glass = gltfMesh.slice({ firstIndex: 3600, indexCount: 900, label: "glass" });
+const pbrWgsl = "@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }";
 
-gpu.draw({ shader: pbrWgsl, mesh: hull, set: { material: hullMat } });
-gpu.draw({ shader: glassWgsl, mesh: glass, set: { material: glassMat }, blend: "alpha" });
+gpu.draw({ shader: pbrWgsl, mesh: hull });
+gpu.draw({ shader: pbrWgsl, mesh: glass, blend: "alpha" });
 ```
 
 ```ts
-const text = gpu.mesh({ buffers: [{ data: glyphQuads, attributes: { pos: "float32x2", uv: "float32x2" } }], indices: quadIndices });
-const textDraw = gpu.draw({ shader: sdfTextWgsl, mesh: text, set: { atlas } });
+import { init } from "vgpu/mock";
 
-text.write(packedGlyphs);
-text.writeIndices(packedIndices);
-textDraw.draw({ target, indices: glyphCount * 6 });
+const gpu = await init();
+const glyphQuads = new Float32Array(4 * 4);
+const quadIndices = new Uint16Array([0, 1, 2, 2, 1, 3]);
+const text = gpu.mesh({
+  buffers: [{ data: glyphQuads, attributes: { pos: "float32x2", uv: "float32x2" } }],
+  indices: quadIndices,
+});
+const sdfTextWgsl = "@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }";
+const textDraw = gpu.draw({ shader: sdfTextWgsl, mesh: text });
+const target = gpu.target({ size: [640, 480] });
+
+text.write(new Float32Array(4 * 4));
+text.writeIndices(new Uint16Array([0, 1, 2, 2, 1, 3]));
+textDraw.draw({ target, indices: 6 });
 ```
 
 ```ts
+import { init } from "vgpu/mock";
+import { box } from "vgpu/scene";
+
+const gpu = await init();
 const cube = gpu.mesh(box({ size: 2 }));
 ```
 
