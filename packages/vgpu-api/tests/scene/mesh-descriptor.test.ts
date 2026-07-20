@@ -101,6 +101,12 @@ test("caller-owned buffers require explicit counts and a complete index trio", a
     const raw = { buffer: vertex, attributes: { pos: { format: "float32x2" as const, location: 0 } } };
     expect(() => gpu.mesh({ buffers: [raw] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
     expect(gpu.mesh({ buffers: [raw], vertexCount: 3 }).vertexCount).toBe(3);
+    const owned = { data: new Float32Array(6), attributes: { position: { format: "float32x2" as const, location: 0 } } };
+    const hybridRaw = { buffer: vertex, attributes: { uv: { format: "float32x2" as const, location: 1 } } };
+    expect(gpu.mesh({ buffers: [owned, hybridRaw] }).vertexCount).toBe(3);
+    const instances = [owned, hybridRaw].map((buffer) => ({ ...buffer, stepMode: "instance" as const }));
+    expect(gpu.mesh({ buffers: instances }).instanceCount).toBe(3);
+    expect(() => gpu.mesh({ buffers: [{ ...hybridRaw, stepMode: "instance" }] })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
     expect(() => gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
     expect(() => gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index, indexFormat: "uint16" })).toThrowError(/VGPU-MESH-LAYOUT-INVALID/);
     expect(gpu.mesh({ buffers: [raw], vertexCount: 3, indexBuffer: index, indexFormat: "uint16", indexCount: 4 }).indexCount).toBe(4);

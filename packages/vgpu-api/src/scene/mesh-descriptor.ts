@@ -125,10 +125,10 @@ export class Mesh implements MeshLike {
     const topology = opts.topology ?? "triangle-list";
     if (!TOPOLOGIES.has(topology)) throw meshLayoutInvalidError(where, `Invalid topology: ${String(topology)}.`);
     const index = normalizeIndex(device, opts, where);
-    requireExplicitRawCount(normalized, "vertex", opts.vertexCount, where);
-    requireExplicitRawCount(normalized, "instance", opts.instanceCount, where);
     const vertexCapacity = deriveCount(normalized, "vertex");
     const instanceCapacity = deriveCount(normalized, "instance");
+    requireExplicitRawCount(normalized, "vertex", opts.vertexCount ?? vertexCapacity, where);
+    requireExplicitRawCount(normalized, "instance", opts.instanceCount ?? instanceCapacity, where);
     validateOptionalCapacity(where, "vertexCount", opts.vertexCount, vertexCapacity);
     validateOptionalCapacity(where, "instanceCount", opts.instanceCount, instanceCapacity);
     validateOptionalCapacity(where, "indexCount", opts.indexCount, index.count);
