@@ -1,11 +1,59 @@
-name: Dawn binary build placeholder
+name: Build portable Dawn prebuild
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  disabled-placeholder:
-    if: false
+  linux-arm64-gnu:
+    name: Linux arm64 (glibc 2.31)
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
     steps:
-      - run: echo "Future issue #13 workflow: build webgpu@0.3.10 linux-arm64 Dawn binary, smoke-test on Node 20, and package @vgpu/adapter-node-linux-arm64."
+      - uses: actions/checkout@v4
+
+      - name: Build pinned webgpu 0.4.0 addon in Ubuntu 20.04
+        run: docker build --pull --tag vgpu-dawn-arm64:0.4.0 --file .github/dawn/Dockerfile .github/dawn
+
+      - name: Extract release assets and provenance
+        run: |
+          mkdir -p dawn-out
+          container=$(docker create vgpu-dawn-arm64:0.4.0)
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container":/out/. dawn-out/
+          docker rm "$container" >/dev/null
+          trap - EXIT
+
+      - name: Enforce ELF portability contract
+        run: |
+          set -euo pipefail
+          binary=dawn-out/dawn-linux-arm64-gnu.node
+          test "$(file "$binary" | grep -c 'ELF 64-bit.*ARM aarch64')" -eq 1
+          max_glibc=$(readelf --version-info "$binary" | grep -o 'GLIBC_[0-9.]\+' | sort -V | tail -1)
+          test "$(printf '%s\n' GLIBC_2.31 "$max_glibc" | sort -V | tail -1)" = GLIBC_2.31
+          ! readelf --version-info "$binary" | grep -qE 'GLIBCXX_|CXXABI_'
+          ! readelf -d "$binary" | grep -qE 'RPATH|RUNPATH'
+          (cd dawn-out && sha256sum --check SHA256SUMS)
+
+      - name: Smoke-load with supported Node 22
+        run: |
+          docker run --rm \
+            --volume "$PWD/dawn-out:/out:ro" \
+            node:22-bookworm \
+            node -e "const addon=require('/out/dawn-linux-arm64-gnu.node'); if(typeof addon.create!=='function'||!addon.globals) process.exit(2); console.log('Node 22 native load: OK')"
+
+      - name: Upload prebuild, checksum, and audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dawn-v0.4.0-vgpu-linux-arm64-gnu
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dawn-out/dawn-linux-arm64-gnu.node
+            dawn-out/SHA256SUMS
+            dawn-out/source-manifest.txt
+            dawn-out/readelf-version-info.txt
+            dawn-out/readelf-dynamic.txt
+            dawn-out/build.log

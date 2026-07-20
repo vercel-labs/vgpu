@@ -15,7 +15,10 @@ configurations that block lifecycle scripts. Downloads come from the pinned
 the hash pinned in `@vgpu/adapter-node`. Private-repository and draft-release
 access honors `GH_TOKEN` or `GITHUB_TOKEN`; published public assets are fetched
 without a token. Override the cache root with `VGPU_CACHE_DIR` (or
-`XDG_CACHE_HOME`).
+`XDG_CACHE_HOME`). Cache entries must be regular, non-symlink files. Before
+native loading, the verified bytes are copied through one open file descriptor
+into a private per-process directory and that exact private copy is loaded,
+preventing cache replacement between verification and `require()`.
 
 The portable prebuild currently supports Linux arm64 with glibc 2.31 or newer.
 Linux musl, other Linux CPUs, and other operating systems continue to try stock

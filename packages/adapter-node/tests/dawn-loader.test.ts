@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -40,6 +40,31 @@ describe("Dawn prebuild integrity", () => {
     expect(second).toEqual({ path: first.path, downloaded: false });
     expect(fetch).toHaveBeenCalledOnce();
   });
+
+  test("concurrent downloads use independent temporary files and converge", async () => {
+    const cacheRoot = tempDir();
+    const fetch = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return new Response(fixtureBytes, { status: 200 });
+    });
+    const options = { cacheRoot, platform: "linux" as const, arch: "arm64", libc: "glibc" as const, env: {}, fetch, expectedSha256: fixtureSha256 };
+    const [first, second] = await Promise.all([installDawn(options), installDawn(options)]);
+    expect(first.path).toBe(second.path);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(() => verifyDawnBinary(first.path, fixtureSha256)).not.toThrow();
+  });
+
+  test("rejects a symlinked cache entry", async () => {
+    const cacheRoot = tempDir();
+    const target = `${tempDir()}/fixture.node`;
+    writeFileSync(target, fixtureBytes);
+    const cached = dawnCachePath({ cacheRoot });
+    mkdirSync(dirname(cached), { recursive: true });
+    symlinkSync(target, cached);
+    expect(() => getCachedDawnBinary({ cacheRoot, expectedSha256: fixtureSha256 })).toThrowError(
+      expect.objectContaining({ code: "VGPU-NODE-PREBUILD-CHECKSUM" }),
+    );
+  });
 });
 
 describe("Dawn resolution order", () => {
@@ -71,10 +96,34 @@ describe("Dawn resolution order", () => {
       env: {},
       require: ((id: string) => {
         calls.push(id);
+        writeFileSync(id, "replacement inside private load directory");
         return fakeModule;
       }) as NodeJS.Require,
     });
-    expect(calls).toEqual([cached]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toBe(cached);
+    expect(readFileSync(cached)).toEqual(fixtureBytes);
+  });
+
+  test("never loads a Linux cache when platform eligibility fails", async () => {
+    const cacheRoot = tempDir();
+    const cached = dawnCachePath({ cacheRoot });
+    mkdirSync(dirname(cached), { recursive: true });
+    writeFileSync(cached, fixtureBytes);
+    const calls: string[] = [];
+    await resolveWebGPU({
+      cacheRoot,
+      expectedSha256: fixtureSha256,
+      platform: "linux",
+      arch: "x64",
+      libc: "glibc",
+      env: {},
+      require: ((id: string) => {
+        calls.push(id);
+        return fakeModule;
+      }) as NodeJS.Require,
+    });
+    expect(calls).toEqual(["webgpu"]);
   });
 
   test("uses stock webgpu before attempting a lazy download", async () => {
@@ -122,6 +171,42 @@ describe("Dawn error taxonomy", () => {
         }) as unknown as NodeJS.Require,
       }),
     ).rejects.toMatchObject({ code: "VGPU-NODE-PREBUILD-MISSING", message: expect.stringContaining("unsupported platform darwin/arm64") });
+  });
+
+  test("bounds requests even when fetch ignores AbortSignal", async () => {
+    await expect(
+      installDawn({
+        cacheRoot: tempDir(),
+        platform: "linux",
+        arch: "arm64",
+        libc: "glibc",
+        env: {},
+        requestTimeoutMs: 10,
+        overallTimeoutMs: 20,
+        fetch: vi.fn(() => new Promise<Response>(() => {})),
+      }),
+    ).rejects.toMatchObject({ code: "VGPU-NODE-PREBUILD-MISSING", message: expect.stringContaining("timed out") });
+  });
+
+  test("bounds authenticated release metadata bodies", async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => new Promise<unknown>(() => {}),
+    } as Response;
+    await expect(
+      installDawn({
+        cacheRoot: tempDir(),
+        platform: "linux",
+        arch: "arm64",
+        libc: "glibc",
+        env: { GH_TOKEN: "test" },
+        requestTimeoutMs: 10,
+        overallTimeoutMs: 20,
+        fetch: vi.fn(async () => response),
+      }),
+    ).rejects.toMatchObject({ code: "VGPU-NODE-PREBUILD-MISSING", message: expect.stringContaining("timed out") });
   });
 
   test("reports offline download failure with manual install guidance", async () => {

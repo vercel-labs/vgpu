@@ -1,7 +1,13 @@
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { VGPUError } from "@vgpu/core";
-import { getCachedDawnBinary, installDawn, type DawnInstallOptions } from "./dawn-installer.ts";
+import {
+  createPrivateDawnCopy,
+  getCachedDawnBinary,
+  getUnsupportedPrebuildReason,
+  installDawn,
+  type DawnInstallOptions,
+} from "./dawn-installer.ts";
 
 export type WebGPUModule = { create(options: string[]): GPU; globals: Record<string, unknown> };
 type Require = NodeJS.Require;
@@ -25,9 +31,10 @@ export async function resolveWebGPU(options: DawnResolverOptions = {}): Promise<
     return requireNative(requireImpl, path, "VGPU_DAWN_BINARY");
   }
 
-  if (platform === "linux") {
+  const unsupportedPrebuild = getUnsupportedPrebuildReason({ platform, arch, libc: options.libc });
+  if (!unsupportedPrebuild) {
     const cached = getCachedDawnBinary(options);
-    if (cached) return requireNative(requireImpl, cached, "vgpu cache");
+    if (cached) return requireVerifiedNative(requireImpl, cached, "vgpu cache", options.expectedSha256);
   }
 
   let stockError: unknown;
@@ -39,13 +46,22 @@ export async function resolveWebGPU(options: DawnResolverOptions = {}): Promise<
 
   try {
     const installed = await installDawn({ ...options, env, platform, arch });
-    return requireNative(requireImpl, installed.path, "downloaded vgpu prebuild");
+    return requireVerifiedNative(requireImpl, installed.path, "downloaded vgpu prebuild", options.expectedSha256);
   } catch (prebuildError) {
     throw combineResolutionErrors(stockError, prebuildError, platform, arch);
   }
 }
 
-function requireNative(requireImpl: Require, path: string, provider: string): WebGPUModule {
+function requireVerifiedNative(requireImpl: Require, sourcePath: string, provider: string, expectedSha256?: string): WebGPUModule {
+  const privateCopy = createPrivateDawnCopy(sourcePath, expectedSha256);
+  try {
+    return requireNative(requireImpl, privateCopy.path, provider, sourcePath);
+  } finally {
+    privateCopy.cleanup();
+  }
+}
+
+function requireNative(requireImpl: Require, path: string, provider: string, reportedPath = path): WebGPUModule {
   try {
     const loaded = requireImpl(path) as Partial<WebGPUModule>;
     if (typeof loaded.create !== "function" || !loaded.globals) throw new Error("module does not export Dawn create() and globals");
@@ -56,7 +72,7 @@ function requireNative(requireImpl: Require, path: string, provider: string): We
       code: mismatch ? "VGPU-NODE-GLIBC-MISMATCH" : "VGPU-NODE-NATIVE-LOAD",
       message: mismatch
         ? `Dawn from ${provider} requires GLIBC ${mismatch.required}, but this host reports GLIBC ${mismatch.host ?? "unknown"}.`
-        : `@vgpu/adapter-node could not load Dawn from ${provider} (${path}).`,
+        : `@vgpu/adapter-node could not load Dawn from ${provider} (${reportedPath}).`,
       fix: mismatch
         ? "Install the portable prebuild with `pnpm exec vgpu install-dawn`, or set VGPU_DAWN_BINARY to a compatible binary. Do not upgrade glibc in place."
         : "Check that the file exists, matches this OS/CPU and Node ABI, and that its shared libraries are installed.",
