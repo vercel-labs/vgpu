@@ -4,6 +4,8 @@ export const exampleRunnerSlugs = [
   'anti-aliasing',
   'post-processing',
   'fluid',
+  'instanced-rendering',
+  'batch-rendering',
 ] as const;
 
 export type ExampleRunnerSlug = (typeof exampleRunnerSlugs)[number];

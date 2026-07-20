@@ -6,6 +6,8 @@ import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/met
 import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
 import { meta as postProcessingMeta } from '../examples/post-processing/meta';
 import { meta as fluidMeta } from '../examples/fluid/meta';
+import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
+import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
 
 export interface ExampleThumbOptions {
   readonly warmupFrames?: number;
@@ -37,6 +39,8 @@ const rawMetas = [
   antiAliasingMeta,
   postProcessingMeta,
   fluidMeta,
+  instancedRenderingMeta,
+  batchRenderingMeta,
 ] as const satisfies readonly ExampleMeta[];
 
 const metas = rawMetas.map((meta) => ({

@@ -3,6 +3,8 @@ import { run as runTriangleLedFront } from '../examples/triangle-led-front/examp
 import { run as runAntiAliasing } from '../examples/anti-aliasing/example';
 import { run as runPostProcessing } from '../examples/post-processing/example';
 import { run as runFluid } from '../examples/fluid/example';
+import { run as runInstancedRendering } from '../examples/instanced-rendering/example';
+import { run as runBatchRendering } from '../examples/batch-rendering/example';
 import type { ExampleRunnerSlug } from './example-runner-slugs';
 
 export type ExampleRunner = (canvas: HTMLCanvasElement) => Promise<() => void>;
@@ -13,6 +15,8 @@ export const exampleRunners = {
   'anti-aliasing': runAntiAliasing,
   'post-processing': runPostProcessing,
   fluid: runFluid,
+  'instanced-rendering': runInstancedRendering,
+  'batch-rendering': runBatchRendering,
 } satisfies Record<ExampleRunnerSlug, ExampleRunner>;
 
 export function getExampleRunner(slug: string): ExampleRunner | undefined {

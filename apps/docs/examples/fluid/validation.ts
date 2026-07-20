@@ -55,7 +55,7 @@ function scriptedInput(rate: number, radiusX: number, radiusY: number, activeSte
     get to() { return point(step); },
     get velocity() {
       const from = point(step - 1), to = point(step);
-      return [(to[0] - from[0]) * 60, (to[1] - from[1]) * 60];
+      return [(to[0] - from[0]) * 60, (to[1] - from[1]) * 60] as [number, number];
     },
     stroke: 1,
     consumeStep() { step++; },
