@@ -18,6 +18,8 @@ const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 /** @type {CustomRendererEntry[]} */
 const customRendererEntries = [
   { slug: 'triangle-led-front', module: '../examples/triangle-led-front/example.ts', exportName: 'renderThumb' },
+  { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
+  { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
 ];
 
 const sizes = {
