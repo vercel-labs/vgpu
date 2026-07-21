@@ -1,4 +1,4 @@
-import { Device, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
+import { Device, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
 import { resolveWebGPU, type WebGPUModule } from "./dawn-loader.ts";
 type NodeAdapterFlags = { readonly backendFlags?: readonly string[] };
 type NodeAdapterRetryOptions = { readonly adapterRequestRetryCount?: number; readonly adapterRequestRetryBaseDelayMs?: number };
@@ -49,7 +49,14 @@ async function requestAdapterWithRetry(gpu: GPU, options: GPURequestAdapterOptio
     }
   }
 
-  throw new Error(`No WebGPU adapter available for @vgpu/adapter-node after ${maxAttempts} attempts: ${String(lastError)}`);
+  const tried = JSON.stringify(options);
+  throw new VGPUError({
+    code: "VGPU-NODE-NO-ADAPTER",
+    message: `No WebGPU adapter available after ${maxAttempts} attempts with requestAdapter(${tried}) and Dawn flags [${dawnFlagsUsed?.join(",") ?? ""}].`,
+    fix: "Check the Mesa/driver version, Vulkan ICD (VK_ICD_FILENAMES), and display variables (DISPLAY, WAYLAND_DISPLAY, XDG_RUNTIME_DIR). Use VGPU_DAWN_FLAGS to select a Dawn backend explicitly.",
+    where: "createNodeAdapter",
+    cause: lastError,
+  });
 }
 
 function shouldRetryAdapterRequestError(error: unknown): boolean {
@@ -86,8 +93,9 @@ function backendFlags(opts: RequestDeviceOptions): readonly string[] {
   const envFlags = process.env.VGPU_DAWN_FLAGS?.split(/\s+/).filter(Boolean);
   if (envFlags && envFlags.length > 0) return envFlags;
   if (opts.backendFlags) return opts.backendFlags;
-  if (opts.backend === "webgpu") return [];
-  return process.platform === "linux" ? ["backend=opengl"] : [];
+  if (opts.backend === "opengl") return ["backend=opengl"];
+  if (process.platform === "linux" && opts.backend !== "webgpu" && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) return ["backend=opengl"];
+  return [];
 }
 
 function adapterOptions(opts: RequestDeviceOptions): DawnAdapterOptions {
