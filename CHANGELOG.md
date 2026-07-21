@@ -1,3 +1,9 @@
+## 0.1.1 — 2026-07-21
+
+### Fixed
+- `vgpu`: restore the `vgpu` executable with the complete bundled CLI, including offline documentation, snapshot, and Dawn installation commands.
+- `@vgpu/cli`: mark the extracted CLI package private so releases publish only the public `vgpu` package.
+
 ## 0.1.0 — 2026-07-21
 
 ### Breaking

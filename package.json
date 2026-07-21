@@ -7,7 +7,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "build": "tsc -b && node -e \"require('fs').copyFileSync('packages/wgsl/src/wgsl-types.d.ts', 'packages/wgsl/dist/wgsl-types.d.ts')\"",
+    "build": "tsc -b && node packages/vgpu-api/scripts/copy-cli.mjs && node -e \"require('fs').copyFileSync('packages/wgsl/src/wgsl-types.d.ts', 'packages/wgsl/dist/wgsl-types.d.ts')\"",
     "typecheck": "tsc -b && pnpm run typecheck:fixtures",
     "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json && tsc -p packages/vgpu-api/tests/uniforms/tsconfig.types.json",
     "docs:verify-snippets": "node scripts/verify-docs-snippets.mjs",

@@ -21,7 +21,7 @@
   },
   "license": "MIT",
   "author": "Matias Gonzalez <matiasngf@hotmail.com>",
-  "private": false,
+  "private": true,
   "publishConfig": {
     "access": "public"
   },
