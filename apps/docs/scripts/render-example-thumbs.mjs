@@ -37,7 +37,7 @@ const compareOptions = {
   maxDiffRatio: 0.02,
 };
 const aaModeNames = new Map([[0, 'off'], [1, 'msaa-4x'], [2, 'ssaa-2x'], [3, 'fxaa']]);
-const postProcessingModeNames = ['all-off', 'bloom-only', 'ca-only', 'grain-only'];
+const postProcessingModeNames = ['all-off', 'bloom-only', 'ca-only'];
 
 function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
   const effect = gpu.effect(fragmentSource);
@@ -208,9 +208,8 @@ function assertPostProcessingMetrics(modePixels, poster, width, height) {
   const off = modePixels.get('all-off');
   const bloom = compareBloom(off, modePixels.get('bloom-only'), width, height);
   const ca = compareChromaticAberration(off, modePixels.get('ca-only'), width, height);
-  const grain = compareGrain(off, modePixels.get('grain-only'));
   const posterMetrics = postProcessingPosterMetrics(poster);
-  const metrics = { bloom, ca, grain, poster: posterMetrics };
+  const metrics = { bloom, ca, poster: posterMetrics };
   const problems = [];
 
   if (bloom.growthRatio < .0015) problems.push(`Bloom bright-area growth ${(bloom.growthRatio * 100).toFixed(3)}% (need >=0.150%)`);
@@ -218,17 +217,13 @@ function assertPostProcessingMetrics(modePixels, poster, width, height) {
   if (ca.diffRatio < .008) problems.push(`Chromatic aberration changed only ${(ca.diffRatio * 100).toFixed(3)}% of pixels (need >=0.800%)`);
   if (ca.outerConcentration < .72) problems.push(`Chromatic aberration outer concentration ${(ca.outerConcentration * 100).toFixed(1)}% (need >=72%)`);
   if (ca.fringeRatio < .55) problems.push(`Chromatic aberration color-fringe ratio ${(ca.fringeRatio * 100).toFixed(1)}% (need >=55%)`);
-  if (grain.meanVisibleDelta < .65 || grain.meanVisibleDelta > 3.2) problems.push(`Film grain mean visible delta ${grain.meanVisibleDelta.toFixed(2)} (need 0.65–3.20)`);
-  if (grain.p99Delta < 2 || grain.p99Delta > 8) problems.push(`Film grain p99 delta ${grain.p99Delta.toFixed(1)} (need 2–8)`);
-  if (grain.maxDelta > 11) problems.push(`Film grain max delta ${grain.maxDelta} (need <=11; whole-screen flicker guard)`);
-  if (grain.blackMeanDelta > .35) problems.push(`Film grain black mean delta ${grain.blackMeanDelta.toFixed(2)} (need <=0.35)`);
   if (posterMetrics.coverage < .025 || posterMetrics.coverage > .24) problems.push(`Poster geometry coverage ${(posterMetrics.coverage * 100).toFixed(1)}% (need 2.5–24%)`);
   if (posterMetrics.highlightRatio < .0003 || posterMetrics.highlightRatio > .025) problems.push(`Poster highlight coverage ${(posterMetrics.highlightRatio * 100).toFixed(3)}% (need 0.030–2.500%)`);
   if (posterMetrics.darkRatio < .72) problems.push(`Poster dark-background coverage ${(posterMetrics.darkRatio * 100).toFixed(1)}% (need >=72%)`);
   if (problems.length) throw new Error([
     `Post-processing semantic validation failed (${width}x${height}):`,
     ...problems.map((problem) => `- ${problem}`),
-    'Set VGPU_POST_PROCESSING_MODE_OUTPUT_DIR and inspect all-off/bloom-only/ca-only/grain-only captures.',
+    'Set VGPU_POST_PROCESSING_MODE_OUTPUT_DIR and inspect all-off/bloom-only/ca-only captures.',
   ].join('\n'));
   return metrics;
 }
@@ -272,25 +267,6 @@ function compareChromaticAberration(off, ca, width, height) {
     diffRatio: changed / count,
     outerConcentration: changed ? outer / changed : 0,
     fringeRatio: changed ? fringed / changed : 0,
-  };
-}
-
-function compareGrain(off, grain) {
-  const visibleDeltas = [];
-  let visibleSum = 0, blackSum = 0, blackCount = 0, maxDelta = 0;
-  for (let i = 0; i < off.length; i += 4) {
-    const before = 0.2126 * off[i] + 0.7152 * off[i + 1] + 0.0722 * off[i + 2];
-    const delta = Math.max(Math.abs(grain[i] - off[i]), Math.abs(grain[i + 1] - off[i + 1]), Math.abs(grain[i + 2] - off[i + 2]));
-    maxDelta = Math.max(maxDelta, delta);
-    if (before >= 14) { visibleDeltas.push(delta); visibleSum += delta; }
-    else { blackSum += delta; blackCount++; }
-  }
-  visibleDeltas.sort((a, b) => a - b);
-  return {
-    meanVisibleDelta: visibleDeltas.length ? visibleSum / visibleDeltas.length : 0,
-    p99Delta: visibleDeltas.length ? visibleDeltas[Math.min(visibleDeltas.length - 1, Math.floor(visibleDeltas.length * .99))] : 0,
-    maxDelta,
-    blackMeanDelta: blackCount ? blackSum / blackCount : 0,
   };
 }
 
@@ -405,8 +381,8 @@ function formatAaMetrics(metrics) {
 }
 
 function formatPostProcessingMetrics(metrics) {
-  const { bloom, ca, grain, poster } = metrics;
-  return `bloom growth=${(bloom.growthRatio * 100).toFixed(3)}% core=${(bloom.coreConcentration * 100).toFixed(1)}%, CA diff=${(ca.diffRatio * 100).toFixed(3)}% outer=${(ca.outerConcentration * 100).toFixed(1)}% fringe=${(ca.fringeRatio * 100).toFixed(1)}%, grain mean=${grain.meanVisibleDelta.toFixed(2)} p99=${grain.p99Delta.toFixed(1)} max=${grain.maxDelta} black=${grain.blackMeanDelta.toFixed(2)}, poster=${JSON.stringify(poster)}`;
+  const { bloom, ca, poster } = metrics;
+  return `bloom growth=${(bloom.growthRatio * 100).toFixed(3)}% core=${(bloom.coreConcentration * 100).toFixed(1)}%, CA diff=${(ca.diffRatio * 100).toFixed(3)}% outer=${(ca.outerConcentration * 100).toFixed(1)}% fringe=${(ca.fringeRatio * 100).toFixed(1)}%, poster=${JSON.stringify(poster)}`;
 }
 
 async function writePostProcessingModePngs(modePixels, size, kind) {

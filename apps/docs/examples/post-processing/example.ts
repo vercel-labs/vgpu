@@ -6,7 +6,7 @@ import sceneWgsl from './scene.wgsl';
 import thresholdWgsl from './threshold.wgsl';
 import type { PostProcessingFlags } from './controls';
 
-export type PostProcessingMode = 'all-off' | 'bloom-only' | 'ca-only' | 'grain-only';
+export type PostProcessingMode = 'all-off' | 'bloom-only' | 'ca-only';
 
 interface ThumbOptions {
   warmupFrames?: number;
@@ -26,7 +26,6 @@ interface EffectChain {
   blurH: Effect;
   blurV: Effect;
   grade: Effect;
-  sampler: GPUSampler;
 }
 
 interface ChainTargets {
@@ -38,12 +37,11 @@ interface ChainTargets {
 
 const FORMAT: GPUTextureFormat = 'rgba8unorm';
 const SCENE_CLEAR: readonly [number, number, number, number] = [0.004, 0.006, 0.014, 1];
-const DEFAULT_FLAGS: PostProcessingFlags = { bloom: true, ca: true, grain: true };
+const DEFAULT_FLAGS: PostProcessingFlags = { bloom: true, ca: true };
 const THUMB_MODES: readonly [PostProcessingMode, PostProcessingFlags][] = [
-  ['all-off', { bloom: false, ca: false, grain: false }],
-  ['bloom-only', { bloom: true, ca: false, grain: false }],
-  ['ca-only', { bloom: false, ca: true, grain: false }],
-  ['grain-only', { bloom: false, ca: false, grain: true }],
+  ['all-off', { bloom: false, ca: false }],
+  ['bloom-only', { bloom: true, ca: false }],
+  ['ca-only', { bloom: false, ca: true }],
 ];
 
 export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
@@ -160,7 +158,6 @@ function createEffects(gpu: Gpu, label: string): EffectChain {
     blurH: gpu.effect(blurWgsl, { label: `${label}-blur-h` }),
     blurV: gpu.effect(blurWgsl, { label: `${label}-blur-v` }),
     grade: gpu.effect(gradeWgsl, { label: `${label}-grade` }),
-    sampler: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
   };
 }
 
@@ -187,15 +184,14 @@ async function prewarm(effects: EffectChain, targets: ChainTargets, output: Surf
 
 function setChainConstants(effects: EffectChain): void {
   effects.scene.set({ _pad: 0 });
-  effects.threshold.set({ threshold: 0.82, knee: 0.045, linear_samp: effects.sampler });
-  effects.blurH.set({ direction: [1, 0], linear_samp: effects.sampler });
-  effects.blurV.set({ direction: [0, 1], linear_samp: effects.sampler });
+  effects.threshold.set({ threshold: 0.82, knee: 0.045 });
+  effects.blurH.set({ direction: [1, 0] });
+  effects.blurV.set({ direction: [0, 1] });
   effects.grade.set({
     bloomStrength: 1.85,
     caAmount: 0.052,
-    grainAmount: 0.032,
-    _pad: 0,
-    linear_samp: effects.sampler,
+    _pad0: 0,
+    _pad1: 0,
   });
 }
 
@@ -213,7 +209,6 @@ function setGradeFlags(grade: Effect, flags: PostProcessingFlags): void {
   grade.set({
     bloomOn: flags.bloom ? 1 : 0,
     caOn: flags.ca ? 1 : 0,
-    grainOn: flags.grain ? 1 : 0,
   });
 }
 
@@ -230,7 +225,6 @@ function renderChain(
   frame.pass({ target: targets.bright, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effects.threshold));
   frame.pass({ target: targets.blurA, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effects.blurH));
   frame.pass({ target: targets.blurB, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effects.blurV));
-  effects.grade.set({ time });
   frame.pass({ target: output, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effects.grade));
 }
 
