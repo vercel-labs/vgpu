@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init as initBrowser } from "../src/index.ts";
 import { registerDrawBundle } from "../src/draw.ts";
-import { passDraw } from "../src/pass.ts";
+import { effectDraw } from "../src/effect.ts";
 import { createMockAdapter, init } from "../src/mock.ts";
 
 const WAVE = `
@@ -15,7 +15,8 @@ struct Params { time: f32, speed: f32 }
 
 const SAMPLER_SHADER = `
 @group(0) @binding(0) var samp: sampler;
-@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.0, 1.0); }
+fn useSampler(value: sampler) {}
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { useSampler(samp); return vec4f(uv, 0.0, 1.0); }
 `;
 
 const TEXTURE_SHADER = `
@@ -31,7 +32,7 @@ struct Camera { value: f32 }
 
 test("set() writes lib-owned values in-place and keeps bind group stable on mock", async () => {
   const gpu = await init();
-  const wave = gpu.pass(WAVE, { label: "wave" });
+  const wave = gpu.effect(WAVE, { label: "wave" });
   const target = gpu.target({ size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -47,7 +48,7 @@ test("set() writes lib-owned values in-place and keeps bind group stable on mock
 
 test("creation-time set sugar is exactly an initial set()", async () => {
   const gpu = await init();
-  const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
+  const wave = gpu.effect(WAVE, { label: "wave", set: { speed: 2 } });
   const target = gpu.target({ size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -61,44 +62,41 @@ test("creation-time set sugar is exactly an initial set()", async () => {
 
 test("R1 ownership flip reports canonical fix-it text", async () => {
   const gpu = await init();
-  const wave = gpu.pass(WAVE, { label: "wave" });
+  const wave = gpu.effect(WAVE, { label: "wave" });
   wave.set({ speed: 2 });
   const userBuffer = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
 
   expect(() => wave.set({ speed: userBuffer })).toThrowError(
-    "`speed` es lib-owned desde su primer set() (valor JS). No se puede cambiar el ownership\n" +
-      "  de un binding. Si necesitás compartir el buffer entre passes, creá un recurso ring-0 y pasalo desde\n" +
-      "  el inicio:  const speed = new Uniform(gpu.device, { size: 4 });  wave.set({ speed });",
+    "`speed` is lib-owned by its first JS set(); ownership cannot change. Fix: pass a resource from the start: " +
+      "wave.set({ speed: new Uniform(gpu.device, { size: 4 }) }).",
   );
   gpu.dispose();
 });
 
 test("binding never set, including samplers, reports canonical no-phantom-resource error", async () => {
   const gpu = await init();
-  const lighting = gpu.pass(SAMPLER_SHADER, { label: "lighting" });
+  const lighting = gpu.effect(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
   expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(lighting)))).toThrowError(
-    "el binding `samp` (@group(0) @binding(0), sampler) de 'lighting' nunca fue seteado. Opciones:\n" +
-      "    lighting.set({ samp: gpu.sampler() })            // valor canónico cacheado\n" +
-      "    lighting.group(0, miBindGroup)                   // o reclamá el grupo entero\n" +
-      "  Nunca se crean recursos fantasma por vos.",
+    "Unset `samp` @group(0) @binding(0) in 'lighting'. Fix: lighting.set({samp:gpu.sampler()}); " +
+      "or lighting.group(0, bindGroup).",
   );
   gpu.dispose();
 });
 
 test("missing texture binding reports a texture-specific fix-it", async () => {
   const gpu = await init();
-  const post = gpu.pass(TEXTURE_SHADER, { label: "post" });
+  const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(post)))).toThrowError(/post\.set\(\{ src: scene\.color \}\)/);
+  expect(() => gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(post)))).toThrowError(/post\.set\(\{src:scene\.color\}\)/);
   gpu.dispose();
 });
 
 test("R2 cache hits when alternating between two user-owned resource identities", async () => {
   const gpu = await init();
-  const draw = gpu.pass(CAMERA_SHADER, { label: "cameraPass" });
+  const draw = gpu.effect(CAMERA_SHADER, { label: "cameraPass" });
   const target = gpu.target({ size: [4, 4] });
   const a = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
   const b = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] });
@@ -117,9 +115,9 @@ test("R2 cache hits when alternating between two user-owned resource identities"
 
 test("bundle back-refs stale only on identity changes, never lib-owned in-place writes", async () => {
   const gpu = await init();
-  const wave = gpu.pass(WAVE, { label: "wave", set: { speed: 2 } });
+  const wave = gpu.effect(WAVE, { label: "wave", set: { speed: 2 } });
   const events: unknown[] = [];
-  registerDrawBundle(passDraw(wave), { id: "bundle", markStale: (event) => { events.push(event); } });
+  registerDrawBundle(effectDraw(wave), { id: "bundle", markStale: (event) => { events.push(event); } });
 
   wave.set({ time: 1 });
   wave.set({ speed: 3 });
@@ -137,9 +135,9 @@ test("bundle back-refs stale only on identity changes, never lib-owned in-place 
   gpu.dispose();
 });
 
-test("set() accepts Targets as texture resources and uses target identity", async () => {
+test("set() accepts Targets as texture resources and uses color texture identity", async () => {
   const gpu = await init();
-  const post = gpu.pass(TEXTURE_SHADER, { label: "post" });
+  const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
   const target = gpu.target({ size: [4, 4] });
   const output = gpu.target({ size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
@@ -151,12 +149,101 @@ test("set() accepts Targets as texture resources and uses target identity", asyn
   gpu.dispose();
 });
 
+test("plain draws sampling a resized target rebind with fresh bind groups across repeated resizes and no pipeline creates", async () => {
+  const gpu = await init();
+  const post = gpu.effect(TEXTURE_SHADER, { label: "post" });
+  const source = gpu.target({ size: [4, 4] });
+  const output = gpu.target({ size: [4, 4] });
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+
+  post.set({ src: source });
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  const bindGroupsBeforeResize = mock.calls.createBindGroup;
+  const pipelinesBeforeResize = mock.calls.createRenderPipeline;
+  const asyncPipelinesBeforeResize = mock.calls.createRenderPipelineAsync;
+
+  source.resize([8, 8]);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 1);
+
+  source.resize([16, 16]);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 2);
+
+  post.set({ src: source });
+  source.resize([32, 32]);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.frame((frame) => frame.pass({ target: output }, (p) => p.draw(post)));
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeResize + 3);
+  expect(mock.calls.createRenderPipeline).toBe(pipelinesBeforeResize);
+  expect(mock.calls.createRenderPipelineAsync).toBe(asyncPipelinesBeforeResize);
+  gpu.dispose();
+});
+
+test("target recreation subscriptions refresh across repeated resizes and are removed on re-set", async () => {
+  const gpu = await init();
+  const post = gpu.draw({ shader: TEXTURE_SHADER, label: "post" });
+  const sourceA = gpu.target({ size: [4, 4] });
+  const sourceB = gpu.target({ size: [4, 4] });
+  const sourceC = gpu.target({ size: [4, 4] });
+  const events: unknown[] = [];
+
+  post.set({ src: sourceA });
+  registerDrawBundle(post, { id: "bundle", markStale: (event) => { events.push(event); } });
+  post.set({ src: sourceB });
+  events.length = 0;
+
+  sourceA.resize([8, 8]);
+  expect(events).toEqual([]);
+
+  sourceB.resize([8, 8]);
+  sourceB.resize([16, 16]);
+  expect(events).toEqual([
+    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
+    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
+  ]);
+
+  post.set({ src: sourceC });
+  events.length = 0;
+  sourceB.resize([32, 32]);
+  expect(events).toEqual([]);
+
+  sourceC.resize([8, 8]);
+  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" })]);
+
+  events.length = 0;
+  sourceC.destroy();
+  sourceC.resize([16, 16]);
+  expect(events).toEqual([]);
+  gpu.dispose();
+});
+
+test("resizing a target only drawn onto does not emit bind-group stale events", async () => {
+  const gpu = await init();
+  const post = gpu.draw({ shader: TEXTURE_SHADER, label: "post" });
+  const sampled = gpu.target({ size: [4, 4] });
+  const output = gpu.target({ size: [4, 4] });
+  const events: unknown[] = [];
+
+  post.set({ src: sampled });
+  registerDrawBundle(post, { id: "bundle", markStale: (event) => { events.push(event); } });
+  output.resize([8, 8]);
+
+  expect(events).toEqual([]);
+  gpu.dispose();
+});
+
 test("set() validates resource kind against reflection before WebGPU bind-group creation", async () => {
   const gpu = await init();
-  const lighting = gpu.pass(SAMPLER_SHADER, { label: "lighting" });
+  const lighting = gpu.effect(SAMPLER_SHADER, { label: "lighting" });
   const target = gpu.target({ size: [4, 4] });
 
-  expect(() => lighting.set({ samp: target })).toThrowError(/esperaba sampler/);
+  expect(() => lighting.set({ samp: target })).toThrowError(/needs sampler/);
   gpu.dispose();
 });
 

@@ -95,4 +95,4 @@ draw.set({ params });
 - `Uniform` is user-owned from the first `draw.set({ name: uniform })`; vgpu binds its identity and never packs JS values into it.
 - It creates a non-dynamic bind group. For many per-object uniforms with dynamic offsets, use `UniformPool` instead.
 - Call `destroy()` / `dispose()` when the buffer lifetime ends.
-- **See also:** `SharedUniforms`, `StructuredUniform`, `UniformPool`, `Draw.set`, `Pass.set`.
+- **See also:** `SharedUniforms`, `StructuredUniform`, `UniformPool`, `Draw.set`, `Effect.set`.

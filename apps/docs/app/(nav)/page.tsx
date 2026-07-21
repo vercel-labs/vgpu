@@ -5,7 +5,7 @@ const heroCode = `import { init } from "vgpu";
 
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.pass(WAVE_WGSL, { set: { speed: 2 } });
+const wave = gpu.effect(WAVE_WGSL, { set: { speed: 2 } });
 
 gpu.frame.loop(() => {
   wave.set({ time: gpu.time });
@@ -13,33 +13,26 @@ gpu.frame.loop(() => {
 });`;
 
 const features = [
-  ['One context', 'Use `init()` to get a Gpu with pass, draw, compute, frame, bundle, target, and uniforms.'],
-  ['Explicit WGSL', 'Shaders declare bindings; vgpu reflects them and `set()` binds by name.'],
-  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns are documented as defaults.'],
-  ['Browser and Node', 'Use the same Gpu API from `vgpu`, `vgpu/node`, and `vgpu/mock`.'],
-  ['Ring-0 escape hatches', 'Native handles, UniformPool, buffers, textures, and bind groups remain available when you need them.'],
-  ['Scene helpers', 'Pure geometry and camera utilities live in `vgpu/scene` without a retained scene graph.'],
+  ['Browser and Node', 'Render shaders on a website, write tests or render on the server. vgpu just works.'],
+  ['WGSL modules', 'import/export wgsl code just like typescript modules.'],
+  ['Perf by default', 'Bundles, pre-warmed pipelines, dynamic offsets, shared uniforms, and bake patterns.'],
 ];
 
 export default function HomePage() {
   return (
     <div className="px-6 py-16 lg:px-12 lg:py-20">
       <section className="max-w-4xl mx-auto text-center mb-24">
-        <div className="mb-8 flex flex-wrap justify-center gap-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-1 border border-blue-4 text-blue-9 text-sm font-medium">Ring-1 WebGPU API</div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-2 border border-gray-4 text-gray-10 text-sm"><span className="w-2 h-2 rounded-full bg-green-9" />Early preview 0.0.8</div>
-        </div>
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-12 mb-6 tracking-tight">vgpu</h1>
-        <p className="text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">Agentic-first WebGPU for shaders that should be correct and fast the first time.</p>
+        <p className="text-balance text-lg md:text-xl text-gray-10 mb-10 max-w-2xl mx-auto leading-relaxed">The low-level WebGPU library, designed for agents.</p>
         <div className="flex flex-wrap justify-center gap-4 mb-16">
-          <Link href="/getting-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
-          <Link href="/api" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Overview</Link>
+          <Link href="/get-started" className="px-5 py-2.5 rounded-lg bg-gray-12 text-black font-medium text-sm hover:bg-gray-11 transition-colors">Get Started</Link>
+          <Link href="/reference" className="px-5 py-2.5 rounded-lg bg-gray-2 text-gray-12 font-medium text-sm border border-gray-4 hover:border-gray-5 hover:bg-gray-1 transition-colors">API Reference</Link>
         </div>
         <div className="text-left max-w-2xl mx-auto"><CodeBlock code={heroCode} language="typescript" /></div>
       </section>
       <section className="max-w-4xl mx-auto mb-24">
         <h2 className="text-2xl md:text-3xl font-semibold text-gray-12 text-center mb-4">Everything You Need</h2>
-        <p className="text-gray-9 text-center mb-12 max-w-xl mx-auto">Start with ring-1. Drop to ring-0 only for explicit native control.</p>
+        <p className="text-gray-9 text-center mb-12 max-w-xl mx-auto">Start with the public `vgpu` API. Drop to native WebGPU only when you need explicit control.</p>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map(([title, description]) => (
             <div key={title} className="p-5 rounded-lg bg-gray-1 border border-gray-4 hover:border-gray-5 transition-colors group">
@@ -53,9 +46,9 @@ export default function HomePage() {
         <h2 className="text-2xl md:text-3xl font-semibold text-gray-12 text-center mb-12">Explore the Docs</h2>
         <div className="grid md:grid-cols-2 gap-4">
           {[
-            ['/getting-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
+            ['/get-started', 'Getting Started', 'Install `vgpu` and render with `init()`.'],
             ['/concepts', 'Core Concepts', 'Learn Gpu, set(), targets, frames, bundles, and adapters.'],
-            ['/api', 'API Overview', 'Ring map and generated reference pages.'],
+            ['/reference', 'API Reference', 'Package map and generated topic pages.'],
             ['/examples', 'Examples', 'Live WebGPU demos with read-only source views.'],
           ].map(([href, title, description]) => (
             <Link key={href} href={href} className="group p-6 rounded-lg bg-gray-1 border border-gray-4 hover:border-gray-5 transition-all">

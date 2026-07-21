@@ -1,25 +1,27 @@
-struct Uniforms {
-  time: f32,
-  resolution: vec2f,
-};
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+import { index_of } from "./fluid-common.wgsl";
 
-fn hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-fn noise(p: vec2f) -> f32 {
-  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2f(1.0, 0.0)), u.x), mix(hash(i + vec2f(0.0, 1.0)), hash(i + vec2f(1.0, 1.0)), u.x), u.y);
+struct DisplayConfig {
+  dye_size: vec2u,
+  output_size: vec2f,
 }
-fn fbm(p0: vec2f) -> f32 {
-  var p = p0; var a = 0.5; var v = 0.0;
-  for (var i = 0; i < 5; i++) { v += a * noise(p); p = mat2x2f(1.62, 1.18, -1.18, 1.62) * p; a *= 0.52; }
-  return v;
+@group(0) @binding(0) var<uniform> config: DisplayConfig;
+@group(0) @binding(1) var<storage, read> dye: array<vec4f>;
+
+fn sample_dye(p: vec2f) -> vec3f {
+  let grid = clamp(p * vec2f(config.dye_size) - 0.5, vec2f(0), vec2f(config.dye_size) - 1.0);
+  let cell = vec2i(floor(grid));
+  let f = fract(grid);
+  let bottom = mix(dye[index_of(cell, config.dye_size)].rgb, dye[index_of(cell + vec2i(1, 0), config.dye_size)].rgb, f.x);
+  let top = mix(dye[index_of(cell + vec2i(0, 1), config.dye_size)].rgb, dye[index_of(cell + vec2i(1, 1), config.dye_size)].rgb, f.x);
+  return mix(bottom, top, f.y);
 }
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let p = (uv - 0.5) * vec2f(uniforms.resolution.x / uniforms.resolution.y, 1.0);
-  let t = uniforms.time;
-  let swirl = atan2(p.y, p.x) + length(p) * 5.0 - t * 0.7;
-  let flow = fbm(p * 3.0 + vec2f(cos(swirl), sin(swirl)) * 0.5 + vec2f(t * 0.08, -t * 0.04));
-  let plume = exp(-dot(p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4)), p - vec2f(0.25 * sin(t), 0.18 * cos(t * 1.4))) * 6.0);
-  let color = mix(vec3f(0.02, 0.04, 0.12), vec3f(0.05, 0.85, 1.0), flow) + plume * vec3f(1.0, 0.22, 0.06);
-  return vec4f(pow(color / (1.0 + color), vec3f(0.45)), 1.0);
+
+@fragment
+fn fragment_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  var uv = position.xy / config.output_size;
+  uv.y = 1.0 - uv.y; // WebGPU fragment coordinates start at the top; the solver's +Y points up.
+  let density = sample_dye(uv);
+  let color = 1.0 - exp(-density * 1.35);
+  let vignette = 0.68 + 0.32 * pow(max(0.0, 1.0 - dot(uv - 0.5, uv - 0.5) * 1.9), 1.5);
+  return vec4f((vec3f(0.003, 0.005, 0.014) + color) * vignette, 1.0);
 }

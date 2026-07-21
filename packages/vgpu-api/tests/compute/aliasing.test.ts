@@ -33,7 +33,7 @@ describe("compute storage aliasing", () => {
     const sim = gpu.compute(ALIASING_SHADER, { label: "sim" });
     const buffer = gpu.storage(16);
     sim.set({ src: buffer, dst: buffer });
-    expect(() => sim.dispatch(1)).toThrowError("`src` y `dst` apuntan al MISMO buffer y `dst` es read_write (writable-storage aliasing,\n  prohibido por WebGPU). Fix: usá gpu.pingPongStorage() y alterná read/write.");
+    expect(() => sim.dispatch(1)).toThrowError("`src` and writable `dst` alias. Fix: alternate them with gpu.pingPongStorage().");
   });
 
   test("read + read aliasing passes without warnings", async () => {
@@ -42,6 +42,19 @@ describe("compute storage aliasing", () => {
     const buffer = gpu.storage(32, "read");
     const dst = gpu.storage(32);
     sim.set({ a: buffer, b: buffer, dst });
+    expect(() => sim.dispatch(1)).not.toThrow();
+  });
+
+  test("unused writable storage bindings do not participate in aliasing", async () => {
+    gpu = await init();
+    const shader = `
+      @group(0) @binding(0) var<storage, read> used: array<vec4f>;
+      @group(0) @binding(1) var<storage, read_write> unused: array<vec4f>;
+      @compute @workgroup_size(1) fn main() { let value = used[0]; }
+    `;
+    const sim = gpu.compute(shader, { label: "inactive-alias" });
+    const buffer = gpu.storage(16);
+    sim.set({ used: buffer, unused: buffer });
     expect(() => sim.dispatch(1)).not.toThrow();
   });
 

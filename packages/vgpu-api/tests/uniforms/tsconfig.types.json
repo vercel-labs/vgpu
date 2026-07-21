@@ -7,5 +7,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["../../src/**/*.ts", "shared-uniforms-types.ts"]
+  "include": ["../../src/**/*.ts", "shared-uniforms-types.ts", "pass-draw-overloads-types.ts"]
 }

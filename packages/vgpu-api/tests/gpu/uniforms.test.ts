@@ -25,8 +25,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("gpu.uniforms() Docker GPU
     const createBufferCount = countCreateBufferCalls(gpu.gpu);
     try {
       const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-      const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-      const blur = gpu.pass(BLUR_WGSL, { label: "BLUR_WGSL", set: { g: globals } });
+      const wave = gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+      const blur = gpu.effect(BLUR_WGSL, { label: "BLUR_WGSL", set: { g: globals } });
       const waveTarget = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "waveTarget" });
       const blurTarget = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "blurTarget" });
 
@@ -62,7 +62,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("gpu.uniforms() Docker GPU
   });
 });
 
-function renderPair(gpu: Awaited<ReturnType<typeof init>>, waveTarget: ReturnType<typeof gpu.target>, blurTarget: ReturnType<typeof gpu.target>, wave: ReturnType<typeof gpu.pass>, blur: ReturnType<typeof gpu.pass>): void {
+function renderPair(gpu: Awaited<ReturnType<typeof init>>, waveTarget: ReturnType<typeof gpu.target>, blurTarget: ReturnType<typeof gpu.target>, wave: ReturnType<typeof gpu.effect>, blur: ReturnType<typeof gpu.effect>): void {
   gpu.frame((frame) => {
     frame.pass({ target: waveTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(wave));
     frame.pass({ target: blurTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(blur));

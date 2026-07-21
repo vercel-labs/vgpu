@@ -33,8 +33,8 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
   const scene = gpu.target({ size: [4, 4] });
   const tex1 = gpu.target({ size: [4, 4] });
   const tex2 = gpu.target({ size: [4, 4] });
-  const floor = gpu.pass(FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
-  const walls = gpu.pass(WALLS, { label: "walls" });
+  const floor = gpu.effect(FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
+  const walls = gpu.effect(WALLS, { label: "walls" });
   walls.set({ detail: tex1 });
 
   const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => {
@@ -47,10 +47,41 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
 
   walls.set({ detail: tex2 });
   expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).toThrowError(
-    "bundle 'staticScene' está stale: el binding `detail` (@group(0) @binding(0)) del draw\n" +
-      "  'walls' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n" +
-      "  Fix: re-grabalo → staticScene = gpu.bundle({ target: scene }, ...)\n" +
-      "  (la re-grabación es siempre tuya; la lib solo detecta).",
+    "bundle 'staticScene' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'walls' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → staticScene = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
+  );
+  gpu.dispose();
+});
+
+test("R3 bundle sampling a repeatedly resized target stales through binding identity each time", async () => {
+  const gpu = await init();
+  const scene = gpu.target({ size: [4, 4] });
+  const source = gpu.target({ size: [4, 4] });
+  const post = gpu.effect(WALLS, { label: "post", set: { detail: source } });
+  const recordBundle = (label: string) => gpu.bundle({ target: scene, label }, (b) => {
+    b.draw(post);
+  });
+
+  const firstBundle = recordBundle("postBundleA");
+  source.resize([8, 8]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
+    "bundle 'postBundleA' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
+  );
+
+  const secondBundle = recordBundle("postBundleB");
+  source.resize([16, 16]);
+
+  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
+    "bundle 'postBundleB' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
+      "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+      "  Fix: re-record it → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
+      "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
 });
@@ -71,31 +102,40 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 
   const frameA = gpu.frame();
   frameA.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(1);
+  expect(popResolvers).toHaveLength(2); // pipeline sync-create scope, then R4 raw-claim scope.
   const frameB = gpu.frame();
   frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
-  expect(popResolvers).toHaveLength(2);
+  expect(popResolvers).toHaveLength(3); // cubeB reuses the device pipeline; only its R4 raw-claim scope is new.
+
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
 
   frameB.submit();
   frameA.submit();
 
-  const expectA = expect(frameA.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeA'"),
-    where: "cubeA.draw",
-  });
-  const expectB = expect(frameB.done).rejects.toMatchObject({
-    code: "VGPU-R4-GROUP-VALIDATION",
-    message: expect.stringContaining("grupo 1 reclamado en draw 'cubeB'"),
-    where: "cubeB.draw",
-  });
+  popResolvers[0]!(null);
+  popResolvers[1]!({ message: "first frame validation" } as GPUError);
+  popResolvers[2]!({ message: "second frame validation" } as GPUError);
+  for (const resolve of popResolvers.slice(3)) resolve(null);
 
-  popResolvers[0]!({ message: "first frame validation" } as GPUError);
-  popResolvers[1]!({ message: "second frame validation" } as GPUError);
-  for (const resolve of popResolvers.slice(2)) resolve(null);
+  await frameA.done;
+  await frameB.done;
+  await gpu.settled();
 
-  await expectA;
-  await expectB;
+  expect(errors).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("WebGPU rejected claimed group 1 in 'cubeA'"),
+      where: "cubeA.draw",
+      detail: { drawLabel: "cubeA", group: 1 },
+    }),
+    expect.objectContaining({
+      code: "VGPU-R4-GROUP-VALIDATION",
+      message: expect.stringContaining("WebGPU rejected claimed group 1 in 'cubeB'"),
+      where: "cubeB.draw",
+      detail: { drawLabel: "cubeB", group: 1 },
+    }),
+  ]));
 
   gpu.dispose();
 });
@@ -157,12 +197,12 @@ test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", a
     entries: [bind.resource(0, staticBuffer)],
   });
   expect(() => cube.group(1, staticBindGroup)).toThrowError(
-    "el grupo 1 reclamado en draw 'cube' no es compatible: @binding(0) no coincide con el layout reflejado.",
+    "claimed group 1 in 'cube' is incompatible: @binding(0) does not match the reflected layout.",
   );
 
   cube.group(1, slot.bindGroup);
   expect(() => cube.set({ obj: { value: 1 } })).toThrowError(
-    "el grupo 1 de 'cube' fue reclamado con group(1, bindGroup); no se puede usar set() sobre ese grupo.",
+    "group 1 of 'cube' is claimed; set() cannot update it.",
   );
 
   pool.beginFrame(1);

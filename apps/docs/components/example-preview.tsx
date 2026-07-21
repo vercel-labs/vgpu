@@ -1,10 +1,12 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 
 interface ExamplePreviewProps {
   slug: string;
   title: string;
+  poster?: string;
 }
 
 interface PreviewErrorMessage {
@@ -21,8 +23,14 @@ function isPreviewErrorMessage(value: unknown): value is PreviewErrorMessage {
     && typeof (value as PreviewErrorMessage).message === 'string';
 }
 
-export function ExamplePreview({ slug, title }: ExamplePreviewProps) {
+export function ExamplePreview({ slug, title, poster }: ExamplePreviewProps) {
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setError(null);
+    setLoaded(false);
+  }, [slug]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -42,7 +50,18 @@ export function ExamplePreview({ slug, title }: ExamplePreviewProps) {
         src={`/preview/${slug}`}
         className="h-full w-full border-0 bg-black"
         allow="fullscreen"
+        onLoad={() => setLoaded(true)}
       />
+      {poster && !loaded ? (
+        <Image
+          src={poster}
+          alt={`${title} poster`}
+          fill
+          priority
+          sizes="(max-width: 1280px) 100vw, 900px"
+          className="object-cover"
+        />
+      ) : null}
       {error ? (
         <div className="absolute inset-0 overflow-auto bg-black/85 p-5 text-sm text-red-200 backdrop-blur-sm">
           <div className="mb-3 font-semibold text-red-100">Preview error</div>

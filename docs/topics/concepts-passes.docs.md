@@ -1,0 +1,116 @@
+---
+title: Passes
+summary: A pass composites any number of draws into one target; a single shader can draw directly.
+relatedSymbols:
+  - Frame
+  - FramePass
+  - Effect
+  - Draw
+prevNext:
+  prev:
+    title: Effects
+    href: /concepts/effects
+  next:
+    title: Frames
+    href: /concepts/frames
+order: 50
+---
+
+# Passes
+
+A pass is a render-pass section inside a frame. It has one target, one clear color, and any number of draw calls. Open a pass by hand when you want to composite multiple draws into the same render target — here, an ocean and a boat rendered straight to the canvas:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
+
+const oceanSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let wave = sin(uv.x * 24.0) * 0.01;
+    let depth = smoothstep(0.4 + wave, 1.0, uv.y);
+    return vec4f(0.1, 0.3 + depth * 0.2, 0.55 + depth * 0.3, 1.0);
+  }
+`;
+
+// Draws only the hull pixels; discards everything else.
+const boatSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let inHull = abs(uv.x - 0.5) < 0.12 && abs(uv.y - 0.42) < 0.05;
+    if (!inHull) { discard; }
+    return vec4f(0.45, 0.26, 0.13, 1.0);
+  }
+`;
+
+// ---cut---
+const ocean = gpu.effect(oceanSource);
+const boat = gpu.effect(boatSource);
+
+gpu.frame((frame) => {
+  frame.pass({ target: canvasSurface, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(ocean); // fill the canvas with water
+    pass.draw(boat); // paint the boat on top — same target
+  });
+});
+```
+
+Both draws share one render pass and one target. Order inside the pass is paint order: the ocean fills the canvas first, then the boat draws on top of it.
+
+> Good to know: [`FramePass.draw()`](/reference/vgpu/frame#framepass) accepts a fullscreen [`Effect`](/reference/vgpu/effect#effect) or an explicit [`Draw`](/reference/vgpu/draw#draw). Use `gpu.draw()` when you need meshes, vertex counts, instancing, or raw bind groups.
+
+## One shader? Draw it directly
+
+Now add postprocessing. The pass is the same — the only change is its target: an offscreen [`Target`](/reference/vgpu/target#target) with the same size as the canvas. Then the postprocessing effect (bound with `set({ src: scene })`) needs no pass ceremony to reach the screen:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
+
+const ocean = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let wave = sin(uv.x * 24.0) * 0.01;
+    let depth = smoothstep(0.4 + wave, 1.0, uv.y);
+    return vec4f(0.1, 0.3 + depth * 0.2, 0.55 + depth * 0.3, 1.0);
+  }
+`);
+const boat = gpu.effect(`
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let inHull = abs(uv.x - 0.5) < 0.12 && abs(uv.y - 0.42) < 0.05;
+    if (!inHull) { discard; }
+    return vec4f(0.45, 0.26, 0.13, 1.0);
+  }
+`);
+const postSource = `
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    let vignette = 1.0 - 0.4 * length(uv - vec2f(0.5));
+    return vec4f(base.rgb * vignette, 1.0);
+  }
+`;
+
+// ---cut---
+const scene = gpu.target({ size: [canvasSurface.size[0], canvasSurface.size[1]] });
+const postprocessing = gpu.effect(postSource);
+postprocessing.set({ src: scene }); // the offscreen scene becomes the post input
+
+gpu.frame((frame) => {
+  frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {
+    pass.draw(ocean);
+    pass.draw(boat);
+  });
+});
+
+postprocessing.draw(canvasSurface); // rendering an effect creates a pass
+```
+
+The one-shot `draw()` runs after the frame has submitted, so the scene is already rendered when postprocessing reads it. Under the hood it creates an encoder, opens a render pass on `canvasSurface`, encodes the draw, and submits — the same GPU work you would write by hand with `frame.pass`.
+
+> Good to know: `frame.pass()` always needs a target. Use a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)` or an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })`.

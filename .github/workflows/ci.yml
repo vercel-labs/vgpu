@@ -68,7 +68,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             vgpu-test-dev:ci \
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/vgpu-api/tests/gpu; \
+              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts; \
               s=$?; kill $xp; exit $s'
       - name: Run pixel snapshot CLI in Docker
         run: |
@@ -156,6 +156,28 @@ jobs:
           print(text[max(0, idx - 120):idx + 160] if idx >= 0 else text[:280])
           PY
           tail -30 /tmp/next-wgsl-dev.log
+
+
+  docs-app-build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm run build
+      - name: Regenerate docs manifest + skill
+        run: node packages/vgpu/lib/docs/generate/cli.js
+      - name: Build docs app
+        run: pnpm --filter docs build
 
   docs-generated:
     # Guards that the committed docs manifest + generated skill are in sync with their sources

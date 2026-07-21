@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render",
     "test:docker": "bash infra/test-docker/run.sh",
+    "thumbs:docker": "bash infra/test-docker/thumbs.sh",
     "test:docker:cleanup": "docker ps -a --filter \"label=vgpu-test=1\" --format '{{.ID}}' | xargs -r docker rm -f && docker image prune -f --filter \"label=vgpu-test=1\"",
     "generate-lit-cube-snapshot": "pnpm exec esbuild scripts/generate-lit-cube-snapshot.ts --bundle --platform=node --format=esm --external:pngjs --external:webgpu --outfile=packages/adapter-node/dist/generate-lit-cube-snapshot.mjs && node packages/adapter-node/dist/generate-lit-cube-snapshot.mjs",
     "bundle-check": "node scripts/check-bundle-size.mjs",

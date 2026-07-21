@@ -1,0 +1,34 @@
+---
+title: Agents
+summary: vgpu is agent-first — point your agent at npx vgpu docs, or install the vgpu skill.
+relatedSymbols: []
+prevNext:
+  prev:
+    title: Get started
+    href: /get-started
+  next:
+    title: Web
+    href: /get-started/web
+---
+
+# Agents
+
+vgpu is an agent-first library. The full documentation ships inside the npm package, versioned with the API in your `node_modules` — an agent can learn and verify vgpu without leaving the terminal.
+
+## Point your agent at the docs
+
+```bash
+npx vgpu docs
+```
+
+That's the whole instruction. The command prints its own guide — starting with the agent get-started, `vgpu docs cat getting-started.md` — plus the tools to explore and search every reference page, guide, and error code. Your agent takes it from there.
+
+## Install the skill
+
+```bash
+npx skills add vercel-labs/vgpu
+```
+
+For agents that support skills, this installs the vgpu skill: the same reference docs plus guidance on when to load each one, so the agent reads only the doc it needs.
+
+Everything an agent learns this way, you can read on this site — it is the human mirror of the same content.

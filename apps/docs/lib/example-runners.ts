@@ -1,28 +1,23 @@
 import { run as runGradient } from '../examples/gradient/example';
-import { run as runWave } from '../examples/wave/example';
-import { run as runColorCycle } from '../examples/color-cycle/example';
-import { run as runRaymarching } from '../examples/raymarching/example';
-import { run as runNoise } from '../examples/noise/example';
-import { run as runMetaballs } from '../examples/metaballs/example';
-import { run as runFractal } from '../examples/fractal/example';
-import { run as runAlienPlanet } from '../examples/alien-planet/example';
+import { run as runTriangleLedFront } from '../examples/triangle-led-front/example';
+import { run as runAntiAliasing } from '../examples/anti-aliasing/example';
+import { run as runPostProcessing } from '../examples/post-processing/example';
 import { run as runFluid } from '../examples/fluid/example';
-import { run as runTriangleParticles } from '../examples/triangle-particles/example';
+import { run as runInstancedRendering } from '../examples/instanced-rendering/example';
+import { run as runBatchRendering } from '../examples/batch-rendering/example';
+import type { ExampleRunnerSlug } from './example-runner-slugs';
 
 export type ExampleRunner = (canvas: HTMLCanvasElement) => Promise<() => void>;
 
 export const exampleRunners = {
   gradient: runGradient,
-  wave: runWave,
-  'color-cycle': runColorCycle,
-  raymarching: runRaymarching,
-  noise: runNoise,
-  metaballs: runMetaballs,
-  fractal: runFractal,
-  'alien-planet': runAlienPlanet,
+  'triangle-led-front': runTriangleLedFront,
+  'anti-aliasing': runAntiAliasing,
+  'post-processing': runPostProcessing,
   fluid: runFluid,
-  'triangle-particles': runTriangleParticles,
-} satisfies Record<string, ExampleRunner>;
+  'instanced-rendering': runInstancedRendering,
+  'batch-rendering': runBatchRendering,
+} satisfies Record<ExampleRunnerSlug, ExampleRunner>;
 
 export function getExampleRunner(slug: string): ExampleRunner | undefined {
   return exampleRunners[slug as keyof typeof exampleRunners];

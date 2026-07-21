@@ -1,0 +1,82 @@
+---
+title: Node.js
+summary: Render headless in Node.js through Dawn — save a PNG or assert on pixels in a test.
+relatedSymbols:
+  - Gpu
+  - Target
+  - Effect
+prevNext:
+  prev:
+    title: Web
+    href: /get-started/web
+  next:
+    title: Context
+    href: /concepts/context
+---
+
+# Node.js
+
+In Node.js, vgpu renders headless through Dawn — the same API, no canvas, no browser. Import `init` from `vgpu/node`, render into an offscreen [`Target`](/reference/vgpu/target#target), and read the pixels back.
+
+## Install
+
+```sh
+npm install vgpu
+```
+
+## Save a PNG
+
+`target.read()` resolves to the rendered RGBA bytes. Hand them to any PNG encoder — here, `pngjs`:
+
+```ts
+import { writeFileSync } from "node:fs";
+import { PNG } from "pngjs";
+import { init } from "vgpu/node";
+
+const gradientSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`;
+
+const gpu = await init();
+const target = gpu.target({ size: [256, 256] });
+
+gpu.effect(gradientSource).draw(target);
+const pixels = await target.read(); // RGBA bytes
+
+const png = new PNG({ width: target.size[0], height: target.size[1] });
+png.data.set(pixels);
+writeFileSync("gradient.png", PNG.sync.write(png));
+```
+
+## Write a test
+
+The same render runs inside a test. Read the pixels and assert on them:
+
+```ts
+import { expect, test } from "vitest";
+import { init } from "vgpu/node";
+
+const gradientSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`;
+
+test("gradient renders", async () => {
+  const gpu = await init();
+  const target = gpu.target({ size: [64, 64] });
+
+  gpu.effect(gradientSource).draw(target);
+  const pixels = await target.read();
+
+  // center pixel: blue is the constant 0.4 (~102 of 255), alpha is 1.0
+  const center = (32 * 64 + 32) * 4;
+  expect(pixels[center + 2]).toBeGreaterThan(95);
+  expect(pixels[center + 2]).toBeLessThan(110);
+  expect(pixels[center + 3]).toBe(255);
+});
+```
+
+> Good to know: use `vgpu/mock` for deterministic unit tests that need no GPU; reach for `vgpu/node` when real Dawn/WebGPU behavior is under test.

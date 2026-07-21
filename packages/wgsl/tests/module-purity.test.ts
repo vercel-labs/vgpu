@@ -24,10 +24,10 @@ test("resolver rejects @group/@binding declarations in imported modules", async 
     },
   })).rejects.toMatchObject({
     code: "VGPU-RESOLVE-MODULE-BINDING",
-    message: "VGPU-RESOLVE-MODULE-BINDING: /noise.wgsl declara '@group(0) @binding(0) seed'.\n" +
-      "Los módulos no pueden declarar bindings — exportá el struct y declaralo en tu entry:\n" +
+    message: "VGPU-RESOLVE-MODULE-BINDING: /noise.wgsl declares '@group(0) @binding(0) seed'.\n" +
+      "Modules cannot declare bindings — export the struct and declare it in your entry:\n" +
       "  export struct NoiseConfig { seed: u32 }\n" +
-      "  // en tu entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;",
+      "  // in your entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;",
     line: 2,
     column: 1,
   });

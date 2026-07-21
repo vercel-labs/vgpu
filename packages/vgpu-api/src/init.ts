@@ -1,4 +1,5 @@
-export { createGpu, type AdapterFactory, type Compute, type ComputeOptions, type Gpu, type InitOptions, type PingPongStorage, type PingPongTargets, type SharedUniforms, type StorageAccess, type StorageBuffer } from "./gpu.ts";
+export { createGpu, type AdapterFactory, type Compute, type ComputeOptions, type Gpu, type GpuErrorListener, type InitOptions, type PingPongStorage, type PingPongTargets, type SharedUniforms, type StorageAccess, type StorageBuffer } from "./gpu.ts";
+export type { ClearColor } from "./target-utils.ts";
 export type { Bundle, BundleOptions, BundleRecorder } from "./bundle.ts";
 export type { Surface, SurfaceOptions, SurfaceResizeEvent } from "./surface.ts";
 

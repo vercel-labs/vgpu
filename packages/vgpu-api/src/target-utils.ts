@@ -1,7 +1,8 @@
 import { targetSizeRequiredError, unsupportedError } from "./errors.ts";
-import type { TargetOptions, TargetTextureOptions } from "./target.ts";
+import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
 
 export const DEFAULT_FORMAT: GPUTextureFormat = "rgba8unorm";
+export type ClearColor = GPUColor | readonly [number, number, number, number];
 
 export interface TargetDeviceCaps {
   readonly isCompatibilityMode?: boolean;
@@ -16,7 +17,13 @@ export function depthFormatFor(options: TargetTextureOptions): GPUTextureFormat 
 }
 
 export function sampleCountFor(options: TargetTextureOptions): 1 | 4 {
-  return options.msaa === true || options.msaa === 4 ? 4 : 1;
+  const msaa = options.msaa as unknown;
+  if (msaa === true || msaa === 4) return 4;
+  if (msaa === undefined || msaa === false) return 1;
+  const e = targetSizeRequiredError();
+  (e as { code: string }).code = "VGPU-TARGET-MSAA-INVALID";
+  e.message = `msaa received ${msaa}; WebGPU 1|4; use true`;
+  throw e;
 }
 
 export function validateTargetOptions(options: Partial<TargetOptions> | undefined, caps: TargetDeviceCaps): void {
@@ -29,29 +36,39 @@ function validateMsaaFormat(format: GPUTextureFormat, caps: TargetDeviceCaps): v
   if (!(caps.isCompatibilityMode && format === "rgba16float")) return;
   throw unsupportedError(
     "gpu.target",
-    "msaa: true con formato rgba16float no está soportado por Dawn compatibility mode en este device.",
-    "En este entorno usá rgba16float sin msaa, o usá un formato MSAA-compatible como rgba8unorm para ejercitar resolve. En devices WebGPU capaces, rgba16float+msaa queda soportado.",
+    "Dawn compatibility mode does not support rgba16float+msaa.",
+    "Use rgba8unorm for MSAA here, or disable msaa.",
   );
 }
 
-export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: GPUColor | readonly [number, number, number, number]): GPURenderPassColorAttachment {
-  return {
+export function colorAttachment(resolved: { createView(): GPUTextureView }, msaa: { createView(): GPUTextureView } | undefined, clear: ClearColor, preserve?: boolean): GPURenderPassColorAttachment {
+  const attachment: GPURenderPassColorAttachment = {
     view: (msaa ?? resolved).createView(),
     resolveTarget: msaa ? resolved.createView() : undefined,
-    loadOp: "clear",
+    loadOp: preserve ? "load" : "clear",
     storeOp: msaa ? "discard" : "store",
-    clearValue: colorValue(clear),
   };
+  if (!preserve) attachment.clearValue = colorValue(clear);
+  return attachment;
 }
 
-export function depthAttachment(depth: { createView(): GPUTextureView }): GPURenderPassDepthStencilAttachment {
-  return { view: depth.createView(), depthLoadOp: "clear", depthStoreOp: "store", depthClearValue: 1 };
+export function depthAttachment(depth: { createView(): GPUTextureView; readonly sampleCount?: number }, preserve?: boolean): GPURenderPassDepthStencilAttachment {
+  const attachment: GPURenderPassDepthStencilAttachment = { view: depth.createView(), depthLoadOp: preserve ? "load" : "clear", depthStoreOp: depth.sampleCount! > 1 ? "discard" : "store" };
+  if (!preserve) attachment.depthClearValue = 1;
+  return attachment;
 }
 
-export function colorValue(clear: GPUColor | readonly [number, number, number, number]): GPUColor {
+export function colorValue(clear: ClearColor): GPUColor {
   return Array.isArray(clear) ? { r: clear[0], g: clear[1], b: clear[2], a: clear[3] } : clear;
 }
 
 export function sameSize(a: readonly [number, number], b: readonly [number, number]): boolean {
   return a[0] === b[0] && a[1] === b[1];
+}
+
+
+/** @internal Internal normalization guard: `renderPassDescriptor` is required on Target and never on options bags. */
+export function isTarget(value: unknown): value is Target {
+  return typeof value === "object" && value !== null
+    && typeof (value as Target).renderPassDescriptor === "function";
 }

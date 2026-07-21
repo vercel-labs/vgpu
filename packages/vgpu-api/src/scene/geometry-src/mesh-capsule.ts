@@ -60,5 +60,5 @@ function validate(radius: number, height: number, radialSegments: number, height
   const smoothCount = (radialSegments + 1) * (3 * heightSegments + 1);
   const flatCount = radialSegments * (3 * heightSegments) * 6;
   const vertexCount = shading === "flat" ? flatCount : smoothCount;
-  if (vertexCount > 65535) throw invalidUsage("Mesh.capsule", `Segment counts produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segment counts.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.capsule", `Segments make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

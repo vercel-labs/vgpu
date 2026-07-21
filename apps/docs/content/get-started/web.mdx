@@ -1,0 +1,92 @@
+---
+title: Web
+summary: Install vgpu, render a gradient to a canvas, and load .wgsl files in Next.js or Vite.
+relatedSymbols:
+  - Gpu
+  - Surface
+  - Effect
+prevNext:
+  prev:
+    title: Agents
+    href: /get-started/agents
+  next:
+    title: Node.js
+    href: /get-started/node
+---
+
+# Web
+
+In the browser, vgpu renders with WebGPU straight to a `<canvas>`. Install the package, write a fragment shader, and draw.
+
+## Install
+
+```sh
+npm install vgpu
+```
+
+## Render a gradient
+
+Create a context, wrap your canvas in a [`Surface`](/reference/vgpu/surface#surface), and draw an effect:
+
+```ts
+import { init } from "vgpu";
+import gradientSource from "./gradient.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+const gradient = gpu.effect(gradientSource);
+
+gradient.draw(surface); // renders immediately
+```
+
+```wgsl
+// gradient.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, 0.4, 1.0);
+}
+```
+
+## Load .wgsl files in Next.js
+
+Add the loader rule to your Next.js config:
+
+```js
+// next.config.mjs
+const config = {
+  turbopack: {
+    rules: {
+      "*.wgsl": {
+        loaders: ["@vgpu/wgsl/loader-webpack"],
+        as: "*.js",
+      },
+    },
+  },
+};
+
+export default config;
+```
+
+> Good to know: for webpack builds, add the same loader as a module rule: `config.module.rules.push({ test: /\.wgsl$/, use: "@vgpu/wgsl/loader-webpack" })`.
+
+## Load .wgsl files in Vite
+
+Add the plugin from `@vgpu/wgsl/loader-vite`:
+
+```js
+// vite.config.js
+import { defineConfig } from "vite";
+import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+
+export default defineConfig({
+  plugins: [wgslVitePlugin()],
+});
+```
+
+## Type .wgsl imports
+
+Create a `wgsl-env.d.ts` in your project so TypeScript types every `.wgsl` import as a string:
+
+```tsx
+/// <reference types="@vgpu/wgsl/wgsl-types" />
+```

@@ -96,6 +96,7 @@ particles.swap();
 ## Notes
 
 - Use `gpu.pingPongStorage(bytes)` when a compute step reads previous state and writes next state; binding the same writable storage identity twice is rejected before dispatch.
+- Bindings use compute visibility only when statically reachable from the selected compute entry point; unused declarations stay in the layout with visibility `0`.
 - Dispatch counts are forwarded to WebGPU; validate domain-specific bounds in your app.
 - `gpu.storage()` creates storage buffers with `copy_src` and `copy_dst`, so they can be read back and rewritten from JS.
 - **See also:** `Gpu.compute`, `Draw.set`, `SharedUniforms`, `Target`, `StorageBuffer` from `vgpu/core`.

@@ -3,8 +3,8 @@ import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCheck } from "../lib/check/run.js";
-import { runCreate } from "../lib/create/run.js";
 import { runDocs } from "../lib/docs/run.js";
+import { runInstallDawn } from "../lib/install-dawn/run.js";
 import { runSnapshotCommand } from "../lib/snapshot/run.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -17,9 +17,9 @@ Official VGPU CLI.
 
 Commands:
   check      Validate and reflect a WGSL file as JSON
-  create     Scaffold a minimal ring-1 VGPU project
   docs       Explore bundled VGPU documentation
   snapshot   Compare the representative GPU pixel snapshot
+  install-dawn  Download and verify the portable Node Dawn prebuild
   doctor     Coming soon
   wgsl       Coming soon
 
@@ -55,9 +55,9 @@ export function runCli(args) {
   if (command === undefined || command === "--help" || command === "-h") return { code: 0, stdout: help };
   if (command === "--version" || command === "-v") return { code: 0, stdout: `${VERSION}\n` };
   if (command === "check") return runCheck(rest);
-  if (command === "create") return runCreate(rest);
   if (command === "docs") return runDocs(rest);
   if (command === "snapshot") return runSnapshotCommand({ args: rest });
+  if (command === "install-dawn") return runInstallDawn(rest);
   if (command === "doctor" || command === "wgsl") return { code: 1, stderr: comingSoon(command) };
   return { code: 1, stderr: `Unknown vgpu command: ${command}\n\n${help}` };
 }

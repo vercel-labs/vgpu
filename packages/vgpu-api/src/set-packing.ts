@@ -1,4 +1,4 @@
-import type { HostShareableLayout, LayoutMember, WGSLType } from "@vgpu/wgsl/runtime";
+import type { HostShareableLayout, LayoutMember, WGSLType } from "@vgpu/wgsl/reflect-source";
 import { unsupportedError } from "./errors.ts";
 
 /** Packs JS values into the frozen ReflectionFacade host-shareable layout bytes. */

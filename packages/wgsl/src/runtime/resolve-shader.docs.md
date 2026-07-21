@@ -42,10 +42,10 @@ declare function resolveShader(opts: ResolveOptions): Promise<ResolvedShader>;
 **Throws:** `VGPU-RESOLVE-MODULE-BINDING` when a non-entry imported module declares any `@group(...)` or `@binding(...)` resource — move the resource declaration into the entry module and export only structs/functions from the module. The error message is exactly:
 
 ```text
-VGPU-RESOLVE-MODULE-BINDING: <module> declara '@group(<group>) @binding(<binding>) <name>'.
-Los módulos no pueden declarar bindings — exportá el struct y declaralo en tu entry:
+VGPU-RESOLVE-MODULE-BINDING: <module> declares '@group(<group>) @binding(<binding>) <name>'.
+Modules cannot declare bindings — export the struct and declare it in your entry:
   export struct NoiseConfig { seed: u32 }
-  // en tu entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;
+  // in your entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;
 ```
 
 **Throws:** `VGPU-WGSL-RES-ABS` when an import specifier starts with `/` — use a relative, `@/`, or package import.

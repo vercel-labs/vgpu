@@ -4,14 +4,17 @@ import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock
 export interface MockGPUDeviceInstrumentation {
   readonly calls: {
     createBuffer: number;
+    createBindGroupLayout: number;
     createBindGroup: number;
     createCommandEncoder: number;
     createRenderBundleEncoder: number;
+    createShaderModule: number;
     createRenderPipeline: number;
     createRenderPipelineAsync: number;
     createComputePipeline: number;
   };
   readonly createBufferDescriptors: GPUBufferDescriptor[];
+  readonly createBindGroupLayoutDescriptors: GPUBindGroupLayoutDescriptor[];
   readonly createBindGroupDescriptors: GPUBindGroupDescriptor[];
   readonly createCommandEncoderDescriptors: GPUCommandEncoderDescriptor[];
   readonly createRenderBundleEncoderDescriptors: GPURenderBundleEncoderDescriptor[];
@@ -54,8 +57,15 @@ export function createMockGPUDevice(): GPUDevice {
       // Mock WebGPU texture: only fields touched by core/render tests are implemented.
       } as unknown as MockGPUTexture;
     },
-    createShaderModule: () => ({}) as GPUShaderModule,
-    createBindGroupLayout: () => ({}) as GPUBindGroupLayout,
+    createShaderModule(): GPUShaderModule {
+      instrumentation.calls.createShaderModule += 1;
+      return {} as GPUShaderModule;
+    },
+    createBindGroupLayout(desc: GPUBindGroupLayoutDescriptor): GPUBindGroupLayout {
+      instrumentation.calls.createBindGroupLayout += 1;
+      instrumentation.createBindGroupLayoutDescriptors.push(desc);
+      return {} as GPUBindGroupLayout;
+    },
     createPipelineLayout: () => ({}) as GPUPipelineLayout,
     createBindGroup(desc: GPUBindGroupDescriptor): GPUBindGroup {
       instrumentation.calls.createBindGroup += 1;
@@ -103,7 +113,7 @@ export function createMockGPUDevice(): GPUDevice {
         copyTextureToBuffer() {},
         beginComputePass: () => ({ setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} }) as unknown as GPUComputePassEncoder,
         // Mock render pass encoder: only binding/pipeline/draw/bundle/end methods used by tests are implemented.
-        beginRenderPass: () => ({ setBindGroup() {}, setVertexBuffer() {}, setPipeline() {}, executeBundles() {}, draw() {}, end() {} }) as unknown as GPURenderPassEncoder,
+        beginRenderPass: () => ({ setBindGroup() {}, setVertexBuffer() {}, setIndexBuffer() {}, setPipeline() {}, executeBundles() {}, draw() {}, drawIndexed() {}, end() {} }) as unknown as GPURenderPassEncoder,
         finish: () => ({}),
       // Mock command encoder: only copy/render/finish methods used by core/render are implemented.
       } as unknown as GPUCommandEncoder;
@@ -137,14 +147,17 @@ function createMockGPUDeviceInstrumentation(): MockGPUDeviceInstrumentation {
   return {
     calls: {
       createBuffer: 0,
+      createBindGroupLayout: 0,
       createBindGroup: 0,
       createCommandEncoder: 0,
       createRenderBundleEncoder: 0,
+      createShaderModule: 0,
       createRenderPipeline: 0,
       createRenderPipelineAsync: 0,
       createComputePipeline: 0,
     },
     createBufferDescriptors: [],
+    createBindGroupLayoutDescriptors: [],
     createBindGroupDescriptors: [],
     createCommandEncoderDescriptors: [],
     createRenderBundleEncoderDescriptors: [],

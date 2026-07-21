@@ -20,8 +20,8 @@ export async function runSharedUniformsExample() {
   const gpu = await init();
   const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
   const globals = gpu.uniforms({ time: 0.2, mouse: [0.4, 0.6] });
-  const wave = gpu.pass(WAVE, { label: "wave", set: { globals } });
-  const tint = gpu.pass(TINT, { label: "tint", set: { g: globals } });
+  const wave = gpu.effect(WAVE, { label: "wave", set: { globals } });
+  const tint = gpu.effect(TINT, { label: "tint", set: { g: globals } });
   globals.set({ time: 0.8 });
   gpu.frame((frame) => {
     frame.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(wave));

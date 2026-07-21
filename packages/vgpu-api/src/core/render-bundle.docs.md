@@ -1,6 +1,6 @@
 # createRenderBundle
 
-Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Pass` commands because it derives formats from `Target` and performs stale-bundle checks (`VGPU-R3-BUNDLE-STALE`).
+Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Effect` commands because it derives formats from `Target` and performs stale-bundle checks (`VGPU-R3-BUNDLE-STALE`).
 
 ## Import
 
@@ -113,7 +113,7 @@ void bundle;
 
 ## Notes
 
-- This helper intentionally does not know about main API (`vgpu`) `Draw`, `Pass`, or `Target`; you must supply formats and native commands yourself.
+- This helper intentionally does not know about main API (`vgpu`) `Draw`, `Effect`, or `Target`; you must supply formats and native commands yourself.
 - Use `gpu.bundle()` for public API examples unless you are already managing native pipelines.
 - `RenderBundleRecorder.draw(number, ...)` defaults to `(instanceCount=1, firstVertex=0, firstInstance=0)`; object overload has the same defaults.
 - **See also:** `Bundle`, `FramePass.bundles`, `Draw`, `Target`.

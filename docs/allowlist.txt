@@ -1,8 +1,8 @@
 vgpu init packages/vgpu-api/src/init.docs.md
 vgpu Gpu packages/vgpu-api/src/gpu.docs.md
 vgpu InitOptions packages/vgpu-api/src/init.docs.md
-vgpu Pass packages/vgpu-api/src/pass.docs.md
-vgpu PassOptions packages/vgpu-api/src/pass.docs.md
+vgpu Effect packages/vgpu-api/src/effect.docs.md
+vgpu EffectOptions packages/vgpu-api/src/effect.docs.md
 vgpu Draw packages/vgpu-api/src/draw.docs.md
 vgpu DrawOptions packages/vgpu-api/src/draw.docs.md
 vgpu DrawCallOptions packages/vgpu-api/src/draw.docs.md

@@ -19,19 +19,19 @@ export function createPingPongStorage(device: Device, bytes: number, access: Sto
 }
 
 class TargetPingPong implements PingPongTargets {
-  private parity = 0;
+  #parity = 0;
   constructor(private readonly halves: readonly [Target, Target]) {}
-  get read(): Target { return this.halves[this.parity]; }
-  get write(): Target { return this.halves[this.parity ^ 1]; }
-  swap(): void { this.parity ^= 1; }
+  get read(): Target { return this.halves[this.#parity]; }
+  get write(): Target { return this.halves[this.#parity ^ 1]; }
+  swap(): void { this.#parity ^= 1; }
 }
 
 class StoragePingPong implements PingPongStorage {
-  private parity = 0;
+  #parity = 0;
   constructor(private readonly halves: readonly [StorageBuffer, StorageBuffer]) {}
-  get read(): StorageBuffer { return this.halves[this.parity]; }
-  get write(): StorageBuffer { return this.halves[this.parity ^ 1]; }
-  swap(): void { this.parity ^= 1; }
+  get read(): StorageBuffer { return this.halves[this.#parity]; }
+  get write(): StorageBuffer { return this.halves[this.#parity ^ 1]; }
+  swap(): void { this.#parity ^= 1; }
 }
 
 function clampDimension(value: number): number {

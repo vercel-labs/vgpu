@@ -32,6 +32,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./install-dawn": {
+      "types": "./dist/dawn-installer.d.ts",
+      "import": "./dist/dawn-installer.js"
     }
   },
   "files": [
@@ -41,7 +45,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "postinstall": "node -e \"import('./dist/postinstall.js').catch(() => {})\""
   },
   "dependencies": {
     "@vgpu/core": "workspace:*",

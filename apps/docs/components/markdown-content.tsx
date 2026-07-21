@@ -2,10 +2,33 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/code-block';
-import { resolveMarkdownHref } from '@/lib/manifest';
+import { resolveMarkdownHref, resolveSymbolHref } from '@/lib/manifest';
+import type { TocItem } from '@/components/table-of-contents';
+
+interface HastNode {
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+}
+
+// Marks <code> elements that already live inside an <a> so the code renderer
+// skips symbol autolinking (nested <a> breaks hydration). Runs on the hast
+// tree because react-markdown hands hast nodes (with `properties`) to
+// component renderers; mdast `data` never reaches them.
+const markCodeInsideLinks = () => (tree: HastNode) => {
+  const walk = (node: HastNode, inLink: boolean) => {
+    if (node.tagName === 'code' && inLink) {
+      node.properties = { ...node.properties, dataSkipAutolink: 'true' };
+    }
+    const childInLink = inLink || node.tagName === 'a';
+    for (const child of node.children ?? []) walk(child, childInLink);
+  };
+  walk(tree, false);
+};
 
 interface MarkdownContentProps {
   content: string;
+  enableTwoslashCut?: boolean;
 }
 
 function textFromChildren(children: React.ReactNode): string {
@@ -15,13 +38,29 @@ function textFromChildren(children: React.ReactNode): string {
   return '';
 }
 
-function slugifyHeading(children: React.ReactNode) {
-  return textFromChildren(children)
+function slugifyHeadingText(text: string) {
+  return text
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+}
+
+function slugifyHeading(children: React.ReactNode) {
+  return slugifyHeadingText(textFromChildren(children));
+}
+
+
+const TWOSLASH_CUT_MARKER = '// ---cut---';
+
+function stripTwoslashCut(code: string) {
+  const markerIndex = code.indexOf(TWOSLASH_CUT_MARKER);
+  if (markerIndex === -1) return code;
+
+  const afterMarker = markerIndex + TWOSLASH_CUT_MARKER.length;
+  const nextLineIndex = code.indexOf('\n', afterMarker);
+  return nextLineIndex === -1 ? '' : code.slice(nextLineIndex + 1);
 }
 
 function normalizeCodeLanguage(language: string | undefined) {
@@ -34,19 +73,56 @@ function normalizeCodeLanguage(language: string | undefined) {
   return normalized;
 }
 
-export function MarkdownContent({ content }: MarkdownContentProps) {
+export function extractToc(content: string): TocItem[] {
+  const headingCounts = new Map<string, number>();
+  const items: TocItem[] = [];
+
+  for (const match of content.matchAll(/^(#{1,3})\s+(.+)$/gm)) {
+    const level = match[1].length;
+    const title = match[2]
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .trim();
+    const base = slugifyHeadingText(title);
+    const count = headingCounts.get(base) ?? 0;
+    headingCounts.set(base, count + 1);
+    if (level === 2 || level === 3) {
+      items.push({
+        id: count === 0 ? base : `${base}-${count + 1}`,
+        title,
+        level,
+      });
+    }
+  }
+
+  return items;
+}
+
+export function MarkdownContent({ content, enableTwoslashCut = false }: MarkdownContentProps) {
+  const headingCounts = new Map<string, number>();
+  const headingId = (children: React.ReactNode) => {
+    const base = slugifyHeading(children);
+    const count = headingCounts.get(base) ?? 0;
+    headingCounts.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count + 1}`;
+  };
+
   return (
     <div className="prose-content text-gray-11 leading-7">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[markCodeInsideLinks]}
         components={{
-          h1: ({ children }) => (
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-12 mb-4">
-              {children}
-            </h1>
-          ),
+          h1: ({ children }) => {
+            const id = headingId(children);
+            return (
+              <h1 id={id} className="scroll-mt-24 text-3xl md:text-4xl font-semibold tracking-tight text-gray-12 mb-4">
+                {children}
+              </h1>
+            );
+          },
           h2: ({ children }) => {
-            const id = slugifyHeading(children);
+            const id = headingId(children);
             return (
               <h2 id={id} className="group scroll-mt-24 text-2xl font-semibold tracking-tight text-gray-12 mt-10 mb-4">
                 <a href={`#${id}`} className="no-underline text-gray-12">
@@ -56,7 +132,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
             );
           },
           h3: ({ children }) => {
-            const id = slugifyHeading(children);
+            const id = headingId(children);
             return (
               <h3 id={id} className="group scroll-mt-24 text-xl font-semibold text-gray-12 mt-8 mb-3">
                 <a href={`#${id}`} className="no-underline text-gray-12">
@@ -108,10 +184,20 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
           thead: ({ children }) => <thead className="bg-gray-2 text-gray-12">{children}</thead>,
           th: ({ children }) => <th className="border-b border-gray-4 px-4 py-2 text-left font-medium">{children}</th>,
           td: ({ children }) => <td className="border-b border-gray-4 px-4 py-2 text-gray-11">{children}</td>,
-          code: ({ className, children }) => {
-            const code = String(children).replace(/\n$/, '');
+          code: ({ className, children, node }) => {
+            const skipAutoLink = Boolean((node as HastNode | undefined)?.properties?.dataSkipAutolink);
+            const rawCode = String(children).replace(/\n$/, '');
+            const code = enableTwoslashCut ? stripTwoslashCut(rawCode) : rawCode;
             const match = /language-([^\s]+)/.exec(className ?? '');
             if (!match && !code.includes('\n')) {
+              const symbolHref = skipAutoLink ? undefined : resolveSymbolHref(code);
+              if (symbolHref) {
+                return (
+                  <Link href={symbolHref} className="rounded bg-gray-2 px-1.5 py-0.5 text-sm text-blue-9 no-underline hover:text-blue-10">
+                    <code>{children}</code>
+                  </Link>
+                );
+              }
               return <code className="rounded bg-gray-2 px-1.5 py-0.5 text-sm text-gray-12">{children}</code>;
             }
             return <CodeBlock code={code} language={normalizeCodeLanguage(match?.[1])} showLineNumbers />;

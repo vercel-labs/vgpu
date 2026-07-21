@@ -1,8 +1,8 @@
-import type { Attr, EntryPointInfo, ParsedAlias, ParsedDecls, ParsedStruct, ParseAliasResult, ParseEntryPointResult, ParseOverrideResult, ParseStructResult, ParseVarResult, VarDecl } from "./reflect-types.ts";
+import type { Attr, EntryPointInfo, EntryPointParam, ParsedAlias, ParsedDecls, ParsedEntryPoint, ParsedStruct, ParsedStructMember, ParseAliasResult, ParseEntryPointResult, ParseOverrideResult, ParseStructResult, ParseVarResult, VarDecl } from "./reflect-types.ts";
 import type { MangleModule } from "./mangler.ts";
 import { mangle } from "./mangler.ts";
 import type { Token } from "./scanner.ts";
-import type { OverrideInfo, StructMemberInfo } from "./reflect-types.ts";
+import type { OverrideInfo } from "./reflect-types.ts";
 import { parseType } from "./reflect-type-parser.ts";
 import { expectIdent, findNext, findToken, matching, readAttrs, skipUntil } from "./reflect-token-utils.ts";
 import { numericAttr } from "./reflect-utils.ts";
@@ -13,7 +13,7 @@ export function parseDeclarations(module: MangleModule): ParsedDecls {
   const structs: ParsedStruct[] = [];
   const aliases: ParsedAlias[] = [];
   const vars: VarDecl[] = [];
-  const entries: EntryPointInfo[] = [];
+  const entries: ParsedEntryPoint[] = [];
   const overrides: OverrideInfo[] = [];
   const features: string[] = [];
   const tokens = module.tokens.filter((token) => token.kind !== "lineComment" && token.kind !== "blockComment");
@@ -53,7 +53,7 @@ export function parseDeclarations(module: MangleModule): ParsedDecls {
       continue;
     }
     if (kind === "fn") {
-      const result = parseEntryPointDecl(tokens, i, attrs);
+      const result = parseEntryPointDecl(module, tokens, i, attrs);
       if (result.item) entries.push(result.item);
       i = result.next;
       continue;
@@ -100,10 +100,36 @@ export function parseVarDecl(module: MangleModule, tokens: readonly Token[], ind
   };
 }
 
-export function parseEntryPointDecl(tokens: readonly Token[], index: number, attrs: readonly Attr[]): ParseEntryPointResult {
+export function parseEntryPointDecl(module: MangleModule, tokens: readonly Token[], index: number, attrs: readonly Attr[]): ParseEntryPointResult {
   const name = expectIdent(tokens[index + 1]);
   const stage = attrs.find((attr) => attr.name === "vertex" || attr.name === "fragment" || attr.name === "compute")?.name as EntryPointInfo["stage"] | undefined;
-  return { item: stage ? { name, mangledName: name, stage, workgroupSize: parseWorkgroupSize(attrs) } : undefined, next: index + 1 };
+  if (!stage) return { item: undefined, next: index + 1 };
+  const open = findNext(tokens, index + 2, "(");
+  const close = matching(tokens, open);
+  return { item: { name, mangledName: name, stage, workgroupSize: parseWorkgroupSize(attrs), path: module.path, params: parseEntryPointParams(tokens.slice(open + 1, close)) }, next: close + 1 };
+}
+
+export function parseEntryPointParams(tokens: readonly Token[]): EntryPointParam[] {
+  const params: EntryPointParam[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const [attrs, afterAttrs] = readAttrs(tokens, i);
+    i = afterAttrs;
+    if (!tokens[i] || tokens[i]!.text === ",") { i++; continue; }
+    const name = expectIdent(tokens[i]);
+    const colon = findNext(tokens, i + 1, ":");
+    let end = colon + 1;
+    let angle = 0;
+    while (end < tokens.length) {
+      if (tokens[end]!.text === "<") angle++;
+      if (tokens[end]!.text === ">") angle = Math.max(0, angle - 1);
+      if (angle === 0 && tokens[end]!.text === ",") break;
+      end++;
+    }
+    params.push({ name, attrs, type: parseType(tokens.slice(colon + 1, end)) });
+    i = end + 1;
+  }
+  return params;
 }
 
 export function parseOverrideDecl(tokens: readonly Token[], index: number): ParseOverrideResult {
@@ -113,8 +139,8 @@ export function parseOverrideDecl(tokens: readonly Token[], index: number): Pars
   return { item: { name, mangledName: name, defaultValue: eq === undefined ? undefined : tokens.slice(eq + 1, end).map((t) => t.text).join("") }, next: end + 1 };
 }
 
-export function parseMembers(tokens: readonly Token[]): StructMemberInfo[] {
-  const members: StructMemberInfo[] = [];
+export function parseMembers(tokens: readonly Token[]): ParsedStructMember[] {
+  const members: ParsedStructMember[] = [];
   let i = 0;
   while (i < tokens.length) {
     const [attrs, afterAttrs] = readAttrs(tokens, i);
@@ -130,7 +156,7 @@ export function parseMembers(tokens: readonly Token[]): StructMemberInfo[] {
       if (angle === 0 && (tokens[end]!.text === "," || tokens[end]!.text === ";")) break;
       end++;
     }
-    members.push({ name, type: parseType(tokens.slice(colon + 1, end)), align: numericAttr(attrs, "align"), size: numericAttr(attrs, "size") });
+    members.push({ name, attrs, type: parseType(tokens.slice(colon + 1, end)), align: numericAttr(attrs, "align"), size: numericAttr(attrs, "size") });
     i = end + 1;
   }
   return members;

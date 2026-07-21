@@ -64,5 +64,5 @@ function validate(radius: number, height: number, radialSegments: number, height
   const smoothCount = (radialSegments + 1) * (heightSegments + 1) + (openEnded ? 0 : radialSegments + 2);
   const flatCount = radialSegments * heightSegments * 6 + (openEnded ? 0 : radialSegments * 3);
   const vertexCount = shading === "flat" ? flatCount : smoothCount;
-  if (vertexCount > 65535) throw invalidUsage("Mesh.cone", `Segment counts produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segment counts.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.cone", `Segments make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

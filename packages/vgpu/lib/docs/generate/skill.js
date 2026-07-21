@@ -35,7 +35,9 @@ function referenceFile(doc) {
 }
 
 function router(docs) {
-  const guides = docs.filter((d) => d.kind === "guide").sort(bySymbol);
+  const guides = docs.filter((d) => d.kind === "guide");
+  const concepts = guides.filter((d) => d.symbol.startsWith("concepts-")).sort(byOrderThenSymbol);
+  const performanceGuides = guides.filter((d) => !d.symbol.startsWith("concepts-")).sort(bySymbol);
   const api = docs.filter((d) => d.kind === "api");
   const packages = [...new Set(api.map((d) => d.package))].sort();
   const symbolCount = api.reduce((n, d) => n + d.symbols.length, 0);
@@ -65,13 +67,21 @@ function router(docs) {
     "npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
     "```",
     "",
-    "## Performance guides",
+    "Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bake example thumbnails with `pnpm thumbs:docker` / `pnpm --filter docs thumbs:check` (pass `-- --only <slug>` for a single example).",
     "",
-    "Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.",
+    "## Core concepts",
     "",
   ];
-  for (const guide of guides) {
-    out.push(`- **${guide.symbol}** — ${summarize(guide.content)}  \`references${guide.virtualPath}\``);
+  for (const guide of concepts) {
+    out.push(`- **${guide.topicTitle}** — ${summarize(guide.content)}  \`references${guide.virtualPath}\``);
+  }
+  out.push("");
+  out.push("## Performance guides");
+  out.push("");
+  out.push("Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.");
+  out.push("");
+  for (const guide of performanceGuides) {
+    out.push(`- **${guide.topicTitle}** — ${summarize(guide.content)}  \`references${guide.virtualPath}\``);
   }
   out.push("");
   out.push("## API reference");
@@ -90,10 +100,11 @@ function router(docs) {
 }
 
 function summarize(content) {
-  // Collect the first prose paragraph (sentences may wrap across source lines), skipping headings
-  // and blockquotes, then take its first sentence.
+  // Collect the first prose paragraph (sentences may wrap across source lines), skipping frontmatter,
+  // headings and blockquotes, then take its first sentence.
+  const body = content.replace(/^---\n[\s\S]*?\n---\n?/u, "");
   let paragraph = "";
-  for (const raw of content.split("\n")) {
+  for (const raw of body.split("\n")) {
     const line = raw.trim();
     if (line.startsWith("#") || line.startsWith(">")) continue;
     if (!line) {
@@ -110,6 +121,10 @@ function summarize(content) {
   const sentence = plain.match(/^(.*?\.)(?:\s|$)/u);
   const text = sentence ? sentence[1] : plain;
   return text.length > 150 ? `${text.slice(0, 147).trimEnd()}…` : text;
+}
+
+function byOrderThenSymbol(a, b) {
+  return (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY) || bySymbol(a, b);
 }
 
 function bySymbol(a, b) {

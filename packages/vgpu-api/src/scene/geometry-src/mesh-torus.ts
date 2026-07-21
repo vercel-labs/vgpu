@@ -65,5 +65,5 @@ function validate(radius: number, tube: number, radialSegments: number, tubularS
   if (arc <= 0) throw invalidUsage("Mesh.torus", "Arc must be greater than 0.");
   const smoothCount = (radialSegments + 1) * (tubularSegments + 1);
   const vertexCount = shading === "flat" ? radialSegments * tubularSegments * 6 : smoothCount;
-  if (vertexCount > 65535) throw invalidUsage("Mesh.torus", `Segment counts produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segment counts.`);
+  if (vertexCount > 65535) throw invalidUsage("Mesh.torus", `Segments make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
 }

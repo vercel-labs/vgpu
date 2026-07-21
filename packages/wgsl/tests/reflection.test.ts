@@ -114,7 +114,7 @@ test("reflection rejects bool in host-shareable layout with canonical fix-it", a
   await expect(resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
     struct Params { enabled: bool }
     @group(0) @binding(0) var<uniform> params: Params;
-  ` } })).rejects.toThrow("VGPUError: `bool` no es host-shareable en uniform/storage. Fix: usá `u32` (0 | 1) → struct Params { enabled: u32 }");
+  ` } })).rejects.toThrow("VGPUError: `bool` is not host-shareable in uniform/storage. Fix: use `u32` (0 | 1) → struct Params { enabled: u32 }");
 });
 
 test("reflection classifies texture bindings for exact BGL entries", async () => {

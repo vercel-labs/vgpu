@@ -1,18 +1,37 @@
-import { CodeBlock } from '@/components/code-block';
-import { Callout } from '@/components/mdx/callout';
-const gpuCode = `import { init } from "vgpu";
-const gpu = await init();
-const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const target = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });`;
-const setCode = `const wave = gpu.pass(\`
-struct Params { time: f32, speed: f32 }
-@group(0) @binding(0) var<uniform> params: Params;
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, params.speed, 1); }
-\`, { set: { speed: 2 } });
-wave.set({ time: gpu.time });`;
-const frameCode = `gpu.frame((f) => {
-  f.pass({ target: scene }, (p) => p.draw(cube));
-  f.pass({ target: surface }, (p) => p.draw(post));
-});`;
-const packageRows = [['vgpu', 'Ring-1 public API: init, Gpu, pass, draw, compute, frame, bundle, target, uniforms.'], ['vgpu/core', 'Ring-0 escape hatches and native handles.'], ['vgpu/scene', 'Pure geometry and camera helpers.'], ['@vgpu/wgsl', 'WGSL module resolution, reflection, and loaders.']];
-export default function ConceptsPage() { return <div className="px-4 py-8 lg:px-8 lg:py-12 max-w-4xl mx-auto"><h1 className="text-3xl md:text-4xl font-semibold text-gray-12 mb-4">Core Concepts</h1><p className="text-xl text-gray-10 mb-12">vgpu is one context, explicit WGSL bindings, and frames you schedule yourself.</p><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Packages</h2><div className="rounded-lg border border-gray-4 overflow-hidden">{packageRows.map(([name, description]) => <div key={name} className="grid md:grid-cols-[11rem_1fr] gap-3 p-4 border-b border-gray-4 last:border-b-0 bg-gray-1"><code className="text-blue-9 text-sm">{name}</code><p className="text-gray-10 text-sm leading-relaxed">{description}</p></div>)}</div></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">One Gpu context</h2><CodeBlock code={gpuCode} language="typescript" /></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">WGSL owns bindings</h2><p className="text-gray-11 mb-4">The shader declares resources; <code>set()</code> binds by name. JS values are written in-place, resources are user-owned.</p><CodeBlock code={setCode} language="typescript" /><Callout type="info">There are no globals. Pass time explicitly and read resolution from targets.</Callout></section><section className="mb-12"><h2 className="text-2xl font-semibold text-gray-12 mb-4">Frames are on-demand</h2><CodeBlock code={frameCode} language="typescript" /></section></div>; }
+import Link from 'next/link';
+import { getConceptPage } from '@/lib/concepts';
+
+export const metadata = {
+  title: 'Concepts',
+  description: 'The core ideas behind every vgpu program, in reading order.',
+};
+
+const order = ['context', 'draws', 'compilation', 'effects', 'passes', 'frames', 'render-bundles'];
+
+export default function ConceptsPage() {
+  const pages = order
+    .map((slug) => ({ slug, page: getConceptPage(slug) }))
+    .filter((entry): entry is { slug: string; page: NonNullable<ReturnType<typeof getConceptPage>> } => entry.page !== null);
+
+  return (
+    <article className="px-4 py-8 lg:px-8 lg:py-12 max-w-6xl mx-auto">
+      <h1 className="text-3xl font-semibold text-gray-12">Concepts</h1>
+      <p className="mt-4 max-w-2xl leading-7 text-gray-11">
+        These ideas cover every vgpu program. Read them in order — each page builds on the previous one.
+      </p>
+
+      <div className="mt-8 grid gap-3">
+        {pages.map(({ slug, page }) => (
+          <Link
+            key={slug}
+            href={`/concepts/${slug}`}
+            className="flex flex-col gap-1 rounded-lg border border-gray-4 bg-gray-1 p-4 transition-colors hover:border-gray-5 hover:bg-gray-2 sm:flex-row sm:items-baseline sm:gap-3"
+          >
+            <span className="font-medium text-gray-12">{page.frontmatter.title}</span>
+            <span className="text-sm text-gray-10">{page.frontmatter.summary}</span>
+          </Link>
+        ))}
+      </div>
+    </article>
+  );
+}

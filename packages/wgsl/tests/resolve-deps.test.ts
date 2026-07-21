@@ -21,6 +21,23 @@ test("resolveShader deps include entry and transitive imports sorted and deduped
   expect(result.deps).toEqual([a, b, entry, shared].sort());
 });
 
+test("resolveShader correlates final emitted imported calls with entry bindings", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-bindings-"));
+  const entry = join(dir, "main.wgsl");
+  const helper = join(dir, "helper.wgsl");
+  await writeFile(helper, "export fn readValue(value: vec4f) -> vec4f { return value; }");
+  await writeFile(entry, `
+    import { readValue } from './helper.wgsl';
+    @group(0) @binding(0) var<uniform> used: vec4f;
+    @group(0) @binding(1) var<uniform> unused: vec4f;
+    @vertex fn vs() -> @builtin(position) vec4f { return readValue(used); }
+  `);
+  const result = await resolveShader({ entry, validate: false });
+  expect(result.wgsl).toContain("readValue");
+  expect(result.reflection.entryPoints[0]?.bindings).toEqual([{ group: 0, binding: 0 }]);
+  expect(result.reflection.bindings).toHaveLength(2);
+});
+
 test("resolveShader deps contain only the entry for a leaf shader", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
   const entry = join(dir, "leaf.wgsl");

@@ -29,13 +29,21 @@ import shader from "./shader.wgsl";
 const draw = gpu.draw({ shader });
 ```
 
+## Stage storage limits: `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT`
+
+**Symptom:** creating a draw reports that the selected vertex or fragment entry uses more storage buffers than the device grants for that stage.
+
+**Cause:** bindings statically reached by the selected entry point count against `maxStorageBuffersInVertexStage` or `maxStorageBuffersInFragmentStage` (falling back to `maxStorageBuffersPerShaderStage` when a stage-specific property is unavailable). Unused declarations and resources used only by another stage do not count.
+
+**Fix:** if the adapter supports it, request the reported count through `init({ requiredLimits: { maxStorageBuffersInVertexStage: count } })` or the fragment sibling. For vertex data, prefer `gpu.mesh(...)` vertex streams where possible. Otherwise reduce the number of storage buffers reached by that stage. The error detail includes `stage`, `entryPoint`, `count`, `limit`, and the `{ name, group, binding }` bindings that were counted.
+
 ## Missing binding: `VGPU-R1-BINDING-NEVER-SET`
 
 Every reflected binding must be set by name or covered by a claimed group. Do not rely on globals or implicit buffers.
 
 ```text
-const pass = gpu.pass(WGSL);
-pass.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
+const effect = gpu.effect(WGSL);
+effect.set({ params: { time: gpu.time }, tex: target.color, samp: gpu.sampler() });
 ```
 
 ## Ownership flip: `VGPU-R1-OWNERSHIP-FLIP`
@@ -59,7 +67,7 @@ struct Params { enabled: u32 }
 
 ## Bundle stale
 
-`VGPU-R3-BUNDLE-STALE` means a bundle was recorded against an old target or bind-group identity. Re-record after resize or resource identity changes. Plain JS `set()` updates are safe because buffers are written in place.
+`VGPU-R3-BUNDLE-STALE` means a bundle was recorded for a different render signature or an old bind-group/resource identity. A bundle survives resizing the target it draws onto when formats/depth/sample count match; re-record after resource identity changes, including sampling a resized target. Plain JS `set()` updates are safe because buffers are written in place.
 
 ## Manual bind-group claims
 

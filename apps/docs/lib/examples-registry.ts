@@ -1,21 +1,30 @@
 import { exampleSources, type ExampleSourceFile } from './examples-source.generated';
+import { exampleThumbs } from './example-thumbs.generated';
 
 import { meta as gradientMeta } from '../examples/gradient/meta';
-import { meta as waveMeta } from '../examples/wave/meta';
-import { meta as colorCycleMeta } from '../examples/color-cycle/meta';
-import { meta as raymarchingMeta } from '../examples/raymarching/meta';
-import { meta as noiseMeta } from '../examples/noise/meta';
-import { meta as metaballsMeta } from '../examples/metaballs/meta';
-import { meta as fractalMeta } from '../examples/fractal/meta';
-import { meta as alienPlanetMeta } from '../examples/alien-planet/meta';
+import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
+import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
+import { meta as postProcessingMeta } from '../examples/post-processing/meta';
 import { meta as fluidMeta } from '../examples/fluid/meta';
-import { meta as triangleParticlesMeta } from '../examples/triangle-particles/meta';
+import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
+import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
+
+export interface ExampleThumbOptions {
+  readonly warmupFrames?: number;
+  readonly time?: number;
+  readonly dt?: number;
+  readonly headless?: boolean;
+  readonly note?: string;
+  readonly fragmentFile?: string;
+}
 
 export interface ExampleMeta {
   readonly slug: string;
   readonly title: string;
   readonly description: string;
   readonly thumbnail?: string;
+  readonly hero?: string;
+  readonly thumb?: ExampleThumbOptions;
   readonly files?: readonly string[];
 }
 
@@ -24,18 +33,21 @@ export interface ExampleRecord {
   readonly sources: readonly ExampleSourceFile[];
 }
 
-const metas = [
+const rawMetas = [
   gradientMeta,
-  waveMeta,
-  colorCycleMeta,
-  raymarchingMeta,
-  noiseMeta,
-  metaballsMeta,
-  fractalMeta,
-  alienPlanetMeta,
+  triangleLedFrontMeta,
+  antiAliasingMeta,
+  postProcessingMeta,
   fluidMeta,
-  triangleParticlesMeta,
+  instancedRenderingMeta,
+  batchRenderingMeta,
 ] as const satisfies readonly ExampleMeta[];
+
+const metas = rawMetas.map((meta) => ({
+  ...meta,
+  thumbnail: exampleThumbs[meta.slug]?.card,
+  hero: exampleThumbs[meta.slug]?.hero,
+})) satisfies readonly ExampleMeta[];
 
 export const examples = metas.map((meta) => ({
   meta,

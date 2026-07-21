@@ -35,12 +35,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const canvas = gpuCanvasLike(8, 8, true);
       const surface = gpu.surface(canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
-      const red = gpu.pass(RED, { label: "surfaceRed" });
+      const red = gpu.effect(RED, { label: "surfaceRed" });
       gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.draw(red)));
       expect(rgbaAt(await surface.read(), 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
       surface.resize([12, 4]);
-      const green = gpu.pass(GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: surface.size } });
+      const green = gpu.effect(GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: surface.size } });
       gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.draw(green)));
       const pixels = await surface.read();
       expect(surface.size).toEqual([12, 4]);
@@ -66,8 +66,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const a = gpu.surface(gpuCanvasLike(6, 6, true), { dpr: 1, label: "surfaceA" });
       const b = gpu.surface(gpuCanvasLike(5, 5, true), { dpr: 1, label: "surfaceB" });
-      const blue = gpu.pass(BLUE, { label: "blue" });
-      const yellow = gpu.pass(YELLOW, { label: "yellow" });
+      const blue = gpu.effect(BLUE, { label: "blue" });
+      const yellow = gpu.effect(YELLOW, { label: "yellow" });
 
       gpu.frame((frame) => {
         frame.pass({ target: a }, (pass) => pass.draw(blue));
@@ -137,11 +137,11 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
         const canvas = (${workerCanvasSource()})(16, 8);
         const surface = gpu.surface(canvas);
         const half = gpu.target({ size: [Math.max(1, surface.size[0] / 2), Math.max(1, surface.size[1] / 2)] });
-        const pass = gpu.pass(${JSON.stringify(BLUE)});
+        const effect = gpu.effect(${JSON.stringify(BLUE)});
         surface.onResize(({ width, height }) => half.resize([width / 2, height / 2]));
         const initial = [...surface.size];
         surface.resize([20, 10]);
-        gpu.frame((frame) => frame.pass({ target: half }, (p) => p.draw(pass)));
+        gpu.frame((frame) => frame.pass({ target: half }, (p) => p.draw(effect)));
         const pixels = await half.read();
         const offset = 4 * (2 * half.size[0] + 5);
         parentPort.postMessage({ initial, resized: [...surface.size], half: [...half.size], pixel: [pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3]] });

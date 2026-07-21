@@ -1,6 +1,7 @@
 export const meta = {
   slug: 'fluid',
-  title: 'Fluid Simulation',
-  description: 'Compute-driven dye flow with ping-pong storage textures and a vgpu display pass.',
-  files: ['meta.ts', 'example.ts', 'compute.wgsl', 'display.wgsl'],
+  title: 'Interactive Fluid',
+  description: 'A compact pressure-projected fluid solver with velocity advection, colorful dye, and pointer or touch stirring.',
+  thumb: { warmupFrames: 120, dt: 1 / 60 },
+  files: ['example.ts', 'simulation.ts', 'controls.ts', 'math.ts', 'fluid-common.wgsl', 'advect-velocity.wgsl', 'curl.wgsl', 'vorticity.wgsl', 'divergence.wgsl', 'pressure.wgsl', 'project.wgsl', 'advect-dye.wgsl', 'display.wgsl'],
 } as const;

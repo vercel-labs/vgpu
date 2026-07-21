@@ -57,6 +57,6 @@ function validate(radius: number, widthSegments: number, heightSegments: number)
   if (heightSegments < 2) throw invalidUsage("Mesh.sphere", "Height segments must be at least 2.");
   const vertexCount = (widthSegments + 1) * (heightSegments + 1);
   if (vertexCount > 65535) {
-    throw invalidUsage("Mesh.sphere", `Segment counts (widthSegments=${widthSegments}, heightSegments=${heightSegments}) produce ${vertexCount} vertices, exceeding the uint16 index limit of 65,535. Reduce segment counts.`);
+    throw invalidUsage("Mesh.sphere", `Segments ${widthSegments}x${heightSegments} make ${vertexCount} vertices > uint16 limit 65535; reduce them.`);
   }
 }

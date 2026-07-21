@@ -14,7 +14,7 @@ Bind groups are cached by resource identity. Updating a JS value in place keeps 
 
 ## Bundle staleness
 
-Bundles freeze encoded commands and bind groups. Buffer contents may change, but target resize or resource identity changes require re-recording. Replay reports `VGPU-R3-BUNDLE-STALE`.
+Bundles freeze encoded commands and bind groups. Buffer contents may change, and replay targets may resize as long as their render signature matches. Re-record when a sampled resource identity changes; replay reports `VGPU-R3-BUNDLE-STALE`.
 
 ## Claimed groups
 
@@ -26,7 +26,7 @@ p.draw(draw, { offsets: { 1: [offset] } });
 
 ## Cost model defaults
 
-- Pre-warm pipelines with `targets:`.
+- Pre-warm pipelines with `await draw.compile(target)`.
 - Share globals with `gpu.uniforms()`.
 - Use `instances` for repeated geometry.
 - Use ping-pong for iterative read/write resources.

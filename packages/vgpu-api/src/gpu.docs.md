@@ -12,7 +12,7 @@ import { init } from "vgpu/mock";
 ## Signature
 
 ```ts
-import type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawOptions, Frame, FrameRunner, Pass, PassOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions } from "vgpu";
+import type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawOptions, Frame, FrameRunner, Effect, EffectOptions, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions } from "vgpu";
 import type { Device } from "vgpu/core";
 import type { ShaderSource } from "vgpu";
 
@@ -23,7 +23,7 @@ interface Gpu {
   deltaTime: number;
   frameCount: number;
   surface(canvas: HTMLCanvasElement | OffscreenCanvas, opts?: SurfaceOptions): Surface;
-  pass(source: string | ShaderSource, opts?: PassOptions): Pass;
+  effect(source: string | ShaderSource, opts?: EffectOptions): Effect;
   draw(opts: DrawOptions): Draw;
   target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
@@ -36,6 +36,8 @@ interface Gpu {
   pingPongStorage(bytes: number): PingPongStorage;
   uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T>;
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle;
+  onError(cb: GpuErrorListener): () => void;
+  settled(): Promise<void>;
 }
 ```
 
@@ -47,8 +49,8 @@ interface Gpu {
 |---|---|---:|---|---|
 | surface.canvas | `HTMLCanvasElement \| OffscreenCanvas` | ✔ | — | Canvas-like object with a `webgpu` context. A canvas may have one live `Surface`. |
 | surface.opts | `SurfaceOptions` | ✖ | `{}` | Per-surface canvas format, size, DPR, and auto-resize behavior. |
-| pass.source | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource { version: 1, wgsl }`. |
-| pass.opts | `PassOptions` | ✖ | `{}` | `label` defaults to `"pass"`; `set` defaults to no initial bindings. |
+| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource { version: 1, wgsl }`. |
+| effect.opts | `EffectOptions` | ✖ | `{}` | `label` defaults to `"effect"`; `set` defaults to no initial bindings. |
 | draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
 | frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits automatically in `finally`; if omitted, caller must call `frame.submit()`. |
@@ -63,12 +65,13 @@ interface Gpu {
 | pingPong.opts | `TargetTextureOptions` | ✖ | `{}` | Texture/attachment options only; size comes from positional width/height. |
 | pingPongStorage.bytes | `number` | ✔ | — | Creates two `"read-write"` storage buffers. |
 | uniforms.values | `Record<string, unknown>` | ✔ | — | Cloned initial JS values; WGSL layout is adopted when first bound. |
-| bundle.opts | `BundleOptions` | ✔ | — | Requires `target`. |
+| bundle.opts | `BundleOptions` | ✔ | — | Requires a `target` or target signature. |
 | bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Records bundle commands immediately. |
+| onError.cb | `GpuErrorListener` | ✔ | — | Receives asynchronous vgpu errors; returns an unsubscribe function. |
 
 **Returns:** `Gpu` methods return the resources named in their signatures. `dispose()` and frame/pass callbacks return `void`.
 
-**Throws:** `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-RING1-UNSUPPORTED` for unsupported pass/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `gpu.target()` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Pass`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
+**Throws:** `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `gpu.target()` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
 
 ## Examples
 
@@ -85,6 +88,7 @@ const draw = gpu.draw({
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0, 1, 1); }
   `,
+  // optional sync pre-warm; `await draw.compile(target)` is preferred during browser load
   targets: [target],
 });
 
@@ -100,16 +104,28 @@ declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }`);
+const wave = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }`);
 
 gpu.frame.loop((frame) => {
   frame.pass({ target: surface }, (pass) => pass.draw(wave));
 });
 ```
 
+## Error delivery
+
+`gpu.onError(cb)` subscribes to asynchronous vgpu errors and returns an unsubscribe function. Listeners run in subscription order; removing one stops future deliveries; a throwing listener is reported to `console.error` without stopping the rest. If no listener is registered, vgpu reports the error to `console.error` by default.
+
+`gpu.settled()` resolves after the current snapshot of pending error deliveries and in-flight pipeline work settles. It never rejects, so it is safe for deterministic tests and teardown.
+
 ## Notes
 
 - There is no implicit screen property and no implicit default target. Pass `target` explicitly to frame passes and one-shot draws.
 - Canvas-specific `size`, `dpr`, and `autoResize` live on `gpu.surface(canvas, opts)`, not on `init()`.
 - Time is explicit JS state. Pass `gpu.time`, `gpu.deltaTime`, or `gpu.frameCount` through `set()` or `SharedUniforms` when shaders need them.
-- **See also:** `init`, `Surface`, `Pass`, `Draw`, `Compute`, `Frame`, `Target`, `Bundle`, `SharedUniforms`.
+- **See also:** `init`, `Surface`, `Effect`, `Draw`, `Compute`, `Frame`, `Target`, `Bundle`, `SharedUniforms`.
+
+## Sampled float texture layouts
+
+vgpu infers sampled-texture layouts per selected WGSL entry point. A non-multisampled `texture_*<f32>` used by `textureSample*` or `textureGather*` with an ordinary sampler receives WebGPU `sampleType: "float"`; a texture used only by `textureLoad` remains `"unfilterable-float"`. Calls through helper functions are included.
+
+The WGSL `f32` scalar type does not make every concrete texture format filterable. In particular, `r32float`, `rg32float`, and `rgba32float` require the device's `float32-filterable` feature for ordinary sampling. Use a filterable format, request that feature when supported, or use `textureLoad` without a sampler.

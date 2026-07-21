@@ -1,16 +1,17 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
 import { InternalDraw, encodeDraw, registerDrawBundle, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
-import { InternalPass, passDraw, type Pass } from "./pass.ts";
-import type { Target } from "./target.ts";
+import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
+import type { CompileTarget, Target, TargetSignature } from "./target.ts";
+import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
 import { VGPUError } from "./errors.ts";
 
 export interface BundleOptions {
-  readonly target: Target;
+  readonly target: CompileTarget;
   readonly label?: string;
 }
 
 export interface BundleRecorder {
-  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  draw(drawable: Draw | Effect, opts?: DrawCallOptions): void;
 }
 
 export interface Bundle {
@@ -21,51 +22,53 @@ export interface Bundle {
 let nextBundleId = 1;
 let recordingDepth = 0;
 
-/** Records explicit WebGPU render bundles and keeps the R3 stale snapshot checked at replay time. */
+/** Records explicit WebGPU render bundles and keeps the R3 stale signature checked at replay time. */
 export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle {
   const id = opts.label ?? `bundle${nextBundleId++}`;
-  const bundle = new RecordedBundle(device, id, opts.target);
+  const signature = normalizeBundleSignature(opts.target);
+  const bundle = new RecordedBundle(device, id, signature);
   bundle.record(record);
   return bundle;
 }
 
 class RecordedBundle implements Bundle, BundleBackReference {
   gpu!: GPURenderBundle;
-  private staleEvent?: BundleStaleEvent;
-  private readonly targetSnapshot: TargetSnapshot;
-  private readonly draws = new Set<InternalDraw>();
+  #staleEvent?: BundleStaleEvent;
+  readonly #signatureKey: string;
+  readonly #draws = new Set<InternalDraw>();
 
-  constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly target: Target) {
-    this.targetSnapshot = snapshotTarget(target);
+  constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly signature: TargetSignature) {
+    this.#signatureKey = signatureKeyOf(signature);
   }
 
   record(record: (recorder: BundleRecorder) => void): void {
     this.gpu = createRenderBundle(this.device, {
       label: this.id,
-      colorFormats: this.target.colors.map((color) => color.format),
-      depthStencilFormat: this.target.depth?.format,
-      sampleCount: this.target.sampleCount,
-      record: (recorder) => this.recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
+      colorFormats: this.signature.colors,
+      depthStencilFormat: this.signature.depth,
+      sampleCount: this.signature.sampleCount ?? 1,
+      record: (recorder) => this.#recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
     });
-    for (const draw of this.draws) registerDrawBundle(draw, this);
+    for (const draw of this.#draws) registerDrawBundle(draw, this);
   }
 
   markStale(event: BundleStaleEvent): void {
     if (recordingDepth > 0) return;
-    this.staleEvent ??= event;
+    this.#staleEvent ??= event;
   }
 
   assertReplayable(target: Target): void {
-    const resizeMessage = targetResizeStaleMessage(this.id, this.targetSnapshot, snapshotTarget(target));
-    if (resizeMessage) throw bundleStaleError(this.id, resizeMessage);
-    if (this.staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.staleEvent));
+    const actual = normalizeBundleSignature(target);
+    const actualKey = signatureKeyOf(actual);
+    if (this.#signatureKey !== actualKey) throw bundleStaleError(this.id, targetSignatureStaleMessage(this.id, this.#signatureKey, actualKey));
+    if (this.#staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.#staleEvent));
   }
 
   remember(draw: InternalDraw): void {
-    this.draws.add(draw);
+    this.#draws.add(draw);
   }
 
-  private recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
+  #recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
     recordingDepth += 1;
     try { record(new ExplicitBundleRecorder(this, encoder)); }
     finally { recordingDepth -= 1; }
@@ -75,43 +78,30 @@ class RecordedBundle implements Bundle, BundleBackReference {
 class ExplicitBundleRecorder implements BundleRecorder {
   constructor(private readonly bundle: RecordedBundle, private readonly encoder: GPURenderPassEncoder) {}
 
-  draw(drawable: Draw | Pass, opts: DrawCallOptions = {}): void {
-    const draw = drawable instanceof InternalPass ? passDraw(drawable) : drawable as InternalDraw;
+  draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
+    // Blend/writeMask are constructor-only draw pipeline state. If they ever become mutable or per-call,
+    // bundles need a new staleness dimension beyond the target signature checked at replay.
+    const draw = drawable instanceof InternalEffect ? effectDraw(drawable) : drawable as InternalDraw;
     this.bundle.remember(draw);
-    encodeDraw(draw, this.encoder, this.bundleTarget(), opts);
-  }
-
-  private bundleTarget(): Target {
-    return this.bundle.target;
+    encodeDraw(draw, this.encoder, this.bundle.signature, opts);
   }
 }
 
-type TargetSnapshot = {
-  readonly size: readonly [number, number];
-  readonly colorFormats: readonly GPUTextureFormat[];
-  readonly depthFormat?: GPUTextureFormat;
-  readonly sampleCount: 1 | 4;
-};
-
-function snapshotTarget(target: Target): TargetSnapshot {
-  return {
-    size: [target.size[0], target.size[1]],
-    colorFormats: target.colors.map((color) => color.format),
-    depthFormat: target.depth?.format,
-    sampleCount: target.sampleCount,
-  };
+function normalizeBundleSignature(target: CompileTarget): TargetSignature {
+  const signature = normalizeSignature(target);
+  validateTargetSignature(signature, "gpu.bundle");
+  return signature;
 }
 
-function targetResizeStaleMessage(id: string, before: TargetSnapshot, after: TargetSnapshot): string | undefined {
-  if (sameTargetSnapshot(before, after)) return undefined;
-  return `bundle '${id}' está stale: el target cambió después de la grabación. Los bundles congelan attachments y bind groups.\n  Fix: re-grabá el bundle después de resize → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+function targetSignatureStaleMessage(id: string, recordedKey: string, actualKey: string): string {
+  return `bundle '${id}' is stale: the replay target signature does not match the recorded signature. Bundles freeze format/depth/sampleCount and bind groups.\n  Recorded signature: ${recordedKey}\n  Actual signature: ${actualKey}\n  Fix: re-record the bundle for this target → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function staleEventMessage(id: string, event: BundleStaleEvent): string {
   if (event.kind === "group-claim") {
-    return `bundle '${id}' está stale: el grupo ${event.group} del draw\n  '${event.drawLabel}' cambió de bind group después de la grabación. Los bundles congelan comandos y bind groups.\n  Fix: re-grabalo → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+    return `bundle '${id}' is stale: group ${event.group} of draw\n  '${event.drawLabel}' changed bind group after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
   }
-  return `bundle '${id}' está stale: el binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) del draw\n  '${event.drawLabel}' cambió de recurso después de la grabación. Los bundles congelan comandos y bind groups.\n  Fix: re-grabalo → ${id} = gpu.bundle({ target: scene }, ...)\n  (la re-grabación es siempre tuya; la lib solo detecta).`;
+  return `bundle '${id}' is stale: binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) of draw\n  '${event.drawLabel}' changed resource after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function bundleStaleError(id: string, message: string): VGPUError {
@@ -126,17 +116,5 @@ export function replayBundles(target: Target, bundles: readonly Bundle[], execut
 
 function assertRecordedBundle(bundle: Bundle): RecordedBundle {
   if (bundle instanceof RecordedBundle) return bundle;
-  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() esperaba bundles creados por gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
-}
-
-function sameTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-  return sameSize(a.size, b.size) && a.sampleCount === b.sampleCount && a.depthFormat === b.depthFormat && sameTuple(a.colorFormats, b.colorFormats);
-}
-
-function sameSize(a: readonly [number, number], b: readonly [number, number]): boolean {
-  return a[0] === b[0] && a[1] === b[1];
-}
-
-function sameTuple<T>(a: readonly T[], b: readonly T[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() expected bundles created by gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
 }

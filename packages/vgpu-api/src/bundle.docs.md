@@ -1,6 +1,6 @@
 # Bundle
 
-Main API (`vgpu`) render bundle recorded by `gpu.bundle({ target }, cb)`. Bundles freeze commands, attachment formats, target size, and bind-group identities for static work; `FramePass.bundles()` checks staleness (`VGPU-R3-BUNDLE-STALE`) when replaying.
+Main API (`vgpu`) render bundle recorded by `gpu.bundle({ target }, cb)`. Bundles freeze commands, attachment formats, sample count, and bind-group identities for static work; `FramePass.bundles()` checks signature and resource staleness (`VGPU-R3-BUNDLE-STALE`) when replaying.
 
 ## Import
 
@@ -11,15 +11,15 @@ import type { Bundle, BundleOptions, BundleRecorder } from "vgpu";
 ## Signature
 
 ```ts
-import type { Draw, DrawCallOptions, Pass, Target } from "vgpu";
+import type { Draw, DrawCallOptions, Effect, Target, TargetSignature } from "vgpu";
 
 interface BundleOptions {
-  readonly target: Target;
+  readonly target: Target | TargetSignature;
   readonly label?: string;
 }
 
 interface BundleRecorder {
-  draw(drawable: Draw | Pass, opts?: DrawCallOptions): void;
+  draw(drawable: Draw | Effect, opts?: DrawCallOptions): void;
 }
 
 interface Bundle {
@@ -33,16 +33,16 @@ interface Bundle {
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
 | gpu.bundle.opts | `BundleOptions` | ✔ | — | Recording options. |
-| opts.target | `Target` | ✔ | — | Formats, depth format, sample count, and size are snapshotted from this target. |
+| opts.target | `Target \| TargetSignature` | ✔ | — | Formats, depth format, and sample count are recorded. Signature form is `{ colors: [...], depth?, sampleCount? }`; `colors` is required. |
 | opts.label | `string` | ✖ | `` `bundle${n}` `` | Bundle id and GPU label. Auto id increments from `bundle1`. |
 | gpu.bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Called immediately to encode commands. |
-| recorder.draw.drawable | `Draw \| Pass` | ✔ | — | Draw or fullscreen pass to encode into the bundle. |
+| recorder.draw.drawable | `Draw \| Effect` | ✔ | — | Draw or fullscreen effect to encode into the bundle. |
 | recorder.draw.opts | `DrawCallOptions` | ✖ | `{}` | Counts and offsets captured in the recorded commands. |
 | framePass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Replayed bundles; must be created by `gpu.bundle`. |
 
 **Returns:** `gpu.bundle()` returns `Bundle` with `id` and native `gpu` render bundle; `BundleRecorder.draw()` returns `void`; `FramePass.bundles()` returns `void`.
 
-**Throws:** `VGPU-R3-BUNDLE-STALE` when replay target size/formats/depth/sample count changed or when a recorded draw's bound resource identity / claimed group changed after recording; `VGPU-R3-BUNDLE-INVALID` when replay receives an object not created by `gpu.bundle`; `VGPU-SURFACE-DISPOSED` when replaying against a disposed surface; draw binding errors such as `VGPU-R1-BINDING-NEVER-SET` can throw during recording.
+**Throws:** `VGPU-R3-BUNDLE-STALE` when replay target formats/depth/sample count differ from the recorded signature or when a recorded draw's bound resource identity / claimed group changed after recording; `VGPU-R3-BUNDLE-INVALID` when replay receives an object not created by `gpu.bundle`; `VGPU-SURFACE-DISPOSED` when replaying against a disposed surface; draw binding errors such as `VGPU-R1-BINDING-NEVER-SET` can throw during recording. Signature mismatch messages print both recorded and actual signature keys.
 
 ## Examples
 
@@ -73,11 +73,11 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const surface = gpu.surface(mockCanvas());
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-let statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(pass));
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+let statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
 
 surface.onResize(() => {
-  statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(pass));
+  statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
 });
 
 gpu.frame((frame) => {
@@ -100,10 +100,10 @@ import { init } from "vgpu/mock";
 
 const gpu = await init();
 const ping = gpu.pingPong(32, 32);
-const pass = gpu.pass(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-const even = gpu.bundle({ target: ping.write }, (b) => b.draw(pass));
+const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const even = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
 ping.swap();
-const odd = gpu.bundle({ target: ping.write }, (b) => b.draw(pass));
+const odd = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
 ping.swap();
 
 gpu.frame((frame) => {
@@ -111,9 +111,16 @@ gpu.frame((frame) => {
 });
 ```
 
+## Signature-arm recording
+
+`gpu.bundle({ target: { colors: ["bgra8unorm"], depth: "depth24plus", sampleCount: 4 } }, cb)` records before a target exists. This relaxes only the replay target: any resources sampled by draws still need to be set before recording. Cold signature recording creates missing pipelines synchronously, which can jank; pre-warm first with `await draw.compile(signature)` or `await effect.compile(signature)`.
+
+For future canvas surfaces, use `navigator.gpu.getPreferredCanvasFormat()` when building the signature. A bundle recorded for `bgra8unorm` will not replay on an `rgba8unorm` surface, and the stale error prints both keys.
+
 ## Notes
 
-- Bundles freeze target size and attachment shape. Re-record after `target.resize()` or a surface resize.
-- `surface.onResize(...)` fires immediately, so the same re-recording callback can initialize and refresh a surface bundle.
+- Bundles match replay targets by render signature, not size. They survive resizing the target they draw onto.
+- Re-record when the bundle samples a resized target; vgpu detects the changed texture identity and reports `VGPU-R3-BUNDLE-STALE`.
+- `surface.onResize(...)` fires immediately, so the same re-recording callback can initialize and refresh bundles that sample resized resources.
 - Bundles freeze bind group identities, not buffer contents. Updating JS-owned packed values in-place is safe; rebinding a different texture/buffer/sampler stales the bundle.
-- **See also:** `FramePass.bundles`, `Draw`, `Pass`, `Surface`, `Target`, `createRenderBundle`.
+- **See also:** `FramePass.bundles`, `Draw`, `Effect`, `Surface`, `Target`, `createRenderBundle`.

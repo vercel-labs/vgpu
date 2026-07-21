@@ -2,7 +2,7 @@ import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { describe, expect, test } from "vitest";
 import { init } from "../../src/mock.ts";
 import { drawBindingState } from "../../src/draw.ts";
-import { passDraw } from "../../src/pass.ts";
+import { effectDraw } from "../../src/effect.ts";
 
 const WAVE_WGSL = `
 struct Globals { time: f32, mouse: vec2f }
@@ -59,10 +59,10 @@ describe("gpu.uniforms() shared uniforms", () => {
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
     expect(mock.calls.createBuffer).toBe(0);
-    const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const wave = gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
 
     expect(mock.calls.createBuffer).toBe(1);
-    const state = drawBindingState(passDraw(wave), "globals");
+    const state = drawBindingState(effectDraw(wave), "globals");
     expect(state?.ownership).toBe("user");
     expect(mock.createBufferDescriptors[0]).toMatchObject({ size: 16, label: "globals.sharedUniform" });
     gpu.dispose();
@@ -72,11 +72,11 @@ describe("gpu.uniforms() shared uniforms", () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 
-    gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
 
-    expect(() => gpu.pass(BLUR_BAD_WGSL, { label: "BLUR_WGSL", set: { globals } })).toThrowError(
-      "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de WAVE_WGSL);\n" +
-        "  BLUR_WGSL declara { time: vec2f, ... } — alineá los structs o usá dos uniforms distintos.",
+    expect(() => gpu.effect(BLUR_BAD_WGSL, { label: "BLUR_WGSL", set: { globals } })).toThrowError(
+      "Uniform 'globals' layout { time: f32, mouse: vec2f } from WAVE_WGSL != { time: vec2f, ... } from " +
+        "BLUR_WGSL. Fix: align structs or split uniforms.",
     );
     gpu.dispose();
   });
@@ -85,11 +85,11 @@ describe("gpu.uniforms() shared uniforms", () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 
-    gpu.pass(PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
+    gpu.effect(PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
 
-    expect(() => gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } })).toThrowError(
-      "shared uniforms 'globals' ya tiene layout { time: f32, mouse: vec2f } (adoptado de PADDED_WGSL);\n" +
-        "  WAVE_WGSL declara { time: f32, ... } — alineá los structs o usá dos uniforms distintos.",
+    expect(() => gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } })).toThrowError(
+      "Uniform 'globals' layout { time: f32, mouse: vec2f } from PADDED_WGSL != { time: f32, ... } from " +
+        "WAVE_WGSL. Fix: align structs or split uniforms.",
     );
     gpu.dispose();
   });
@@ -97,8 +97,8 @@ describe("gpu.uniforms() shared uniforms", () => {
   test("one in-place write is visible to both consumers without reallocating buffers or bind groups", async () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-    const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-    const blur = gpu.pass(BLUR_WGSL, { label: "BLUR_WGSL", set: { globals } });
+    const wave = gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const blur = gpu.effect(BLUR_WGSL, { label: "BLUR_WGSL", set: { globals } });
     const target = gpu.target({ size: [4, 4] });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -118,8 +118,8 @@ describe("gpu.uniforms() shared uniforms", () => {
       });
     });
 
-    const resource = drawBindingState(passDraw(wave), "globals")?.resource as GPUBufferBinding;
-    expect(resource.buffer).toBe((drawBindingState(passDraw(blur), "globals")?.resource as GPUBufferBinding).buffer);
+    const resource = drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding;
+    expect(resource.buffer).toBe((drawBindingState(effectDraw(blur), "globals")?.resource as GPUBufferBinding).buffer);
     expect(mock.calls.createBuffer).toBe(1);
     expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame);
     expect(bindGroupsAfterFirstFrame).toBe(2);
@@ -135,7 +135,7 @@ describe("gpu.uniforms() shared uniforms", () => {
   test("set() batches a partial update into one writeBuffer call", async () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-    gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     let writes = 0;
     const originalWriteBuffer = gpu.device.gpu.queue.writeBuffer.bind(gpu.device.gpu.queue);
     gpu.device.gpu.queue.writeBuffer = ((...args: Parameters<GPUQueue["writeBuffer"]>) => {
@@ -152,22 +152,22 @@ describe("gpu.uniforms() shared uniforms", () => {
   test("binding name is chosen by each shader", async () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-    const wave = gpu.pass(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-    const override = gpu.pass(OVERRIDE_NAME_WGSL, { label: "OVERRIDE_WGSL", set: { g: globals } });
+    const wave = gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const override = gpu.effect(OVERRIDE_NAME_WGSL, { label: "OVERRIDE_WGSL", set: { g: globals } });
 
-    expect(drawBindingState(passDraw(wave), "globals")?.ownership).toBe("user");
-    expect(drawBindingState(passDraw(override), "g")?.ownership).toBe("user");
-    expect((drawBindingState(passDraw(wave), "globals")?.resource as GPUBufferBinding).buffer).toBe((drawBindingState(passDraw(override), "g")?.resource as GPUBufferBinding).buffer);
+    expect(drawBindingState(effectDraw(wave), "globals")?.ownership).toBe("user");
+    expect(drawBindingState(effectDraw(override), "g")?.ownership).toBe("user");
+    expect((drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding).buffer).toBe((drawBindingState(effectDraw(override), "g")?.resource as GPUBufferBinding).buffer);
     gpu.dispose();
   });
 
   test("storage address-space uses the same deferred-layout shared resource path", async () => {
     const gpu = await init();
     const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-    const storage = gpu.pass(STORAGE_WGSL, { label: "STORAGE_WGSL", set: { globals } });
+    const storage = gpu.effect(STORAGE_WGSL, { label: "STORAGE_WGSL", set: { globals } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-    expect(drawBindingState(passDraw(storage), "globals")?.ownership).toBe("user");
+    expect(drawBindingState(effectDraw(storage), "globals")?.ownership).toBe("user");
     expect(mock.createBufferDescriptors[0]?.usage).toBe(128 | 8);
     gpu.dispose();
   });

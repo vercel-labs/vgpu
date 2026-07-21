@@ -60,7 +60,7 @@ The spike implemented typed reflection on top of the existing scanner/parser/mod
   - Also runs WGSL validation through Dawn/Naga when `VGPU_DOCKER_TEST=1`.
 
 - `packages/wgsl/tests/toy-set-demo.test.ts`
-  - Minimal disposable `ToyPass` prototype for `gpu.pass(WGSL).set({ time, speed })` behavior.
+  - Minimal disposable `ToyPass` prototype for `gpu.effect(WGSL).set({ time, speed })` behavior.
   - Mock test verifies:
     - `set()` writes in-place using reflection.
     - bind group is created once and remains stable across subsequent `set()` calls.

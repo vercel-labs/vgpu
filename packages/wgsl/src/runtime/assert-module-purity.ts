@@ -20,10 +20,10 @@ export function assertModulesHaveNoBindings(modules: readonly MangleModule[], en
     const attr = firstBindingAttr(offender.attrs);
     throw wgslError(
       "VGPU-RESOLVE-MODULE-BINDING",
-      `VGPU-RESOLVE-MODULE-BINDING: ${module.path} declara '@group(${group ?? "?"}) @binding(${binding ?? "?"}) ${offender.name}'.\n` +
-        "Los módulos no pueden declarar bindings — exportá el struct y declaralo en tu entry:\n" +
+      `VGPU-RESOLVE-MODULE-BINDING: ${module.path} declares '@group(${group ?? "?"}) @binding(${binding ?? "?"}) ${offender.name}'.\n` +
+        "Modules cannot declare bindings — export the struct and declare it in your entry:\n" +
         "  export struct NoiseConfig { seed: u32 }\n" +
-        "  // en tu entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;",
+        "  // in your entry: @group(0) @binding(0) var<uniform> cfg: NoiseConfig;",
       attr?.token?.line,
       attr?.token?.column,
     );

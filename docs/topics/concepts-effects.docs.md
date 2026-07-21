@@ -1,0 +1,126 @@
+---
+title: Effects
+summary: An effect is a full-screen fragment shader; chain effects by binding a target as another effect's input.
+relatedSymbols:
+  - Effect
+  - Target
+prevNext:
+  prev:
+    title: Compilation
+    href: /concepts/compilation
+  next:
+    title: Passes
+    href: /concepts/passes
+order: 40
+---
+
+# Effects
+
+An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `gpu.effect(source)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. See [Compilation](/concepts/compilation) for the full pre-warm flow. Every draw fills the whole target — you only write the fragment.
+
+Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const surface = gpu.surface(canvas);
+
+// ---cut---
+const sceneSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 1.0, 1.0);
+  }
+`;
+
+// Post-processing: reads the scene texture and inverts its colors.
+const postSource = `
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src));
+    let base = textureLoad(src, vec2u(uv * dims), 0);
+    return vec4f(1.0 - base.rgb, 1.0);
+  }
+`;
+
+const scene = gpu.target({ size: [1280, 720] });
+
+const sceneEffect = gpu.effect(sceneSource);
+const post = gpu.effect(postSource);
+post.set({ src: scene }); // the offscreen result becomes the post input
+
+sceneEffect.draw(scene); // render the scene offscreen
+post.draw(surface); // invert it onto the canvas
+```
+
+`post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
+
+## Updating bindings
+
+You can update bindings at any time by using `.set`.
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
+
+// ---cut---
+const pulseSource = `
+  struct Params { time: f32, width: f32, height: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let glow = sin(params.time) * 0.5 + 0.5;
+    return vec4f(uv.x, uv.y, glow, 1.0);
+  }
+`;
+
+const pulse = gpu.effect(pulseSource, {
+  // initial uniform defaults
+  set: {
+    params: {
+      time: 0,
+      width: canvasSurface.size[0],
+      height: canvasSurface.size[1]
+    }
+  },
+});
+
+// update uniforms before drawing
+pulse.set({
+  params: {
+    time: gpu.time,
+  },
+});
+
+pulse.draw(canvasSurface);
+```
+
+You should also only update uniforms when they need to change, for example, react to canvas size changes:
+
+```ts
+import { init } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = gpu.surface(canvas);
+const pulse = gpu.effect(`
+  struct Params { time: f32, width: f32, height: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+  }
+`, { set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
+
+// ---cut---
+const unsubscribe = canvasSurface.onResize(({ width, height }) => {
+  pulse.set({ params: { width, height } }); // partial update: time keeps its value
+});
+```
+
+`onResize()` fires the callback once immediately with the current size, then again on every resize. It returns an `unsubscribe` function — call it when you tear the effect down.

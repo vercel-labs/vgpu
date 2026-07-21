@@ -3,26 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { navSections, type NavGroup, type NavItem, type NavSection } from '@/lib/nav';
 import { PackageNav } from './package-nav';
-
-const navItems = [
-  {
-    label: 'Documentation',
-    items: [
-      { href: '/', label: 'Introduction' },
-      { href: '/getting-started', label: 'Getting Started' },
-      { href: '/concepts', label: 'Core Concepts' },
-    ],
-  },
-  {
-    label: 'Reference',
-    items: [
-      { href: '/api', label: 'API Overview' },
-      { href: '/packages', label: 'Packages' },
-      { href: '/examples', label: 'Examples' },
-    ],
-  },
-];
 
 export function Navigation() {
   const pathname = usePathname();
@@ -67,33 +49,14 @@ export function Navigation() {
           </div>
 
           <nav className="flex-1 overflow-y-auto py-6 px-3">
-            {navItems.map((section, idx) => (
-              <div key={section.label} className={idx > 0 ? 'mt-8' : ''}>
-                <h4 className="px-3 mb-2 text-xs font-medium text-gray-9 uppercase tracking-wider">
-                  {section.label}
-                </h4>
-                <ul className="space-y-0.5">
-                  {section.items.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`block px-3 py-2 rounded-md text-sm transition-colors ${
-                            isActive
-                              ? 'bg-gray-2 text-gray-12 font-medium'
-                              : 'text-gray-10 hover:bg-gray-1 hover:text-gray-12'
-                          }`}
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {section.label === 'Reference' ? <PackageNav /> : null}
-              </div>
+            {navSections.map((section, idx) => (
+              <NavSectionBlock
+                key={section.title}
+                section={section}
+                pathname={pathname}
+                onNavigate={() => setMobileMenuOpen(false)}
+                className={idx > 0 ? 'mt-4' : ''}
+              />
             ))}
           </nav>
 
@@ -121,4 +84,76 @@ export function Navigation() {
       )}
     </>
   );
+}
+
+interface NavSectionBlockProps {
+  section: NavSection;
+  pathname: string;
+  onNavigate: () => void;
+  className?: string;
+}
+
+function NavSectionBlock({ section, pathname, onNavigate, className }: NavSectionBlockProps) {
+  const isInside = sectionContains(section, pathname);
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const open = manualOpen ?? isInside;
+
+  const titleClassName = `text-xs font-medium uppercase tracking-wider transition-colors ${
+    section.href && pathname === section.href ? 'text-gray-12' : 'text-gray-9'
+  }`;
+
+  return (
+    <div className={className}>
+      <div className="mb-1 flex items-center justify-between pl-3 pr-1">
+        {section.href ? (
+          <Link href={section.href} onClick={onNavigate} className={`${titleClassName} hover:text-gray-12`}>
+            {section.title}
+          </Link>
+        ) : (
+          <button type="button" onClick={() => setManualOpen(!open)} className={`${titleClassName} hover:text-gray-12`}>
+            {section.title}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setManualOpen(!open)}
+          aria-expanded={open}
+          aria-label={`${open ? 'Collapse' : 'Expand'} ${section.title}`}
+          className="rounded p-1 text-gray-8 transition-colors hover:bg-gray-1 hover:text-gray-11"
+        >
+          <svg
+            viewBox="0 0 12 12"
+            className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4.5 2.5 8 6l-3.5 3.5" />
+          </svg>
+        </button>
+      </div>
+      {open ? (
+        <div className="pl-2">
+          <PackageNav groups={section.groups} pathname={pathname} onNavigate={onNavigate} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function sectionContains(section: NavSection, pathname: string): boolean {
+  if (section.href && (pathname === section.href || pathname.startsWith(`${section.href}/`))) return true;
+  return section.groups.some((group) => groupContains(group, pathname));
+}
+
+function groupContains(group: NavGroup, pathname: string): boolean {
+  if ((group.items ?? []).some((item) => itemContains(item, pathname))) return true;
+  return (group.groups ?? []).some((child) => groupContains(child, pathname));
+}
+
+function itemContains(item: NavItem, pathname: string): boolean {
+  if (pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`))) return true;
+  return (item.children ?? []).some((child) => itemContains(child, pathname));
 }

@@ -13,9 +13,13 @@ import type { Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } 
 ## Signature
 
 ```ts
-import type { ShaderSource, Target } from "vgpu";
+import type { ShaderSource, Target, TargetSignature } from "vgpu";
 
 type SetBag = Record<string, unknown>;
+
+type BlendPreset = "alpha" | "additive" | "premultiplied";
+interface BlendComponentOptions { readonly src: GPUBlendFactor; readonly dst: GPUBlendFactor; readonly op?: GPUBlendOperation; }
+interface BlendOptions { readonly color: BlendComponentOptions; readonly alpha?: BlendComponentOptions; }
 
 interface DrawOptions {
   readonly shader: string | ShaderSource;
@@ -26,6 +30,8 @@ interface DrawOptions {
   readonly instances?: number;
   readonly vertices?: number;
   readonly firstInstance?: number;
+  readonly blend?: BlendPreset | BlendOptions;
+  readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
 
 interface DrawCallOptions {
@@ -54,7 +60,9 @@ interface Draw {
   set(values: SetBag): this;
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
-  draw(opts?: DrawCallOptions): Promise<void>;
+  draw(target?: Target | DrawCallOptions): void;
+  compile(target?: Target | TargetSignature): Promise<this>;
+  compileSync(target?: Target | TargetSignature): this;
 }
 ```
 
@@ -66,26 +74,30 @@ interface Draw {
 | opts.mesh | `MeshLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
 | opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
-| opts.targets | `readonly Target[]` | ✖ | `undefined` | Pre-warms pipelines for the listed target formats. |
+| opts.targets | `readonly Target[]` | ✖ | `undefined` | Synchronous pre-warm sugar for the listed target signatures. In browser load paths, prefer `await draw.compile(target)`. |
 | opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
 | opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
 | opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
+| opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state applied uniformly to every color target. Presets resolve at construction; explicit components use `src`/`dst` and optional `op` (`"add"` default). Omitted `alpha` copies `color`. |
+| opts.writeMask | `readonly ("r" \| "g" \| "b" \| "a")[]` | ✖ | all channels | Constructor-only color channel mask applied uniformly to every color target. Omit to write RGBA; `[]` writes no channels; `["r","g","b"]` skips alpha. |
 | draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
 | draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
 | draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
 | draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |
-| draw.draw.opts | `DrawCallOptions` | ✖ | `{}` | One-shot draw options. `target` must be supplied explicitly. |
-| opts.target | `Target` | ✖ | — | Required at runtime for one-shot draws. Use a `Surface` or an offscreen `Target`. |
+| draw.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot draw options. Pass a bare target for the common case, or an options bag when setting counts or offsets. |
+| opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
 | opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
 | opts.instances | `number` | ✖ | `DrawOptions.instances ?? 1` | Per-call instance count; integer `>= 0`. |
 | opts.vertices | `number` | ✖ | `mesh.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed meshes use `mesh.indexCount`. |
 | opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed meshes use firstIndex/baseVertex `0`. |
 | opts.firstInstance | `number` | ✖ | `DrawOptions.firstInstance ?? 0` | Per-call first instance. |
 
-**Returns:** `gpu.draw()` returns `Draw`; `set()` and `group()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `Promise<void>` so raw claimed-group validation can be awaited.
+**Returns:** `gpu.draw()` returns `Draw`; `set()`, `group()`, and `compileSync()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `void`; `compile()` returns `Promise<this>`.
 
-**Throws:** `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
+Bindings remain present in reflected layouts, but their `visibility` is the union of static use by the selected vertex and fragment entry points. Unused declarations have visibility `0`. Build claimed bind groups from `draw.layout(group)` rather than guessing a raw layout; a raw layout matching the old broad visibility is not group-equivalent.
+
+**Throws:** `VGPU-LIMIT-STORAGE-VERTEX` or `VGPU-LIMIT-STORAGE-FRAGMENT` before bind-group-layout creation when actual static use exceeds the granted stage limit (request the supported `requiredLimits` value or reduce/move the storage data); `VGPU-TARGET-REQUIRED` when `draw.draw()` is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-R1-DRAW-COUNT` when any count field is not an integer `>= 0`; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` from `set()`/draw preflight; `VGPU-SET-TEXTURE-FILTERABILITY` when a facade texture format cannot satisfy an ordinarily sampled `float` binding (detail identifies the format, texture and paired sampler; use a filterable format, request `float32-filterable`, or rewrite to `textureLoad`); `VGPU-R4-GROUP-CLAIMED`, `VGPU-R4-GROUP-INCOMPATIBLE`, or `VGPU-R4-GROUP-VALIDATION` for raw claimed bind groups; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`.
 
 ## Examples
 
@@ -106,12 +118,20 @@ const tri = gpu.draw({
   `,
 });
 
-await tri.draw({ target, vertices: 3, instances: 1 });
+tri.draw({ target, vertices: 3, instances: 1 });
 ```
+
+## Pipeline pre-warm
+
+`draw.compile(target)` asynchronously prepares one target signature and resolves to the same draw. `draw.compileSync(target)` prepares the same signature synchronously; if an async compile for that signature is still pending, the synchronous result wins the race and unblocks later draws. Both methods also accept a target signature object such as `{ colors: ["bgra8unorm"], depth: "depth24plus", sampleCount: 4 }`; `colors` is required and bare strings are rejected.
+
+Each color/depth/sample-count variant is a different pipeline. A missed variant sync-compiles on first use, which can jank; fire-and-forget pre-warms should always use `.catch(...)` or `gpu.onError`/`gpu.settled()` will not observe the returned promise rejection. `targets: [target]` is kept as creation-time `compileSync()` sugar for non-browser hot paths.
 
 ## Notes
 
 - Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
-- One-shot `draw.draw()` has no implicit target. Prefer `gpu.frame((frame) => frame.pass({ target }, ...))` for multi-pass work.
+- Blend and write masks are immutable pipeline state, fixed at `gpu.draw()` construction. They apply to all color targets; per-target MRT blend can be added later without changing this shape.
+- Blend presets: `"alpha"` uses source alpha over, `"premultiplied"` uses premultiplied source over, and `"additive"` uses one-plus-one additive blending for color and alpha. In explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
+- One-shot `draw.draw()` has no implicit target and returns `void`; raw claimed-group validation errors are delivered through `gpu.onError`, and tests can `await gpu.settled()`.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
-- **See also:** `Pass`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
+- **See also:** `Effect`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
