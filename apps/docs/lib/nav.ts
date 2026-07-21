@@ -1,3 +1,5 @@
+import { examples } from './examples-registry';
+
 import {
   getGuideRecord,
   getReferenceTopic,
@@ -61,9 +63,10 @@ const guideGroups = [
 ] as const;
 
 
-const exampleItems: NavItem[] = [
-  { title: 'Simple Gradient', href: '/examples/gradient' },
-];
+const exampleItems: NavItem[] = examples.map(({ meta }) => ({
+  title: meta.title,
+  href: `/examples/${meta.slug}`,
+}));
 
 export const navSections: NavSection[] = [
   {
