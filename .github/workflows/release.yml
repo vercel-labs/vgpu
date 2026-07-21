@@ -6,6 +6,8 @@ on:
 
 jobs:
   publish:
+    # Binary-asset releases like dawn-* must not publish npm.
+    if: ${{ startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
