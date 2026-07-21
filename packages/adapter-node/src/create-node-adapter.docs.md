@@ -38,15 +38,23 @@ commands. `VGPU-NODE-PREBUILD-CHECKSUM` refuses a corrupt or substituted asset.
 cannot load. Do not upgrade a host's glibc in place; install the portable
 prebuild or provide an audited binary with `VGPU_DAWN_BINARY`.
 
-On Linux the adapter uses the OpenGL software backend by default
-(`backend=opengl` plus Dawn compatibility feature level) and keeps a
-process-wide singleton GPU instance; conflicting later flags are warned and
-ignored because Dawn re-init can SIGSEGV. For deterministic headless Vulkan CI,
-install the distro's Mesa/lavapipe packages, set
-`VGPU_DAWN_FLAGS=backend=vulkan`, and select its ICD with `VK_ICD_FILENAMES`.
-Mesa and GPU drivers remain host-managed and are never downloaded by vgpu.
-`VGPU_DAWN_FLAGS` may contain any space-separated Dawn flags and replaces the
-default backend selection.
+On Linux the adapter keeps the established OpenGL compatibility backend when
+`DISPLAY` or `WAYLAND_DISPLAY` is configured. Without a display server it lets
+Dawn discover the available backend, enabling display-free Vulkan without
+application configuration. It keeps a process-wide singleton GPU instance;
+conflicting later flags are warned
+and ignored because Dawn re-init can SIGSEGV. For deterministic headless Vulkan
+CI, install the distro's Mesa/lavapipe packages and select its ICD with
+`VK_ICD_FILENAMES`; `VGPU_DAWN_FLAGS=backend=vulkan` remains available when
+strict backend selection is required. Mesa and GPU drivers remain host-managed
+and are never downloaded by vgpu. `VGPU_DAWN_FLAGS` may contain any
+space-separated Dawn flags and replaces automatic backend discovery.
+
+A CPU Vulkan device is not necessarily a WebGPU fallback adapter. In current
+Dawn builds lavapipe is acquired by the normal request; forcing
+`forceFallbackAdapter` can exclude it. If no adapter is found after the retry
+window, `VGPU-NODE-NO-ADAPTER` reports the request options and Dawn flags and
+points to the Mesa version, Vulkan ICD, and display environment to inspect.
 
 For agentic headless snapshot tests, pair this adapter with an explicit
 offscreen `rgba8unorm` render target that includes `"copy_src"`, submit the

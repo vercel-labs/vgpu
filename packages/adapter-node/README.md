@@ -27,7 +27,9 @@ gpu.dispose();
 
 - Node.js 22+ is the supported engine.
 - Linux Dawn prebuilds require a compatible GLIBC. Use the repository Docker runner for reproducible CI and snapshots.
-- Headless Linux runs use software rendering variables such as `LIBGL_ALWAYS_SOFTWARE=1`, `DISPLAY=:99`, and `XDG_RUNTIME_DIR=/tmp/xdg-runtime`.
+- Linux lets Dawn discover available backends. X11/OpenGL software rendering can use `LIBGL_ALWAYS_SOFTWARE=1` and `DISPLAY`; display-free Vulkan/lavapipe uses a valid `VK_ICD_FILENAMES` and `XDG_RUNTIME_DIR`.
+- `VGPU_DAWN_FLAGS=backend=vulkan` or `backend=opengl` pins a backend when automatic discovery is not desired.
+- `VGPU-NODE-NO-ADAPTER` includes the attempted Dawn flags and adapter options plus Mesa, Vulkan ICD, and display diagnostics.
 
 ## License
 

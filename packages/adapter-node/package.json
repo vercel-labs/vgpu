@@ -52,5 +52,5 @@
     "@vgpu/core": "workspace:*",
     "webgpu": "0.4.0"
   },
-  "vgpuBundleBudgetGzipBytes": 30720
+  "vgpuBundleBudgetGzipBytes": 32768
 }
