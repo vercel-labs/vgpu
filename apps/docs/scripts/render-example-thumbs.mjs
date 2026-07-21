@@ -21,6 +21,8 @@ const customRendererEntries = [
   { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
   { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
   { slug: 'fluid', module: '../examples/fluid/validation.ts', exportName: 'renderThumb' },
+  { slug: 'instanced-rendering', module: '../examples/instanced-rendering/example.ts', exportName: 'renderThumb' },
+  { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
 ];
 
 const sizes = {

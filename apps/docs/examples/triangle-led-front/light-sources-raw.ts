@@ -62,7 +62,7 @@ export function createLightSourcesRaw(
   const ledMesh = gpu.mesh({
     label: 'triangle-led-front-led-emitters',
     buffers: [{
-      data: ledVertices,
+      data: ledVertices.buffer as ArrayBuffer,
       stride: 24,
       attributes: {
         position: 'float32x2',

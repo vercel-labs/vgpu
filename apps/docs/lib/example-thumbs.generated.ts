@@ -10,6 +10,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/anti-aliasing.card.png",
     "hero": "/examples/anti-aliasing.hero.png"
   },
+  "batch-rendering": {
+    "card": "/examples/batch-rendering.card.png",
+    "hero": "/examples/batch-rendering.hero.png"
+  },
   "fluid": {
     "card": "/examples/fluid.card.png",
     "hero": "/examples/fluid.hero.png"
@@ -17,6 +21,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "gradient": {
     "card": "/examples/gradient.card.png",
     "hero": "/examples/gradient.hero.png"
+  },
+  "instanced-rendering": {
+    "card": "/examples/instanced-rendering.card.png",
+    "hero": "/examples/instanced-rendering.hero.png"
   },
   "post-processing": {
     "card": "/examples/post-processing.card.png",
