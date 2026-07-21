@@ -120,3 +120,5 @@ requestAnimationFrame(tick);
 ```
 
 Both work. `gpu.frame.loop()` is the same loop with the clock, throttling, and resize handling done for you.
+
+See it live: the [fluid example](/examples/fluid) runs a compute-driven simulation with exactly this frame loop shape.

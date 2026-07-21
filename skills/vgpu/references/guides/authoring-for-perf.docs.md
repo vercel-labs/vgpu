@@ -4,6 +4,17 @@
 
 Write WGSL so reflection can build stable layouts. Bindings should be explicit, structs should be host-shareable, and hot paths should avoid per-frame resource identity changes.
 
+Layouts mirror what each entry point statically uses, the same way WebGPU's
+`layout: 'auto'` behaves: bindings an entry never touches are omitted,
+visibility covers only the stages that actually read a binding, and sampled
+`f32` textures are declared filterable exactly when the shader samples them
+through a filtering sampler (`textureLoad`-only access stays
+unfilterable, keeping `rgba32float` readbacks valid). Mismatches fail eagerly
+with structured errors — `VGPU-LIMIT-STORAGE-VERTEX`/`-FRAGMENT` when a
+storage binding would exceed a device's per-stage limits, and
+`VGPU-SET-TEXTURE-FILTERABILITY` when a non-filterable format meets a
+filtering sampler — instead of surfacing as native pipeline failures.
+
 ## WGSL defaults
 
 ```wgsl

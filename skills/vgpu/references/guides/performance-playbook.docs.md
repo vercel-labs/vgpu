@@ -105,7 +105,8 @@ gpu.frame.loop(() => {
   wave.draw();
 });
 ```
-Default: create once; update changing numbers/vectors/structs with `set()`.
+Default: create once; update changing numbers/vectors/structs with `set()`. `set()` performs no equality check — a value written every frame is uploaded
+every frame, so hoist static and resize-class values out of the render loop.
 
 ## 5. Bake static inputs once
 

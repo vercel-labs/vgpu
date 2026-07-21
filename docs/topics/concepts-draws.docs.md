@@ -114,3 +114,5 @@ smoke.draw(surface);
 ```
 
 One draw call, 10,000 smoke puffs, zero buffers — each particle derives its position, size, and fade from `instance_index` and `time`. Counts can also change per call: `smoke.draw({ target: surface, instances: 500 })`.
+
+See it live: the [instanced rendering example](/examples/instanced-rendering) drives a 125k-cube lattice from a single instance stream.
