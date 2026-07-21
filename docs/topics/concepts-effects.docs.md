@@ -61,6 +61,13 @@ post.draw(surface); // invert it onto the canvas
 
 You can update bindings at any time by using `.set`.
 
+`set()` writes immediately — there is no change detection, so every call is a
+real GPU write. Match your calls to how often values actually change: constants
+once at creation, size- and resolution-class uniforms at init and on resize,
+and per-frame calls only for genuinely dynamic values like time or pointer
+input. Rebinding the same resources is free — bind groups are cached by
+resource identity — so this rule is purely about avoiding redundant writes.
+
 ```ts
 import { init } from "vgpu";
 

@@ -163,3 +163,5 @@ gpu.frame.loop((frame) => {
 ## When not to bother
 
 Recording is not free, and a couple of draws per frame cost almost nothing to encode. Bundles pay off with many draws in a hot loop. The full ladder: `effect.draw(target)` for a single pass, `gpu.frame()` to batch passes into one submit, `gpu.bundle()` to skip re-encoding what never changes.
+
+See it live: the [batch rendering example](/examples/batch-rendering) packs four primitive types into one buffer and replays them from a single bundle.
