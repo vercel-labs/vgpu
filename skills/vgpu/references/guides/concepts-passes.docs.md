@@ -89,10 +89,10 @@ const boat = gpu.effect(`
 `);
 const postSource = `
   @group(0) @binding(0) var src: texture_2d<f32>;
+  @group(0) @binding(1) var samp: sampler;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let dims = vec2f(textureDimensions(src));
-    let base = textureLoad(src, vec2u(uv * dims), 0);
+    let base = textureSampleLevel(src, samp, uv, 0.0);
     let vignette = 1.0 - 0.4 * length(uv - vec2f(0.5));
     return vec4f(base.rgb * vignette, 1.0);
   }
@@ -101,7 +101,10 @@ const postSource = `
 // ---cut---
 const scene = gpu.target({ size: [canvasSurface.size[0], canvasSurface.size[1]] });
 const postprocessing = gpu.effect(postSource);
-postprocessing.set({ src: scene }); // the offscreen scene becomes the post input
+postprocessing.set({
+  src: scene,
+  samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
+}); // the offscreen scene becomes the post input
 
 gpu.frame((frame) => {
   frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => {

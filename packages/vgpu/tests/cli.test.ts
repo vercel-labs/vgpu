@@ -27,13 +27,36 @@ test("exposes the manual Dawn installer command", async () => {
   });
 });
 
-test("supports docs help and path listing", () => {
+test("puts the getting-started guide first in CLI help", () => {
+  const rootHelp = success(["--help"]);
+  expect(rootHelp.indexOf("vgpu docs cat getting-started.md")).toBeLessThan(rootHelp.indexOf("Commands:"));
+  expect(rootHelp.indexOf("WGSL and adapter packages:")).toBeLessThan(rootHelp.indexOf("Slim tooling subpaths:"));
+
   const help = success(["docs", "help"]);
   expect(help).toContain("Usage: vgpu docs <command>");
-  expect(help).toContain("Start here: vgpu docs cat getting-started.md");
-  expect(success(["docs", "ls"])).toContain("/vgpu/core");
+  expect(help.split("\n")[2]).toBe("Start here: vgpu docs cat getting-started.md   (the guide for using the latest API correctly)");
+  expect(help.indexOf("vgpu docs cat getting-started.md", help.indexOf("Examples:"))).toBeLessThan(help.indexOf("vgpu docs ls /guides"));
+});
+
+test("curates root and guide listings for onboarding", () => {
+  const root = success(["docs", "ls"]).trimEnd().split("\n");
+  expect(root.slice(0, 4)).toEqual(["/guides", "/vgpu", "/vgpu/scene", "/vgpu/core"]);
+  expect(root.at(-1)).toBe("Tip: start with \"vgpu docs cat getting-started.md\"; /guides holds concept guides; @vgpu/render/* is low-level tooling.");
+  expect(root.indexOf("/@vgpu/wgsl")).toBeLessThan(root.indexOf("/@vgpu/render/edit"));
+
+  const guides = success(["docs", "ls", "/guides"]).trimEnd().split("\n");
+  expect(guides[0]).toBe("getting-started.docs.md");
+  expect(guides.slice(1, 8)).toEqual([
+    "concepts-context.docs.md",
+    "concepts-draws.docs.md",
+    "concepts-compilation.docs.md",
+    "concepts-effects.docs.md",
+    "concepts-passes.docs.md",
+    "concepts-frames.docs.md",
+    "concepts-render-bundles.docs.md",
+  ]);
+
   expect(success(["docs", "ls", "/vgpu/core"])).toContain("buffer.docs.md");
-  expect(success(["docs", "ls", "/guides"])).toContain("getting-started.docs.md");
 });
 
 test("cats docs by path and unique symbol", () => {

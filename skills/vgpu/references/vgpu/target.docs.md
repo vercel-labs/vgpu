@@ -96,11 +96,15 @@ const gpu = await init();
 const surface = gpu.surface(mockCanvas());
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = gpu.target({ size: bloomSize(surface.size[0], surface.size[1]) });
-const bright = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const bright = gpu.effect(`
+  struct Params { resolution: vec2f }
+  @group(0) @binding(0) var<uniform> params: Params;
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+`, { set: { params: { resolution: bloom.size } } });
 
 surface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
-  bright.set({ resolution: bloom.size });
+  bright.set({ params: { resolution: bloom.size } });
 });
 
 function mockCanvas(): HTMLCanvasElement {

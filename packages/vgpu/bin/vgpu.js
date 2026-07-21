@@ -15,6 +15,9 @@ const help = `vgpu ${VERSION}
 
 Official VGPU CLI.
 
+New here? Read the guide first:
+  vgpu docs cat getting-started.md
+
 Commands:
   check      Validate and reflect a WGSL file as JSON
   docs       Explore bundled VGPU documentation
@@ -30,16 +33,16 @@ Primary runtime entrypoints:
   - vgpu/scene
   - vgpu/client
 
+WGSL and adapter packages:
+  - @vgpu/wgsl
+  - @vgpu/adapter-mock
+  - @vgpu/adapter-node
+
 Slim tooling subpaths:
   - @vgpu/render/inspect
   - @vgpu/render/utils
   - @vgpu/render/edit
   - @vgpu/render/perf
-
-WGSL and adapter packages:
-  - @vgpu/wgsl
-  - @vgpu/adapter-mock
-  - @vgpu/adapter-node
 
 Run \`vgpu docs --help\` for docs commands.
 `;
