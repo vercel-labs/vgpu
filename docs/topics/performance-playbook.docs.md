@@ -164,8 +164,10 @@ const wave = gpu.effect(WAVE_WGSL, { set: { globals } });
 const blur = gpu.effect(BLUR_WGSL, { set: { globals } });
 gpu.frame.loop((frame) => {
   globals.set({ time: gpu.time, mouse });
-  frame.pass(target, wave);
-  frame.pass(target, blur);
+  frame.pass(target, (pass) => {
+    pass.draw(wave);
+    pass.draw(blur);
+  });
 });
 ```
 Default: shared values belong in one `gpu.uniforms()` object.
