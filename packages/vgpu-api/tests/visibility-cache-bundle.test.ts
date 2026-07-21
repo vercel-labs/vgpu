@@ -1,5 +1,5 @@
-import { expect, test } from "vitest";
-import { bindGroupLayoutMetadata } from "@vgpu/core";
+import { expect, test, vi } from "vitest";
+import { bindGroupLayoutMetadata, createMockGPUDevice, Device } from "@vgpu/core";
 import { init } from "../src/mock.ts";
 
 const vertexShader = (name: string) => `
@@ -118,5 +118,18 @@ test("known unfilterable float textures fail with an actionable structured error
     message: expect.stringContaining("hdr-color (rgba32float)"),
     fix: expect.stringContaining("float32-filterable"),
   }));
+  gpu.dispose();
+});
+
+test("requested float32-filterable permits promoted rgba32float facade textures", async () => {
+  const device = createMockGPUDevice();
+  Object.defineProperty(device, "features", { value: new Set<GPUFeatureName>(["float32-filterable"]) });
+  const requestDevice = vi.fn(async () => new Device(device));
+  const gpu = await init({ adapter: { requestDevice }, requiredFeatures: ["float32-filterable"] });
+  const draw = gpu.draw({ shader: sampledTextureShader(true), label: "feature-enabled" });
+  const hdr = gpu.device.createTexture({ size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "filterable-hdr" });
+  expect(bindGroupLayoutMetadata(draw.layout(0))?.entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
+  expect(() => draw.set({ image: hdr, imageSampler: gpu.sampler({ minFilter: "linear" }) })).not.toThrow();
+  expect(requestDevice).toHaveBeenCalledWith(expect.objectContaining({ requiredFeatures: ["float32-filterable"] }));
   gpu.dispose();
 });

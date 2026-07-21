@@ -118,3 +118,29 @@ test("sampling pair metadata is non-enumerable", () => {
   expect(entry.samplingPairs).toEqual([]);
   expect(Object.keys(entry)).not.toContain("samplingPairs");
 });
+
+test("compute entries retain ordinary sampling pairs", () => {
+  expect(pairs(`
+    @group(0) @binding(0) var image: texture_2d<f32>;
+    @group(0) @binding(1) var imageSampler: sampler;
+    @group(0) @binding(2) var<storage, read_write> output: array<vec4f>;
+    @compute @workgroup_size(1) fn main() {
+      output[0] = textureSampleLevel(image, imageSampler, vec2f(0.5), 0.0);
+    }
+  `).main).toEqual([{ texture: { group: 0, binding: 0 }, sampler: { group: 0, binding: 1 }, mode: "filtering" }]);
+});
+
+test("unresolved sampled origins fall back to safely promoting every eligible used float texture", () => {
+  expect(pairs(`
+    @group(0) @binding(0) var image: texture_2d<f32>;
+    @group(0) @binding(1) var other: texture_2d<f32>;
+    @group(0) @binding(2) var imageSampler: sampler;
+    @fragment fn main() -> @location(0) vec4f {
+      let indirect = image;
+      return textureSample(indirect, imageSampler, vec2f(0.5)) + textureLoad(other, vec2i(0), 0);
+    }
+  `).main).toEqual([
+    { texture: { group: 0, binding: 0 }, sampler: { group: 0, binding: 2 }, mode: "filtering" },
+    { texture: { group: 0, binding: 1 }, sampler: { group: 0, binding: 2 }, mode: "filtering" },
+  ]);
+});
