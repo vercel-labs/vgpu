@@ -129,8 +129,8 @@ function append(out: number[], triangles: readonly Vec3[], center: Vec3, color: 
 }
 function transform(p: Vec3, y: number, x: number): Vec3 {
   const cy = Math.cos(y), sy = Math.sin(y), cx = Math.cos(x), sx = Math.sin(x), scale = .34;
-  const px = (p[0] * cy + p[2] * sy) * scale, pz = (-p[0] * sy + p[2] * cy) * scale;
-  return [px, (p[1] * cx - pz * sx) * scale / scale, (p[1] * sx + pz * cx)];
+  const px = p[0] * cy + p[2] * sy, pz = -p[0] * sy + p[2] * cy;
+  return [px * scale, (p[1] * cx - pz * sx) * scale, (p[1] * sx + pz * cx) * scale];
 }
 function sub(a: Vec3, b: Vec3): Vec3 { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function cross(a: Vec3, b: Vec3): Vec3 { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
