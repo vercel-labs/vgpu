@@ -13,7 +13,7 @@ export function buildIndex(manifest = loadManifest()) {
     push(paths, record.virtualPath, record);
     push(symbols, record.symbol, record);
   }
-  return { records: manifest.records, packages: [...packages].sort(), paths, symbols };
+  return { records: manifest.records, packages: [...packages].sort(comparePackage), paths, symbols };
 }
 
 export function resolveSymbol(index, symbol) {
@@ -34,6 +34,22 @@ export function uniqueByPath(records) {
 export function normalizePath(path) {
   if (path === "/") return path;
   return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function comparePackage(left, right) {
+  const rank = (name) => {
+    if (name === "guides") return 0;
+    if (name === "vgpu") return 1;
+    if (name === "vgpu/scene") return 2;
+    if (name === "vgpu/core") return 3;
+    if (name === "@vgpu/wgsl") return 4;
+    if (name === "@vgpu/wgsl/runtime") return 5;
+    if (name.startsWith("@vgpu/wgsl/loader-")) return 6;
+    if (name.startsWith("@vgpu/wgsl-std/")) return 7;
+    if (name.startsWith("@vgpu/render/")) return 8;
+    return 9;
+  };
+  return rank(left) - rank(right) || left.localeCompare(right);
 }
 
 function push(map, key, value) {

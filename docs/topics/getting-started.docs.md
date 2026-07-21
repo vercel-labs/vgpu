@@ -2,25 +2,34 @@
 
 Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from JavaScript (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
 
-```text
+```ts
 import { init } from "vgpu";
 
 const gpu = await init();
+const canvas = document.querySelector("canvas")!;
 const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const screen = surface!;
 const gradient = gpu.effect(`
 struct Params { time: f32, texel: vec2f }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
 }
-`, { set: { time: 0, texel: screen.texelSize } });
+`, { set: { params: { time: 0, texel: surface.texelSize } } });
 
-gpu.frame.loop((f) => {
-  gradient.set({ time: gpu.time, texel: screen.texelSize });
-  f.pass(screen, gradient);
+surface.onResize(() => {
+  gradient.set({ params: { texel: surface.texelSize } });
+});
+
+gpu.frame.loop((frame) => {
+  gradient.set({ params: { time: gpu.time } });
+  frame.pass(surface, gradient);
 });
 ```
+
+Two habits keep this correct as it grows: bindings are set by their WGSL
+names — `params` is a struct, so its members nest inside it — and `set()`
+writes immediately, so the render loop only writes what actually changes
+(`time`); size-class values like `texel` belong in the resize handler.
 
 ## Default choices
 

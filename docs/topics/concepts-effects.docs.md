@@ -37,10 +37,10 @@ const sceneSource = `
 // Post-processing: reads the scene texture and inverts its colors.
 const postSource = `
   @group(0) @binding(0) var src: texture_2d<f32>;
+  @group(0) @binding(1) var samp: sampler;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let dims = vec2f(textureDimensions(src));
-    let base = textureLoad(src, vec2u(uv * dims), 0);
+    let base = textureSampleLevel(src, samp, uv, 0.0);
     return vec4f(1.0 - base.rgb, 1.0);
   }
 `;
@@ -49,13 +49,19 @@ const scene = gpu.target({ size: [1280, 720] });
 
 const sceneEffect = gpu.effect(sceneSource);
 const post = gpu.effect(postSource);
-post.set({ src: scene }); // the offscreen result becomes the post input
+post.set({
+  src: scene,
+  samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
+}); // the offscreen result becomes the post input
 
 sceneEffect.draw(scene); // render the scene offscreen
 post.draw(surface); // invert it onto the canvas
 ```
 
-`post.set({ src: scene })` exposes the offscreen result to WGSL as a `texture_2d<f32>` binding named `src`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
+Reach for `textureLoad` only when you need exact texels or an unfilterable
+format — for ordinary sampling, a filtering sampler is simpler and faster.
+
+`post.set(...)` exposes the offscreen result and filtering sampler to WGSL as bindings named `src` and `samp`. Each one-shot `draw()` encodes and submits its own work immediately, in call order.
 
 ## Updating bindings
 

@@ -92,17 +92,18 @@ Use for animated JS values. The first `set()` latches ownership: plain JS values
 
 Before:
 ```text
-gpu.frame.loop(() => {
-  const wave = gpu.effect(WAVE_WGSL, { set: { time: gpu.time, speed: 2 } });
-  wave.draw();
+const wave = gpu.effect(WAVE_WGSL, { set: { time: 0, speed: 2 } });
+gpu.frame.loop((frame) => {
+  wave.set({ time: gpu.time, speed: 2 });
+  frame.pass(target, wave);
 });
 ```
 After:
 ```text
 const wave = gpu.effect(WAVE_WGSL, { set: { time: 0, speed: 2 } });
-gpu.frame.loop(() => {
+gpu.frame.loop((frame) => {
   wave.set({ time: gpu.time });
-  wave.draw();
+  frame.pass(target, wave);
 });
 ```
 Default: create once; update changing numbers/vectors/structs with `set()`. `set()` performs no equality check — a value written every frame is uploaded
@@ -163,10 +164,10 @@ After:
 const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
 const wave = gpu.effect(WAVE_WGSL, { set: { globals } });
 const blur = gpu.effect(BLUR_WGSL, { set: { globals } });
-gpu.frame.loop(() => {
+gpu.frame.loop((frame) => {
   globals.set({ time: gpu.time, mouse });
-  wave.draw();
-  blur.draw();
+  frame.pass(target, wave);
+  frame.pass(target, blur);
 });
 ```
 Default: shared values belong in one `gpu.uniforms()` object.

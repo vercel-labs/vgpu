@@ -41,17 +41,20 @@ const pulseEffect = gpu.effect(`
 `, { set: { params: { time: 0 } } });
 const postEffect = gpu.effect(`
   @group(0) @binding(0) var src: texture_2d<f32>;
+  @group(0) @binding(1) var samp: sampler;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let dims = vec2f(textureDimensions(src));
-    let base = textureLoad(src, vec2u(uv * dims), 0);
+    let base = textureSampleLevel(src, samp, uv, 0.0);
     return vec4f(1.0 - base.rgb, 1.0);
   }
 `);
 
 // ---cut---
 const sceneTarget = gpu.target({ size: [canvasTarget.size[0], canvasTarget.size[1]] });
-postEffect.set({ src: sceneTarget });
+postEffect.set({
+  src: sceneTarget,
+  samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
+});
 
 gpu.frame((frame) => {
   frame.pass(sceneTarget, pulseEffect);

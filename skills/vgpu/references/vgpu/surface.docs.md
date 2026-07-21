@@ -93,12 +93,16 @@ const surface = gpu.surface(canvas);
 
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = gpu.target({ size: bloomSize(surface.size[0], surface.size[1]) });
-const brightPass = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const brightPass = gpu.effect(`
+  struct Params { resolution: vec2f }
+  @group(0) @binding(0) var<uniform> params: Params;
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+`, { set: { params: { resolution: bloom.size } } });
 const composite = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
 
 surface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
-  brightPass.set({ resolution: [width / 2, height / 2] });
+  brightPass.set({ params: { resolution: bloom.size } });
 });
 
 gpu.frame((frame) => {
