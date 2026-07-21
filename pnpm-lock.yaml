@@ -321,17 +321,17 @@ importers:
   packages/vgpu-api:
     dependencies:
       '@vgpu/adapter-mock':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../adapter-mock
       '@vgpu/adapter-node':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../adapter-node
       '@vgpu/core':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../core
       '@vgpu/wgsl':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../wgsl
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
@@ -1002,18 +1002,6 @@ packages:
 
   '@ungap/structured-clone@1.3.2':
     resolution: {integrity: sha512-5jsZFwgR5rTdKwidH9Qmat75RKwqfpKlWWB1frDkljN127mwqBu8K0PYo7/hFpF03IEJpfVPpCQDY/eDx3iHvA==}
-
-  '@vgpu/adapter-mock@0.1.0':
-    resolution: {integrity: sha512-cxp2z8FZWxP/OfNePS9lqnwoJTW1PFxRsuN2qE8OL1VELion5qsrRwnRo+u3IZI8G/Kx0VfHDVkPZ4f7fyRLZg==}
-
-  '@vgpu/adapter-node@0.1.0':
-    resolution: {integrity: sha512-NkhatZosaSC7v9OAGGUQQQAq0gWm32oMqQwySsfIlN+GYP4asjEqdEXsAA2dbe+yt/zScFNt9BnUuV1dWBixew==}
-
-  '@vgpu/core@0.1.0':
-    resolution: {integrity: sha512-eT9kGtM+J8+xtOQi9FzV6mePC/RZR/yvNHTNsnDSRMq8g8vhgBlvwyZ45FsRH9oloFMCoqvnwz0/0T3sD8nGwQ==}
-
-  '@vgpu/wgsl@0.1.0':
-    resolution: {integrity: sha512-V1NvCgxgOYVPiLbS4ovIx3vs/XU03969rNDp4/Z7iLw9XBDs2azkF/46pxNLHHuZ8TOu84nzQ2e8HZ1jixfcjw==}
 
   '@vitest/expect@2.1.9':
     resolution: {integrity: sha512-UJCIkTBenHeKT1TTlKMJWy1laZewsRIzYighyYiJKZreqtdxSos/S1t+ktRMQWu2CKqaarrkeszJx1cgC5tGZw==}
@@ -2790,23 +2778,6 @@ snapshots:
   '@types/unist@3.0.3': {}
 
   '@ungap/structured-clone@1.3.2': {}
-
-  '@vgpu/adapter-mock@0.1.0':
-    dependencies:
-      '@vgpu/core': 0.1.0
-
-  '@vgpu/adapter-node@0.1.0':
-    dependencies:
-      '@vgpu/core': 0.1.0
-      webgpu: 0.4.0
-    transitivePeerDependencies:
-      - supports-color
-
-  '@vgpu/core@0.1.0':
-    dependencies:
-      '@vgpu/wgsl': 0.1.0
-
-  '@vgpu/wgsl@0.1.0': {}
 
   '@vitest/expect@2.1.9':
     dependencies:

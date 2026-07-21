@@ -1,3 +1,12 @@
+## 0.1.2 — 2026-07-21
+
+### Changed
+- `vgpu docs` now leads agents to the getting-started guide, presents packages and guides in a curated learning order, and lists `/guides` with getting started first.
+- Rewrite getting-started, effect, pass, frame, surface, target, and performance examples around valid structured bindings, resize-owned updates, frame batching, and filterable texture sampling.
+
+### Added
+- Add runtime tests that execute getting-started and corrected performance/post-processing snippets against `vgpu/mock` so documentation examples cannot silently drift from the public API.
+
 ## 0.1.1 — 2026-07-21
 
 ### Fixed

@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/adapter-node",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Node.js GPU adapter for vgpu, using Dawn-based WebGPU bindings.",
   "keywords": [
     "webgpu",
