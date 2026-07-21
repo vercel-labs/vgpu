@@ -5,12 +5,13 @@
   "scripts": {
     "predev": "node scripts/ingest-examples.mjs",
     "dev": "next dev --port 3001",
-    "prebuild": "node scripts/ingest-examples.mjs",
+    "prebuild": "pnpm run build:workspace && node scripts/ingest-examples.mjs",
     "build": "next build",
     "start": "next start --port 3001",
     "thumbs": "node scripts/render-example-thumbs.mjs --update",
     "thumbs:check": "node scripts/render-example-thumbs.mjs --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:workspace": "pnpm --dir ../.. run build"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
@@ -43,5 +44,8 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22 <23"
   }
 }
