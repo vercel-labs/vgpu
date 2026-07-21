@@ -39,7 +39,21 @@ writes immediately, so the render loop only writes what actually changes
 - Use `set()` for every binding declared in WGSL; missing bindings fail with `VGPU-R1-BINDING-NEVER-SET`.
 - Keep plain JS values plain from their first `set()`; if you need user-owned lifetime, pass a resource from the first `set()`.
 
-## Open concrete docs
+## Where to go next
+
+Read the concept guides in order — each builds on the previous one:
+
+```sh
+vgpu docs cat concepts-context.md         # the Gpu context, surfaces, targets
+vgpu docs cat concepts-draws.md           # gpu.draw, meshes, instancing
+vgpu docs cat concepts-compilation.md     # compile() and pipeline warmup
+vgpu docs cat concepts-effects.md         # fragment effects and set()
+vgpu docs cat concepts-passes.md          # frame.pass and multi-pass work
+vgpu docs cat concepts-frames.md          # frame batching and animation loops
+vgpu docs cat concepts-render-bundles.md  # record draws once, replay cheap
+```
+
+For performance work and testing:
 
 ```sh
 vgpu docs cat /guides/performance-model.docs.md
