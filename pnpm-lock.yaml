@@ -308,6 +308,9 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
     devDependencies:
+      '@vgpu/adapter-node':
+        specifier: workspace:*
+        version: link:../adapter-node
       '@vgpu/wgsl':
         specifier: workspace:*
         version: link:../wgsl

@@ -1,15 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { formatBinaryLoadError } from "../src/index";
+import { glibcMismatch } from "../src/dawn-loader";
 
-describe("formatBinaryLoadError", () => {
-  test("reports glibc workaround for older linux hosts", () => {
-    const error = formatBinaryLoadError(new Error("libc.so.6: version `GLIBC_2.38' not found"), {
-      detectedGlibcVersion: "2.36",
+describe("glibcMismatch", () => {
+  test("extracts the binary requirement and host runtime", () => {
+    expect(glibcMismatch(new Error("libc.so.6: version `GLIBC_2.38' not found"), "2.36")).toEqual({
+      required: "2.38",
+      host: "2.36",
     });
-    expect(error.code).toBe("VGPU-ADAPTER-NODE-BINARY-LOAD");
-    expect(error.message).toContain("requires GLIBC 2.38 or newer");
-    expect(error.message).toContain("This host reports GLIBC 2.36");
-    expect(error.fix).toContain("pnpm test:docker");
-    expect(String(error.cause)).toContain("GLIBC_2.38");
   });
 });

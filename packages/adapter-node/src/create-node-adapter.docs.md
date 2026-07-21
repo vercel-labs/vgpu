@@ -1,28 +1,52 @@
 # createNodeAdapter
 
-`createNodeAdapter()` returns a Dawn-backed `VGPUAdapter` using `webgpu@0.4.0`.
-That version is pinned because upstream added `dist/linux-arm64.dawn.node`, which
-lets this adapter use the official Dawn prebuilt binary. On Linux the adapter uses
-the OpenGL software backend by default (`backend=opengl` plus Dawn compatibility
-feature level) and keeps a process-wide singleton GPU instance; conflicting later
-flags are warned and ignored because Dawn re-init can SIGSEGV.
+`createNodeAdapter()` returns a Dawn-backed `VGPUAdapter` using the
+`webgpu@0.4.0` API. The native loader resolves Dawn in this order:
 
-On Linux, the `webgpu@0.4.0` Dawn linux-arm64 prebuild may require GLIBC 2.38+
-when the native binary is loaded. Debian 12/bookworm (GLIBC 2.36) and similar
-hosts can fail with `/lib/aarch64-linux-gnu/libc.so.6: version 'GLIBC_2.38' not
-found`. This is a native environment compatibility issue, not a shader or
-rendering issue. Use the pinned Docker test environment (`pnpm test:docker`) or
-another Node 22 host based on Debian trixie, Ubuntu 24.04+, or equivalent GLIBC
-2.38+ runtime.
+1. the file named by `VGPU_DAWN_BINARY`;
+2. a verified vgpu prebuild in the versioned user cache;
+3. the stock `webgpu` package;
+4. on Linux, a lazy download of the vgpu prebuild if stock Dawn cannot load.
 
-For headless/software rendering, match the Docker environment variables
-`LIBGL_ALWAYS_SOFTWARE=1`, `DISPLAY=:99`, and
-`XDG_RUNTIME_DIR=/tmp/xdg-runtime`. The pinned Docker image uses Node 22 on
-Debian trixie with Mesa/EGL/GL and Xvfb for the OpenGL software stack, which is
-the recommended baseline for CI and visual snapshot agents. `VGPU_DAWN_FLAGS`
-may be set to space-separated Dawn flags, such as
-`VGPU_DAWN_FLAGS=backend=opengl`, and replaces the adapter's default backend flag
-selection.
+A best-effort postinstall download normally fills the cache. It never fails npm
+or pnpm installation, and the runtime retry covers `--ignore-scripts` and pnpm
+configurations that block lifecycle scripts. Downloads come from the pinned
+`vercel-labs/vgpu` GitHub Release and are accepted only when their SHA-256 equals
+the hash pinned in `@vgpu/adapter-node`. Private-repository and draft-release
+access honors `GH_TOKEN` or `GITHUB_TOKEN`; published public assets are fetched
+without a token. Override the cache root with `VGPU_CACHE_DIR` (or
+`XDG_CACHE_HOME`). Cache entries must be regular, non-symlink files. Before
+native loading, the verified bytes are copied through one open file descriptor
+into a private per-process directory and that exact private copy is loaded,
+preventing cache replacement between verification and `require()`.
+
+The portable prebuild currently supports Linux arm64 with glibc 2.31 or newer.
+Linux musl, other Linux CPUs, and other operating systems continue to try stock
+`webgpu`; errors identify an unsupported platform, musl, an offline/blocked
+download, or the exact required and detected glibc versions. Manual and CI
+installation is available with:
+
+```sh
+pnpm exec vgpu install-dawn
+# or
+npx @vgpu/cli install-dawn
+```
+
+`VGPU-NODE-PREBUILD-MISSING` includes the failed reason and those remediation
+commands. `VGPU-NODE-PREBUILD-CHECKSUM` refuses a corrupt or substituted asset.
+`VGPU-NODE-GLIBC-MISMATCH` names both versions when a selected native binary
+cannot load. Do not upgrade a host's glibc in place; install the portable
+prebuild or provide an audited binary with `VGPU_DAWN_BINARY`.
+
+On Linux the adapter uses the OpenGL software backend by default
+(`backend=opengl` plus Dawn compatibility feature level) and keeps a
+process-wide singleton GPU instance; conflicting later flags are warned and
+ignored because Dawn re-init can SIGSEGV. For deterministic headless Vulkan CI,
+install the distro's Mesa/lavapipe packages, set
+`VGPU_DAWN_FLAGS=backend=vulkan`, and select its ICD with `VK_ICD_FILENAMES`.
+Mesa and GPU drivers remain host-managed and are never downloaded by vgpu.
+`VGPU_DAWN_FLAGS` may contain any space-separated Dawn flags and replaces the
+default backend selection.
 
 For agentic headless snapshot tests, pair this adapter with an explicit
 offscreen `rgba8unorm` render target that includes `"copy_src"`, submit the
