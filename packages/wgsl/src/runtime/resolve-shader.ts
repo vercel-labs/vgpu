@@ -16,7 +16,7 @@ import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
-export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, WGSLType } from "./reflect.ts";
+export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";
 export interface ResolveOptions {
@@ -57,6 +57,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   for (const reflectedEntry of reflection.entryPoints) {
     const emittedEntry = emittedReflection.entryPoints.find((item) => item.name === reflectedEntry.mangledName);
     if (emittedEntry?.bindings) Object.defineProperty(reflectedEntry, "bindings", { value: emittedEntry.bindings, enumerable: false });
+    if (emittedEntry?.samplingPairs) Object.defineProperty(reflectedEntry, "samplingPairs", { value: emittedEntry.samplingPairs, enumerable: false });
   }
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);

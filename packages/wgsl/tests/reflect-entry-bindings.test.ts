@@ -83,3 +83,38 @@ test("bindings metadata is non-enumerable", () => {
   expect(entry.bindings).toEqual([]);
   expect(Object.keys(entry)).not.toContain("bindings");
 });
+
+const pairs = (source: string) => Object.fromEntries(reflectSource(source).entryPoints.map((entry) => [entry.name, entry.samplingPairs]));
+
+test("sampling pairs distinguish loads, ordinary sampling, and comparison", () => {
+  expect(pairs(`
+    @group(0) @binding(0) var tex: texture_2d<f32>;
+    @group(0) @binding(1) var samp: sampler;
+    @group(0) @binding(2) var depth: texture_depth_2d;
+    @group(0) @binding(3) var cmp: sampler_comparison;
+    @fragment fn loaded() -> @location(0) vec4f { return textureLoad(tex, vec2i(0), 0); }
+    @fragment fn sampled() -> @location(0) vec4f { return textureSampleLevel(tex, samp, vec2f(0), 0); }
+    @fragment fn compared() -> @location(0) vec4f { return vec4f(textureSampleCompare(depth, cmp, vec2f(0), 0)); }
+  `)).toEqual({ loaded: [], sampled: [{ texture: { group: 0, binding: 0 }, sampler: { group: 0, binding: 1 }, mode: "filtering" }], compared: [{ texture: { group: 0, binding: 2 }, sampler: { group: 0, binding: 3 }, mode: "comparison" }] });
+});
+
+test("sampling pairs compose helper parameters without cross-products", () => {
+  expect(pairs(`
+    @group(0) @binding(0) var a: texture_2d<f32>;
+    @group(0) @binding(1) var sa: sampler;
+    @group(0) @binding(2) var b: texture_2d<f32>;
+    @group(0) @binding(3) var sb: sampler;
+    fn leaf(t: texture_2d<f32>, s: sampler) -> vec4f { return textureSample(t, s, vec2f(0)); }
+    fn nested(t: texture_2d<f32>, s: sampler) -> vec4f { return leaf(t, s); }
+    @fragment fn main() -> @location(0) vec4f { return nested(a, sa) + nested(b, sb); }
+  `).main).toEqual([
+    { texture: { group: 0, binding: 0 }, sampler: { group: 0, binding: 1 }, mode: "filtering" },
+    { texture: { group: 0, binding: 2 }, sampler: { group: 0, binding: 3 }, mode: "filtering" },
+  ]);
+});
+
+test("sampling pair metadata is non-enumerable", () => {
+  const entry = reflectSource("@compute @workgroup_size(1) fn main() {}").entryPoints[0]!;
+  expect(entry.samplingPairs).toEqual([]);
+  expect(Object.keys(entry)).not.toContain("samplingPairs");
+});

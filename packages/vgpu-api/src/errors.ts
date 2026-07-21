@@ -18,6 +18,15 @@ export function storageStageLimitError(label: string, stage: "vertex" | "fragmen
   });
 }
 
+export function textureFilterabilityError(label: string, binding: BindingInfo, format: string, resourceName: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SET-TEXTURE-FILTERABILITY",
+    message: `${resourceName} (${format}) cannot satisfy filtering texture '${binding.name}' @group(${binding.group}) @binding(${binding.binding}).`,
+    fix: "Use a filterable format; request float32-filterable for rgba32float when supported; or use textureLoad without a sampler.",
+    where: `${label}.set`,
+  });
+}
+
 export function neverSetError(drawLabel: string, binding: BindingInfo): VGPUError {
   const fix = missingBindingFix(drawLabel, binding);
   return new VGPUError({

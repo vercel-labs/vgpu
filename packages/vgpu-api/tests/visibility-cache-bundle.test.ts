@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { bindGroupLayoutMetadata } from "@vgpu/core";
 import { init } from "../src/mock.ts";
 
 const vertexShader = (name: string) => `
@@ -83,5 +84,39 @@ test("bundle recording and mesh slices share narrowed pipeline layouts", async (
   expect(first.layout(0)).toBe(second.layout(0));
   const target = gpu.target({ size: [2, 2] });
   expect(() => gpu.bundle({ target, label: "narrowed-bundle" }, (bundle) => { bundle.draw(first); bundle.draw(second); })).not.toThrow();
+  gpu.dispose();
+});
+
+const sampledTextureShader = (sample: boolean) => `
+@group(0) @binding(0) var image: texture_2d<f32>;
+@group(0) @binding(1) var imageSampler: sampler;
+@vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+@fragment fn fs() -> @location(0) vec4f { return ${sample ? "textureSampleLevel(image, imageSampler, vec2f(0), 0)" : "textureLoad(image, vec2i(0), 0)"}; }
+`;
+
+test("ordinary sampling promotes f32 texture layouts while loads remain unfilterable", async () => {
+  const gpu = await init();
+  const loaded = gpu.draw({ shader: sampledTextureShader(false), label: "loaded-f32" });
+  const sampled = gpu.draw({ shader: sampledTextureShader(true), label: "sampled-f32" });
+  const again = gpu.draw({ shader: sampledTextureShader(true), label: "sampled-again" });
+  const loadedEntry = bindGroupLayoutMetadata(loaded.layout(0))?.entries;
+  const sampledEntry = bindGroupLayoutMetadata(sampled.layout(0))?.entries;
+  expect(loadedEntry?.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("unfilterable-float");
+  expect(sampledEntry?.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
+  expect(sampled.layout(0)).toBe(again.layout(0));
+  expect(sampled.layout(0)).not.toBe(loaded.layout(0));
+  gpu.dispose();
+});
+
+test("known unfilterable float textures fail with an actionable structured error", async () => {
+  const gpu = await init();
+  const draw = gpu.draw({ shader: sampledTextureShader(true), label: "filterability" });
+  const hdr = gpu.device.createTexture({ size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "hdr-color" });
+  expect(() => draw.set({ image: hdr })).toThrow(expect.objectContaining({
+    code: "VGPU-SET-TEXTURE-FILTERABILITY",
+    where: "filterability.set",
+    message: expect.stringContaining("hdr-color (rgba32float)"),
+    fix: expect.stringContaining("float32-filterable"),
+  }));
   gpu.dispose();
 });
