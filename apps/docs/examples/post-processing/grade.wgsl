@@ -10,38 +10,14 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var scene_tex: texture_2d<f32>;
 @group(0) @binding(2) var bloom_tex: texture_2d<f32>;
-
-fn load_scene(pixel: vec2i) -> vec3f {
-  let dims = vec2i(textureDimensions(scene_tex));
-  return textureLoad(scene_tex, clamp(pixel, vec2i(0), dims - vec2i(1)), 0).rgb;
-}
+@group(0) @binding(3) var linear_samp: sampler;
 
 fn sample_scene_linear(uv: vec2f) -> vec3f {
-  let dims = vec2f(textureDimensions(scene_tex));
-  let coord = uv * dims - vec2f(0.5);
-  let base = vec2i(floor(coord));
-  let blend = fract(coord);
-  let top = mix(load_scene(base), load_scene(base + vec2i(1, 0)), blend.x);
-  let bottom = mix(load_scene(base + vec2i(0, 1)), load_scene(base + vec2i(1, 1)), blend.x);
-  return mix(top, bottom, blend.y);
-}
-
-fn load_bloom(pixel: vec2i) -> vec3f {
-  let dims = vec2i(textureDimensions(bloom_tex));
-  return textureLoad(bloom_tex, clamp(pixel, vec2i(0), dims - vec2i(1)), 0).rgb;
+  return textureSampleLevel(scene_tex, linear_samp, uv, 0.0).rgb;
 }
 
 fn sample_bloom_linear(uv: vec2f) -> vec3f {
-  // The bloom target is half-resolution. Manual bilinear upsampling removes the
-  // exposed low-resolution texel grid while avoiding the facade's conservative
-  // unfilterable-float reflection for sampled textures.
-  let dims = vec2f(textureDimensions(bloom_tex));
-  let coord = uv * dims - vec2f(0.5);
-  let base = vec2i(floor(coord));
-  let blend = fract(coord);
-  let top = mix(load_bloom(base), load_bloom(base + vec2i(1, 0)), blend.x);
-  let bottom = mix(load_bloom(base + vec2i(0, 1)), load_bloom(base + vec2i(1, 1)), blend.x);
-  return mix(top, bottom, blend.y);
+  return textureSampleLevel(bloom_tex, linear_samp, uv, 0.0).rgb;
 }
 
 fn sample_composite(uv: vec2f) -> vec3f {

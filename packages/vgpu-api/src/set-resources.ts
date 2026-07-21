@@ -1,7 +1,7 @@
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
-import { incompatibleResourceError } from "./errors.ts";
+import { incompatibleResourceError, textureFilterabilityError } from "./errors.ts";
 import type { Target } from "./target.ts";
 import { isSharedUniformsValue } from "./uniforms.ts";
 
@@ -14,6 +14,9 @@ export interface NormalizedBindingResource {
 
 export interface ResourceNormalizationContext {
   readonly sourceHint: string;
+  readonly filterableTexture?: boolean;
+  readonly float32Filterable?: boolean;
+  readonly pairedSampler?: BindingInfo;
 }
 
 type ObjectRecord = Record<PropertyKey, unknown>;
@@ -39,7 +42,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 export function normalizeResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
   switch (binding.bindingLayout?.kind) {
     case "buffer": return normalizeBufferResource(binding, value, context);
-    case "texture": return normalizeTextureResource(binding, value);
+    case "texture": return normalizeTextureResource(binding, value, context);
     case "sampler": return normalizeSamplerResource(binding, value);
     case "storageTexture": throw incompatibleResourceError(binding, "storage texture", "Pass a storage-compatible texture.");
     case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pass a compatible GPUExternalTexture.");
@@ -59,18 +62,21 @@ function normalizeBufferResource(binding: BindingInfo, value: unknown, context: 
   throw incompatibleResourceError(binding, "buffer", `Pass a compatible Buffer/Uniform: ${binding.name}.set({ ${binding.name}: gpu.device.createBuffer(...) }).`);
 }
 
-function normalizeTextureResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
+function normalizeTextureResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
   const target = asTarget(value);
   if (target) {
     const color = target.color;
+    validateTextureFilterability(binding, color, context);
     const onTexturesRecreated = target.onTexturesRecreated?.bind(target);
     return { resource: color.createView(), identity: color.resourceIdentity, unsubscribe: (cb) => target.onDestroy(cb), onRecreate: onTexturesRecreated ? (cb) => onTexturesRecreated(cb) : undefined };
   }
   if (value instanceof Texture) {
     validateTextureUsage(binding, value.usage);
+    validateTextureFilterability(binding, value, context);
     return { resource: value.createView(), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }
   if (isTextureLike(value)) return { resource: value.createView(), identity: value.resourceIdentity ?? syntheticIdentity(value) };
+  if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
   throw incompatibleResourceError(binding, "texture/target", `Pass a Texture or Target: ${binding.name}.set({ ${binding.name}: scene.color }) or set({ ${binding.name}: scene }).`);
 }
 
@@ -94,6 +100,13 @@ function validateBufferUsage(binding: BindingInfo, usage: readonly string[]): vo
 function validateTextureUsage(binding: BindingInfo, usage: readonly string[]): void {
   if (!usage.includes("texture_binding") && !usage.includes("render_attachment")) {
     throw incompatibleResourceError(binding, "sampled texture", "Use texture_binding usage or a sampleable Target.");
+  }
+}
+
+function validateTextureFilterability(binding: BindingInfo, texture: Texture, context: ResourceNormalizationContext): void {
+  if (!context.filterableTexture || context.float32Filterable) return;
+  if (texture.format === "r32float" || texture.format === "rg32float" || texture.format === "rgba32float") {
+    throw textureFilterabilityError(context.sourceHint, binding, texture.format, texture.label ?? "texture", context.pairedSampler);
   }
 }
 

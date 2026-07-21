@@ -2,6 +2,7 @@ import type { MangleModule } from "./mangler.ts";
 import { bindingKind, reflectedBindingLayout } from "./reflect-bind-layout.ts";
 import { parseDeclarations } from "./reflect-declarations.ts";
 import { layoutOf } from "./reflect-layout.ts";
+import { entrySamplingPairs } from "./reflect-sampling.ts";
 import { buildModuleSymbols, buildRegistry, resolveType, unwrapAlias } from "./reflect-symbols.ts";
 import type { Attr, BindingInfo, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, ModuleSymbols, ParsedDecls, ParsedEntryPoint, ParsedStructMember, Reflection, Registry } from "./reflect-types.ts";
 import { numericAttr } from "./reflect-utils.ts";
@@ -24,6 +25,7 @@ export type {
   OverrideInfo,
   ReflectedBindingLayout,
   Reflection,
+  SamplingPair,
   ReflectionFacade,
   ScalarKind,
   StorageTextureAccess,
@@ -75,9 +77,10 @@ export function reflect(modules: readonly MangleModule[]): Reflection {
 
   bindings.sort((a, b) => a.group - b.group || a.binding - b.binding);
   const uses = entryBindingUses(modules, raw, bindings);
+  const pairs = entrySamplingPairs(modules, raw, bindings);
   return {
     bindings,
-    entryPoints: raw.flatMap((item) => item.entries.map((entry) => publicEntryPoint(entry, raw.flatMap((decls) => decls.structs), moduleSymbols, registry, uses.get(entry) ?? bindings))),
+    entryPoints: raw.flatMap((item) => item.entries.map((entry) => publicEntryPoint(entry, raw.flatMap((decls) => decls.structs), moduleSymbols, registry, uses.get(entry) ?? bindings, pairs.get(entry) ?? []))),
     overrides: raw.flatMap((item) => item.overrides),
     featuresRequired: [...new Set(raw.flatMap((item) => item.features))],
     aliases: [...registry.aliases.values()],
@@ -92,7 +95,7 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
     const module = modules[moduleIndex]!;
     const decls = raw[moduleIndex]!;
     const analysis = analyzeWgslTokens(module.tokens);
-    const conservative = analysis.fallback.wholeModule || module.parsed.imports.length > 0;
+    const conservative = analysis.fallback.wholeModule;
     const functionDeclarations = new Map<number, number>();
     for (const declaration of analysis.declarations) {
       if (declaration.kind !== "function") continue;
@@ -113,13 +116,11 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
       const pending = [root.id];
       const visited = new Set<number>();
       const used = new Map<string, BindingRef>();
-      let fallback = false;
       while (pending.length) {
         const functionId = pending.pop()!;
         if (visited.has(functionId)) continue;
         visited.add(functionId);
-        const fn = analysis.functions[functionId];
-        if (!fn || fn.skipped) { fallback = true; break; }
+        if (!analysis.functions[functionId]) continue;
         for (const reference of analysis.references) {
           if (reference.functionId !== functionId) continue;
           const binding = bindingDeclarations.get(reference.declarationId);
@@ -128,15 +129,16 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
           if (callee !== undefined) pending.push(callee);
         }
       }
-      result.set(entry, fallback ? all : [...used.values()].sort((a, b) => a.group - b.group || a.binding - b.binding));
+      result.set(entry, [...used.values()].sort((a, b) => a.group - b.group || a.binding - b.binding));
     }
   }
   return result;
 }
 
-function publicEntryPoint(entry: ParsedEntryPoint, structs: readonly { readonly path: string; readonly mangledName: string; readonly members: readonly ParsedStructMember[] }[], symbols: ReadonlyMap<string, ModuleSymbols>, registry: Registry, bindings: readonly BindingRef[]): EntryPointInfo {
+function publicEntryPoint(entry: ParsedEntryPoint, structs: readonly { readonly path: string; readonly mangledName: string; readonly members: readonly ParsedStructMember[] }[], symbols: ReadonlyMap<string, ModuleSymbols>, registry: Registry, bindings: readonly BindingRef[], samplingPairs: EntryPointInfo["samplingPairs"]): EntryPointInfo {
   const result: EntryPointInfo = { name: entry.name, mangledName: entry.mangledName, stage: entry.stage, workgroupSize: entry.workgroupSize };
   Object.defineProperty(result, "bindings", { value: bindings.map(({ group, binding }) => ({ group, binding })), enumerable: false, configurable: true });
+  Object.defineProperty(result, "samplingPairs", { value: samplingPairs, enumerable: false, configurable: true });
   if (entry.stage === "vertex") Object.defineProperty(result, "inputs", { value: vertexInputs(entry, structs, symbols, registry), enumerable: false });
   return result;
 }

@@ -113,8 +113,15 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.buffer!.write(bytes, 0);
   }
 
+  function resourceContext(binding: BindingInfo) {
+    const entry = bindGroupLayoutMetadata(options.bindGroupLayouts.get(binding.group)!)?.entries.find((item) => item.binding === binding.binding);
+    const pair = options.reflection.entryPoints.flatMap((item) => item.samplingPairs ?? []).find((item) => item.mode === "filtering" && item.texture.group === binding.group && item.texture.binding === binding.binding);
+    const pairedSampler = pair && options.reflection.bindings.find((item) => item.group === pair.sampler.group && item.binding === pair.sampler.binding);
+    return { sourceHint: options.label, filterableTexture: entry?.texture?.sampleType === "float", float32Filterable: options.device.features.has("float32-filterable"), pairedSampler };
+  }
+
   function setUserOwned(state: MutableBindingState, value: unknown): void {
-    const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
+    const normalized = normalizeResource(state.info, value, resourceContext(state.info));
     state.unsubscribe?.();
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
@@ -126,7 +133,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function rebindRecreatedResource(state: MutableBindingState, value: unknown): void {
     const beforeIdentity = identityString(state.identity);
     if (state.identity) options.cache.evictIdentity(state.identity);
-    const normalized = normalizeResource(state.info, value, { sourceHint: options.label });
+    const normalized = normalizeResource(state.info, value, resourceContext(state.info));
     state.unsubscribe?.();
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;

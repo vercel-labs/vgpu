@@ -3,20 +3,24 @@ import type { BindingInfo, EntryPointInfo, ReflectedBindingLayout, Reflection } 
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
-export type BindingVisibilityFn = (binding: BindingInfo) => GPUShaderStageFlags;
+export type BindingVisibilityFn = ((binding: BindingInfo) => GPUShaderStageFlags) & { readonly filterable?: ReadonlySet<string> };
 
 const bindGroupLayoutCaches = new WeakMap<GPUDevice, Map<string, GPUBindGroupLayout>>();
 
 export function visibilityForEntries(bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[]): BindingVisibilityFn {
   const masks = new Map<string, number>();
+  const filterable = new Set<string>();
   for (const entry of entries) {
     const stage = entry.stage === "vertex" ? 1 : entry.stage === "fragment" ? 2 : 4;
     for (const binding of entry.bindings ?? bindings) {
       const key = `${binding.group}:${binding.binding}`;
       masks.set(key, (masks.get(key) ?? 0) | stage);
     }
+    for (const pair of entry.samplingPairs ?? []) if (pair.mode === "filtering") filterable.add(`${pair.texture.group}:${pair.texture.binding}`);
   }
-  return (binding) => masks.get(`${binding.group}:${binding.binding}`) ?? 0;
+  const policy: BindingVisibilityFn = (binding) => masks.get(`${binding.group}:${binding.binding}`) ?? 0;
+  Object.defineProperty(policy, "filterable", { value: filterable });
+  return policy;
 }
 
 export function bindGroupLayoutEntriesForGroup(
@@ -27,7 +31,7 @@ export function bindGroupLayoutEntriesForGroup(
   return bindings.flatMap((binding) => {
     if (binding.group !== group) return [];
     const mask = visibility(binding);
-    return mask === 0 ? [] : [{ binding: binding.binding, visibility: mask, ...layoutEntry(binding) }];
+    return mask === 0 ? [] : [{ binding: binding.binding, visibility: mask, ...layoutEntry(binding, visibility.filterable?.has(`${binding.group}:${binding.binding}`) ?? false) }];
   });
 }
 
@@ -82,9 +86,10 @@ function requiredLayout(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout
   return layout;
 }
 
-function layoutEntry(binding: BindingInfo): Omit<GPUBindGroupLayoutEntry, "binding" | "visibility"> {
+function layoutEntry(binding: BindingInfo, filterable: boolean): Omit<GPUBindGroupLayoutEntry, "binding" | "visibility"> {
   const reflected = binding.bindingLayout;
   if (!reflected) throw unsupportedError("bindGroupLayout", `Binding '${binding.name}' does not have a reflected bindingLayout.`);
+  if (filterable && reflected.kind === "texture" && reflected.texture.sampleType === "unfilterable-float" && !reflected.texture.multisampled) return { texture: { ...reflected.texture, sampleType: "float" } };
   return reflectedToWebGPU(reflected);
 }
 

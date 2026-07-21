@@ -57,6 +57,12 @@ export interface BindingRef {
   readonly binding: number;
 }
 
+export interface SamplingPair {
+  readonly texture: BindingRef;
+  readonly sampler: BindingRef;
+  readonly mode: "filtering" | "comparison";
+}
+
 export interface EntryPointInfo {
   readonly name: string;
   readonly mangledName: string;
@@ -65,6 +71,8 @@ export interface EntryPointInfo {
   readonly inputs?: readonly EntryPointInputInfo[];
   /** Resource bindings statically used by this entry point and its transitive callees. */
   readonly bindings?: readonly BindingRef[];
+  /** Sampler/texture pairs statically sampled by this entry point and transitive callees. */
+  readonly samplingPairs?: readonly SamplingPair[];
 }
 
 export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly defaultValue?: string }
