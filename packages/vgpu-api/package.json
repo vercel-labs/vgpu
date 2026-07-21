@@ -1,6 +1,6 @@
 {
   "name": "vgpu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Public VGPU API entrypoint scaffold for browser, Node, mock, scene, and client typing surfaces.",
   "keywords": [
     "webgpu",
@@ -64,16 +64,19 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -b",
-    "test": "cd ../.. && vitest run packages/vgpu-api"
+    "build": "tsc -b && node scripts/copy-cli.mjs",
+    "test": "cd ../.. && vitest run packages/vgpu-api",
+    "prepack": "pnpm --dir ../vgpu generate:docs && node scripts/copy-cli.mjs"
   },
   "dependencies": {
-    "@vgpu/adapter-mock": "workspace:*",
-    "@vgpu/adapter-node": "workspace:*",
-    "@vgpu/core": "workspace:*",
-    "@vgpu/wgsl": "workspace:*",
+    "@vgpu/adapter-mock": "0.1.0",
+    "@vgpu/adapter-node": "0.1.0",
+    "@vgpu/core": "0.1.0",
+    "@vgpu/wgsl": "0.1.0",
     "wgpu-matrix": "^3.4.2",
-    "@webgpu/types": "^0.1.69"
+    "@webgpu/types": "^0.1.69",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0"
   },
   "vgpuExportBundleBudgetNote": "Bundle-diet ceilings use 512-byte granularity with one rounded safety step above measured gzip sizes.",
   "vgpuExportBundleBudgetsGzipBytes": {
@@ -83,5 +86,8 @@
     "./scene": 5632,
     "./client": 512,
     "./core": 3584
+  },
+  "bin": {
+    "vgpu": "./dist/cli/bin/vgpu.js"
   }
 }
