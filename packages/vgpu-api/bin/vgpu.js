@@ -1,15 +1,14 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 
+const cliUrl = new URL("../dist/cli/bin/vgpu.js", import.meta.url);
 let runCli;
-try {
-  ({ runCli } = await import("../dist/cli/bin/vgpu.js"));
-} catch (error) {
-  if (error?.code === "ERR_MODULE_NOT_FOUND") {
-    process.stderr.write("vgpu CLI is not built. Run `pnpm build` before using it from a workspace checkout.\n");
-    process.exitCode = 1;
-  } else {
-    throw error;
-  }
+
+if (!existsSync(cliUrl)) {
+  process.stderr.write("vgpu CLI is not built. Run `pnpm build` before using it from a workspace checkout.\n");
+  process.exitCode = 1;
+} else {
+  ({ runCli } = await import(cliUrl.href));
 }
 
 if (runCli) {
