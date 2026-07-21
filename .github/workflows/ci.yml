@@ -79,7 +79,7 @@ jobs:
             -e CI=true \
             vgpu-test-dev:ci \
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter @vgpu/cli exec vgpu snapshot --ci; \
+              node packages/vgpu/bin/vgpu.js snapshot --ci; \
               s=$?; kill $xp; exit $s'
 
   wgsl-cachekey-determinism:
