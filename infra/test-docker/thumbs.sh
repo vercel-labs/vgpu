@@ -19,7 +19,7 @@ trap cleanup EXIT INT TERM
 cleanup
 
 DOCKER_OUTPUT_ARGS=()
-for output_var in VGPU_AA_MODE_OUTPUT_DIR VGPU_POST_PROCESSING_MODE_OUTPUT_DIR; do
+for output_var in VGPU_AA_MODE_OUTPUT_DIR VGPU_POST_PROCESSING_MODE_OUTPUT_DIR VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR; do
   output_dir=${!output_var:-}
   if [ -n "$output_dir" ]; then
     mkdir -p "$output_dir"

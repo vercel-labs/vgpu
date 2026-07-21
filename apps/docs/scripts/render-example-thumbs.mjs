@@ -20,6 +20,7 @@ const customRendererEntries = [
   { slug: 'triangle-led-front', module: '../examples/triangle-led-front/example.ts', exportName: 'renderThumb' },
   { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
   { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
+  { slug: 'black-hole', module: '../examples/black-hole/example.ts', exportName: 'renderThumb' },
   { slug: 'fluid', module: '../examples/fluid/validation.ts', exportName: 'renderThumb' },
   { slug: 'instanced-rendering', module: '../examples/instanced-rendering/example.ts', exportName: 'renderThumb' },
   { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
@@ -73,7 +74,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
     } else if (args.fluidDrag && slug === 'fluid') {
@@ -93,6 +94,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const renderer = renderers[slug];
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
     const postProcessingModePixels = slug === 'post-processing' ? new Map() : undefined;
+    const blackHoleVariantPixels = slug === 'black-hole' ? new Map() : undefined;
     const modePixels = aaModePixels ?? postProcessingModePixels;
     let fluidState;
     if (renderer) {
@@ -102,6 +104,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
         time: metaThumb.time,
         onModeRendered: modePixels
           ? (mode, pixels) => modePixels.set(mode, pixels.slice())
+          : undefined,
+        onVariantRendered: blackHoleVariantPixels
+          ? (variant, pixels) => blackHoleVariantPixels.set(variant, pixels.slice())
           : undefined,
         scriptedDrag: slug === 'fluid' && args.fluidDrag,
         soak: slug === 'fluid' && args.fluidSoak,
@@ -126,11 +131,17 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const fluidMetrics = slug === 'fluid' && !args.fluidSoak && !args.fluidDrag
       ? assertFluidMetrics(pixels, size[0], size[1])
       : undefined;
+    const blackHoleMetrics = blackHoleVariantPixels
+      ? assertBlackHoleMetrics(blackHoleVariantPixels, pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
     if (postProcessingModePixels && process.env.VGPU_POST_PROCESSING_MODE_OUTPUT_DIR) {
       await writePostProcessingModePngs(postProcessingModePixels, size, path.basename(output, '.png').replace('post-processing.', ''));
+    }
+    if (blackHoleVariantPixels && process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR) {
+      await writeBlackHoleVariantPngs(blackHoleVariantPixels, pixels, size, path.basename(output, '.png').replace('black-hole.', ''));
     }
     const variance = lumaVariance(pixels);
     const diagnosticMode = args.fluidDrag || args.fluidSoak;
@@ -138,7 +149,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     if (!diagnosticMode && variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
     const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, fluidMetrics, fluidState };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
   }
@@ -373,6 +384,58 @@ function silhouetteDice(a, b) {
     if (aOn && bOn) intersection++;
   }
   return total ? (2 * intersection) / total : 1;
+}
+
+function assertBlackHoleMetrics(variants, poster, width, height) {
+  for (const name of ['time-delta', 'pointer-orbit']) {
+    if (!variants.has(name)) throw new Error(`Black-hole validation did not capture ${name}.`);
+  }
+  let dark = 0, highlights = 0;
+  const count = poster.length / 4;
+  for (let i = 0; i < poster.length; i += 4) {
+    const y = 0.2126 * poster[i] + 0.7152 * poster[i + 1] + 0.0722 * poster[i + 2];
+    if (y < 22) dark++;
+    if (y > 170) highlights++;
+  }
+  const difference = (candidate) => {
+    let changed = 0;
+    for (let i = 0; i < poster.length; i += 4) {
+      const delta = Math.max(
+        Math.abs(poster[i] - candidate[i]),
+        Math.abs(poster[i + 1] - candidate[i + 1]),
+        Math.abs(poster[i + 2] - candidate[i + 2]),
+      );
+      if (delta > 8) changed++;
+    }
+    return changed / count;
+  };
+  const metrics = {
+    darkRatio: dark / count,
+    highlightRatio: highlights / count,
+    variance: lumaVariance(poster),
+    timeDeltaRatio: difference(variants.get('time-delta')),
+    pointerOrbitRatio: difference(variants.get('pointer-orbit')),
+  };
+  const problems = [];
+  if (metrics.darkRatio < .88 || metrics.darkRatio > .98) problems.push(`Dark-space coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 88–98%)`);
+  if (metrics.highlightRatio < .02 || metrics.highlightRatio > .07) problems.push(`Bright-disk highlights ${(metrics.highlightRatio * 100).toFixed(3)}% (need 2–7%)`);
+  if (metrics.variance < 1500 || metrics.variance > 3200) problems.push(`Luma variance ${metrics.variance.toFixed(2)} (need 1500–3200)`);
+  if (metrics.timeDeltaRatio < .01) problems.push(`Time delta changed only ${(metrics.timeDeltaRatio * 100).toFixed(3)}% of pixels (need >=1%)`);
+  if (metrics.pointerOrbitRatio < .08) problems.push(`Pointer orbit changed only ${(metrics.pointerOrbitRatio * 100).toFixed(2)}% of pixels (need >=8%)`);
+  if (problems.length) throw new Error([
+    `Black-hole semantic validation failed (${width}x${height}):`,
+    ...problems.map((problem) => `- ${problem}`),
+  ].join('\n'));
+  return metrics;
+}
+
+async function writeBlackHoleVariantPngs(variants, poster, size, kind) {
+  const dir = process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR;
+  await mkdir(dir, { recursive: true });
+  await writePng(path.join(dir, `${kind}-poster.png`), poster, size[0], size[1]);
+  for (const [name, pixels] of variants) {
+    await writePng(path.join(dir, `${kind}-${name}.png`), pixels, size[0], size[1]);
+  }
 }
 
 function formatAaMetrics(metrics) {
