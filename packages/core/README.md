@@ -1,6 +1,6 @@
 # @vgpu/core
 
-> 0.1.2 — core layer (`vgpu/core`) runtime primitives
+> 0.1.3 — core layer (`vgpu/core`) runtime primitives
 
 `@vgpu/core` contains the low-level WebGPU wrappers used by `vgpu/core`: `Device`, `Buffer`, `Texture`, `Queue`, shader modules, bind-group helpers, resource identities, and validation errors. Most applications should start from `init()` in `vgpu`, `vgpu/node`, or `vgpu/mock` and drop to these primitives only for explicit native control.
 

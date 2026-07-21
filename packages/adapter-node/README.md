@@ -1,6 +1,6 @@
 # @vgpu/adapter-node
 
-> 0.1.2 — Dawn adapter for `vgpu/node`
+> 0.1.3 — Dawn adapter for `vgpu/node`
 
 `@vgpu/adapter-node` connects vgpu to Node.js through the `webgpu` Dawn native prebuild. Most callers should import `init` from `vgpu/node`; direct adapter/device helpers remain for core layer (`vgpu/core`) tooling.
 
