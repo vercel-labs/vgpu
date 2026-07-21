@@ -59,6 +59,7 @@
   },
   "files": [
     "client.d.ts",
+    "bin",
     "dist",
     "README.md",
     "LICENSE"
@@ -88,6 +89,6 @@
     "./core": 3584
   },
   "bin": {
-    "vgpu": "./dist/cli/bin/vgpu.js"
+    "vgpu": "./bin/vgpu.js"
   }
 }
