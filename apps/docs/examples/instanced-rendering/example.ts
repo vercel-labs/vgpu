@@ -88,6 +88,7 @@ function render(frame: Frame, scene: Scene, blit: Effect, target: Target, output
 
 function createBlit(gpu: Gpu, source: Target, output: Output): Effect {
   const blit = gpu.effect(blitWgsl, { label: 'instanced-rendering-blit' });
+  blit.set({ linear_samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }) });
   setBlitSource(blit, source, output);
   return blit;
 }

@@ -16,6 +16,7 @@ export interface ResourceNormalizationContext {
   readonly sourceHint: string;
   readonly filterableTexture?: boolean;
   readonly float32Filterable?: boolean;
+  readonly pairedSampler?: BindingInfo;
 }
 
 type ObjectRecord = Record<PropertyKey, unknown>;
@@ -75,6 +76,7 @@ function normalizeTextureResource(binding: BindingInfo, value: unknown, context:
     return { resource: value.createView(), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }
   if (isTextureLike(value)) return { resource: value.createView(), identity: value.resourceIdentity ?? syntheticIdentity(value) };
+  if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
   throw incompatibleResourceError(binding, "texture/target", `Pass a Texture or Target: ${binding.name}.set({ ${binding.name}: scene.color }) or set({ ${binding.name}: scene }).`);
 }
 
@@ -104,7 +106,7 @@ function validateTextureUsage(binding: BindingInfo, usage: readonly string[]): v
 function validateTextureFilterability(binding: BindingInfo, texture: Texture, context: ResourceNormalizationContext): void {
   if (!context.filterableTexture || context.float32Filterable) return;
   if (texture.format === "r32float" || texture.format === "rg32float" || texture.format === "rgba32float") {
-    throw textureFilterabilityError(context.sourceHint, binding, texture.format, texture.label ?? "texture");
+    throw textureFilterabilityError(context.sourceHint, binding, texture.format, texture.label ?? "texture", context.pairedSampler);
   }
 }
 

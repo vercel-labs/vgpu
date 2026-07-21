@@ -26,6 +26,7 @@ interface EffectChain {
   blurH: Effect;
   blurV: Effect;
   grade: Effect;
+  sampler: GPUSampler;
 }
 
 interface ChainTargets {
@@ -158,6 +159,7 @@ function createEffects(gpu: Gpu, label: string): EffectChain {
     blurH: gpu.effect(blurWgsl, { label: `${label}-blur-h` }),
     blurV: gpu.effect(blurWgsl, { label: `${label}-blur-v` }),
     grade: gpu.effect(gradeWgsl, { label: `${label}-grade` }),
+    sampler: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
   };
 }
 
@@ -184,10 +186,11 @@ async function prewarm(effects: EffectChain, targets: ChainTargets, output: Surf
 
 function setChainConstants(effects: EffectChain): void {
   effects.scene.set({ _pad: 0 });
-  effects.threshold.set({ threshold: 0.82, knee: 0.045 });
-  effects.blurH.set({ direction: [1, 0] });
-  effects.blurV.set({ direction: [0, 1] });
+  effects.threshold.set({ threshold: 0.82, knee: 0.045, linear_samp: effects.sampler });
+  effects.blurH.set({ direction: [1, 0], linear_samp: effects.sampler });
+  effects.blurV.set({ direction: [0, 1], linear_samp: effects.sampler });
   effects.grade.set({
+    linear_samp: effects.sampler,
     bloomStrength: 1.85,
     caAmount: 0.052,
     _pad0: 0,

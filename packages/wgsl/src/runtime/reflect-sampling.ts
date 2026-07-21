@@ -29,9 +29,10 @@ export function entrySamplingPairs(modules: readonly MangleModule[], raw: readon
     for (const entry of decls.entries) {
       const root = analysis.functions.find((fn) => fn.name === entry.name);
       const pairs: SamplingPair[] = [];
-      let fallback = analysis.fallback.wholeModule || module.parsed.imports.length > 0 || !root;
+      let fallback = analysis.fallback.wholeModule || !root;
       if (!fallback && root) fallback = !walk(root.id, new Map(), new Set(), analysis, bindingDeclarations, functionDeclarations, pairs);
-      result.set(entry, fallback ? conservativePairs(bindings) : dedupe(pairs));
+      const used = root ? staticallyUsedBindings(root.id, analysis, bindingDeclarations, functionDeclarations) : bindings.map(ref);
+      result.set(entry, fallback ? conservativePairs(bindings, used) : dedupe(pairs));
     }
   }
   return result;
@@ -57,9 +58,10 @@ function walk(functionId: number, env: ReadonlyMap<number, Origin>, visited: Set
     if (!ranges) return false;
     const origins = ranges.map(([start, end]) => resolveOrigin(start, end, analysis, globals, env));
     if (mode) {
-      const resolved = origins.filter((item): item is Origin => !!item);
-      if (resolved.length < 2) return false;
-      output.push({ texture: resolved[0]!, sampler: resolved[1]!, mode });
+      const offset = name === "textureGather" && !directOrigin(ranges[0]!, analysis, globals, env) ? 1 : 0;
+      const texture = origins[offset], sampler = origins[offset + 1];
+      if (!texture || !sampler) return false;
+      output.push({ texture, sampler, mode });
     } else {
       const params = analysis.declarations.filter((decl) => decl.kind === "param" && decl.functionId === callee).sort((a, b) => a.tokenIndex - b.tokenIndex);
       const nextEnv = new Map<number, Origin>();
@@ -77,6 +79,11 @@ function resolveOrigin(start: number, end: number, analysis: ScopeAnalysis, glob
     if (origin) return origin;
   }
   return undefined;
+}
+
+function directOrigin(range: readonly [number, number], analysis: ScopeAnalysis, globals: ReadonlyMap<number, Origin>, env: ReadonlyMap<number, Origin>): Origin | undefined {
+  const first = analysis.references.find((ref) => ref.tokenIndex >= range[0] && ref.tokenIndex <= range[1]);
+  return first?.tokenIndex === range[0] ? globals.get(first.declarationId) ?? env.get(first.declarationId) : undefined;
 }
 
 function argumentRanges(analysis: ScopeAnalysis, open: number): readonly [number, number][] | undefined {
@@ -99,9 +106,28 @@ function nextSignificant(analysis: ScopeAnalysis, index: number): number | undef
   return undefined;
 }
 
-function conservativePairs(bindings: readonly BindingInfo[]): readonly SamplingPair[] {
-  const textures = bindings.filter((item) => item.bindingLayout?.kind === "texture" && item.bindingLayout.texture.sampleType === "unfilterable-float" && !item.bindingLayout.texture.multisampled);
-  const samplers = bindings.filter((item) => item.bindingLayout?.kind === "sampler" && item.bindingLayout.sampler.type === "filtering");
+function staticallyUsedBindings(root: number, analysis: ScopeAnalysis, globals: ReadonlyMap<number, BindingRef>, functions: ReadonlyMap<number, number>): readonly BindingRef[] {
+  const pending = [root], visited = new Set<number>(), used = new Map<string, BindingRef>();
+  while (pending.length) {
+    const functionId = pending.pop()!;
+    if (visited.has(functionId)) continue;
+    visited.add(functionId);
+    for (const reference of analysis.references) {
+      if (reference.functionId !== functionId) continue;
+      const binding = globals.get(reference.declarationId);
+      if (binding) used.set(`${binding.group}:${binding.binding}`, binding);
+      const callee = functions.get(reference.declarationId);
+      if (callee !== undefined) pending.push(callee);
+    }
+  }
+  return [...used.values()];
+}
+
+function conservativePairs(bindings: readonly BindingInfo[], usedBindings: readonly BindingRef[]): readonly SamplingPair[] {
+  const used = new Set(usedBindings.map((item) => `${item.group}:${item.binding}`));
+  const active = bindings.filter((item) => used.has(`${item.group}:${item.binding}`));
+  const textures = active.filter((item) => item.bindingLayout?.kind === "texture" && item.bindingLayout.texture.sampleType === "unfilterable-float" && !item.bindingLayout.texture.multisampled);
+  const samplers = active.filter((item) => item.bindingLayout?.kind === "sampler" && item.bindingLayout.sampler.type === "filtering");
   return textures.flatMap((texture) => samplers.map((sampler) => ({ texture: ref(texture), sampler: ref(sampler), mode: "filtering" as const })));
 }
 function ref(binding: BindingInfo): BindingRef { return { group: binding.group, binding: binding.binding }; }

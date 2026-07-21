@@ -1,5 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { bindGroupLayoutMetadata, createMockGPUDevice, Device } from "@vgpu/core";
+import { reflectSource } from "@vgpu/wgsl/reflect-source";
+import { bindGroupLayoutEntriesForGroup, visibilityForEntries } from "../src/set-layouts.ts";
 import { init } from "../src/mock.ts";
 
 const vertexShader = (name: string) => `
@@ -117,6 +119,10 @@ test("known unfilterable float textures fail with an actionable structured error
     where: "filterability.set",
     message: expect.stringContaining("hdr-color (rgba32float)"),
     fix: expect.stringContaining("float32-filterable"),
+    detail: {
+      format: "rgba32float", group: 0, binding: 0, bindingName: "image", resourceName: "hdr-color",
+      samplerName: "imageSampler", samplerGroup: 0, samplerBinding: 1,
+    },
   }));
   gpu.dispose();
 });
@@ -131,5 +137,103 @@ test("requested float32-filterable permits promoted rgba32float facade textures"
   expect(bindGroupLayoutMetadata(draw.layout(0))?.entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
   expect(() => draw.set({ image: hdr, imageSampler: gpu.sampler({ minFilter: "linear" }) })).not.toThrow();
   expect(requestDevice).toHaveBeenCalledWith(expect.objectContaining({ requiredFeatures: ["float32-filterable"] }));
+  gpu.dispose();
+});
+
+test("unresolved direct and helper sampling promote the positional texture bindings", async () => {
+  const gpu = await init();
+  const direct = gpu.draw({ label: "fallback-direct", shader: `
+    @group(0) @binding(0) var image: texture_2d<f32>;
+    @group(0) @binding(1) var samp: sampler;
+    @group(0) @binding(2) var other: texture_2d<f32>;
+    @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+    @fragment fn fs() -> @location(0) vec4f { let image = image; return textureSample(image, samp, vec2f(textureDimensions(other))); }
+  ` });
+  const helper = gpu.draw({ label: "fallback-helper", shader: `
+    @group(0) @binding(0) var image: texture_2d<f32>;
+    @group(0) @binding(1) var samp: sampler;
+    @group(0) @binding(2) var other: texture_2d<f32>;
+    fn sampleIt(t: texture_2d<f32>, s: sampler, q: texture_2d<f32>) -> vec4f { let t = t; return textureSample(t, s, vec2f(textureDimensions(q))); }
+    @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+    @fragment fn fs() -> @location(0) vec4f { return sampleIt(image, samp, other); }
+  ` });
+  for (const draw of [direct, helper]) {
+    const entries = bindGroupLayoutMetadata(draw.layout(0))!.entries;
+    expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
+    expect(entries.find((entry) => entry.binding === 2)?.texture?.sampleType).toBe("float");
+  }
+  gpu.dispose();
+});
+
+test("selected vertex load and fragment sample union only promotes the sampled texture", async () => {
+  const gpu = await init();
+  const draw = gpu.draw({ label: "mixed-entry-policy", shader: `
+    @group(0) @binding(0) var sampled: texture_2d<f32>;
+    @group(0) @binding(1) var samp: sampler;
+    @group(0) @binding(2) var loaded: texture_2d<f32>;
+    @vertex fn vs() -> @builtin(position) vec4f { return textureLoad(loaded, vec2i(0), 0); }
+    @fragment fn fs() -> @location(0) vec4f { return textureSampleLevel(sampled, samp, vec2f(0), 0); }
+  ` });
+  const entries = bindGroupLayoutMetadata(draw.layout(0))!.entries;
+  expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
+  expect(entries.find((entry) => entry.binding === 2)?.texture?.sampleType).toBe("unfilterable-float");
+  expect(entries.find((entry) => entry.binding === 0)?.visibility).toBe(2);
+  expect(entries.find((entry) => entry.binding === 2)?.visibility).toBe(1);
+  gpu.dispose();
+});
+
+test("depth integer external storage and multisampled layouts are never promoted", async () => {
+  const gpu = await init();
+  const draw = gpu.draw({ label: "special-textures", shader: `
+    @group(0) @binding(0) var depthTex: texture_depth_2d;
+    @group(0) @binding(1) var comparison: sampler_comparison;
+    @group(0) @binding(2) var sintTex: texture_2d<i32>;
+    @group(0) @binding(3) var uintTex: texture_2d<u32>;
+    @group(0) @binding(4) var msTex: texture_multisampled_2d<f32>;
+    @group(0) @binding(5) var storageTex: texture_storage_2d<rgba8unorm, write>;
+    @group(0) @binding(6) var externalTex: texture_external;
+    @group(0) @binding(7) var ordinary: sampler;
+    @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
+    @fragment fn fs() -> @location(0) vec4f {
+      textureStore(storageTex, vec2i(0), vec4f(1));
+      return vec4f(textureSampleCompare(depthTex, comparison, vec2f(0), 0))
+        + vec4f(textureLoad(sintTex, vec2i(0), 0))
+        + vec4f(textureLoad(uintTex, vec2i(0), 0))
+        + textureLoad(msTex, vec2i(0), 0)
+        + textureSampleBaseClampToEdge(externalTex, ordinary, vec2f(0));
+    }
+  ` });
+  const entries = bindGroupLayoutMetadata(draw.layout(0))!.entries;
+  expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("depth");
+  expect(entries.find((entry) => entry.binding === 2)?.texture?.sampleType).toBe("sint");
+  expect(entries.find((entry) => entry.binding === 3)?.texture?.sampleType).toBe("uint");
+  expect(entries.find((entry) => entry.binding === 4)?.texture).toMatchObject({ sampleType: "unfilterable-float", multisampled: true });
+  expect(entries.find((entry) => entry.binding === 5)?.storageTexture).toBeDefined();
+  expect(entries.find((entry) => entry.binding === 6)?.externalTexture).toBeDefined();
+  gpu.dispose();
+});
+
+test("equal effective descriptors are isolated across devices", async () => {
+  const firstGpu = await init(), secondGpu = await init();
+  const first = firstGpu.draw({ shader: sampledTextureShader(true), label: "same-label" });
+  const second = secondGpu.draw({ shader: sampledTextureShader(true), label: "same-label" });
+  expect(first.layout(0)).not.toBe(second.layout(0));
+  firstGpu.dispose(); secondGpu.dispose();
+});
+
+test("effective promotion does not mutate reflected binding layouts", () => {
+  const reflection = reflectSource(sampledTextureShader(true));
+  const texture = reflection.bindings[0]!;
+  expect(texture.bindingLayout).toMatchObject({ kind: "texture", texture: { sampleType: "unfilterable-float" } });
+  const policy = visibilityForEntries(reflection.bindings, reflection.entryPoints);
+  expect(bindGroupLayoutEntriesForGroup(reflection.bindings, 0, policy)[0]?.texture?.sampleType).toBe("float");
+  expect(texture.bindingLayout).toMatchObject({ kind: "texture", texture: { sampleType: "unfilterable-float" } });
+});
+
+test("opaque raw texture views skip facade format prechecks", async () => {
+  const gpu = await init();
+  const draw = gpu.draw({ shader: sampledTextureShader(true), label: "raw-view-fallback" });
+  const raw = gpu.device.gpu.createTexture({ size: [1, 1], format: "rgba32float", usage: 4 }).createView();
+  expect(() => draw.set({ image: raw, imageSampler: gpu.sampler() })).not.toThrow();
   gpu.dispose();
 });

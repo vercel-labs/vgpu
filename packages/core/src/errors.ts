@@ -9,6 +9,13 @@ export interface VGPUErrorDetail {
   readonly count?: number;
   readonly limit?: number;
   readonly bindings?: readonly { readonly name: string; readonly group: number; readonly binding: number }[];
+  readonly format?: string;
+  readonly binding?: number;
+  readonly bindingName?: string;
+  readonly resourceName?: string;
+  readonly samplerName?: string;
+  readonly samplerGroup?: number;
+  readonly samplerBinding?: number;
 }
 
 export interface VGPUErrorData {

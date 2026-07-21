@@ -95,7 +95,7 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
     const module = modules[moduleIndex]!;
     const decls = raw[moduleIndex]!;
     const analysis = analyzeWgslTokens(module.tokens);
-    const conservative = analysis.fallback.wholeModule || module.parsed.imports.length > 0;
+    const conservative = analysis.fallback.wholeModule;
     const functionDeclarations = new Map<number, number>();
     for (const declaration of analysis.declarations) {
       if (declaration.kind !== "function") continue;
@@ -116,13 +116,11 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
       const pending = [root.id];
       const visited = new Set<number>();
       const used = new Map<string, BindingRef>();
-      let fallback = false;
       while (pending.length) {
         const functionId = pending.pop()!;
         if (visited.has(functionId)) continue;
         visited.add(functionId);
-        const fn = analysis.functions[functionId];
-        if (!fn || fn.skipped) { fallback = true; break; }
+        if (!analysis.functions[functionId]) continue;
         for (const reference of analysis.references) {
           if (reference.functionId !== functionId) continue;
           const binding = bindingDeclarations.get(reference.declarationId);
@@ -131,7 +129,7 @@ function entryBindingUses(modules: readonly MangleModule[], raw: readonly Parsed
           if (callee !== undefined) pending.push(callee);
         }
       }
-      result.set(entry, fallback ? all : [...used.values()].sort((a, b) => a.group - b.group || a.binding - b.binding));
+      result.set(entry, [...used.values()].sort((a, b) => a.group - b.group || a.binding - b.binding));
     }
   }
   return result;

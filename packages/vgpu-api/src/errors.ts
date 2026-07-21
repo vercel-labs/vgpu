@@ -18,12 +18,13 @@ export function storageStageLimitError(label: string, stage: "vertex" | "fragmen
   });
 }
 
-export function textureFilterabilityError(label: string, binding: BindingInfo, format: string, resourceName: string): VGPUError {
+export function textureFilterabilityError(label: string, binding: BindingInfo, format: string, resourceName: string, sampler?: BindingInfo): VGPUError {
   return new VGPUError({
     code: "VGPU-SET-TEXTURE-FILTERABILITY",
     message: `${resourceName} (${format}) cannot satisfy filtering texture '${binding.name}' @group(${binding.group}) @binding(${binding.binding}).`,
     fix: "Use a filterable format; request float32-filterable for rgba32float when supported; or use textureLoad without a sampler.",
     where: `${label}.set`,
+    detail: { format, group: binding.group, binding: binding.binding, bindingName: binding.name, resourceName, samplerName: sampler?.name, samplerGroup: sampler?.group, samplerBinding: sampler?.binding },
   });
 }
 

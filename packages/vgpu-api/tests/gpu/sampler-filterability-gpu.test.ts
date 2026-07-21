@@ -25,6 +25,12 @@ const BLOOM_SHAPE = `${FULLSCREEN}
   return vec4f(glow.rgb, 1.0);
 }
 `;
+const LOAD_SHAPE = `${FULLSCREEN}
+@group(0) @binding(0) var source: texture_2d<f32>;
+@fragment fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  return textureLoad(source, vec2i(position.xy), 0);
+}
+`;
 const INSTANCING_BLIT_SHAPE = `${FULLSCREEN}
 @group(0) @binding(0) var colorTarget: texture_2d<f32>;
 @group(0) @binding(1) var blitSampler: sampler;
@@ -54,6 +60,35 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
     }
   });
 
+  test("rgba32float textureLoad remains unfilterable and renders without float32-filterable", async () => {
+    const gpu = await init();
+    try {
+      expect(gpu.device.features.has("float32-filterable")).toBe(false);
+      const source = gpu.target({ size: [8, 8], format: "rgba32float", label: "load-only-hdr" });
+      const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "load-only-output" });
+      const solid = gpu.draw({ shader: SOLID, vertices: 3 });
+      const loaded = gpu.draw({ shader: LOAD_SHAPE, vertices: 3 });
+      expect(textureSampleType(loaded.layout(0), 0)).toBe("unfilterable-float");
+      expect(() => loaded.set({ source })).not.toThrow();
+      gpu.frame((frame) => {
+        frame.pass({ target: source }, (pass) => pass.draw(solid));
+        frame.pass({ target: output }, (pass) => pass.draw(loaded));
+      });
+      expect(pixelAt(await output.read(), 8, 4, 4)[1]).toBeGreaterThan(100);
+    } finally { gpu.dispose(); }
+  });
+
+  test("rgba32float ordinary sampling reports the structured facade error before native validation", async () => {
+    const gpu = await init();
+    try {
+      const source = gpu.target({ size: [1, 1], format: "rgba32float", label: "sampled-hdr" });
+      const sampled = gpu.draw({ shader: BLOOM_SHAPE, label: "sampled-hdr-draw", vertices: 3 });
+      expect(() => sampled.set({ source, linearSampler: gpu.sampler() })).toThrow(expect.objectContaining({
+        code: "VGPU-SET-TEXTURE-FILTERABILITY",
+        detail: expect.objectContaining({ format: "rgba32float", bindingName: "source", samplerName: "linearSampler" }),
+      }));
+    } finally { gpu.dispose(); }
+  });
 });
 
 async function renderSampledFixture(
