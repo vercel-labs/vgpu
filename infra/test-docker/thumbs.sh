@@ -18,10 +18,20 @@ trap cleanup EXIT INT TERM
 
 cleanup
 
+DOCKER_OUTPUT_ARGS=()
+for output_var in VGPU_AA_MODE_OUTPUT_DIR VGPU_POST_PROCESSING_MODE_OUTPUT_DIR; do
+  output_dir=${!output_var:-}
+  if [ -n "$output_dir" ]; then
+    mkdir -p "$output_dir"
+    DOCKER_OUTPUT_ARGS+=(--env "$output_var=$output_dir" -v "$output_dir:$output_dir")
+  fi
+done
+
 docker build --platform linux/arm64 -t "$IMAGE_TAG" -f "$ROOT_DIR/infra/test-docker/Dockerfile" "$ROOT_DIR"
 docker image prune -f --filter "label=vgpu-test=1" >/dev/null
 
 docker run \
+  "${DOCKER_OUTPUT_ARGS[@]}" \
   --rm \
   --name "$CONTAINER_NAME" \
   --label vgpu-test=1 \

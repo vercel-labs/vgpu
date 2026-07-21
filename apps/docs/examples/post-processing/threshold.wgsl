@@ -22,7 +22,8 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let uv = position.xy / uniforms.resolution;
   let color = load_scene(uv);
   let brightness = luma(color);
-  let soft = smoothstep(uniforms.threshold - uniforms.knee, uniforms.threshold + uniforms.knee, brightness);
-  let extracted = max(color - vec3f(uniforms.threshold), vec3f(0.0)) * soft;
-  return vec4f(extracted, 1.0);
+  // Preserve the hue of selected pixels. The narrow knee deliberately excludes every
+  // mid-tone shape, leaving only the small emissive cores for the bloom blur.
+  let selected = smoothstep(uniforms.threshold - uniforms.knee, uniforms.threshold + uniforms.knee, brightness);
+  return vec4f(color * selected, 1.0);
 }
