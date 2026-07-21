@@ -1,6 +1,6 @@
 {
   "name": "vgpu",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "description": "Public VGPU API entrypoint scaffold for browser, Node, mock, scene, and client typing surfaces.",
   "keywords": [
     "webgpu",

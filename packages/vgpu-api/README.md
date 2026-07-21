@@ -1,6 +1,6 @@
 # vgpu
 
-> 0.0.8 — public main API (`vgpu`) preview
+> 0.1.0 — public main API (`vgpu`) preview
 
 `vgpu` is the public package for the new API. It is built around one `Gpu` context, explicit WGSL reflection, and `set()` ownership rules that make the fast path the default.
 
