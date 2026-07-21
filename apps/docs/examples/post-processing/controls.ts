@@ -1,7 +1,6 @@
 export interface PostProcessingFlags {
   bloom: boolean;
   ca: boolean;
-  grain: boolean;
 }
 
 export interface PostProcessingControls {
@@ -14,7 +13,6 @@ export interface PostProcessingControls {
 const CONTROL_DEFS: Array<{ key: keyof PostProcessingFlags; label: string }> = [
   { key: 'bloom', label: 'Bloom' },
   { key: 'ca', label: 'Chromatic Aberration' },
-  { key: 'grain', label: 'Film Grain' },
 ];
 
 export function installControls(canvas: HTMLCanvasElement): PostProcessingControls {
@@ -80,7 +78,6 @@ export function installControls(canvas: HTMLCanvasElement): PostProcessingContro
   const getFlags = (): PostProcessingFlags => ({
     bloom: inputs.get('bloom')?.checked ?? true,
     ca: inputs.get('ca')?.checked ?? true,
-    grain: inputs.get('grain')?.checked ?? true,
   });
 
   return {
