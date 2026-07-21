@@ -14,6 +14,44 @@ const FRAGMENT_ONLY = `
 @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
 `;
 
+function surfaceCanvas(): HTMLCanvasElement {
+  const canvas: Record<string, unknown> = { width: 4, height: 4 };
+  canvas.getContext = (kind: string) => kind === "webgpu" ? {
+    configure: () => undefined,
+    getCurrentTexture: () => ({ createView: () => ({}) }),
+  } : null;
+  return canvas as HTMLCanvasElement;
+}
+
+function expectOutsideFrame(fn: () => unknown): void {
+  try { fn(); }
+  catch (error) {
+    expect(error).toMatchObject({
+      code: "VGPU-SURFACE-NOT-IN-FRAME",
+      fix: "surface passes must run inside gpu.frame(...); precompile against an offscreen gpu.target(...) instead",
+    });
+    return;
+  }
+  throw new Error("Expected VGPU-SURFACE-NOT-IN-FRAME");
+}
+
+test("surface pipeline creation is rejected outside gpu.frame with an offscreen precompile hint", async () => {
+  const gpu = await init();
+  const surface = gpu.surface(surfaceCanvas());
+  const draw = gpu.draw({ shader: WGSL });
+  const effect = gpu.effect(FRAGMENT_ONLY);
+
+  expectOutsideFrame(() => draw.compile(surface));
+  expectOutsideFrame(() => draw.compileSync(surface));
+  expectOutsideFrame(() => draw.draw(surface));
+  expectOutsideFrame(() => effect.compile(surface));
+  expectOutsideFrame(() => effect.compileSync(surface));
+  expectOutsideFrame(() => effect.draw(surface));
+  expectOutsideFrame(() => gpu.bundle({ target: surface }, () => undefined));
+  expect(() => gpu.frame((frame) => frame.pass(surface, draw))).not.toThrow();
+  gpu.dispose();
+});
+
 test("Draw.compile warms the shared store so later draw does not sync-create", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });

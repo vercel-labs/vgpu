@@ -9,7 +9,8 @@ import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, cachedBi
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, pipelineKeyOf, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { isTarget } from "./target-utils.ts";
-import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, storageStageLimitError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
+import { isFrameActive, isSurface } from "./surface.ts";
 import { meshLayoutResolver, type MeshLayoutResolvable } from "./scene/mesh-descriptor.ts";
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
@@ -139,7 +140,9 @@ export interface Draw {
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
   draw(target?: Target | DrawCallOptions): void;
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
   compile(target?: CompileTarget): Promise<this>;
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
   compileSync(target?: CompileTarget): this;
 }
 
@@ -243,6 +246,7 @@ export class InternalDraw implements Draw {
     const state = drawState(this);
     const target = opts.target ?? state.defaultTarget;
     if (!target) throw targetRequiredError(`${this.label}.draw`);
+    assertSurfaceTargetInFrame(target, `${this.label}.draw`);
     const encoder = state.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
     const validations: ClaimedGroupValidationResult[] = [];
@@ -361,6 +365,7 @@ export class InternalDraw implements Draw {
     const state = drawState(this);
     const resolvedTarget = target ?? state.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError(where);
+    assertSurfaceTargetInFrame(resolvedTarget, where);
     const signature = normalizeSignature(resolvedTarget);
     validateTargetSignature(signature, where);
     return signature;
@@ -619,4 +624,8 @@ function dynamicEntries(draw: InternalDraw, group: number): GPUBindGroupLayoutEn
 function dynamicEntry(entry: GPUBindGroupLayoutEntry): GPUBindGroupLayoutEntry {
   if (!entry.buffer) return entry;
   return { ...entry, buffer: { ...entry.buffer, hasDynamicOffset: true } };
+}
+
+function assertSurfaceTargetInFrame(target: CompileTarget, where: string): void {
+  if (isSurface(target) && !isFrameActive()) throw surfaceNotInFrameError(where);
 }

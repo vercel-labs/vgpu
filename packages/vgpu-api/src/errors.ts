@@ -151,6 +151,15 @@ export function meshFormatMismatchError(where: string, name: string, meshFormat:
   return meshError("VGPU-MESH-FORMAT-MISMATCH", where, `Attribute '${name}' ${meshFormat} != shader ${shaderType}.`, "Match the float/sint/uint shader base type; widths may differ.");
 }
 
+export function pipelineLayoutGapError(group: number): VGPUError {
+  return new VGPUError({
+    code: "VGPU-PIPELINE-LAYOUT-GAP",
+    message: `Pipeline bind group ${group} is missing.`,
+    fix: "Use consecutive @group() indices starting at 0.",
+    where: "pipeline layout",
+  });
+}
+
 export function compileFailedError(where: string, cause: unknown, signature?: string): VGPUError {
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",
@@ -184,6 +193,15 @@ export function targetSizeRequiredError(): VGPUError {
     code: "VGPU-TARGET-SIZE-REQUIRED",
     message: "Target size required. Fix: gpu.target({ size: [w,h] }); update surface-derived targets in onResize.",
     where: "gpu.target",
+  });
+}
+
+export function surfaceNotInFrameError(where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-NOT-IN-FRAME",
+    message: "Surface targets are only available inside gpu.frame().",
+    fix: "surface passes must run inside gpu.frame(...); precompile against an offscreen gpu.target(...) instead",
+    where,
   });
 }
 

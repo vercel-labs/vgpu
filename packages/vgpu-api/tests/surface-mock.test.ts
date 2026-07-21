@@ -229,15 +229,15 @@ test("surface bundle survives resize, and re-recording from onResize is usable i
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const manual = gpu.surface(canvasLike(10, 10), { autoResize: false });
   const effect = gpu.effect(SOLID);
-  const resizeBundle = gpu.bundle({ target: manual, label: "surfaceBundle" }, (b) => b.draw(effect));
+  const resizeBundle = gpu.bundle({ target: { colors: [manual.format] }, label: "surfaceBundle" }, (b) => b.draw(effect));
 
   manual.resize([12, 12]);
   expect(() => gpu.frame((f) => f.pass({ target: manual }, (p) => p.bundles(resizeBundle)))).not.toThrow();
 
   const canvas = canvasLike(10, 10);
   const surface = gpu.surface(canvas);
-  let bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(effect));
-  surface.onResize(() => { bundle = gpu.bundle({ target: surface, label: "surfaceBundleFresh" }, (b) => b.draw(effect)); });
+  let bundle = gpu.bundle({ target: { colors: [surface.format] }, label: "surfaceBundleFresh" }, (b) => b.draw(effect));
+  surface.onResize(() => { bundle = gpu.bundle({ target: { colors: [surface.format] }, label: "surfaceBundleFresh" }, (b) => b.draw(effect)); });
   (canvas as unknown as { clientWidth: number; clientHeight: number }).clientWidth = 13;
   (canvas as unknown as { clientWidth: number; clientHeight: number }).clientHeight = 13;
   expect(() => gpu.frame((f) => f.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();

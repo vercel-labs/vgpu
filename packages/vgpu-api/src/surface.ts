@@ -39,7 +39,12 @@ export interface Surface extends Target {
 export type SurfaceCanvas = HTMLCanvasElement | OffscreenCanvas;
 
 let resizeCallbackDepth = 0;
+let frameDepth = 0;
 export function isSurfaceResizeCallbackActive(): boolean { return resizeCallbackDepth > 0; }
+export function isFrameActive(): boolean { return frameDepth > 0; }
+export function enterFrame(): void { frameDepth += 1; }
+export function leaveFrame(): void { frameDepth -= 1; }
+export function isSurface(target: unknown): target is CanvasSurface { return target instanceof CanvasSurface; }
 
 export class CanvasSurface implements Surface {
   readonly resourceIdentity = createResourceIdentity("render-target");

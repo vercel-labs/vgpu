@@ -13,7 +13,7 @@ test("surface bundles do not stale just because getCurrentTexture returns a fres
   const surface = gpu.surface(mockCanvas(), { size: [4, 4] });
   const draw = gpu.effect(SOLID, { label: "surfaceStatic" });
 
-  const bundle = gpu.bundle({ target: surface, label: "surfaceBundle" }, (b) => b.draw(draw));
+  const bundle = gpu.bundle({ target: { colors: [surface.format] }, label: "surfaceBundle" }, (b) => b.draw(draw));
 
   expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
   expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
