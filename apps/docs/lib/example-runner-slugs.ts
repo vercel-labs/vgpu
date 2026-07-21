@@ -3,6 +3,7 @@ export const exampleRunnerSlugs = [
   'triangle-led-front',
   'anti-aliasing',
   'post-processing',
+  'black-hole',
   'fluid',
   'instanced-rendering',
   'batch-rendering',
