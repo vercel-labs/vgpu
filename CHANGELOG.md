@@ -1,3 +1,12 @@
+## 0.1.3 — 2026-07-21
+
+### Fixed
+- `@vgpu/adapter-node`: let Dawn discover display-free Vulkan adapters on headless Linux instead of always forcing OpenGL, while preserving the OpenGL compatibility default when a display server is configured and honoring explicit backend flags.
+- `@vgpu/adapter-node`: report failed adapter discovery as structured `VGPU-NODE-NO-ADAPTER` diagnostics with the attempted options, Dawn flags, and actionable Mesa, Vulkan ICD, and display checks.
+
+### Added
+- Add a Vulkan-only Docker fixture and render/readback coverage for lavapipe in headless environments such as Amazon Linux 2023.
+
 ## 0.1.2 — 2026-07-21
 
 ### Changed
