@@ -1,4 +1,4 @@
-## Unreleased — vgpu rewrite
+## 0.1.0 — 2026-07-21
 
 ### Breaking
 - `Draw.draw()` now returns `void`; use `gpu.onError(cb)` for asynchronous validation errors and `await gpu.settled()` in tests or teardown.
@@ -8,8 +8,28 @@
 - Public rendering docs now target the `vgpu` package (`init`, `Gpu`, `pass`, `draw`, `compute`, `frame`, `bundle`, `target`, `uniforms`) and mark the old thick render surface for removal in the rewrite.
 - Shader authoring guidance now treats performance patterns as defaults: bundles/replay, pipeline pre-warm, R4 dynamic offsets, in-place `set()`, bake, instancing, shared uniforms, ping-pong, and target-owned MSAA/depth.
 
+### Added
+- `@vgpu/core`: add `pingPong()` texture and buffer pairs with swap, reset, resize, and lifecycle helpers.
+- `@vgpu/core`: add `filter` and `wrap` sampler descriptor shorthands.
+- `@vgpu/core`: support explicit texture mip-level, dimension, and view-format options.
+- `@vgpu/core` and `@vgpu/adapter-node`: add explicit cube/layer texture views and compatibility-mode plumbing.
+- `@vgpu/core`: add extent-only `Texture.resize()` and cache the default view with resize/destroy invalidation.
+- `@vgpu/render`: add multipass frame helpers and setup-time render bundle recording.
+- `@vgpu/render`: add schema-typed `StructuredUniform` buffers with partial writes and custom bind-group composition.
+- `@vgpu/render`: add descriptor-like and raw-descriptor render pipeline APIs with async-to-sync fallback support.
+- `@vgpu/render`: add `Uniform`, `StorageBuffer`, `gpuFrameTime`, and `pixelDiff` performance primitives.
+- `@vgpu/wgsl-std`: add hash, noise, fullscreen, tonemapping, and luminance-threshold WGSL utilities.
+- CLI docs generation now discovers performance guides and emits the generated `skills/vgpu` mirror.
+
+### Changed
+- `@vgpu/wgsl`: prune unused resolved WGSL declarations conservatively for shaders with entry points.
+- `@vgpu/wgsl`, `@vgpu/core`, and `vgpu`: reflect transitive static binding use to build stage-exact pipeline layouts and report actionable stage-limit errors.
+- `@vgpu/wgsl` and `vgpu`: infer filterable sampled-float texture layouts per entry point while preserving unfilterable load-only textures.
+
 ### Fixed
 - `Effect.gpu` now returns the actual compiled pipeline after warmup/use instead of staying undefined.
+- `@vgpu/render`: omit the optional dynamic-offset argument to `RenderPass.setBindGroup` instead of forwarding explicit `undefined`.
+- `@vgpu/core`: unwrap VGPU buffer-like objects before generic GPU buffer binding objects.
 
 ## 0.0.3 — 2026-05-13
 
