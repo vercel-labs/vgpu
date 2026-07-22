@@ -1,0 +1,101 @@
+name: Build portable Lavapipe renderer
+
+on:
+  workflow_dispatch:
+    inputs:
+      mesa_version:
+        description: Mesa release version
+        required: true
+        default: 25.0.7
+        type: string
+      mesa_sha256:
+        description: Trusted archive SHA256 (must be updated when overriding Mesa version)
+        required: true
+        default: 592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-24.04
+          - arch: arm64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned Mesa Lavapipe
+        env:
+          ARCH: ${{ matrix.arch }}
+          MESA_VERSION: ${{ inputs.mesa_version }}
+          MESA_SHA256: ${{ inputs.mesa_sha256 }}
+        run: infra/lavapipe-build/build.sh
+
+      - name: Acquire Dawn validation addon
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dawn-validation
+          package=$(npm pack webgpu@0.4.0 --pack-destination /tmp --silent)
+          tar -xzf "/tmp/$package" -C dawn-validation --strip-components=2 \
+            "package/dist/linux-${ARCH}.dawn.node"
+          mv "dawn-validation/linux-${ARCH}.dawn.node" dawn-validation/dawn.node
+
+      - name: Verify archive and per-file checksums
+        env:
+          ARCH: ${{ matrix.arch }}
+          MESA_VERSION: ${{ inputs.mesa_version }}
+        run: |
+          set -euo pipefail
+          archive="mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz"
+          (cd lavapipe-out && sha256sum --check "$archive.sha256")
+          (cd lavapipe-out/asset && sha256sum --check SHA256SUMS)
+          tar -tzf "lavapipe-out/$archive" | diff -u \
+            <(printf 'libvulkan_lvp.so\nlvp_icd.json\n') -
+
+      - name: Validate on the glibc 2.36 Bookworm floor proof
+        if: matrix.arch == 'arm64'
+        env:
+          ARCH: ${{ matrix.arch }}
+          MESA_VERSION: ${{ inputs.mesa_version }}
+          VALIDATION_IMAGE: node:24-bookworm
+        run: |
+          infra/lavapipe-build/validate.sh \
+            "lavapipe-out/mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz" \
+            dawn-validation/dawn.node \
+            lavapipe-validation-bookworm
+
+      - name: Validate on current Trixie
+        env:
+          ARCH: ${{ matrix.arch }}
+          MESA_VERSION: ${{ inputs.mesa_version }}
+          VALIDATION_IMAGE: node:24-trixie
+        run: |
+          infra/lavapipe-build/validate.sh \
+            "lavapipe-out/mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz" \
+            dawn-validation/dawn.node \
+            lavapipe-validation-trixie
+
+      - name: Upload renderer, checksums, and validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesa-lavapipe-${{ inputs.mesa_version }}-linux-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            lavapipe-out/mesa-lavapipe-${{ inputs.mesa_version }}-linux-${{ matrix.arch }}.tar.gz
+            lavapipe-out/mesa-lavapipe-${{ inputs.mesa_version }}-linux-${{ matrix.arch }}.tar.gz.sha256
+            lavapipe-out/asset/SHA256SUMS
+            lavapipe-out/evidence/
+            lavapipe-validation-bookworm/
+            lavapipe-validation-trixie/
