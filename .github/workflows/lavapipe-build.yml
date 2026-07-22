@@ -46,10 +46,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dawn-validation
-          package=$(npm pack webgpu@0.4.0 --pack-destination /tmp --silent)
-          tar -xzf "/tmp/$package" -C dawn-validation --strip-components=2 \
-            "package/dist/linux-${ARCH}.dawn.node"
-          mv "dawn-validation/linux-${ARCH}.dawn.node" dawn-validation/dawn.node
+          if [ "$ARCH" = arm64 ]; then
+            curl -fsSL \
+              https://github.com/vercel-labs/vgpu/releases/download/dawn-v0.4.0-vgpu.1/dawn-linux-arm64-gnu.node \
+              -o dawn-validation/dawn.node
+            echo '1d78020a40e1d5291c1bf8349155487ccbef7e123753fd4a5bbb3fe19a9e4277  dawn-validation/dawn.node' \
+              | sha256sum --check -
+            max_glibc=$(objdump -T dawn-validation/dawn.node | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
+            test "$(printf '%s\n' GLIBC_2.31 "$max_glibc" | sort -V | tail -1)" = GLIBC_2.31
+          else
+            package=$(npm pack webgpu@0.4.0 --pack-destination /tmp --silent)
+            tar -xzf "/tmp/$package" -C dawn-validation --strip-components=2 \
+              "package/dist/linux-${ARCH}.dawn.node"
+            mv "dawn-validation/linux-${ARCH}.dawn.node" dawn-validation/dawn.node
+          fi
 
       - name: Verify archive and per-file checksums
         env:
