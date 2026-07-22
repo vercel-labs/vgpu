@@ -74,8 +74,8 @@ export async function prepareFluid(fluid: Fluid, output: Output): Promise<void> 
   const config = { dye_size: [DYE_WIDTH, DYE_HEIGHT], output_size: output.size };
   fluid.passes.display[0].set({ config, dye: fluid.dye.read });
   fluid.passes.display[1].set({ config, dye: fluid.dye.write });
-  await Promise.all(fluid.passes.display.map((display) => display.compile(output)));
-  fluid.bundles = [0, 1].map((parity) => fluid.gpu.bundle({ target: output }, (bundle) => {
+  await Promise.all(fluid.passes.display.map((display) => display.compile({ colors: [output.format] })));
+  fluid.bundles = [0, 1].map((parity) => fluid.gpu.bundle({ target: { colors: [output.format] } }, (bundle) => {
     bundle.draw(fluid.passes.display[parity]!);
   })) as [Bundle, Bundle];
   fluid.output = output;

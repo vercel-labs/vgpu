@@ -1,9 +1,11 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
+import { wgslVitePlugin } from "./packages/wgsl/src/loader-vite/index.ts";
 
 export default defineConfig({
+  plugins: [wgslVitePlugin()],
   test: {
-    include: ["packages/**/*.test.ts", "examples/**/*.test.ts"],
+    include: ["packages/**/*.test.ts", "examples/**/*.test.ts", "apps/docs/**/*.test.ts"],
     poolMatchGlobs: [["{packages/adapter-node/tests/**,packages/render/tests/**}", "forks"]],
     testTimeout: 30_000,
   },

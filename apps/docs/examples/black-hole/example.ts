@@ -156,7 +156,7 @@ async function prewarm(effects: Effects, targets: Targets, output: Output): Prom
     effects.scene.compile(targets.scene), effects.brightPass.compile(targets.bloomA),
     effects.blurH1.compile(targets.bloomB), effects.blurV1.compile(targets.bloomA),
     effects.blurH2.compile(targets.bloomB), effects.blurV2.compile(targets.bloomA),
-    effects.composite.compile(output),
+    effects.composite.compile({ colors: [output.format] }),
   ]);
 }
 

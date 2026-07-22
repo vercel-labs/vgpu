@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
@@ -6,8 +6,9 @@ import { init } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
+const args = parseArgs(process.argv.slice(2));
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(docsDir, 'public', 'examples');
+const outDir = args.proofDir ? path.resolve(args.proofDir) : path.join(docsDir, 'public', 'examples');
 const cacheDir = path.join(docsDir, '.thumbs-cache');
 const rendererEntry = path.join(cacheDir, 'renderers-entry.ts');
 const rendererBundle = path.join(cacheDir, 'renderers.mjs');
@@ -26,7 +27,7 @@ const customRendererEntries = [
   { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
 ];
 
-const sizes = {
+const sizes = args.proofDir ? { proof: [160, 90] } : {
   card: [1280, 720],
   hero: [1600, 900],
 };
@@ -52,12 +53,16 @@ function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
   gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
 }
 
-const args = parseArgs(process.argv.slice(2));
 await mkdir(outDir, { recursive: true });
+if (args.artifactDir) {
+  await rm(args.artifactDir, { recursive: true, force: true });
+  await mkdir(args.artifactDir, { recursive: true });
+}
 const [renderers, docsData] = await Promise.all([loadRenderers(), loadDocsData()]);
 const { examples, exampleSources } = docsData;
 
 let failures = 0;
+const comparisonSummary = [];
 const selected = examples.filter((example) => !args.only || example.meta.slug === args.only);
 if (args.only && selected.length === 0) throw new Error(`Unknown example slug '${args.only}'.`);
 
@@ -75,6 +80,7 @@ for (const example of selected) {
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
     console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
     } else if (args.fluidDrag && slug === 'fluid') {
@@ -84,6 +90,7 @@ for (const example of selected) {
 }
 
 await rm(cacheDir, { recursive: true, force: true });
+if (args.artifactDir) await writeFile(path.join(args.artifactDir, 'summary.txt'), `${comparisonSummary.join('\n')}\n`);
 if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
 async function renderOne(renderers, example, exampleSources, size, metaThumb, output) {
@@ -99,7 +106,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     let fluidState;
     if (renderer) {
       await renderer(gpu, target, {
-        warmupFrames: metaThumb.warmupFrames ?? 60,
+        warmupFrames: args.proofDir ? (slug === 'fluid' ? 24 : 3) : (metaThumb.warmupFrames ?? 60),
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
         onModeRendered: modePixels
@@ -124,14 +131,14 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       );
     }
     const pixels = await target.read();
-    const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
-    const postProcessingMetrics = postProcessingModePixels
+    const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
+    const postProcessingMetrics = postProcessingModePixels && !args.proofDir
       ? assertPostProcessingMetrics(postProcessingModePixels, pixels, size[0], size[1])
       : undefined;
-    const fluidMetrics = slug === 'fluid' && !args.fluidSoak && !args.fluidDrag
+    const fluidMetrics = slug === 'fluid' && !args.proofDir && !args.fluidSoak && !args.fluidDrag
       ? assertFluidMetrics(pixels, size[0], size[1])
       : undefined;
-    const blackHoleMetrics = blackHoleVariantPixels
+    const blackHoleMetrics = blackHoleVariantPixels && !args.proofDir
       ? assertBlackHoleMetrics(blackHoleVariantPixels, pixels, size[0], size[1])
       : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
@@ -145,13 +152,30 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     const variance = lumaVariance(pixels);
     const diagnosticMode = args.fluidDrag || args.fluidSoak;
-    const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
+    const requiredVariance = args.proofDir ? 2 : (slug === 'fluid' ? 120 : minLumaVariance);
     if (!diagnosticMode && variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
-    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
+    const compare = args.proofDir
+      ? (await writePng(output, pixels, size[0], size[1]), { status: 'proof', ratio: 0 })
+      : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
+    await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
     return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
+  }
+}
+
+async function persistComparisonArtifacts(compare, pixels, size, baselinePath) {
+  if (!args.artifactDir || !['missing', 'different'].includes(compare.status)) return;
+  const stem = path.basename(baselinePath, '.png');
+  const actual = path.join(args.artifactDir, `${stem}.actual.png`);
+  if (compare.status === 'different') {
+    await Promise.all([
+      copyFile(compare.actualPath, actual),
+      copyFile(compare.diffPath, path.join(args.artifactDir, `${stem}.diff.png`)),
+    ]);
+  } else {
+    await writePng(actual, pixels, size[0], size[1]);
   }
 }
 
@@ -523,7 +547,7 @@ async function loadDocsData() {
 }
 
 function parseArgs(argv) {
-  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false };
+  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false, proofDir: undefined, artifactDir: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
@@ -532,8 +556,12 @@ function parseArgs(argv) {
     else if (arg === '--only') parsed.only = argv[++i];
     else if (arg === '--fluid-drag') parsed.fluidDrag = true;
     else if (arg === '--fluid-soak') parsed.fluidSoak = true;
+    else if (arg === '--proof-dir') parsed.proofDir = argv[++i];
+    else if (arg === '--artifact-dir') parsed.artifactDir = path.resolve(argv[++i]);
     else throw new Error(`Unknown argument '${arg}'.`);
   }
+  if (parsed.proofDir && parsed.artifactDir) throw new Error('--artifact-dir is only valid for baseline comparison.');
+  if (parsed.proofDir && (parsed.update || parsed.check)) throw new Error('--proof-dir cannot be combined with --update/--check.');
   if (parsed.update && parsed.check) throw new Error('Use either --update or --check, not both.');
   return parsed;
 }

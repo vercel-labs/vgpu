@@ -81,6 +81,46 @@ jobs:
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
               node packages/vgpu/bin/vgpu.js snapshot --ci; \
               s=$?; kill $xp; exit $s'
+      - name: Render docs example proofs in Docker
+        run: |
+          rm -rf artifacts/example-renders
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e VGPU_DOCKER_TEST=1 \
+            -e CI=true \
+            vgpu-test-dev:ci \
+            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
+              pnpm --filter docs render:proof; \
+              s=$?; kill $xp; exit $s'
+      - name: Upload docs example render proofs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-example-renders
+          path: artifacts/example-renders/*.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Compare docs example thumbnails in Docker
+        run: |
+          rm -rf artifacts/thumb-diffs
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e VGPU_DOCKER_TEST=1 \
+            -e CI=true \
+            vgpu-test-dev:ci \
+            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
+              pnpm --filter docs thumbs:check -- --artifact-dir ../../artifacts/thumb-diffs; \
+              s=$?; kill $xp; exit $s'
+      - name: Upload docs thumbnail comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-thumb-comparison
+          path: artifacts/thumb-diffs
+          if-no-files-found: error
+          retention-days: 7
 
   wgsl-cachekey-determinism:
     name: wgsl-cachekey-determinism (${{ matrix.os }})
