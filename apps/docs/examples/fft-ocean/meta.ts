@@ -1,6 +1,6 @@
 export const meta = {
   slug: 'fft-ocean',
-  title: 'FFT Ocean',
+  title: 'Particles ocean',
   description: 'A deep-water surface driven by a real inverse FFT — a Phillips spectrum evolves in frequency space, Stockham passes bring it back to a displacement field, and half a million particles ride the waves through an HDR bloom chain.',
   thumb: { warmupFrames: 1, time: 18 },
   files: [
