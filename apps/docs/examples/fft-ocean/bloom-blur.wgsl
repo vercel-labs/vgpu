@@ -1,4 +1,6 @@
-override KERNEL_RADIUS: u32 = 6u;
+// Coefficients after each level's canonical radius are zero, so one fixed
+// 22-tap loop reproduces front's 6/10/14/18/22 specialized pipelines.
+const KERNEL_RADIUS: u32 = 22u;
 struct VSOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,

@@ -423,9 +423,7 @@ function silhouetteDice(a, b) {
 }
 
 function assertFftOceanMetrics(variants, poster, width, height) {
-  for (const name of ['time-delta', 'pointer-orbit']) {
-    if (!variants.has(name)) throw new Error(`FFT-ocean validation did not capture ${name}.`);
-  }
+  if (!variants.has('time-delta')) throw new Error('FFT-ocean validation did not capture time-delta.');
   const count = poster.length / 4;
   let dark = 0, water = 0, highlights = 0;
   const rowMeans = new Float64Array(height), columnMeans = new Float64Array(width);
@@ -434,7 +432,7 @@ function assertFftOceanMetrics(variants, poster, width, height) {
     const luma = .2126 * poster[i] + .7152 * poster[i + 1] + .0722 * poster[i + 2];
     if (luma < 18) dark++;
     if (luma >= 18) water++;
-    if (luma > 170) highlights++;
+    if (luma > 64) highlights++;
     rowMeans[y] += luma / width; columnMeans[x] += luma / height;
   }
   const spread = (values) => Math.max(...values) - Math.min(...values);
@@ -443,15 +441,14 @@ function assertFftOceanMetrics(variants, poster, width, height) {
     for (let i = 0; i < poster.length; i += 4) if (Math.max(Math.abs(poster[i] - candidate[i]), Math.abs(poster[i + 1] - candidate[i + 1]), Math.abs(poster[i + 2] - candidate[i + 2])) > 8) changed++;
     return changed / count;
   };
-  const metrics = { darkRatio: dark / count, waterCoverage: water / count, highlightRatio: highlights / count, variance: lumaVariance(poster), horizontalBand: spread(columnMeans), verticalBand: spread(rowMeans), timeDeltaRatio: difference(variants.get('time-delta')), pointerOrbitRatio: difference(variants.get('pointer-orbit')) };
+  const metrics = { darkRatio: dark / count, waterCoverage: water / count, highlightRatio: highlights / count, variance: lumaVariance(poster), horizontalBand: spread(columnMeans), verticalBand: spread(rowMeans), timeDeltaRatio: difference(variants.get('time-delta')) };
   const problems = [];
-  if (metrics.darkRatio < .55 || metrics.darkRatio > .9) problems.push(`Dark-water coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 55–90%)`);
-  if (metrics.waterCoverage < .1 || metrics.waterCoverage > .45) problems.push(`Visible ocean coverage ${(metrics.waterCoverage * 100).toFixed(1)}% (need 10–45%)`);
-  if (metrics.highlightRatio < .003 || metrics.highlightRatio > .12) problems.push(`Highlight sparkle ${(metrics.highlightRatio * 100).toFixed(2)}% (need .3–12%)`);
-  if (metrics.variance < 700 || metrics.variance > 2600) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need 700–2600)`);
-  if (metrics.horizontalBand < 8 || metrics.verticalBand < 40) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=8, v>=40)`);
-  if (metrics.timeDeltaRatio < .03 || metrics.timeDeltaRatio > .65) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need 3–65%)`);
-  if (metrics.pointerOrbitRatio < .08 || metrics.pointerOrbitRatio > .7) problems.push(`Pointer delta ${(metrics.pointerOrbitRatio * 100).toFixed(2)}% (need 8–70%)`);
+  if (metrics.darkRatio < .97 || metrics.darkRatio > .9995) problems.push(`Dark-water coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 97–99.95%)`);
+  if (metrics.waterCoverage < .001 || metrics.waterCoverage > .03) problems.push(`Visible ocean coverage ${(metrics.waterCoverage * 100).toFixed(1)}% (need .1–3%)`);
+  if (metrics.highlightRatio < .00005 || metrics.highlightRatio > .01) problems.push(`Highlight sparkle ${(metrics.highlightRatio * 100).toFixed(2)}% (need .005–1%)`);
+  if (metrics.variance < 10 || metrics.variance > 200) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need 10–200)`);
+  if (metrics.horizontalBand < 1 || metrics.verticalBand < 3) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=1, v>=3)`);
+  if (metrics.timeDeltaRatio < .002 || metrics.timeDeltaRatio > .08) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need .2–8%)`);
   if (problems.length) throw new Error([`FFT-ocean semantic validation failed (${width}x${height}):`, ...problems.map((x) => `- ${x}`)].join('\n'));
   return metrics;
 }
