@@ -21,9 +21,8 @@ export const OCEAN_TUNING = {
   },
   particles: {
     pointSize: 0.75,
-    snap: 50,
     fadeNear: 60,
-    fadeFar: 115,
+    fadeFar: 250,
     fadePower: 3.2,
     oceanColor: [0.003035269835488375, 0.003035269835488375, 0.003035269835488375, 0] as const,
     neonColor: [1, 1, 1, 0] as const,
@@ -32,16 +31,16 @@ export const OCEAN_TUNING = {
   camera: {
     // Gallery reframe: the docs canvas is much taller than front's hero strip.
     // Raising and backing off the rig keeps the horizon in the upper third.
-    eye: [0, 55, 90] as const,
-    target: [0, 0, 55] as const,
+    eye: [0, 30, 90] as const,
+    target: [0, 5, 55] as const,
     up: [0, 1, 0] as const,
     pitchDegrees: -10,
-    fovDegrees: 60,
+    fovDegrees: 90,
     near: 0.1,
     far: 2000,
   },
   bloom: {
-    threshold: 0.55,
+    threshold: 0.3,
     smoothWidth: 0.01,
     strength: 0.08,
     radius: 0.46,

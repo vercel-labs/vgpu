@@ -9,15 +9,16 @@ export interface IfftStage {
   readonly output: Exclude<SimulationTargetName, 'spectrum'>;
 }
 
-/** Explicit Stockham identity table. Every row maps to one immutable effect. */
-export function createIfftStageTable(resolution: number): readonly IfftStage[] {
-  const stages = Math.log2(resolution);
-  if (!Number.isInteger(stages)) throw new Error(`FFT resolution must be a power of two, got ${resolution}`);
+export const OCEAN_RESOLUTION = 512 as const;
+const AXIS_STAGES = 9;
+
+/** The one immutable 18-pass Stockham table for the canonical 512² ocean. */
+export function createIfftStageTable(): readonly IfftStage[] {
   const table: IfftStage[] = [];
   let input: SimulationTargetName = 'spectrum';
   let output: 'ping' | 'pong' = 'ping';
   for (const horizontal of [true, false]) {
-    for (let axisStage = 0; axisStage < stages; axisStage++) {
+    for (let axisStage = 0; axisStage < AXIS_STAGES; axisStage++) {
       table.push(Object.freeze({
         index: table.length,
         axisStage,

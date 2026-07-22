@@ -60,15 +60,9 @@ export fn particleVertex(
   let f = 1.0 - smoothstep(u.fade.x, u.fade.y, dist);
   let fade = pow(clamp(f, 0.0, 1.0), u.fade.z);
 
-  // --- Projection snapping (aspect-corrected point rounding) ------------------------
+  // --- Continuous projection ---------------------------------------------------------
   let projected = u.projection * mv;
-  var ndc = projected.xy / projected.w;
-  let aspect = u.viewport.x / max(u.viewport.y, 1e-3);
-  var snapNdc = vec2f(ndc.x * aspect, ndc.y);
-  // Snapping (with pre-scaled X) keeps particles aligned to a grid before unscaling.
-  snapNdc = floor(snapNdc * u.fade.w) / u.fade.w;
-  snapNdc.x /= aspect;
-  ndc = snapNdc;
+  let ndc = projected.xy / projected.w;
 
   // --- Point size in clip space -----------------------------------------------------
   let corner = quadCorner(vertexIndex);

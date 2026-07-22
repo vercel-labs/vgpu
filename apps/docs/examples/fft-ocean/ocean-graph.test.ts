@@ -3,7 +3,7 @@ import { createIfftStageTable, generateOceanNoise } from './ocean-graph';
 
 describe('FFT ocean graph', () => {
   it('builds immutable ping/pong stages with correct final parity', () => {
-    const table = createIfftStageTable(512);
+    const table = createIfftStageTable();
     expect(table).toHaveLength(18);
     expect(table.map((stage) => stage.subtransformSize)).toEqual([
       2, 4, 8, 16, 32, 64, 128, 256, 512,
@@ -22,7 +22,4 @@ describe('FFT ocean graph', () => {
     expect(new Set(a.slice(0, 32))).not.toHaveLength(1);
   });
 
-  it('rejects non-power-of-two resolutions', () => {
-    expect(() => createIfftStageTable(48)).toThrow(/power of two/);
-  });
 });

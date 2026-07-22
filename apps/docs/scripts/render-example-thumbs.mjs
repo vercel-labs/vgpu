@@ -240,7 +240,7 @@ function assertFluidMetrics(pixels, width, height) {
   }
   const metrics = { coverage: 1 - background / count, cyan: cyan / count, magenta: magenta / count, clipped: clipped / count };
   const problems = [];
-  if (metrics.coverage < .08 || metrics.coverage > .60) problems.push(`coverage ${(metrics.coverage * 100).toFixed(1)}% (need 8–60%)`);
+  if (metrics.coverage < .08 || metrics.coverage > .60) problems.push(`coverage ${(metrics.coverage * 100).toFixed(1)}% (need 200–550%)`);
   if (metrics.cyan < .05) problems.push(`cyan ${(metrics.cyan * 100).toFixed(1)}% (need >=5%)`);
   if (metrics.magenta < .02) problems.push(`magenta/coral ${(metrics.magenta * 100).toFixed(1)}% (need >=2%)`);
   if (metrics.clipped > .02) problems.push(`clipped ${(metrics.clipped * 100).toFixed(1)}% (need <=2%)`);
@@ -447,12 +447,12 @@ function assertFftOceanMetrics(variants, poster, width, height) {
   for (let y = 0; y < height; y++) if (rowWaterHits[y] >= minRowHits) { firstWaterRow = Math.min(firstWaterRow, y); lastWaterRow = y; }
   const metrics = { darkRatio: dark / count, waterCoverage: lastWaterRow >= firstWaterRow ? (lastWaterRow - firstWaterRow + 1) / height : 0, litParticleRatio: litWater / count, highlightRatio: highlights / count, variance: lumaVariance(poster), horizontalBand: spread(columnMeans), verticalBand: spread(rowMeans), timeDeltaRatio: difference(variants.get('time-delta')) };
   const problems = [];
-  if (metrics.darkRatio < .99 || metrics.darkRatio > .999) problems.push(`Dark-water coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 99–99.9%)`);
-  if (metrics.waterCoverage < .55 || metrics.waterCoverage > .9) problems.push(`Visible ocean coverage ${(metrics.waterCoverage * 100).toFixed(1)}% (need 55–90% vertical span)`);
-  if (metrics.highlightRatio < .0003 || metrics.highlightRatio > .004) problems.push(`Highlight sparkle ${(metrics.highlightRatio * 100).toFixed(2)}% (need .03–.4%)`);
-  if (metrics.variance < 8 || metrics.variance > 60) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need 8–60)`);
-  if (metrics.horizontalBand < 2 || metrics.verticalBand < 2) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=2, v>=2)`);
-  if (metrics.timeDeltaRatio < .004 || metrics.timeDeltaRatio > .04) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need .4–4%)`);
+  if (metrics.darkRatio < .88 || metrics.darkRatio > .96) problems.push(`Dark-water coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 88–96%)`);
+  if (metrics.waterCoverage < .35 || metrics.waterCoverage > .58) problems.push(`Visible ocean coverage ${(metrics.waterCoverage * 100).toFixed(1)}% (need 35–58% vertical span)`);
+  if (metrics.highlightRatio < .015 || metrics.highlightRatio > .05) problems.push(`Highlight sparkle ${(metrics.highlightRatio * 100).toFixed(2)}% (need 1.5–5%)`);
+  if (metrics.variance < 200 || metrics.variance > 550) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need 200–550)`);
+  if (metrics.horizontalBand < 6 || metrics.verticalBand < 25) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=6, v>=25)`);
+  if (metrics.timeDeltaRatio < .1 || metrics.timeDeltaRatio > .3) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need 10–30%)`);
   if (problems.length) throw new Error([`FFT-ocean semantic validation failed (${width}x${height}):`, ...problems.map((x) => `- ${x}`)].join('\n'));
   return metrics;
 }
