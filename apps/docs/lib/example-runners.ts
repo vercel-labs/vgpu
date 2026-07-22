@@ -6,6 +6,7 @@ import { run as runBlackHole } from '../examples/black-hole/example';
 import { run as runFluid } from '../examples/fluid/example';
 import { run as runInstancedRendering } from '../examples/instanced-rendering/example';
 import { run as runBatchRendering } from '../examples/batch-rendering/example';
+import { run as runFftOcean } from '../examples/fft-ocean/example';
 import type { ExampleRunnerSlug } from './example-runner-slugs';
 
 export type ExampleRunner = (canvas: HTMLCanvasElement) => Promise<() => void>;
@@ -19,6 +20,7 @@ export const exampleRunners = {
   fluid: runFluid,
   'instanced-rendering': runInstancedRendering,
   'batch-rendering': runBatchRendering,
+  'fft-ocean': runFftOcean,
 } satisfies Record<ExampleRunnerSlug, ExampleRunner>;
 
 export function getExampleRunner(slug: string): ExampleRunner | undefined {

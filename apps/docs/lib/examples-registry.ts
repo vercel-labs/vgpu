@@ -9,6 +9,7 @@ import { meta as blackHoleMeta } from '../examples/black-hole/meta';
 import { meta as fluidMeta } from '../examples/fluid/meta';
 import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
 import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
+import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
 
 export interface ExampleThumbOptions {
   readonly warmupFrames?: number;
@@ -43,6 +44,7 @@ const rawMetas = [
   fluidMeta,
   instancedRenderingMeta,
   batchRenderingMeta,
+  fftOceanMeta,
 ] as const satisfies readonly ExampleMeta[];
 
 const metas = rawMetas.map((meta) => ({
