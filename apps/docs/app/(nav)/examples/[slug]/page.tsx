@@ -31,9 +31,6 @@ export default async function ExampleDetailPage({ params, searchParams }: Exampl
         <Breadcrumbs items={getBreadcrumbs(pathname)} />
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Link href="/examples" className="mb-3 inline-flex text-sm text-gray-9 transition-colors hover:text-gray-12">
-              ← Back to examples
-            </Link>
             <h1 className="text-3xl font-bold tracking-tight text-gray-12 md:text-4xl">
               {example.meta.title}
             </h1>
@@ -51,18 +48,10 @@ export default async function ExampleDetailPage({ params, searchParams }: Exampl
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)]">
           <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-9">Source</h2>
-              <span className="text-xs text-gray-8">Read-only</span>
-            </div>
             <CodeViewer files={example.sources} activeFile={activeFile} />
           </section>
 
           <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-9">Preview</h2>
-              <span className="text-xs text-gray-8">WebGPU iframe</span>
-            </div>
             <ExamplePreview slug={example.meta.slug} title={example.meta.title} poster={example.meta.hero} />
           </section>
         </div>
