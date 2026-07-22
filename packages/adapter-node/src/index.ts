@@ -53,7 +53,7 @@ async function requestAdapterWithRetry(gpu: GPU, options: GPURequestAdapterOptio
   throw new VGPUError({
     code: "VGPU-NODE-NO-ADAPTER",
     message: `No WebGPU adapter available after ${maxAttempts} attempts with requestAdapter(${tried}) and Dawn flags [${dawnFlagsUsed?.join(",") ?? ""}].`,
-    fix: "Check the Mesa/driver version, Vulkan ICD (VK_ICD_FILENAMES), and display variables (DISPLAY, WAYLAND_DISPLAY, XDG_RUNTIME_DIR). Use VGPU_DAWN_FLAGS to select a Dawn backend explicitly.",
+    fix: "Check the Mesa/driver version, Vulkan ICD (VK_ICD_FILENAMES), and display variables (DISPLAY, WAYLAND_DISPLAY, XDG_RUNTIME_DIR). Use VGPU_DAWN_FLAGS to select a Dawn backend explicitly. To diagnose the environment, run: npx vgpu doctor",
     where: "createNodeAdapter",
     cause: lastError,
   });

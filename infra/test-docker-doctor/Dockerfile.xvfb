@@ -1,0 +1,8 @@
+FROM node:22-trixie-slim
+LABEL vgpu-test=1 vgpu-doctor-test=1
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 DEBIAN_FRONTEND=noninteractive DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 XDG_RUNTIME_DIR=/tmp/xdg-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends libegl-dev libegl1 libgl1 libgl1-mesa-dri libglx-mesa0 xvfb && rm -rf /var/lib/apt/lists/* && mkdir -p /tmp/xdg-runtime && chmod 700 /tmp/xdg-runtime
+WORKDIR /workspace
+COPY . .
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
+CMD ["bash", "infra/test-docker-doctor/assert.sh", "xvfb"]

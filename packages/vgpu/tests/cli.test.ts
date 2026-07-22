@@ -11,13 +11,19 @@ function success(args) {
   return result.stdout ?? "";
 }
 
-test("preserves root help, version, and placeholders", () => {
+test("preserves root help, version, and remaining placeholder", () => {
   expect(success(["--help"])).toContain("snapshot");
   expect(success(["--help"])).toContain("install-dawn");
+  expect(success(["--help"])).toContain("doctor     Verify this machine can render headless (JSON verdict + fixes)");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
-  expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
   expect(runCli(["wgsl"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
+});
+
+test("exposes doctor JSON without rendering", async () => {
+  const result = await runCli(["doctor", "--no-render"]);
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.stdout ?? "")).toMatchObject({ verdict: "unverified", adapter: null, findings: expect.any(Array) });
 });
 
 test("exposes the manual Dawn installer command", async () => {
@@ -29,6 +35,7 @@ test("exposes the manual Dawn installer command", async () => {
 
 test("puts the getting-started guide first in CLI help", () => {
   const rootHelp = success(["--help"]);
+  expect(rootHelp).toContain("New here? Read the guide first:\n  vgpu docs cat getting-started.md\nRendering in Node? Check the environment first:\n  vgpu doctor");
   expect(rootHelp.indexOf("vgpu docs cat getting-started.md")).toBeLessThan(rootHelp.indexOf("Commands:"));
   expect(rootHelp.indexOf("WGSL and adapter packages:")).toBeLessThan(rootHelp.indexOf("Slim tooling subpaths:"));
 
