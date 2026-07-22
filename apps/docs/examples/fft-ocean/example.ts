@@ -11,6 +11,7 @@ import bloomBrightWgsl from './bloom-bright.wgsl';
 import bloomBlurWgsl from './bloom-blur.wgsl';
 import bloomCompositeWgsl from './bloom-composite.wgsl';
 import presentWgsl from './present.wgsl';
+import stagePreviewWgsl from './stage-preview.wgsl';
 
 type Output = Surface | Target;
 type Orbit = readonly [number, number];
@@ -18,6 +19,7 @@ type Resolution = 256 | 512;
 interface ThumbOptions {
   time?: number;
   onVariantRendered?: (variant: 'time-delta' | 'pointer-orbit', pixels: Uint8Array, size: readonly [number, number]) => void | Promise<void>;
+  onIntermediateRendered?: (kind: 'displacement', pixels: Uint8Array, size: readonly [number, number]) => void | Promise<void>;
 }
 interface StageEffect { readonly spec: IfftStage; readonly effect: Effect; readonly output: Target }
 interface BloomLevel { readonly horizontal: Target; readonly vertical: Target; readonly horizontalEffect: Effect; readonly verticalEffect: Effect }
@@ -74,6 +76,17 @@ export async function renderThumb(gpu: Gpu, output: Target, opts: ThumbOptions =
   const time = opts.time ?? 18;
   renderAt(gpu, graph, output, time, POSTER_ORBIT);
   await gpu.gpu.queue.onSubmittedWorkDone();
+  if (opts.onIntermediateRendered) {
+    const displacement = graph.ifft.at(-1)!.output;
+    const previewTarget = gpu.target({ size: displacement.size, format: 'rgba8unorm', label: 'fft-ocean-displacement-preview' });
+    const preview = gpu.effect(stagePreviewWgsl, { label: 'fft-ocean-displacement-preview' });
+    preview.set({ u: { outputWidth: displacement.size[0], outputHeight: displacement.size[1], stage: 1, gain: 16 }, u_input: displacement });
+    await preview.compile(previewTarget);
+    gpu.frame((frame) => frame.pass({ target: previewTarget, clear: CLEAR }, (pass) => pass.draw(preview)));
+    await gpu.gpu.queue.onSubmittedWorkDone();
+    await opts.onIntermediateRendered('displacement', await previewTarget.read(), previewTarget.size);
+    previewTarget.color.destroy();
+  }
   renderAt(gpu, graph, output, time + 5, POSTER_ORBIT);
   await gpu.gpu.queue.onSubmittedWorkDone();
   await opts.onVariantRendered?.('time-delta', await output.read(), output.size);

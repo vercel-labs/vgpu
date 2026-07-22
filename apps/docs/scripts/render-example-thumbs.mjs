@@ -80,7 +80,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
@@ -103,6 +103,8 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
     const postProcessingModePixels = slug === 'post-processing' ? new Map() : undefined;
     const blackHoleVariantPixels = slug === 'black-hole' ? new Map() : undefined;
+    const fftOceanVariantPixels = slug === 'fft-ocean' ? new Map() : undefined;
+    const variantPixels = blackHoleVariantPixels ?? fftOceanVariantPixels;
     const modePixels = aaModePixels ?? postProcessingModePixels;
     let fluidState;
     if (renderer) {
@@ -113,8 +115,11 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
         onModeRendered: modePixels
           ? (mode, pixels) => modePixels.set(mode, pixels.slice())
           : undefined,
-        onVariantRendered: blackHoleVariantPixels
-          ? (variant, pixels) => blackHoleVariantPixels.set(variant, pixels.slice())
+        onVariantRendered: variantPixels
+          ? (variant, pixels) => variantPixels.set(variant, pixels.slice())
+          : undefined,
+        onIntermediateRendered: slug === 'fft-ocean' && process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR
+          ? (kind, raw, mapSize) => writeFftOceanIntermediate(kind, raw, mapSize, process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR)
           : undefined,
         scriptedDrag: slug === 'fluid' && args.fluidDrag,
         soak: slug === 'fluid' && args.fluidSoak,
@@ -142,6 +147,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const blackHoleMetrics = blackHoleVariantPixels && !args.proofDir
       ? assertBlackHoleMetrics(blackHoleVariantPixels, pixels, size[0], size[1])
       : undefined;
+    const fftOceanMetrics = fftOceanVariantPixels && !args.proofDir
+      ? assertFftOceanMetrics(fftOceanVariantPixels, pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
@@ -149,7 +157,10 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       await writePostProcessingModePngs(postProcessingModePixels, size, path.basename(output, '.png').replace('post-processing.', ''));
     }
     if (blackHoleVariantPixels && process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR) {
-      await writeBlackHoleVariantPngs(blackHoleVariantPixels, pixels, size, path.basename(output, '.png').replace('black-hole.', ''));
+      await writeVariantPngs(blackHoleVariantPixels, pixels, size, path.basename(output, '.png').replace('black-hole.', ''), process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR);
+    }
+    if (fftOceanVariantPixels && process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR) {
+      await writeVariantPngs(fftOceanVariantPixels, pixels, size, path.basename(output, '.png').replace('fft-ocean.', ''), process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR);
     }
     const variance = lumaVariance(pixels);
     const diagnosticMode = args.fluidDrag || args.fluidSoak;
@@ -160,7 +171,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fluidMetrics, fluidState };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fftOceanMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
   }
@@ -411,6 +422,40 @@ function silhouetteDice(a, b) {
   return total ? (2 * intersection) / total : 1;
 }
 
+function assertFftOceanMetrics(variants, poster, width, height) {
+  for (const name of ['time-delta', 'pointer-orbit']) {
+    if (!variants.has(name)) throw new Error(`FFT-ocean validation did not capture ${name}.`);
+  }
+  const count = poster.length / 4;
+  let dark = 0, water = 0, highlights = 0;
+  const rowMeans = new Float64Array(height), columnMeans = new Float64Array(width);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 4;
+    const luma = .2126 * poster[i] + .7152 * poster[i + 1] + .0722 * poster[i + 2];
+    if (luma < 18) dark++;
+    if (luma >= 18) water++;
+    if (luma > 170) highlights++;
+    rowMeans[y] += luma / width; columnMeans[x] += luma / height;
+  }
+  const spread = (values) => Math.max(...values) - Math.min(...values);
+  const difference = (candidate) => {
+    let changed = 0;
+    for (let i = 0; i < poster.length; i += 4) if (Math.max(Math.abs(poster[i] - candidate[i]), Math.abs(poster[i + 1] - candidate[i + 1]), Math.abs(poster[i + 2] - candidate[i + 2])) > 8) changed++;
+    return changed / count;
+  };
+  const metrics = { darkRatio: dark / count, waterCoverage: water / count, highlightRatio: highlights / count, variance: lumaVariance(poster), horizontalBand: spread(columnMeans), verticalBand: spread(rowMeans), timeDeltaRatio: difference(variants.get('time-delta')), pointerOrbitRatio: difference(variants.get('pointer-orbit')) };
+  const problems = [];
+  if (metrics.darkRatio < .55 || metrics.darkRatio > .9) problems.push(`Dark-water coverage ${(metrics.darkRatio * 100).toFixed(1)}% (need 55–90%)`);
+  if (metrics.waterCoverage < .1 || metrics.waterCoverage > .45) problems.push(`Visible ocean coverage ${(metrics.waterCoverage * 100).toFixed(1)}% (need 10–45%)`);
+  if (metrics.highlightRatio < .003 || metrics.highlightRatio > .12) problems.push(`Highlight sparkle ${(metrics.highlightRatio * 100).toFixed(2)}% (need .3–12%)`);
+  if (metrics.variance < 700 || metrics.variance > 2600) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need 700–2600)`);
+  if (metrics.horizontalBand < 8 || metrics.verticalBand < 40) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=8, v>=40)`);
+  if (metrics.timeDeltaRatio < .03 || metrics.timeDeltaRatio > .65) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need 3–65%)`);
+  if (metrics.pointerOrbitRatio < .08 || metrics.pointerOrbitRatio > .7) problems.push(`Pointer delta ${(metrics.pointerOrbitRatio * 100).toFixed(2)}% (need 8–70%)`);
+  if (problems.length) throw new Error([`FFT-ocean semantic validation failed (${width}x${height}):`, ...problems.map((x) => `- ${x}`)].join('\n'));
+  return metrics;
+}
+
 function assertBlackHoleMetrics(variants, poster, width, height) {
   for (const name of ['time-delta', 'pointer-orbit']) {
     if (!variants.has(name)) throw new Error(`Black-hole validation did not capture ${name}.`);
@@ -454,13 +499,33 @@ function assertBlackHoleMetrics(variants, poster, width, height) {
   return metrics;
 }
 
-async function writeBlackHoleVariantPngs(variants, poster, size, kind) {
-  const dir = process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR;
+async function writeVariantPngs(variants, poster, size, kind, dir) {
   await mkdir(dir, { recursive: true });
   await writePng(path.join(dir, `${kind}-poster.png`), poster, size[0], size[1]);
   for (const [name, pixels] of variants) {
     await writePng(path.join(dir, `${kind}-${name}.png`), pixels, size[0], size[1]);
   }
+}
+
+async function writeFftOceanIntermediate(kind, raw, size, dir) {
+  if (kind !== 'displacement') return;
+  await mkdir(dir, { recursive: true });
+  if (raw.byteLength === size[0] * size[1] * 4) {
+    await writePng(path.join(dir, `${kind}-map.png`), raw, size[0], size[1]);
+    return;
+  }
+  const floats = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
+  const rgba = new Uint8Array(size[0] * size[1] * 4);
+  let maxAbs = 1e-6;
+  for (let i = 0; i < floats.length; i += 4) maxAbs = Math.max(maxAbs, Math.abs(floats[i]), Math.abs(floats[i + 1]), Math.abs(floats[i + 2]));
+  for (let i = 0, p = 0; i < floats.length; i += 4, p += 4) {
+    rgba[p] = Math.max(0, Math.min(255, Math.round(127.5 + floats[i] / maxAbs * 127.5)));
+    rgba[p + 1] = Math.max(0, Math.min(255, Math.round(127.5 + floats[i + 1] / maxAbs * 127.5)));
+    rgba[p + 2] = Math.max(0, Math.min(255, Math.round(127.5 + floats[i + 2] / maxAbs * 127.5)));
+    rgba[p + 3] = 255;
+  }
+  await mkdir(dir, { recursive: true });
+  await writePng(path.join(dir, `${kind}-map.png`), rgba, size[0], size[1]);
 }
 
 function formatAaMetrics(metrics) {
