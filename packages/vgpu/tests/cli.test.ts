@@ -11,13 +11,19 @@ function success(args) {
   return result.stdout ?? "";
 }
 
-test("preserves root help, version, and placeholders", () => {
+test("preserves root help, version, and remaining placeholder", () => {
   expect(success(["--help"])).toContain("snapshot");
   expect(success(["--help"])).toContain("install-dawn");
+  expect(success(["--help"])).toContain("doctor     Diagnose headless");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
-  expect(runCli(["doctor"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
   expect(runCli(["wgsl"])).toMatchObject({ code: 1, stderr: expect.stringContaining("coming soon") });
+});
+
+test("exposes doctor JSON without rendering", async () => {
+  const result = await runCli(["doctor", "--no-render"]);
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.stdout ?? "")).toMatchObject({ verdict: "unverified", adapter: null, findings: expect.any(Array) });
 });
 
 test("exposes the manual Dawn installer command", async () => {
