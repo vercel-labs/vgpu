@@ -245,3 +245,14 @@ test("surface bundle survives resize, and re-recording from onResize is usable i
   expect(() => gpu.frame((f) => f.pass({ target: surface }, (p) => p.bundles(bundle)))).toThrowError(/VGPU-SURFACE-DISPOSED|disposed/);
   gpu.dispose();
 });
+
+test("a deferred frame can pass a surface before manual submit", async () => {
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const surface = gpu.surface(canvasLike(4, 4), { autoResize: false });
+  const effect = gpu.effect(SOLID);
+  const frame = gpu.frame();
+
+  expect(() => frame.pass(surface, effect)).not.toThrow();
+  frame.submit();
+  gpu.dispose();
+});

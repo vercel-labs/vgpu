@@ -302,7 +302,7 @@ export class InternalDraw implements Draw {
   }
 
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
-    const pipeline = this.pipelineFor(target);
+    const pipeline = this.pipelineFor(target, true);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
     for (const binding of drawState(this).setCore.bindGroups()) this.#setBindGroup(pass, binding, opts, claimValidation);
@@ -341,8 +341,8 @@ export class InternalDraw implements Draw {
     return this;
   }
 
-  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
-    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`);
+  pipelineFor(target: Target | TargetSignature, allowSurface = false): GPURenderPipeline | undefined {
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`, allowSurface);
     const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
@@ -355,17 +355,17 @@ export class InternalDraw implements Draw {
     return promise;
   }
 
-  #compileKey(target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
-    const signature = this.#signatureForKeyTarget(target, where);
+  #compileKey(target: CompileTarget | undefined, where: string, allowSurface = false): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
+    const signature = this.#signatureForKeyTarget(target, where, allowSurface);
     const signatureKey = signatureKeyOf(signature);
     return { signature, signatureKey, key: this.#pipelineKey(signature) };
   }
 
-  #signatureForKeyTarget(target: CompileTarget | undefined, where: string): TargetSignature {
+  #signatureForKeyTarget(target: CompileTarget | undefined, where: string, allowSurface = false): TargetSignature {
     const state = drawState(this);
     const resolvedTarget = target ?? state.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError(where);
-    assertSurfaceTargetInFrame(resolvedTarget, where);
+    if (!allowSurface) assertSurfaceTargetInFrame(resolvedTarget, where);
     const signature = normalizeSignature(resolvedTarget);
     validateTargetSignature(signature, where);
     return signature;

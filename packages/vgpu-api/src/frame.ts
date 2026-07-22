@@ -6,7 +6,7 @@ import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, frameReentrantError, passPreserveMsaaError, surfaceNotInFrameError, targetRequiredError } from "./errors.ts";
-import { enterFrame, isFrameActive, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
+import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
 import { isTarget, type ClearColor } from "./target-utils.ts";
 
 export interface FramePassOptions {
@@ -48,7 +48,7 @@ export class Frame {
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError("Frame.pass");
-    if (isSurface(resolvedTarget) && !isFrameActive()) throw surfaceNotInFrameError("Frame.pass");
+    if (isSurface(resolvedTarget) && this.#submitted) throw surfaceNotInFrameError("Frame.pass");
     const clear = targetOnly ? undefined : target.clear;
     const preserve = clear === false;
     if (preserve && resolvedTarget.sampleCount === 4) throw passPreserveMsaaError();
