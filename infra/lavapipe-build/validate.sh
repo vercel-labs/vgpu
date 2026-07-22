@@ -12,6 +12,7 @@ DAWN=$(realpath "$DAWN")
 rm -rf "$RESULTS_DIR"
 mkdir -p "$RESULTS_DIR"
 RESULTS_DIR=$(realpath "$RESULTS_DIR")
+status=0
 docker run --rm --label vgpu-lavapipe-build=1 \
   -v "$DAWN:/cache/dawn.node:ro" \
   -v "$ARCHIVE:/input/lavapipe.tar.gz:ro" \
@@ -42,5 +43,15 @@ printf "GLIBC=%s\nGLIBCXX=%s\nCXXABI=%s\n" "$max_glibc" "${max_glibcxx:-none}" "
 for run in 1 2 3; do
   node /work/dump-render.mjs > "/out/lavapipe-run${run}.json" 2> "/out/lavapipe-run${run}.stderr"
 done
-'
+' || status=$?
+if (( status != 0 )); then
+  echo "Validation failed in $VALIDATION_IMAGE (exit $status); captured diagnostics:" >&2
+  for file in "$RESULTS_DIR"/clean-container-ldd.txt "$RESULTS_DIR"/symbol-version-floor.txt \
+    "$RESULTS_DIR"/lavapipe-run*.json "$RESULTS_DIR"/lavapipe-run*.stderr; do
+    [[ -f "$file" ]] || continue
+    printf '\n===== %s =====\n' "$(basename "$file")" >&2
+    cat "$file" >&2
+  done
+  exit "$status"
+fi
 printf 'Validation passed in %s: GLIBC <= 2.31, 17 features, shader-f16, compute 1024, exact 64x64 readback\n' "$VALIDATION_IMAGE"
