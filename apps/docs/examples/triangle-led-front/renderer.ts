@@ -264,8 +264,8 @@ export function createHeroRenderer(
       if (!target) return;
       const ready = parts.lightSourcesRaw.ready;
       await Promise.all([
-        lightFloorDraw.compile(target),
-        darkFloorDraw.compile(target),
+        lightFloorDraw.compile({ colors: [target.format] }),
+        darkFloorDraw.compile({ colors: [target.format] }),
         raycastDraw.compile(parts.raycastTarget),
         noiseDraw.compile(noiseTarget),
         ready ?? Promise.resolve(),
@@ -308,11 +308,11 @@ export function createHeroRenderer(
     const floorBundles: FloorBundles = {
       target,
       light: gpu.bundle(
-        { target, label: 'triangle-led-front-light-floor' },
+        { target: { colors: [target.format] }, label: 'triangle-led-front-light-floor' },
         (bundle) => bundle.draw(lightFloorDraw),
       ),
       dark: gpu.bundle(
-        { target, label: 'triangle-led-front-dark-floor' },
+        { target: { colors: [target.format] }, label: 'triangle-led-front-dark-floor' },
         (bundle) => bundle.draw(darkFloorDraw),
       ),
     };

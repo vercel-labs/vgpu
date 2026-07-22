@@ -6,8 +6,9 @@ import { init } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
+const args = parseArgs(process.argv.slice(2));
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(docsDir, 'public', 'examples');
+const outDir = args.proofDir ? path.resolve(args.proofDir) : path.join(docsDir, 'public', 'examples');
 const cacheDir = path.join(docsDir, '.thumbs-cache');
 const rendererEntry = path.join(cacheDir, 'renderers-entry.ts');
 const rendererBundle = path.join(cacheDir, 'renderers.mjs');
@@ -26,7 +27,7 @@ const customRendererEntries = [
   { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
 ];
 
-const sizes = {
+const sizes = args.proofDir ? { proof: [160, 90] } : {
   card: [1280, 720],
   hero: [1600, 900],
 };
@@ -52,7 +53,6 @@ function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
   gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
 }
 
-const args = parseArgs(process.argv.slice(2));
 await mkdir(outDir, { recursive: true });
 const [renderers, docsData] = await Promise.all([loadRenderers(), loadDocsData()]);
 const { examples, exampleSources } = docsData;
@@ -99,7 +99,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     let fluidState;
     if (renderer) {
       await renderer(gpu, target, {
-        warmupFrames: metaThumb.warmupFrames ?? 60,
+        warmupFrames: args.proofDir ? (slug === 'fluid' ? 24 : 3) : (metaThumb.warmupFrames ?? 60),
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
         onModeRendered: modePixels
@@ -124,14 +124,14 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       );
     }
     const pixels = await target.read();
-    const aaMetrics = aaModePixels ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
-    const postProcessingMetrics = postProcessingModePixels
+    const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
+    const postProcessingMetrics = postProcessingModePixels && !args.proofDir
       ? assertPostProcessingMetrics(postProcessingModePixels, pixels, size[0], size[1])
       : undefined;
-    const fluidMetrics = slug === 'fluid' && !args.fluidSoak && !args.fluidDrag
+    const fluidMetrics = slug === 'fluid' && !args.proofDir && !args.fluidSoak && !args.fluidDrag
       ? assertFluidMetrics(pixels, size[0], size[1])
       : undefined;
-    const blackHoleMetrics = blackHoleVariantPixels
+    const blackHoleMetrics = blackHoleVariantPixels && !args.proofDir
       ? assertBlackHoleMetrics(blackHoleVariantPixels, pixels, size[0], size[1])
       : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
@@ -145,9 +145,11 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     const variance = lumaVariance(pixels);
     const diagnosticMode = args.fluidDrag || args.fluidSoak;
-    const requiredVariance = slug === 'fluid' ? 120 : minLumaVariance;
+    const requiredVariance = args.proofDir ? 2 : (slug === 'fluid' ? 120 : minLumaVariance);
     if (!diagnosticMode && variance < requiredVariance) throw new Error(`${slug} rendered an empty-looking thumbnail: luma variance ${variance.toFixed(2)} < ${requiredVariance}.`);
-    const compare = await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
+    const compare = args.proofDir
+      ? (await writePng(output, pixels, size[0], size[1]), { status: 'proof', ratio: 0 })
+      : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     const info = await stat(output).catch(() => undefined);
     return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fluidMetrics, fluidState };
   } finally {
@@ -523,7 +525,7 @@ async function loadDocsData() {
 }
 
 function parseArgs(argv) {
-  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false };
+  const parsed = { update: false, check: false, only: undefined, fluidDrag: false, fluidSoak: false, proofDir: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
@@ -532,8 +534,10 @@ function parseArgs(argv) {
     else if (arg === '--only') parsed.only = argv[++i];
     else if (arg === '--fluid-drag') parsed.fluidDrag = true;
     else if (arg === '--fluid-soak') parsed.fluidSoak = true;
+    else if (arg === '--proof-dir') parsed.proofDir = argv[++i];
     else throw new Error(`Unknown argument '${arg}'.`);
   }
+  if (parsed.proofDir && (parsed.update || parsed.check)) throw new Error('--proof-dir cannot be combined with --update/--check.');
   if (parsed.update && parsed.check) throw new Error('Use either --update or --check, not both.');
   return parsed;
 }

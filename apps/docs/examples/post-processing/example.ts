@@ -180,7 +180,7 @@ async function prewarm(effects: EffectChain, targets: ChainTargets, output: Surf
     effects.threshold.compile(targets.bright),
     effects.blurH.compile(targets.blurA),
     effects.blurV.compile(targets.blurB),
-    effects.grade.compile(output),
+    effects.grade.compile({ colors: [output.format] }),
   ]);
 }
 

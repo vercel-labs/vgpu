@@ -187,12 +187,12 @@ async function prewarm(
   output: Surface | Target,
 ): Promise<void> {
   await Promise.all([
-    effects.scene.compile(output),
+    effects.scene.compile({ colors: [output.format] }),
     effects.scene.compile(targets.msaa),
     effects.scene.compile(targets.ssaa),
     effects.scene.compile(targets.ldr),
-    effects.resolve.compile(output),
-    effects.fxaa.compile(output),
+    effects.resolve.compile({ colors: [output.format] }),
+    effects.fxaa.compile({ colors: [output.format] }),
   ]);
 }
 
