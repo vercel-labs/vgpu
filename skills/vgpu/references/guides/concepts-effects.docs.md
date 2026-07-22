@@ -22,6 +22,14 @@ An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader cr
 
 Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
 
+The `uv` varying that `gpu.effect()` injects is top-origin: `(0, 0)` is the
+top-left corner and `v` grows downward — the same convention as WebGPU texture
+coordinates, `@builtin(position)`, and `target.read()`. Sampling any texture
+with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
+image exactly. If you are porting a WebGL or Shadertoy shader that assumes
+`v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep
+everything else flip-free.
+
 ```ts
 import { init } from "vgpu";
 
@@ -75,6 +83,13 @@ once at creation, size- and resolution-class uniforms at init and on resize,
 and per-frame calls only for genuinely dynamic values like time or pointer
 input. Rebinding the same resources is free — bind groups are cached by
 resource identity — so this rule is purely about avoiding redundant writes.
+
+One more rule keeps multi-pass frames predictable: a frame records into a
+single command buffer, and `set()` writes land before any of it executes — so
+re-recording the same effect with mutated uniforms makes every pass read the
+final values. When two passes need different values (a horizontal and a
+vertical blur, say), create two effects; they are cheap, and each owns its
+uniforms.
 
 ```ts
 import { init } from "vgpu";

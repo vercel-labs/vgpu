@@ -97,3 +97,6 @@ test("gradient renders", async () => {
 ```
 
 > Good to know: use `vgpu/mock` for deterministic unit tests that need no GPU; reach for `vgpu/node` when real Dawn/WebGPU behavior is under test.
+
+> Good to know: call `gpu.dispose()` when you are done — it stops Dawn's event
+> polling so the process exits on its own instead of hanging.

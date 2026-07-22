@@ -19,14 +19,7 @@ fn aces(x: vec3f) -> vec3f {
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let hdrScene = textureSampleLevel(scene, samp, uv, 0.0).rgb;
-  // The scene is sampled directly, but the bloom chain (bright-pass + 4 blur
-  // passes) leaves the bloom target Y-inverted relative to the scene: WebGPU's
-  // texture sample origin differs from the clip-space Y the passes render with,
-  // and that discrepancy surfaces across the multi-pass chain. Flip uv.y when
-  // sampling bloom so the glow aligns with the base image. Verified empirically
-  // by isolating scene-only vs bloom-only renders (bloom matched only with the
-  // flip). Do NOT remove this without re-running that comparison.
-  let hdrBloom = textureSampleLevel(bloom, samp, vec2f(uv.x, 1.0 - uv.y), 0.0).rgb;
+  let hdrBloom = textureSampleLevel(bloom, samp, uv, 0.0).rgb;
   var color = hdrScene + hdrBloom * composite.bloomStrength;
 
   color *= composite.exposure;

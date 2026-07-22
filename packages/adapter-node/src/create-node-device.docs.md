@@ -219,6 +219,46 @@ environment, use a project convention such as:
 VGPU_WRITE_SNAPSHOTS=1 pnpm test:docker
 ```
 
+## Shutting down cleanly
+
+Dawn keeps polling for device events while the device is alive, which keeps
+the Node process running after your last render. Dispose the context when you
+are done:
+
+```text
+try {
+  // render, read pixels, write files
+  await gpu.settled();
+} finally {
+  gpu.dispose();
+}
+```
+
+`gpu.dispose()` destroys the device and stops event polling, letting the
+process exit on its own — no `process.exit()` needed.
+
+## Headless rendering without a GPU
+
+vgpu renders on CPU through Mesa's lavapipe Vulkan driver — no GPU, no display,
+no X server:
+
+- Install a recent Mesa (>= 23; Debian trixie and Ubuntu 24.04+ ship one) with
+  `mesa-vulkan-drivers`.
+- Point the Vulkan loader at lavapipe and give it a runtime directory:
+
+```sh
+export VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd.*.json | head -1)
+export XDG_RUNTIME_DIR=/tmp/vgpu-runtime && mkdir -p "$XDG_RUNTIME_DIR"
+```
+
+- Leave `DISPLAY` unset: without a display, vgpu lets Dawn discover the Vulkan
+  backend directly.
+
+Verify the device with `vulkaninfo --summary` — expect an llvmpipe/lavapipe
+CPU entry. Older Mesa (22.x) lacks features Dawn requires and is rejected at
+adapter time; if acquisition fails, the structured `VGPU-NODE-NO-ADAPTER`
+error lists what was tried.
+
 ## `.gpu` lifecycle guidance
 
 `.gpu` is a raw WebGPU escape hatch. Use it for operations VGPU does not wrap,
