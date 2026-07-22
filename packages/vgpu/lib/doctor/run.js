@@ -130,8 +130,8 @@ function probeVulkanIcd(context) {
 }
 
 function probeMesa(context) {
-  const outputs = [context.command("pkg-config", ["--modversion", "vulkan"]), context.command("glxinfo", ["-B"]), context.command("vulkaninfo", ["--summary"])].filter(Boolean).join("\n");
-  const match = outputs.match(/(?:Mesa\s*)?(\d+)\.(\d+)(?:\.\d+)?/iu);
+  const outputs = [context.command("glxinfo", ["-B"]), context.command("vulkaninfo", ["--summary"])].filter(Boolean).join("\n");
+  const match = outputs.match(/Mesa[^\d]*(\d+)\.(\d+)(?:\.\d+)?/iu);
   if (!match) return { status: "skip", evidence: "Mesa version was not detected; the render probe verifies the active driver." };
   const version = `${match[1]}.${match[2]}`;
   return Number(match[1]) < 23
