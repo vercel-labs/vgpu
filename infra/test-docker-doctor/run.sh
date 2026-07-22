@@ -7,6 +7,7 @@ images=()
 cleanup() {
   docker ps -aq --filter label=vgpu-doctor-test=1 | xargs -r docker rm -f >/dev/null
   ((${#images[@]} == 0)) || docker image rm -f "${images[@]}" >/dev/null 2>&1 || true
+  docker images -q --filter label=vgpu-doctor-test=1 | xargs -r docker image rm -f >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 for mode in vulkan broken xvfb; do
