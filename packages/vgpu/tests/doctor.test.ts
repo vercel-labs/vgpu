@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { parseOsRelease, prescriptionsFor, runDoctor, runProbeRegistry } from "../lib/doctor/run.js";
+import { parseOsRelease, prescriptionsFor, probeRegistry, runDoctor, runProbeRegistry } from "../lib/doctor/run.js";
 
 const linux = {
   platform: "linux",
@@ -28,6 +28,15 @@ describe("doctor probe registry", () => {
 describe("doctor prescriptions", () => {
   test("parses quoted os-release fixtures", () => {
     expect(parseOsRelease('ID="ubuntu"\nID_LIKE="debian linux"\nVERSION_ID=24.04\n')).toEqual({ ID: "ubuntu", ID_LIKE: "debian linux", VERSION_ID: "24.04" });
+  });
+
+  test("reads the Mesa driver version instead of the Vulkan API version", async () => {
+    const findings = await runProbeRegistry(probeRegistry, {
+      ...linux,
+      command: (name: string) => name === "vulkaninfo" ? "Vulkan Instance Version: 1.4.304\ndriverInfo = Mesa 25.0.7" : null,
+      glibc: "2.41",
+    });
+    expect(findings.find((finding) => finding.probe === "linux-mesa")).toMatchObject({ status: "ok", evidence: expect.stringContaining("Mesa 25.0") });
   });
 
   test("selects executable apt, dnf, and generic lavapipe fixes", () => {
