@@ -1,6 +1,6 @@
 # vgpu
 
-> 0.1.3 — early preview of the new public `vgpu` API
+> 0.1.4 — early preview of the new public `vgpu` API
 
 vgpu is an agentic-first WebGPU library for browsers, Node/Dawn, and deterministic mock tests. The public package is `vgpu`: one `Gpu` context with explicit WGSL reflection and performance-oriented defaults.
 

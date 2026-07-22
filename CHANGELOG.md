@@ -1,3 +1,16 @@
+## 0.1.4 — 2026-07-21
+
+### Behavior change
+- **`gpu.effect()` now injects top-origin UV coordinates:** `(0, 0)` is the top-left and `v` grows downward, matching WebGPU texture coordinates, `@builtin(position)`, and `target.read()`. The previous behavior is reproducible with `vec2f(uv.x, 1.0 - uv.y)`. New GPU orientation regressions cover direct effects and texture pass-through.
+
+### Added
+- Add structured `VGPU-SURFACE-NOT-IN-FRAME` errors when surface targets are used outside `gpu.frame()` across compile, draw, and bundle entry points, while preserving deferred frames that are completed before their surface pass.
+- Add structured `VGPU-PIPELINE-LAYOUT-GAP` diagnostics for non-contiguous bind-group indices.
+- Add the raymarched black-hole example with HDR bloom to the docs app.
+
+### Documentation
+- Document the top-origin Y convention, clean Node shutdown with `gpu.dispose()`, and display-free headless rendering with Mesa lavapipe.
+
 ## 0.1.3 — 2026-07-21
 
 ### Fixed
