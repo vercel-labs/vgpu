@@ -49,6 +49,14 @@ interface Effect {
 | effect.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot render pass. Pass a bare target for the common case, or an options bag when setting per-call draw options. |
 | opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
 
+The `uv` varying that `gpu.effect()` injects is top-origin: `(0, 0)` is the
+top-left corner and `v` grows downward — the same convention as WebGPU texture
+coordinates, `@builtin(position)`, and `target.read()`. Sampling any texture
+with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
+image exactly. If you are porting a WebGL or Shadertoy shader that assumes
+`v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep
+everything else flip-free.
+
 **Returns:** `gpu.effect()` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
 
 **Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `gpu.effect()` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler). Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
