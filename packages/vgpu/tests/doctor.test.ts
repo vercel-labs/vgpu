@@ -43,7 +43,7 @@ describe("doctor prescriptions", () => {
     expect(prescriptionsFor({ ID: "ubuntu" }).install).toBe("apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers");
     expect(prescriptionsFor({ ID: "amzn", VERSION_ID: "2023", ID_LIKE: "fedora" }).install).toBe("dnf install -y vulkan-loader mesa-vulkan-drivers");
     expect(prescriptionsFor({ ID: "unknown" }).install).toContain("Vulkan loader and Mesa Vulkan drivers");
-    expect(prescriptionsFor({ ID: "debian" }).env).toContain("VK_DRIVER_FILES");
+    expect(prescriptionsFor({ ID: "debian" }).env).toBe("export VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)\nexport VK_DRIVER_FILES=$VK_ICD_FILENAMES");
   });
 });
 

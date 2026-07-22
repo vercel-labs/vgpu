@@ -160,16 +160,12 @@ export function prescriptionsFor(osRelease) {
     : /fedora|rhel|centos|amzn/u.test(ids)
       ? "dnf install -y vulkan-loader mesa-vulkan-drivers"
       : "Install the system Vulkan loader and Mesa Vulkan drivers (lavapipe) with this distribution's package manager.";
-  const icd = findLikelyLavapipeIcd();
-  return { install, env: `export VK_ICD_FILENAMES=${icd}\nexport VK_DRIVER_FILES=${icd}` };
+  const discoverIcd = "$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)";
+  return { install, env: `export VK_ICD_FILENAMES=${discoverIcd}\nexport VK_DRIVER_FILES=$VK_ICD_FILENAMES` };
 }
 function lavapipePrescription(osRelease) {
   const prescription = prescriptionsFor(osRelease);
   return `${prescription.install}\n${prescription.env}`;
-}
-function findLikelyLavapipeIcd() {
-  const candidates = ["/usr/share/vulkan/icd.d/lvp_icd.x86_64.json", "/usr/share/vulkan/icd.d/lvp_icd.aarch64.json", "/usr/share/vulkan/icd.d/lvp_icd.json"];
-  return candidates.find(existsSync) ?? candidates[0];
 }
 
 async function realRender() {
