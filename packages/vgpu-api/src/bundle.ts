@@ -3,7 +3,8 @@ import { InternalDraw, encodeDraw, registerDrawBundle, type BundleBackReference,
 import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
-import { VGPUError } from "./errors.ts";
+import { surfaceNotInFrameError, VGPUError } from "./errors.ts";
+import { isFrameActive, isSurface } from "./surface.ts";
 
 export interface BundleOptions {
   readonly target: CompileTarget;
@@ -25,6 +26,7 @@ let recordingDepth = 0;
 /** Records explicit WebGPU render bundles and keeps the R3 stale signature checked at replay time. */
 export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle {
   const id = opts.label ?? `bundle${nextBundleId++}`;
+  if (isSurface(opts.target) && !isFrameActive()) throw surfaceNotInFrameError("gpu.bundle");
   const signature = normalizeBundleSignature(opts.target);
   const bundle = new RecordedBundle(device, id, signature);
   bundle.record(record);

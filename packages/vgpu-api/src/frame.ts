@@ -5,8 +5,8 @@ import { replayBundles, type Bundle } from "./bundle.ts";
 import { encodeDraw, type Draw, type DrawCallOptions } from "./draw.ts";
 import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, frameReentrantError, passPreserveMsaaError, targetRequiredError } from "./errors.ts";
-import { isSurfaceResizeCallbackActive } from "./surface.ts";
+import { claimedGroupNativeValidationError, frameReentrantError, passPreserveMsaaError, surfaceNotInFrameError, targetRequiredError } from "./errors.ts";
+import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
 import { isTarget, type ClearColor } from "./target-utils.ts";
 
 export interface FramePassOptions {
@@ -48,6 +48,7 @@ export class Frame {
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError("Frame.pass");
+    if (isSurface(resolvedTarget) && this.#submitted) throw surfaceNotInFrameError("Frame.pass");
     const clear = targetOnly ? undefined : target.clear;
     const preserve = clear === false;
     if (preserve && resolvedTarget.sampleCount === 4) throw passPreserveMsaaError();
@@ -136,6 +137,7 @@ export class FrameRunner {
   frame(cb?: (frame: Frame) => void): Frame {
     if (this.#running || isSurfaceResizeCallbackActive()) throw frameReentrantError();
     this.#running = true;
+    enterFrame();
     try {
       this.advance();
       const frame = this.createFrame();
@@ -145,6 +147,7 @@ export class FrameRunner {
       }
       return frame;
     } finally {
+      leaveFrame();
       this.#running = false;
     }
   }

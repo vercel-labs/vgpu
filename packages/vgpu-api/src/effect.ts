@@ -23,7 +23,9 @@ export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
   compile(target?: CompileTarget): Promise<this>;
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
   compileSync(target?: CompileTarget): this;
 }
 

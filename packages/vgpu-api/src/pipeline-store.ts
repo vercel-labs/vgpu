@@ -1,7 +1,7 @@
 import { bindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { Target, CompileTarget, TargetSignature } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
-import { compileDisposedError, compileFailedError, compileSignatureInvalidError, type VGPUError } from "./errors.ts";
+import { compileDisposedError, compileFailedError, compileSignatureInvalidError, pipelineLayoutGapError, type VGPUError } from "./errors.ts";
 
 export interface ErrorCtx {
   readonly where: string;
@@ -299,7 +299,7 @@ function contiguousLayouts(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLay
 
 function requiredLayout(bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>, group: number): GPUBindGroupLayout {
   const layout = bindGroupLayouts.get(group);
-  if (!layout) throw new Error(`Pipeline bind groups must be contiguous; missing group ${group}.`);
+  if (!layout) throw pipelineLayoutGapError(group);
   return layout;
 }
 
