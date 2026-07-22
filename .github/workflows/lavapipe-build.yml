@@ -63,15 +63,28 @@ jobs:
           tar -tzf "lavapipe-out/$archive" | diff -u \
             <(printf 'libvulkan_lvp.so\nlvp_icd.json\n') -
 
-      - name: Validate in a clean container
+      - name: Validate on the glibc 2.36 Bookworm floor proof
+        if: matrix.arch == 'arm64'
         env:
           ARCH: ${{ matrix.arch }}
           MESA_VERSION: ${{ inputs.mesa_version }}
+          VALIDATION_IMAGE: node:24-bookworm
         run: |
           infra/lavapipe-build/validate.sh \
             "lavapipe-out/mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz" \
             dawn-validation/dawn.node \
-            lavapipe-validation
+            lavapipe-validation-bookworm
+
+      - name: Validate on current Trixie
+        env:
+          ARCH: ${{ matrix.arch }}
+          MESA_VERSION: ${{ inputs.mesa_version }}
+          VALIDATION_IMAGE: node:24-trixie
+        run: |
+          infra/lavapipe-build/validate.sh \
+            "lavapipe-out/mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz" \
+            dawn-validation/dawn.node \
+            lavapipe-validation-trixie
 
       - name: Upload renderer, checksums, and validation evidence
         uses: actions/upload-artifact@v4
@@ -84,4 +97,5 @@ jobs:
             lavapipe-out/mesa-lavapipe-${{ inputs.mesa_version }}-linux-${{ matrix.arch }}.tar.gz.sha256
             lavapipe-out/asset/SHA256SUMS
             lavapipe-out/evidence/
-            lavapipe-validation/
+            lavapipe-validation-bookworm/
+            lavapipe-validation-trixie/

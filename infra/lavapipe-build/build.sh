@@ -29,7 +29,9 @@ docker cp "$container:/out/." "$OUTPUT_DIR/asset"
 docker rm "$container" >/dev/null
 container=
 mv "$OUTPUT_DIR/asset/ldd.txt" "$OUTPUT_DIR/asset/llvm-static-link-libs.txt" \
-  "$OUTPUT_DIR/asset/readelf-dynamic.txt" "$OUTPUT_DIR/evidence/"
+  "$OUTPUT_DIR/asset/readelf-dynamic.txt" "$OUTPUT_DIR/asset/readelf-version-info.txt" \
+  "$OUTPUT_DIR/asset/objdump-dynamic-symbols.txt" "$OUTPUT_DIR/asset/symbol-version-floor.txt" \
+  "$OUTPUT_DIR/evidence/"
 archive="mesa-lavapipe-${MESA_VERSION}-linux-${ARCH}.tar.gz"
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
   -C "$OUTPUT_DIR/asset" -czf "$OUTPUT_DIR/$archive" libvulkan_lvp.so lvp_icd.json
