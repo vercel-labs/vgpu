@@ -30,10 +30,12 @@ export const OCEAN_TUNING = {
     foamColor: [1, 1, 1, 0] as const,
   },
   camera: {
-    eye: [0, 19.3, 60] as const,
-    target: [0, 17.3, -40] as const,
+    // Gallery reframe: the docs canvas is much taller than front's hero strip.
+    // Raising and backing off the rig keeps the horizon in the upper third.
+    eye: [0, 55, 90] as const,
+    target: [0, 0, 55] as const,
     up: [0, 1, 0] as const,
-    pitchDegrees: -38.9,
+    pitchDegrees: -10,
     fovDegrees: 60,
     near: 0.1,
     far: 2000,
