@@ -1,3 +1,13 @@
+## 0.1.5 — 2026-07-21
+
+### Added
+- **Add `vgpu doctor` for agent-readable environment diagnostics.** It probes Dawn binary resolution and platform compatibility plus OS-specific graphics prerequisites, then performs a real init → render → readback → dispose check for a `healthy` or `unhealthy` verdict. Output is JSON by default with stable exit codes, `--pretty` is available for humans, and `--no-render` returns an explicit `unverified` verdict. Failures include executable Debian/Ubuntu, Fedora/RHEL/Amazon Linux, or generic prescriptions.
+- Add the project glossary and first ADR documenting why doctor health is determined by a real render, plus a getting-started static-render validation workflow and CLI help routing to doctor. `VGPU-NODE-NO-ADAPTER` now points directly to `npx vgpu doctor`.
+
+### Fixed
+- Fix surface prewarming in five docs example runners by compiling against explicit color-format signatures instead of live surfaces.
+- Harden example rendering CI with Node render proofs and uploaded artifacts, plus strict full-thumbnail comparisons across the docs example catalog.
+
 ## 0.1.4 — 2026-07-21
 
 ### Behavior change
