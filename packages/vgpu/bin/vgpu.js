@@ -18,13 +18,15 @@ Official VGPU CLI.
 
 New here? Read the guide first:
   vgpu docs cat getting-started.md
+Rendering in Node? Check the environment first:
+  vgpu doctor
 
 Commands:
   check      Validate and reflect a WGSL file as JSON
   docs       Explore bundled VGPU documentation
   snapshot   Compare the representative GPU pixel snapshot
   install-dawn  Download and verify the portable Node Dawn prebuild
-  doctor     Diagnose headless vgpu/node rendering (JSON by default)
+  doctor     Verify this machine can render headless (JSON verdict + fixes)
   wgsl       Coming soon
 
 Primary runtime entrypoints:

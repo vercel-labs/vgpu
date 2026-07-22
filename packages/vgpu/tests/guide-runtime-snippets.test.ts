@@ -13,7 +13,7 @@ test("getting-started TypeScript fences execute against vgpu/mock", async () => 
   expect(blocks.length).toBeGreaterThan(0);
   for (const block of blocks) {
     const executable = block
-      .replace(/^import \{ init \} from ["']vgpu["'];?\n/mu, "")
+      .replace(/^import \{ init \} from ["']vgpu(?:\/node)?["'];?\n/mu, "")
       .replace(/const canvas = document\.querySelector\(["']canvas["']\)!;/u, "const canvas = createMockCanvas();")
       .replace(/gpu\.frame\.loop\(/gu, "gpu.frame(");
 

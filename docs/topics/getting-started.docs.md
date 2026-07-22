@@ -31,6 +31,38 @@ names — `params` is a struct, so its members nest inside it — and `set()`
 writes immediately, so the render loop only writes what actually changes
 (`time`); size-class values like `texel` belong in the resize handler.
 
+## Validate with static renders
+
+You do not need a browser — or eyes — to prove a shader right. First, verify
+the machine can render at all:
+
+```sh
+npx vgpu doctor   # JSON verdict: healthy | unhealthy — each problem with its exact fix
+```
+
+`doctor` acquires a real adapter and renders a frame; when something is
+missing it prescribes the exact package install or environment variable to
+set. Once healthy, render headless and read the pixels back — objective
+evidence instead of guesswork:
+
+```ts
+import { init } from "vgpu/node";
+
+const SHADER = `
+  @fragment fn main() -> @location(0) vec4f {
+    return vec4f(0.25, 0.5, 0.75, 1.0);
+  }
+`;
+const gpu = await init();
+const target = gpu.target({ size: [160, 90] }); // small targets stay fast, even on CPU
+gpu.effect(SHADER).draw(target);
+const pixels = await target.read();             // RGBA bytes — assert on them or save a PNG
+gpu.dispose();                                  // stops Dawn's polling so the process exits
+```
+
+Keep the loop tight: render → read → adjust → render. Every visual claim you
+make should be backed by pixels you actually read.
+
 ## Default choices
 
 - Use `gpu.effect()` for fullscreen fragment work.
