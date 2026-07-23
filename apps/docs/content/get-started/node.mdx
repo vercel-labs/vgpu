@@ -48,6 +48,65 @@ binary. When no binary can be resolved, `init()` throws a structured
 [`createNodeAdapter`](/reference/vgpu-adapter-node/create-node-adapter) for the
 full resolution order.
 
+## Choose an environment
+
+Start every new machine with `npx vgpu doctor`. After that, choose the mode
+that matches what the environment is supposed to guarantee:
+
+| Environment | Setup | Runtime choice |
+| --- | --- | --- |
+| Local workstation | Install the normal GPU driver | `init()` — use normal system discovery |
+| Server or sandbox without a GPU | Run `npx vgpu install-software-renderer` once | `init()` — use the cached CPU renderer only when normal discovery finds nothing |
+| Deterministic screenshots and pixel tests | Cache the software renderer in the CI image | `init({ adapter: "software" })` — force the same Mesa renderer everywhere |
+| GPU-required CI | Install the vendor driver | `init({ adapter: "hardware" })` — fail instead of silently running on CPU |
+| Air-gapped runner | Pre-populate the Dawn and software-renderer caches while the image has network access | Select `auto`, `hardware`, or `software` normally at runtime |
+
+### Configure it from TypeScript
+
+```ts
+import { init } from "vgpu/node";
+
+const gpu = await init();                        // auto: normal adapter first, cached CPU fallback last
+const hardware = await init({ adapter: "hardware" }); // require a real GPU
+const software = await init({ adapter: "software" }); // force deterministic CPU rendering
+
+console.log(software.adapter);
+// { name: "llvmpipe: Mesa 25.0.7 ...", type: "cpu" }
+```
+
+`auto` never downloads the software renderer. It uses lavapipe only after you
+have explicitly installed it and normal adapter discovery returned nothing.
+A working system adapter always wins.
+
+### Override it from CI
+
+Environment overrides win over the TypeScript option and announce themselves
+once on stderr, so CI can force a policy without changing application code:
+
+```sh
+VGPU_ADAPTER=software node render.mjs  # deterministic CPU pixels
+VGPU_ADAPTER=hardware pnpm test        # require a GPU and fail loudly without one
+```
+
+Use the SDK option for the project's declared behavior and the environment
+variable for temporary CI or debugging intervention. The browser API does not
+need this configuration — `import { init } from "vgpu"` continues to let the
+browser choose its adapter.
+
+Whichever mode you use, release the device when the process is done:
+
+```ts
+try {
+  // render, read pixels, write artifacts
+  await gpu.settled();
+} finally {
+  gpu.dispose();
+}
+```
+
+For loader resolution, distro-specific dependencies, Docker, and lifecycle
+details, see [`createNodeDevice`](/reference/vgpu-adapter-node/create-node-device).
+
 ## Save a PNG
 
 `target.read()` resolves to the rendered RGBA bytes. Hand them to any PNG encoder — here, `pngjs`:
