@@ -27,7 +27,7 @@ export default async function ExampleDetailPage({ params, searchParams }: Exampl
 
   return (
     <div className="px-6 py-8 lg:px-8 xl:px-12">
-      <div className="mx-auto max-w-[1500px]">
+      <div className="mx-auto max-w-3xl">
         <Breadcrumbs items={getBreadcrumbs(pathname)} />
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -46,14 +46,9 @@ export default async function ExampleDetailPage({ params, searchParams }: Exampl
           </Link>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)]">
-          <section>
-            <CodeViewer files={example.sources} activeFile={activeFile} />
-          </section>
-
-          <section>
-            <ExamplePreview slug={example.meta.slug} title={example.meta.title} poster={example.meta.hero} />
-          </section>
+        <div className="space-y-6">
+          <ExamplePreview slug={example.meta.slug} title={example.meta.title} poster={example.meta.hero} />
+          <CodeViewer files={example.sources} activeFile={activeFile} />
         </div>
         <PageNavigation prev={prev} next={next} />
       </div>

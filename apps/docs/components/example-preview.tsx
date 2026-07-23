@@ -44,7 +44,7 @@ export function ExamplePreview({ slug, title, poster }: ExamplePreviewProps) {
   }, [slug]);
 
   return (
-    <div className="relative h-[60vh] min-h-[420px] overflow-hidden rounded-lg border border-gray-4 bg-black shadow-2xl">
+    <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-gray-4 bg-black shadow-2xl">
       <iframe
         title={`${title} preview`}
         src={`/preview/${slug}`}
