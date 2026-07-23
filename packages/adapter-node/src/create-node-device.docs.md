@@ -254,9 +254,9 @@ npx vgpu install-software-renderer
 This downloads vgpu's portable lavapipe build (Mesa 25, ~20 MB, sha256-verified,
 cached next to the Dawn binary) — no root, no system packages. Once cached,
 `init()` uses it automatically whenever no other adapter exists, and prints a
-one-line notice on stderr when it does. The only system requirement is the
-Vulkan loader (`libvulkan1` on Debian/Ubuntu, `vulkan-loader` on Fedora/Amazon
-Linux), which doctor checks and prescribes.
+one-line notice on stderr when it does. The system needs a handful of tiny
+libraries (Vulkan loader, libdrm, zlib, zstd, and libudev) — doctor checks and
+prescribes them in one command.
 
 Prefer your distribution's driver when it is recent (Mesa >= 23 with
 `mesa-vulkan-drivers`); the portable build exists for hosts where that is not

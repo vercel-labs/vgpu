@@ -27,7 +27,7 @@ if (healthy) {
   const icd = report.findings.find((finding) => finding.probe === "linux-vulkan-icd");
   assert.equal(icd.status, "fail");
   assert.match(icd.prescription, /^run: npx vgpu install-software-renderer/m);
-  assert.match(icd.prescription, /Alternative \(system packages\): apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers/);
+  assert.match(icd.prescription, /Alternative \(system packages\): apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers/);
   assert.equal(report.adapter, null);
 }
 NODE

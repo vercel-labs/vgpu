@@ -165,10 +165,10 @@ function probeWindowsVersion(context) { return { status: "ok", evidence: `Window
 export function prescriptionsFor(osRelease) {
   const ids = `${osRelease.ID ?? ""} ${osRelease.ID_LIKE ?? ""}`.toLowerCase();
   const install = /debian|ubuntu/u.test(ids)
-    ? "apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers"
+    ? "apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers"
     : /fedora|rhel|centos|amzn/u.test(ids)
-      ? "dnf install -y vulkan-loader mesa-vulkan-drivers"
-      : "Install the system Vulkan loader and Mesa Vulkan drivers (lavapipe) with this distribution's package manager.";
+      ? "dnf install -y vulkan-loader libdrm zlib libzstd systemd-libs mesa-vulkan-drivers"
+      : "Install the Vulkan loader, libdrm, zlib, zstd, libudev, and Mesa Vulkan drivers (lavapipe) with this distribution's package manager.";
   const discoverIcd = "$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)";
   return { install, env: `export VK_ICD_FILENAMES=${discoverIcd}\nexport VK_DRIVER_FILES=$VK_ICD_FILENAMES` };
 }
