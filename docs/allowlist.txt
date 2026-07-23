@@ -194,3 +194,5 @@ vgpu Surface packages/vgpu-api/src/surface.docs.md
 vgpu SurfaceOptions packages/vgpu-api/src/surface.docs.md
 vgpu SurfaceResizeEvent packages/vgpu-api/src/surface.docs.md
 vgpu TargetTextureOptions packages/vgpu-api/src/target.docs.md
+@vgpu/adapter-node createNodeAdapter packages/adapter-node/src/create-node-adapter.docs.md
+@vgpu/adapter-node createNodeDevice packages/adapter-node/src/create-node-device.docs.md

@@ -36,6 +36,10 @@
     "./install-dawn": {
       "types": "./dist/dawn-installer.d.ts",
       "import": "./dist/dawn-installer.js"
+    },
+    "./install-software-renderer": {
+      "types": "./dist/software-renderer-installer.d.ts",
+      "import": "./dist/software-renderer-installer.js"
     }
   },
   "files": [
@@ -52,5 +56,5 @@
     "@vgpu/core": "workspace:*",
     "webgpu": "0.4.0"
   },
-  "vgpuBundleBudgetGzipBytes": 32768
+  "vgpuBundleBudgetGzipBytes": 40960
 }

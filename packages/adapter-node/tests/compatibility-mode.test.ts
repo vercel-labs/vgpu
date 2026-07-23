@@ -6,6 +6,14 @@ const state = vi.hoisted(() => ({
   nullRequestsRemaining: 0,
   deviceLabels: [] as string[],
   deviceDescriptors: [] as GPUDeviceDescriptor[],
+  cachedIcd: null as string | null,
+  adapterInfo: null as GPUAdapterInfo | null,
+  icdAtRequest: [] as (string | undefined)[],
+}));
+
+vi.mock("../src/software-renderer-cache.ts", () => ({
+  getCachedSoftwareRenderer: () => state.cachedIcd,
+  createPrivateSoftwareRendererCopy: (path: string) => ({ path, cleanup() {} }),
 }));
 
 vi.mock("node:module", async (importOriginal) => {
@@ -21,12 +29,13 @@ vi.mock("node:module", async (importOriginal) => {
           return {
             async requestAdapter(options: GPURequestAdapterOptions): Promise<GPUAdapter | null> {
               state.adapterOptions.push(options);
+              state.icdAtRequest.push(process.env.VK_ICD_FILENAMES);
               if (state.nullRequestsRemaining > 0) {
                 state.nullRequestsRemaining--;
                 return null;
               }
               return {
-                info: null,
+                info: state.adapterInfo,
                 async requestDevice(descriptor: GPUDeviceDescriptor): Promise<GPUDevice> {
                   state.deviceDescriptors.push(descriptor);
                   return {
@@ -51,6 +60,9 @@ beforeEach(() => {
   state.nullRequestsRemaining = 0;
   state.deviceLabels = [];
   state.deviceDescriptors = [];
+  state.cachedIcd = null;
+  state.adapterInfo = null;
+  state.icdAtRequest = [];
 });
 
 test.runIf(process.platform === "linux")("node adapter marks default Linux Dawn devices as compatibility mode", async () => {
@@ -130,4 +142,56 @@ test("node adapter reports structured diagnostics after identical adapter retrie
   expect(error).toMatchObject({ name: "VGPUError", code: "VGPU-NODE-NO-ADAPTER", where: "createNodeAdapter" });
   expect(error.message).toContain("Dawn flags [");
   expect(error.fix).toContain("VK_ICD_FILENAMES");
+});
+
+test("auto retries with the cached software renderer only after hardware discovery returns no adapter", async () => {
+  state.nullRequestsRemaining = 3;
+  state.cachedIcd = "/cache/lvp_icd.json";
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const { createNodeAdapter } = await import("../src/index.ts");
+  const device = await createNodeAdapter({ adapter: "auto" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+  expect(state.icdAtRequest).toEqual([undefined, undefined, undefined, "/cache/lvp_icd.json"]);
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("using CPU software renderer (lavapipe)"));
+  device.destroy();
+  error.mockRestore();
+});
+
+test("software mode requires the cache, forces its ICD from the first request, and stays quiet", async () => {
+  state.cachedIcd = "/cache/lvp_icd.json";
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const { createNodeAdapter } = await import("../src/index.ts");
+  const device = await createNodeAdapter({ adapter: "software" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+  expect(state.icdAtRequest).toEqual(["/cache/lvp_icd.json"]);
+  expect(error).not.toHaveBeenCalled();
+  expect((device.adapterInfo as GPUAdapterInfo & { adapterType?: string }).adapterType).toBe("cpu");
+  device.destroy();
+  error.mockRestore();
+});
+
+test("hardware mode rejects a discovered CPU adapter and never consults the portable cache", async () => {
+  state.cachedIcd = "/cache/lvp_icd.json";
+  state.adapterInfo = { description: "llvmpipe" } as unknown as GPUAdapterInfo;
+  const { createNodeAdapter } = await import("../src/index.ts");
+  await expect(createNodeAdapter({ adapter: "hardware" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never)).rejects.toMatchObject({
+    code: "VGPU-NODE-NO-ADAPTER",
+    fix: expect.stringContaining("real GPU"),
+  });
+  expect(state.icdAtRequest).toEqual([undefined]);
+});
+
+test("VGPU_ADAPTER accepts hardware/software, announces the override, and rejects invalid values", async () => {
+  const previous = process.env.VGPU_ADAPTER;
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const { nodeAdapterEnvironmentOverride } = await import("../src/index.ts");
+  try {
+    process.env.VGPU_ADAPTER = "hardware";
+    expect(nodeAdapterEnvironmentOverride()).toBe("hardware");
+    expect(error).toHaveBeenCalledWith("vgpu: adapter overridden by VGPU_ADAPTER=hardware");
+    process.env.VGPU_ADAPTER = "invalid";
+    expect(() => nodeAdapterEnvironmentOverride()).toThrowError(expect.objectContaining({ code: "VGPU-NODE-ADAPTER-INVALID" }));
+  } finally {
+    if (previous === undefined) delete process.env.VGPU_ADAPTER;
+    else process.env.VGPU_ADAPTER = previous;
+    error.mockRestore();
+  }
 });

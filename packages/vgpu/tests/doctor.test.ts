@@ -40,9 +40,9 @@ describe("doctor prescriptions", () => {
   });
 
   test("selects executable apt, dnf, and generic lavapipe fixes", () => {
-    expect(prescriptionsFor({ ID: "ubuntu" }).install).toBe("apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers");
-    expect(prescriptionsFor({ ID: "amzn", VERSION_ID: "2023", ID_LIKE: "fedora" }).install).toBe("dnf install -y vulkan-loader mesa-vulkan-drivers");
-    expect(prescriptionsFor({ ID: "unknown" }).install).toContain("Vulkan loader and Mesa Vulkan drivers");
+    expect(prescriptionsFor({ ID: "ubuntu" }).install).toBe("apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers");
+    expect(prescriptionsFor({ ID: "amzn", VERSION_ID: "2023", ID_LIKE: "fedora" }).install).toBe("dnf install -y vulkan-loader libdrm zlib libzstd systemd-libs mesa-vulkan-drivers");
+    expect(prescriptionsFor({ ID: "unknown" }).install).toContain("Vulkan loader, libdrm, zlib, zstd, libudev, and Mesa Vulkan drivers");
     expect(prescriptionsFor({ ID: "debian" }).env).toBe("export VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)\nexport VK_DRIVER_FILES=$VK_ICD_FILENAMES");
   });
 });
@@ -80,7 +80,7 @@ describe("doctor output contract", () => {
     expect(report.verdict).toBe("unhealthy");
     expect(report.findings.find((finding: { probe: string }) => finding.probe === "linux-vulkan-icd")).toMatchObject({
       status: "fail",
-      prescription: expect.stringContaining("apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers"),
+      prescription: expect.stringContaining("apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers"),
     });
   });
 });
