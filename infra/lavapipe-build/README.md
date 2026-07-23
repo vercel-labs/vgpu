@@ -42,7 +42,7 @@ Tarball SHA256: `eac1477d6404af2d63fc08104e980d0cbbf657470c966a0bc638099c00d3dca
 
 Both clean Bookworm and Trixie containers passed three fresh processes: 17 Dawn features including `shader-f16`, `maxComputeInvocationsPerWorkgroup` 1024, exact 64×64 readback (`[64,128,191,255]` center, `[0,0,0,255]` corner, 1,352 nonblack pixels), and no uncaptured errors.
 
-The asset also passed directly on the current Bookworm host using `vgpu@0.1.5` and its portable Dawn loader: `vgpu doctor` reported **healthy**, adapter **llvmpipe: Mesa 25.0.7 (LLVM 19.1.7)**, type `cpu`; host `ldd` resolved every dependency and render/dispose exited cleanly.
+The asset also passed directly on the current Bookworm host using `vgpu@0.1.6` and its portable Dawn loader: `vgpu doctor` reported **healthy**, adapter **llvmpipe: Mesa 25.0.7 (LLVM 19.1.7)**, type `cpu`; host `ldd` resolved every dependency and render/dispose exited cleanly.
 
 ## Build and runtime gotchas
 

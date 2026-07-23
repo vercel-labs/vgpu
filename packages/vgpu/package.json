@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/cli",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
     "webgpu",
@@ -45,9 +45,9 @@
     "pngjs": "^7.0.0"
   },
   "peerDependencies": {
-    "@vgpu/adapter-node": "^0.1.5",
-    "@vgpu/wgsl": "^0.1.5",
-    "vgpu": "^0.1.5"
+    "@vgpu/adapter-node": "^0.1.6",
+    "@vgpu/wgsl": "^0.1.6",
+    "vgpu": "^0.1.6"
   },
   "peerDependenciesMeta": {
     "@vgpu/adapter-node": {

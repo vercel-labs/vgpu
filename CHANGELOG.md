@@ -1,3 +1,19 @@
+## 0.1.6 — 2026-07-21
+
+### Added
+- **Add a native software renderer for portable, display-free Node rendering.** Provision it only with the explicit, consented `npx vgpu install-software-renderer` command; npm install, `vgpu doctor`, and `init()` never download it. Node callers can select `init({ adapter: "auto" | "hardware" | "software" })`, inspect `gpu.adapter`, or set the `VGPU_ADAPTER` environment override. Doctor prescriptions and the Node environment guide explain installation and adapter selection.
+- Publish portable Mesa lavapipe for Linux x64 and arm64 as the GitHub Release asset `lavapipe-v25.0.7-vgpu.1`, with build/validation infrastructure targeting a glibc 2.31 old-host ABI floor and portable Dawn validation.
+
+### Security
+- Harden the software-renderer trust boundary with bounded 32 MiB downloads and timeouts, an exact two-file tar allowlist, pinned archive and extracted-file hashes, private non-symlink cache validation, atomic/concurrent cache installation, and a forced-Vulkan critical section. The post-hardening security re-audit is clean.
+
+### Behavior and migration
+- The browser API is unchanged. This release adds no npm package or dependency: the optional lavapipe payload is a separately consented GitHub Release download. Existing Node defaults remain available; choose `adapter: "software"` or `VGPU_ADAPTER=software` only when the provisioned CPU renderer is required.
+
+### Examples and documentation
+- Add the Particles Ocean example with FFT waves, particles, bloom, gallery thumbnails, graph validation, and deterministic render checks.
+- Simplify example detail layout and strengthen gallery thumbnail/render CI alongside the new Node environment guidance.
+
 ## 0.1.5 — 2026-07-21
 
 ### Added
