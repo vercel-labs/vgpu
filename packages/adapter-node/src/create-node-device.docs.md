@@ -239,25 +239,43 @@ process exit on its own — no `process.exit()` needed.
 
 ## Headless rendering without a GPU
 
-vgpu renders on CPU through Mesa's lavapipe Vulkan driver — no GPU, no display,
-no X server:
-
-- Install a recent Mesa (>= 23; Debian trixie and Ubuntu 24.04+ ship one) with
-  `mesa-vulkan-drivers`.
-- Point the Vulkan loader at lavapipe and give it a runtime directory:
+vgpu can render on CPU anywhere. Check the machine first:
 
 ```sh
-export VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd.*.json | head -1)
-export XDG_RUNTIME_DIR=/tmp/vgpu-runtime && mkdir -p "$XDG_RUNTIME_DIR"
+npx vgpu doctor
 ```
 
-- Leave `DISPLAY` unset: without a display, vgpu lets Dawn discover the Vulkan
-  backend directly.
+If no usable Vulkan driver exists, the fix is one command:
 
-Verify the device with `vulkaninfo --summary` — expect an llvmpipe/lavapipe
-CPU entry. Older Mesa (22.x) lacks features Dawn requires and is rejected at
-adapter time; if acquisition fails, the structured `VGPU-NODE-NO-ADAPTER`
-error lists what was tried.
+```sh
+npx vgpu install-software-renderer
+```
+
+This downloads vgpu's portable lavapipe build (Mesa 25, ~20 MB, sha256-verified,
+cached next to the Dawn binary) — no root, no system packages. Once cached,
+`init()` uses it automatically whenever no other adapter exists, and prints a
+one-line notice on stderr when it does. The only system requirement is the
+Vulkan loader (`libvulkan1` on Debian/Ubuntu, `vulkan-loader` on Fedora/Amazon
+Linux), which doctor checks and prescribes.
+
+Prefer your distribution's driver when it is recent (Mesa >= 23 with
+`mesa-vulkan-drivers`); the portable build exists for hosts where that is not
+an option.
+
+## Choosing an adapter
+
+```ts
+import { init } from "vgpu/node";
+
+{ const gpu = await init(); }                        // auto: hardware first, cached software renderer as last resort
+{ const gpu = await init({ adapter: "hardware" }); } // require a real GPU — fails loud, never falls back
+{ const gpu = await init({ adapter: "software" }); } // force the portable renderer — deterministic pixels on any machine
+```
+
+`gpu.adapter` reports what was selected: `{ name, type: "gpu" | "cpu" }`.
+The `VGPU_ADAPTER` environment variable overrides the code-level choice and
+announces itself on stderr — handy for forcing a mode in CI without editing
+code.
 
 ## `.gpu` lifecycle guidance
 

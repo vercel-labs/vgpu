@@ -14,6 +14,7 @@ function success(args) {
 test("preserves root help, version, and remaining placeholder", () => {
   expect(success(["--help"])).toContain("snapshot");
   expect(success(["--help"])).toContain("install-dawn");
+  expect(success(["--help"])).toContain("install-software-renderer");
   expect(success(["--help"])).toContain("doctor     Verify this machine can render headless (JSON verdict + fixes)");
   expect(success(["--help"])).toContain("vgpu docs --help");
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
@@ -26,10 +27,14 @@ test("exposes doctor JSON without rendering", async () => {
   expect(JSON.parse(result.stdout ?? "")).toMatchObject({ verdict: "unverified", adapter: null, findings: expect.any(Array) });
 });
 
-test("exposes the manual Dawn installer command", async () => {
+test("exposes the manual native installers", async () => {
   await expect(Promise.resolve(runCli(["install-dawn", "--help"]))).resolves.toMatchObject({
     code: 0,
     stdout: expect.stringContaining("VGPU_CACHE_DIR"),
+  });
+  await expect(Promise.resolve(runCli(["install-software-renderer", "--help"]))).resolves.toMatchObject({
+    code: 0,
+    stdout: expect.stringContaining("sha256-verify"),
   });
 });
 

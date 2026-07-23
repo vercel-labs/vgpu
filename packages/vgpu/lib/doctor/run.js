@@ -10,6 +10,7 @@ const statuses = new Set(["ok", "warn", "fail", "skip"]);
 export const probeRegistry = [
   { id: "binary-resolution", platforms: ["all"], run: probeBinaryResolution },
   { id: "binary-compatibility", platforms: ["all"], run: probeBinaryCompatibility },
+  { id: "software-renderer-cache", platforms: ["all"], run: probeSoftwareRendererCache },
   { id: "linux-glibc", platforms: ["linux"], run: probeGlibc },
   { id: "linux-vulkan-loader", platforms: ["linux"], run: probeVulkanLoader },
   { id: "linux-vulkan-icd", platforms: ["linux"], run: probeVulkanIcd },
@@ -79,6 +80,7 @@ function createContext(overrides) {
     glibc: overrides.glibc ?? runtimeGlibc(),
     release: overrides.release ?? command(platform === "win32" ? "cmd" : "uname", platform === "win32" ? ["/c", "ver"] : ["-r"]),
     render: overrides.render ?? realRender,
+    softwareRenderer: overrides.softwareRenderer ?? softwareRendererState,
   };
 }
 
@@ -96,6 +98,12 @@ function probeBinaryResolution(context) {
   } catch {
     return { status: "warn", evidence: `No stock webgpu package resolved; normal chain will try vgpu cache under ${cache}, then download the portable Dawn prebuild if supported.` };
   }
+}
+
+async function probeSoftwareRendererCache(context) {
+  const state = await (context.softwareRenderer?.() ?? { path: null, error: null });
+  if (state.path) return { status: "ok", evidence: `Portable software renderer 25.0.7-vgpu.1 is cached and sha256-verified at ${state.path}.` };
+  return { status: "skip", evidence: state.error ? `Portable software renderer cache is unusable: ${state.error}` : "Portable software renderer is not cached (it is installed only with explicit consent)." };
 }
 
 function probeBinaryCompatibility(context) {
@@ -122,11 +130,12 @@ function probeVulkanLoader(context) {
   return { status: "fail", evidence: "Vulkan loader libvulkan.so.1 was not found.", prescription: prescriptionsFor(context.osRelease).install };
 }
 
-function probeVulkanIcd(context) {
+async function probeVulkanIcd(context) {
   const files = context.listIcds();
-  return files.length
-    ? { status: "ok", evidence: `Vulkan ICD manifests: ${files.join(", ")}.` }
-    : { status: "fail", evidence: "No Vulkan ICD manifest was found in /usr/share/vulkan/icd.d, VK_ICD_FILENAMES, or VK_DRIVER_FILES.", prescription: lavapipePrescription(context.osRelease) };
+  if (files.length) return { status: "ok", evidence: `Vulkan ICD manifests: ${files.join(", ")}.` };
+  const softwareRenderer = await (context.softwareRenderer?.() ?? { path: null });
+  if (softwareRenderer.path) return { status: "skip", evidence: "No system Vulkan ICD manifest was found; the cached portable software renderer is available as the automatic last resort." };
+  return { status: "fail", evidence: "No Vulkan ICD manifest was found in /usr/share/vulkan/icd.d, VK_ICD_FILENAMES, or VK_DRIVER_FILES.", prescription: lavapipePrescription(context.osRelease) };
 }
 
 function probeMesa(context) {
@@ -165,7 +174,13 @@ export function prescriptionsFor(osRelease) {
 }
 function lavapipePrescription(osRelease) {
   const prescription = prescriptionsFor(osRelease);
-  return `${prescription.install}\n${prescription.env}`;
+  return `run: npx vgpu install-software-renderer\nAlternative (system packages): ${prescription.install}\n${prescription.env}`;
+}
+async function softwareRendererState() {
+  try {
+    const { getCachedSoftwareRenderer } = await import("@vgpu/adapter-node/install-software-renderer");
+    return { path: getCachedSoftwareRenderer(), error: null };
+  } catch (error) { return { path: null, error: errorEvidence(error) }; }
 }
 
 async function realRender() {

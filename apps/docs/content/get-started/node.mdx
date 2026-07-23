@@ -39,6 +39,9 @@ Before your first render, `npx vgpu doctor` checks the machine end to end — it
 acquires an adapter and renders a real frame, and when something is missing it
 prints the exact fix as JSON. Run it once before debugging anything else.
 
+> Good to know: no GPU and no driver? `npx vgpu install-software-renderer` sets
+> up a portable CPU renderer once; `init()` uses it automatically after that.
+
 Air-gapped or custom environments can point `VGPU_DAWN_BINARY` at a local
 binary. When no binary can be resolved, `init()` throws a structured
 `VGPU-NODE-PREBUILD-MISSING` error that names the exact reason and fix. See

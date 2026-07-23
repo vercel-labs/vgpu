@@ -1,7 +1,7 @@
-FROM node:22-trixie-slim
+FROM node:22-bookworm-slim
 LABEL vgpu-test=1 vgpu-doctor-test=1
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends libvulkan1 && rm -rf /var/lib/apt/lists/* /usr/share/vulkan/icd.d
+RUN apt-get update && apt-get install -y --no-install-recommends libvulkan1 libdrm2 libudev1 libzstd1 zlib1g && rm -rf /var/lib/apt/lists/* /usr/share/vulkan/icd.d
 WORKDIR /workspace
 COPY . .
 RUN corepack enable && pnpm install --frozen-lockfile && pnpm build

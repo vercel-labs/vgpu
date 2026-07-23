@@ -6,6 +6,7 @@ import { runCheck } from "../lib/check/run.js";
 import { runDocs } from "../lib/docs/run.js";
 import { runDoctor } from "../lib/doctor/run.js";
 import { runInstallDawn } from "../lib/install-dawn/run.js";
+import { runInstallSoftwareRenderer } from "../lib/install-software-renderer/run.js";
 import { runSnapshotCommand } from "../lib/snapshot/run.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,7 @@ Commands:
   docs       Explore bundled VGPU documentation
   snapshot   Compare the representative GPU pixel snapshot
   install-dawn  Download and verify the portable Node Dawn prebuild
+  install-software-renderer  Download and verify the portable CPU renderer
   doctor     Verify this machine can render headless (JSON verdict + fixes)
   wgsl       Coming soon
 
@@ -64,6 +66,7 @@ export function runCli(args) {
   if (command === "docs") return runDocs(rest);
   if (command === "snapshot") return runSnapshotCommand({ args: rest });
   if (command === "install-dawn") return runInstallDawn(rest);
+  if (command === "install-software-renderer") return runInstallSoftwareRenderer(rest);
   if (command === "doctor") return runDoctor(rest);
   if (command === "wgsl") return { code: 1, stderr: comingSoon(command) };
   return { code: 1, stderr: `Unknown vgpu command: ${command}\n\n${help}` };
