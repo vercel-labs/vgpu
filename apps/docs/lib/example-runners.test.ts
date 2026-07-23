@@ -15,6 +15,9 @@ class StubElement {
   checked = false;
   dataset: Record<string, string> = {};
   setAttribute() {}
+  setPointerCapture() {}
+  hasPointerCapture() { return false; }
+  releasePointerCapture() {}
   addEventListener() {}
   removeEventListener() {}
   append(child: StubElement) { child.parentElement = this; }
