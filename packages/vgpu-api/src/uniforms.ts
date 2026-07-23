@@ -122,6 +122,7 @@ function staticBindingLayout(binding: BindingInfo): HostShareableLayout & { read
 
 function mergeInto(target: Record<string, unknown>, patch: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(patch)) {
+    if (isUnsafeKey(key)) continue;
     if (isPlainObject(value) && isPlainObject(target[key])) mergeInto(target[key] as Record<string, unknown>, value);
     else target[key] = cloneValue(value);
   }
@@ -129,8 +130,15 @@ function mergeInto(target: Record<string, unknown>, patch: Record<string, unknow
 
 function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
   const next: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) next[key] = cloneValue(entry);
+  for (const [key, entry] of Object.entries(value)) {
+    if (isUnsafeKey(key)) continue;
+    next[key] = cloneValue(entry);
+  }
   return next;
+}
+
+function isUnsafeKey(key: string): boolean {
+  return key === "__proto__" || key === "constructor" || key === "prototype";
 }
 
 function cloneValue(value: unknown): unknown {
