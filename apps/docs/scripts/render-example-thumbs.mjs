@@ -22,6 +22,7 @@ const customRendererEntries = [
   { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
   { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
   { slug: 'black-hole', module: '../examples/black-hole/example.ts', exportName: 'renderThumb' },
+  { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/example.ts', exportName: 'renderThumb' },
   { slug: 'fluid', module: '../examples/fluid/validation.ts', exportName: 'renderThumb' },
   { slug: 'instanced-rendering', module: '../examples/instanced-rendering/example.ts', exportName: 'renderThumb' },
   { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
@@ -80,7 +81,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
@@ -103,8 +104,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
     const postProcessingModePixels = slug === 'post-processing' ? new Map() : undefined;
     const blackHoleVariantPixels = slug === 'black-hole' ? new Map() : undefined;
+    const raymarchedFractalVariantPixels = slug === 'raymarched-fractal' ? new Map() : undefined;
     const fftOceanVariantPixels = slug === 'fft-ocean' ? new Map() : undefined;
-    const variantPixels = blackHoleVariantPixels ?? fftOceanVariantPixels;
+    const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels;
     const modePixels = aaModePixels ?? postProcessingModePixels;
     let fluidState;
     if (renderer) {
@@ -147,6 +149,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const blackHoleMetrics = blackHoleVariantPixels && !args.proofDir
       ? assertBlackHoleMetrics(blackHoleVariantPixels, pixels, size[0], size[1])
       : undefined;
+    const raymarchedFractalMetrics = raymarchedFractalVariantPixels && !args.proofDir
+      ? assertRaymarchedFractalMetrics(raymarchedFractalVariantPixels, pixels, size[0], size[1])
+      : undefined;
     const fftOceanMetrics = fftOceanVariantPixels && !args.proofDir
       ? assertFftOceanMetrics(fftOceanVariantPixels, pixels, size[0], size[1])
       : undefined;
@@ -158,6 +163,9 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     }
     if (blackHoleVariantPixels && process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR) {
       await writeVariantPngs(blackHoleVariantPixels, pixels, size, path.basename(output, '.png').replace('black-hole.', ''), process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR);
+    }
+    if (raymarchedFractalVariantPixels && process.env.VGPU_RAYMARCHED_FRACTAL_VARIANT_OUTPUT_DIR) {
+      await writeVariantPngs(raymarchedFractalVariantPixels, pixels, size, path.basename(output, '.png').replace('raymarched-fractal.', ''), process.env.VGPU_RAYMARCHED_FRACTAL_VARIANT_OUTPUT_DIR);
     }
     if (fftOceanVariantPixels && process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR) {
       await writeVariantPngs(fftOceanVariantPixels, pixels, size, path.basename(output, '.png').replace('fft-ocean.', ''), process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR);
@@ -171,7 +179,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, fftOceanMetrics, fluidMetrics, fluidState };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, fluidMetrics, fluidState };
   } finally {
     gpu.dispose();
   }
@@ -454,6 +462,46 @@ function assertFftOceanMetrics(variants, poster, width, height) {
   if (metrics.horizontalBand < 6 || metrics.verticalBand < 25) problems.push(`Variance bands h=${metrics.horizontalBand.toFixed(1)} v=${metrics.verticalBand.toFixed(1)} (need h>=6, v>=25)`);
   if (metrics.timeDeltaRatio < .1 || metrics.timeDeltaRatio > .3) problems.push(`Time delta ${(metrics.timeDeltaRatio * 100).toFixed(2)}% (need 10–30%)`);
   if (problems.length) throw new Error([`FFT-ocean semantic validation failed (${width}x${height}):`, ...problems.map((x) => `- ${x}`)].join('\n'));
+  return metrics;
+}
+
+function assertRaymarchedFractalMetrics(variants, poster, width, height) {
+  for (const name of ['static-repeat', 'alternate-orbit', 'bloom-off']) {
+    if (!variants.has(name)) throw new Error(`Raymarched-fractal validation did not capture ${name}.`);
+  }
+  const count = poster.length / 4;
+  let nearBlack = 0, neutral = 0, highlights = 0;
+  for (let i = 0; i < poster.length; i += 4) {
+    const r = poster[i], g = poster[i + 1], b = poster[i + 2];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const luma = .2126 * r + .7152 * g + .0722 * b;
+    if (max <= 12) nearBlack++;
+    if (luma >= 40 && max - min <= 12) neutral++;
+    if (luma >= 180) highlights++;
+  }
+  const difference = (candidate, threshold = 8) => {
+    let changed = 0, absolute = 0;
+    for (let i = 0; i < poster.length; i += 4) {
+      const delta = Math.max(Math.abs(poster[i] - candidate[i]), Math.abs(poster[i + 1] - candidate[i + 1]), Math.abs(poster[i + 2] - candidate[i + 2]));
+      if (delta > threshold) changed++;
+      absolute += Math.abs(poster[i] - candidate[i]) + Math.abs(poster[i + 1] - candidate[i + 1]) + Math.abs(poster[i + 2] - candidate[i + 2]);
+    }
+    return { ratio: changed / count, meanChannelDelta: absolute / (count * 3 * 255) };
+  };
+  const repeat = difference(variants.get('static-repeat'), 0);
+  const orbit = difference(variants.get('alternate-orbit'));
+  const bloom = compareBloom(variants.get('bloom-off'), poster, width, height);
+  const metrics = { nearBlackRatio: nearBlack / count, neutralRatio: neutral / count, highlightRatio: highlights / count, variance: lumaVariance(poster), repeat, orbit, bloom };
+  const problems = [];
+  if (metrics.nearBlackRatio < .70 || metrics.nearBlackRatio > .96) problems.push(`Near-black coverage ${(metrics.nearBlackRatio * 100).toFixed(1)}% (need 70–96%)`);
+  if (metrics.neutralRatio < .04 || metrics.neutralRatio > .32) problems.push(`Neutral geometry ${(metrics.neutralRatio * 100).toFixed(1)}% (need 4–32%)`);
+  if (metrics.highlightRatio < .002 || metrics.highlightRatio > .12) problems.push(`Highlights ${(metrics.highlightRatio * 100).toFixed(2)}% (need .2–12%)`);
+  if (metrics.variance < 250) problems.push(`Luma variance ${metrics.variance.toFixed(1)} (need >=250)`);
+  if (repeat.ratio > .0001 || repeat.meanChannelDelta > .0002) problems.push(`Static repeat changed ${(repeat.ratio * 100).toFixed(4)}%, mean=${repeat.meanChannelDelta.toFixed(6)}`);
+  if (orbit.ratio < .05) problems.push(`Alternate orbit changed only ${(orbit.ratio * 100).toFixed(2)}% (need >=5%)`);
+  if (bloom.growthRatio < .001 || bloom.growthRatio > .12) problems.push(`Bloom growth ${(bloom.growthRatio * 100).toFixed(3)}% (need .1–12%)`);
+  if (bloom.coreConcentration < .65) problems.push(`Bloom concentration ${(bloom.coreConcentration * 100).toFixed(1)}% (need >=65%)`);
+  if (problems.length) throw new Error([`Raymarched-fractal semantic validation failed (${width}x${height}):`, ...problems.map((problem) => `- ${problem}`)].join('\n'));
   return metrics;
 }
 

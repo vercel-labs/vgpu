@@ -7,6 +7,7 @@ import { run as runFluid } from '../examples/fluid/example';
 import { run as runInstancedRendering } from '../examples/instanced-rendering/example';
 import { run as runBatchRendering } from '../examples/batch-rendering/example';
 import { run as runFftOcean } from '../examples/fft-ocean/example';
+import { run as runRaymarchedFractal } from '../examples/raymarched-fractal/example';
 import type { ExampleRunnerSlug } from './example-runner-slugs';
 
 export type ExampleRunner = (canvas: HTMLCanvasElement) => Promise<() => void>;
@@ -21,6 +22,7 @@ export const exampleRunners = {
   'instanced-rendering': runInstancedRendering,
   'batch-rendering': runBatchRendering,
   'fft-ocean': runFftOcean,
+  'raymarched-fractal': runRaymarchedFractal,
 } satisfies Record<ExampleRunnerSlug, ExampleRunner>;
 
 export function getExampleRunner(slug: string): ExampleRunner | undefined {
