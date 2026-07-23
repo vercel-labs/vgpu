@@ -1,6 +1,6 @@
 # @vgpu/adapter-mock
 
-> 0.1.5 — deterministic adapter for `vgpu/mock`
+> 0.1.6 — deterministic adapter for `vgpu/mock`
 
 `@vgpu/adapter-mock` backs the `vgpu/mock` entrypoint for tests that need the public `Gpu` API without real GPU hardware.
 
