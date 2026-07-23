@@ -29,3 +29,17 @@ describe("portable software renderer installer", () => {
     expect(softwareRendererCacheDirectory({ cacheRoot: "/cache", arch: "x64" })).toBe("/cache/vgpu/software-renderer/25.0.7-vgpu.1/linux-x64");
   });
 });
+
+test("times out a fetch that never settles", async () => {
+  const fetch = vi.fn(() => new Promise<Response>(() => {}));
+  await expect(installSoftwareRenderer({ cacheRoot: cacheRoot(), platform: "linux", arch: "x64", fetch, timeoutMs: 10 })).rejects.toMatchObject({
+    code: "VGPU-NODE-SOFTWARE-RENDERER-DOWNLOAD", message: expect.stringContaining("timed out"),
+  });
+});
+
+test("rejects a declared archive larger than the configured cap", async () => {
+  const fetch = vi.fn(async () => new Response("x", { status: 200, headers: { "content-length": "1024" } }));
+  await expect(installSoftwareRenderer({ cacheRoot: cacheRoot(), platform: "linux", arch: "x64", fetch, maxBytes: 16 })).rejects.toMatchObject({
+    code: "VGPU-NODE-SOFTWARE-RENDERER-DOWNLOAD", message: expect.stringContaining("exceeds 16 byte limit"),
+  });
+});

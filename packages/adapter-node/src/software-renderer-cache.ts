@@ -40,9 +40,16 @@ export function getCachedSoftwareRenderer(options: SoftwareRendererCacheOptions 
   for (const path of [archive, icd, library]) assertSoftwareRendererRegularFile(path);
   const arch = options.arch ?? process.arch;
   verifySoftwareRendererArchive(archive, options.expectedSha256 ?? softwareRendererExpectedHash(arch));
+  verifySoftwareRendererFiles(softwareRendererCacheDirectory(options), arch);
+  return icd;
+}
+export function verifySoftwareRendererFiles(directory: string, arch: string = process.arch): void {
+  const icd = join(directory, "lvp_icd.json");
+  const library = join(directory, "libvulkan_lvp.so");
+  assertSoftwareRendererRegularFile(icd);
+  assertSoftwareRendererRegularFile(library);
   verifyFileHash(icd, icdHash);
   verifyFileHash(library, libraryHashes[arch] ?? "");
-  return icd;
 }
 export function verifySoftwareRendererArchive(path: string, expected: string): void {
   assertSoftwareRendererRegularFile(path);

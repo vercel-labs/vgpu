@@ -20,7 +20,10 @@ export function nodeAdapterEnvironmentOverride(): NodeAdapterMode | undefined {
     fix: "Unset VGPU_ADAPTER or set it to software or hardware.",
     where: "init",
   });
-  console.error(`vgpu: adapter overridden by VGPU_ADAPTER=${value}`);
+  if (!announcedAdapterOverrides.has(value)) {
+    announcedAdapterOverrides.add(value);
+    console.error(`vgpu: adapter overridden by VGPU_ADAPTER=${value}`);
+  }
   return value;
 }
 export function describeNodeAdapter(info: GPUAdapterInfo | null): NodeAdapterInfo {
@@ -34,6 +37,8 @@ const defaultAdapterRequestRetryBaseDelayMs = 100;
 let dawnGPU: GPU | null = null;
 let dawnFlagsUsed: readonly string[] | null = null;
 let loadedWebGPU: WebGPUModule | null = null;
+let softwareOperation = Promise.resolve();
+const announcedAdapterOverrides = new Set<string>();
 
 export function createNodeAdapter(options: CreateNodeAdapterOptions = {}): VGPUAdapter {
   return { requestDevice: (deviceOptions) => requestDevice(deviceOptions, options.adapter ?? "auto") };
@@ -53,7 +58,11 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
 
   if (mode === "software") {
     const icd = requireCachedSoftwareRenderer();
-    adapter = await withSoftwareIcd(icd, () => requestAdapterWithRetry(getDawnGPU(opts, webgpu), options as GPURequestAdapterOptions, opts));
+    adapter = await withSoftwareIcd(icd, () => {
+      dawnGPU = null;
+      dawnFlagsUsed = null;
+      return requestAdapterWithRetry(getDawnGPU(opts, webgpu, true), options as GPURequestAdapterOptions, opts);
+    });
     software = true;
   } else {
     const gpu = getDawnGPU(opts, webgpu);
@@ -74,7 +83,7 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
         // The hardware instance found nothing, so replace it for the consented retry.
         dawnGPU = null;
         dawnFlagsUsed = null;
-        return requestAdapterWithRetry(getDawnGPU(opts, webgpu), options as GPURequestAdapterOptions, opts);
+        return requestAdapterWithRetry(getDawnGPU(opts, webgpu, true), options as GPURequestAdapterOptions, opts);
       });
       software = true;
     }
@@ -133,15 +142,21 @@ function requireCachedSoftwareRenderer(): string {
   });
 }
 async function withSoftwareIcd<T>(icd: string, operation: () => Promise<T>): Promise<T> {
-  const privateCopy = createPrivateSoftwareRendererCopy(icd);
-  const previous = process.env.VK_ICD_FILENAMES;
-  process.env.VK_ICD_FILENAMES = privateCopy.path;
-  try { return await operation(); }
-  finally {
-    if (previous === undefined) delete process.env.VK_ICD_FILENAMES;
-    else process.env.VK_ICD_FILENAMES = previous;
-    privateCopy.cleanup();
-  }
+  const run = softwareOperation.then(async () => {
+    const privateCopy = createPrivateSoftwareRendererCopy(icd);
+    const previousIcd = process.env.VK_ICD_FILENAMES;
+    const previousDrivers = process.env.VK_DRIVER_FILES;
+    process.env.VK_ICD_FILENAMES = privateCopy.path;
+    delete process.env.VK_DRIVER_FILES;
+    try { return await operation(); }
+    finally {
+      if (previousIcd === undefined) delete process.env.VK_ICD_FILENAMES; else process.env.VK_ICD_FILENAMES = previousIcd;
+      if (previousDrivers === undefined) delete process.env.VK_DRIVER_FILES; else process.env.VK_DRIVER_FILES = previousDrivers;
+      privateCopy.cleanup();
+    }
+  });
+  softwareOperation = run.then(() => undefined, () => undefined);
+  return run;
 }
 function hasVendorVulkanIcd(): boolean {
   if (process.env.VK_ICD_FILENAMES || process.env.VK_DRIVER_FILES) return true;
@@ -149,8 +164,8 @@ function hasVendorVulkanIcd(): boolean {
 }
 function shouldRetryAdapterRequestError(error: unknown): boolean { return !/AbortError/i.test(String(error)); }
 function sleep(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
-function getDawnGPU(opts: RequestDeviceOptions, webgpu: WebGPUModule): GPU {
-  const flags = backendFlags(opts);
+function getDawnGPU(opts: RequestDeviceOptions, webgpu: WebGPUModule, forceSoftware = false): GPU {
+  const flags = forceSoftware ? [] : backendFlags(opts);
   if (dawnGPU) {
     if (!flagsEqual(flags, dawnFlagsUsed)) console.warn(`[@vgpu/adapter-node] Dawn already initialized with flags [${dawnFlagsUsed?.join(",") ?? ""}], ignoring requested flags [${flags.join(",")}]. Re-init causes SIGSEGV in Dawn.`);
     return dawnGPU;
