@@ -15,6 +15,20 @@ class CanvasMock {
 
 const pointer = (pointerId: number, clientX: number, clientY: number, isPrimary = true) => ({ pointerId, clientX, clientY, isPrimary });
 
+test('vertical drag maps upward motion to lower pitch and downward motion to higher pitch', () => {
+  const canvas = new CanvasMock();
+  const orbit: Orbit = { yaw: 0.58, pitch: 0.24 };
+  const dispose = installDragOrbit(canvas as unknown as HTMLCanvasElement, orbit, vi.fn());
+
+  canvas.emit('pointerdown', pointer(1, 100, 100));
+  canvas.emit('pointermove', pointer(1, 100, 80));
+  expect(orbit.pitch).toBeCloseTo(0.12);
+  canvas.emit('pointermove', pointer(1, 100, 100));
+  expect(orbit.pitch).toBeCloseTo(0.24);
+
+  dispose();
+});
+
 test('drag orbit ignores hover/other pointers and stops exactly on up or cancel', () => {
   const canvas = new CanvasMock();
   const orbit: Orbit = { yaw: 0.58, pitch: 0.24 };
@@ -29,7 +43,7 @@ test('drag orbit ignores hover/other pointers and stops exactly on up or cancel'
   canvas.emit('pointermove', pointer(2, 100, 100));
   canvas.emit('pointermove', pointer(1, 30, -300));
   expect(orbit.yaw).toBeCloseTo(0.46);
-  expect(orbit.pitch).toBe(1.15);
+  expect(orbit.pitch).toBe(-1.15);
   expect(requestRender).toHaveBeenCalledTimes(1);
   canvas.emit('pointerup', pointer(1, 30, -300));
   expect(canvas.captured.has(1)).toBe(false);

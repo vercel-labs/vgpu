@@ -45,7 +45,7 @@ export function installDragOrbit(canvas: HTMLCanvasElement, orbit: Orbit, reques
     lastY = event.clientY;
     if (dx === 0 && dy === 0) return;
     orbit.yaw -= dx * 0.006;
-    orbit.pitch = Math.max(-1.15, Math.min(1.15, orbit.pitch - dy * 0.006));
+    orbit.pitch = Math.max(-1.15, Math.min(1.15, orbit.pitch + dy * 0.006));
     requestRender();
   };
   const end = (event: PointerEvent) => {

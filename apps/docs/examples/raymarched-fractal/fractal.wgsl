@@ -74,8 +74,10 @@ fn ambientOcclusion(p: vec3f, n: vec3f) -> f32 {
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let cp = cos(params.pitch); let sp = sin(params.pitch);
   let cy = cos(params.yaw); let sy = sin(params.yaw);
-  let ro = vec3f(3.15 * sy * cp, 3.15 * sp, 3.15 * cy * cp);
-  let forward = normalize(-ro);
+  let orbitTarget = vec3f(0.0, 0.18, 0.0);
+  let orbitOffset = vec3f(3.15 * sy * cp, 3.15 * sp, 3.15 * cy * cp);
+  let ro = orbitTarget + orbitOffset;
+  let forward = normalize(orbitTarget - ro);
   let right = normalize(cross(forward, vec3f(0.0, 1.0, 0.0)));
   let up = cross(right, forward);
   var screen = uv * 2.0 - 1.0;
