@@ -249,7 +249,11 @@ jobs:
     # Frozen schemas, controlled vocabulary, and deterministic revision artifacts.
     runs-on: ubuntu-24.04-arm
     steps:
+      # The artifact revision is derived from the last source-snapshot commit.
+      # A shallow PR-merge checkout treats the synthetic merge as that commit.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
