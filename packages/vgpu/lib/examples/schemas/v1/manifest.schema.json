@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.labs.vercel.dev/schemas/examples/v1/manifest.schema.json",
+  "title": "VGPU Example Manifest",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "contractId", "revision", "id", "title", "description", "tags", "capabilities", "aggregateSha256", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 }, "contractId": { "const": "vgpu-examples/v1" },
+    "revision": { "$ref": "#/$defs/sha256" }, "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "title": { "type": "string", "minLength": 1 }, "description": { "type": "string", "minLength": 1 },
+    "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }, "capabilities": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "aggregateSha256": { "$ref": "#/$defs/sha256" },
+    "files": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/file" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file": {
+      "type": "object", "additionalProperties": false, "required": ["path", "contentType", "size", "sha256", "url"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 }, "contentType": { "enum": ["text/typescript", "text/wgsl", "text/plain"] },
+        "size": { "type": "integer", "minimum": 0, "maximum": 2097152 }, "sha256": { "$ref": "#/$defs/sha256" }, "url": { "type": "string", "format": "uri" }
+      }
+    }
+  }
+}

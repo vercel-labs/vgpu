@@ -102,6 +102,21 @@ function NavSectionBlock({ section, pathname, onNavigate, className }: NavSectio
     section.href && pathname === section.href ? 'text-gray-12' : 'text-gray-9'
   }`;
 
+  if (section.href && section.groups.length === 0) {
+    return (
+      <div className={className}>
+        <Link
+          href={section.href}
+          onClick={onNavigate}
+          aria-current={pathname === section.href ? 'page' : undefined}
+          className={`${titleClassName} block px-3 py-1 hover:text-gray-12`}
+        >
+          {section.title}
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <div className="mb-1 flex items-center justify-between pl-3 pr-1">

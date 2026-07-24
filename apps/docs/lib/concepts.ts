@@ -74,16 +74,27 @@ export function getConceptPage(slug: string): ConceptPage | null {
 
   try {
     const source = readFileSync(resolve(process.cwd(), CONCEPT_FILES[slug as keyof typeof CONCEPT_FILES]), 'utf8');
-    const { frontmatter, content } = parseConceptSource(source);
-    return {
-      slug,
-      frontmatter,
-      content,
-      headings: extractHeadings(content),
-    };
+    return topicPage(slug, source);
   } catch {
     return null;
   }
+}
+
+export function getDocsTopicPage(slug: string): ConceptPage | null {
+  if (!/^[a-z0-9-]+$/u.test(slug)) return null;
+
+  const source = readFileSync(resolve(process.cwd(), '../../docs/topics', `${slug}.docs.md`), 'utf8');
+  return topicPage(slug, source);
+}
+
+function topicPage(slug: string, source: string): ConceptPage {
+  const { frontmatter, content } = parseConceptSource(source);
+  return {
+    slug,
+    frontmatter,
+    content,
+    headings: extractHeadings(content),
+  };
 }
 
 function parseConceptSource(source: string) {

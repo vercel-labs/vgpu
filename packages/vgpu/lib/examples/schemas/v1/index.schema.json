@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.labs.vercel.dev/schemas/examples/v1/index.schema.json",
+  "title": "VGPU Examples Index or Latest Pointer",
+  "oneOf": [
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "contractId", "revision", "indexUrl", "indexSha256"],
+      "properties": {
+        "schemaVersion": { "const": 1 }, "contractId": { "const": "vgpu-examples/v1" },
+        "revision": { "$ref": "#/$defs/sha256" }, "indexUrl": { "type": "string", "format": "uri" },
+        "indexSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "contractId", "revision", "source", "examples"],
+      "properties": {
+        "schemaVersion": { "const": 1 }, "contractId": { "const": "vgpu-examples/v1" },
+        "revision": { "$ref": "#/$defs/sha256" },
+        "source": { "type": "object", "additionalProperties": false, "required": ["repository", "gitCommit"], "properties": { "repository": { "type": "string", "minLength": 1 }, "gitCommit": { "type": "string", "minLength": 1 } } },
+        "examples": { "type": "array", "items": { "$ref": "#/$defs/example" } }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "example": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "description", "tags", "capabilities", "fileCount", "aggregateSha256", "manifestUrl", "manifestSha256"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }, "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }, "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "capabilities": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }, "fileCount": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "aggregateSha256": { "$ref": "#/$defs/sha256" }, "manifestUrl": { "type": "string", "format": "uri" }, "manifestSha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

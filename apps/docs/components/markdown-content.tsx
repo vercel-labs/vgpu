@@ -67,7 +67,7 @@ function normalizeCodeLanguage(language: string | undefined) {
   if (!language) return 'typescript';
 
   const normalized = language.toLowerCase();
-  if (normalized === 'dockerfile' || normalized === 'sh' || normalized === 'shell') return 'bash';
+  if (normalized === 'dockerfile' || normalized === 'sh' || normalized === 'shell' || normalized === 'terminal') return 'bash';
   if (normalized === 'js') return 'javascript';
   if (normalized === 'txt' || normalized === 'text' || normalized === 'plain') return 'typescript';
   return normalized;

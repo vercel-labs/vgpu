@@ -16,6 +16,7 @@ export interface DocsRecord {
   topic: string;
   topicTitle: string;
   symbolKind: DocsSymbolKind;
+  websitePath?: string;
 }
 
 export interface ReferenceTopic {
@@ -86,7 +87,7 @@ const packageTitles: Record<string, string> = {
 
 export const docsRecords = (docsManifest.records as DocsRecord[]).slice().sort(compareRecords);
 export const apiRecords = docsRecords.filter((record) => record.kind === 'api');
-export const guideRecords = docsRecords.filter((record) => record.kind === 'guide');
+export const guideRecords = docsRecords.filter((record) => record.kind === 'guide' && record.websitePath === undefined);
 export const referenceGroups = buildReferenceGroups(apiRecords);
 export const referenceTopics = referenceGroups.flatMap((group) => group.topics);
 export const packageGroups = referenceGroups;

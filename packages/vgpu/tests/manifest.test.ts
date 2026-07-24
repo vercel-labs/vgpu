@@ -88,6 +88,22 @@ test("manifest includes getting-started as a guide", () => {
   });
 });
 
+test("exports the CLI reference to the docs corpus and skill", () => {
+  expect(docsManifest.records.find((record) => record.symbol === "cli")).toMatchObject({
+    package: "guides",
+    symbol: "cli",
+    repoPath: "docs/topics/cli.docs.md",
+    virtualPath: "/guides/cli.docs.md",
+    kind: "guide",
+    topicTitle: "CLI",
+    websitePath: "/cli",
+  });
+
+  const skill = buildSkill(docsManifest);
+  expect(skill.get("SKILL.md")).toContain("## CLI reference");
+  expect(skill.get("references/guides/cli.docs.md")).toContain("# CLI");
+});
+
 test("getting-started cat references resolve against the docs index", () => {
   const index = buildIndex(docsManifest);
   const refs = [...gettingStartedSource.matchAll(/vgpu docs cat\s+([^\s`|]+)/gu)]

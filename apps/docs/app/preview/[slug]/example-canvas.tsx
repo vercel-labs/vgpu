@@ -1,61 +1,94 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { getExampleRunner } from '@/lib/example-runners';
+import { Component, lazy, Suspense, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
+import { getExampleComponentLoader } from '@/lib/example-components';
+import { createDeduplicatedExampleErrorReporter, ExampleErrorReporterProvider } from '@/lib/example-error-reporter';
+import { type ExampleSlug } from '@/lib/example-slugs';
 
 interface ExampleCanvasProps {
-  slug: string;
+  slug: ExampleSlug;
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.stack || error.message : String(error);
 }
 
+function postPreviewError(slug: ExampleSlug, message: string): void {
+  window.parent?.postMessage(
+    { type: 'vgpu-example-error', slug, message },
+    window.location.origin,
+  );
+}
+
+function ErrorDisplay({ message }: { message: string }) {
+  return (
+    <div className="absolute inset-0 overflow-auto bg-black/90 p-4 font-mono text-xs leading-5 text-red-200">
+      <div className="mb-2 font-sans text-sm font-semibold text-red-100">Preview error</div>
+      <pre className="whitespace-pre-wrap">{message}</pre>
+    </div>
+  );
+}
+
+interface PreviewErrorBoundaryProps {
+  readonly reportError: (error: unknown) => void;
+  readonly children: ReactNode;
+}
+
+interface PreviewErrorBoundaryState {
+  readonly message: string | null;
+}
+
+class PreviewErrorBoundary extends Component<PreviewErrorBoundaryProps, PreviewErrorBoundaryState> {
+  state: PreviewErrorBoundaryState = { message: null };
+
+  static getDerivedStateFromError(error: unknown): PreviewErrorBoundaryState {
+    return { message: messageOf(error) };
+  }
+
+  componentDidCatch(error: unknown, _info: ErrorInfo): void {
+    this.props.reportError(error);
+  }
+
+  render() {
+    if (this.state.message) return <ErrorDisplay message={this.state.message} />;
+    return this.props.children;
+  }
+}
+
+function ReactExampleCanvas({ slug }: { slug: ExampleSlug }) {
+  const loader = getExampleComponentLoader(slug);
+  const LazyExample = useMemo(
+    () => lazy(() => loader().then((module) => ({ default: module.Example }))),
+    [loader],
+  );
+  return (
+    <Suspense fallback={<div className="h-full w-full bg-black" aria-label="Loading example" />}>
+      <LazyExample />
+    </Suspense>
+  );
+}
+
+function PreviewHost({ slug }: { slug: ExampleSlug }) {
+  const [asyncError, setAsyncError] = useState<string | null>(null);
+  const reportError = useMemo(() => createDeduplicatedExampleErrorReporter(
+    (error) => setAsyncError(messageOf(error)),
+    (error) => postPreviewError(slug, messageOf(error)),
+  ), [slug]);
+
+  if (asyncError) return <ErrorDisplay message={asyncError} />;
+  return (
+    <ExampleErrorReporterProvider reportError={reportError}>
+      <PreviewErrorBoundary reportError={reportError}>
+        <ReactExampleCanvas slug={slug} />
+      </PreviewErrorBoundary>
+    </ExampleErrorReporterProvider>
+  );
+}
+
 export function ExampleCanvas({ slug }: ExampleCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const runner = getExampleRunner(slug);
-    if (!runner) {
-      const message = `Unknown example: ${slug}`;
-      setError(message);
-      window.parent?.postMessage({ type: 'vgpu-example-error', slug, message }, window.location.origin);
-      return;
-    }
-
-    let disposed = false;
-    let dispose: (() => void) | undefined;
-
-    runner(canvas)
-      .then((cleanup) => {
-        if (disposed) cleanup();
-        else dispose = cleanup;
-      })
-      .catch((err: unknown) => {
-        const message = messageOf(err);
-        setError(message);
-        window.parent?.postMessage({ type: 'vgpu-example-error', slug, message }, window.location.origin);
-      });
-
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [slug]);
-
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
-      <canvas ref={canvasRef} className="block h-full w-full touch-none" />
-      {error ? (
-        <div className="absolute inset-0 overflow-auto bg-black/90 p-4 font-mono text-xs leading-5 text-red-200">
-          <div className="mb-2 font-sans text-sm font-semibold text-red-100">Preview error</div>
-          <pre className="whitespace-pre-wrap">{error}</pre>
-        </div>
-      ) : null}
+      <PreviewHost key={slug} slug={slug} />
     </div>
   );
 }

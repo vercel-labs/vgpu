@@ -1,0 +1,6 @@
+[
+  { "name": "traversal", "path": "../renderer.ts", "text": "ok\n" },
+  { "name": "crlf", "path": "renderer.ts", "text": "bad\r\n" },
+  { "name": "nul", "path": "renderer.ts", "text": "bad\u0000value\n" },
+  { "name": "missing-final-lf", "path": "renderer.ts", "text": "bad" }
+]

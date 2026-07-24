@@ -1,11 +1,18 @@
+import type { ExampleMetaDefinition } from '../../lib/example-meta';
+
 export const meta = {
   slug: 'triangle-led-front',
   title: 'Triangle LED Hero',
-  description: 'Analytic edge-glow triangle with LED emitters, floor radiance, and interactive color deploy.',
+  description: 'Analytic edge-glow triangle with LED emitters, floor radiance, and interactive color deploy. Canvas-scoped pointer input drives the lighting while an accessible mode selector chooses highlighted edges.',
+  tags: ['triangle', 'led', 'raycasting', 'lighting'],
+  capabilities: ['webgpu', 'select-control', 'pointer-input', 'multi-pass', 'continuous-rendering', 'responsive-canvas'],
   thumb: { warmupFrames: 90, dt: 1 / 60 },
   files: [
-    'example.ts',
+    'index.tsx',
+    'controls.tsx',
+    'types.ts',
     'renderer.ts',
+    'scene-renderer.ts',
     'light-sources-raw.ts',
     'light-sources-pass.ts',
     'led-buffer.ts',
@@ -26,4 +33,4 @@ export const meta = {
     'shaders/themes/dark/main-scene-floor.wgsl',
     'shaders/themes/light/main-scene-floor.wgsl',
   ],
-} as const;
+} as const satisfies ExampleMetaDefinition;

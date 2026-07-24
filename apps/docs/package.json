@@ -12,14 +12,18 @@
     "thumbs:check": "node scripts/render-example-thumbs.mjs --check",
     "render:proof": "node scripts/render-example-thumbs.mjs --proof-dir ../../artifacts/example-renders",
     "typecheck": "tsc --noEmit",
+    "check:example-imports": "node scripts/check-example-imports.mjs",
+    "check:example-bundles": "node scripts/check-example-bundles.mjs",
     "build:workspace": "pnpm --dir ../.. run build"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "@next/mdx": "^16.2.10",
+    "@vercel/blob": "^2.0.0",
     "@vgpu/adapter-mock": "workspace:*",
     "@vgpu/adapter-node": "workspace:*",
+    "@vgpu/cli": "workspace:*",
     "@vgpu/core": "workspace:*",
     "@vgpu/wgsl": "workspace:*",
     "@vgpu/wgsl-std": "workspace:*",
@@ -31,7 +35,6 @@
     "react-markdown": "^9.0.3",
     "remark-gfm": "^4.0.0",
     "shiki": "^3.21.0",
-    "@vgpu/cli": "workspace:*",
     "vgpu": "workspace:*"
   },
   "devDependencies": {

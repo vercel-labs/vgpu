@@ -1,0 +1,18 @@
+# VGPU canonical examples API
+
+Official origin: https://vgpu.labs.vercel.dev
+Discovery: https://vgpu.labs.vercel.dev/.well-known/vgpu-examples.json
+Contract: vgpu-examples/v1
+
+Use the published CLI to inspect canonical gallery source:
+
+  npx vgpu examples search "raymarching"
+  npx vgpu examples show raymarched-fractal
+  npx vgpu examples cat raymarched-fractal renderer.ts
+  npx vgpu examples pull raymarched-fractal --out ./fractal
+
+The API and CLI are read-only and raw-only. They never execute fetched code, generate a scaffold, install dependencies, or support third-party registries. Search happens locally in the CLI; there is no server search endpoint.
+
+Every online command begins at the pinned HTTPS discovery URL. The CLI validates the embedded v1 schema hash, contract status, minimum CLI version, strict response shapes, same-origin URLs, response limits, and all source hashes. Deprecated contracts warn. Revoked, unsupported, or too-new contracts fail before the index is fetched. Immutable revisions remain addressable after latest advances.
+
+Successful JSON responses use application/json; charset=utf-8. JSON errors use {"error":{"code":"VGPU-EXAMPLES-...","message":"..."}}. Source responses use their declared text content type with charset=utf-8. GET, HEAD, and OPTIONS are tokenless with wildcard read-only CORS. ETag conditional requests return 304. Do not follow redirects or execute returned source.

@@ -73,6 +73,7 @@ function enrichRecord(record) {
     topic,
     topicTitle,
     ...(frontmatter.order === undefined ? {} : { order: parseOrder(frontmatter.order, record.repoPath) }),
+    ...(frontmatter.websitePath === undefined ? {} : { websitePath: parseWebsitePath(frontmatter.websitePath, record.repoPath) }),
     symbolKind: frontmatter.symbolKind ?? inferSymbolKind(record.symbol),
   };
 }
@@ -97,6 +98,13 @@ function parseOrder(value, repoPath) {
   const order = Number(value);
   if (!Number.isFinite(order)) throw new Error(`Invalid numeric order in ${repoPath}: ${value}`);
   return order;
+}
+
+function parseWebsitePath(value, repoPath) {
+  if (!/^\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/u.test(value)) {
+    throw new Error(`Invalid website path in ${repoPath}: ${value}`);
+  }
+  return value;
 }
 
 function topicForRecord(record) {

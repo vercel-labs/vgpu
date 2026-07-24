@@ -218,6 +218,8 @@ jobs:
         run: node packages/vgpu/lib/docs/generate/cli.js
       - name: Build docs app
         run: pnpm --filter docs build
+      - name: Check docs example bundle isolation and budgets
+        run: pnpm --filter docs check:example-bundles
 
   docs-generated:
     # Guards that the committed docs manifest + generated skill are in sync with their sources
@@ -242,3 +244,36 @@ jobs:
             exit 1
           fi
           echo "Generated docs manifest + skill are up to date."
+
+  examples-api-generated:
+    # Frozen schemas, controlled vocabulary, and deterministic revision artifacts.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate authored controlled vocabulary
+        run: node apps/docs/scripts/validate-example-vocabulary.mjs
+      - name: Synchronize frozen embedded schemas
+        run: node apps/docs/scripts/sync-examples-api-contracts.mjs
+      - name: Regenerate deterministic examples API artifacts
+        run: node apps/docs/scripts/generate-examples-api.mjs
+      - name: Test foundation contracts and publisher
+        run: pnpm exec vitest run apps/docs/lib/examples-api apps/docs/scripts/validate-example-vocabulary.test.ts
+      - name: Fail on schema or artifact drift
+        run: |
+          changed=$(git status --porcelain -- apps/docs/generated/examples-api apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts)
+          if [ -n "$changed" ]; then
+            echo "::error::Examples API schemas or generated artifacts are out of date."
+            echo "$changed"
+            git diff -- apps/docs/generated/examples-api apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts
+            exit 1
+          fi

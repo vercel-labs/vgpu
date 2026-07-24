@@ -1,0 +1,13 @@
+{
+  "protocol": "vgpu-examples",
+  "discoveryVersion": 1,
+  "contracts": [
+    {
+      "id": "vgpu-examples/v1",
+      "schemaSha256": "96acb9eef4ece73b508abd91685b27f81f523c008b36dd92f07f8013f61b4221",
+      "status": "deprecated",
+      "minimumCliVersion": "0.1.6",
+      "indexUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/latest.json"
+    }
+  ]
+}

@@ -30,4 +30,6 @@ test("the vgpu tarball includes the full internal CLI", () => {
   expect(files).toContain("bin/vgpu.js");
   expect(files).toContain("dist/cli/bin/vgpu.js");
   expect(files).toContain("dist/cli/lib/generated/docs-manifest.generated.js");
+  expect(files).toContain("dist/cli/lib/examples/run.js");
+  expect(files).toContain("dist/cli/lib/examples/schemas/v1/discovery.schema.json");
 });

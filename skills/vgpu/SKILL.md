@@ -34,6 +34,10 @@ Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bak
 - **Frames** — A frame is one unit of GPU work.  `references/guides/concepts-frames.docs.md`
 - **Render bundles** — A render loop re-encodes every pipeline, bind group, and draw on every tick — even when nothing changed.  `references/guides/concepts-render-bundles.docs.md`
 
+## CLI reference
+
+- **CLI** — vgpu CLI commands, arguments, flags, and exit codes.  `references/guides/cli.docs.md`
+
 ## Performance guides
 
 Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.

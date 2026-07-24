@@ -27,6 +27,7 @@ function languageFor(file: CodeViewerFile) {
 export async function CodeViewer({ files, activeFile }: CodeViewerProps) {
   const selected =
     files.find((file) => file.name === activeFile) ??
+    files.find((file) => file.name === 'index.tsx') ??
     files.find((file) => file.name === 'example.ts') ??
     files[0];
 

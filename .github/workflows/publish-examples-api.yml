@@ -1,0 +1,73 @@
+name: Publish examples API
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Already-successful docs deployment URL (VERCEL_DEPLOYMENT_URL)"
+        required: true
+        type: string
+
+concurrency:
+  group: publish-examples-api-production
+  cancel-in-progress: false
+
+jobs:
+  publish-after-docs-deployment:
+    environment: examples-api-production
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN: ${{ secrets.VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN }}
+      VGPU_EXAMPLES_ORIGIN: ${{ vars.VGPU_EXAMPLES_ORIGIN || 'https://vgpu.labs.vercel.dev' }}
+      VGPU_EXAMPLES_BLOB_PREFIX: ${{ vars.VGPU_EXAMPLES_BLOB_PREFIX || 'examples/v1' }}
+      VERCEL_DEPLOYMENT_URL: ${{ inputs.deployment_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Require retained public Blob credentials and official origin
+        run: |
+          test -n "$VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN" || { echo "::error::Missing VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN"; exit 1; }
+          test "$VGPU_EXAMPLES_ORIGIN" = "https://vgpu.labs.vercel.dev" || { echo "::error::Unexpected production origin"; exit 1; }
+          test "$VGPU_EXAMPLES_BLOB_PREFIX" = "examples/v1" || { echo "::error::Unexpected blob prefix"; exit 1; }
+          test -n "$VERCEL_DEPLOYMENT_URL" || { echo "::error::Missing VERCEL_DEPLOYMENT_URL"; exit 1; }
+      - name: Confirm the matching docs deployment is already live
+        run: |
+          deployment="$VERCEL_DEPLOYMENT_URL"
+          case "$deployment" in http://*|https://*) ;; *) deployment="https://$deployment" ;; esac
+          curl --fail --silent --show-error --location --max-redirs 0 --max-time 30 "$deployment/" >/dev/null
+      - name: Generate, create-only publish, pre-pointer route verify, then advance latest
+        run: node apps/docs/scripts/generate-examples-api.mjs --publish
+      - name: Verify official discovery to fractal source chain
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          const origin = process.env.VGPU_EXAMPLES_ORIGIN;
+          const json = async (url) => {
+            const response = await fetch(url, { redirect: 'error', cache: 'no-store' });
+            if (!response.ok || response.headers.get('content-type') !== 'application/json; charset=utf-8') throw new Error(`Bad response ${response.status} ${url}`);
+            return response.json();
+          };
+          const discovery = await json(`${origin}/.well-known/vgpu-examples.json`);
+          const contract = discovery.contracts.find(({ id }) => id === 'vgpu-examples/v1');
+          const latest = await json(contract.indexUrl);
+          const index = await json(latest.indexUrl);
+          const fractalEntry = index.examples.find(({ id }) => id === 'raymarched-fractal');
+          const manifest = await json(fractalEntry.manifestUrl);
+          const file = manifest.files[0];
+          const response = await fetch(file.url, { redirect: 'error', cache: 'no-store' });
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          const hash = createHash('sha256').update(bytes).digest('hex');
+          if (hash !== file.sha256 || bytes.byteLength !== file.size) throw new Error('Remote fractal source integrity mismatch');
+          console.log(JSON.stringify({ revision: index.revision, id: manifest.id, path: file.path, sha256: hash }));
+          NODE

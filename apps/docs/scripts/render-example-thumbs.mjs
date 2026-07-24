@@ -15,18 +15,19 @@ const rendererBundle = path.join(cacheDir, 'renderers.mjs');
 const docsDataEntry = path.join(cacheDir, 'docs-data-entry.ts');
 const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 
-/** @typedef {{ slug: string; module: string; exportName: string }} CustomRendererEntry */
-/** @type {CustomRendererEntry[]} */
-const customRendererEntries = [
-  { slug: 'triangle-led-front', module: '../examples/triangle-led-front/example.ts', exportName: 'renderThumb' },
-  { slug: 'anti-aliasing', module: '../examples/anti-aliasing/example.ts', exportName: 'renderThumb' },
-  { slug: 'post-processing', module: '../examples/post-processing/example.ts', exportName: 'renderThumb' },
-  { slug: 'black-hole', module: '../examples/black-hole/example.ts', exportName: 'renderThumb' },
-  { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/example.ts', exportName: 'renderThumb' },
-  { slug: 'fluid', module: '../examples/fluid/validation.ts', exportName: 'renderThumb' },
-  { slug: 'instanced-rendering', module: '../examples/instanced-rendering/example.ts', exportName: 'renderThumb' },
-  { slug: 'batch-rendering', module: '../examples/batch-rendering/example.ts', exportName: 'renderThumb' },
-  { slug: 'fft-ocean', module: '../examples/fft-ocean/example.ts', exportName: 'renderThumb' },
+/** @typedef {{ slug: string; module: string; exportName: string }} RendererEntry */
+/** @type {RendererEntry[]} */
+const rendererEntries = [
+  { slug: 'gradient', module: '../examples/gradient/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'triangle-led-front', module: '../examples/triangle-led-front/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'anti-aliasing', module: '../examples/anti-aliasing/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'post-processing', module: '../examples/post-processing/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'black-hole', module: '../examples/black-hole/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'fluid', module: '../examples/fluid/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'instanced-rendering', module: '../examples/instanced-rendering/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'batch-rendering', module: '../examples/batch-rendering/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'fft-ocean', module: '../examples/fft-ocean/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/renderer.ts', exportName: 'renderThumbnail' },
 ];
 
 const sizes = args.proofDir ? { proof: [160, 90] } : {
@@ -205,14 +206,14 @@ function resolveFragmentFile(example, exampleSources) {
   if (preferred) return preferred;
   const metaListed = example.meta.files?.find((file) => file.endsWith('.wgsl'));
   if (metaListed) return metaListed;
-  const generated = exampleSources[slug]?.find((item) => item.lang === 'wgsl');
-  return generated?.name;
+  const generated = exampleSources[slug]?.files.find((item) => item.language === 'wgsl');
+  return generated?.path;
 }
 
 function sourceFor(exampleSources, slug, fileName) {
-  const file = exampleSources[slug]?.find((item) => item.name === fileName);
+  const file = exampleSources[slug]?.files.find((item) => item.path === fileName);
   if (!file) throw new Error(`Missing generated source for ${slug}/${fileName}. Run scripts/ingest-examples.mjs first.`);
-  return file.code;
+  return file.content;
 }
 
 function lumaVariance(bytes) {
@@ -600,9 +601,9 @@ async function writeAaModePngs(modePixels, size, kind) {
 }
 
 async function loadRenderers() {
-  if (customRendererEntries.length === 0) return {};
+  if (rendererEntries.length === 0) return {};
   await mkdir(cacheDir, { recursive: true });
-  const contents = customRendererEntries
+  const contents = rendererEntries
     .map((entry, index) => `export { ${entry.exportName} as renderer_${index} } from '${entry.module}';`)
     .join('\n');
   await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `${contents}\n`));
@@ -618,7 +619,7 @@ async function loadRenderers() {
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);
-  return customRendererEntries.reduce((acc, entry, index) => {
+  return rendererEntries.reduce((acc, entry, index) => {
     const renderer = module[`renderer_${index}`];
     if (typeof renderer !== 'function') {
       throw new Error(`Renderer export for '${entry.slug}' was not found.`);
@@ -644,8 +645,17 @@ function wgslPlugin() {
 async function loadDocsData() {
   await mkdir(cacheDir, { recursive: true });
   await import('node:fs/promises').then(({ writeFile }) => writeFile(docsDataEntry, `
-    export { examples } from '../lib/examples-registry';
-    export { exampleSources } from '../lib/examples-source.generated';
+    import { examplesMetadata } from '../lib/examples-metadata';
+    import { exampleSources } from '../lib/examples-source.generated';
+    const examples = examplesMetadata.map((meta) => ({
+      meta,
+      sources: (exampleSources[meta.slug]?.files ?? []).map((file) => ({
+        name: file.path,
+        lang: file.language,
+        code: file.content,
+      })),
+    }));
+    export { examples, exampleSources };
   `));
   await build({
     entryPoints: [docsDataEntry],
@@ -654,7 +664,13 @@ async function loadDocsData() {
     platform: 'node',
     format: 'esm',
     sourcemap: false,
-    external: ['server-only'],
+    plugins: [{
+      name: 'ignore-server-only-marker',
+      setup(builder) {
+        builder.onResolve({ filter: /^server-only$/ }, () => ({ path: 'server-only', namespace: 'empty' }));
+        builder.onLoad({ filter: /.*/, namespace: 'empty' }, () => ({ contents: 'export {};' }));
+      },
+    }],
     loader: { '.wgsl': 'text' },
     logLevel: 'silent',
   });

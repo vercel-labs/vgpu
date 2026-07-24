@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.labs.vercel.dev/schemas/examples/v1/error.schema.json",
+  "title": "VGPU Examples Error",
+  "type": "object", "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message"],
+      "properties": { "code": { "type": "string", "pattern": "^VGPU-EXAMPLES-[A-Z0-9-]+$" }, "message": { "type": "string", "minLength": 1 } }
+    }
+  }
+}

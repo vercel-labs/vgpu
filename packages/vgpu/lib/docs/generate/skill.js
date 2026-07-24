@@ -37,7 +37,8 @@ function referenceFile(doc) {
 function router(docs) {
   const guides = docs.filter((d) => d.kind === "guide");
   const concepts = guides.filter((d) => d.symbol.startsWith("concepts-")).sort(byOrderThenSymbol);
-  const performanceGuides = guides.filter((d) => !d.symbol.startsWith("concepts-")).sort(bySymbol);
+  const cliGuides = guides.filter((d) => d.symbol === "cli");
+  const performanceGuides = guides.filter((d) => !d.symbol.startsWith("concepts-") && d.symbol !== "cli").sort(bySymbol);
   const api = docs.filter((d) => d.kind === "api");
   const packages = [...new Set(api.map((d) => d.package))].sort();
   const symbolCount = api.reduce((n, d) => n + d.symbols.length, 0);
@@ -74,6 +75,12 @@ function router(docs) {
   ];
   for (const guide of concepts) {
     out.push(`- **${guide.topicTitle}** — ${summarize(guide.content)}  \`references${guide.virtualPath}\``);
+  }
+  out.push("");
+  out.push("## CLI reference");
+  out.push("");
+  for (const guide of cliGuides) {
+    out.push(`- **${guide.topicTitle}** — ${guide.summary || summarize(guide.content)}  \`references${guide.virtualPath}\``);
   }
   out.push("");
   out.push("## Performance guides");

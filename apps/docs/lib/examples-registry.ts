@@ -1,63 +1,26 @@
-import { exampleSources, type ExampleSourceFile } from './examples-source.generated';
-import { exampleThumbs } from './example-thumbs.generated';
+import 'server-only';
 
-import { meta as gradientMeta } from '../examples/gradient/meta';
-import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
-import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
-import { meta as postProcessingMeta } from '../examples/post-processing/meta';
-import { meta as blackHoleMeta } from '../examples/black-hole/meta';
-import { meta as fluidMeta } from '../examples/fluid/meta';
-import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
-import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
-import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
-import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
+import { exampleSources } from './examples-source.generated';
+import { examplesMetadata } from './examples-metadata';
 
-export interface ExampleThumbOptions {
-  readonly warmupFrames?: number;
-  readonly time?: number;
-  readonly dt?: number;
-  readonly headless?: boolean;
-  readonly note?: string;
-  readonly fragmentFile?: string;
-}
-
-export interface ExampleMeta {
-  readonly slug: string;
-  readonly title: string;
-  readonly description: string;
-  readonly thumbnail?: string;
-  readonly hero?: string;
-  readonly thumb?: ExampleThumbOptions;
-  readonly files?: readonly string[];
+export interface ExampleSourceFile {
+  readonly name: string;
+  readonly lang: string;
+  readonly code: string;
 }
 
 export interface ExampleRecord {
-  readonly meta: ExampleMeta;
+  readonly meta: (typeof examplesMetadata)[number];
   readonly sources: readonly ExampleSourceFile[];
 }
 
-const rawMetas = [
-  gradientMeta,
-  triangleLedFrontMeta,
-  antiAliasingMeta,
-  postProcessingMeta,
-  blackHoleMeta,
-  fluidMeta,
-  instancedRenderingMeta,
-  batchRenderingMeta,
-  fftOceanMeta,
-  raymarchedFractalMeta,
-] as const satisfies readonly ExampleMeta[];
-
-const metas = rawMetas.map((meta) => ({
-  ...meta,
-  thumbnail: exampleThumbs[meta.slug]?.card,
-  hero: exampleThumbs[meta.slug]?.hero,
-})) satisfies readonly ExampleMeta[];
-
-export const examples = metas.map((meta) => ({
+export const examples = examplesMetadata.map((meta) => ({
   meta,
-  sources: exampleSources[meta.slug] ?? [],
+  sources: (exampleSources[meta.slug]?.files ?? []).map((file) => ({
+    name: file.path,
+    lang: file.language,
+    code: file.content,
+  })),
 })) satisfies readonly ExampleRecord[];
 
 export function getExample(slug: string): ExampleRecord | undefined {

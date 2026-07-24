@@ -1,0 +1,6 @@
+import { usage } from './errors.js';
+const aliases=new Map([['raymarching','raymarch'],['raymarched','raymarch'],['raymarch','raymarch']]);
+export function tokens(value){return value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/([a-z])([A-Z])/g,'$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).map(t=>aliases.get(t)??(t.endsWith('ing')?t.slice(0,-3):t.endsWith('ed')?t.slice(0,-2):t));}
+const has=(value,q)=>tokens(value).includes(q);
+function termScore(e,raw,q){let s=0;if(e.id===raw)s=Math.max(s,100);if(e.id.startsWith(raw)||has(e.id,q))s=Math.max(s,60);if(e.tags.some(x=>x===raw||has(x,q)))s=Math.max(s,50);if(has(e.title,q))s=Math.max(s,35);if(e.capabilities.some(x=>x===raw||has(x,q)))s=Math.max(s,25);if(has(e.description,q))s=Math.max(s,10);return s;}
+export function searchExamples(index,query,{any=false,limit=20}={}){const raw=tokens(query);if(!raw.length)throw usage('Search query must contain a letter or number');const originals=query.toLowerCase().split(/\s+/).filter(Boolean);return index.examples.map((e,order)=>{const scores=raw.map((q,i)=>termScore(e,originals[i]??q,q));return {e,order,scores,score:scores.reduce((a,b)=>a+b,0)}}).filter(x=>any?x.scores.some(Boolean):x.scores.every(Boolean)).sort((a,b)=>b.score-a.score||a.order-b.order||a.e.id.localeCompare(b.e.id)).slice(0,limit).map(({e,score})=>({...e,score}));}

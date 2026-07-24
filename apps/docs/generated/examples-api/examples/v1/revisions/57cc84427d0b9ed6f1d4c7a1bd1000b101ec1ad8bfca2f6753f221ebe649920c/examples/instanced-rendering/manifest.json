@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c",
+  "id": "instanced-rendering",
+  "title": "Instanced Rendering",
+  "description": "One cube mesh + one instance stream, with 125,000 independently animated cubes.",
+  "tags": [
+    "instancing",
+    "indirect-rendering",
+    "performance"
+  ],
+  "capabilities": [
+    "webgpu",
+    "select-control",
+    "instanced-rendering",
+    "offscreen-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "c9b1b1b1c4df04f911e6fc127eeeb5962bc19508c015cf01dfb0ee48f65d640a",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 1576,
+      "sha256": "17f9d50b13fabb83ccd7b7382be62d03ea25d908c691ef9b89b373a03fd76958",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/index.tsx.raw"
+    },
+    {
+      "path": "controls.tsx",
+      "contentType": "text/typescript",
+      "size": 858,
+      "sha256": "55b7a10c375fbab0cc1df2e16059f8b6188808b5a89963dfa0dae900f0b2ad42",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/controls.tsx.raw"
+    },
+    {
+      "path": "types.ts",
+      "contentType": "text/typescript",
+      "size": 211,
+      "sha256": "6e921dd6c2a23e61252aca2a105b7183feb6a96d8de0fc0e9676b4068079a170",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/types.ts.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 9139,
+      "sha256": "f2026c6ba252c2c00034540464c900ecc6d70a46551a725b6b975cfa4317ab1c",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1763,
+      "sha256": "a0e520cad5e2994dd3391118fd2a815acab42b5727d8cdf3a945e8c94048052b",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/scene.wgsl.raw"
+    },
+    {
+      "path": "blit.wgsl",
+      "contentType": "text/wgsl",
+      "size": 348,
+      "sha256": "1d6957358650364304515e7deb8728bf20186482b84dcd361e5525b60c0c6566",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/57cc84427d0b9ed6f1d4c7a1bd1000b101ec1ad8bfca2f6753f221ebe649920c/examples/instanced-rendering/files/blit.wgsl.raw"
+    }
+  ]
+}
