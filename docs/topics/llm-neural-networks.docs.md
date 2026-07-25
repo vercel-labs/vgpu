@@ -1,7 +1,6 @@
 ---
 title: LLM and neural network buffers
 summary: Factual external WebGPU device and buffer integration matrix.
-websitePath: /guides/llm-neural-networks
 relatedSymbols: [init, Device, Buffer]
 ---
 
