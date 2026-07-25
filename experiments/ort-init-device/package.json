@@ -1,0 +1,21 @@
+{
+  "name": "@vgpu-experiments/ort-init-device",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:pinned": "npm install --ignore-scripts=false",
+    "typecheck": "tsc --noEmit",
+    "serve": "node scripts/serve.mjs --host 127.0.0.1 --port 3004",
+    "e2e:node": "bash node/run-e2e.sh"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.27.0",
+    "webgpu": "0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.7",
+    "@webgpu/types": "0.1.69",
+    "typescript": "5.7.3",
+    "vite": "6.1.0"
+  }
+}

@@ -42,7 +42,7 @@ export interface FlatNavItem extends NavItem {
 const guideGroups = [
   {
     title: 'General',
-    slugs: ['getting-started'],
+    slugs: ['getting-started', 'llm-neural-networks'],
   },
   {
     title: 'Performance',

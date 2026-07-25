@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true,
+    "noEmit": true, "skipLibCheck": true, "lib": ["ES2022", "DOM"], "types": ["node", "@webgpu/types"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["browser/**/*.ts", "node/**/*.ts", "shared/**/*.ts"]
+}
