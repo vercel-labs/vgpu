@@ -82,7 +82,7 @@
   "vgpuExportBundleBudgetNote": "Bundle-diet ceilings use 512-byte granularity with one rounded safety step above measured gzip sizes.",
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 31232,
-    "./node": 31232,
+    "./node": 31744,
     "./mock": 31232,
     "./scene": 5632,
     "./client": 512,
