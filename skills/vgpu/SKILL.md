@@ -46,6 +46,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Authoring shaders for performance** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
 - **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), gpu.surface(canvas, opts), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
 - **Getting started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
+- **LLM and neural network buffers** — DRAFT PROSE PENDING AUTHOR  `references/guides/llm-neural-networks.docs.md`
 - **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
 - **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
 - **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
