@@ -53,6 +53,7 @@ export function normalizeResource(binding: BindingInfo, value: unknown, context:
 function normalizeBufferResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
   if (isSharedUniformsValue(value)) return value.asBindingResource(binding, context.sourceHint);
   if (value instanceof Buffer) {
+    value.assertUsable(`${context.sourceHint}.set`);
     validateBufferUsage(binding, value.options.usage);
     return { resource: { buffer: value.gpu }, identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }

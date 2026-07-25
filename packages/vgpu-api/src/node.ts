@@ -1,6 +1,6 @@
 import { createNodeAdapter, describeNodeAdapter, nodeAdapterEnvironmentOverride, type NodeAdapterInfo, type NodeAdapterMode } from "@vgpu/adapter-node";
 import type { VGPUAdapter } from "@vgpu/core";
-import { createGpu, type Gpu, type InitOptions } from "./init.ts";
+import { createGpu, type ExternalDeviceInitOptions, type Gpu, type RequestedDeviceInitOptions } from "./init.ts";
 
 export { createNodeAdapter } from "@vgpu/adapter-node";
 export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Gpu, ClearColor, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent } from "./init.ts";
@@ -16,11 +16,16 @@ export { Uniform } from "./core/uniform.ts";
 export type { UniformOptions } from "./core/uniform.ts";
 export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
-export interface NodeInitOptions extends Omit<InitOptions, "adapter"> { readonly adapter?: NodeAdapterMode | VGPUAdapter }
-export interface NodeGpu extends Gpu { readonly adapter: NodeAdapterInfo }
+type NodeRequestedDeviceInitOptions = Omit<RequestedDeviceInitOptions, "adapter"> & { readonly adapter?: NodeAdapterMode | VGPUAdapter };
+export type NodeInitOptions = NodeRequestedDeviceInitOptions | ExternalDeviceInitOptions;
+export interface NodeGpu extends Gpu { readonly adapter: NodeAdapterInfo | null }
 
 /** Node headless entrypoint (Dawn via @vgpu/adapter-node). */
 export async function init(options: NodeInitOptions = {}): Promise<NodeGpu> {
+  if ("device" in options) {
+    const gpu = await createGpu("node", options as ExternalDeviceInitOptions);
+    return Object.assign(gpu, { adapter: null });
+  }
   const override = nodeAdapterEnvironmentOverride();
   const requested = override ?? options.adapter ?? "auto";
   const custom = typeof requested === "object" ? requested : undefined;
