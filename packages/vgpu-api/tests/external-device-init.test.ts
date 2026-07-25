@@ -20,6 +20,7 @@ test("browser external init preserves exact identity and bypasses adapter resolu
   expect(gpu.device.gpu).toBe(device);
   expect(requestAdapter).not.toHaveBeenCalled();
   gpu.dispose(); gpu.dispose();
+  expect(() => gpu.compute("@compute @workgroup_size(1) fn main() {}" )).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
   expect(device.destroy).not.toHaveBeenCalled();
 });
 

@@ -58,13 +58,16 @@ test("device loss preserves reason and message and invalidates public operations
 
 test("wrapBuffer preserves identity, metadata, signal semantics, and never native-destroys", () => {
   const f = fakeDevice(); const device = new Device(f.gpu, null, "external"); const raw = rawBuffer();
-  const wrapped = device.wrapBuffer(raw); const calls = vi.fn();
+  const wrapped = device.wrapBuffer(raw); const sibling = device.wrapBuffer(raw); const calls = vi.fn();
   wrapped.onDestroy(calls); wrapped.dispose(); wrapped.dispose(); wrapped.onDestroy(calls);
+  sibling.write(new Uint32Array([1]));
   expect(wrapped.gpu).toBe(raw);
   expect(wrapped.options).toMatchObject({ size: 16, usage: expect.arrayContaining(["storage", "copy_src", "copy_dst"]) });
   expect(calls).toHaveBeenCalledTimes(2); // one original listener and one late listener
   expect(raw.destroy).not.toHaveBeenCalled();
   expect(() => wrapped.write(new Uint32Array([1]))).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  sibling.dispose();
+  expect(raw.destroy).not.toHaveBeenCalled();
   device.dispose();
 });
 
@@ -74,6 +77,9 @@ test("external buffer validates usage, alignment, and range", async () => {
   expect(() => wrapped.write(new Uint32Array([1]))).toThrow(expect.objectContaining({ code: "VGPU-EXTERNAL-BUFFER-VALIDATION" }));
   await expect(wrapped.read(4)).rejects.toMatchObject({ code: "VGPU-EXTERNAL-BUFFER-VALIDATION" });
   const copyable = device.wrapBuffer(rawBuffer(4 | 8, 16));
+  const nativeCause = new Error("native validation failure");
+  f.writeBuffer.mockImplementationOnce(() => { throw nativeCause; });
+  expect(() => copyable.write(new Uint32Array([1]))).toThrow(expect.objectContaining({ code: "VGPU-EXTERNAL-BUFFER-VALIDATION", cause: nativeCause }));
   expect(() => copyable.write(new Uint32Array([1]), 2)).toThrow(expect.objectContaining({ code: "VGPU-EXTERNAL-BUFFER-VALIDATION" }));
   await expect(copyable.read(20)).rejects.toMatchObject({ code: "VGPU-EXTERNAL-BUFFER-VALIDATION" });
   device.dispose();
