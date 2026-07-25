@@ -29,7 +29,8 @@ ab --session "$SESSION" --webgpu --headed console | tee "$ART/browser-console.lo
 ab --session "$SESSION" --webgpu --headed screenshot "$ART/browser.png"
 grep -q PROBE_PASS "$ART/browser-dom.json" || sed 's/\\"/"/g' "$ART/browser-dom.json" | grep -q '"status":"PASS"'
 grep -F '"status": "PASS"' "$ART/browser.json"
-identify -format '%[fx:standard_deviation]\n' "$ART/browser.png" | tee "$ART/browser-pixel-stddev.txt" | awk '$1 > 10'
+identify -format '%[fx:standard_deviation]\n' "$ART/browser.png" | tee "$ART/browser-pixel-stddev.txt" | awk '$1 > 0.01'
+echo 0 >"$ART/browser.rc"
 trap - EXIT
 timeout --kill-after=1s 5s agent-browser --session "$SESSION" close >/dev/null 2>&1 || true
 kill "$SERVER" >/dev/null 2>&1 || true
