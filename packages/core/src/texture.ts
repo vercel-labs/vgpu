@@ -56,6 +56,7 @@ export class Texture {
   }
 
   createView(desc?: GPUTextureViewDescriptor): GPUTextureView {
+    this.assertAlive("Texture.createView");
     return this.gpu.createView(desc);
   }
 
@@ -93,9 +94,11 @@ export class Texture {
   }
 
   async read(): Promise<Uint8Array> {
-    this.assertAlive();
+    this.assertAlive("Texture.read");
     if (isMockGPUTexture(this.gpu)) return this.gpu.__vgpuMockBytes.slice();
-    return this.device.readback.readTexture(this.gpu, this.options.size, this.options.format);
+    const result = await this.device.readback.readTexture(this.gpu, this.options.size, this.options.format);
+    this.assertAlive("Texture.read");
+    return result;
   }
 
   destroy(): void {
@@ -111,8 +114,9 @@ export class Texture {
     this.destroy();
   }
 
-  private assertAlive(): void {
-    if (this.destroyed) throw new ValidationError({ code: "VGPU-CORE-TEXTURE-DESTROYED", message: "Texture is destroyed", where: "Texture" });
+  private assertAlive(where = "Texture"): void {
+    if (this.destroyed) throw new ValidationError({ code: "VGPU-CORE-TEXTURE-DESTROYED", message: "Texture is destroyed", where });
+    (this.device as unknown as { assertUsable?(where: string): void }).assertUsable?.(where);
   }
 }
 

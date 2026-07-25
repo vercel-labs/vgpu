@@ -12,12 +12,13 @@ export class Buffer {
   private readonly identity = createResourceIdentity("buffer");
   private destroyed = false;
 
+  constructor(device: Device, gpu: GPUBuffer, options: BufferOptions);
   constructor(
     private readonly device: Device,
     readonly gpu: GPUBuffer,
     readonly options: BufferOptions,
     private readonly ownership: BufferOwnership = "owned",
-  ) {}
+  ) { Object.defineProperty(this, "assertUsable", { value: (where: string) => this.#assertUsable(where) }); }
 
   get resourceIdentity(): ResourceIdentity { return this.identity; }
 
@@ -25,8 +26,7 @@ export class Buffer {
     return this.destroySignal.onDestroy(this, cb);
   }
 
-  /** @internal Used by Ring-1 resource normalization to reject stale wrappers. */
-  assertUsable(where = "Buffer"): void {
+  #assertUsable(where = "Buffer"): void {
     if (this.destroyed) {
       throw new ValidationError({
         code: "VGPU-BUFFER-DISPOSED",
@@ -35,11 +35,11 @@ export class Buffer {
         fix: "Wrap or create a live GPUBuffer before using it.",
       });
     }
-    this.device.assertUsable(where);
+    (this.device as unknown as { assertUsable(where: string): void }).assertUsable(where);
   }
 
   write(data: BufferWriteData, offset = 0): void {
-    this.assertUsable("Buffer.write");
+    this.#assertUsable("Buffer.write");
     if (this.ownership === "external") {
       this.validateExternalOperation("write", offset, data.byteLength, "copy_dst");
     }
@@ -52,11 +52,11 @@ export class Buffer {
   }
 
   async read(byteLength: number, offset = 0): Promise<ArrayBuffer> {
-    this.assertUsable("Buffer.read");
+    this.#assertUsable("Buffer.read");
     if (this.ownership === "external") this.validateExternalOperation("read", offset, byteLength, "copy_src");
     try {
       const result = await this.device.readback.read(this.gpu, byteLength, offset);
-      this.assertUsable("Buffer.read");
+      this.#assertUsable("Buffer.read");
       return result;
     } catch (cause) {
       if (cause instanceof ValidationError || this.ownership !== "external") throw cause;

@@ -22,14 +22,19 @@ export interface NodeGpu extends Gpu { readonly adapter: NodeAdapterInfo | null 
 
 /** Node headless entrypoint (Dawn via @vgpu/adapter-node). */
 export async function init(options: NodeInitOptions = {}): Promise<NodeGpu> {
-  if ("device" in options) {
-    const gpu = await createGpu("node", options as ExternalDeviceInitOptions);
-    return Object.assign(gpu, { adapter: null });
+  if (typeof options !== "object" || options === null) return createGpu("node", options as never) as Promise<NodeGpu>;
+  try {
+    if ("device" in options) {
+      const gpu = await createGpu("node", options as ExternalDeviceInitOptions);
+      return Object.assign(gpu, { adapter: null });
+    }
+    const override = nodeAdapterEnvironmentOverride();
+    const requested = override ?? options.adapter ?? "auto";
+    const custom = typeof requested === "object" ? requested : undefined;
+    const { adapter: _, ...deviceOptions } = options;
+    const gpu = await createGpu("node", custom ? { ...deviceOptions, adapter: custom } : deviceOptions, {}, () => createNodeAdapter({ adapter: typeof requested === "string" ? requested : "auto" }));
+    return Object.assign(gpu, { adapter: Object.freeze(describeNodeAdapter(gpu.device.adapterInfo)) });
+  } catch {
+    return createGpu("node", options as never) as Promise<NodeGpu>;
   }
-  const override = nodeAdapterEnvironmentOverride();
-  const requested = override ?? options.adapter ?? "auto";
-  const custom = typeof requested === "object" ? requested : undefined;
-  const { adapter: _, ...deviceOptions } = options;
-  const gpu = await createGpu("node", custom ? { ...deviceOptions, adapter: custom } : deviceOptions, {}, () => createNodeAdapter({ adapter: typeof requested === "string" ? requested : "auto" }));
-  return Object.assign(gpu, { adapter: Object.freeze(describeNodeAdapter(gpu.device.adapterInfo)) });
 }

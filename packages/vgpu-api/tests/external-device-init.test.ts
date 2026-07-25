@@ -68,6 +68,48 @@ test("disposing a wrapped buffer evicts Ring-1 cache identity and rejects later 
   second.dispose(); gpu.dispose();
 });
 
+test("retained compute and uniform-like bindings respect logical disposal", async () => {
+  const device = externalDevice();
+  const gpu = await initBrowser({ device });
+  const dispatch = gpu.compute("@compute @workgroup_size(1) fn main() {}");
+  const raw = device.createBuffer({ size: 16, usage: 64 | 8 });
+  const wrapped = gpu.device.wrapBuffer(raw);
+  const uniformLike = { gpu: wrapped.gpu, size: 16, buffer: wrapped };
+  const set = gpu.compute("struct U { value: u32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }");
+  wrapped.dispose();
+  expect(() => set.set({ u: uniformLike })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  gpu.dispose();
+  expect(() => dispatch.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
+});
+
+test("retained draw, effect, and frame operations respect logical disposal", async () => {
+  const gpu = await initBrowser({ device: externalDevice() });
+  const effect = gpu.effect("@fragment fn fs() -> @location(0) vec4f { return vec4f(1); }");
+  const draw = gpu.draw({ shader: "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f { return vec4f(f32(i), 0, 0, 1); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }" });
+  const frame = gpu.frame();
+  gpu.dispose();
+  expect(() => effect.set({})).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
+  expect(() => draw.set({})).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
+  expect(() => frame.submit()).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
+});
+
+test("retained compute reports device loss reason", async () => {
+  let resolveLost!: (info: GPUDeviceLostInfo) => void;
+  const device = Object.assign(createMockGPUDevice(), { lost: new Promise<GPUDeviceLostInfo>((resolve) => { resolveLost = resolve; }), destroy: vi.fn() });
+  const gpu = await initBrowser({ device });
+  const compute = gpu.compute("@compute @workgroup_size(1) fn main() {}");
+  resolveLost({ reason: "unknown", message: "runtime lost" } as GPUDeviceLostInfo);
+  await Promise.resolve();
+  expect(() => compute.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-LOST", message: expect.stringContaining("runtime lost") }));
+  gpu.dispose();
+});
+
+test("hostile plain-JS init options use stable validation codes", async () => {
+  await expect(initBrowser(null as never)).rejects.toMatchObject({ code: "VGPU-INIT-DEVICE-INVALID" });
+  const throwingDevice = Object.defineProperty({}, "device", { get() { throw new Error("getter boom"); } });
+  await expect(initBrowser(throwingDevice as never)).rejects.toMatchObject({ code: "VGPU-INIT-DEVICE-INVALID" });
+});
+
 test("exclusive InitOptions rejects mixed forms at compile time", () => {
   // @ts-expect-error external device cannot be combined with a label
   const invalid: Parameters<typeof initBrowser>[0] = { device: externalDevice(), label: "mixed" };

@@ -8,6 +8,7 @@ import type { Target } from "./target.ts";
 import { claimedGroupNativeValidationError, frameReentrantError, passPreserveMsaaError, surfaceNotInFrameError, targetRequiredError } from "./errors.ts";
 import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
 import { isTarget, type ClearColor } from "./target-utils.ts";
+import { assertDeviceUsable } from "./lifecycle.ts";
 
 export interface FramePassOptions {
   readonly target: Target;
@@ -38,12 +39,14 @@ export class Frame {
     private readonly trackSettled?: (promise: Promise<unknown>) => void,
     private readonly defaultClearColor: () => ClearColor = () => [0, 0, 0, 1],
   ) {
+    assertDeviceUsable(device, "Frame.constructor");
     this.#encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
+    assertDeviceUsable(this.device, "Frame.pass");
     const targetOnly = isTarget(target);
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
@@ -53,7 +56,7 @@ export class Frame {
     const preserve = clear === false;
     if (preserve && resolvedTarget.sampleCount === 4) throw passPreserveMsaaError();
     const encoder = this.#encoder.beginRenderPass(resolvedTarget.renderPassDescriptor(clear === undefined || clear === true || clear === false ? this.defaultClearColor() : clear, preserve));
-    try { cb(new FramePass(encoder, resolvedTarget, this.#validations)); }
+    try { cb(new (FramePass as unknown as new (encoder: GPURenderPassEncoder, target: Target, validations: ClaimedGroupValidationResult[], device: Device) => FramePass)(encoder, resolvedTarget, this.#validations, this.device)); }
     catch (error) {
       discardClaimedGroupValidationResults(this.#validations);
       this.#validations.length = 0;
@@ -65,6 +68,7 @@ export class Frame {
   }
 
   submit(): void {
+    assertDeviceUsable(this.device, "Frame.submit");
     if (this.#submitted) return;
     this.#submitted = true;
     let commandBuffer: GPUCommandBuffer;
@@ -105,6 +109,7 @@ export class Frame {
 
   async #deliverValidationError(label: string, group: number, cause: unknown): Promise<void> {
     await submittedWorkDone(this.device);
+    assertDeviceUsable(this.device, "Frame.validation");
     const error = claimedGroupNativeValidationError(label, group, cause);
     if (this.errorSink) await this.errorSink(error);
     else console.error(error);
@@ -117,11 +122,14 @@ export class Frame {
 }
 
 export class FramePass {
-  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[]) {}
+  constructor(encoder: GPURenderPassEncoder, target: Target, validations: ClaimedGroupValidationResult[]);
+  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly device?: Device) {}
   draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
+    if (this.device) assertDeviceUsable(this.device, "FramePass.draw");
     encodeFrameDrawable(drawable, this.encoder, this.target, opts, (result) => this.validations.push(result));
   }
   bundles(...bundles: readonly Bundle[]): void {
+    if (this.device) assertDeviceUsable(this.device, "FramePass.bundles");
     replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));
   }
 }

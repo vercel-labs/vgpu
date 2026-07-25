@@ -5,6 +5,7 @@ import { createSetCore, bindGroupLayoutsForReflection, pipelineLayoutFor, type S
 import { visibilityForEntries } from "./set-layouts.ts";
 import type { Compute, ComputeOptions } from "./gpu.ts";
 import { unsupportedError, writableStorageAliasingError } from "./errors.ts";
+import { assertDeviceUsable } from "./lifecycle.ts";
 
 let nextComputeId = 1;
 
@@ -31,6 +32,7 @@ export class ComputePipeline implements Compute {
     readonly opts: ComputeOptions = {},
     private readonly cache: BindGroupCache = createBindGroupCache(),
   ) {
+    assertDeviceUsable(device, "Compute.constructor");
     this.label = opts.label ?? "compute";
     this.reflection = reflectSource(source, `${this.label}.wgsl`);
     const entry = computeEntryPoint(this.reflection, this.label);
@@ -50,11 +52,13 @@ export class ComputePipeline implements Compute {
   }
 
   set(values: SetBag): this {
+    assertDeviceUsable(this.device, `${this.label}.set`);
     this.setCore.set(values);
     return this;
   }
 
   dispatch(x: number, y = 1, z = 1): void {
+    assertDeviceUsable(this.device, `${this.label}.dispatch`);
     this.#preflightAliasing();
     const encoder = this.device.gpu.createCommandEncoder({ label: `${this.label}.encoder` });
     const pass = encoder.beginComputePass({ label: `${this.label}.pass` });

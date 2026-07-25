@@ -20,6 +20,7 @@ import { createSharedUniforms } from "./uniforms.ts";
 import { CanvasSurface, type Surface, type SurfaceCanvas, type SurfaceOptions } from "./surface.ts";
 import type { ClearColor } from "./target-utils.ts";
 import { createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type SettledSource, type ShaderModuleCache } from "./pipeline-store.ts";
+import { assertDeviceUsable } from "./lifecycle.ts";
 
 export type RequestedDeviceInitOptions = {
   readonly adapter?: VGPUAdapter;
@@ -68,10 +69,10 @@ export interface Gpu {
 export type AdapterFactory = () => VGPUAdapter;
 
 export async function createGpu(entry: "browser" | "node" | "mock", opts: InitOptions = {}, _unused: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
-  validateInitOptions(opts);
-  const device = await createDevice(entry, opts, adapterFactory);
+  const validated = validateInitOptions(opts);
+  const device = await createDevice(entry, validated, adapterFactory);
   try {
-    device.assertUsable("init");
+    assertDeviceUsable(device, "init");
     return new RingGpu(device);
   } catch (error) {
     device.dispose();
@@ -121,7 +122,7 @@ class RingGpu implements Gpu {
   bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle { this.#assertUsable(); return createBundle(this.device, opts, cb); }
   onError(cb: GpuErrorListener): () => void { this.#assertUsable(); this.#errorListeners.add(cb); return () => { this.#errorListeners.delete(cb); }; }
   async settled(): Promise<void> { this.#assertUsable(); const snapshot = [...this.#pendingDeliveries, ...[...this.#settledSources].flatMap((source) => source())]; await Promise.allSettled(snapshot); this.#assertUsable(); }
-  #assertUsable(): void { this.device.assertUsable("Gpu"); }
+  #assertUsable(): void { assertDeviceUsable(this.device, "Gpu"); }
   #registerSettledSource(source: SettledSource): () => void { this.#settledSources.add(source); return () => { this.#settledSources.delete(source); }; }
   #reportError(error: VGPUError): Promise<void> { if (this.#disposed) return Promise.resolve(); const delivery = Promise.resolve().then(() => { const listeners = [...this.#errorListeners]; if (!listeners.length) { console.error(error); return; } for (const listener of listeners) { try { listener(error); } catch (listenerError) { console.error(listenerError); } } }); return this.#trackDelivery(delivery); }
   #trackDelivery(promise: Promise<unknown>): Promise<void> { const tracked = Promise.resolve(promise).then(() => undefined, (error) => { console.error(error); }); this.#pendingDeliveries.add(tracked); void tracked.finally(() => this.#pendingDeliveries.delete(tracked)); return tracked; }
@@ -132,17 +133,35 @@ class RingGpu implements Gpu {
 async function createDevice(entry: "browser" | "node" | "mock", opts: InitOptions, adapterFactory?: AdapterFactory): Promise<Device> {
   if ("device" in opts) {
     if (!isGPUDeviceShape(opts.device)) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid external GPUDevice shape.");
-    return new Device(opts.device, null, "external");
+    return new (Device as unknown as new (gpu: GPUDevice, adapterInfo: null, ownership: "external") => Device)(opts.device, null, "external");
   }
   if (opts.adapter || adapterFactory) return (opts.adapter ?? adapterFactory!()).requestDevice(opts);
   if (entry === "browser") return requestBrowserDevice(opts);
   throw unsupportedError("init", `init(${entry}) requires adapterFactory.`);
 }
 
-function validateInitOptions(opts: InitOptions): void {
-  if (!opts || typeof opts !== "object" || !("device" in opts)) return;
-  if ("adapter" in opts || "powerPreference" in opts || "requiredFeatures" in opts || "requiredLimits" in opts || "label" in opts) {
-    throw initError("VGPU-INIT-OPTIONS-CONFLICT", "External device options cannot be mixed.");
+function validateInitOptions(value: unknown): InitOptions {
+  if (typeof value !== "object" || value === null) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid init options.");
+  const opts = value as Record<string, unknown>;
+  try {
+    if ("device" in opts) {
+      if ("adapter" in opts || "powerPreference" in opts || "requiredFeatures" in opts || "requiredLimits" in opts || "label" in opts) {
+        throw initError("VGPU-INIT-OPTIONS-CONFLICT", "External device options cannot be mixed.");
+      }
+      const device = opts.device;
+      if (!isGPUDeviceShape(device)) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid external GPUDevice shape.");
+      return { device };
+    }
+    return {
+      ...(opts.adapter !== undefined ? { adapter: opts.adapter as VGPUAdapter } : {}),
+      ...(opts.powerPreference !== undefined ? { powerPreference: opts.powerPreference as GPUPowerPreference } : {}),
+      ...(opts.requiredFeatures !== undefined ? { requiredFeatures: opts.requiredFeatures as readonly GPUFeatureName[] } : {}),
+      ...(opts.requiredLimits !== undefined ? { requiredLimits: opts.requiredLimits as RequiredDeviceLimits } : {}),
+      ...(opts.label !== undefined ? { label: opts.label as string } : {}),
+    };
+  } catch (error) {
+    if (error instanceof VGPUError) throw error;
+    throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid init options.");
   }
 }
 function isGPUDeviceShape(value: unknown): value is GPUDevice {

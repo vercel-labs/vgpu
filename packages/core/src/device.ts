@@ -14,7 +14,7 @@ export interface DeviceOptions {
   readonly isCompatibilityMode?: boolean;
 }
 
-export type DeviceOwnership = "owned" | "external";
+type DeviceOwnership = "owned" | "external";
 type DeviceState = "alive" | "disposed" | "lost";
 
 export class Device {
@@ -28,16 +28,18 @@ export class Device {
   private lossInfo: GPUDeviceLostInfo | undefined;
   private observeLoss = true;
 
+  constructor(gpu: GPUDevice, adapterInfo?: GPUAdapterInfo | null, options?: DeviceOptions);
   constructor(
     readonly gpu: GPUDevice,
     readonly adapterInfo: GPUAdapterInfo | null = null,
     ownershipOrOptions: DeviceOwnership | DeviceOptions = "owned",
     options: DeviceOptions = {},
   ) {
+    Object.defineProperty(this, "assertUsable", { value: (where: string) => this.#assertUsable(where) });
     this.ownership = typeof ownershipOrOptions === "string" ? ownershipOrOptions : "owned";
     const opts = typeof ownershipOrOptions === "string" ? options : ownershipOrOptions;
     this.isCompatibilityMode = opts.isCompatibilityMode ?? false;
-    this.queue = new Queue(gpu.queue, (where) => this.assertUsable(where));
+    this.queue = new (Queue as unknown as new (gpu: GPUQueue, guard: (where: string) => void) => Queue)(gpu.queue, (where) => this.#assertUsable(where));
     this.readback = new Readback(gpu);
     const lost = gpu.lost;
     if (lost && typeof (lost as PromiseLike<GPUDeviceLostInfo>).then === "function") {
@@ -50,28 +52,28 @@ export class Device {
   }
 
   get limits(): GPUSupportedLimits {
-    this.assertUsable("Device.limits");
+    this.#assertUsable("Device.limits");
     return this.gpu.limits;
   }
 
   get features(): GPUSupportedFeatures {
-    this.assertUsable("Device.features");
+    this.#assertUsable("Device.features");
     return this.gpu.features;
   }
 
   createShader(input: ShaderInput): Shader {
-    this.assertUsable("Device.createShader");
+    this.#assertUsable("Device.createShader");
     const resolved = typeof input === "string" ? compile(input) : input;
     return new Shader(this.gpu.createShaderModule({ code: resolved.wgsl }), resolved);
   }
 
   createTexture(opts: TextureOptions): Texture {
-    this.assertUsable("Device.createTexture");
+    this.#assertUsable("Device.createTexture");
     return new Texture(this, this.gpu.createTexture(toGPUTextureDescriptor(opts)), opts);
   }
 
   createBuffer(opts: BufferOptions): Buffer {
-    this.assertUsable("Device.createBuffer");
+    this.#assertUsable("Device.createBuffer");
     const error = validateBufferOptions(opts);
     if (error) this.captureError(error);
     const desc = error ? mockBufferDescriptor(Math.max(4, opts.size || 4)) : toGPUBufferDescriptor(opts);
@@ -80,7 +82,7 @@ export class Device {
 
   /** Wraps a caller-owned GPUBuffer without taking ownership of its native lifetime. */
   wrapBuffer(buffer: GPUBuffer): Buffer {
-    this.assertUsable("Device.wrapBuffer");
+    this.#assertUsable("Device.wrapBuffer");
     if (!isExternalBufferShape(buffer)) {
       throw new ValidationError({
         code: "VGPU-EXTERNAL-BUFFER-INVALID",
@@ -94,25 +96,24 @@ export class Device {
       usage: bufferUsageNames(buffer.usage),
       ...(buffer.label ? { label: buffer.label } : {}),
     };
-    return new Buffer(this, buffer, options, "external");
+    return new (Buffer as unknown as new (device: Device, gpu: GPUBuffer, options: BufferOptions, ownership: "external") => Buffer)(this, buffer, options, "external");
   }
 
   pushErrorScope(filter: GPUErrorFilter): void {
-    this.assertUsable("Device.pushErrorScope");
+    this.#assertUsable("Device.pushErrorScope");
     this.scopes.push([]);
     this.gpu.pushErrorScope?.(filter);
   }
 
   async popErrorScope(): Promise<VGPUError | null> {
-    this.assertUsable("Device.popErrorScope");
+    this.#assertUsable("Device.popErrorScope");
     const scope = this.scopes.pop();
     const nativeError = await this.gpu.popErrorScope?.();
-    this.assertUsable("Device.popErrorScope");
+    this.#assertUsable("Device.popErrorScope");
     return scope?.[0] ?? nativeErrorToVGPUError(nativeError) ?? null;
   }
 
-  /** @internal Public only so facade/resources can enforce the same lifecycle state. */
-  assertUsable(where: string): void {
+  #assertUsable(where: string): void {
     if (this.state === "alive") return;
     if (this.state === "disposed") {
       throw new ValidationError({

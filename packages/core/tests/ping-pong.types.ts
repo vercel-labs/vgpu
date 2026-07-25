@@ -1,8 +1,7 @@
-import { pingPong } from "../src/index.ts";
+import { Buffer, Device, Queue, pingPong } from "../src/index.ts";
 import type {
   BufferOptions,
   BufferPingPong,
-  Device,
   CreateDeviceOptions,
   TextureOptions,
   TexturePingPong,
@@ -29,3 +28,18 @@ void validDeviceOptions;
 // @ts-expect-error misspelled WebGPU limit names are rejected
 const invalidDeviceOptions: CreateDeviceOptions = { requiredLimits: { maxStorageBufferInVertexStage: 2 } };
 void invalidDeviceOptions;
+
+declare const rawDevice: GPUDevice;
+declare const rawBuffer: GPUBuffer;
+declare const rawQueue: GPUQueue;
+new Device(rawDevice, null, { isCompatibilityMode: true });
+new Buffer(device, rawBuffer, bufferOptions);
+new Queue(rawQueue);
+// @ts-expect-error ownership is inferred internally and is not a public constructor option
+new Device(rawDevice, null, "external");
+// @ts-expect-error Buffer ownership is an internal implementation detail
+new Buffer(device, rawBuffer, bufferOptions, "external");
+// @ts-expect-error Queue lifecycle guards cannot be injected by consumers
+new Queue(rawQueue, () => undefined);
+// @ts-expect-error lifecycle preflight is not public API
+device.assertUsable("consumer");

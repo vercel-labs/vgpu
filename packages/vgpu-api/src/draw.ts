@@ -12,6 +12,7 @@ import { isTarget } from "./target-utils.ts";
 import { blendInvalidError, claimedGroupNativeValidationError, meshRangeInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
 import { meshLayoutResolver, type MeshLayoutResolvable } from "./scene/mesh-descriptor.ts";
+import { assertDeviceUsable } from "./lifecycle.ts";
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
 
@@ -163,6 +164,7 @@ export class InternalDraw implements Draw {
     errorSink?: ValidationErrorSink,
     trackSettled?: (promise: Promise<unknown>) => void,
   ) {
+    assertDeviceUsable(device, "Draw.constructor");
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
     const reflection = reflectSource(source, `${this.label}.wgsl`);
@@ -205,12 +207,14 @@ export class InternalDraw implements Draw {
 
   set(values: SetBag): this {
     const state = drawState(this);
+    assertDeviceUsable(state.device, `${this.label}.set`);
     for (const change of state.setCore.set(values)) state.recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change });
     return this;
   }
 
   group(n: number, bindGroup: GPUBindGroup): this {
     const state = drawState(this);
+    assertDeviceUsable(state.device, `${this.label}.group`);
     const expectedLayout = this.#dynamicBindGroupLayouts.get(n) ?? this.layout(n);
     const previousIdentity = state.setCore.claimGroup(n, bindGroup, expectedLayout);
     state.recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
@@ -218,6 +222,7 @@ export class InternalDraw implements Draw {
   }
 
   layout(n: number, opts: DrawLayoutOptions = {}): GPUBindGroupLayout {
+    assertDeviceUsable(drawState(this).device, `${this.label}.layout`);
     if (!opts.dynamicOffsets) return drawState(this).setCore.layout(n);
     return this.#dynamicLayout(n);
   }
@@ -242,6 +247,7 @@ export class InternalDraw implements Draw {
    * `gpu.onError` as `VGPU-R4-GROUP-VALIDATION`.
    */
   draw(arg: Target | DrawCallOptions = {}): void {
+    assertDeviceUsable(drawState(this).device, `${this.label}.draw`);
     const opts = isTarget(arg) ? { target: arg } : arg;
     const state = drawState(this);
     const target = opts.target ?? state.defaultTarget;
@@ -302,6 +308,7 @@ export class InternalDraw implements Draw {
   }
 
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
+    assertDeviceUsable(drawState(this).device, `${this.label}.encode`);
     const pipeline = this.pipelineFor(target, true);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
@@ -326,15 +333,18 @@ export class InternalDraw implements Draw {
   }
 
   compile(target?: CompileTarget): Promise<this> {
+    assertDeviceUsable(drawState(this).device, `${this.label}.compile`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compile`);
     const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey });
     return promise.then(() => {
+      assertDeviceUsable(drawState(this).device, `${this.label}.compile`);
       drawState(this).resolvedPipelineKeys.add(key);
       return this;
     });
   }
 
   compileSync(target?: CompileTarget): this {
+    assertDeviceUsable(drawState(this).device, `${this.label}.compileSync`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compileSync`);
     const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.compileSync`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
@@ -342,6 +352,7 @@ export class InternalDraw implements Draw {
   }
 
   pipelineFor(target: Target | TargetSignature, allowSurface = false): GPURenderPipeline | undefined {
+    assertDeviceUsable(drawState(this).device, `${this.label}.pipelineFor`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`, allowSurface);
     const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
@@ -349,10 +360,14 @@ export class InternalDraw implements Draw {
   }
 
   pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
+    assertDeviceUsable(drawState(this).device, `${this.label}.pipelineForAsync`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineForAsync`);
     const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey });
-    void promise.then(() => drawState(this).resolvedPipelineKeys.add(key), () => undefined);
-    return promise;
+    return promise.then((pipeline) => {
+      assertDeviceUsable(drawState(this).device, `${this.label}.pipelineForAsync`);
+      drawState(this).resolvedPipelineKeys.add(key);
+      return pipeline;
+    });
   }
 
   #compileKey(target: CompileTarget | undefined, where: string, allowSurface = false): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
@@ -591,6 +606,7 @@ function drawState(draw: Draw): DrawState {
 function reportDrawValidationError(state: DrawState, label: string, group: number, cause: unknown): Promise<void> {
   const delivery = (async () => {
     await submittedWorkDone(state.device);
+    assertDeviceUsable(state.device, `${label}.validation`);
     const error = claimedGroupNativeValidationError(label, group, cause);
     if (state.errorSink) await state.errorSink(error);
     else console.error(error);
