@@ -14,6 +14,6 @@ agent-browser --session "$SESSION" --webgpu --headed eval 'new Promise(r=>reques
 agent-browser --session "$SESSION" --webgpu --headed eval 'JSON.stringify({status:document.documentElement.dataset.probeStatus,text:document.body.innerText,canvas:Boolean(document.querySelector("canvas"))})' | tee "$ART/browser-dom.json"
 agent-browser --session "$SESSION" --webgpu --headed console | tee "$ART/browser-console.log"
 agent-browser --session "$SESSION" --webgpu --headed screenshot "$ART/browser.png"
-grep -q PROBE_PASS "$ART/browser-dom.json" || grep -q '"status":"PASS"' "$ART/browser-dom.json"
+grep -q PROBE_PASS "$ART/browser-dom.json" || sed 's/\\"/"/g' "$ART/browser-dom.json" | grep -q '"status":"PASS"'
 grep -F '"status": "PASS"' "$ART/browser.json"
 identify -format '%[fx:standard_deviation]\n' "$ART/browser.png" | tee "$ART/browser-pixel-stddev.txt" | awk '$1 > 10'
