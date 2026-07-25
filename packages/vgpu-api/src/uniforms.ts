@@ -5,6 +5,7 @@ import type { NormalizedBindingResource } from "./set-resources.ts";
 import { sharedUniformLayoutMismatchError, unsupportedError } from "./errors.ts";
 import { writeLayoutValue } from "./set-packing.ts";
 import { formatSharedUniformLayout, sharedUniformLayoutSignature } from "./uniforms-layout.ts";
+import { assertBufferUsable } from "./lifecycle.ts";
 
 interface SharedUniformLayoutState {
   readonly layout: HostShareableLayout & { readonly size: number };
@@ -42,6 +43,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     ensureBufferBinding(binding);
     const adopted = this.#ensureLayout(binding, sourceHint);
     const buffer = this.#requiredBuffer();
+    assertBufferUsable(buffer, `${sourceHint}.set`);
     return {
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
       identity: buffer.resourceIdentity,

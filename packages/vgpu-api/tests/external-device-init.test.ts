@@ -110,6 +110,34 @@ test("hostile plain-JS init options use stable validation codes", async () => {
   await expect(initBrowser(throwingDevice as never)).rejects.toMatchObject({ code: "VGPU-INIT-DEVICE-INVALID" });
 });
 
+test("shared uniforms reject a disposed backing buffer", async () => {
+  const gpu = await initBrowser({ device: externalDevice() });
+  const shared = gpu.uniforms({ value: 1 });
+  const compute = gpu.compute("struct U { value: f32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }");
+  compute.set({ u: shared });
+  const buffer = (shared as unknown as { buffer: import("@vgpu/core").Buffer }).buffer;
+  buffer.dispose();
+  expect(() => compute.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  gpu.dispose();
+});
+
+test("node snapshots hostile device getters once", async () => {
+  let reads = 0;
+  const options = Object.defineProperty({}, "device", { get() { reads++; throw new Error("boom"); } });
+  await expect(initNode(options as never)).rejects.toMatchObject({ code: "VGPU-INIT-DEVICE-INVALID" });
+  expect(reads).toBe(1);
+});
+
+test("gpu frame state rejects reads and writes after loss", async () => {
+  let resolveLost!: (info: GPUDeviceLostInfo) => void;
+  const device = Object.assign(createMockGPUDevice(), { lost: new Promise<GPUDeviceLostInfo>((resolve) => { resolveLost = resolve; }) });
+  const gpu = await initBrowser({ device });
+  resolveLost({ reason: "destroyed", message: "state lost" } as GPUDeviceLostInfo);
+  await Promise.resolve(); await Promise.resolve();
+  expect(() => gpu.time).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-LOST" }));
+  expect(() => { gpu.frameCount = 9; }).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-LOST" }));
+});
+
 test("exclusive InitOptions rejects mixed forms at compile time", () => {
   // @ts-expect-error external device cannot be combined with a label
   const invalid: Parameters<typeof initBrowser>[0] = { device: externalDevice(), label: "mixed" };

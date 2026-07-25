@@ -69,7 +69,7 @@ export interface Gpu {
 export type AdapterFactory = () => VGPUAdapter;
 
 export async function createGpu(entry: "browser" | "node" | "mock", opts: InitOptions = {}, _unused: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
-  const validated = validateInitOptions(opts);
+  const validated = normalizeInitOptions(opts);
   const device = await createDevice(entry, validated, adapterFactory);
   try {
     assertDeviceUsable(device, "init");
@@ -82,7 +82,7 @@ export async function createGpu(entry: "browser" | "node" | "mock", opts: InitOp
 
 class RingGpu implements Gpu {
   readonly gpu: GPUDevice;
-  time = 0; deltaTime = 0; frameCount = 0;
+  #time = 0; #deltaTime = 0; #frameCount = 0;
   #lastTimeMs = nowMs();
   readonly #cache = createBindGroupCache(); readonly #pipelineStore: PipelineStore;
   readonly #shaderModules: ShaderModuleCache; readonly #pipelineLayouts: PipelineLayoutCache; readonly #samplers;
@@ -99,6 +99,12 @@ class RingGpu implements Gpu {
     this.frame = callableFrameRunner(runner);
   }
 
+  get time(): number { this.#assertUsable(); return this.#time; }
+  set time(value: number) { this.#assertUsable(); this.#time = value; }
+  get deltaTime(): number { this.#assertUsable(); return this.#deltaTime; }
+  set deltaTime(value: number) { this.#assertUsable(); this.#deltaTime = value; }
+  get frameCount(): number { this.#assertUsable(); return this.#frameCount; }
+  set frameCount(value: number) { this.#assertUsable(); this.#frameCount = value; }
   get clearColor(): ClearColor { this.#assertUsable(); return this.#clearColorValue; }
   set clearColor(value: ClearColor) {
     this.#assertUsable();
@@ -140,7 +146,7 @@ async function createDevice(entry: "browser" | "node" | "mock", opts: InitOption
   throw unsupportedError("init", `init(${entry}) requires adapterFactory.`);
 }
 
-function validateInitOptions(value: unknown): InitOptions {
+export function normalizeInitOptions(value: unknown): InitOptions {
   if (typeof value !== "object" || value === null) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid init options.");
   const opts = value as Record<string, unknown>;
   try {
