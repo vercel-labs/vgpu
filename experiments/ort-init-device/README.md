@@ -6,6 +6,8 @@ This non-published experiment is the executable Node/browser recipe for vgpu 0.1
 
 Install this directory's exact dependencies, build the repository, and run `node/run-e2e.sh`. The user-side setup is in `node/recipe.mjs`: it imports the supported public `webgpu` package, creates one Dawn singleton, installs that singleton as `navigator.gpu`, installs WebGPU constructors and `self`, and only then imports `ort.webgpu.bundle.min.mjs`. Absolute asyncify `.mjs`/`.wasm` paths, `wasmBinary`, and `numThreads=1` are required. The generic threaded WASM flavor is intentionally tested in a separate process and must fail with `webgpuInit is not a function`.
 
+`webgpu@0.4.0`'s Linux ARM64 prebuilt requires glibc 2.38. Run the primary public-package recipe and generic-WASM negative proof on x64 CI or ARM64 with glibc 2.38 or newer. On older ARM64 hosts, `node/run-fallback-e2e.sh` is the explicitly labeled host fallback: it installs and uses the supported `@vgpu/adapter-node` portable Dawn and software renderer 0.1.6, then runs the same positive snapshot/reference, identity, anti-fallback, lifecycle, and native-destroy assertions. It does not replace the primary recipe or its negative proof.
+
 The application adopts `ort.env.webgpu.device` with `init({device})`. vgpu does not import ORT, select its assets, or mutate globals.
 
 ## Lifetime
