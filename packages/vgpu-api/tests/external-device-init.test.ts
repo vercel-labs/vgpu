@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createMockGPUDevice, getMockGPUDeviceInstrumentation } from "@vgpu/core";
+import { createMockGPUDevice, Device, getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init as initBrowser } from "../src/index.ts";
 import { init as initNode } from "../src/node.ts";
 
@@ -118,6 +118,20 @@ test("shared uniforms reject a disposed backing buffer", async () => {
   const buffer = (shared as unknown as { buffer: import("@vgpu/core").Buffer }).buffer;
   buffer.dispose();
   expect(() => compute.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  gpu.dispose();
+});
+
+test.each([
+  ["browser", initBrowser],
+  ["node", initNode],
+] as const)("%s snapshots every requested-device option once", async (_entry, init) => {
+  const reads = Object.fromEntries(["adapter", "powerPreference", "requiredFeatures", "requiredLimits", "label"].map((key) => [key, 0])) as Record<string, number>;
+  const adapter = { requestDevice: vi.fn(async () => new Device(externalDevice())) };
+  const values: Record<string, unknown> = { adapter, powerPreference: "high-performance", requiredFeatures: [], requiredLimits: {}, label: "single-read" };
+  const options = Object.create(null) as Record<string, unknown>;
+  for (const key of Object.keys(values)) Object.defineProperty(options, key, { enumerable: true, get() { reads[key]++; return values[key]; } });
+  const gpu = await init(options as never);
+  expect(reads).toEqual({ adapter: 1, powerPreference: 1, requiredFeatures: 1, requiredLimits: 1, label: 1 });
   gpu.dispose();
 });
 

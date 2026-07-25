@@ -158,12 +158,17 @@ export function normalizeInitOptions(value: unknown): InitOptions {
       if (!isGPUDeviceShape(device)) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid external GPUDevice shape.");
       return { device };
     }
+    const adapter = opts.adapter;
+    const powerPreference = opts.powerPreference;
+    const requiredFeatures = opts.requiredFeatures;
+    const requiredLimits = opts.requiredLimits;
+    const label = opts.label;
     return {
-      ...(opts.adapter !== undefined ? { adapter: opts.adapter as VGPUAdapter } : {}),
-      ...(opts.powerPreference !== undefined ? { powerPreference: opts.powerPreference as GPUPowerPreference } : {}),
-      ...(opts.requiredFeatures !== undefined ? { requiredFeatures: opts.requiredFeatures as readonly GPUFeatureName[] } : {}),
-      ...(opts.requiredLimits !== undefined ? { requiredLimits: opts.requiredLimits as RequiredDeviceLimits } : {}),
-      ...(opts.label !== undefined ? { label: opts.label as string } : {}),
+      ...(adapter !== undefined ? { adapter: adapter as VGPUAdapter } : {}),
+      ...(powerPreference !== undefined ? { powerPreference: powerPreference as GPUPowerPreference } : {}),
+      ...(requiredFeatures !== undefined ? { requiredFeatures: requiredFeatures as readonly GPUFeatureName[] } : {}),
+      ...(requiredLimits !== undefined ? { requiredLimits: requiredLimits as RequiredDeviceLimits } : {}),
+      ...(label !== undefined ? { label: label as string } : {}),
     };
   } catch (error) {
     if (error instanceof VGPUError) throw error;
