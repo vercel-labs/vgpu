@@ -17,12 +17,17 @@ export fn trace_cube_exit(model: mat4x4f, entry: vec3f, direction: vec3f, half_e
   return CubeExit(entry + direction * distance, normalize(rotation * local_normal), distance);
 }
 
-export fn transmitted_cube_ray(model: mat4x4f, entry: vec3f, incident: vec3f, normal: vec3f, eta: f32, half_extent: f32, fallback_thickness: f32, double_amount: f32) -> vec4f {
-  let inside = refract(incident, normal, eta);
+export fn transmitted_cube_inside_ray(model: mat4x4f, entry: vec3f, inside: vec3f, eta: f32, half_extent: f32, fallback_thickness: f32, double_amount: f32) -> vec4f {
   if (dot(inside, inside) < 1e-6) { return vec4f(entry, 0.0); }
   if (double_amount < 1e-3) { return vec4f(entry + inside * (fallback_thickness + 4.0), 1.0); }
+  // Every cone sample intersects independently: averaging one central exit would retain
+  // the sharp back-face discontinuity that rough glass is supposed to spread out.
   let exit = trace_cube_exit(model, entry, inside, half_extent);
   let outgoing = refract(inside, -exit.normal, 1.0 / eta);
   if (dot(outgoing, outgoing) < 1e-6) { return vec4f(exit.position + inside * 4.0, 1.0); }
   return vec4f(exit.position + outgoing * 4.0, 1.0);
+}
+
+export fn transmitted_cube_ray(model: mat4x4f, entry: vec3f, incident: vec3f, normal: vec3f, eta: f32, half_extent: f32, fallback_thickness: f32, double_amount: f32) -> vec4f {
+  return transmitted_cube_inside_ray(model, entry, refract(incident, normal, eta), eta, half_extent, fallback_thickness, double_amount);
 }

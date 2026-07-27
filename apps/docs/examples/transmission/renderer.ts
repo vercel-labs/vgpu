@@ -58,8 +58,6 @@ const FLOOR = {
 } as const;
 
 const GLASS = {
-  /** Soda-lime glass. Fixed: the example spends its controls on what is visually new. */
-  ior: 1.5,
   /** Ray length inside the solid in `simple` mode; `double` measures the real one. */
   thickness: 0.85,
   /** Beer-Lambert absorption per world unit: a faint bottle-glass tint. */
@@ -512,6 +510,7 @@ function renderScene(gpu: Gpu, scene: Scene, output: Output, view: CameraView, c
       view_projection: view.camera.viewProjection,
       model,
       camera_position: view.position,
+      ior: controls.ior,
       roughness: controls.roughness,
       dispersion: controls.dispersion ? 1 : 0,
       refraction_mode: doubleRefraction ? 1 : 0,
@@ -585,6 +584,7 @@ function copyIntoLevel(gpu: Gpu, source: Target, texture: Texture, level: number
 
 function normalizeControls(controls: Readonly<TransmissionControls>): TransmissionControls {
   return {
+    ior: Math.max(1, Math.min(2.4, Number.isFinite(controls.ior) ? controls.ior : DEFAULT_TRANSMISSION_CONTROLS.ior)),
     roughness: Math.max(0, Math.min(1, Number.isFinite(controls.roughness) ? controls.roughness : DEFAULT_TRANSMISSION_CONTROLS.roughness)),
     dispersion: Boolean(controls.dispersion),
     refraction: controls.refraction === 'double' ? 'double' : 'simple',

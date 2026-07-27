@@ -11,6 +11,19 @@ export function Controls({ value, onChange, disabled = false }: ControlsProps) {
     <fieldset className="absolute right-4 top-4 z-[2] grid gap-2 rounded-2xl border border-white/20 bg-black/60 p-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur">
       <legend className="sr-only">Glass material</legend>
       <label className="flex items-center gap-2 whitespace-nowrap">
+        IOR
+        <input
+          aria-label="Index of refraction"
+          type="range"
+          min={1}
+          max={2.4}
+          step={0.01}
+          value={value.ior}
+          disabled={disabled}
+          onChange={(event) => onChange({ ...value, ior: event.currentTarget.valueAsNumber })}
+        />
+      </label>
+      <label className="flex items-center gap-2 whitespace-nowrap">
         Roughness
         <input
           type="range"

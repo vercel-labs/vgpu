@@ -1,6 +1,7 @@
 import { env_lod, sample_env } from "./env-common.wgsl";
-import { trace_cube_exit, transmitted_cube_ray } from "./backface.wgsl";
-import { DISPERSION_SAMPLES, spectral_weight } from "./dispersion.wgsl";
+import { trace_cube_exit, transmitted_cube_inside_ray } from "./backface.wgsl";
+import { cone_direction, cone_rotation, TRANSMISSION_SAMPLES } from "./cone.wgsl";
+import { spectral_weight } from "./dispersion.wgsl";
 import { dielectric_fresnel } from "./fresnel.wgsl";
 import { reflection_cone, transmission_lod } from "./lod-selection.wgsl";
 import { project_to_uv, transmitted_ray } from "./refraction.wgsl";
@@ -84,53 +85,39 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let incident = -view;
   let facing = clamp(dot(view, normal), 0.0, 1.0);
 
-  // Both fetches use an explicit level, and both levels are computed before any branch:
-  // derivatives are only well defined in uniform control flow.
-  //
-  // The reflection cone is driven by the same roughness as the transmission, and at full
-  // width, not half: a sandblasted face that transmits a smear cannot reflect a crisp
-  // horizon, and the seam between two faces is exactly where that mismatch shows.
+  // Both fetches use explicit levels computed before branches, preserving uniform
+  // derivative flow. Cone integration supplies the geometric blur, so the scene pyramid
+  // contributes only the lower-frequency half instead of blurring the result twice.
   let reflected = reflect(incident, normal);
   let env_level = env_lod(reflection_cone(glass.roughness), dpdx(reflected), dpdy(reflected), glass.texel_angle);
-  // Stopping two levels short of the top of the pyramid: the last mip of a screen-sized
-  // target is a handful of texels, i.e. the average of the whole frame, and a face that
-  // samples a constant reads as opaque paint rather than as frosted glass. One level down
-  // still smears every edge away but keeps the floor-to-horizon gradient behind the cube.
-  let scene_level = transmission_lod(glass.roughness, glass.scene_levels);
+  let scene_level = transmission_lod(glass.roughness, glass.scene_levels) * 0.55;
 
-  // Follow the bent ray to the actual cube boundary. The old G-buffer sampled the far
-  // face hit by the *camera* ray at this pixel, which is a different point/normal.
   let central_inside = refract(incident, normal, 1.0 / glass.ior);
   let central_exit = trace_cube_exit(glass.model, in.world_position, central_inside, 0.65);
-  let double_amount = select(0.0, 1.0 - smoothstep(0.18, 0.8, glass.roughness), glass.refraction_mode > 0.5);
+  let double_amount = select(0.0, 1.0, glass.refraction_mode > 0.5);
   let thickness = mix(glass.thickness, central_exit.distance, double_amount);
   let reflection = sample_env(env_tex, env_samp, reflected, env_level, glass.env_size);
 
-  // Dispersion as a spectral sweep, not three fringes: DISPERSION_SAMPLES wavelengths
-  // walk the IOR from the red end (bends least) to the blue one, each transmitted
-  // separately and accumulated under a smooth response curve. Splitting only R, G and B
-  // puts all the energy on three indices, which reads as three hard-edged colour bands;
-  // seven overlapping wavelengths land on seven neighbouring pixels and reconstruct a
-  // continuous rainbow along the gradient instead.
-  var transmitted: vec3f;
-  if (glass.dispersion > 0.5) {
-    var spectrum = vec3f(0.0);
-    var total = vec3f(0.0);
-    for (var i = 0; i < DISPERSION_SAMPLES; i = i + 1) {
-      let t = (f32(i) + 0.5) / f32(DISPERSION_SAMPLES);
-      let ior = glass.ior + (t - 0.5) * glass.dispersion_spread;
-      let ray = transmitted_cube_ray(glass.model, in.world_position, incident, normal, 1.0 / ior, 0.65, glass.thickness, double_amount);
-      let weight = spectral_weight(t);
-      spectrum += sample_transmission(ray, scene_level, reflection) * weight;
-      total += weight;
-    }
-    // Per-channel normalisation: the sweep redistributes light, it never adds or removes
-    // any, so a uniform background has to come back out unchanged.
-    transmitted = spectrum / max(total, vec3f(1e-4));
-  } else {
-    let ray = transmitted_cube_ray(glass.model, in.world_position, incident, normal, 1.0 / glass.ior, 0.65, glass.thickness, double_amount);
-    transmitted = sample_transmission(ray, scene_level, reflection);
+  // Eleven equal-area golden-angle samples form a deterministic cone. Roughness is
+  // squared so polished glass remains sharp while the high end spreads across multiple
+  // exit faces. In double mode every jittered inside direction traces its own cube exit.
+  let cone_radius = glass.roughness * glass.roughness * 0.18;
+  let rotation = cone_rotation(in.position.xy);
+  var spectrum = vec3f(0.0);
+  var total = vec3f(0.0);
+  for (var i = 0; i < TRANSMISSION_SAMPLES; i = i + 1) {
+    let t = (f32(i) + 0.5) / f32(TRANSMISSION_SAMPLES);
+    let spectral_ior = max(1.0, glass.ior + (t - 0.5) * glass.dispersion_spread);
+    let ior = select(glass.ior, spectral_ior, glass.dispersion > 0.5);
+    let eta = 1.0 / ior;
+    let base_inside = refract(incident, normal, eta);
+    let inside = cone_direction(base_inside, i, cone_radius, rotation);
+    let ray = transmitted_cube_inside_ray(glass.model, in.world_position, inside, eta, 0.65, glass.thickness, double_amount);
+    let weight = select(vec3f(1.0), spectral_weight(t), glass.dispersion > 0.5);
+    spectrum += sample_transmission(ray, scene_level, reflection) * weight;
+    total += weight;
   }
+  var transmitted = spectrum / max(total, vec3f(1e-4));
 
   // Beer-Lambert: the further the ray travels inside the solid, the more of it the glass
   // keeps. This is what gives thick corners their colour while flat faces stay clear.
