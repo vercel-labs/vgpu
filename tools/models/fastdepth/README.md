@@ -80,9 +80,27 @@ apps/docs/public/depth-gate/
 1. `tools/models/fastdepth/stage-gate.sh` (only needed if the payload is missing).
 2. `pnpm --filter docs dev`.
 3. Open `http://localhost:3000/depth-gate/index.html` in a browser with a **real**
-   GPU (Chrome/Edge 121+). Defaults: 2 warmups + 10 timed sequential runs,
-   60 s per-run timeout, 300 s whole-gate budget.
-   Overrides: `?runs=10&warmups=2&runTimeoutMs=60000&budgetMs=300000`.
+   GPU (Chrome/Edge 121+). **Just open the bare URL** — the defaults are the
+   intended configuration: 2 warmups + 10 timed sequential runs, 60 s per-run
+   timeout, 300 s whole-gate budget.
+
+   Optional overrides: `?runs=10&warmups=2&runTimeoutMs=60000&budgetMs=300000`.
+   Parsing is deliberately defensive, because a 0 ms watchdog once killed a real
+   author run before the model had even loaded:
+
+   - absent, blank (`?budgetMs=`), `0`, negative and non-numeric values all fall
+     back to the defaults — a watchdog is never 0 ms;
+   - values are clamped to sane ranges (`runs` ≤ 500, `runTimeoutMs` 1 s–10 min,
+     `budgetMs` 30 s–1 h), and `budgetMs` is raised if it cannot contain one run;
+   - `?budgetMs=off` (also `none`/`inf`) relaxes a watchdog to its 1 h ceiling
+     rather than disabling it, so the page can still never hang forever;
+   - `warmups=0` is honoured as a real request, but then the **first timed run
+     absorbs shader compilation** and will usually blow the p95 ceiling. That is
+     a true result, not a bug — use the default 2 warmups to measure steady state.
+
+   Both the raw query params and the effective values land in the evidence JSON
+   (`optionsRaw`, `options`, `optionNotes`), and the page header appends
+   `· N option(s) defaulted/clamped` whenever any coercion happened.
 4. Read the verdict, then eyeball the two previews (source left, normalized
    near-depth right, white = near). The plan requires a human sign-off that the
    layering is meaningful, not just numerically sane.
