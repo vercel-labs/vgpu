@@ -1,35 +1,36 @@
 // Reads the ten GPU-resident logits ONNX Runtime Web produced and draws the
-// class probabilities, plus a preview of the normalized 28x28 input.
+// class probabilities.
 //
 // The softmax is computed here, so the 40 bytes of output are never copied or
-// read back to the CPU. Class labels are static DOM text next to the canvas.
+// read back to the CPU. Class labels are static DOM text below the canvas.
 //
 // Everything is laid out in framebuffer pixels and antialiased with signed
 // distance fields, so rounded corners, hairlines and glows keep their shape at
-// any canvas aspect ratio. The only fraction of the *width* used for layout is
-// `SPLIT`, which the static DOM label row mirrors so the digits stay under the
-// bars.
+// any canvas aspect ratio. The chart uses the full width: class `i` owns the
+// column `[i, i + 1) / 10`, which a plain ten-column DOM grid mirrors exactly,
+// so every label sits under its own bar with no magic padding.
 struct Uniforms {
   resolution: vec2f,
   /// 1.0 once a real inference result is bound, 0.0 for the idle state.
   has_result: f32,
-  /// Side length of the input preview in texels (28).
+  /// Side length of the model input in texels (28). Kept for the pipeline's
+  /// uniform layout; the chart itself needs no input geometry.
   input_size: f32,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> logits: array<f32>;
+/// The normalized 28x28 input stays bound: `createVisualizer().render()` owns
+/// this slot and the drawing surface next to the canvas already shows the ink,
+/// so the chart deliberately does not draw the tensor a second time.
 @group(0) @binding(2) var<storage, read> digit: array<f32>;
 
 const CLASSES: u32 = 10u;
 
-/// Where the probability chart starts, as a fraction of the width. The static
-/// DOM class labels are padded by the same fraction (`pl-[38%]`).
-const SPLIT: f32 = 0.38;
 /// Chart band, as fractions of the height: 1.0 probability and the axis.
-const CHART_TOP: f32 = 0.14;
-const CHART_BASE: f32 = 0.86;
+const CHART_TOP: f32 = 0.13;
+const CHART_BASE: f32 = 0.855;
 /// Every class stays visible even at a probability of ~0, as a small nub.
-const MIN_BAR: f32 = 0.012;
+const MIN_BAR: f32 = 0.014;
 
 const BG_TOP: vec3f = vec3f(0.038, 0.043, 0.055);
 const BG_BOTTOM: vec3f = vec3f(0.024, 0.027, 0.036);
@@ -47,14 +48,6 @@ const WIN_GLOW: vec3f = vec3f(0.120, 0.420, 0.780);
 const REST_LOW: vec3f = vec3f(0.085, 0.135, 0.200);
 const REST_HIGH: vec3f = vec3f(0.220, 0.360, 0.500);
 const REST_TIP: vec3f = vec3f(0.400, 0.560, 0.720);
-/// Input preview.
-const PANEL_TOP: vec3f = vec3f(0.060, 0.068, 0.086);
-const PANEL_BOTTOM: vec3f = vec3f(0.030, 0.035, 0.046);
-const PANEL_FRAME: vec3f = vec3f(0.400, 0.470, 0.600);
-const INK_HALO: vec3f = vec3f(0.100, 0.300, 0.620);
-const INK_BODY: vec3f = vec3f(0.380, 0.700, 1.000);
-const INK_CORE: vec3f = vec3f(0.930, 0.980, 1.000);
-const GRID: vec3f = vec3f(0.020, 0.024, 0.032);
 
 /// Numerically stable softmax over the ten logits.
 fn probability(index: u32) -> f32 {
@@ -89,40 +82,11 @@ fn coverage(distance_px: f32) -> f32 {
   return clamp(0.5 - distance_px, 0.0, 1.0);
 }
 
-fn digit_at(cell: vec2i) -> f32 {
-  let size = i32(uniforms.input_size);
-  let c = clamp(cell, vec2i(0), vec2i(size - 1));
-  return digit[c.y * size + c.x];
-}
-
-/// Bilinear tap of the input tensor; `p` is normalized over the preview box.
-fn sample_digit(p: vec2f) -> f32 {
-  let grid = p * uniforms.input_size - 0.5;
-  let base = floor(grid);
-  let frac = grid - base;
-  let cell = vec2i(base);
-  let top = mix(digit_at(cell), digit_at(cell + vec2i(1, 0)), frac.x);
-  let bottom = mix(digit_at(cell + vec2i(0, 1)), digit_at(cell + vec2i(1, 1)), frac.x);
-  return mix(top, bottom, frac.y);
-}
-
-/// Two rings of taps around `p`, used as a cheap bloom around the strokes.
-fn digit_halo(p: vec2f) -> f32 {
-  let near = 1.7 / uniforms.input_size;
-  let far = 3.6 / uniforms.input_size;
-  var total = 0.0;
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    let angle = f32(i) * 0.7853981634;
-    let dir = vec2f(cos(angle), sin(angle));
-    total = total + sample_digit(p + dir * near) * 0.72 + sample_digit(p + dir * far) * 0.28;
-  }
-  return total / 8.0;
-}
-
 @fragment
 fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let resolution = max(uniforms.resolution, vec2f(1.0));
   let px = position.xy;
+  let width = resolution.x;
   let height = resolution.y;
   let has_result = uniforms.has_result > 0.5;
 
@@ -131,20 +95,21 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   color = color + AMBIENT * (1.0 - smoothstep(0.0, 1.15, length(px / height)));
 
   // ---------------------------------------------------------------- chart ---
-  let chart_x = SPLIT * resolution.x;
-  let column_w = (resolution.x - chart_x) / f32(CLASSES);
+  let column_w = width / f32(CLASSES);
   let top = CHART_TOP * height;
   let base = CHART_BASE * height;
   let span = base - top;
-  let bar_half = min(column_w * 0.32, 0.075 * height);
-  let bar_radius = bar_half * 0.55;
-  let in_chart = select(0.0, 1.0, px.x > chart_x - column_w * 0.5);
+  let bar_half = min(column_w * 0.30, 0.075 * height);
+  let bar_radius = bar_half * 0.5;
+  // Full-bleed rules and axis, faded near the canvas edges so the hairlines
+  // never end in a hard stub against the border.
+  let edge_fade = smoothstep(0.0, 0.035 * width, min(px.x, width - px.x));
   let winner = best_class();
 
   // Halo and column wash behind the winning bar, drawn before the bars so it
   // reads as light spilling out of the argmax rather than a border.
   if (has_result) {
-    let winner_x = chart_x + (f32(winner) + 0.5) * column_w;
+    let winner_x = (f32(winner) + 0.5) * column_w;
     let winner_h = max(probability(winner) * span, MIN_BAR * height);
     let to_winner = sd_round_box(
       px - vec2f(winner_x, base - winner_h * 0.5),
@@ -152,7 +117,7 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
       bar_radius,
     );
     color = color + WIN_GLOW * 0.34 * exp(-max(to_winner, 0.0) / (0.05 * height));
-    let band_x = 1.0 - smoothstep(column_w * 0.3, column_w * 0.95, abs(px.x - winner_x));
+    let band_x = 1.0 - smoothstep(column_w * 0.28, column_w * 0.9, abs(px.x - winner_x));
     let band_y = smoothstep(0.0, 0.05 * height, px.y - (top - 0.05 * height))
       * (1.0 - smoothstep(base - 0.015 * height, base, px.y));
     color = color + WIN_GLOW * 0.10 * band_x * band_y;
@@ -162,18 +127,18 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   for (var k = 1u; k <= 4u; k = k + 1u) {
     let y = base - span * f32(k) * 0.25;
     let weight = select(1.0, 1.8, k == 4u);
-    color = color + RULE * weight * coverage(abs(px.y - y) - 0.5) * in_chart;
+    color = color + RULE * weight * coverage(abs(px.y - y) - 0.5) * edge_fade;
   }
 
   // Bars: an unfilled track per class, the softmax fill on top of it.
-  let bar_center_x = chart_x + (floor(clamp((px.x - chart_x) / column_w, 0.0, f32(CLASSES) - 1.0)) + 0.5) * column_w;
-  let index = u32(clamp((px.x - chart_x) / column_w, 0.0, f32(CLASSES) - 1.0));
+  let index = u32(clamp(px.x / column_w, 0.0, f32(CLASSES) - 1.0));
+  let bar_center_x = (f32(index) + 0.5) * column_w;
   let track = sd_round_box(px - vec2f(bar_center_x, (top + base) * 0.5), vec2f(bar_half, span * 0.5), bar_radius);
   // The track fades towards 1.0 probability so the chart never looks like a row
   // of solid slabs.
   let track_fade = 0.35 + 0.65 * smoothstep(top, base, px.y);
-  color = mix(color, TRACK, coverage(track) * 0.92 * track_fade * in_chart);
-  color = mix(color, TRACK_EDGE, coverage(abs(track) - 0.6) * 0.4 * track_fade * in_chart);
+  color = mix(color, TRACK, coverage(track) * 0.92 * track_fade);
+  color = mix(color, TRACK_EDGE, coverage(abs(track) - 0.6) * 0.4 * track_fade);
 
   if (has_result) {
     let is_winner = index == winner;
@@ -188,47 +153,18 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     // Glass sheen down the left flank of every bar.
     fill = fill + vec3f(0.05, 0.06, 0.07)
       * (1.0 - smoothstep(0.0, bar_half * 0.9, abs(px.x - (bar_center_x - bar_half * 0.45))));
-    color = mix(color, fill, coverage(bar) * in_chart);
+    color = mix(color, fill, coverage(bar));
     // Bright tip so short bars still have a readable edge.
     let tip = coverage(bar) * coverage(abs(px.y - (base - bar_h)) - 1.4);
-    color = mix(
-      color,
-      select(REST_TIP, WIN_TIP, is_winner),
-      tip * select(0.45, 0.95, is_winner) * in_chart,
-    );
+    color = mix(color, select(REST_TIP, WIN_TIP, is_winner), tip * select(0.45, 0.95, is_winner));
   }
 
   // Axis and one tick per class, pointing at the static DOM label below. The
   // winner's tick is brighter, which keeps the highlight in the shader.
-  color = mix(color, AXIS, coverage(abs(px.y - base) - 0.9) * in_chart);
-  let tick = sd_round_box(px - vec2f(bar_center_x, base + 0.024 * height), vec2f(0.75, 0.014 * height), 0.75);
+  color = mix(color, AXIS, coverage(abs(px.y - base) - 0.9) * edge_fade);
+  let tick = sd_round_box(px - vec2f(bar_center_x, base + 0.026 * height), vec2f(0.75, 0.015 * height), 0.75);
   let tick_weight = select(0.35, select(0.35, 1.0, index == winner), has_result);
-  color = mix(color, AXIS + vec3f(0.10), coverage(tick) * tick_weight * in_chart);
-
-  // -------------------------------------------------------- input preview ---
-  let left_w = SPLIT * resolution.x;
-  let side = min(left_w - 0.10 * height, 0.82 * height);
-  let panel_center = vec2f(left_w * 0.5, height * 0.5);
-  let panel_half = vec2f(side * 0.5);
-  let panel_d = sd_round_box(px - panel_center, panel_half, 0.035 * height);
-  let panel_cover = coverage(panel_d);
-  if (panel_cover > 0.0) {
-    let local = (px - (panel_center - panel_half)) / max(side, 1.0);
-    var panel = mix(PANEL_TOP, PANEL_BOTTOM, smoothstep(0.0, 1.0, local.y));
-    let inset = 0.08;
-    let uv = (local - inset) / (1.0 - 2.0 * inset);
-    let inside = select(0.0, 1.0, uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0);
-    let ink = sample_digit(uv);
-    panel = panel + INK_HALO * digit_halo(uv) * 0.6;
-    // The 28x28 tensor lattice, only where there is no ink to muddy.
-    let cell_px = side * (1.0 - 2.0 * inset) / uniforms.input_size;
-    let edge = min(fract(uv.x * uniforms.input_size), fract(uv.y * uniforms.input_size)) * cell_px;
-    panel = panel + GRID * (1.0 - smoothstep(0.0, 1.3, edge)) * (1.0 - ink) * inside;
-    panel = mix(panel, INK_BODY, smoothstep(0.04, 0.55, ink));
-    panel = mix(panel, INK_CORE, smoothstep(0.55, 0.92, ink));
-    color = mix(color, panel, panel_cover);
-  }
-  color = mix(color, PANEL_FRAME, coverage(abs(panel_d) - 0.9) * 0.5);
+  color = mix(color, AXIS + vec3f(0.10), coverage(tick) * tick_weight);
 
   return vec4f(color, 1.0);
 }

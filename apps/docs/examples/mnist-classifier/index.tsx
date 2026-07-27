@@ -193,24 +193,23 @@ export function Example() {
           </button>
         </div>
 
-        <div className="relative min-w-[320px] flex-1">
-          <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="relative min-w-[360px] flex-1">
+          <div className="flex items-baseline justify-between gap-3">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
-              model input 28 × 28
+              probability
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
-              softmax(logits) · probability
-            </span>
+            <span className="font-mono text-[10px] text-white/25">softmax(logits)</span>
           </div>
           <canvas
             ref={barsCanvasRef}
             aria-label="Class probabilities rendered from the model's GPU-resident logits"
-            className="block h-[280px] w-full rounded-xl border border-white/10"
+            className="mt-2 block h-[280px] w-full rounded-xl border border-white/10 bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
           />
           {/* Static labels: reading the winning class from the GPU would require a
-              readback, which this example deliberately avoids. The 38% padding
-              mirrors `SPLIT` in visualize.wgsl, so each digit sits under its bar. */}
-          <div className="grid grid-cols-10 pl-[38%] pt-1 text-center font-mono text-[11px] tabular-nums text-white/40">
+              readback, which this example deliberately avoids. The chart uses the
+              full canvas width, one tenth per class, so this ten-column grid puts
+              every digit under its own bar. */}
+          <div className="grid grid-cols-10 pt-1.5 text-center font-mono text-[11px] tabular-nums text-white/40">
             {Array.from({ length: 10 }, (_, digit) => (
               <span key={digit}>{digit}</span>
             ))}
