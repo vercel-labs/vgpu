@@ -18,7 +18,7 @@ export const exampleComponentLoaders = {
   'batch-rendering': () => import('../examples/batch-rendering/index'),
   'fft-ocean': () => import('../examples/fft-ocean/index'),
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
-  'neural-shader-cppn': () => import('../examples/neural-shader-cppn/index'),
+  'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
   'air-painting': () => import('../examples/air-painting/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;

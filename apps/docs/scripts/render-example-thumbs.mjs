@@ -28,7 +28,7 @@ const rendererEntries = [
   { slug: 'batch-rendering', module: '../examples/batch-rendering/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'fft-ocean', module: '../examples/fft-ocean/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'neural-shader-cppn', module: '../examples/neural-shader-cppn/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'depth-estimation', module: '../examples/depth-estimation/thumbnail.ts', exportName: 'renderThumbnail' },
   { slug: 'mnist-classifier', module: '../examples/mnist-classifier/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'air-painting', module: '../examples/air-painting/renderer.ts', exportName: 'renderThumbnail' },
 ];

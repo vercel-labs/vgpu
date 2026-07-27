@@ -15,7 +15,7 @@
     "batch-rendering": 3662,
     "fft-ocean": 9235,
     "raymarched-fractal": 3995,
-    "neural-shader-cppn": 25381,
+    "depth-estimation": 0,
     "mnist-classifier": 6681,
     "air-painting": 13079
   },

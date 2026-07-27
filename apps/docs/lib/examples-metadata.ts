@@ -12,7 +12,7 @@ import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/
 import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
 import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
 import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
-import { meta as neuralShaderCppnMeta } from '../examples/neural-shader-cppn/meta';
+import { meta as depthEstimationMeta } from '../examples/depth-estimation/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
 import { meta as airPaintingMeta } from '../examples/air-painting/meta';
 
@@ -27,7 +27,7 @@ const rawMetadata = {
   'batch-rendering': batchRenderingMeta,
   'fft-ocean': fftOceanMeta,
   'raymarched-fractal': raymarchedFractalMeta,
-  'neural-shader-cppn': neuralShaderCppnMeta,
+  'depth-estimation': depthEstimationMeta,
   'mnist-classifier': mnistClassifierMeta,
   'air-painting': airPaintingMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
@@ -51,7 +51,7 @@ export const exampleMetadataBySlug = {
   'batch-rendering': withThumbnails(rawMetadata['batch-rendering']),
   'fft-ocean': withThumbnails(rawMetadata['fft-ocean']),
   'raymarched-fractal': withThumbnails(rawMetadata['raymarched-fractal']),
-  'neural-shader-cppn': withThumbnails(rawMetadata['neural-shader-cppn']),
+  'depth-estimation': withThumbnails(rawMetadata['depth-estimation']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
   'air-painting': withThumbnails(rawMetadata['air-painting']),
 } satisfies Record<ExampleSlug, ExampleMeta>;

@@ -14,6 +14,8 @@ export const meta = {
     'gpu-buffer-interop',
     'storage-buffers',
     'compute-shader',
+    'camera-input',
+    'select-control',
     'pointer-input',
     'demand-rendering',
     'responsive-canvas',

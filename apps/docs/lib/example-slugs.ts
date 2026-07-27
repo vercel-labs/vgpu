@@ -9,7 +9,7 @@ export const exampleSlugs = [
   'batch-rendering',
   'fft-ocean',
   'raymarched-fractal',
-  'neural-shader-cppn',
+  'depth-estimation',
   'mnist-classifier',
   'air-painting',
 ] as const;

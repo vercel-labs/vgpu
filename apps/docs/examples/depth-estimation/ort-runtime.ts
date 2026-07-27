@@ -120,7 +120,7 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   function measure(): void {
     if (!surface || !gpu) return;
     const rect = options.canvas.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) surface.resize(rect.width, rect.height);
+    if (rect.width > 0 && rect.height > 0) surface.resize([rect.width, rect.height]);
     drawIdle();
   }
 
