@@ -1,4 +1,4 @@
-import { MAX_RADIUS, MIN_RADIUS, ORBIT_RADIUS } from './camera';
+import { DEFAULT_PITCH, DEFAULT_YAW, MAX_RADIUS, MIN_RADIUS, ORBIT_RADIUS } from './camera';
 
 export interface OrbitInput {
   /** Camera yaw/pitch in radians and orbit radius, eased toward the dragged target. */
@@ -28,8 +28,8 @@ const EASE_RATE = 14;
  * point of the example, and the refraction has to be readable while the camera is idle.
  */
 export function installOrbitInput(canvas: HTMLCanvasElement, options: OrbitInputOptions = {}): OrbitInput {
-  let targetYaw = options.yaw ?? 0.68;
-  let targetPitch = clampPitch(options.pitch ?? 0.45);
+  let targetYaw = options.yaw ?? DEFAULT_YAW;
+  let targetPitch = clampPitch(options.pitch ?? DEFAULT_PITCH);
   let targetRadius = clampRadius(options.radius ?? ORBIT_RADIUS);
   let currentYaw = targetYaw;
   let currentPitch = targetPitch;

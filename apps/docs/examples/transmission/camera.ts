@@ -7,6 +7,17 @@ export const MAX_RADIUS = 7.5;
 /** The cube sits at the origin; the orbit looks slightly above it so the floor stays in frame. */
 export const TARGET: readonly [number, number, number] = [0, 0.05, 0];
 
+/** Yaw of the cube's resting pose, in radians. The camera is offset from it on purpose. */
+export const CUBE_YAW = 0.62;
+/**
+ * Opening view: 36° off the cube's own yaw, so two vertical faces stay visible at once.
+ * Head-on (camera yaw ≈ CUBE_YAW) flattens the cube into a single square and hides the
+ * second refraction, which is the whole point of the example.
+ */
+export const DEFAULT_YAW = CUBE_YAW + 0.63;
+/** Just above the horizon: high enough to read the floor through the glass, low enough to keep the sky. */
+export const DEFAULT_PITCH = 0.42;
+
 export interface CameraView {
   /** View-projection consumed by the cube, floor and backface draws. */
   readonly camera: SceneCamera;
@@ -62,7 +73,7 @@ export function cameraView(yaw: number, pitch: number, aspect: number, radius = 
  * interfaces reads, and a still frame is what makes the thumbnail deterministic.
  */
 export function modelMatrix(): Float32Array {
-  const yaw = 0.62;
+  const yaw = CUBE_YAW;
   const pitch = 0.28;
   const cy = Math.cos(yaw);
   const sy = Math.sin(yaw);

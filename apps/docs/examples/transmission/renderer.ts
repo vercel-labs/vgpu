@@ -3,7 +3,7 @@ import type { Texture } from 'vgpu/core';
 import { box, plane } from 'vgpu/scene';
 
 import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '../../lib/example-renderer';
-import { cameraView, modelMatrix, translationMatrix, type CameraView } from './camera';
+import { cameraView, DEFAULT_PITCH, DEFAULT_YAW, modelMatrix, translationMatrix, type CameraView } from './camera';
 import { installOrbitInput } from './pointer-input';
 import { DEFAULT_TRANSMISSION_CONTROLS, type TransmissionControls } from './types';
 import skyWgsl from './sky.wgsl';
@@ -267,7 +267,7 @@ export async function renderThumbnail(gpu: Gpu, output: Target, opts: ThumbnailO
   try {
     // Fixed camera and controls: nothing here reads the clock, so every run of the
     // headless renderer produces the same pixels.
-    const view = cameraView(0.68, 0.45, aspectOf(output));
+    const view = cameraView(DEFAULT_YAW, DEFAULT_PITCH, aspectOf(output));
     for (let i = 0; i < Math.max(1, opts.warmupFrames ?? 3); i++) {
       renderScene(gpu, scene, output, view, DEFAULT_TRANSMISSION_CONTROLS);
     }
