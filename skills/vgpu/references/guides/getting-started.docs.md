@@ -47,7 +47,7 @@ missing it prescribes the exact package install or environment variable to
 set. Once healthy, render headless and read the pixels back — objective
 evidence instead of guesswork:
 
-```ts
+```typescript
 import { writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { init } from "vgpu/node";
