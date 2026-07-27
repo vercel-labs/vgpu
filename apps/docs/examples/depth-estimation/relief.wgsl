@@ -36,13 +36,13 @@ struct Uniforms {
 
 const BG: vec3f = vec3f(0.039, 0.039, 0.039);       // #0a0a0a  gray-1
 const SURFACE: vec3f = vec3f(0.098, 0.098, 0.098);  // #191919  gray-3
-const FAR: vec3f = vec3f(0.133, 0.133, 0.133);      // #222222  gray-4
-const NEAR: vec3f = vec3f(0.451, 0.451, 0.451);     // #737373  gray-10
+const FAR: vec3f = vec3f(0.075, 0.078, 0.086);      // just above the panel
+const NEAR: vec3f = vec3f(0.780, 0.792, 0.816);     // near-white foreground
 const ACCENT: vec3f = vec3f(0.000, 0.439, 0.953);   // #0070f3  blue-9
 const RIM: vec3f = vec3f(0.059, 0.204, 0.376);      // #0f3460  blue-4
 
 /// Contour bands across the full nearness range.
-const CONTOURS: f32 = 12.0;
+const CONTOURS: f32 = 10.0;
 
 /// Inverse of `key_of` in reduce-range.wgsl.
 fn value_of(key: u32) -> f32 {
@@ -79,6 +79,19 @@ fn nearness_at(texel: vec2i) -> f32 {
   return nearness(depth_at(texel));
 }
 
+/// Bilinear nearness at a normalized position. The tensor is a fraction of the
+/// canvas size -- 320x256 stretched over a full-width figure -- so sampling the
+/// nearest texel would draw the depth grid itself as stair steps.
+fn nearness_sample(uv: vec2f) -> f32 {
+  let p = uv * uniforms.depth_size - vec2f(0.5);
+  let base = floor(p);
+  let f = p - base;
+  let i = vec2i(base);
+  let top = mix(nearness_at(i), nearness_at(i + vec2i(1, 0)), f.x);
+  let bottom = mix(nearness_at(i + vec2i(0, 1)), nearness_at(i + vec2i(1, 1)), f.x);
+  return mix(top, bottom, f.y);
+}
+
 @fragment
 fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let uv = position.xy / uniforms.resolution;
@@ -102,21 +115,22 @@ fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   // Single-step parallax: shift the lookup by the pointer, scaled by how near
   // the surface under the cursor is, which makes foreground objects slide over
   // the background as you move.
-  let probe = nearness_at(vec2i(fitted * uniforms.depth_size));
+  let probe = nearness_sample(fitted);
   let shifted = fitted + uniforms.parallax * (probe - 0.45) * 0.06;
 
-  let texel = vec2i(shifted * uniforms.depth_size);
-  if (shifted.x < 0.0 || shifted.x > 1.0 || shifted.y < 0.0 || shifted.y > 1.0) {
-    return vec4f(BG, 1.0);
-  }
+  // Parallax can push the lookup off the edge of the tensor. That is masked at
+  // the end rather than returned early, because `fwidth` below has to be
+  // reached under uniform control flow and `depth_at` already clamps.
+  let outside = shifted.x < 0.0 || shifted.x > 1.0 || shifted.y < 0.0 || shifted.y > 1.0;
 
-  let n = nearness_at(texel);
+  let n = nearness_sample(shifted);
 
   // Pseudo-normal from the nearness gradient. The z term sets how much relief
   // the lighting implies; it is in nearness units, not metres, on purpose —
   // the three models disagree about metres.
-  let dx = nearness_at(texel + vec2i(1, 0)) - nearness_at(texel - vec2i(1, 0));
-  let dy = nearness_at(texel + vec2i(0, 1)) - nearness_at(texel - vec2i(0, 1));
+  let step = 1.0 / uniforms.depth_size;
+  let dx = nearness_sample(shifted + vec2f(step.x, 0.0)) - nearness_sample(shifted - vec2f(step.x, 0.0));
+  let dy = nearness_sample(shifted + vec2f(0.0, step.y)) - nearness_sample(shifted - vec2f(0.0, step.y));
   let normal = normalize(vec3f(-dx * 6.0, -dy * 6.0, 0.35));
 
   let light = normalize(vec3f(-0.45, -0.7, 0.55));
@@ -125,23 +139,33 @@ fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   // which is exactly where one object ends and another begins.
   let steepness = clamp(length(vec2f(dx, dy)) * 7.0, 0.0, 1.0);
 
-  // Base tone carries the depth ordering; near is lighter, far recedes to the
-  // panel colour.
+  // Base tone carries the depth ordering: near is bright, far sinks toward the
+  // panel colour. Neutral on purpose -- tinting the whole field would bury the
+  // shading that is doing the actual work.
   var colour = mix(FAR, NEAR, n);
-  colour = mix(colour, SURFACE, 0.25);
-  colour = colour + ACCENT * diffuse * 0.22;
-  colour = colour + RIM * steepness * 0.9;
+  // Lighting modulates that tone rather than adding to it, so the relief reads
+  // as one surface instead of a glow laid over a gradient.
+  colour = colour * (0.70 + 0.62 * diffuse);
+  // The single accent goes on depth discontinuities, which is where one object
+  // stops and the next begins.
+  colour = colour + ACCENT * steepness * 0.5;
 
   // Contour bands, antialiased in screen space so they stay hairlines at any
   // canvas size and vanish where the surface is flat.
   let bands = n * CONTOURS;
-  let band_width = max(fwidth(bands), 1e-4);
-  let line = 1.0 - smoothstep(0.0, band_width * 1.2, abs(fract(bands) - 0.5) - 0.5 + band_width * 1.2);
-  colour = colour + vec3f(0.10, 0.12, 0.14) * line * (0.35 + 0.65 * steepness);
+  // Distance to the nearest band boundary, measured in bands, then compared
+  // against one pixel's worth of change. Where the field is flat that pixel
+  // width collapses to nothing and no line is drawn -- which is the point:
+  // measuring the line in screen space keeps it a hairline on a slope and
+  // stops it from flooding whole flat regions.
+  let to_edge = min(fract(bands), 1.0 - fract(bands));
+  let band_width = max(fwidth(bands), 1e-5);
+  let line = 1.0 - smoothstep(0.0, band_width, to_edge);
+  colour = colour + vec3f(0.26) * line;
 
   // Vignette keeps the eye on the subject without adding a gradient wash.
   let edge = distance(uv, vec2f(0.5, 0.5));
   colour = colour * (1.0 - 0.35 * clamp(edge - 0.35, 0.0, 1.0));
 
-  return vec4f(clamp(colour, vec3f(0.0), vec3f(1.0)), 1.0);
+  return vec4f(select(clamp(colour, vec3f(0.0), vec3f(1.0)), BG, outside), 1.0);
 }

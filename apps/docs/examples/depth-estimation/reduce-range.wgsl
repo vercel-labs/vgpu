@@ -9,9 +9,13 @@
 // So the range is reduced here and handed to `relief.wgsl` as two u32 keys.
 //
 // One workgroup does the whole job. The largest output is 560x448 = 250,880
-// scalars, so 256 threads walk ~980 elements each and then tree-reduce in
+// scalars, so 64 threads walk ~3,900 elements each and then tree-reduce in
 // shared memory. That is far too little work to bother spreading across the
 // device, and it keeps this to a single dispatch with no atomics.
+//
+// 64 rather than a wider group on purpose: WebGPU only guarantees a workgroup
+// size of 256 in its default limits, and real devices report less -- the Node
+// software adapter used for thumbnails caps this dimension at 128.
 
 struct Uniforms {
   /// Number of valid f32 scalars in `depth`.
@@ -23,10 +27,10 @@ struct Uniforms {
 /// [0] = minimum key, [1] = maximum key. Order-preserving u32 encodings.
 @group(0) @binding(2) var<storage, read_write> range: array<u32>;
 
-const THREADS: u32 = 256u;
+const THREADS: u32 = 64u;
 
-var<workgroup> shared_min: array<u32, 256>;
-var<workgroup> shared_max: array<u32, 256>;
+var<workgroup> shared_min: array<u32, 64>;
+var<workgroup> shared_max: array<u32, 64>;
 
 /// Maps a float to a u32 whose unsigned ordering matches float ordering, so the
 /// reduction can use plain integer min/max. Negative floats invert, positive
@@ -37,7 +41,7 @@ fn key_of(value: f32) -> u32 {
   return bits ^ mask;
 }
 
-@compute @workgroup_size(256)
+@compute @workgroup_size(64)
 fn main(@builtin(local_invocation_index) lane: u32) {
   var local_min = 0xFFFFFFFFu;
   var local_max = 0u;
