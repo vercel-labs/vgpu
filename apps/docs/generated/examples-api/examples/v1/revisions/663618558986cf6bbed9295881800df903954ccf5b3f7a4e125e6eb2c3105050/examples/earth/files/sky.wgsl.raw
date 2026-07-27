@@ -14,6 +14,7 @@ const DUST_COOL = vec3f(0.085, 0.100, 0.170);
 const DUST_WARM = vec3f(0.200, 0.170, 0.150);
 const STAR_COOL = vec3f(0.72, 0.82, 1.00);
 const STAR_WARM = vec3f(1.00, 0.84, 0.62);
+const STAR_INTENSITY = 0.5;
 const SUN_COLOR = vec3f(1.0, 0.647, 0.0);
 
 struct SkyUniforms {
@@ -85,9 +86,11 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   // --- Stars ---------------------------------------------------------------
   // 3 layers: sparse bright anchors, the main field, and a dense dim wash
   // that reads as unresolved background stars.
-  color = color + starLayer(direction, 34.0, 0.55, 0.16, 17) * 1.35;
-  color = color + starLayer(direction, 92.0, 0.42, 0.20, 71) * 0.85;
-  color = color + starLayer(direction, 210.0, 0.26, 0.26, 149) * 0.30;
+  color = color + (
+    starLayer(direction, 34.0, 0.55, 0.16, 17) * 1.35
+      + starLayer(direction, 92.0, 0.42, 0.20, 71) * 0.85
+      + starLayer(direction, 210.0, 0.26, 0.26, 149) * 0.30
+  ) * STAR_INTENSITY;
   color = color * sky.starBrightness;
 
   // --- Sun -----------------------------------------------------------------

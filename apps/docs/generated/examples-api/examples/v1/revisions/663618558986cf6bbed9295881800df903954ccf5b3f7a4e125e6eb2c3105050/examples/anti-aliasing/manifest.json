@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
-  "revision": "c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8",
+  "revision": "663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050",
   "id": "anti-aliasing",
   "title": "Anti-Aliasing",
   "description": "One high-contrast scene through Off, MSAA 4×, SSAA 2×, and FXAA — pick a mode and watch the edges.",
@@ -25,49 +25,49 @@
       "contentType": "text/typescript",
       "size": 1546,
       "sha256": "c9aebc484747f6fa63f1dab0aa23fa7ed83cbbfc0e187ec0a57e50a379112179",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/index.tsx.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/index.tsx.raw"
     },
     {
       "path": "controls.tsx",
       "contentType": "text/typescript",
       "size": 968,
       "sha256": "a8597d93552512082953404adc1b9bde4a208ae299d8f012a929e4b53db29cf8",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/controls.tsx.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/controls.tsx.raw"
     },
     {
       "path": "types.ts",
       "contentType": "text/typescript",
       "size": 398,
       "sha256": "944606670a2f672984b2c53cbfd2e3cfc8dd0e9138ecee5f99e5ee4fa5ee4e15",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/types.ts.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/types.ts.raw"
     },
     {
       "path": "renderer.ts",
       "contentType": "text/typescript",
       "size": 12291,
       "sha256": "21ca3a4cea97d7ef088915bcd69a2fda5e803ec806e8deba6825fc6d7a967231",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/renderer.ts.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/renderer.ts.raw"
     },
     {
       "path": "scene.wgsl",
       "contentType": "text/wgsl",
       "size": 950,
       "sha256": "b7e76c9212dc238fbdf067322884cfa877a0dfef428019a6ada9168894e56d99",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/scene.wgsl.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/scene.wgsl.raw"
     },
     {
       "path": "resolve.wgsl",
       "contentType": "text/wgsl",
       "size": 1031,
       "sha256": "71217e873166c11911121d71f2477f9ff3356c4a13ed0ec95ce3e90ec72697fa",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/resolve.wgsl.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/resolve.wgsl.raw"
     },
     {
       "path": "fxaa.wgsl",
       "contentType": "text/wgsl",
       "size": 1762,
       "sha256": "ebccc0fb9d9458ce08116784177310a6d65c7f84cd15133157d3b48476296991",
-      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/c38824e9f0f5da16eb61fbbb6546b51ca1e0fd33b015028973f62917f23274a8/examples/anti-aliasing/files/fxaa.wgsl.raw"
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/files/fxaa.wgsl.raw"
     }
   ]
 }
