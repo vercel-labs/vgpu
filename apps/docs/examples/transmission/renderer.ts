@@ -1,4 +1,4 @@
-import type { Draw, Effect, Frame, Gpu, Mesh, Surface, Target } from 'vgpu';
+import type { Draw, Effect, Frame, Gpu, Geometry, Surface, Target } from 'vgpu';
 import type { Texture } from 'vgpu/core';
 import { box, plane } from 'vgpu/scene';
 
@@ -103,8 +103,8 @@ interface Scene {
   /** Trilinear: roughness lands on a fractional LOD of the scene pyramid. */
   readonly pyramidSampler: GPUSampler;
   readonly screenSampler: GPUSampler;
-  readonly cubeMesh: Mesh;
-  readonly floorMesh: Mesh;
+  readonly cubeGeometry: Geometry;
+  readonly floorGeometry: Geometry;
   readonly background: Draw;
   readonly floor: Draw;
   readonly backface: Draw;
@@ -305,8 +305,8 @@ async function createScene(gpu: Gpu, output: Output, label: string): Promise<Sce
   const env = await bakeEnvironment(gpu, envSampler, label);
   const targets = createTargets(gpu, output.size, label);
 
-  const cubeMesh = gpu.mesh(box({ size: CUBE_SIZE }));
-  const floorMesh = gpu.mesh(plane({ width: FLOOR_SIZE, height: FLOOR_SIZE, widthSegments: 1, heightSegments: 1 }));
+  const cubeGeometry = gpu.geometry(box({ size: CUBE_SIZE }));
+  const floorGeometry = gpu.geometry(plane({ width: FLOOR_SIZE, height: FLOOR_SIZE, widthSegments: 1, heightSegments: 1 }));
 
   // The sky covers the frame from the far plane without touching depth, so the floor and
   // the cube behind it still resolve against each other normally.
@@ -318,11 +318,11 @@ async function createScene(gpu: Gpu, output: Output, label: string): Promise<Sce
   });
   background.set({ env_tex: env, env_samp: envSampler });
 
-  const floor = gpu.draw({ shader: floorWgsl, mesh: floorMesh, cull: 'none', label: `${label}-floor` });
+  const floor = gpu.draw({ shader: floorWgsl, geometry: floorGeometry, cull: 'none', label: `${label}-floor` });
   floor.set({ env_tex: env, env_samp: envSampler });
 
-  const backface = gpu.draw({ shader: backfaceWgsl, mesh: cubeMesh, cull: 'front', label: `${label}-backface` });
-  const glass = gpu.draw({ shader: glassWgsl, mesh: cubeMesh, cull: 'back', label: `${label}-glass` });
+  const backface = gpu.draw({ shader: backfaceWgsl, geometry: cubeGeometry, cull: 'front', label: `${label}-backface` });
+  const glass = gpu.draw({ shader: glassWgsl, geometry: cubeGeometry, cull: 'back', label: `${label}-glass` });
   glass.set({ env_tex: env, env_samp: envSampler });
 
   const present = gpu.effect(presentWgsl, { label: `${label}-present` });
@@ -338,7 +338,7 @@ async function createScene(gpu: Gpu, output: Output, label: string): Promise<Sce
 
   const scene: Scene = {
     env, envSampler, pyramidSampler, screenSampler,
-    cubeMesh, floorMesh,
+    cubeGeometry, floorGeometry,
     background, floor, backface, glass, present, blurs,
     targets,
   };
@@ -597,6 +597,8 @@ function aspectOf(output: Output): number {
 
 function destroyScene(scene: Scene): void {
   destroyTargets(scene.targets);
+  scene.cubeGeometry.destroy();
+  scene.floorGeometry.destroy();
   scene.env.destroy();
 }
 
