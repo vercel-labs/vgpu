@@ -16,9 +16,13 @@ The `init({ device })` option adopts a `GPUDevice` that another library created.
 vgpu never takes ownership of an adopted device. `gpu.dispose()` releases the resources vgpu created, but it never calls `device.destroy()` on a device it did not request.
 
 ```ts
+import * as ort from "onnxruntime-web/webgpu";
 import { init } from "vgpu";
 
-const gpu = await init({ device: ort.env.webgpu.device }); // one shared GPUDevice
+declare const session: ort.InferenceSession;
+declare const input: ort.Tensor;
+
+const gpu = await init({ device: await ort.env.webgpu.device }); // one shared GPUDevice
 const output = (await session.run({ input })).output;      // model output stays on the GPU
 const source = gpu.device.wrapBuffer(output.gpuBuffer);    // consume it with zero copies
 ```

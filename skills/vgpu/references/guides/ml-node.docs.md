@@ -20,14 +20,19 @@ If `require("webgpu")` fails with a `GLIBC_2.38` error, run `npx vgpu doctor` an
 Same route after the pinned Dawn and ORT setup:
 
 ```ts
+import * as ort from "onnxruntime-web/webgpu";
 import { create, globals } from "webgpu";
 import { init } from "vgpu/node";
+
+declare const modelBytes: Uint8Array;
+declare const input: ort.Tensor;
+declare function createOrtSession(dawn: GPU, modelBytes: Uint8Array): Promise<ort.InferenceSession>;
 
 Object.assign(globalThis, globals);
 const dawn = create([]);
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { gpu: dawn } });
 const session = await createOrtSession(dawn, modelBytes);
-const rawDevice = ort.env.webgpu.device;
+const rawDevice = await ort.env.webgpu.device;
 const gpu = await init({ device: rawDevice });
 const output = (await session.run({ input })).output;
 const destination = gpu.device.createBuffer({ size: output.gpuBuffer.size, usage: ["storage", "copy_dst"] });
@@ -49,9 +54,16 @@ try {
 Same zero-copy route on Node:
 
 ```ts
-import { init } from "vgpu/node";
+import * as ort from "onnxruntime-web/webgpu";
+import { init, type Buffer, type Compute } from "vgpu/node";
 
-const rawDevice = ort.env.webgpu.device;
+declare const session: ort.InferenceSession;
+declare const input: ort.Tensor;
+declare const compute: Compute;
+declare const destination: Buffer;
+declare const workgroups: number;
+
+const rawDevice = await ort.env.webgpu.device;
 const gpu = await init({ device: rawDevice });
 const output = (await session.run({ input })).output;
 const source = gpu.device.wrapBuffer(output.gpuBuffer);

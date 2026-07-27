@@ -34,7 +34,7 @@ export declare function init(options?: InitOptions): Promise<Gpu>;
 ```
 
 ```ts
-class Device {
+declare class Device {
   /** Wraps a caller-owned GPUBuffer without taking ownership of its native lifetime. */
   wrapBuffer(buffer: GPUBuffer): Buffer;
 }
@@ -49,21 +49,28 @@ class Device {
 Pass either requested-device options or an external device — never both. The two option families are mutually exclusive; mixing `device` with `adapter` or any other requested-device option throws `VGPU-INIT-OPTIONS-CONFLICT`.
 
 ```ts
+import * as ort from "onnxruntime-web/webgpu";
 import { init } from "vgpu";
 
 // Requested device — vgpu creates it and destroys it on dispose.
 const owned = await init({ powerPreference: "high-performance" });
 
 // External device — vgpu borrows it and never destroys it.
-const gpu = await init({ device: ort.env.webgpu.device });
+const gpu = await init({ device: await ort.env.webgpu.device });
 
 // Never both.
-await init({ device: ort.env.webgpu.device, label: "mixed" }); // throws VGPU-INIT-OPTIONS-CONFLICT
+// @ts-expect-error External-device options cannot include a requested-device label.
+await init({ device: await ort.env.webgpu.device, label: "mixed" }); // throws VGPU-INIT-OPTIONS-CONFLICT
 ```
 
 `Device.wrapBuffer` wraps a caller-owned `GPUBuffer` in a vgpu `Buffer` without taking ownership. `wrapper.gpu` is the exact object you passed in. Disposing the wrapper detaches it from vgpu but never destroys the underlying buffer, and dispose is idempotent — a double dispose is a no-op.
 
 ```ts
+import type { Gpu } from "vgpu";
+
+declare const gpu: Gpu;
+declare const raw: GPUBuffer;
+
 const wrapper = gpu.device.wrapBuffer(raw); // raw: a GPUBuffer you own
 
 wrapper.gpu === raw; // true — same object, no copy
@@ -88,6 +95,16 @@ Choose one of two consumption modes. Snapshot copies the model output once, GPU-
 In reference mode, always `await gpu.device.queue.flush()` before disposing the source tensor. Do not dispose the tensor while vgpu work that reads it is still in flight — skipping the flush is an experimental fast path, not a supported contract.
 
 ```ts
+import * as ort from "onnxruntime-web/webgpu";
+import type { Buffer, Compute, Gpu } from "vgpu";
+
+declare const session: ort.InferenceSession;
+declare const input: ort.Tensor;
+declare const gpu: Gpu;
+declare const compute: Compute;
+declare const destination: Buffer;
+declare const workgroups: number;
+
 const output = (await session.run({ input })).output;       // 1. retain the tensor
 const source = gpu.device.wrapBuffer(output.gpuBuffer);     // 2. wrap — zero copies
 compute.set({ source, destination }).dispatch(workgroups);  // 3. submit vgpu work
@@ -101,6 +118,13 @@ output.dispose();                                           // 6. runtime may fr
 Snapshot needs no new API: copy once with the raw escape hatch (`gpu.gpu` is the shared `GPUDevice`, `buffer.gpu` the raw `GPUBuffer`), then treat the destination as any other vgpu buffer.
 
 ```ts
+import * as ort from "onnxruntime-web/webgpu";
+import type { Gpu } from "vgpu";
+
+declare const session: ort.InferenceSession;
+declare const input: ort.Tensor;
+declare const gpu: Gpu;
+
 const output = (await session.run({ input })).output;
 const destination = gpu.device.createBuffer({
   size: output.gpuBuffer.size,

@@ -25,6 +25,9 @@ Copy the model output once into a vgpu-owned buffer, then release the tensor:
 import * as ort from "onnxruntime-web/webgpu";
 import { init } from "vgpu";
 
+declare const modelBytes: Uint8Array;
+declare const input: ort.Tensor;
+
 const adapter = await navigator.gpu.requestAdapter();
 if (!adapter) throw new Error("WebGPU adapter unavailable");
 ort.env.webgpu.adapter = adapter;
@@ -32,7 +35,7 @@ const session = await ort.InferenceSession.create(modelBytes, {
   executionProviders: ["webgpu"],
   preferredOutputLocation: "gpu-buffer",
 });
-const gpu = await init({ device: ort.env.webgpu.device });
+const gpu = await init({ device: await ort.env.webgpu.device });
 const output = (await session.run({ input })).output;
 const destination = gpu.device.createBuffer({ size: output.gpuBuffer.size, usage: ["storage", "copy_dst"] });
 try {
@@ -54,13 +57,19 @@ Wrap the model output directly — zero copies, strict lifetime:
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
-import { init } from "vgpu";
+import { init, type Buffer, type Compute } from "vgpu";
+
+declare const modelBytes: Uint8Array;
+declare const input: ort.Tensor;
+declare const compute: Compute;
+declare const destination: Buffer;
+declare const workgroups: number;
 
 const session = await ort.InferenceSession.create(modelBytes, {
   executionProviders: ["webgpu"],
   preferredOutputLocation: "gpu-buffer",
 });
-const gpu = await init({ device: ort.env.webgpu.device });
+const gpu = await init({ device: await ort.env.webgpu.device });
 const output = (await session.run({ input })).output;
 const source = gpu.device.wrapBuffer(output.gpuBuffer);
 try {
