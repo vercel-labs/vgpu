@@ -11,6 +11,7 @@ import {
 import {
   BRUSH_STATE_BYTES,
   BRUSH_TUNING,
+  DITHER_CELL_LOGICAL_PX,
   KEYPOINT_BUFFER_BYTES,
   MASK_BYTES,
   MASK_HEIGHT,
@@ -209,7 +210,7 @@ describe('deterministic thumbnail', () => {
     expect(uniforms.source_size).toEqual([FIXTURE_FRAME_WIDTH, FIXTURE_FRAME_HEIGHT]);
     expect(uniforms.has_frame).toBe(1);
     // Fixed logical cell at dpr 1.
-    expect(uniforms.cell).toBe(3);
+    expect(uniforms.cell).toBe(DITHER_CELL_LOGICAL_PX);
   });
 
   it('drains, settles and releases every owned resource', async () => {
