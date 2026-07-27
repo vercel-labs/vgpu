@@ -30,6 +30,7 @@ const rendererEntries = [
   { slug: 'fft-ocean', module: '../examples/fft-ocean/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'environment-map', module: '../examples/environment-map/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'transmission', module: '../examples/transmission/renderer.ts', exportName: 'renderThumbnail' },
 ];
 
 const sizes = args.proofDir ? { proof: [160, 90] } : {

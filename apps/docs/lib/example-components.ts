@@ -20,6 +20,7 @@ export const exampleComponentLoaders = {
   'fft-ocean': () => import('../examples/fft-ocean/index'),
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
   'environment-map': () => import('../examples/environment-map/index'),
+  transmission: () => import('../examples/transmission/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

@@ -14,6 +14,7 @@ import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
 import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
 import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
 import { meta as environmentMapMeta } from '../examples/environment-map/meta';
+import { meta as transmissionMeta } from '../examples/transmission/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -28,6 +29,7 @@ const rawMetadata = {
   'fft-ocean': fftOceanMeta,
   'raymarched-fractal': raymarchedFractalMeta,
   'environment-map': environmentMapMeta,
+  transmission: transmissionMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -51,6 +53,7 @@ export const exampleMetadataBySlug = {
   'fft-ocean': withThumbnails(rawMetadata['fft-ocean']),
   'raymarched-fractal': withThumbnails(rawMetadata['raymarched-fractal']),
   'environment-map': withThumbnails(rawMetadata['environment-map']),
+  transmission: withThumbnails(rawMetadata.transmission),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);
