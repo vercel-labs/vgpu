@@ -155,29 +155,24 @@ export function Example() {
   const blocked = status.phase === 'unsupported' || status.phase === 'error';
 
   return (
-    <div className="flex h-full w-full flex-col gap-4 overflow-auto bg-[#08090c] p-4 text-white/90">
-      <p className="max-w-3xl text-xs leading-relaxed text-white/55">
-        Draw a digit and classify it with ONNX Runtime Web on WebGPU. vgpu adopts ORT&apos;s device and
-        renders the ten GPU-resident logits through a non-owning zero-copy buffer wrapper. The output
-        is only 40 bytes, so zero-copy is not a meaningful speedup here; this example demonstrates
-        the interop API and lifetime contract. Large or per-frame tensors are where eliminating
-        transfers becomes performance-relevant.
-      </p>
-
+    <div className="flex h-full w-full flex-col gap-4 overflow-auto bg-black p-4 text-gray-11">
+      {/* No prose in here: the gallery and the docs page carry the description,
+          including the note that the 40-byte output makes this an interop
+          demonstration rather than a speedup. */}
       <div className="flex flex-wrap items-start gap-5">
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-9">
               draw
             </span>
-            <span className="font-mono text-[10px] text-white/25">280 × 280</span>
+            <span className="font-mono text-[10px] text-gray-9">280 × 280</span>
           </div>
           <canvas
             ref={drawCanvasRef}
             width={FIXTURE_SURFACE}
             height={FIXTURE_SURFACE}
             aria-label="Drawing surface for a handwritten digit"
-            className="h-[280px] w-[280px] cursor-crosshair touch-none rounded-xl border border-white/10 bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-white/20"
+            className="h-[280px] w-[280px] cursor-crosshair touch-none rounded-lg border border-gray-4 bg-black transition-colors hover:border-gray-5"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endStroke}
@@ -187,7 +182,7 @@ export function Example() {
           <button
             type="button"
             onClick={clear}
-            className="self-start rounded-md border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-white/60 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white/90"
+            className="self-start rounded-md border border-gray-4 bg-gray-1 px-3 py-1 font-mono text-[11px] text-gray-9 transition-colors hover:border-gray-5 hover:bg-gray-2 hover:text-gray-12"
           >
             clear
           </button>
@@ -195,21 +190,21 @@ export function Example() {
 
         <div className="relative min-w-[360px] flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-9">
               probability
             </span>
-            <span className="font-mono text-[10px] text-white/25">softmax(logits)</span>
+            <span className="font-mono text-[10px] text-gray-9">softmax(logits)</span>
           </div>
           <canvas
             ref={barsCanvasRef}
             aria-label="Class probabilities rendered from the model's GPU-resident logits"
-            className="mt-2 block h-[280px] w-full rounded-xl border border-white/10 bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            className="mt-2 block h-[280px] w-full rounded-lg border border-gray-4 bg-gray-1"
           />
           {/* Static labels: reading the winning class from the GPU would require a
               readback, which this example deliberately avoids. The chart uses the
               full canvas width, one tenth per class, so this ten-column grid puts
               every digit under its own bar. */}
-          <div className="grid grid-cols-10 pt-1.5 text-center font-mono text-[11px] tabular-nums text-white/40">
+          <div className="grid grid-cols-10 pt-1.5 text-center font-mono text-[11px] tabular-nums text-gray-9">
             {Array.from({ length: 10 }, (_, digit) => (
               <span key={digit}>{digit}</span>
             ))}
@@ -217,7 +212,7 @@ export function Example() {
 
           {initializing && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <p className="rounded-lg border border-white/10 bg-black/70 px-3 py-2 font-mono text-xs text-white/70 backdrop-blur-sm">
+              <p className="rounded-lg border border-gray-4 bg-gray-2 px-3 py-2 font-mono text-xs text-gray-11">
                 {(status.detail && STAGE_LABELS[status.detail]) ?? 'Preparing inference…'}
               </p>
             </div>
@@ -225,36 +220,36 @@ export function Example() {
 
           {blocked && (
             <div className="absolute inset-0 flex items-center justify-center p-4">
-              <div className="max-w-md rounded-lg border border-white/10 bg-black/85 p-3 text-sm backdrop-blur-sm">
-                <h2 className="mb-1 font-medium">
+              <div className="max-w-md rounded-lg border border-gray-4 bg-gray-2 p-3 text-sm">
+                <h2 className="mb-1 font-medium text-gray-12">
                   {status.phase === 'unsupported' ? 'WebGPU inference is required' : 'Inference failed'}
                 </h2>
-                <p className="mb-2 text-white/70">
+                <p className="mb-2 text-gray-9">
                   This example runs ONNX Runtime Web on the WebGPU execution provider so vgpu can
                   share its device. It does not fall back to CPU inference.
                 </p>
-                {status.detail && <p className="font-mono text-xs text-white/60">{status.detail}</p>}
+                {status.detail && <p className="font-mono text-xs text-gray-9">{status.detail}</p>}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-white/35">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-gray-9">
         <span
           aria-hidden
           className={`inline-block h-1.5 w-1.5 rounded-full ${
             status.phase === 'classifying'
-              ? 'bg-[#3b9eff] shadow-[0_0_6px_rgba(59,158,255,0.9)]'
+              ? 'bg-blue-9'
               : status.phase === 'ready'
-                ? 'bg-[#46a758]'
-                : 'bg-white/25'
+                ? 'bg-gray-8'
+                : 'bg-gray-6'
           }`}
         />
-        <span className="text-white/55">
+        <span className="text-gray-11">
           {status.phase === 'classifying' ? 'running inference…' : `inferences: ${status.runs ?? 0}`}
         </span>
-        <span className="text-white/20">·</span>
+        <span className="text-gray-6">·</span>
         <span>40 bytes of logits, softmax in WGSL, no readback</span>
       </p>
     </div>
