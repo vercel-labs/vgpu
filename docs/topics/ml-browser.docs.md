@@ -7,7 +7,15 @@ relatedSymbols: [init, Device, Buffer]
 
 # Quickstart: Browser
 
-DRAFT PROSE PENDING AUTHOR
+In this quickstart you run an ONNX model with ONNX Runtime Web's WebGPU execution provider and consume its output with vgpu shaders — on one shared `GPUDevice`, without the result ever leaving the GPU.
+
+Prerequisites:
+
+- A browser with WebGPU enabled.
+- `onnxruntime-web` in your app — vgpu does not bundle or import ORT.
+- A model that runs on the WebGPU execution provider.
+
+Create the ORT session first so ORT owns the device, then pass `ort.env.webgpu.device` to `init`. Set `preferredOutputLocation: "gpu-buffer"` so outputs stay on the GPU.
 
 ## Browser snapshot
 

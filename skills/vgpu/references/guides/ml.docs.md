@@ -15,4 +15,12 @@ The `init({ device })` option adopts a `GPUDevice` that another library created.
 
 vgpu never takes ownership of an adopted device. `gpu.dispose()` releases the resources vgpu created, but it never calls `device.destroy()` on a device it did not request.
 
-DRAFT PROSE PENDING AUTHOR
+There are two ways to consume a model output: snapshot copies it once, GPU-to-GPU, into a buffer vgpu owns; reference wraps the runtime's buffer directly with zero copies. [Buffers & ownership](/ml/buffers) explains when to use each and the lifetime contract that comes with them.
+
+Start with the quickstart for your environment:
+
+- [Quickstart: Browser](/ml/browser) — share ONNX Runtime Web's device in a page and consume a model output.
+- [Quickstart: Node](/ml/node) — the pinned Dawn and ORT recipe, plus the portable fallback for hosts the stock binaries reject.
+- [Buffers & ownership](/ml/buffers) — snapshot vs reference, `wrapBuffer` semantics, errors, and lifetime.
+
+For the full API surface, see the [reference](/reference) for `init`, `Device`, and `Buffer`.

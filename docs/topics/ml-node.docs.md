@@ -7,7 +7,7 @@ relatedSymbols: [init, Device, Buffer]
 
 # Quickstart: Node
 
-DRAFT PROSE PENDING AUTHOR
+In this quickstart you run the same integration in Node, with Dawn providing WebGPU. Node has no global WebGPU, so the recipe wires one up explicitly before ORT initializes — pin the versions below exactly; the combination is what vgpu validates.
 
 The primary Node matrix is Node 22, `webgpu@0.4.0`, `onnxruntime-web@1.27.0`, and vgpu/software-renderer 0.1.6. The `webgpu@0.4.0` Linux ARM64 prebuilt requires glibc 2.38; run the primary recipe and generic-WASM negative proof on x64 CI or ARM64 with glibc 2.38 or newer. The explicitly labeled host fallback uses the supported `@vgpu/adapter-node` portable Dawn and software renderer. Executable recipes are under `experiments/ort-init-device/`.
 
