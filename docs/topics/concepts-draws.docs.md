@@ -1,10 +1,10 @@
 ---
 title: Draws
-summary: gpu.draw() renders geometry with custom vertex buffers — you write the vertex stage, gpu.mesh() supplies the buffers.
+summary: gpu.draw() renders geometry with custom vertex buffers — you write the vertex stage, gpu.geometry() supplies the buffers.
 relatedSymbols:
   - Draw
   - DrawOptions
-  - MeshLike
+  - GeometryLike
 prevNext:
   prev:
     title: Context
@@ -17,11 +17,11 @@ order: 20
 
 # Draws
 
-A [`Draw`](/reference/vgpu/draw#draw) renders geometry with custom vertex buffers: you write both the vertex and the fragment stage, and a mesh supplies the buffers. If you want to render a full-screen shader instead, use an [Effect](/concepts/effects).
+A [`Draw`](/reference/vgpu/draw#draw) renders geometry with custom vertex buffers: you write both the vertex and the fragment stage, and a geometry supplies the buffers. If you want to render a full-screen shader instead, use an [Effect](/concepts/effects).
 
-## Draw a mesh
+## Draw a geometry
 
-`gpu.mesh(geometry)` turns geometry from `vgpu/scene` into vertex and index buffers. Your vertex shader declares the attributes it consumes — `@location(0) position`, `@location(1) normal` — and the mesh feeds them.
+`gpu.geometry(geometry)` turns geometry from `vgpu/scene` into vertex and index buffers. Your vertex shader declares the attributes it consumes — `@location(0) position`, `@location(1) normal` — and the geometry feeds them.
 
 ```ts
 import { init } from "vgpu";
@@ -55,7 +55,7 @@ const shader = `
 const target = gpu.target({ size: [1280, 720], depth: true });
 const camera = perspectiveCamera({ fov: 45, aspect: 16 / 9, position: [2, 2, 3], target: [0, 0, 0] });
 
-const cube = gpu.draw({ shader, mesh: gpu.mesh(box({ size: 1 })) });
+const cube = gpu.draw({ shader, geometry: gpu.geometry(box({ size: 1 })) });
 cube.set({
   camera: { viewProjection: camera.viewProjection },
   model: { model: orbit(0) },
@@ -69,12 +69,12 @@ Everything works like the rest of vgpu: bindings are reflected from the WGSL, `s
 Three details specific to geometry:
 
 - 3D needs a depth buffer, and surfaces don't have one — render into a `gpu.target({ depth: true })` and composite it to the canvas. [Effects](/concepts/effects) and [Passes](/concepts/passes) show how. Deep scenes fight z-fighting with reversed-Z: `depth: { compare: "greater" }` on the draw, `clearDepth: 0` on the pass.
-- A closed mesh like this box never shows its back faces — add `cull: "back"` to the draw and skip roughly half the fragment work.
-- `MeshLike` is an open interface: `gpu.mesh()` builds one from `vgpu/scene` geometry, but you can also pass your own `GPUBuffer`s and vertex layouts. See the [reference](/reference/vgpu/draw#meshlike).
+- A closed geometry like this box never shows its back faces — add `cull: "back"` to the draw and skip roughly half the fragment work.
+- `GeometryLike` is an open interface: `gpu.geometry()` builds one from `vgpu/scene` geometry, but you can also pass your own `GPUBuffer`s and vertex layouts. See the [reference](/reference/vgpu/draw#geometrylike).
 
-## No mesh? You spawn triangles
+## No geometry? You spawn triangles
 
-Leave `mesh` out and the draw runs with no buffers at all: `vertices` defaults to `3`, so every instance is one triangle whose corners you position from `@builtin(vertex_index)`. Combined with `instances`, that spawns a particle system from nothing:
+Leave `geometry` out and the draw runs with no buffers at all: `vertices` defaults to `3`, so every instance is one triangle whose corners you position from `@builtin(vertex_index)`. Combined with `instances`, that spawns a particle system from nothing:
 
 ```ts
 import { init } from "vgpu";

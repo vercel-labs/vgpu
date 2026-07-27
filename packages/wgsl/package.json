@@ -73,10 +73,10 @@
     "webpack": "^5.97.1"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 25600,
-    "./runtime": 204800,
-    "./loader-webpack": 204800,
-    "./loader-vite": 204800,
-    "./reflect-source": 25600
+    ".": 1024,
+    "./runtime": 20992,
+    "./loader-webpack": 21504,
+    "./loader-vite": 21504,
+    "./reflect-source": 13824
   }
 }

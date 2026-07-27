@@ -62,15 +62,15 @@ test("entry selects the named fragment entry point in the pipeline descriptor", 
   gpu.dispose();
 });
 
-test("entry selects the named vertex entry point; its inputs feed the mesh layout resolver", async () => {
+test("entry selects the named vertex entry point; its inputs feed the geometry layout resolver", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [4, 4] });
-  const mesh = gpu.mesh({ buffers: [{ data: new Float32Array(9), attributes: { position: "float32x3" } }] });
+  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array(9), attributes: { position: "float32x3" } }] });
 
-  // The first vertex entry (vs_plain) has no inputs, so the mesh attribute would be unmatched with default selection.
-  expect(() => gpu.draw({ shader: TWO_VERTEX_WGSL, label: "default-vertex", mesh })).toThrow(expect.objectContaining({ code: "VGPU-MESH-ATTRIBUTE-UNMATCHED" }));
+  // The first vertex entry (vs_plain) has no inputs, so the geometry attribute would be unmatched with default selection.
+  expect(() => gpu.draw({ shader: TWO_VERTEX_WGSL, label: "default-vertex", geometry })).toThrow(expect.objectContaining({ code: "VGPU-MESH-ATTRIBUTE-UNMATCHED" }));
 
-  gpu.draw({ shader: TWO_VERTEX_WGSL, label: "pick-mesh", entry: { vertex: "vs_mesh" }, mesh }).draw(target);
+  gpu.draw({ shader: TWO_VERTEX_WGSL, label: "pick-geometry", entry: { vertex: "vs_mesh" }, geometry }).draw(target);
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.vertex.entryPoint).toBe("vs_mesh");
   expect(desc?.vertex.buffers).toEqual([{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] }]);

@@ -31,7 +31,7 @@ function setup() {
   const canvas = { getBoundingClientRect: () => ({ width: 320, height: 180 }) } as HTMLCanvasElement;
   const surface = { size: [320, 180], format: 'bgra8unorm', dispose: vi.fn() };
   const target = { size: [320, 180], format: 'rgba8unorm', resize: vi.fn(), destroy: vi.fn() };
-  const mesh = {
+  const geometry = {
     slice: vi.fn(() => ({ firstVertex: 0, vertexCount: 3 })),
     destroy: vi.fn(),
   };
@@ -47,13 +47,13 @@ function setup() {
     target: vi.fn(() => target),
     effect: vi.fn(() => ({ set: vi.fn(), compile: vi.fn(async () => {}) })),
     sampler: vi.fn(() => ({})),
-    mesh: vi.fn(() => mesh),
+    geometry: vi.fn(() => geometry),
     draw: vi.fn(draw),
     bundle: vi.fn(() => ({})),
     frame: Object.assign(vi.fn(), { loop: vi.fn(() => ({ stop })) }),
     dispose: vi.fn(),
   };
-  return { canvas, windowListeners, frames, disconnect, surface, target, mesh, stop, drain, settled, gpu };
+  return { canvas, windowListeners, frames, disconnect, surface, target, geometry, stop, drain, settled, gpu };
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -72,12 +72,12 @@ test('drains and settles before destroying thumbnail resources after render fail
     expect(env.drain).toHaveBeenCalledOnce();
     expect(env.settled).toHaveBeenCalledOnce();
   });
-  expect(env.mesh.destroy).not.toHaveBeenCalled();
+  expect(env.geometry.destroy).not.toHaveBeenCalled();
   expect(env.target.destroy).not.toHaveBeenCalled();
   drainPending.resolve();
   settledPending.resolve();
   await expect(rendering).rejects.toBe(error);
-  expect(env.mesh.destroy).toHaveBeenCalledOnce();
+  expect(env.geometry.destroy).toHaveBeenCalledOnce();
   expect(env.target.destroy).toHaveBeenCalledOnce();
 });
 
@@ -98,7 +98,7 @@ test('owns one loop, coalesces offscreen resize, and disposes twice safely', asy
   renderer.dispose();
   expect(env.stop).toHaveBeenCalledOnce();
   expect(env.disconnect).toHaveBeenCalledOnce();
-  expect(env.mesh.destroy).toHaveBeenCalledOnce();
+  expect(env.geometry.destroy).toHaveBeenCalledOnce();
   expect(env.target.destroy).toHaveBeenCalledOnce();
   expect(env.surface.dispose).toHaveBeenCalledOnce();
   expect(env.windowListeners.size).toBe(0);

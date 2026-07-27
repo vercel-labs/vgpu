@@ -2,12 +2,12 @@
 
 # Draw
 
-Target-agnostic renderable shader unit created by `gpu.draw()`. It reflects WGSL bindings, caches pipelines per target format/depth/sample count, and supports meshes, explicit vertex counts, instancing, and raw group claims.
+Target-agnostic renderable shader unit created by `gpu.draw()`. It reflects WGSL bindings, caches pipelines per target format/depth/sample count, and supports geometries, explicit vertex counts, instancing, and raw group claims.
 
 ## Import
 
 ```ts
-import type { DepthOptions, Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike, StencilFaceOptions, StencilOptions } from "vgpu";
+import type { DepthOptions, Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, GeometryLike, StencilFaceOptions, StencilOptions } from "vgpu";
 ```
 
 ## Signature
@@ -46,7 +46,7 @@ interface StencilOptions {
 
 interface DrawOptions {
   readonly shader: string | ShaderSource;
-  readonly mesh?: MeshLike;
+  readonly geometry?: GeometryLike;
   readonly set?: SetBag;
   readonly label?: string;
   readonly targets?: readonly Target[];
@@ -82,7 +82,7 @@ interface DrawCallOptions {
 
 interface DrawLayoutOptions { readonly dynamicOffsets?: boolean; }
 
-interface MeshLike {
+interface GeometryLike {
   readonly vertexCount?: number;
   readonly indexCount?: number;
   readonly instanceCount?: number;
@@ -114,18 +114,18 @@ interface Draw {
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
 | opts.shader | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource`. Must contain compatible vertex/fragment entry points; default names are `vs_main` and `fs_main` if reflection does not find them. |
-| opts.mesh | `MeshLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
+| opts.geometry | `GeometryLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
 | opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
 | opts.targets | `readonly Target[]` | ✖ | `undefined` | Synchronous pre-warm sugar for the listed target signatures. In browser load paths, prefer `await draw.compile(target)`. |
 | opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
-| opts.vertices | `number` | ✖ | `3` for non-indexed, unless `mesh.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed meshes. Integer `>= 0`. |
+| opts.vertices | `number` | ✖ | `3` for non-indexed, unless `geometry.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed geometries. Integer `>= 0`. |
 | opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
 | opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state applied uniformly to every color target. Presets resolve at construction; explicit components use `src`/`dst` and optional `op` (`"add"` default). Omitted `alpha` copies `color`. |
 | opts.blendConstant | `readonly [number, number, number, number]` | ✖ | whatever the pass holds — `(0, 0, 0, 0)` at pass start | Scales `"constant"`/`"one-minus-constant"` blend factors. Use it to fade or crossfade a whole layer per draw without touching per-vertex alpha. Encoder state, not pipeline state (see Notes). Components must be finite; values outside `[0, 1]` are legal. When omitted, no `setBlendConstant` is emitted for this draw, so constant factors read the current pass value: the `(0, 0, 0, 0)` default at the start of the pass, or the value an earlier draw in the same pass set, which persists until the next set. At least one color target's effective blend (`colors[i].blend` when that target has one, else the top-level `blend`) must use a constant factor. |
 | opts.writeMask | `readonly ("r" \| "g" \| "b" \| "a")[]` | ✖ | all channels | Constructor-only color channel mask applied uniformly to every color target. Omit to write RGBA; `[]` writes no channels; `["r","g","b"]` skips alpha. |
 | opts.colors | `readonly ({ blend?, writeMask? } \| null)[]` | ✖ | `undefined` | Per-attachment blend/writeMask overrides for MRT — the deferred-shading case, where one draw writes a G-buffer (`gpu.target({ colors: [...] })`) and each attachment needs different state. One entry per color attachment, aligned by index. Inheritance is per field: `null` entries and omitted fields fall back to the top-level `blend`/`writeMask`; `{ writeMask: [] }` leaves that attachment untouched. |
-| opts.cull | `"none" \| "front" \| "back"` | ✖ | `"none"` | Skips rasterizing triangles that face away from the chosen side. `"back"`: culls faces pointing away from the viewer; on a closed mesh they are never visible, so the GPU skips roughly half the fragment work. `"front"`: culls faces toward the viewer; used when rendering shadow maps to reduce peter panning. When omitted, no triangles are culled — required for open geometry such as foliage cards. |
+| opts.cull | `"none" \| "front" \| "back"` | ✖ | `"none"` | Skips rasterizing triangles that face away from the chosen side. `"back"`: culls faces pointing away from the viewer; on a closed geometry they are never visible, so the GPU skips roughly half the fragment work. `"front"`: culls faces toward the viewer; used when rendering shadow maps to reduce peter panning. When omitted, no triangles are culled — required for open geometry such as foliage cards. |
 | opts.frontFace | `"ccw" \| "cw"` | ✖ | `"ccw"` | Winding order that counts as front-facing — the reference `cull` works against. Set `"cw"` for geometry authored clockwise, or for draws with a negative (mirrored) scale, which flips the on-screen winding. When omitted, counter-clockwise triangles are front. |
 | opts.unclippedDepth | `boolean` | ✖ | `false` | Disables depth clipping so geometry outside `[near, far]` rasterizes instead of vanishing. Use it for shadow-map pancaking: casters behind the light's near plane flatten onto it instead of being clipped out of the map. Requires the `"depth-clip-control"` device feature. When omitted or `false`, standard clipping applies. |
 | opts.depth | `false \| DepthOptions` | ✖ | `{ write: true, compare: "less-equal" }` | Depth test/write state for targets with a depth attachment; fields are in the `DepthOptions` table below. `false` disables depth testing for overlays and gizmos that must draw over the scene regardless of distance. When omitted, nearer fragments win and coplanar re-draws still pass; ignored when the target has no depth. |
@@ -141,9 +141,9 @@ interface Draw {
 | draw.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot draw options. Pass a bare target for the common case, or an options bag when setting counts or offsets. |
 | opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
 | opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
-| opts.instances | `number` | ✖ | `DrawOptions.instances ?? mesh.instanceCount ?? 1` | Per-call instance count; integer `>= 0`. |
-| opts.vertices | `number` | ✖ | `mesh.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed meshes use `mesh.indexCount`. |
-| opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed meshes use firstIndex/baseVertex `0`. |
+| opts.instances | `number` | ✖ | `DrawOptions.instances ?? geometry.instanceCount ?? 1` | Per-call instance count; integer `>= 0`. |
+| opts.vertices | `number` | ✖ | `geometry.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed geometries use `geometry.indexCount`. |
+| opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed geometries use firstIndex/baseVertex `0`. |
 | opts.firstInstance | `number` | ✖ | `DrawOptions.firstInstance ?? 0` | Per-call first instance. |
 | opts.indirect | `StorageBuffer \| { buffer, offset? }` | ✖ | `undefined` | GPU-driven draw: the GPU reads the draw arguments from the buffer at byte `offset` (default `0`) instead of CPU-side counts. Use it when a culling compute pass decides what to draw — the arguments are written on the GPU and the CPU never round-trips. Create the buffer with `gpu.storage(bytes, { indirect: true })`; argument layouts are in Notes. |
 
@@ -227,14 +227,14 @@ const tri = gpu.draw({
 tri.draw({ target, vertices: 3, instances: 1 });
 ```
 
-Backface culling for a closed imported mesh:
+Backface culling for a closed imported geometry:
 
 ```ts
 import { init } from "vgpu/mock";
 
 const gpu = await init();
 const scene = gpu.target({ size: [256, 256], depth: true });
-const statue = { vertexCount: 36 }; // closed mesh; vertex data omitted for brevity
+const statue = { vertexCount: 36 }; // closed geometry; vertex data omitted for brevity
 const opaque = gpu.draw({
   shader: `
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -243,8 +243,8 @@ const opaque = gpu.draw({
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.8, 0.8, 0.7, 1); }
   `,
-  mesh: statue,
-  cull: "back",    // closed mesh: faces pointing away are never visible
+  geometry: statue,
+  cull: "back",    // closed geometry: faces pointing away are never visible
   frontFace: "cw", // the importer produced clockwise triangles
 });
 opaque.draw(scene);
@@ -454,19 +454,19 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 ## Notes
 
 - Choose blend by use case: omit it for opaque geometry; use `"alpha"`/`"premultiplied"` for ordinary composition and `"additive"` for glow. Reserve explicit equations for special effects. `blendConstant` is persistent pass state (not pipeline state and not bundle state), so set it when fading or crossfading a layer.
-- For MRT, use `colors[i]` to inherit or override blend/write masks per attachment. Use `cull: "back"` on closed meshes, `"none"` on foliage/cards, and `"front"` for shadow passes; pair negative scales with `frontFace: "cw"`. Disable depth for overlays and depth writes for transparent/decals. Stencil needs a depth-stencil target; `multisample.alphaToCoverage` is for alpha-tested foliage with MSAA, not general blending.
+- For MRT, use `colors[i]` to inherit or override blend/write masks per attachment. Use `cull: "back"` on closed geometries, `"none"` on foliage/cards, and `"front"` for shadow passes; pair negative scales with `frontFace: "cw"`. Disable depth for overlays and depth writes for transparent/decals. Stencil needs a depth-stencil target; `multisample.alphaToCoverage` is for alpha-tested foliage with MSAA, not general blending.
 - Use indirect draws when compute produces arguments in storage buffers marked `{ indirect: true }`; this avoids CPU readback and keeps culling GPU-driven.
-- Count precedence is per-call option, then draw option, then mesh/default. `instances: 0` and `vertices: 0` are valid no-op draws.
+- Count precedence is per-call option, then draw option, then geometry/default. `instances: 0` and `vertices: 0` are valid no-op draws.
 - Blend, write masks, `colors`, `cull`, `frontFace`, `unclippedDepth`, `depth`, `stencil` (all but `ref`), `multisample`, `constants`, and `entry` are immutable pipeline state, fixed at `gpu.draw()`; draws that differ in any of them compile distinct pipelines. Absent options and their explicit no-op spellings — `unclippedDepth: false`, `multisample: {}`, `constants: {}`, an all-defaults `stencil`, `entry` naming the first-of-stage functions — keep byte-identical descriptors and cache keys.
 - WebGPU mapping: `cull`/`frontFace`/`unclippedDepth` → `GPUPrimitiveState`; `depth` → `GPUDepthStencilState` (`write` → `depthWriteEnabled`, `compare` → `depthCompare`, the bias family → `depthBias`/`depthBiasSlopeScale`/`depthBiasClamp`); `stencil` → its stencil members (`fail` → `failOp`, `depthFail` → `depthFailOp`, `pass` → `passOp`); `multisample` → `GPUMultisampleState`, with the sample `count` always taken from the target's `sampleCount`; `constants` → `GPUProgrammableStage.constants` on both stages.
 - `depth: false` compiles `{ depthWriteEnabled: false, depthCompare: "always" }` because WebGPU cannot omit depth state when the pass has a depth attachment. `stencil` merges into the same depth-stencil state; stencil without a `depth` option keeps the depth defaults.
 - `unclippedDepth` disables clipping only; fragment depth is still clamped to the viewport `[minDepth, maxDepth]` range at output.
 - With `alphaToCoverage` on, WebGPU additionally requires the first color target to be blendable with an alpha channel and forbids a fragment `sample_mask` output; native validation reports those.
 - WebGPU matches `constants` keys against the module's override declarations, not per entry point, so one record serves both stages even when an override is referenced by only one of them.
-- `entry` selection happens at construction: binding visibility, bind group layouts, vertex input layouts (the selected vertex entry's inputs drive mesh attribute matching), and storage-stage limit checks all reflect the chosen variant. Unused declarations keep visibility `0` in reflected layouts, so build claimed bind groups from `draw.layout(n)` rather than guessing a raw layout.
+- `entry` selection happens at construction: binding visibility, bind group layouts, vertex input layouts (the selected vertex entry's inputs drive geometry attribute matching), and storage-stage limit checks all reflect the chosen variant. Unused declarations keep visibility `0` in reflected layouts, so build claimed bind groups from `draw.layout(n)` rather than guessing a raw layout.
 - `blendConstant` and `stencil.ref` are encoder state: emitted as `setBlendConstant`/`setStencilReference` after `setPipeline` and before the draw, so draws that differ only in them share pipelines. Both are *pass* state and persist: a value set by one draw stays in effect for every later draw in the same pass that does not set its own. The `(0, 0, 0, 0)` blend-constant default therefore only holds until the first draw in the pass sets one — pass `blendConstant` explicitly on any draw in a pass that must not inherit a previous draw's value (`stencil.ref` behaves the same, and an explicit `0` re-emits). Render bundle encoders cannot set render-pass state, so `gpu.bundle` rejects such draws with `VGPU-BUNDLE-BLEND-CONSTANT`/`VGPU-BUNDLE-STENCIL-REF`; encode them in a frame pass instead.
 - Blend presets: `"alpha"` uses source alpha over, `"premultiplied"` uses premultiplied source over, and `"additive"` uses one-plus-one additive blending for color and alpha. In explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
-- `indirect` argument layouts: a non-indexed mesh (or no mesh) encodes `drawIndirect` — 4 u32 values, `vertexCount, instanceCount, firstVertex, firstInstance` (16 bytes); an indexed mesh still sets its index buffer and encodes `drawIndexedIndirect` — 5 32-bit values, `indexCount, instanceCount, firstIndex, baseVertex (signed), firstInstance` (20 bytes). Write them from a compute shader (bind the same buffer as storage) or from JS via `write()`. Indirect draws record fine into `gpu.bundle`: `drawIndirect`/`drawIndexedIndirect` exist on render bundle encoders.
+- `indirect` argument layouts: a non-indexed geometry (or no geometry) encodes `drawIndirect` — 4 u32 values, `vertexCount, instanceCount, firstVertex, firstInstance` (16 bytes); an indexed geometry still sets its index buffer and encodes `drawIndexedIndirect` — 5 32-bit values, `indexCount, instanceCount, firstIndex, baseVertex (signed), firstInstance` (20 bytes). Write them from a compute shader (bind the same buffer as storage) or from JS via `write()`. Indirect draws record fine into `gpu.bundle`: `drawIndirect`/`drawIndexedIndirect` exist on render bundle encoders.
 - A non-zero `firstInstance` inside the buffered indirect arguments silently turns the draw into a no-op unless the device has the `"indirect-first-instance"` feature. The value lives on the GPU, so vgpu cannot validate it — request the feature with `init({ requiredFeatures: ["indirect-first-instance"] })` when you need it.
 - One-shot `draw.draw()` has no implicit target and returns `void`; raw claimed-group validation errors are delivered through `gpu.onError`, and tests can `await gpu.settled()`.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.

@@ -63,9 +63,9 @@
     "wgpu-matrix": "^3.4.2"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    "./inspect": 4096,
-    "./utils": 2048,
-    "./edit": 25600,
-    "./perf": 3072
+    "./inspect": 2560,
+    "./utils": 1024,
+    "./edit": 12288,
+    "./perf": 1536
   }
 }

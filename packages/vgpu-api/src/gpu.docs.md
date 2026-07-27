@@ -28,7 +28,7 @@ interface Gpu {
   target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;
-  mesh(geometry: unknown): import("vgpu").MeshLike;
+  geometry(descriptor: unknown): import("vgpu").GeometryLike;
   dispose(): void;
   compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
   storage(bytes: number, access?: StorageAccess | StorageOptions): StorageBuffer;

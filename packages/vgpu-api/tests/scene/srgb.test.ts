@@ -31,3 +31,18 @@ test("keeps zero component triples finite", () => {
   expect(color).toEqual([0, 0, 0]);
   expect(color.every(Number.isFinite)).toBe(true);
 });
+
+test("srgb accepts #rrggbb hex strings and matches the packed-number form", () => {
+  expect(srgb("#ff6600")).toEqual(srgb(0xff6600));
+  expect(srgb("3b82f6")).toEqual(srgb(0x3b82f6));
+});
+
+test("srgb rejects malformed hex strings with a coded error", () => {
+  let code: string | undefined;
+  try {
+    srgb("#12345" as never);
+  } catch (error) {
+    code = (error as { code?: string }).code;
+  }
+  expect(code).toBe("VGPU-CORE-INVALID-USAGE");
+});

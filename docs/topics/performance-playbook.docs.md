@@ -33,12 +33,12 @@ Use before the first visible frame or route transition. This compiles render pip
 
 Before:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 ```
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 await cube.compile(scene);
 gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
@@ -129,7 +129,7 @@ Default: if an input is static, bake it outside the loop with one `gpu.frame(...
 
 ## 6. Instancing (`instances`, `vertices`)
 
-Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed meshes ignore `vertices` and `firstVertex`.
+Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed geometries ignore `vertices` and `firstVertex`.
 
 Before:
 ```text
@@ -208,12 +208,12 @@ Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and
 Before:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba8unorm" });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 ```
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 await cube.compile(scene);
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
@@ -221,17 +221,17 @@ Default: put depth/MSAA on the target; do not invent global render settings.
 
 ## 10. Back-face culling (`cull: "back"`)
 
-Use for closed meshes. With the default `cull: "none"`, triangles facing away from the camera still rasterize; culling them drops roughly half of a closed mesh's fragment work.
+Use for closed geometries. With the default `cull: "none"`, triangles facing away from the camera still rasterize; culling them drops roughly half of a closed geometry's fragment work.
 
 Before:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 ```
 After:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()), cull: "back" });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()), cull: "back" });
 ```
-Default: `cull: "back"` for closed meshes. Keep `"none"` for planes, alpha-tested foliage, and anything seen from both sides.
+Default: `cull: "back"` for closed geometries. Keep `"none"` for planes, alpha-tested foliage, and anything seen from both sides.
 
 ## 11. Occlusion culling (`gpu.visibility`)
 

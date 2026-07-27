@@ -77,16 +77,16 @@ test("indirect accepts { buffer, offset } and forwards the custom offset", async
   vi.restoreAllMocks();
 });
 
-test("indexed meshes emit drawIndexedIndirect with the index buffer still set", async () => {
+test("indexed geometries emit drawIndexedIndirect with the index buffer still set", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
   const target = gpu.target({ size: [2, 2] });
-  const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
   const args = gpu.storage(20, { indirect: true });
 
-  gpu.draw({ shader: MESH_SHADER, label: "indexed-gpu-driven", mesh }).draw({ target, indirect: args });
+  gpu.draw({ shader: MESH_SHADER, label: "indexed-gpu-driven", geometry }).draw({ target, indirect: args });
 
-  expect(ops).toEqual([["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", mesh.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(args), 0]]);
+  expect(ops).toEqual([["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geometry.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(args), 0]]);
   gpu.dispose();
   vi.restoreAllMocks();
 });
@@ -109,11 +109,11 @@ test("bundles record and replay indirect draws end-to-end", async () => {
   const gpu = await init();
   const bundleOps = spyBundleEncoderOps(gpu.device.gpu);
   const target = gpu.target({ size: [2, 2] });
-  const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
   const drawArgs = gpu.storage(16, { indirect: true });
   const indexedArgs = gpu.storage(20, { indirect: true });
   const plain = gpu.draw({ shader: DRAW_SHADER, label: "bundled-gpu-driven" });
-  const indexed = gpu.draw({ shader: MESH_SHADER, label: "bundled-indexed-gpu-driven", mesh });
+  const indexed = gpu.draw({ shader: MESH_SHADER, label: "bundled-indexed-gpu-driven", geometry });
 
   const bundle = gpu.bundle({ target, label: "gpuDriven" }, (b) => {
     b.draw(plain, { indirect: drawArgs });
@@ -122,7 +122,7 @@ test("bundles record and replay indirect draws end-to-end", async () => {
 
   expect(bundleOps).toEqual([
     ["setPipeline"], ["drawIndirect", gpuBufferOf(drawArgs), 0],
-    ["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", mesh.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(indexedArgs), 0],
+    ["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geometry.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(indexedArgs), 0],
   ]);
   expect(() => gpu.frame((f) => f.pass(target, (p) => p.bundles(bundle)))).not.toThrow();
   gpu.dispose();
@@ -159,9 +159,9 @@ test("indirect offsets must be 4-aligned non-negative integers", async () => {
 test("indirect arguments must fit: 16 bytes for drawIndirect, 20 for drawIndexedIndirect, 12 for dispatchWorkgroupsIndirect", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [2, 2] });
-  const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
   const draw = gpu.draw({ shader: DRAW_SHADER, label: "too-small" });
-  const indexed = gpu.draw({ shader: MESH_SHADER, label: "too-small-indexed", mesh });
+  const indexed = gpu.draw({ shader: MESH_SHADER, label: "too-small-indexed", geometry });
   const sim = gpu.compute(COMPUTE_SHADER, { label: "too-small-sim" });
 
   // drawIndirect reads 4 u32s: a 12-byte buffer, or 16 bytes at offset 4, cannot hold them.

@@ -66,7 +66,7 @@ import { box } from "vgpu/scene";
 
 const gpu = await init();
 const sceneShader = `/* vertex + fragment WGSL */`;
-const msaaScene = gpu.draw({ shader: sceneShader, mesh: gpu.mesh(box({ size: 1 })) });
+const msaaScene = gpu.draw({ shader: sceneShader, geometry: gpu.geometry(box({ size: 1 })) });
 
 await msaaScene.compile({
   colors: ['bgra8unorm'],

@@ -16,7 +16,7 @@ const nav = [
 ];
 const metadata = {
   context: ["Context", "init() creates the Gpu context; every surface, target, effect, and frame is created from it.", "/get-started/node", "/concepts/draws"],
-  draws: ["Draws", "gpu.draw() renders geometry with custom vertex buffers — you write the vertex stage, gpu.mesh() supplies the buffers.", "/concepts/context", "/concepts/compilation"],
+  draws: ["Draws", "gpu.draw() renders geometry with custom vertex buffers — you write the vertex stage, gpu.geometry() supplies the buffers.", "/concepts/context", "/concepts/compilation"],
   compilation: ["Compilation", "Pipelines compile lazily on first use; pre-warm them during load so the first frame doesn't hitch.", "/concepts/draws", "/concepts/effects"],
   effects: ["Effects", "An effect is a full-screen fragment shader; chain effects by binding a target as another effect's input.", "/concepts/compilation", "/concepts/passes"],
   passes: ["Passes", "A pass composites any number of draws into one target; a single shader can draw directly.", "/concepts/effects", "/concepts/frames"],
@@ -25,7 +25,7 @@ const metadata = {
 } as const;
 const headingIds = {
   context: ["create-resources-once-draw-every-frame"],
-  draws: ["draw-a-mesh", "no-mesh-you-spawn-triangles"],
+  draws: ["draw-a-geometry", "no-geometry-you-spawn-triangles"],
   compilation: ["pre-warming-with-a-target", "compiling-without-a-target", "compilesync", "errors", "render-bundles"],
   effects: ["updating-bindings"],
   passes: ["one-shader-draw-it-directly"],

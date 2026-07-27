@@ -11,7 +11,7 @@ export function storageStageLimitError(label: string, stage: "vertex" | "fragmen
     code: `VGPU-LIMIT-STORAGE-${suffix}`,
     message: `${title} entry '${entryPoint}' in '${label}' uses ${count} storage buffer(s), but device limit ${limitName} is ${limit}.`,
     fix: stage === "vertex"
-      ? `Request init({ requiredLimits: { ${limitName}: ${count} } }) if the adapter supports it, or move vertex data to gpu.mesh(...) vertex streams.`
+      ? `Request init({ requiredLimits: { ${limitName}: ${count} } }) if the adapter supports it, or move vertex data to gpu.geometry(...) vertex streams.`
       : `Request init({ requiredLimits: { ${limitName}: ${count} } }) if the adapter supports it, or reduce fragment storage buffers.`,
     where: `${label}.pipelineLayout`,
     detail: { stage, entryPoint, count, limit, bindings: bindings.map(({ name, group, binding }) => ({ name, group, binding })) },
@@ -419,25 +419,25 @@ export function meshLimitExceededError(where: string, message: string): VGPUErro
   return meshError("VGPU-MESH-LIMIT-EXCEEDED", where, message, "Use <= 8 buffers and <= 16 attributes (or the device limits).");
 }
 export function meshLocationConflictError(where: string, location: number): VGPUError {
-  return meshError("VGPU-MESH-LOCATION-CONFLICT", where, `Duplicate mesh @location(${location}).`, "Use unique locations, or omit them for name matching.");
+  return meshError("VGPU-MESH-LOCATION-CONFLICT", where, `Duplicate geometry @location(${location}).`, "Use unique locations, or omit them for name matching.");
 }
 export function meshDataMisalignedError(where: string, message: string): VGPUError {
   return meshError("VGPU-MESH-DATA-MISALIGNED", where, message, "Fix: repack data, set matching stride, or give raw buffers an explicit count.");
 }
 export function meshRangeInvalidError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-RANGE-INVALID", where, message, "Use index ranges for indexed meshes, vertex ranges otherwise, within mesh counts.");
+  return meshError("VGPU-MESH-RANGE-INVALID", where, message, "Use index ranges for indexed geometries, vertex ranges otherwise, within geometry counts.");
 }
 export function meshWriteRangeError(where: string, message: string): VGPUError {
-  return meshError("VGPU-MESH-WRITE-RANGE", where, message, "Write within the buffer byteLength, or create a larger mesh.");
+  return meshError("VGPU-MESH-WRITE-RANGE", where, message, "Write within the buffer byteLength, or create a larger geometry.");
 }
 export function meshAttributeUnmatchedError(where: string, name: string, available: readonly string[] = []): VGPUError {
-  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' has no shader input.`, `Use shader name${available.length ? ` (${available.join(",")})` : ""} or { location:n }.`);
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Geometry attribute '${name}' has no shader input.`, `Use shader name${available.length ? ` (${available.join(",")})` : ""} or { location:n }.`);
 }
 export function meshAttributeAmbiguousError(where: string, name: string, locations: readonly number[]): VGPUError {
-  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Mesh attribute '${name}' matches locations ${locations.join(",")}.`, "Rename inputs or set { location:n }.");
+  return meshError("VGPU-MESH-ATTRIBUTE-UNMATCHED", where, `Geometry attribute '${name}' matches locations ${locations.join(",")}.`, "Rename inputs or set { location:n }.");
 }
 export function meshInputMissingError(where: string, name: string, available: readonly string[] = []): VGPUError {
-  return meshError("VGPU-MESH-INPUT-MISSING", where, `Mesh lacks shader input '${name}'.`, `Add/remove it. Mesh attributes: ${available.join(",") || "none"}.`);
+  return meshError("VGPU-MESH-INPUT-MISSING", where, `Geometry lacks shader input '${name}'.`, `Add/remove it. Geometry attributes: ${available.join(",") || "none"}.`);
 }
 export function meshFormatMismatchError(where: string, name: string, meshFormat: string, shaderType: string): VGPUError {
   return meshError("VGPU-MESH-FORMAT-MISMATCH", where, `Attribute '${name}' ${meshFormat} != shader ${shaderType}.`, "Match the float/sint/uint shader base type; widths may differ.");

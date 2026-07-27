@@ -44,7 +44,7 @@
   "scripts": {
     "build": "tsc -b"
   },
-  "vgpuBundleBudgetGzipBytes": 51200,
+  "vgpuBundleBudgetGzipBytes": 43520,
   "dependencies": {
     "@vgpu/wgsl": "workspace:*"
   }

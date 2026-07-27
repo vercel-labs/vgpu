@@ -13,7 +13,7 @@ import { srgb } from "vgpu/scene";
 ## Signature
 
 ```ts
-type SrgbInput = number | [number, number, number];
+type SrgbInput = number | string | [number, number, number];
 type LinearRgb = [number, number, number];
 
 declare function srgb(input: SrgbInput): LinearRgb;
@@ -23,10 +23,10 @@ declare function srgb(input: SrgbInput): LinearRgb;
 
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| input | `number \| [number, number, number]` | ✔ | — | Either a packed `0xRRGGBB` number or a three-channel sRGB tuple. Tuple channels are expected in normalized `0..1` units, not byte `0..255` units. |
+| input | `number \| string \| [number, number, number]` | ✔ | — | A packed `0xRRGGBB` number, a `"#rrggbb"` hex string, or a three-channel sRGB tuple. Tuple channels are expected in normalized `0..1` units, not byte `0..255` units. |
 
 **Returns:** `LinearRgb` (`[number, number, number]`) — normalized linear RGB channels. Each channel uses the standard sRGB transfer curve: `channel / 12.92` for `channel <= 0.04045`, otherwise `((channel + 0.055) / 1.055) ** 2.4`.
-**Throws:** None.
+**Throws:** `VGPU-CORE-INVALID-USAGE` for malformed hex strings; numeric and tuple inputs are not validated.
 
 ## Examples
 
@@ -34,7 +34,8 @@ declare function srgb(input: SrgbInput): LinearRgb;
 import { srgb } from "vgpu/scene";
 
 const albedo = srgb(0xff8040);
-console.log(albedo.length); // 3
+const sky = srgb("#3b82f6");
+console.log(albedo.length, sky.length); // 3 3
 ```
 
 ```ts
@@ -48,7 +49,7 @@ void normalizedGray;
 
 ## Notes
 
-- The numeric form is a packed hexadecimal color, for example `0xff8040`. Do not call `srgb(255, 128, 64)`; that is not the function signature.
+- The numeric form is a packed hexadecimal color (`0xff8040`); the string form accepts `"#rrggbb"` or `"rrggbb"`. Do not call `srgb(255, 128, 64)`; that is not the function signature.
 - Tuple input is not clamped. Values outside `0..1`, `NaN`, and `Infinity` flow through JavaScript arithmetic and can produce non-display color values.
 - `srgb` is CPU-side only. For texture sampling and post-processing, keep color-management decisions explicit in WGSL.
 - **See also:** `degToRad`, `SceneGeometry`.

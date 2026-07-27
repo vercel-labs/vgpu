@@ -45,5 +45,5 @@
   "dependencies": {
     "@vgpu/core": "workspace:*"
   },
-  "vgpuBundleBudgetGzipBytes": 20480
+  "vgpuBundleBudgetGzipBytes": 13824
 }

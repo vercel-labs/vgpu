@@ -23,7 +23,7 @@ export function meshToWireframe(mesh: Mesh, device: Device): Promise<WireframeMe
 
 **Returns:** `Promise<WireframeMesh>` — frozen mesh-like object that reuses the source `vertexBuffer`, exposes a raw `indexBuffer`, reports whether the index data is `uint16` or `uint32`, and includes the deduplicated `lineCount`.
 
-**Throws:** `VGPU-CORE-INVALID-USAGE` when the source mesh lacks a readable vertex buffer; fix by creating the mesh via `gpu.mesh(...)` or promoting it through `meshToReadable` first.
+**Throws:** `VGPU-CORE-INVALID-USAGE` when the source mesh lacks a readable vertex buffer; fix by creating the geometry via `gpu.geometry(...)` or promoting it through `meshToReadable` first.
 
 ## Examples
 
@@ -36,7 +36,7 @@ import { box } from "vgpu/scene";
 async function main(): Promise<void> {
   const adapter = createMockAdapter();
   const gpu = await init({ adapter });
-  const solid = gpu.mesh(box({ size: 1 }));
+  const solid = gpu.geometry(box({ size: 1 }));
   const readable = await meshToReadable(solid as never, gpu.device);
   const wireframe = await meshToWireframe(readable, gpu.device);
   const inspector = wireframeMaterial({ device: gpu.device });

@@ -16,3 +16,4 @@ coverage/
 *~
 .*.swp
 .*.swo
+.tmp-doc-snippets-*/

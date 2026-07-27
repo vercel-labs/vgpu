@@ -1,5 +1,5 @@
 {
-  "description": "Production Turbopack gzip baselines captured after the 10-example React migration at 55c7024. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host.",
+  "description": "Production Turbopack gzip baselines captured after the 10-example React migration and refreshed for the stateful scene camera API. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host.",
   "sharedHost": {
     "gzipBytes": 1194,
     "maxGrowthBytes": 5120
@@ -11,8 +11,8 @@
     "post-processing": 4243,
     "black-hole": 5963,
     "fluid": 5385,
-    "instanced-rendering": 3740,
-    "batch-rendering": 3662,
+    "instanced-rendering": 13376,
+    "batch-rendering": 13243,
     "fft-ocean": 9235,
     "raymarched-fractal": 3995
   },

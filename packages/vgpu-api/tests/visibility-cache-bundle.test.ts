@@ -76,11 +76,11 @@ test("equal dynamic descriptors reuse layout identity", async () => {
   gpu.dispose();
 });
 
-test("bundle recording and mesh slices share narrowed pipeline layouts", async () => {
+test("bundle recording and geometry slices share narrowed pipeline layouts", async () => {
   const gpu = await init();
-  const mesh = gpu.mesh({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }] });
-  const first = gpu.draw({ shader: vertexShader("first"), label: "mesh-first", mesh });
-  const second = gpu.draw({ shader: vertexShader("second"), label: "mesh-second", mesh: mesh.slice({ firstVertex: 0, vertexCount: 3 }) });
+  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }] });
+  const first = gpu.draw({ shader: vertexShader("first"), label: "geometry-first", geometry });
+  const second = gpu.draw({ shader: vertexShader("second"), label: "geometry-second", geometry: geometry.slice({ firstVertex: 0, vertexCount: 3 }) });
   first.set({ first: [0, 0, 0, 1] });
   second.set({ second: [0, 0, 0, 1] });
   expect(first.layout(0)).toBe(second.layout(0));

@@ -100,7 +100,7 @@ test("two used storage buffers exceed a limit of one while unused storage does n
   expect(() => gpu.draw({ shader, label: "two-storage" })).toThrow(expect.objectContaining({
     code: "VGPU-LIMIT-STORAGE-VERTEX",
     message: "Vertex entry 'vs' in 'two-storage' uses 2 storage buffer(s), but device limit maxStorageBuffersInVertexStage is 1.",
-    fix: "Request init({ requiredLimits: { maxStorageBuffersInVertexStage: 2 } }) if the adapter supports it, or move vertex data to gpu.mesh(...) vertex streams.",
+    fix: "Request init({ requiredLimits: { maxStorageBuffersInVertexStage: 2 } }) if the adapter supports it, or move vertex data to gpu.geometry(...) vertex streams.",
     detail: expect.objectContaining({ count: 2, limit: 1, bindings: [
       { name: "a", group: 0, binding: 0 }, { name: "b", group: 0, binding: 1 },
     ] }),

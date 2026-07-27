@@ -95,13 +95,13 @@ test("depth bias outside the i32 range fails at draw construction", async () => 
 test("nonzero depth bias is rejected for non-triangle topologies", async () => {
   const gpu = await init();
   const expectInvalid = (label: string, topology: GPUPrimitiveTopology, depth: unknown): void => {
-    expect(() => gpu.draw({ shader: DRAW_SHADER, label, mesh: { topology }, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
+    expect(() => gpu.draw({ shader: DRAW_SHADER, label, geometry: { topology }, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
   };
   expectInvalid("bias-line-list", "line-list", { bias: 1 });
   expectInvalid("slope-line-strip", "line-strip", { biasSlopeScale: 0.5 });
   expectInvalid("clamp-point-list", "point-list", { biasClamp: 0.5 });
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "zero-bias-lines", mesh: { topology: "line-list" }, depth: { bias: 0, compare: "less" } })).not.toThrow();
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "bias-strip", mesh: { topology: "triangle-strip", stripIndexFormat: "uint16" }, depth: { bias: 1 } })).not.toThrow();
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "zero-bias-lines", geometry: { topology: "line-list" }, depth: { bias: 0, compare: "less" } })).not.toThrow();
+  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "bias-strip", geometry: { topology: "triangle-strip", stripIndexFormat: "uint16" }, depth: { bias: 1 } })).not.toThrow();
   gpu.dispose();
 });
 

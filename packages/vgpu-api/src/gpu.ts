@@ -7,8 +7,8 @@ import { InternalDraw, type Draw, type DrawOptions } from "./draw.ts";
 import { Frame, FrameRunner, type FrameLoopHandle } from "./frame.ts";
 import { InternalEffect, type Effect, type EffectOptions } from "./effect.ts";
 import { createSamplerCache } from "./sampler.ts";
-import { mesh as createSceneMesh } from "./scene/mesh.ts";
-import { Mesh, type MeshOptions } from "./scene/mesh-descriptor.ts";
+import { createGeometry } from "./scene/geometry-factory.ts";
+import { Geometry, type GeometryOptions } from "./scene/geometry-descriptor.ts";
 import type { SceneGeometry } from "./scene/geometry.ts";
 import { OffscreenTarget, type Target, type TargetOptions, type TargetTextureOptions } from "./target.ts";
 import { frameReentrantError, surfaceDuplicateError, unsupportedError, VGPUError } from "./errors.ts";
@@ -70,8 +70,8 @@ export interface Gpu {
   target(opts: TargetOptions): Target;
   readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;
-  mesh(geometry: SceneGeometry): Mesh;
-  mesh(options: MeshOptions): Mesh;
+  geometry(geometry: SceneGeometry): Geometry;
+  geometry(options: GeometryOptions): Geometry;
   dispose(): void;
   compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
   storage(bytes: number, access?: StorageAccess | StorageOptions): StorageBuffer;
@@ -146,7 +146,7 @@ class RingGpu implements Gpu {
     return surface;
   }
   effect(source: string | ShaderSource, opts: EffectOptions = {}): Effect {
-    if (hasMesh(opts)) throw unsupportedError("gpu.effect", "gpu.effect() never accepts vertex buffers; use gpu.draw({ shader, mesh: gpu.mesh(geometry) }).");
+    if (hasGeometry(opts)) throw unsupportedError("gpu.effect", "gpu.effect() never accepts vertex buffers; use gpu.draw({ shader, geometry: gpu.geometry(descriptor) }).");
     return new InternalEffect(this.device, toWgsl(source), opts, this.#cache, undefined, this.#pipelineStore, this.#shaderModules, this.#pipelineLayouts, (error) => this.#reportError(error), (promise) => this.#trackDelivery(promise));
   }
   draw(opts: DrawOptions): Draw {
@@ -155,10 +155,10 @@ class RingGpu implements Gpu {
   }
   target(opts: TargetOptions): Target { return new OffscreenTarget(this.device, opts); }
   sampler(desc?: GPUSamplerDescriptor): GPUSampler { return this.#samplers.sampler(desc); }
-  mesh(geometry: SceneGeometry): Mesh;
-  mesh(options: MeshOptions): Mesh;
-  mesh(input: SceneGeometry | MeshOptions): Mesh {
-    return isMeshOptions(input) ? new Mesh(this.device, input) : createSceneMesh(this.device, input);
+  geometry(geometry: SceneGeometry): Geometry;
+  geometry(options: GeometryOptions): Geometry;
+  geometry(input: SceneGeometry | GeometryOptions): Geometry {
+    return isGeometryOptions(input) ? new Geometry(this.device, input) : createGeometry(this.device, input);
   }
   dispose(): void {
     if (this.#disposed) return;
@@ -298,11 +298,11 @@ async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   return new Device(gpuDevice, adapter.info ?? null);
 }
 
-function hasMesh(opts: EffectOptions): boolean {
-  return "mesh" in (opts as Record<string, unknown>);
+function hasGeometry(opts: EffectOptions): boolean {
+  return "geometry" in (opts as Record<string, unknown>);
 }
 
-function isMeshOptions(value: SceneGeometry | MeshOptions): value is MeshOptions {
+function isGeometryOptions(value: SceneGeometry | GeometryOptions): value is GeometryOptions {
   return typeof value === "object" && value !== null && "buffers" in value;
 }
 

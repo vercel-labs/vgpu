@@ -61,8 +61,8 @@ test("device store dedupes byte-identical WGSL, layout, and signature across dra
 test("different vertex buffer layouts do not collide", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [2, 2] });
-  const a = gpu.draw({ shader: VERTEX_WGSL, label: "layout-a", mesh: { vertexBufferLayouts: [VERTEX_LAYOUT_A] } });
-  const b = gpu.draw({ shader: VERTEX_WGSL, label: "layout-b", mesh: { vertexBufferLayouts: [VERTEX_LAYOUT_B] } });
+  const a = gpu.draw({ shader: VERTEX_WGSL, label: "layout-a", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_A] } });
+  const b = gpu.draw({ shader: VERTEX_WGSL, label: "layout-b", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_B] } });
 
   a.draw(target);
   b.draw(target);
@@ -107,13 +107,13 @@ test("blend and writeMask participate in shared pipeline cache keys", async () =
   gpu.dispose();
 });
 
-test("strip meshes that derive stripIndexFormat from indexFormat do not collide in the cache", async () => {
+test("strip geometries that derive stripIndexFormat from indexFormat do not collide in the cache", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [2, 2] });
-  // Neither mesh spells stripIndexFormat out: the descriptor derives it from indexFormat, so the key must too.
-  const a = gpu.draw({ shader: WGSL, label: "strip-uint16", mesh: { topology: "triangle-strip", indexFormat: "uint16" } });
-  const b = gpu.draw({ shader: WGSL, label: "strip-uint32", mesh: { topology: "triangle-strip", indexFormat: "uint32" } });
-  const c = gpu.draw({ shader: WGSL, label: "strip-uint16-again", mesh: { topology: "triangle-strip", indexFormat: "uint16" } });
+  // Neither geometry spells stripIndexFormat out: the descriptor derives it from indexFormat, so the key must too.
+  const a = gpu.draw({ shader: WGSL, label: "strip-uint16", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
+  const b = gpu.draw({ shader: WGSL, label: "strip-uint32", geometry: { topology: "triangle-strip", indexFormat: "uint32" } });
+  const c = gpu.draw({ shader: WGSL, label: "strip-uint16-again", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
 
   a.draw(target);
   b.draw(target);
@@ -130,8 +130,8 @@ test("strip meshes that derive stripIndexFormat from indexFormat do not collide 
 test("an explicit stripIndexFormat and the derived one share a pipeline", async () => {
   const gpu = await init();
   const target = gpu.target({ size: [2, 2] });
-  const derived = gpu.draw({ shader: WGSL, label: "derived", mesh: { topology: "line-strip", indexFormat: "uint16" } });
-  const explicitFormat = gpu.draw({ shader: WGSL, label: "explicit", mesh: { topology: "line-strip", stripIndexFormat: "uint16", indexFormat: "uint16" } });
+  const derived = gpu.draw({ shader: WGSL, label: "derived", geometry: { topology: "line-strip", indexFormat: "uint16" } });
+  const explicitFormat = gpu.draw({ shader: WGSL, label: "explicit", geometry: { topology: "line-strip", stripIndexFormat: "uint16", indexFormat: "uint16" } });
 
   derived.draw(target);
   explicitFormat.draw(target);

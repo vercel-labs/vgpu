@@ -18,9 +18,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
       const shader = await resolveShader({ entry });
       expect(shader.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/light/index.wgsl"))).toBe(true);
 
-      const mesh = gpu.mesh(box({ size: 1 }));
-      const lit = await renderCube(gpu, shader.wgsl, mesh, [-1, 1, -1]);
-      const inverted = await renderCube(gpu, shader.wgsl, mesh, [1, -1, 1]);
+      const geometry = gpu.geometry(box({ size: 1 }));
+      const lit = await renderCube(gpu, shader.wgsl, geometry, [-1, 1, -1]);
+      const inverted = await renderCube(gpu, shader.wgsl, geometry, [1, -1, 1]);
 
       const litBrightFace = averageLuma(lit, 48, { x: 24, y: 24, width: 10, height: 10 });
       const litShadowFace = averageLuma(lit, 48, { x: 20, y: 9, width: 8, height: 8 });
@@ -36,9 +36,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
   });
 });
 
-async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, mesh: ReturnType<Awaited<ReturnType<typeof init>>["mesh"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
+async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, geometry: ReturnType<Awaited<ReturnType<typeof init>>["geometry"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
   const target = gpu.target({ size: [48, 48], format: "rgba8unorm", depth: true, label: "litCube" });
-  const cube = gpu.draw({ shader, mesh, targets: [target] });
+  const cube = gpu.draw({ shader, geometry, targets: [target] });
   const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
 
   const camera = bindingName(cube, 0);
