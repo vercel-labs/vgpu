@@ -1,5 +1,6 @@
 public/dist
 public/ort
+public/models/depth
 .next
 .turbo
 *.tsbuildinfo
