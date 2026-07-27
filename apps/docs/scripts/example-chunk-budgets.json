@@ -1,5 +1,5 @@
 {
-  "description": "Production Turbopack gzip baselines captured after the 10-example React migration at 55c7024, extended with the ONNX examples. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host. The ML routes' baselines cover the route-owned chunks only: onnxruntime-web is imported dynamically inside the example, so its runtime chunk and the ~24 MiB same-origin WASM are fetched on demand and are not attributed to a route chunk by this checker.",
+  "description": "Production Turbopack gzip baselines captured after the 10-example React migration at 55c7024, extended with the ONNX examples. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host. The ML routes' baselines cover the route-owned chunks only: onnxruntime-web is imported dynamically inside the example, so its runtime chunk and the ~24 MiB same-origin WASM are fetched on demand and are not attributed to a route chunk by this checker. air-painting is the largest of the three because it ships four shaders plus the pose contract, camera, preprocess, scheduler and fixture modules; its 9 MB same-origin model is a public asset and is likewise not part of any route chunk.",
   "sharedHost": {
     "gzipBytes": 1194,
     "maxGrowthBytes": 5120
@@ -16,7 +16,8 @@
     "fft-ocean": 9235,
     "raymarched-fractal": 3995,
     "neural-shader-cppn": 25381,
-    "mnist-classifier": 6681
+    "mnist-classifier": 6681,
+    "air-painting": 13079
   },
   "exampleGrowth": {
     "percent": 2,

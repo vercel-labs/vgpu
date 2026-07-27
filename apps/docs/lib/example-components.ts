@@ -20,6 +20,7 @@ export const exampleComponentLoaders = {
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
   'neural-shader-cppn': () => import('../examples/neural-shader-cppn/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
+  'air-painting': () => import('../examples/air-painting/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

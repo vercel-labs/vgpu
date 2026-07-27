@@ -11,6 +11,7 @@ export const exampleSlugs = [
   'raymarched-fractal',
   'neural-shader-cppn',
   'mnist-classifier',
+  'air-painting',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

@@ -14,6 +14,7 @@ import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
 import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
 import { meta as neuralShaderCppnMeta } from '../examples/neural-shader-cppn/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
+import { meta as airPaintingMeta } from '../examples/air-painting/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -28,6 +29,7 @@ const rawMetadata = {
   'raymarched-fractal': raymarchedFractalMeta,
   'neural-shader-cppn': neuralShaderCppnMeta,
   'mnist-classifier': mnistClassifierMeta,
+  'air-painting': airPaintingMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -51,6 +53,7 @@ export const exampleMetadataBySlug = {
   'raymarched-fractal': withThumbnails(rawMetadata['raymarched-fractal']),
   'neural-shader-cppn': withThumbnails(rawMetadata['neural-shader-cppn']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
+  'air-painting': withThumbnails(rawMetadata['air-painting']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);
