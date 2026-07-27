@@ -6,9 +6,13 @@ summary: Consume GPU tensors from ML runtimes without a CPU roundtrip.
 relatedSymbols: [init, Device, Buffer]
 ---
 
-# LLM and neural network buffers
+# Machine learning buffers
 
-DRAFT PROSE PENDING AUTHOR
+Share one `GPUDevice` between vgpu and a machine learning runtime so model outputs stay on the GPU.
+
+The `init({ device })` option adopts a `GPUDevice` that another library created. Use it when an ML runtime such as ONNX Runtime Web already owns a WebGPU device and you want vgpu shaders to consume the model's output buffers without a CPU roundtrip. The API is model-agnostic: vision, diffusion, embedding, or LLM outputs are all just `GPUBuffer`s to vgpu.
+
+vgpu never takes ownership of an adopted device. `gpu.dispose()` releases the resources vgpu created, but it never calls `device.destroy()` on a device it did not request.
 
 ## SDK signatures
 
@@ -47,7 +51,9 @@ class Device {
 | `VGPU-INIT-DEVICE-INVALID` | The external device or init options fail structural validation. |
 | `VGPU-EXTERNAL-BUFFER-INVALID` | `wrapBuffer` receives a value without finite `size` and `usage`. |
 
-DRAFT PROSE PENDING AUTHOR
+Pass either requested-device options or an external device — never both. The two option families are mutually exclusive; mixing `device` with `adapter` or any other requested-device option throws `VGPU-INIT-OPTIONS-CONFLICT`.
+
+`Device.wrapBuffer` wraps a caller-owned `GPUBuffer` in a vgpu `Buffer` without taking ownership. `wrapper.gpu` is the exact object you passed in. Disposing the wrapper detaches it from vgpu but never destroys the underlying buffer, and dispose is idempotent — a double dispose is a no-op.
 
 ## Platform and ownership matrix
 
@@ -60,9 +66,15 @@ DRAFT PROSE PENDING AUTHOR
 
 The primary Node matrix is Node 22, `webgpu@0.4.0`, `onnxruntime-web@1.27.0`, and vgpu/software-renderer 0.1.6. The `webgpu@0.4.0` Linux ARM64 prebuilt requires glibc 2.38; run the primary recipe and generic-WASM negative proof on x64 CI or ARM64 with glibc 2.38 or newer. The explicitly labeled host fallback uses the supported `@vgpu/adapter-node` portable Dawn and software renderer. Executable recipes are under `experiments/ort-init-device/`.
 
-DRAFT PROSE PENDING AUTHOR
+If `require("webgpu")` fails with a `GLIBC_2.38` error, run `npx vgpu doctor` and follow its prescription: `npx vgpu install-dawn` installs vgpu's portable Dawn build (glibc 2.31 floor), and `npx vgpu install-software-renderer` adds a portable software renderer for hosts without a GPU. The recipes below run unchanged on that fallback.
+
+Choose one of two consumption modes. Snapshot copies the model output once, GPU-to-GPU, into a buffer vgpu owns; after the copy you are decoupled from the runtime and may free its tensor at any time. Reference wraps the runtime's buffer directly with zero copies; the runtime keeps ownership and you must respect its lifetime.
+
+In reference mode, always `await gpu.device.queue.flush()` before disposing the source tensor. Do not dispose the tensor while vgpu work that reads it is still in flight — skipping the flush is an experimental fast path, not a supported contract.
 
 ## Browser snapshot
+
+Copy the model output once into a vgpu-owned buffer, then release the tensor:
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
@@ -93,6 +105,8 @@ try {
 
 ## Browser reference
 
+Wrap the model output directly — zero copies, strict lifetime:
+
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
 import { init } from "vgpu";
@@ -116,6 +130,8 @@ try {
 ```
 
 ## Node snapshot
+
+Same route after the pinned Dawn and ORT setup:
 
 ```ts
 import { create, globals } from "webgpu";
@@ -144,6 +160,8 @@ try {
 
 ## Node reference
 
+Same zero-copy route on Node:
+
 ```ts
 import { init } from "vgpu/node";
 
@@ -162,8 +180,8 @@ try {
 }
 ```
 
-DRAFT PROSE PENDING AUTHOR
+## Scope
+
+The integration is deliberately narrow: vgpu adopts a device and wraps buffers — everything else stays in your hands.
 
 vgpu does not import ORT, resolve ORT WASM assets, mutate Node globals, validate GPUBuffer provenance, interpret Tensor dtype/shape/layout, recover a lost device, or transfer ownership of the borrowed device or buffer.
-
-DRAFT PROSE PENDING AUTHOR

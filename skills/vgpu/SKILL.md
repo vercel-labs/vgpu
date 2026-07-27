@@ -47,7 +47,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), gpu.surface(canvas, opts), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
 - **Getting started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
 - **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
-- **Machine learning buffers** — DRAFT PROSE PENDING AUTHOR  `references/guides/ml-buffers.docs.md`
+- **Machine learning buffers** — Share one GPUDevice between vgpu and a machine learning runtime so model outputs stay on the GPU.  `references/guides/ml-buffers.docs.md`
 - **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
 - **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
 - **Performance patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
