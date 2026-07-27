@@ -23,6 +23,9 @@ importers:
       esbuild:
         specifier: ^0.21.5
         version: 0.21.5
+      onnxruntime-web:
+        specifier: 1.27.0
+        version: 1.27.0
       pixelmatch:
         specifier: ^7.2.0
         version: 7.2.0
@@ -38,6 +41,9 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+      webgpu:
+        specifier: 0.4.0
+        version: 0.4.0
 
   apps/docs:
     dependencies:
