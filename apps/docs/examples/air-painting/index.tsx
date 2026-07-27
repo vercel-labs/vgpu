@@ -3,10 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useExampleErrorReporter } from '../../lib/example-error-reporter';
 import { CameraUnavailableError, requestCamera, type CameraSource } from './camera-source';
-import { createDemoRenderer, type AirPaintDemoStatus } from './demo-runtime';
 import { createRenderer, type AirPaintStatus } from './ort-runtime';
 
-type Mode = 'demo' | 'camera';
+/**
+ * Before the camera is enabled there is no renderer, no WebGPU device and no
+ * canvas at all -- just a flat empty panel and the button.
+ *
+ * The example used to fill that state with a canned figure wiping itself clear.
+ * It was the first thing anyone saw and it looked synthetic, which made the whole
+ * example look synthetic. An empty panel promises nothing and so cannot
+ * disappoint; the effect is now only ever shown with real input.
+ */
+type Mode = 'idle' | 'camera';
 
 interface Controls {
   clear(): void;
@@ -33,7 +41,7 @@ export function Example() {
   const reportError = useExampleErrorReporter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controlsRef = useRef<Controls | undefined>(undefined);
-  const [mode, setMode] = useState<Mode>('demo');
+  const [mode, setMode] = useState<Mode>('idle');
   const [camera, setCamera] = useState<CameraSource | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [requesting, setRequesting] = useState(false);
@@ -42,45 +50,29 @@ export function Example() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Idle renders no canvas, so there is nothing to drive and nothing to start.
+    if (!canvas || mode !== 'camera' || !camera) return;
     setTone('starting');
     setBlocked(undefined);
 
-    let controls: Controls;
-    if (mode === 'camera' && camera) {
-      const renderer = createRenderer({
-        canvas,
-        camera,
-        onError: reportError,
-        onStatus: (status: AirPaintStatus) => {
-          setTone(cameraTone(status.phase));
-          setBlocked(blockedDetail(status.phase, status.detail));
-        },
-      });
-      controls = renderer;
-      void renderer.ready.catch(() => {
-        // onError already reported initialization failures to the preview host.
-      });
-    } else {
-      const renderer = createDemoRenderer({
-        canvas,
-        onError: reportError,
-        onStatus: (status: AirPaintDemoStatus) => {
-          setTone(status.phase === 'running' ? 'painting' : 'starting');
-          setBlocked(blockedDetail(status.phase, status.detail));
-        },
-      });
-      controls = renderer;
-      void renderer.ready.catch(() => {
-        // Same.
-      });
-    }
+    const renderer = createRenderer({
+      canvas,
+      camera,
+      onError: reportError,
+      onStatus: (status: AirPaintStatus) => {
+        setTone(cameraTone(status.phase));
+        setBlocked(blockedDetail(status.phase, status.detail));
+      },
+    });
+    void renderer.ready.catch(() => {
+      // onError already reported initialization failures to the preview host.
+    });
 
-    controlsRef.current = controls;
+    controlsRef.current = renderer;
     return () => {
       controlsRef.current = undefined;
       // Disposing the camera renderer also stops the media tracks.
-      controls.dispose();
+      renderer.dispose();
     };
   }, [camera, mode, reportError]);
 
@@ -108,7 +100,7 @@ export function Example() {
     if (mode !== 'camera') return;
     // The renderer's cleanup disposes the camera, so just drop it and re-key.
     setCamera(undefined);
-    setMode('demo');
+    setMode('idle');
     setNotice(undefined);
   }, [mode]);
 
@@ -119,18 +111,21 @@ export function Example() {
   return (
     <div className="flex h-full w-full flex-col gap-3 bg-black p-4">
       <div className="relative min-h-[280px] flex-1">
-        <canvas
-          // Re-keying gives each mode a fresh canvas, so a WebGPU context is never
-          // reconfigured onto a different device.
-          key={mode}
-          ref={canvasRef}
-          aria-label={
-            mode === 'camera'
-              ? 'Mirrored camera view, dithered outside the strokes painted by both hands'
-              : 'Visual demo of the dithered compositor with a synthetic two-handed trajectory'
-          }
-          className="block h-full w-full rounded-lg border border-gray-4 bg-gray-1"
-        />
+        {mode === 'camera' ? (
+          <canvas
+            // Re-keying gives each mode a fresh canvas, so a WebGPU context is
+            // never reconfigured onto a different device.
+            key={mode}
+            ref={canvasRef}
+            aria-label="Mirrored camera view behind frosted glass, wiped clear where either hand has passed"
+            className="block h-full w-full rounded-lg border border-gray-4 bg-gray-1"
+          />
+        ) : (
+          <div
+            aria-hidden
+            className="h-full w-full rounded-lg border border-gray-4 bg-gray-1"
+          />
+        )}
         {blocked && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <p className="rounded-lg border border-gray-4 bg-gray-2 px-3 py-2 font-mono text-[11px] text-gray-11">
@@ -159,7 +154,12 @@ export function Example() {
             {requesting ? 'requesting…' : 'enable camera'}
           </button>
         )}
-        <button type="button" onClick={clear} className={BUTTON_CLASS}>
+        <button
+          type="button"
+          onClick={clear}
+          disabled={mode !== 'camera'}
+          className={BUTTON_CLASS}
+        >
           clear
         </button>
         {notice && (
@@ -180,7 +180,7 @@ function cameraTone(phase: AirPaintStatus['phase']): Tone {
 
 /** Only failure states get words; everything else is the dot. */
 function blockedDetail(
-  phase: AirPaintStatus['phase'] | AirPaintDemoStatus['phase'],
+  phase: AirPaintStatus['phase'],
   detail: string | undefined,
 ): string | undefined {
   if (phase === 'unsupported') return detail ?? 'This example needs WebGPU.';

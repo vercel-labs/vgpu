@@ -22,7 +22,8 @@ import {
   BRUSH_BUFFER_BYTES,
   BRUSH_TUNING,
   computeFrameTransform,
-  DITHER_CELL_LOGICAL_PX,
+  FOG_TUNING,
+  fogDecay,
   HAND_EXTRAPOLATION,
   KEYPOINT_BUFFER_BYTES,
   MASK_BYTES,
@@ -31,10 +32,12 @@ import {
   MASK_WIDTH,
   maxJumpDistance,
   type BrushTuning,
+  type FogTuning,
   type HandExtrapolation,
   type FrameTransform,
 } from './pose-contract';
 import compositeWgsl from './composite.wgsl';
+import frostWgsl from './frost.wgsl';
 import paintWgsl from './paint.wgsl';
 import wristWgsl from './wrist.wgsl';
 
@@ -55,6 +58,7 @@ export interface VisualPipelineOptions {
   readonly label?: string;
   readonly tuning?: BrushTuning;
   readonly extrapolation?: HandExtrapolation;
+  readonly fog?: FogTuning;
 }
 
 export interface ConsumeOptions {
@@ -124,6 +128,7 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
   const label = options.label ?? 'air-painting';
   const tuning = options.tuning ?? BRUSH_TUNING;
   const extrapolation = options.extrapolation ?? HAND_EXTRAPOLATION;
+  const fog = options.fog ?? FOG_TUNING;
   let transform = computeFrameTransform(options.sourceWidth, options.sourceHeight);
 
   const mask = gpu.device.createBuffer({
@@ -139,10 +144,23 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
   });
 
   let frameTexture = createFrameTexture(gpu, label, transform);
-  const sampler = gpu.sampler({ minFilter: 'linear', magFilter: 'linear' });
+  // Clamped so the 9-tap kernel cannot wrap the frame's own edge into the frost.
+  const sampler = gpu.sampler({
+    minFilter: 'linear',
+    magFilter: 'linear',
+    addressModeU: 'clamp-to-edge',
+    addressModeV: 'clamp-to-edge',
+  });
+
+  let frostA = createFrostTarget(gpu, label, transform, fog, 'a');
+  let frostB = createFrostTarget(gpu, label, transform, fog, 'b');
 
   const wrist: Compute = gpu.compute(wristWgsl, { label: `${label}-wrist` });
   const paint: Compute = gpu.compute(paintWgsl, { label: `${label}-paint` });
+  // Two instances of one shader: the horizontal pass downsamples out of the
+  // full-resolution camera texture, the vertical pass runs target-to-target.
+  const frostH: Effect = gpu.effect(frostWgsl, { label: `${label}-frost-h` });
+  const frostV: Effect = gpu.effect(frostWgsl, { label: `${label}-frost-v` });
   const composite: Effect = gpu.effect(compositeWgsl, { label: `${label}-composite` });
 
   const pipeline: VisualPipeline = {
@@ -181,6 +199,11 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
           mask_size: [MASK_WIDTH, MASK_HEIGHT],
           radius: tuning.radiusTexels,
           feather: tuning.featherTexels,
+          // The re-fog rides the inference clock. Being multiplicative it
+          // composes, so the fog curve is the same whether results arrive at
+          // 15 Hz or 60 Hz.
+          decay: fogDecay(dtSeconds, fog.refogTauSeconds),
+          clear_epsilon: fog.clearEpsilon,
         },
         brushes,
         mask,
@@ -192,22 +215,51 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
 
     renderVisualFrame(output, frameOptions = {}) {
       const dpr = Math.min(2, Math.max(1, frameOptions.dpr ?? 1));
+      // Horizontal pass reads the full-resolution camera texture and lands in the
+      // quarter-resolution target; vertical pass runs target-to-target.
+      frostH.set({
+        src: frameTexture,
+        samp: sampler,
+        frost: {
+          texel_size: [1 / transform.sourceWidth, 1 / transform.sourceHeight],
+          direction: [1, 0],
+          sigma: fog.blurSigmaTexels,
+        },
+      });
+      frostV.set({
+        src: frostA.color,
+        samp: sampler,
+        frost: {
+          texel_size: frostA.texelSize,
+          direction: [0, 1],
+          sigma: fog.blurSigmaTexels,
+        },
+      });
       composite.set({
         uniforms: {
           resolution: output.size,
           mask_size: [MASK_WIDTH, MASK_HEIGHT],
           source_size: [transform.sourceWidth, transform.sourceHeight],
-          cell: DITHER_CELL_LOGICAL_PX * dpr,
           has_frame: frameOptions.hasFrame === false ? 0 : 1,
           show_cursor: frameOptions.showCursor === false ? 0 : 1,
           cursor_radius: tuning.radiusTexels + 6,
+          frost_lift: fog.frostLift,
+          frost_grain: fog.frostGrain,
+          grain_cell: fog.grainCellLogicalPx * dpr,
         },
         frame_tex: frameTexture,
         frame_samp: sampler,
         mask,
         brushes,
+        frost_tex: frostB.color,
       });
-      gpu.frame((frame) => frame.pass({ target: output }, (pass) => pass.draw(composite)));
+      // All three passes in one frame: the frost chain has to complete before the
+      // compositor samples it, and same-frame ordering gives that for free.
+      gpu.frame((frame) => {
+        frame.pass({ target: frostA }, (pass) => pass.draw(frostH));
+        frame.pass({ target: frostB }, (pass) => pass.draw(frostV));
+        frame.pass({ target: output }, (pass) => pass.draw(composite));
+      });
     },
 
     writeFrame(rgba) {
@@ -252,11 +304,20 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
       const previous = frameTexture;
       frameTexture = createFrameTexture(gpu, label, transform);
       previous.destroy();
+      // The frost chain is sized off the camera, so it has to follow.
+      const previousA = frostA;
+      const previousB = frostB;
+      frostA = createFrostTarget(gpu, label, transform, fog, 'a');
+      frostB = createFrostTarget(gpu, label, transform, fog, 'b');
+      destroyTarget(previousA);
+      destroyTarget(previousB);
       // The mask keeps its strokes: it lives in normalized brush space, so a
-      // camera resolution change does not invalidate what the user painted.
+      // camera resolution change does not invalidate what the user wiped.
     },
 
     dispose() {
+      destroyTarget(frostB);
+      destroyTarget(frostA);
       frameTexture.destroy();
       brushes.dispose();
       mask.dispose();
@@ -264,6 +325,34 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
   };
 
   return pipeline;
+}
+
+/**
+ * One stage of the frost chain, at `1 / blurDownsample` of the camera resolution.
+ *
+ * Rounded up and floored at 1 so a very small or very odd camera resolution
+ * cannot produce a zero-sized target.
+ */
+function createFrostTarget(
+  gpu: Gpu,
+  label: string,
+  transform: FrameTransform,
+  fog: FogTuning,
+  suffix: string,
+): Target {
+  const divisor = Math.max(1, Math.floor(fog.blurDownsample));
+  const width = Math.max(1, Math.ceil(transform.sourceWidth / divisor));
+  const height = Math.max(1, Math.ceil(transform.sourceHeight / divisor));
+  return gpu.target({
+    size: [width, height],
+    format: 'rgba8unorm',
+    label: `${label}-frost-${suffix}`,
+  });
+}
+
+/** `Target` does not declare `destroy()` on the public interface; it has one. */
+function destroyTarget(target: Target | undefined): void {
+  (target as { destroy?: () => void } | undefined)?.destroy?.();
 }
 
 function createFrameTexture(gpu: Gpu, label: string, transform: FrameTransform): Texture {

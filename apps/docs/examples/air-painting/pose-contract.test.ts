@@ -11,7 +11,10 @@ import {
 } from './fixtures';
 import {
   applyPoseSample,
-  bayer8,
+  FOG_TUNING,
+  fogDecay,
+  MAX_FOG_DT,
+  refogTexel,
   brushSpaceToKeypoint,
   BRUSH_BUFFER_BYTES,
   BRUSH_COUNT,
@@ -288,34 +291,80 @@ describe('wrist state machine', () => {
   });
 });
 
-describe('Bayer 8x8 matrix', () => {
-  // The standard recursive Bayer matrix; the shader builds this with bit tricks.
-  const expected = [
-    [0, 32, 8, 40, 2, 34, 10, 42],
-    [48, 16, 56, 24, 50, 18, 58, 26],
-    [12, 44, 4, 36, 14, 46, 6, 38],
-    [60, 28, 52, 20, 62, 30, 54, 22],
-    [3, 35, 11, 43, 1, 33, 9, 41],
-    [51, 19, 59, 27, 49, 17, 57, 25],
-    [15, 47, 7, 39, 13, 45, 5, 37],
-    [63, 31, 55, 23, 61, 29, 53, 21],
-  ];
+describe('re-fog decay', () => {
+  const tau = FOG_TUNING.refogTauSeconds;
 
-  it('reproduces the literal matrix', () => {
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 8; x++) {
-        expect(bayer8(x, y), `cell (${x}, ${y})`).toBe(expected[y]![x]!);
-      }
-    }
+  it('halves the wipe every tau * ln 2 seconds', () => {
+    // dt is clamped, so a half-life cannot be reached in a single step; it is
+    // reached by composing steps, which is exactly how the shader applies it.
+    const dt = 1 / 15;
+    const step = fogDecay(dt, tau);
+    // Rounded to a whole number of steps, so the landing is close rather than exact.
+    const halfLifeSteps = Math.round((tau * Math.LN2) / dt);
+    expect(step ** halfLifeSteps).toBeCloseTo(0.5, 2);
+    // And keeps halving: two half-lives is a quarter.
+    expect(step ** (halfLifeSteps * 2)).toBeCloseTo(0.25, 2);
+    // The underlying curve is exact right up to the clamp.
+    expect(fogDecay(MAX_FOG_DT, tau)).toBeCloseTo(Math.exp(-MAX_FOG_DT / tau), 12);
   });
 
-  it('is a permutation of 0..63 and tiles', () => {
-    const seen = new Set<number>();
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) seen.add(bayer8(x, y));
-    expect(seen.size).toBe(64);
-    expect(bayer8(9, 17)).toBe(bayer8(1, 1));
+  it('composes, so the fog does not depend on the inference rate', () => {
+    // The same second of wall clock, delivered at 15 Hz and at 60 Hz.
+    let slow = 1;
+    for (let i = 0; i < 15; i++) slow *= fogDecay(1 / 15, tau);
+    let fast = 1;
+    for (let i = 0; i < 60; i++) fast *= fogDecay(1 / 60, tau);
+    expect(slow).toBeCloseTo(fast, 12);
+    expect(slow).toBeCloseTo(Math.exp(-1 / tau), 12);
+  });
+
+  it('clamps dt so a stalled tab does not fog over in one step', () => {
+    expect(fogDecay(1000, tau)).toBe(fogDecay(MAX_FOG_DT, tau));
+    // Negative or absurd dt must never brighten the glass.
+    expect(fogDecay(-5, tau)).toBe(1);
+    expect(fogDecay(0, tau)).toBe(1);
+  });
+
+  it('refogs monotonically toward zero once the hand stops wiping', () => {
+    let value = 1;
+    const seen: number[] = [value];
+    // tau * ln(1 / epsilon) is ~39 s of fogging before the floor snaps it to 0.
+    const steps = Math.ceil((tau * Math.log(1 / FOG_TUNING.clearEpsilon)) / (1 / 15)) + 60;
+    for (let i = 0; i < steps; i++) {
+      const next = refogTexel(value, 0, 1 / 15);
+      expect(next).toBeLessThanOrEqual(value);
+      value = next;
+      seen.push(value);
+    }
+    expect(seen.at(-1)).toBe(0);
+    // Non-increasing all the way down, never a step back up.
+    for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeLessThanOrEqual(seen[i - 1]!);
+  });
+
+  it('snaps to exactly zero instead of leaving glass permanently unclean', () => {
+    // Just under the floor decays to a real 0, which is what re-enables the
+    // compositor's early-out. Without the snap this would linger forever.
+    expect(refogTexel(FOG_TUNING.clearEpsilon * 0.9, 0, 1 / 15)).toBe(0);
+    expect(refogTexel(1, 0, 1 / 15)).toBeGreaterThan(0);
+  });
+
+  it('lets an active wipe win over the decay via max', () => {
+    // A texel fogged almost to nothing, with a hand on it right now.
+    expect(refogTexel(0.01, 1, 1 / 15)).toBe(1);
+    // Partial brush coverage still pins the texel to the brush.
+    expect(refogTexel(0, 0.4, 1 / 15)).toBeCloseTo(0.4, 12);
+    // And decay never pushes a held texel below what the brush is writing.
+    let value = 1;
+    for (let i = 0; i < 50; i++) value = refogTexel(value, 1, 1 / 15);
+    expect(value).toBe(1);
+  });
+
+  it('never exceeds fully clean glass', () => {
+    expect(refogTexel(1, 5, 1 / 15)).toBe(1);
+    expect(refogTexel(1, 1, 0)).toBe(1);
   });
 });
+
 
 describe('synthetic fixtures', () => {
   const transform = fixtureTransform();

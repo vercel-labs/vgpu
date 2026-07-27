@@ -173,12 +173,15 @@ export const BRUSH_TUNING: BrushTuning = {
   emaTauSeconds: 0.075,
   maxJumpFraction: 0.18,
   invalidResetCount: 2,
-  // A touch bolder than the geometry needs, with a feather barely wider than one
-  // texel: the mask carries just enough ramp for the compositor to antialias
-  // against, so a stroke lands as confident ink rather than a soft airbrushed
-  // blob. Widening the feather instead of the radius is what made it look fuzzy.
-  radiusTexels: 10,
-  featherTexels: 1.1,
+  // Sized for a palm, not a pen. 30 texels is ~6% of the mask width, which at a
+  // normal arm's length reads as the width of a hand dragged across the glass;
+  // the previous 10 drew a fingertip line, which is the wrong gesture entirely
+  // for wiping something clear.
+  radiusTexels: 30,
+  // Proportional scaling of the old 1.1 feather would be 3.3. It is deliberately
+  // a little wider: a pen wants a crisp edge, but a hand smears, and the wipe
+  // boundary is the one place this effect can look either convincing or cheap.
+  featherTexels: 4,
 };
 
 /**
@@ -504,30 +507,108 @@ export function applyPoseSample(
 }
 
 /**
- * 8x8 Bayer ordered-dither threshold index, 0..63. Identical construction to
- * `composite.wgsl`, which the unit tests pin against the literal matrix.
+ * Frosted-glass tuning.
  *
- * `M(x, y) = sum_i 4^(k-1-i) * M2(bit_i(x), bit_i(y))`, LSB first, with
- * `M2(a, b) = ((a ^ b) << 1) | b`.
+ * The screen is fogged; your hands wipe it clear; it fogs back up. The mask is
+ * the wipe: 1 is clean glass, 0 is fully frosted, and the compositor *lerps the
+ * blur amount* by it rather than switching. That continuity is the whole reason
+ * re-fogging reads as condensation creeping back instead of a light turning off.
  */
-export function bayer8(x: number, y: number): number {
-  const bx = x & 7;
-  const by = y & 7;
-  let value = 0;
-  for (let i = 0; i < 3; i++) {
-    const xb = (bx >> i) & 1;
-    const yb = (by >> i) & 1;
-    value = (value << 2) | (((xb ^ yb) << 1) | yb);
-  }
-  return value;
+export interface FogTuning {
+  /**
+   * Time constant of the exponential re-fog, in seconds.
+   *
+   * The mask decays by `exp(-dt / tau)` each inference, so a wiped patch loses
+   * half its clarity every `tau * ln 2` seconds — about 4.8 s here. Slow enough
+   * that a drawn shape survives long enough to be admired, fast enough that
+   * walking away leaves a fogged screen rather than a permanent painting.
+   */
+  readonly refogTauSeconds: number;
+  /**
+   * Coverage below which a texel snaps to exactly 0.
+   *
+   * Exponential decay never actually reaches zero, so without a floor every
+   * texel ever wiped keeps a vanishing non-zero value forever: invisible, but it
+   * defeats the compositor's early-out and leaves the glass subtly, permanently
+   * unclean. One 8-bit step is comfortably below anything the eye can find.
+   */
+  readonly clearEpsilon: number;
+  /**
+   * Gaussian sigma of the frost, in *downsampled* blur texels.
+   *
+   * Combined with `blurDownsample` this is the effective blur in source pixels
+   * (`sigma * downsample`). Kept in downsampled texels because that is the space
+   * the 9-tap kernel actually walks.
+   */
+  readonly blurSigmaTexels: number;
+  /**
+   * Resolution divisor for the blur chain.
+   *
+   * Frost is heavy and low-frequency, so blurring at quarter resolution costs a
+   * sixteenth of the samples and is visually indistinguishable — the one place
+   * in this example where the cheap path is also the correct one.
+   */
+  readonly blurDownsample: number;
+  /** Brightness the frost lifts toward, mimicking light scattered in condensation. */
+  readonly frostLift: number;
+  /** Amplitude of the static frost grain. Anchored to logical pixels, never animated. */
+  readonly frostGrain: number;
+  /**
+   * Grain cell side in logical (CSS) pixels.
+   *
+   * Not 1. Per-pixel grain is wrong twice over: real condensation is a speckle
+   * of droplets far coarser than a display pixel, and per-pixel white noise is
+   * incompressible, which bloated the committed thumbnail to 1.5 MB. A 3 px cell
+   * looks more like frost *and* lets PNG do its job.
+   *
+   * Measured in logical pixels and scaled by DPR at upload, so the speckle is a
+   * fixed physical size and does not shimmer when the canvas resizes.
+   */
+  readonly grainCellLogicalPx: number;
+}
+
+export const FOG_TUNING: FogTuning = {
+  refogTauSeconds: 7,
+  clearEpsilon: 1 / 255,
+  blurSigmaTexels: 2.2,
+  blurDownsample: 4,
+  // Enough lift to read as condensation, not so much that the frosted state
+  // washes out to a flat grey card: the blacks still have to be black.
+  frostLift: 0.1,
+  frostGrain: 0.022,
+  grainCellLogicalPx: 4,
+};
+
+/** Largest dt honoured by the re-fog, so a stalled tab does not fog in one step. */
+export const MAX_FOG_DT = 0.25;
+
+/**
+ * Per-step multiplier for the exponential re-fog: `exp(-dt / tau)`.
+ *
+ * Computed on the CPU and uploaded, so `paint.wgsl` stays a multiply and this
+ * single definition is what both the GPU and the tests use. Being multiplicative
+ * it composes: applying it at 15 Hz and at 60 Hz converge to the same curve, so
+ * the fog does not depend on the inference rate.
+ */
+export function fogDecay(dtSeconds: number, tauSeconds = FOG_TUNING.refogTauSeconds): number {
+  const dt = Math.min(Math.max(dtSeconds, 0), MAX_FOG_DT);
+  return Math.exp(-dt / Math.max(tauSeconds, 1e-4));
 }
 
 /**
- * Dither cell side in logical (CSS) pixels. Fixed, so the pattern never shimmers.
+ * Reference re-fog of one mask texel, mirroring `paint.wgsl`.
  *
- * 4 px is the point where the 8x8 Bayer super-cell spans a legible 32 px and the
- * dots read as a deliberate halftone screen rather than as sensor noise, while
- * still resolving a face. Smaller and the pattern dissolves into grain at docs
- * card size; larger and the figure stops being recognisable.
+ * `max` against the incoming wipe is what lets a hand paint *through* the decay:
+ * a texel being actively wiped is pinned to the brush coverage no matter how
+ * long it has been fogging.
  */
-export const DITHER_CELL_LOGICAL_PX = 4;
+export function refogTexel(
+  previous: number,
+  wipeCoverage: number,
+  dtSeconds: number,
+  tuning: FogTuning = FOG_TUNING,
+): number {
+  const faded = previous * fogDecay(dtSeconds, tuning.refogTauSeconds);
+  const next = Math.max(faded, Math.max(0, wipeCoverage));
+  return next < tuning.clearEpsilon ? 0 : Math.min(1, next);
+}

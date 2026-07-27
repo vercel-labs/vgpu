@@ -11,7 +11,8 @@ import {
 import {
   BRUSH_BUFFER_BYTES,
   BRUSH_TUNING,
-  DITHER_CELL_LOGICAL_PX,
+  FOG_TUNING,
+  fogDecay,
   KEYPOINT_BUFFER_BYTES,
   MASK_BYTES,
   MASK_HEIGHT,
@@ -29,6 +30,7 @@ interface Recorded {
   readonly draws: string[];
   readonly buffers: { label: string; size: number; destroyed: boolean }[];
   readonly textures: { label: string; size: readonly number[]; destroyed: boolean }[];
+  readonly targets: { label: string; size: readonly number[]; destroyed: boolean }[];
   readonly writes: { label: string; bytes: number }[];
   readonly textureWrites: { bytes: number; width: number; height: number }[];
   readonly compositeUniforms: Record<string, unknown>[];
@@ -42,6 +44,7 @@ function createFakeGpu(options: { failComposite?: boolean } = {}) {
     draws: [],
     buffers: [],
     textures: [],
+    targets: [],
     writes: [],
     textureWrites: [],
     compositeUniforms: [],
@@ -117,10 +120,25 @@ function createFakeGpu(options: { failComposite?: boolean } = {}) {
     effect: (_source: string, opts: { label?: string }) => ({
       label: opts.label ?? 'effect',
       set(values: Record<string, unknown>) {
-        recorded.compositeUniforms.push((values.uniforms as Record<string, unknown>) ?? {});
+        // Only the compositor sets a `uniforms` block; frost sets `frost`.
+        if (values.uniforms) {
+          recorded.compositeUniforms.push(values.uniforms as Record<string, unknown>);
+        }
         return this;
       },
     }),
+    target: (opts: { size: readonly number[]; label?: string }) => {
+      const entry = { label: opts.label ?? '', size: opts.size, destroyed: false };
+      recorded.targets.push(entry);
+      return {
+        size: opts.size,
+        texelSize: [1 / opts.size[0]!, 1 / opts.size[1]!] as const,
+        color: { createView: () => ({}), gpu: { marker: entry.label } },
+        destroy() {
+          entry.destroyed = true;
+        },
+      };
+    },
     frame: (cb: (frame: unknown) => void) => {
       cb({
         pass: (_opts: unknown, body: (pass: unknown) => void) => {
@@ -156,7 +174,13 @@ describe('deterministic thumbnail', () => {
     // coverage for the capsules.
     expect(wrist.every((entry) => entry.workgroups === 1)).toBe(true);
     expect(paint.every((entry) => entry.workgroups === Math.ceil(MASK_TEXELS / 64))).toBe(true);
-    expect(recorded.draws).toEqual(['air-painting-thumb-composite']);
+    // Frost is separable: horizontal, then vertical, then the composite that
+    // samples the result. All three land in one frame, in that order.
+    expect(recorded.draws).toEqual([
+      'air-painting-thumb-frost-h',
+      'air-painting-thumb-frost-v',
+      'air-painting-thumb-composite',
+    ]);
   });
 
   it('uses the frozen transform and tuning in the wrist uniforms', async () => {
@@ -206,7 +230,7 @@ describe('deterministic thumbnail', () => {
     expect(recorded.textures[0]?.size).toEqual([FIXTURE_FRAME_WIDTH, FIXTURE_FRAME_HEIGHT]);
   });
 
-  it('passes the mask and dither contract to the compositor', async () => {
+  it('passes the mask and frost contract to the compositor', async () => {
     const { gpu, recorded } = createFakeGpu();
     await renderThumbnail(gpu, target);
     const uniforms = recorded.compositeUniforms.at(-1)!;
@@ -214,8 +238,34 @@ describe('deterministic thumbnail', () => {
     expect(uniforms.mask_size).toEqual([MASK_WIDTH, MASK_HEIGHT]);
     expect(uniforms.source_size).toEqual([FIXTURE_FRAME_WIDTH, FIXTURE_FRAME_HEIGHT]);
     expect(uniforms.has_frame).toBe(1);
-    // Fixed logical cell at dpr 1.
-    expect(uniforms.cell).toBe(DITHER_CELL_LOGICAL_PX);
+    expect(uniforms.frost_lift).toBe(FOG_TUNING.frostLift);
+    expect(uniforms.frost_grain).toBe(FOG_TUNING.frostGrain);
+  });
+
+  it('sizes the frost chain to the downsampled camera frame', async () => {
+    const { gpu, recorded } = createFakeGpu();
+    await renderThumbnail(gpu, target);
+    const divisor = FOG_TUNING.blurDownsample;
+    const expected = [
+      Math.ceil(FIXTURE_FRAME_WIDTH / divisor),
+      Math.ceil(FIXTURE_FRAME_HEIGHT / divisor),
+    ];
+    expect(recorded.targets).toHaveLength(2);
+    for (const entry of recorded.targets) expect(entry.size).toEqual(expected);
+  });
+
+  it('drives the re-fog from the same dt the state machine uses', async () => {
+    const { gpu, recorded } = createFakeGpu();
+    await renderThumbnail(gpu, target);
+    const paint = recorded.dispatches.filter((entry) => entry.label.endsWith('-paint'));
+    const decay = fogDecay(THUMB_DT);
+    // Every step fogs by exactly one dt, and none of them fully clears.
+    expect(paint.every((entry) => entry.uniforms.decay === decay)).toBe(true);
+    expect(decay).toBeGreaterThan(0);
+    expect(decay).toBeLessThan(1);
+    expect(paint[0]!.uniforms.clear_epsilon).toBe(FOG_TUNING.clearEpsilon);
+    expect(paint[0]!.uniforms.radius).toBe(BRUSH_TUNING.radiusTexels);
+    expect(paint[0]!.uniforms.feather).toBe(BRUSH_TUNING.featherTexels);
   });
 
   it('drains, settles and releases every owned resource', async () => {
@@ -225,6 +275,7 @@ describe('deterministic thumbnail', () => {
     expect(recorded.settled).toBe(1);
     expect(recorded.buffers.every((entry) => entry.destroyed)).toBe(true);
     expect(recorded.textures.every((entry) => entry.destroyed)).toBe(true);
+    expect(recorded.targets.every((entry) => entry.destroyed)).toBe(true);
   });
 
   it('still drains and releases when compositing throws', async () => {
@@ -234,6 +285,7 @@ describe('deterministic thumbnail', () => {
     expect(recorded.settled).toBe(1);
     expect(recorded.buffers.every((entry) => entry.destroyed)).toBe(true);
     expect(recorded.textures.every((entry) => entry.destroyed)).toBe(true);
+    expect(recorded.targets.every((entry) => entry.destroyed)).toBe(true);
   });
 
   it('is deterministic: two runs record identical uniforms', async () => {

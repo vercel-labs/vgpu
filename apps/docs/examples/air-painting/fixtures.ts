@@ -89,19 +89,27 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
 /**
  * Rasterizes the canned "camera" frame as tightly packed RGBA8.
  *
- * It is a synthetic figure, not a photograph: a key-lit head, torso and raised
- * arm, against a soft pool of light, that the synthetic hand paths sweep across.
+ * Deliberately **not a person**. The example used to ship a synthetic figure and
+ * it looked like exactly what it was, so the stand-in is now an abstract
+ * composition chosen for one job: making the frost unmistakable.
  *
- * Deliberately **neutral greyscale** (r = g = b). The compositor's palette is two
- * docs greys, so a coloured frame would drag a third and fourth hue into an
- * otherwise monochrome design the moment a stroke revealed it.
+ * That job dictates the content. It is built from two frequency bands, because
+ * blur is only legible if there is something at the scale the blur destroys:
  *
- * Tonally it is authored *for an ordered dither*: every value the figure and the
- * backdrop take lands in the mid-range, because a Bayer threshold turns tone into
- * dot *density* and only mid-tones have density to show. Pinning the body near
- * white — as an untuned figure does — reads as one flat blown-out mass with no
- * form at all. Fine per-pixel grain is intentional: it breaks up banding in the
- * dithered field and gives the revealed side real local variance.
+ * - Fine concentric rings, ~15 px per cycle, are the carrier. A gaussian with a
+ *   sigma of a few quarter-resolution texels annihilates them completely, so the
+ *   frosted state is smooth and the wiped state is visibly crisp.
+ * - Three soft discs are the ballast. They are far wider than the blur kernel, so
+ *   they survive it and the frosted state still reads as *something behind glass*
+ *   rather than as a flat grey card.
+ *
+ * The ring wavelength is the one number here that is not free: at 15 px it is
+ * ~15 samples per cycle, comfortably band-limited, so the sharp state shows clean
+ * rings instead of the moire a tighter pattern would alias into.
+ *
+ * Neutral greyscale (r = g = b) and held in the mid range. The compositor lifts
+ * the frost toward white, and a frame that already ran hot would clip to a flat
+ * white sheet the moment it fogged.
  *
  * Coordinates here are **source** space (un-mirrored), exactly like a real
  * camera frame.
@@ -111,46 +119,29 @@ export function createFixtureFrame(
   height = FIXTURE_FRAME_HEIGHT,
 ): Uint8Array {
   const pixels = new Uint8Array(width * height * 4);
-  // Capsule radii are height-normalized, so limbs keep a constant pixel thickness.
+  // Disc radii are height-normalized, so x is scaled to keep them circular.
   const aspect = width / height;
+  const ringCx = width * 0.5;
+  const ringCy = height * 0.52;
   for (let y = 0; y < height; y++) {
     const v = (y + 0.5) / height;
     for (let x = 0; x < width; x++) {
       const u = (x + 0.5) / width;
-      const grain = hash2(x, y) - 0.5;
 
-      // Backdrop: near-black negative space with a faint pool of light behind the
-      // figure. Held far below the body's range on purpose — when the two ranges
-      // overlap, the silhouette dissolves into the dot field and the whole frame
-      // reads as one busy grey texture with no subject.
-      const radial = Math.hypot((u - 0.54) / 0.6, (v - 0.46) / 0.8);
-      let luma = 0.025 + 0.075 * smoothstep(1.15, 0.05, radial);
+      // Low band: three soft discs, wider than any blur kernel here, so the
+      // frosted state keeps a sense of depth instead of going flat.
+      let luma = 0.1;
+      luma += 0.2 * disc(u, v, 0.34, 0.44, 0.26, aspect);
+      luma += 0.26 * disc(u, v, 0.63, 0.6, 0.2, aspect);
+      luma += 0.12 * disc(u, v, 0.79, 0.29, 0.13, aspect);
 
-      // Head, neck, torso and the raised arm the wrist path sweeps along.
-      const head = smoothstep(1.02, 0.9, Math.hypot((u - 0.55) / 0.058, (v - 0.3) / 0.092));
-      const neck = capsule(u, v, 0.55, 0.38, 0.55, 0.54, 0.032, aspect);
-      const torso = smoothstep(1.02, 0.86, Math.hypot((u - 0.56) / 0.17, (v - 0.88) / 0.36));
-      const arm = capsule(u, v, 0.47, 0.6, 0.235, 0.335, 0.042, aspect);
+      // High band: concentric rings measured in real pixels, so the wavelength
+      // is exact regardless of frame size. This is the detail the frost eats.
+      const d = Math.hypot(x + 0.5 - ringCx, y + 0.5 - ringCy);
+      luma += 0.085 * Math.sin((d / RING_WAVELENGTH_PX) * Math.PI * 2);
 
-      // Key light from the upper left, so the raised arm reaching toward it is the
-      // brightest thing in frame. Every tone below is capped well short of white,
-      // which would flatten into one blown-out mass with no form at all.
-      const key = 0.6 * smoothstep(0.88, 0.16, u) + 0.26 * smoothstep(0.98, 0.22, v);
-
-      // Composited in painter's order, each part carrying its own base tone rather
-      // than being unioned into a single silhouette. The tonal step between parts
-      // is what makes an overlap read as an edge in dot density: a flat union lit
-      // by one shared ramp fuses head, shoulder and arm into an unreadable blob.
-      // The neck is darkest — a contact shadow under the chin separates the head.
-      luma = luma * (1 - torso) + torso * (0.26 + 0.3 * key);
-      luma = luma * (1 - neck) + neck * (0.22 + 0.24 * key);
-      luma = luma * (1 - head) + head * (0.38 + 0.34 * key);
-      luma = luma * (1 - arm) + arm * (0.46 + 0.36 * key);
-
-      // Grain stays tiny. Ordered dithering is a *geometric* pattern, and noise
-      // injected before the threshold randomises which cells flip, turning clean
-      // rows of dots into blue-noise mush. This is just enough to break banding.
-      const value = clamp255((luma + grain * 0.012) * 255);
+      // Just enough grain to break banding in the smooth discs.
+      const value = clamp255((luma + (hash2(x, y) - 0.5) * 0.012) * 255);
       const index = (y * width + x) * 4;
       pixels[index] = value;
       pixels[index + 1] = value;
@@ -161,32 +152,27 @@ export function createFixtureFrame(
   return pixels;
 }
 
+/** Ring period in pixels. Well above the Nyquist limit, so the rings never alias. */
+const RING_WAVELENGTH_PX = 15;
+
 /**
- * Soft-edged capsule between two normalized points.
+ * Soft-edged disc with a height-normalized radius.
  *
- * `aspect` (width / height) scales x before measuring, so `radius` describes a
- * real circle in *pixels*. Without it a 16:9 frame stretches every capsule 1.78x
- * horizontally, and a diagonal limb rasterizes as a broad wedge instead of an arm.
- * `radius` is therefore in height-normalized units.
+ * `aspect` (width / height) scales x before measuring, so the disc is a real
+ * circle in pixels rather than a 1.78x-wide ellipse on a 16:9 frame.
  */
-function capsule(
+function disc(
   x: number,
   y: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
+  cx: number,
+  cy: number,
   radius: number,
   aspect: number,
 ): number {
-  const px = x * aspect;
-  const abx = (bx - ax) * aspect;
-  const aby = by - ay;
-  const lengthSq = abx * abx + aby * aby || 1;
-  const t = Math.min(1, Math.max(0, ((px - ax * aspect) * abx + (y - ay) * aby) / lengthSq));
-  const d = Math.hypot(px - (ax * aspect + abx * t), y - (ay + aby * t));
-  return smoothstep(radius, radius * 0.6, d);
+  const d = Math.hypot((x - cx) * aspect, y - cy);
+  return smoothstep(radius, radius * 0.35, d);
 }
+
 
 function clamp255(value: number): number {
   return Math.min(255, Math.max(0, Math.round(value)));
@@ -203,7 +189,7 @@ export function hashBytes(bytes: Uint8Array): string {
 }
 
 /** Pins `createFixtureFrame()`; regenerate deliberately, never casually. */
-export const FIXTURE_FRAME_HASH = '2ebbb35c';
+export const FIXTURE_FRAME_HASH = '4f6e2a49';
 
 /** Number of synthetic results the thumbnail and the visual demo replay. */
 export const SYNTHETIC_FRAME_COUNT = 24;
@@ -231,10 +217,13 @@ export function syntheticHandPath(
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
     const wave = Math.sin(t * Math.PI * 1.6);
+    // The bands are pushed apart and the wave flattened so the closest approach
+    // still clears three brush radii. A palm-sized brush is 60 texels across, and
+    // at the old spacing the two wipes merged into a single smear.
     path.push(
       limb === 'right'
-        ? { x: 0.32 + 0.36 * t, y: 0.36 + 0.18 * wave }
-        : { x: 0.68 - 0.36 * t, y: 0.7 - 0.18 * wave },
+        ? { x: 0.32 + 0.36 * t, y: 0.28 + 0.12 * wave }
+        : { x: 0.68 - 0.36 * t, y: 0.78 - 0.12 * wave },
     );
   }
   return path;

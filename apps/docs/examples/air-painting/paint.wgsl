@@ -24,6 +24,10 @@ struct Uniforms {
   radius: f32,
   /// Coverage ramp width in mask texels.
   feather: f32,
+  /// Per-step re-fog multiplier, `exp(-dt / tau)`, computed by `fogDecay()`.
+  decay: f32,
+  /// Coverage below which a texel snaps to exactly 0, so the glass really clears.
+  clear_epsilon: f32,
 };
 
 struct BrushState {
@@ -79,9 +83,24 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3u) {
     coverage = max(coverage, capsule_coverage(texel, brush));
   }
 
-  // Skip the write entirely when neither hand reaches this texel, which is the
-  // overwhelmingly common case across 518,400 invocations.
-  if (coverage > 0.0) {
-    mask[index] = max(mask[index], coverage);
+  let previous = mask[index];
+  // Glass that is already fully fogged and is not being wiped has nothing to do.
+  // That is the overwhelmingly common case across 518,400 invocations, and it is
+  // the early-out that `clear_epsilon` exists to keep reachable: without the
+  // snap-to-zero below, exponential decay would leave every texel ever wiped at
+  // some vanishing non-zero value forever and this branch would never be taken
+  // again.
+  if (previous <= 0.0 && coverage <= 0.0) {
+    return;
   }
+
+  // Re-fog, then let the wipe win. `max` against the decayed value is what lets
+  // a hand paint *through* the decay: a texel under the brush is pinned to the
+  // brush's coverage no matter how long it has been fogging back up.
+  let faded = previous * uniforms.decay;
+  var next = max(faded, coverage);
+  if (next < uniforms.clear_epsilon) {
+    next = 0.0;
+  }
+  mask[index] = min(next, 1.0);
 }
