@@ -272,6 +272,16 @@ importers:
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
 
+  examples/nextjs-flare:
+    dependencies:
+      vgpu:
+        specifier: workspace:*
+        version: link:../../packages/vgpu-api
+    devDependencies:
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(terser@5.47.1)
+
   packages/adapter-mock:
     dependencies:
       '@vgpu/core':
