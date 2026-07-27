@@ -51,7 +51,9 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
 - **Performance patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
 - **Performance playbook: write fast vgpu by default** — This guide is for LLMs and humans writing shaders.  `references/guides/performance-playbook.docs.md`
+- **Debugging shaders by extracting internal values** — A shader has no console.log.  `references/guides/shader-debugging.docs.md`
 - **Shader diagnostics and fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
+- **The default workflow for developing shaders with vgpu** — Follow these eight steps in order every time you write or change a shader.  `references/guides/shader-workflow.docs.md`
 
 ## API reference
 
