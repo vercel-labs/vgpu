@@ -1,0 +1,37 @@
+name: ORT init device Node E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - experiments/ort-init-device/**
+      - packages/vgpu/**
+      - packages/vgpu-api/**
+      - packages/adapter-node/**
+      - .github/workflows/ort-init-device-node.yml
+
+jobs:
+  ort-init-device-node:
+    # ubuntu-24.04 x64 provides glibc 2.39; stock webgpu@0.4.0 Dawn requires glibc >= 2.38.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm build
+      - name: Install pinned experiment dependencies
+        run: npm ci --prefix experiments/ort-init-device
+      - name: Run generic-WASM negative and asyncify Node recipe
+        run: npm run --prefix experiments/ort-init-device e2e:node
