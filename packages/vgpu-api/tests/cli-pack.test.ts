@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = resolve(packageDir, "../..");
+const cliDir = resolve(workspaceRoot, "packages/vgpu");
 
 const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 
@@ -32,4 +33,29 @@ test("the vgpu tarball includes the full internal CLI", () => {
   expect(files).toContain("dist/cli/lib/generated/docs-manifest.generated.js");
   expect(files).toContain("dist/cli/lib/examples/run.js");
   expect(files).toContain("dist/cli/lib/examples/schemas/v1/discovery.schema.json");
+});
+
+test("generating docs refreshes the public CLI guide manifest", () => {
+  execFileSync("pnpm", ["--dir", cliDir, "generate:docs"], {
+    cwd: workspaceRoot,
+    stdio: "pipe",
+  });
+
+  const list = execFileSync("node", ["bin/vgpu.js", "docs", "ls", "/guides"], {
+    cwd: packageDir,
+    encoding: "utf8",
+  });
+  expect(list).toContain("shader-workflow.docs.md");
+  expect(list).toContain("shader-debugging.docs.md");
+
+  for (const [guide, heading] of [
+    ["shader-workflow.md", "# The default workflow for developing shaders with vgpu"],
+    ["shader-debugging.md", "# Debugging shaders by extracting internal values"],
+  ]) {
+    const output = execFileSync("node", ["bin/vgpu.js", "docs", "cat", guide], {
+      cwd: packageDir,
+      encoding: "utf8",
+    });
+    expect(output).toContain(heading);
+  }
 });
