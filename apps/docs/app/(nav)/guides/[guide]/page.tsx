@@ -27,9 +27,10 @@ export default async function GuidePage({ params }: GuidePageProps) {
   if (!record) notFound();
 
   const pathname = `/guides/${record.symbol}`;
+  const content = record.content.replace(/^---\n[\s\S]*?\n---\n?/u, '');
 
   return (
-    <DocsPageShell pathname={pathname} toc={extractToc(record.content)}>
+    <DocsPageShell pathname={pathname} toc={extractToc(content)}>
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <span className="rounded-full border border-blue-4 bg-blue-1 px-3 py-1 text-xs font-medium text-blue-9">
           Guide
@@ -44,7 +45,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
         </a>
       </div>
 
-      <MarkdownContent content={record.content} />
+      <MarkdownContent content={content} />
     </DocsPageShell>
   );
 }
