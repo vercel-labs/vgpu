@@ -4,7 +4,7 @@ export const meta = {
   slug: 'mnist-classifier',
   title: 'MNIST Classifier',
   description:
-    "Draw a digit, classify it with ONNX Runtime Web on WebGPU, and render the ten GPU-resident logits through a non-owning vgpu buffer wrap. The 40-byte output makes this an interop and lifetime demonstration, not a speedup.",
+    "Draw a digit, classify it with ONNX Runtime Web on WebGPU, and render the ten GPU-resident logits through a non-owning vgpu buffer wrap. Zero-copy is not a meaningful speedup for a 40-byte output: this demonstrates the interop API and its lifetime contract, and large or per-frame tensors are where eliminating transfers pays off.",
   tags: ['machine-learning', 'onnx', 'mnist', 'shader'],
   capabilities: [
     'webgpu',
