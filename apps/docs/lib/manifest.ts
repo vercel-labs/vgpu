@@ -177,6 +177,14 @@ export function getGuideRecord(guideSlug: string) {
   return guideRecords.find((record) => record.symbol === decodedSlug) ?? null;
 }
 
+export function getDocsRecordByWebsitePath(websitePath: string) {
+  return docsRecords.find((record) => record.websitePath === websitePath) ?? null;
+}
+
+export function stripMarkdownFrontmatter(content: string) {
+  return content.replace(/^---\n[\s\S]*?\n---\n?/u, '');
+}
+
 export function sourceHref(record: DocsRecord | ReferenceTopic) {
   return `https://github.com/vercel-labs/vgpu/blob/main/${record.repoPath}`;
 }

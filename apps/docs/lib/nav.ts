@@ -42,7 +42,7 @@ export interface FlatNavItem extends NavItem {
 const guideGroups = [
   {
     title: 'General',
-    slugs: ['getting-started', 'ml-buffers'],
+    slugs: ['getting-started'],
   },
   {
     title: 'Performance',
@@ -111,6 +111,21 @@ export const navSections: NavSection[] = [
         return record ? [{ title: titleForRecord(record), href: `/guides/${record.symbol}` }] : [];
       }),
     })).filter((group) => group.items.length > 0),
+  },
+  {
+    title: 'ML',
+    href: '/ml',
+    groups: [
+      {
+        title: '',
+        items: [
+          { title: 'Overview', href: '/ml' },
+          { title: 'Quickstart: Browser', href: '/ml/browser' },
+          { title: 'Quickstart: Node', href: '/ml/node' },
+          { title: 'Buffers & ownership', href: '/ml/buffers' },
+        ],
+      },
+    ],
   },
   {
     title: 'Examples',

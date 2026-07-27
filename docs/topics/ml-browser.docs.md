@@ -1,0 +1,67 @@
+---
+title: Quickstart: Browser
+summary: Copy the model output once into a vgpu-owned buffer, then release the tensor.
+websitePath: /ml/browser
+relatedSymbols: [init, Device, Buffer]
+---
+
+# Quickstart: Browser
+
+DRAFT PROSE PENDING AUTHOR
+
+## Browser snapshot
+
+Copy the model output once into a vgpu-owned buffer, then release the tensor:
+
+```ts
+import * as ort from "onnxruntime-web/webgpu";
+import { init } from "vgpu";
+
+const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) throw new Error("WebGPU adapter unavailable");
+ort.env.webgpu.adapter = adapter;
+const session = await ort.InferenceSession.create(modelBytes, {
+  executionProviders: ["webgpu"],
+  preferredOutputLocation: "gpu-buffer",
+});
+const gpu = await init({ device: ort.env.webgpu.device });
+const output = (await session.run({ input })).output;
+const destination = gpu.device.createBuffer({ size: output.gpuBuffer.size, usage: ["storage", "copy_dst"] });
+try {
+  const encoder = gpu.gpu.createCommandEncoder();
+  encoder.copyBufferToBuffer(output.gpuBuffer, 0, destination.gpu, 0, output.gpuBuffer.size);
+  gpu.gpu.queue.submit([encoder.finish()]);
+  await gpu.device.queue.flush();
+} finally {
+  destination.dispose();
+  output.dispose();
+  gpu.dispose();
+  await session.release();
+}
+```
+
+## Browser reference
+
+Wrap the model output directly — zero copies, strict lifetime:
+
+```ts
+import * as ort from "onnxruntime-web/webgpu";
+import { init } from "vgpu";
+
+const session = await ort.InferenceSession.create(modelBytes, {
+  executionProviders: ["webgpu"],
+  preferredOutputLocation: "gpu-buffer",
+});
+const gpu = await init({ device: ort.env.webgpu.device });
+const output = (await session.run({ input })).output;
+const source = gpu.device.wrapBuffer(output.gpuBuffer);
+try {
+  compute.set({ source, destination }).dispatch(workgroups);
+  await gpu.device.queue.flush();
+} finally {
+  source.dispose();
+  output.dispose();
+  gpu.dispose();
+  await session.release();
+}
+```
