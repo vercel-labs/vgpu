@@ -1,5 +1,5 @@
 import { env_lod, sample_env } from "./env-common.wgsl";
-import { decode_backface } from "./backface.wgsl";
+import { trace_cube_exit, transmitted_cube_ray } from "./backface.wgsl";
 import { DISPERSION_SAMPLES, spectral_weight } from "./dispersion.wgsl";
 import { dielectric_fresnel } from "./fresnel.wgsl";
 import { reflection_cone, transmission_lod } from "./lod-selection.wgsl";
@@ -98,25 +98,12 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   // still smears every edge away but keeps the floor-to-horizon gradient behind the cube.
   let scene_level = transmission_lod(glass.roughness, glass.scene_levels);
 
-  // The backface pass stored the exit surface for this exact pixel: its outward normal,
-  // and the camera distance that gives the true thickness of the solid along this ray.
-  let screen_uv = project_to_uv(glass.view_projection, in.world_position);
-  let back = textureSampleLevel(backface_tex, backface_samp, clamp(screen_uv, vec2f(0.001), vec2f(0.999)), 0.0);
-  let front_distance = distance(in.world_position, glass.camera_position);
-
-  // Roughness blurs the scene the ray lands on, but the far side of the solid is read
-  // from a full-resolution buffer that no amount of roughness touches, so the projected
-  // silhouette of the back edges stayed razor-sharp inside otherwise frosted glass. Fade
-  // the second interface out as the surface roughens — a wide scattering cone averages
-  // over the far geometry anyway — so rough glass converges on the single-interface
-  // result and every internal edge dissolves with the rest of the image. `has_back` also
-  // guards the silhouette pixels the backface pass never covered, where the stored normal
-  // is the cleared zero vector.
-  let decoded_backface = decode_backface(back, front_distance, normal, glass.thickness, glass.roughness, glass.refraction_mode > 0.5);
-  let double_amount = decoded_backface.amount;
-  let thickness = decoded_backface.thickness;
-  let exit_normal = decoded_backface.normal;
-
+  // Follow the bent ray to the actual cube boundary. The old G-buffer sampled the far
+  // face hit by the *camera* ray at this pixel, which is a different point/normal.
+  let central_inside = refract(incident, normal, 1.0 / glass.ior);
+  let central_exit = trace_cube_exit(glass.model, in.world_position, central_inside, 0.65);
+  let double_amount = select(0.0, 1.0 - smoothstep(0.18, 0.8, glass.roughness), glass.refraction_mode > 0.5);
+  let thickness = mix(glass.thickness, central_exit.distance, double_amount);
   let reflection = sample_env(env_tex, env_samp, reflected, env_level, glass.env_size);
 
   // Dispersion as a spectral sweep, not three fringes: DISPERSION_SAMPLES wavelengths
@@ -132,7 +119,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
     for (var i = 0; i < DISPERSION_SAMPLES; i = i + 1) {
       let t = (f32(i) + 0.5) / f32(DISPERSION_SAMPLES);
       let ior = glass.ior + (t - 0.5) * glass.dispersion_spread;
-      let ray = transmitted_ray(in.world_position, incident, normal, 1.0 / ior, exit_normal, thickness, double_amount);
+      let ray = transmitted_cube_ray(glass.model, in.world_position, incident, normal, 1.0 / ior, 0.65, glass.thickness, double_amount);
       let weight = spectral_weight(t);
       spectrum += sample_transmission(ray, scene_level, reflection) * weight;
       total += weight;
@@ -141,7 +128,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
     // any, so a uniform background has to come back out unchanged.
     transmitted = spectrum / max(total, vec3f(1e-4));
   } else {
-    let ray = transmitted_ray(in.world_position, incident, normal, 1.0 / glass.ior, exit_normal, thickness, double_amount);
+    let ray = transmitted_cube_ray(glass.model, in.world_position, incident, normal, 1.0 / glass.ior, 0.65, glass.thickness, double_amount);
     transmitted = sample_transmission(ray, scene_level, reflection);
   }
 

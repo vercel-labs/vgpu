@@ -1,14 +1,28 @@
-export struct BackfaceSample {
-  normal: vec3f,
-  thickness: f32,
-  amount: f32,
-};
+/** Exact exit point/normal for the rotated cube, following the refracted ray (not camera ray). */
+export struct CubeExit { position: vec3f, normal: vec3f, distance: f32 };
 
-/** Decodes the screen-space far-face G-buffer and applies the roughness handoff. */
-export fn decode_backface(back: vec4f, front_distance: f32, fallback_normal: vec3f, fallback_thickness: f32, roughness: f32, enabled: bool) -> BackfaceSample {
-  let has_back = step(1e-4, dot(back.xyz, back.xyz));
-  let amount = has_back * select(0.0, 1.0 - smoothstep(0.18, 0.8, roughness), enabled);
-  let thickness = mix(fallback_thickness, clamp(back.w - front_distance, 0.02, 4.0), amount);
-  let normal = normalize(mix(-fallback_normal, back.xyz, amount));
-  return BackfaceSample(normal, thickness, amount);
+export fn trace_cube_exit(model: mat4x4f, entry: vec3f, direction: vec3f, half_extent: f32) -> CubeExit {
+  let rotation = mat3x3f(model[0].xyz, model[1].xyz, model[2].xyz);
+  let inverse_rotation = transpose(rotation);
+  let local_entry = inverse_rotation * (entry - model[3].xyz);
+  let local_direction = inverse_rotation * direction;
+  let safe = sign(local_direction) * max(abs(local_direction), vec3f(1e-6));
+  let boundary = sign(local_direction) * half_extent;
+  let candidates = select(vec3f(1e6), (boundary - local_entry) / safe, abs(local_direction) > vec3f(1e-5));
+  let distance = min(candidates.x, min(candidates.y, candidates.z));
+  var local_normal = vec3f(0.0);
+  if (candidates.x <= candidates.y && candidates.x <= candidates.z) { local_normal.x = sign(local_direction.x); }
+  else if (candidates.y <= candidates.z) { local_normal.y = sign(local_direction.y); }
+  else { local_normal.z = sign(local_direction.z); }
+  return CubeExit(entry + direction * distance, normalize(rotation * local_normal), distance);
+}
+
+export fn transmitted_cube_ray(model: mat4x4f, entry: vec3f, incident: vec3f, normal: vec3f, eta: f32, half_extent: f32, fallback_thickness: f32, double_amount: f32) -> vec4f {
+  let inside = refract(incident, normal, eta);
+  if (dot(inside, inside) < 1e-6) { return vec4f(entry, 0.0); }
+  if (double_amount < 1e-3) { return vec4f(entry + inside * (fallback_thickness + 4.0), 1.0); }
+  let exit = trace_cube_exit(model, entry, inside, half_extent);
+  let outgoing = refract(inside, -exit.normal, 1.0 / eta);
+  if (dot(outgoing, outgoing) < 1e-6) { return vec4f(exit.position + inside * 4.0, 1.0); }
+  return vec4f(exit.position + outgoing * 4.0, 1.0);
 }
