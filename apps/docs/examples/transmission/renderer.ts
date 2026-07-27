@@ -66,8 +66,14 @@ const GLASS = {
   absorption: [0.3, 0.1, 0.16],
   env_size: ENV_SIZE,
   texel_angle: TEXEL_ANGLE,
-  /** IOR offset between the red and blue rays when dispersion is on. */
-  dispersion_spread: 0.035,
+  /**
+   * IOR distance between the red and the blue end of the spectral sweep.
+   *
+   * Wider than a real soda-lime glass (whose whole visible spread is ~0.01) because the
+   * cube is small and the rainbow has to survive a 1280px thumbnail; the samples in
+   * between keep it continuous instead of turning the extra width into hard bands.
+   */
+  dispersion_spread: 0.09,
 } as const;
 
 interface LevelTargets {
