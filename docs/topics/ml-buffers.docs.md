@@ -46,7 +46,29 @@ class Device {
 
 Pass either requested-device options or an external device — never both. The two option families are mutually exclusive; mixing `device` with `adapter` or any other requested-device option throws `VGPU-INIT-OPTIONS-CONFLICT`.
 
+```ts
+import { init } from "vgpu";
+
+// Requested device — vgpu creates it and destroys it on dispose.
+const owned = await init({ powerPreference: "high-performance" });
+
+// External device — vgpu borrows it and never destroys it.
+const gpu = await init({ device: ort.env.webgpu.device });
+
+// Never both.
+await init({ device: ort.env.webgpu.device, label: "mixed" }); // throws VGPU-INIT-OPTIONS-CONFLICT
+```
+
 `Device.wrapBuffer` wraps a caller-owned `GPUBuffer` in a vgpu `Buffer` without taking ownership. `wrapper.gpu` is the exact object you passed in. Disposing the wrapper detaches it from vgpu but never destroys the underlying buffer, and dispose is idempotent — a double dispose is a no-op.
+
+```ts
+const wrapper = gpu.device.wrapBuffer(raw); // raw: a GPUBuffer you own
+
+wrapper.gpu === raw; // true — same object, no copy
+wrapper.dispose();   // detaches from vgpu; raw is NOT destroyed
+wrapper.dispose();   // no-op — dispose is idempotent
+raw.size;            // still valid — its lifetime never left your hands
+```
 
 ## Platform and ownership matrix
 
@@ -59,7 +81,37 @@ Pass either requested-device options or an external device — never both. The t
 
 Choose one of two consumption modes. Snapshot copies the model output once, GPU-to-GPU, into a buffer vgpu owns; after the copy you are decoupled from the runtime and may free its tensor at any time. Reference wraps the runtime's buffer directly with zero copies; the runtime keeps ownership and you must respect its lifetime.
 
+### Reference mode
+
 In reference mode, always `await gpu.device.queue.flush()` before disposing the source tensor. Do not dispose the tensor while vgpu work that reads it is still in flight — skipping the flush is an experimental fast path, not a supported contract.
+
+```ts
+const output = (await session.run({ input })).output;       // 1. retain the tensor
+const source = gpu.device.wrapBuffer(output.gpuBuffer);     // 2. wrap — zero copies
+compute.set({ source, destination }).dispatch(workgroups);  // 3. submit vgpu work
+await gpu.device.queue.flush();                             // 4. flush — required
+source.dispose();                                           // 5. drop the wrapper
+output.dispose();                                           // 6. runtime may free its buffer now
+```
+
+### Snapshot mode
+
+Snapshot needs no new API: copy once with the raw escape hatch (`gpu.gpu` is the shared `GPUDevice`, `buffer.gpu` the raw `GPUBuffer`), then treat the destination as any other vgpu buffer.
+
+```ts
+const output = (await session.run({ input })).output;
+const destination = gpu.device.createBuffer({
+  size: output.gpuBuffer.size,
+  usage: ["storage", "copy_dst"],
+});
+
+const encoder = gpu.gpu.createCommandEncoder();
+encoder.copyBufferToBuffer(output.gpuBuffer, 0, destination.gpu, 0, output.gpuBuffer.size);
+gpu.gpu.queue.submit([encoder.finish()]);
+await gpu.device.queue.flush();
+
+output.dispose(); // decoupled — destination is yours, independent of the runtime
+```
 
 ## Scope
 

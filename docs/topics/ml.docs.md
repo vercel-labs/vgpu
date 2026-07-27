@@ -13,6 +13,14 @@ The `init({ device })` option adopts a `GPUDevice` that another library created.
 
 vgpu never takes ownership of an adopted device. `gpu.dispose()` releases the resources vgpu created, but it never calls `device.destroy()` on a device it did not request.
 
+```ts
+import { init } from "vgpu";
+
+const gpu = await init({ device: ort.env.webgpu.device }); // one shared GPUDevice
+const output = (await session.run({ input })).output;      // model output stays on the GPU
+const source = gpu.device.wrapBuffer(output.gpuBuffer);    // consume it with zero copies
+```
+
 There are two ways to consume a model output: snapshot copies it once, GPU-to-GPU, into a buffer vgpu owns; reference wraps the runtime's buffer directly with zero copies. [Buffers & ownership](/ml/buffers) explains when to use each and the lifetime contract that comes with them.
 
 Start with the quickstart for your environment:
