@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b",
+  "id": "transmission",
+  "title": "Transmission",
+  "description": "A glass cube refracts the scene behind it in screen space: the frame is rendered, blurred into a pyramid, and read back through Snell refraction, chromatic dispersion and a Fresnel-weighted environment reflection.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "rendering",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "controls",
+    "checkbox-controls",
+    "select-control",
+    "multi-pass",
+    "render-targets",
+    "continuous-rendering",
+    "responsive-canvas",
+    "textures",
+    "hdr"
+  ],
+  "aggregateSha256": "053553a0c203d936f81fd80906edf8c4c6b9a03ac790a98e29e0d3628db1ea1f",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 1573,
+      "sha256": "9093fcd5f14ea372f3cc279429b8a5ff067f22b7bebeb31f6cce28461e254ee3",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/index.tsx.raw"
+    },
+    {
+      "path": "controls.tsx",
+      "contentType": "text/typescript",
+      "size": 1741,
+      "sha256": "4fe1fb5ad125af7377b1286c168c592dfd0b6cf25859f12ffe9dd4a7c91067f4",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/controls.tsx.raw"
+    },
+    {
+      "path": "types.ts",
+      "contentType": "text/typescript",
+      "size": 580,
+      "sha256": "b71f1f54cc60e2413e0d9d567555ab868e1c9b10a639b1b02d6de5b8ac50d5b8",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/types.ts.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 23587,
+      "sha256": "78e1a3caf5a6521c83c4d85a47e47f33b6e7009cde72b42c731f9cb612bb4319",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/renderer.ts.raw"
+    },
+    {
+      "path": "camera.ts",
+      "contentType": "text/typescript",
+      "size": 3862,
+      "sha256": "5d962fae30247e399783b4e970053092243d84492da07845222e6fabb37075e4",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/camera.ts.raw"
+    },
+    {
+      "path": "pointer-input.ts",
+      "contentType": "text/typescript",
+      "size": 4010,
+      "sha256": "8fb5d58253bbb24747e93b735b261f951390262803963c7293243355b5ace150",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/pointer-input.ts.raw"
+    },
+    {
+      "path": "sky.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4361,
+      "sha256": "454ad611e999446600eb322f8e77a1a4877545566caedc86cdb817bc7196e24c",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/sky.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1738,
+      "sha256": "67e2d862245d277910f02d7a57e79d948fbc90c991f5d0d1cf0467624fe71f25",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/blur.wgsl.raw"
+    },
+    {
+      "path": "env-common.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2769,
+      "sha256": "da1deaadb9cdc8c47f42ded78145289fa881e8f8784211cf97c22937c9dd31a2",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/env-common.wgsl.raw"
+    },
+    {
+      "path": "scene-background.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2259,
+      "sha256": "b8bf0175f656caae4db99970d4ddc7c2d80c0cfd240b5f7b4e6e8468d96fde27",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/scene-background.wgsl.raw"
+    },
+    {
+      "path": "floor.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3478,
+      "sha256": "12652c5b993c03b92dc06d8c88b276b6b68f5bd0cb9866f3ec2bf0b9c2eea872",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/floor.wgsl.raw"
+    },
+    {
+      "path": "backface-normal.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1560,
+      "sha256": "1bd2016fe3a7072fed1217c6d232fb7cb6049658bb566622bb083935ee4b1a1c",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/backface-normal.wgsl.raw"
+    },
+    {
+      "path": "backface.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1858,
+      "sha256": "982a72b743eed270311364e376cb81f167240a59d41d5baa06b3dc4f8fba318f",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/backface.wgsl.raw"
+    },
+    {
+      "path": "refraction.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1124,
+      "sha256": "2bcf74ff6bf05eef741d79e46d5ed4e2711f2e81f1d1e970748fe45f4968a5a7",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/refraction.wgsl.raw"
+    },
+    {
+      "path": "dispersion.wgsl",
+      "contentType": "text/wgsl",
+      "size": 380,
+      "sha256": "567310dcac360ec1f3b72dffbc4b9b183cf4c9fea27bc450251061738ea64506",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/dispersion.wgsl.raw"
+    },
+    {
+      "path": "fresnel.wgsl",
+      "contentType": "text/wgsl",
+      "size": 221,
+      "sha256": "1f8037053c7d003faae1814441c87ecf9719851781eea71edf8ba5d7104d5fec",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/fresnel.wgsl.raw"
+    },
+    {
+      "path": "lod-selection.wgsl",
+      "contentType": "text/wgsl",
+      "size": 332,
+      "sha256": "41e4a2a3250d4230313160d72f4df74ed8e06220c7c6c6da97f5c940b8e8e327",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/lod-selection.wgsl.raw"
+    },
+    {
+      "path": "glass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 7741,
+      "sha256": "0c23a31e954cfa1c5a887c164cef80a3cd21a6aed4e161518718394838bff832",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/glass.wgsl.raw"
+    },
+    {
+      "path": "present.wgsl",
+      "contentType": "text/wgsl",
+      "size": 715,
+      "sha256": "c1bcae23262dbe87928bda91f18c794e98a68345624e19802febfb2d63692c22",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/2d8fa447ea13f59c7ef381a7c10e6d1265d4670ed375adde588fdc789b31638b/examples/transmission/files/present.wgsl.raw"
+    }
+  ]
+}
