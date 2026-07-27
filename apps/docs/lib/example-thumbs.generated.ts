@@ -34,6 +34,14 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
   },
+  "mnist-classifier": {
+    "card": "/examples/mnist-classifier.card.png",
+    "hero": "/examples/mnist-classifier.hero.png"
+  },
+  "neural-shader-cppn": {
+    "card": "/examples/neural-shader-cppn.card.png",
+    "hero": "/examples/neural-shader-cppn.hero.png"
+  },
   "post-processing": {
     "card": "/examples/post-processing.card.png",
     "hero": "/examples/post-processing.hero.png"

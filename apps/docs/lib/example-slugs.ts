@@ -10,6 +10,7 @@ export const exampleSlugs = [
   'fft-ocean',
   'raymarched-fractal',
   'neural-shader-cppn',
+  'mnist-classifier',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

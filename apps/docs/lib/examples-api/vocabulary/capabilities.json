@@ -8,6 +8,7 @@
   "external-device",
   "fixed-timestep",
   "fragment-shader",
+  "gpu-buffer-interop",
   "hdr",
   "instanced-rendering",
   "instancing",

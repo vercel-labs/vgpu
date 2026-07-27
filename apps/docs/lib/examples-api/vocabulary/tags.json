@@ -20,6 +20,7 @@
   "led",
   "lighting",
   "machine-learning",
+  "mnist",
   "msaa",
   "navier-stokes",
   "neural-shader",

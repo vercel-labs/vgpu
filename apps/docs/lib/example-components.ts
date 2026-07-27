@@ -19,6 +19,7 @@ export const exampleComponentLoaders = {
   'fft-ocean': () => import('../examples/fft-ocean/index'),
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
   'neural-shader-cppn': () => import('../examples/neural-shader-cppn/index'),
+  'mnist-classifier': () => import('../examples/mnist-classifier/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

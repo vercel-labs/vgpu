@@ -1,5 +1,5 @@
 {
-  "description": "Production Turbopack gzip baselines captured after the 10-example React migration at 55c7024. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host.",
+  "description": "Production Turbopack gzip baselines captured after the 10-example React migration at 55c7024, extended with the ONNX examples. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host. The ML routes' baselines cover the route-owned chunks only: onnxruntime-web is imported dynamically inside the example, so its runtime chunk and the ~24 MiB same-origin WASM are fetched on demand and are not attributed to a route chunk by this checker.",
   "sharedHost": {
     "gzipBytes": 1194,
     "maxGrowthBytes": 5120
@@ -14,7 +14,9 @@
     "instanced-rendering": 3740,
     "batch-rendering": 3662,
     "fft-ocean": 9235,
-    "raymarched-fractal": 3995
+    "raymarched-fractal": 3995,
+    "neural-shader-cppn": 25381,
+    "mnist-classifier": 6681
   },
   "exampleGrowth": {
     "percent": 2,

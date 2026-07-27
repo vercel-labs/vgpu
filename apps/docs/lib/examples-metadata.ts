@@ -13,6 +13,7 @@ import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
 import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
 import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
 import { meta as neuralShaderCppnMeta } from '../examples/neural-shader-cppn/meta';
+import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -26,6 +27,7 @@ const rawMetadata = {
   'fft-ocean': fftOceanMeta,
   'raymarched-fractal': raymarchedFractalMeta,
   'neural-shader-cppn': neuralShaderCppnMeta,
+  'mnist-classifier': mnistClassifierMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -48,6 +50,7 @@ export const exampleMetadataBySlug = {
   'fft-ocean': withThumbnails(rawMetadata['fft-ocean']),
   'raymarched-fractal': withThumbnails(rawMetadata['raymarched-fractal']),
   'neural-shader-cppn': withThumbnails(rawMetadata['neural-shader-cppn']),
+  'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);
