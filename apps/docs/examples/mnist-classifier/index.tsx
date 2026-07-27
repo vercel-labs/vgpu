@@ -155,8 +155,8 @@ export function Example() {
   const blocked = status.phase === 'unsupported' || status.phase === 'error';
 
   return (
-    <div className="flex h-full w-full flex-col gap-3 overflow-auto bg-[#08090c] p-4 text-white/90">
-      <p className="max-w-3xl text-xs leading-relaxed text-white/60">
+    <div className="flex h-full w-full flex-col gap-4 overflow-auto bg-[#08090c] p-4 text-white/90">
+      <p className="max-w-3xl text-xs leading-relaxed text-white/55">
         Draw a digit and classify it with ONNX Runtime Web on WebGPU. vgpu adopts ORT&apos;s device and
         renders the ten GPU-resident logits through a non-owning zero-copy buffer wrapper. The output
         is only 40 bytes, so zero-copy is not a meaningful speedup here; this example demonstrates
@@ -164,14 +164,20 @@ export function Example() {
         transfers becomes performance-relevant.
       </p>
 
-      <div className="flex flex-wrap items-start gap-4">
+      <div className="flex flex-wrap items-start gap-5">
         <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+              draw
+            </span>
+            <span className="font-mono text-[10px] text-white/25">280 × 280</span>
+          </div>
           <canvas
             ref={drawCanvasRef}
             width={FIXTURE_SURFACE}
             height={FIXTURE_SURFACE}
             aria-label="Drawing surface for a handwritten digit"
-            className="h-[280px] w-[280px] touch-none rounded border border-white/15 bg-black"
+            className="h-[280px] w-[280px] cursor-crosshair touch-none rounded-xl border border-white/10 bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-white/20"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endStroke}
@@ -181,21 +187,30 @@ export function Example() {
           <button
             type="button"
             onClick={clear}
-            className="rounded border border-white/20 px-3 py-1 text-xs text-white/80 hover:bg-white/10"
+            className="self-start rounded-md border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] text-white/60 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white/90"
           >
-            Clear
+            clear
           </button>
         </div>
 
         <div className="relative min-w-[320px] flex-1">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+              model input 28 × 28
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+              softmax(logits) · probability
+            </span>
+          </div>
           <canvas
             ref={barsCanvasRef}
             aria-label="Class probabilities rendered from the model's GPU-resident logits"
-            className="block h-[280px] w-full rounded border border-white/15"
+            className="block h-[280px] w-full rounded-xl border border-white/10"
           />
           {/* Static labels: reading the winning class from the GPU would require a
-              readback, which this example deliberately avoids. */}
-          <div className="mt-1 grid grid-cols-10 pl-[36%] text-center font-mono text-[11px] text-white/50">
+              readback, which this example deliberately avoids. The 38% padding
+              mirrors `SPLIT` in visualize.wgsl, so each digit sits under its bar. */}
+          <div className="grid grid-cols-10 pl-[38%] pt-1 text-center font-mono text-[11px] tabular-nums text-white/40">
             {Array.from({ length: 10 }, (_, digit) => (
               <span key={digit}>{digit}</span>
             ))}
@@ -203,7 +218,7 @@ export function Example() {
 
           {initializing && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <p className="rounded bg-black/70 px-3 py-2 text-sm">
+              <p className="rounded-lg border border-white/10 bg-black/70 px-3 py-2 font-mono text-xs text-white/70 backdrop-blur-sm">
                 {(status.detail && STAGE_LABELS[status.detail]) ?? 'Preparing inference…'}
               </p>
             </div>
@@ -211,7 +226,7 @@ export function Example() {
 
           {blocked && (
             <div className="absolute inset-0 flex items-center justify-center p-4">
-              <div className="max-w-md rounded border border-white/15 bg-black/85 p-3 text-sm">
+              <div className="max-w-md rounded-lg border border-white/10 bg-black/85 p-3 text-sm backdrop-blur-sm">
                 <h2 className="mb-1 font-medium">
                   {status.phase === 'unsupported' ? 'WebGPU inference is required' : 'Inference failed'}
                 </h2>
@@ -226,9 +241,22 @@ export function Example() {
         </div>
       </div>
 
-      <p className="font-mono text-[11px] text-white/40">
-        {status.phase === 'classifying' ? 'running inference…' : `inferences: ${status.runs ?? 0}`} · 40
-        bytes of logits, softmax in WGSL, no readback
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-white/35">
+        <span
+          aria-hidden
+          className={`inline-block h-1.5 w-1.5 rounded-full ${
+            status.phase === 'classifying'
+              ? 'bg-[#3b9eff] shadow-[0_0_6px_rgba(59,158,255,0.9)]'
+              : status.phase === 'ready'
+                ? 'bg-[#46a758]'
+                : 'bg-white/25'
+          }`}
+        />
+        <span className="text-white/55">
+          {status.phase === 'classifying' ? 'running inference…' : `inferences: ${status.runs ?? 0}`}
+        </span>
+        <span className="text-white/20">·</span>
+        <span>40 bytes of logits, softmax in WGSL, no readback</span>
       </p>
     </div>
   );
