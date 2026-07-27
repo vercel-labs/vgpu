@@ -88,11 +88,19 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
 /**
  * Rasterizes the canned "camera" frame as tightly packed RGBA8.
  *
- * It is a synthetic figure, not a photograph: a lit torso and head against a
- * cool gradient, with a raised arm that the synthetic wrist trajectory follows.
- * Fine per-pixel texture is intentional — it gives the thumbnail's semantic
- * check real colour variance to find inside revealed strokes, which a flat fill
- * would not.
+ * It is a synthetic figure, not a photograph: a key-lit head, torso and raised
+ * arm that the synthetic wrist trajectory follows, against a soft pool of light.
+ *
+ * Deliberately **neutral greyscale** (r = g = b). The compositor's palette is two
+ * docs greys, so a coloured frame would drag a third and fourth hue into an
+ * otherwise monochrome design the moment a stroke revealed it.
+ *
+ * Tonally it is authored *for an ordered dither*: every value the figure and the
+ * backdrop take lands in the mid-range, because a Bayer threshold turns tone into
+ * dot *density* and only mid-tones have density to show. Pinning the body near
+ * white — as an untuned figure does — reads as one flat blown-out mass with no
+ * form at all. Fine per-pixel grain is intentional: it breaks up banding in the
+ * dithered field and gives the revealed side real local variance.
  *
  * Coordinates here are **source** space (un-mirrored), exactly like a real
  * camera frame.
@@ -102,47 +110,64 @@ export function createFixtureFrame(
   height = FIXTURE_FRAME_HEIGHT,
 ): Uint8Array {
   const pixels = new Uint8Array(width * height * 4);
+  // Capsule radii are height-normalized, so limbs keep a constant pixel thickness.
+  const aspect = width / height;
   for (let y = 0; y < height; y++) {
     const v = (y + 0.5) / height;
     for (let x = 0; x < width; x++) {
       const u = (x + 0.5) / width;
       const grain = hash2(x, y) - 0.5;
 
-      // Cool vignetted backdrop.
-      const radial = Math.hypot(u - 0.5, (v - 0.5) * 0.8);
-      let r = 0.06 + 0.1 * (1 - radial) + 0.05 * u;
-      let g = 0.09 + 0.14 * (1 - radial) + 0.03 * v;
-      let b = 0.17 + 0.22 * (1 - radial);
+      // Backdrop: near-black negative space with a faint pool of light behind the
+      // figure. Held far below the body's range on purpose — when the two ranges
+      // overlap, the silhouette dissolves into the dot field and the whole frame
+      // reads as one busy grey texture with no subject.
+      const radial = Math.hypot((u - 0.54) / 0.6, (v - 0.46) / 0.8);
+      let luma = 0.025 + 0.075 * smoothstep(1.15, 0.05, radial);
 
-      // Torso: a tapered ellipse, centre-right of the frame.
-      const torso = smoothstep(
-        1.05,
-        0.82,
-        Math.hypot((u - 0.56) / 0.17, (v - 0.78) / 0.34),
-      );
-      // Head.
-      const head = smoothstep(1.05, 0.85, Math.hypot((u - 0.56) / 0.075, (v - 0.3) / 0.12));
-      // Raised arm: a capsule from the shoulder up and to the left of frame.
-      const arm = capsule(u, v, 0.47, 0.52, 0.24, 0.34, 0.045);
-      const body = Math.min(1, torso + head + arm);
+      // Head, neck, torso and the raised arm the wrist path sweeps along.
+      const head = smoothstep(1.02, 0.9, Math.hypot((u - 0.55) / 0.058, (v - 0.3) / 0.092));
+      const neck = capsule(u, v, 0.55, 0.38, 0.55, 0.54, 0.032, aspect);
+      const torso = smoothstep(1.02, 0.86, Math.hypot((u - 0.56) / 0.17, (v - 0.88) / 0.36));
+      const arm = capsule(u, v, 0.47, 0.6, 0.235, 0.335, 0.042, aspect);
 
-      if (body > 0) {
-        const lit = 0.55 + 0.45 * smoothstep(0.75, 0.3, u) + 0.1 * Math.sin(v * 22);
-        r = r * (1 - body) + body * (0.86 * lit + 0.06);
-        g = g * (1 - body) + body * (0.66 * lit + 0.05);
-        b = b * (1 - body) + body * (0.55 * lit + 0.05);
-      }
+      // Key light from the upper left, so the raised arm reaching toward it is the
+      // brightest thing in frame. Every tone below is capped well short of white,
+      // which would flatten into one blown-out mass with no form at all.
+      const key = 0.6 * smoothstep(0.88, 0.16, u) + 0.26 * smoothstep(0.98, 0.22, v);
 
+      // Composited in painter's order, each part carrying its own base tone rather
+      // than being unioned into a single silhouette. The tonal step between parts
+      // is what makes an overlap read as an edge in dot density: a flat union lit
+      // by one shared ramp fuses head, shoulder and arm into an unreadable blob.
+      // The neck is darkest — a contact shadow under the chin separates the head.
+      luma = luma * (1 - torso) + torso * (0.26 + 0.3 * key);
+      luma = luma * (1 - neck) + neck * (0.22 + 0.24 * key);
+      luma = luma * (1 - head) + head * (0.38 + 0.34 * key);
+      luma = luma * (1 - arm) + arm * (0.46 + 0.36 * key);
+
+      // Grain stays tiny. Ordered dithering is a *geometric* pattern, and noise
+      // injected before the threshold randomises which cells flip, turning clean
+      // rows of dots into blue-noise mush. This is just enough to break banding.
+      const value = clamp255((luma + grain * 0.012) * 255);
       const index = (y * width + x) * 4;
-      pixels[index] = clamp255((r + grain * 0.05) * 255);
-      pixels[index + 1] = clamp255((g + grain * 0.05) * 255);
-      pixels[index + 2] = clamp255((b + grain * 0.05) * 255);
+      pixels[index] = value;
+      pixels[index + 1] = value;
+      pixels[index + 2] = value;
       pixels[index + 3] = 255;
     }
   }
   return pixels;
 }
 
+/**
+ * Soft-edged capsule between two normalized points.
+ *
+ * `aspect` (width / height) scales x before measuring, so `radius` describes a
+ * real circle in *pixels*. Without it a 16:9 frame stretches every capsule 1.78x
+ * horizontally, and a diagonal limb rasterizes as a broad wedge instead of an arm.
+ * `radius` is therefore in height-normalized units.
+ */
 function capsule(
   x: number,
   y: number,
@@ -151,12 +176,14 @@ function capsule(
   bx: number,
   by: number,
   radius: number,
+  aspect: number,
 ): number {
-  const abx = bx - ax;
+  const px = x * aspect;
+  const abx = (bx - ax) * aspect;
   const aby = by - ay;
   const lengthSq = abx * abx + aby * aby || 1;
-  const t = Math.min(1, Math.max(0, ((x - ax) * abx + (y - ay) * aby) / lengthSq));
-  const d = Math.hypot(x - (ax + abx * t), y - (ay + aby * t));
+  const t = Math.min(1, Math.max(0, ((px - ax * aspect) * abx + (y - ay) * aby) / lengthSq));
+  const d = Math.hypot(px - (ax * aspect + abx * t), y - (ay + aby * t));
   return smoothstep(radius, radius * 0.6, d);
 }
 
@@ -175,7 +202,7 @@ export function hashBytes(bytes: Uint8Array): string {
 }
 
 /** Pins `createFixtureFrame()`; regenerate deliberately, never casually. */
-export const FIXTURE_FRAME_HASH = '098a9a22';
+export const FIXTURE_FRAME_HASH = '2ebbb35c';
 
 /** Number of synthetic results the thumbnail and the visual demo replay. */
 export const SYNTHETIC_FRAME_COUNT = 24;

@@ -136,8 +136,12 @@ export const BRUSH_TUNING: BrushTuning = {
   emaTauSeconds: 0.075,
   maxJumpFraction: 0.18,
   invalidResetCount: 2,
-  radiusTexels: 9,
-  featherTexels: 2,
+  // A touch bolder than the geometry needs, with a feather barely wider than one
+  // texel: the mask carries just enough ramp for the compositor to antialias
+  // against, so a stroke lands as confident ink rather than a soft airbrushed
+  // blob. Widening the feather instead of the radius is what made it look fuzzy.
+  radiusTexels: 10,
+  featherTexels: 1.1,
 };
 
 /** Diagonal of the unit brush square; the jump cap is a fraction of it. */
@@ -367,5 +371,12 @@ export function bayer8(x: number, y: number): number {
   return value;
 }
 
-/** Dither cell side in logical (CSS) pixels. Fixed, so the pattern never shimmers. */
-export const DITHER_CELL_LOGICAL_PX = 3;
+/**
+ * Dither cell side in logical (CSS) pixels. Fixed, so the pattern never shimmers.
+ *
+ * 4 px is the point where the 8x8 Bayer super-cell spans a legible 32 px and the
+ * dots read as a deliberate halftone screen rather than as sensor noise, while
+ * still resolving a face. Smaller and the pattern dissolves into grain at docs
+ * card size; larger and the figure stops being recognisable.
+ */
+export const DITHER_CELL_LOGICAL_PX = 4;

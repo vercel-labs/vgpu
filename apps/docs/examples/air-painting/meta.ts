@@ -3,8 +3,10 @@ import type { ExampleMetaDefinition } from '../../lib/example-meta';
 export const meta = {
   slug: 'air-painting',
   title: 'Air Painting',
+  // All of the example's prose lives here, not inside the frame: the example
+  // itself is the canvas plus two buttons.
   description:
-    "Paint with your wrist. ONNX Runtime Web runs MoveNet SinglePose Lightning on WebGPU, vgpu adopts ORT's device, and WGSL smooths, unletterboxes and paints the 17 GPU-resident keypoints through a non-owning zero-copy wrapper. A fixed 8x8 Bayer dither covers everything except the strokes, which reveal the raw camera.",
+    "Paint in the air with your right wrist. ONNX Runtime Web runs MoveNet SinglePose Lightning on WebGPU, vgpu adopts ORT's device, and WGSL reads the 17 GPU-resident keypoints through a non-owning zero-copy wrapper: the landmarks are smoothed, unletterboxed and turned into strokes without a single byte travelling back to the CPU. A fixed 8x8 Bayer dither covers everything except the strokes, which reveal the raw camera. Raise your right hand into frame and move it to draw; confidence has to reach 0.45 to start a stroke and stays live down to 0.30, and losing the pose for two results breaks the line instead of drawing a connector across the frame. Two honest caveats. Camera preprocessing is CPU-side: the committed graph takes uint8 [1,192,192,3] and a GPU-buffer input tensor was rejected by the runtime, so each inference uploads a letterboxed 110 kB frame — the zero-copy claim is about the output. And without a camera the example runs a visual demo that replays a canned frame and a fixed synthetic wrist trajectory through the same wrist, paint and composite shaders; it shows the visuals only and proves nothing about ONNX Runtime interop, so enable the camera for that. Video never leaves this device and is never uploaded anywhere.",
   tags: ['machine-learning', 'onnx', 'pose-estimation', 'ordered-dithering', 'shader'],
   capabilities: [
     'webgpu',
