@@ -10,12 +10,9 @@
  * is exactly why thumbnails can be deterministic without a model.
  */
 import type { Buffer, Compute, Effect, Gpu, Surface, Target } from 'vgpu';
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { decodeGoldenDepth, GOLDEN_MODEL_ID } from './fixtures';
 import {
   depthByteLength,
   depthElementCount,
-  getDepthModel,
   PRESENTATION_AUTO_RANGE,
   PRESENTATION_LOG_METRIC,
   type DepthModel,
@@ -102,32 +99,4 @@ export function createDepthBuffer(gpu: Gpu, model: DepthModel, label = 'depth-es
 
 export function writeDepth(buffer: Buffer, values: Float32Array): void {
   buffer.write(asWriteData(values));
-}
-
-/**
- * Deterministic thumbnail: uploads the depth field captured from the default
- * model on the committed source image, then runs the production shader.
- *
- * This validates the visualizer only. It proves nothing about ORT interop,
- * which requires a real browser.
- */
-export async function renderThumbnail(
-  gpu: Gpu,
-  target: Target,
-  _options: ThumbnailOptions = {},
-): Promise<void> {
-  const model = getDepthModel(GOLDEN_MODEL_ID);
-  const relief = createReliefPipeline(gpu, 'depth-estimation-thumb');
-  const depth = createDepthBuffer(gpu, model, 'depth-estimation-thumb');
-  try {
-    writeDepth(depth, decodeGoldenDepth());
-    relief.draw(gpu, target, depth, model, { hasResult: true, parallax: [0, 0] });
-  } finally {
-    await Promise.allSettled([
-      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
-      Promise.resolve().then(() => gpu.settled()),
-    ]);
-    relief.dispose();
-    depth.dispose();
-  }
 }
