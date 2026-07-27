@@ -18,6 +18,7 @@ export const exampleComponentLoaders = {
   'batch-rendering': () => import('../examples/batch-rendering/index'),
   'fft-ocean': () => import('../examples/fft-ocean/index'),
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
+  'neural-shader-cppn': () => import('../examples/neural-shader-cppn/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

@@ -8,6 +8,8 @@
     "prebuild": "pnpm run build:workspace && node scripts/prepare-ort-assets.mjs && node scripts/ingest-examples.mjs",
     "build": "next build",
     "start": "next start --port 3001",
+    "model:cppn": "node examples/neural-shader-cppn/generate-model.mjs",
+    "model:cppn:check": "node examples/neural-shader-cppn/generate-model.mjs --check",
     "ort:assets": "node scripts/prepare-ort-assets.mjs",
     "ort:assets:check": "node scripts/prepare-ort-assets.mjs --check",
     "thumbs": "node scripts/render-example-thumbs.mjs --update",

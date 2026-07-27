@@ -9,6 +9,7 @@ export const exampleSlugs = [
   'batch-rendering',
   'fft-ocean',
   'raymarched-fractal',
+  'neural-shader-cppn',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

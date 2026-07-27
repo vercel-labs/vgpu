@@ -5,11 +5,13 @@
   "continuous-rendering",
   "controls",
   "demand-rendering",
+  "external-device",
   "fixed-timestep",
   "fragment-shader",
   "hdr",
   "instanced-rendering",
   "instancing",
+  "machine-learning",
   "multi-pass",
   "offscreen-rendering",
   "pointer-input",
@@ -21,5 +23,6 @@
   "select-control",
   "storage-buffers",
   "textures",
-  "webgpu"
+  "webgpu",
+  "zero-copy"
 ]
