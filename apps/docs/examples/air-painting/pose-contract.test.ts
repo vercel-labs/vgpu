@@ -4,18 +4,32 @@ import {
   fixtureTransform,
   FIXTURE_FRAME_HEIGHT,
   FIXTURE_FRAME_WIDTH,
+  SYNTHETIC_DT,
   SYNTHETIC_FRAME_COUNT,
-  syntheticBrushPath,
+  syntheticHandPath,
   syntheticKeypointFrames,
 } from './fixtures';
 import {
   applyPoseSample,
   bayer8,
   brushSpaceToKeypoint,
+  BRUSH_BUFFER_BYTES,
+  BRUSH_COUNT,
+  BRUSH_LIMBS,
+  BRUSH_STATE_BYTES,
+  BRUSH_STATE_SLOTS,
   BRUSH_TUNING,
   computeFrameTransform,
   createBrushSnapshot,
+  extrapolateHand,
+  HAND_EXTRAPOLATION,
+  handFromSample,
   keypointToBrushSpace,
+  KEYPOINT_COUNT,
+  LEFT_ELBOW_INDEX,
+  LEFT_WRIST_INDEX,
+  poseSampleFromKeypoints,
+  RIGHT_ELBOW_INDEX,
   KEYPOINT_BYTES,
   KEYPOINT_ELEMENTS,
   MASK_BYTES,
@@ -311,47 +325,259 @@ describe('synthetic fixtures', () => {
     expect(transform.sourceHeight).toBe(FIXTURE_FRAME_HEIGHT);
   });
 
-  it('keeps the whole path inside the frame, never in the padding', () => {
-    for (const point of syntheticBrushPath()) {
-      expect(point.x).toBeGreaterThan(0);
-      expect(point.x).toBeLessThan(1);
-      expect(point.y).toBeGreaterThan(0);
-      expect(point.y).toBeLessThan(1);
+  it('keeps both hand paths inside the frame, never in the padding', () => {
+    for (const limb of ['left', 'right'] as const) {
+      for (const point of syntheticHandPath(limb)) {
+        expect(point.x, limb).toBeGreaterThan(0);
+        expect(point.x, limb).toBeLessThan(1);
+        expect(point.y, limb).toBeGreaterThan(0);
+        expect(point.y, limb).toBeLessThan(1);
+      }
     }
   });
 
-  it('encodes 24 valid [1,1,17,3] buffers with only index 10 confident', () => {
+  it('separates the two paths so they read as two strokes, not one', () => {
+    const left = syntheticHandPath('left');
+    const right = syntheticHandPath('right');
+    // At least a couple of brush radii apart at every sample, in mask texels.
+    for (let i = 0; i < left.length; i++) {
+      const dx = (left[i]!.x - right[i]!.x) * MASK_WIDTH;
+      const dy = (left[i]!.y - right[i]!.y) * MASK_HEIGHT;
+      expect(Math.hypot(dx, dy)).toBeGreaterThan(BRUSH_TUNING.radiusTexels * 3);
+    }
+  });
+
+  it('encodes 24 valid [1,1,17,3] buffers with both wrists and both elbows live', () => {
     const frames = syntheticKeypointFrames(transform);
     expect(frames).toHaveLength(SYNTHETIC_FRAME_COUNT);
+    const wrists = BRUSH_LIMBS.map((limb) => limb.wrist);
+    const elbows = BRUSH_LIMBS.map((limb) => limb.elbow);
+
     for (const frame of frames) {
       expect(frame.length).toBe(KEYPOINT_ELEMENTS);
-      const base = RIGHT_WRIST_INDEX * 3;
-      expect(frame[base + 2]!).toBeGreaterThanOrEqual(BRUSH_TUNING.enterConfidence);
-      for (let k = 0; k < 17; k++) {
-        if (k === RIGHT_WRIST_INDEX) continue;
+      for (const wrist of wrists) {
+        expect(frame[wrist * 3 + 2]!).toBeGreaterThanOrEqual(BRUSH_TUNING.enterConfidence);
+        expect(
+          keypointToBrushSpace(frame[wrist * 3]!, frame[wrist * 3 + 1]!, transform),
+        ).toBeDefined();
+      }
+      for (const elbow of elbows) {
+        expect(frame[elbow * 3 + 2]!).toBeGreaterThanOrEqual(HAND_EXTRAPOLATION.elbowConfidence);
+        expect(
+          keypointToBrushSpace(frame[elbow * 3]!, frame[elbow * 3 + 1]!, transform),
+        ).toBeDefined();
+      }
+      // Everything the brushes ignore stays below the enter threshold.
+      for (let k = 0; k < KEYPOINT_COUNT; k++) {
+        if (wrists.includes(k) || elbows.includes(k)) continue;
         expect(frame[k * 3 + 2]!).toBeLessThan(BRUSH_TUNING.enterConfidence);
       }
-      // Valid model-normalized range, and it survives the unletterbox.
-      expect(keypointToBrushSpace(frame[base]!, frame[base + 1]!, transform)).toBeDefined();
     }
   });
 
-  it('drives the reference state machine into a continuous stroke', () => {
-    const state = createBrushSnapshot();
+  it('places wrist and elbow so the extrapolation lands exactly on the authored hand', () => {
     const frames = syntheticKeypointFrames(transform);
-    let painted = 0;
-    for (const frame of frames) {
-      const base = RIGHT_WRIST_INDEX * 3;
-      applyPoseSample(
-        state,
-        { y: frame[base]!, x: frame[base + 1]!, score: frame[base + 2]! },
-        transform,
-        1 / 30,
-      );
-      if (state.stroke) painted++;
+    for (const limb of BRUSH_LIMBS) {
+      const path = syntheticHandPath(limb.name);
+      frames.forEach((frame, index) => {
+        const hand = handFromSample(poseSampleFromKeypoints(frame, limb), transform);
+        expect(hand, `${limb.name}[${index}]`).toBeDefined();
+        expect(hand!.x).toBeCloseTo(path[index]!.x, 6);
+        expect(hand!.y).toBeCloseTo(path[index]!.y, 6);
+      });
     }
-    // One acquisition sample plus 23 painted segments, with no jump breaks.
-    expect(painted).toBe(SYNTHETIC_FRAME_COUNT - 1);
+  });
+
+  it('drives an independent continuous stroke for each hand', () => {
+    const frames = syntheticKeypointFrames(transform);
+    for (const limb of BRUSH_LIMBS) {
+      const state = createBrushSnapshot();
+      let painted = 0;
+      for (const frame of frames) {
+        applyPoseSample(state, poseSampleFromKeypoints(frame, limb), transform, SYNTHETIC_DT);
+        if (state.stroke) painted++;
+      }
+      // One acquisition sample plus 23 painted segments, with no jump breaks.
+      expect(painted, limb.name).toBe(SYNTHETIC_FRAME_COUNT - 1);
+      expect(state.active, limb.name).toBe(true);
+    }
+  });
+});
+
+describe('two independent brushes', () => {
+  const transform = fixtureTransform();
+
+  it('gives every limb its own slot and its own pair of keypoints', () => {
+    expect(BRUSH_COUNT).toBe(2);
+    expect(BRUSH_LIMBS.map((limb) => limb.name)).toEqual(['left', 'right']);
+    expect(BRUSH_LIMBS.map((limb) => limb.wrist)).toEqual([LEFT_WRIST_INDEX, RIGHT_WRIST_INDEX]);
+    expect(BRUSH_LIMBS.map((limb) => limb.elbow)).toEqual([LEFT_ELBOW_INDEX, RIGHT_ELBOW_INDEX]);
+    // Every index distinct: a shared keypoint would couple the two brushes.
+    const all = BRUSH_LIMBS.flatMap((limb) => [limb.wrist, limb.elbow]);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('sizes the storage buffer as one padded slot per brush', () => {
+    expect(BRUSH_STATE_BYTES).toBe(64);
+    expect(BRUSH_BUFFER_BYTES).toBe(BRUSH_STATE_BYTES * BRUSH_COUNT);
+    // The 10 live f32 slots have to fit inside the stride, with room to pad.
+    expect(BRUSH_STATE_SLOTS * 4).toBeLessThanOrEqual(BRUSH_STATE_BYTES);
+  });
+
+  it('does not let one hand losing tracking disturb the other', () => {
+    const frames = syntheticKeypointFrames(transform);
+    const left = createBrushSnapshot();
+    const right = createBrushSnapshot();
+    const soloRight = createBrushSnapshot();
+
+    frames.forEach((frame, index) => {
+      // Blind the left wrist for a stretch in the middle: two consecutive
+      // invalid results is exactly the reset threshold.
+      const blinded = index >= 8 && index <= 12;
+      const leftSample = poseSampleFromKeypoints(frame, BRUSH_LIMBS[0]!);
+      applyPoseSample(
+        left,
+        blinded ? { ...leftSample, score: 0.01 } : leftSample,
+        transform,
+        SYNTHETIC_DT,
+      );
+
+      const rightSample = poseSampleFromKeypoints(frame, BRUSH_LIMBS[1]!);
+      applyPoseSample(right, rightSample, transform, SYNTHETIC_DT);
+      applyPoseSample(soloRight, rightSample, transform, SYNTHETIC_DT);
+    });
+
+    // The left brush felt the dropout...
+    expect(left.strokes).toBeLessThan(SYNTHETIC_FRAME_COUNT - 1);
+    // ...and the right brush is bit-for-bit what it would have been alone.
+    expect(right).toEqual(soloRight);
+  });
+
+  it('keeps two brushes at different positions with no shared term', () => {
+    const frames = syntheticKeypointFrames(transform);
+    const left = createBrushSnapshot();
+    const right = createBrushSnapshot();
+    for (const frame of frames) {
+      applyPoseSample(left, poseSampleFromKeypoints(frame, BRUSH_LIMBS[0]!), transform, SYNTHETIC_DT);
+      applyPoseSample(right, poseSampleFromKeypoints(frame, BRUSH_LIMBS[1]!), transform, SYNTHETIC_DT);
+      if (left.active && right.active) {
+        expect(Math.hypot(left.current.x - right.current.x, left.current.y - right.current.y))
+          .toBeGreaterThan(0.05);
+      }
+    }
+  });
+});
+
+describe('hand extrapolation', () => {
+  const transform = fixtureTransform();
+
+  it('extends past the wrist, away from the elbow, by the tuned factor', () => {
+    const wrist = { x: 0.5, y: 0.4 };
+    const elbow = { x: 0.5, y: 0.6 };
+    const hand = extrapolateHand(wrist, elbow);
+    // Forearm points straight up the frame; the hand continues that way.
+    expect(hand.x).toBeCloseTo(0.5, 12);
+    expect(hand.y).toBeCloseTo(0.4 - 0.2 * HAND_EXTRAPOLATION.factor, 12);
+    expect(hand.y).toBeLessThan(wrist.y);
+  });
+
+  it('is the affine combination (1 + k)·wrist - k·elbow', () => {
+    const wrist = { x: 0.62, y: 0.31 };
+    const elbow = { x: 0.28, y: 0.77 };
+    const k = HAND_EXTRAPOLATION.factor;
+    const hand = extrapolateHand(wrist, elbow);
+    expect(hand.x).toBeCloseTo((1 + k) * wrist.x - k * elbow.x, 12);
+    expect(hand.y).toBeCloseTo((1 + k) * wrist.y - k * elbow.y, 12);
+  });
+
+  it('gives the same answer in model space as in mirrored brush space', () => {
+    // The whole model -> source -> brush chain is affine, and extrapolation is an
+    // affine combination, so the two commute. This is why wrist.wgsl is free to
+    // extrapolate after mirroring. A non-square frame makes the two axes scale
+    // differently, which is exactly where a non-affine mistake would show up.
+    const oblong = computeFrameTransform(640, 360);
+    const wristKp = { y: 0.42, x: 0.61 };
+    const elbowKp = { y: 0.55, x: 0.44 };
+    const k = HAND_EXTRAPOLATION.factor;
+
+    // Extrapolate first, in raw model-normalized coordinates, then transform.
+    const handKp = {
+      y: (1 + k) * wristKp.y - k * elbowKp.y,
+      x: (1 + k) * wristKp.x - k * elbowKp.x,
+    };
+    const viaModel = keypointToBrushSpace(handKp.y, handKp.x, oblong);
+
+    // Transform first, then extrapolate in brush space, which is what runs.
+    const viaBrush = extrapolateHand(
+      keypointToBrushSpace(wristKp.y, wristKp.x, oblong)!,
+      keypointToBrushSpace(elbowKp.y, elbowKp.x, oblong)!,
+    );
+
+    expect(viaModel).toBeDefined();
+    expect(viaBrush.x).toBeCloseTo(viaModel!.x, 10);
+    expect(viaBrush.y).toBeCloseTo(viaModel!.y, 10);
+  });
+
+  it('mirrors the extension along with the point', () => {
+    // In source space the elbow is left of the wrist, so the hand continues to
+    // the right. In the mirrored brush view that has to read as leftwards.
+    const oblong = computeFrameTransform(640, 360);
+    const wrist = keypointToBrushSpace(0.5, 0.62, oblong)!;
+    const elbow = keypointToBrushSpace(0.5, 0.5, oblong)!;
+    expect(elbow.x).toBeGreaterThan(wrist.x);
+    expect(extrapolateHand(wrist, elbow).x).toBeLessThan(wrist.x);
+  });
+
+  it('falls back to the raw wrist when the elbow is not confident enough', () => {
+    const sample = {
+      y: 0.42,
+      x: 0.61,
+      score: 0.9,
+      elbowY: 0.55,
+      elbowX: 0.44,
+      elbowScore: HAND_EXTRAPOLATION.elbowConfidence - 0.01,
+    };
+    const wrist = keypointToBrushSpace(sample.y, sample.x, transform)!;
+    const hand = handFromSample(sample, transform)!;
+    expect(hand).toEqual(wrist);
+
+    // The same sample with a trustworthy elbow does move the point.
+    const extended = handFromSample({ ...sample, elbowScore: 0.9 }, transform)!;
+    expect(extended).not.toEqual(wrist);
+  });
+
+  it('falls back to the raw wrist when the elbow is missing or off-frame', () => {
+    const base = { y: 0.42, x: 0.61, score: 0.9 };
+    const wrist = keypointToBrushSpace(base.y, base.x, transform)!;
+    expect(handFromSample(base, transform)).toEqual(wrist);
+    // In the letterbox padding: a direction from there is not on the person.
+    expect(
+      handFromSample({ ...base, elbowY: 0.02, elbowX: 0.5, elbowScore: 0.9 }, transform),
+    ).toEqual(wrist);
+  });
+
+  it('gates on the wrist alone, never on the elbow', () => {
+    const state = createBrushSnapshot();
+    const confidentWristWeakElbow = {
+      y: 0.42,
+      x: 0.61,
+      score: 0.9,
+      elbowY: 0.55,
+      elbowX: 0.44,
+      elbowScore: 0,
+    };
+    applyPoseSample(state, confidentWristWeakElbow, transform, SYNTHETIC_DT);
     expect(state.active).toBe(true);
+    expect(state.invalid).toBe(0);
+  });
+
+  it('clamps into frame rather than dropping a hand reaching for the edge', () => {
+    // Wrist near the right edge of brush space with the elbow well inside, so
+    // the extension would otherwise overshoot past 1.
+    const wrist = { x: 0.98, y: 0.5 };
+    const elbow = { x: 0.3, y: 0.5 };
+    const hand = extrapolateHand(wrist, elbow);
+    expect(hand.x).toBe(1);
+    expect(hand.y).toBeCloseTo(0.5, 12);
   });
 });

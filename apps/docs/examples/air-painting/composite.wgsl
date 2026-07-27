@@ -49,14 +49,20 @@ struct BrushState {
   invalid: f32,
   has_prev: f32,
   stroke: f32,
-  strokes: f32,
+  /// `@size(28)` pads the 40-byte struct to a 64-byte array stride.
+  @size(28) strokes: f32,
 };
+
+/// One brush per hand; slot 0 is the person's left arm, slot 1 the right.
+/// The array length is spelled as a literal on the binding below because
+/// vgpu's auto-layout reflection requires one (VGPU-WGSL-REFLECT-ARRAY-LENGTH).
+const BRUSH_COUNT: u32 = 2u;
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var frame_tex: texture_2d<f32>;
 @group(0) @binding(2) var frame_samp: sampler;
 @group(0) @binding(3) var<storage, read> mask: array<f32>;
-@group(0) @binding(4) var<storage, read> brush: BrushState;
+@group(0) @binding(4) var<storage, read> brushes: array<BrushState, 2>;
 
 /// gray-12 (#eeeeee): the docs' primary text colour, used as halftone ink.
 const INK = vec3f(0.933, 0.933, 0.933);
@@ -183,14 +189,20 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let outline = clamp(smoothstep(COVERAGE_LO, COVERAGE_HI, mask_dilated(p)) - inside, 0.0, 1.0);
   color = mix(color, ACCENT, outline * 0.75);
 
-  // Optional cursor, only while a wrist is tracked. Distance is measured in mask
-  // texels so the ring stays round regardless of canvas shape.
-  if (uniforms.show_cursor > 0.5 && brush.tracking > 0.5) {
-    let d = distance(p * uniforms.mask_size, brush.current * uniforms.mask_size);
-    let r = uniforms.cursor_radius;
-    // A thin open ring: it marks the brush tip without hiding what is under it.
-    let ring = smoothstep(r + 2.2, r + 1.0, d) * smoothstep(r - 2.2, r - 1.0, d);
-    color = mix(color, ACCENT_LIVE, ring * clamp(brush.confidence, 0.0, 1.0));
+  // One cursor per tracked hand. Distance is measured in mask texels so the ring
+  // stays round regardless of canvas shape.
+  if (uniforms.show_cursor > 0.5) {
+    for (var i = 0u; i < BRUSH_COUNT; i = i + 1u) {
+      let brush = brushes[i];
+      if (brush.tracking < 0.5) {
+        continue;
+      }
+      let d = distance(p * uniforms.mask_size, brush.current * uniforms.mask_size);
+      let r = uniforms.cursor_radius;
+      // A thin open ring: it marks the brush tip without hiding what is under it.
+      let ring = smoothstep(r + 2.2, r + 1.0, d) * smoothstep(r - 2.2, r - 1.0, d);
+      color = mix(color, ACCENT_LIVE, ring * clamp(brush.confidence, 0.0, 1.0));
+    }
   }
 
   return vec4f(color, 1.0);

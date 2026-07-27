@@ -9,7 +9,7 @@ import {
   SYNTHETIC_FRAME_COUNT,
 } from './fixtures';
 import {
-  BRUSH_STATE_BYTES,
+  BRUSH_BUFFER_BYTES,
   BRUSH_TUNING,
   DITHER_CELL_LOGICAL_PX,
   KEYPOINT_BUFFER_BYTES,
@@ -17,6 +17,7 @@ import {
   MASK_HEIGHT,
   MASK_TEXELS,
   MASK_WIDTH,
+  HAND_EXTRAPOLATION,
   maxJumpDistance,
 } from './pose-contract';
 import { renderThumbnail, THUMB_DT } from './renderer';
@@ -151,7 +152,8 @@ describe('deterministic thumbnail', () => {
     const paint = recorded.dispatches.filter((entry) => entry.label.endsWith('-paint'));
     expect(wrist).toHaveLength(SYNTHETIC_FRAME_COUNT);
     expect(paint).toHaveLength(SYNTHETIC_FRAME_COUNT);
-    // One invocation for the state machine, full mask coverage for the capsule.
+    // One workgroup of BRUSH_COUNT invocations for the state machines, full mask
+    // coverage for the capsules.
     expect(wrist.every((entry) => entry.workgroups === 1)).toBe(true);
     expect(paint.every((entry) => entry.workgroups === Math.ceil(MASK_TEXELS / 64))).toBe(true);
     expect(recorded.draws).toEqual(['air-painting-thumb-composite']);
@@ -171,6 +173,9 @@ describe('deterministic thumbnail', () => {
     expect(first.uniforms.stay_confidence).toBe(BRUSH_TUNING.stayConfidence);
     expect(first.uniforms.ema_tau).toBe(BRUSH_TUNING.emaTauSeconds);
     expect(first.uniforms.max_jump).toBeCloseTo(maxJumpDistance(), 12);
+    // Both hands paint, and both paint at the extrapolated hand, not the wrist.
+    expect(first.uniforms.hand_extend).toBe(HAND_EXTRAPOLATION.factor);
+    expect(first.uniforms.elbow_confidence).toBe(HAND_EXTRAPOLATION.elbowConfidence);
     // The thumbnail never resets continuity mid-sequence.
     expect(
       recorded.dispatches
@@ -196,7 +201,7 @@ describe('deterministic thumbnail', () => {
     await renderThumbnail(gpu, target);
     const sizes = new Map(recorded.buffers.map((entry) => [entry.label, entry.size]));
     expect(sizes.get('air-painting-thumb-mask')).toBe(MASK_BYTES);
-    expect(sizes.get('air-painting-thumb-brush')).toBe(BRUSH_STATE_BYTES);
+    expect(sizes.get('air-painting-thumb-brushes')).toBe(BRUSH_BUFFER_BYTES);
     expect(sizes.get('air-painting-thumb-keypoints')).toBe(KEYPOINT_BUFFER_BYTES);
     expect(recorded.textures[0]?.size).toEqual([FIXTURE_FRAME_WIDTH, FIXTURE_FRAME_HEIGHT]);
   });

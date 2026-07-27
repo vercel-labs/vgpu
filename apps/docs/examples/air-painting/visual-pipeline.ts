@@ -19,10 +19,11 @@
  */
 import type { Buffer, Compute, Effect, Gpu, Surface, Target, Texture } from 'vgpu';
 import {
-  BRUSH_STATE_BYTES,
+  BRUSH_BUFFER_BYTES,
   BRUSH_TUNING,
   computeFrameTransform,
   DITHER_CELL_LOGICAL_PX,
+  HAND_EXTRAPOLATION,
   KEYPOINT_BUFFER_BYTES,
   MASK_BYTES,
   MASK_HEIGHT,
@@ -30,6 +31,7 @@ import {
   MASK_WIDTH,
   maxJumpDistance,
   type BrushTuning,
+  type HandExtrapolation,
   type FrameTransform,
 } from './pose-contract';
 import compositeWgsl from './composite.wgsl';
@@ -52,6 +54,7 @@ export interface VisualPipelineOptions {
   readonly sourceHeight: number;
   readonly label?: string;
   readonly tuning?: BrushTuning;
+  readonly extrapolation?: HandExtrapolation;
 }
 
 export interface ConsumeOptions {
@@ -72,8 +75,8 @@ export interface VisualPipeline {
   readonly transform: FrameTransform;
   /** Persistent f32 coverage mask in `brush` space, 960x540. */
   readonly mask: Buffer;
-  /** Persistent wrist/stroke state; only the GPU ever writes meaningful values. */
-  readonly brush: Buffer;
+  /** Persistent per-hand stroke state, one 64-byte slot per limb; only the GPU writes it. */
+  readonly brushes: Buffer;
   readonly frameTexture: Texture;
 
   /**
@@ -120,6 +123,7 @@ export function writeKeypoints(buffer: Buffer, keypoints: Float32Array): void {
 export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): VisualPipeline {
   const label = options.label ?? 'air-painting';
   const tuning = options.tuning ?? BRUSH_TUNING;
+  const extrapolation = options.extrapolation ?? HAND_EXTRAPOLATION;
   let transform = computeFrameTransform(options.sourceWidth, options.sourceHeight);
 
   const mask = gpu.device.createBuffer({
@@ -128,10 +132,10 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
     label: `${label}-mask`,
   });
   // WebGPU zero-initializes buffers, so the idle state is "nothing painted".
-  const brush = gpu.device.createBuffer({
-    size: BRUSH_STATE_BYTES,
+  const brushes = gpu.device.createBuffer({
+    size: BRUSH_BUFFER_BYTES,
     usage: ['storage', 'copy_dst'],
-    label: `${label}-brush`,
+    label: `${label}-brushes`,
   });
 
   let frameTexture = createFrameTexture(gpu, label, transform);
@@ -146,7 +150,7 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
       return transform;
     },
     mask,
-    brush,
+    brushes,
     get frameTexture() {
       return frameTexture;
     },
@@ -163,11 +167,13 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
           ema_tau: tuning.emaTauSeconds,
           max_jump: maxJumpDistance(tuning),
           reset: consumeOptions.reset ? 1 : 0,
+          hand_extend: extrapolation.factor,
+          elbow_confidence: extrapolation.elbowConfidence,
         },
         keypoints,
-        brush,
+        brushes,
       });
-      // One invocation: the whole state machine is 17 keypoints of arithmetic.
+      // One workgroup of BRUSH_COUNT invocations: one independent hand each.
       wrist.dispatch(1);
 
       paint.set({
@@ -176,7 +182,7 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
           radius: tuning.radiusTexels,
           feather: tuning.featherTexels,
         },
-        brush,
+        brushes,
         mask,
       });
       // Submitted after the wrist dispatch on the same queue, so the ordering is
@@ -199,7 +205,7 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
         frame_tex: frameTexture,
         frame_samp: sampler,
         mask,
-        brush,
+        brushes,
       });
       gpu.frame((frame) => frame.pass({ target: output }, (pass) => pass.draw(composite)));
     },
@@ -252,7 +258,7 @@ export function createVisualPipeline(gpu: Gpu, options: VisualPipelineOptions): 
 
     dispose() {
       frameTexture.destroy();
-      brush.dispose();
+      brushes.dispose();
       mask.dispose();
     },
   };

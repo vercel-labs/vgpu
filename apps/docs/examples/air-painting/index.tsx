@@ -126,8 +126,8 @@ export function Example() {
           ref={canvasRef}
           aria-label={
             mode === 'camera'
-              ? 'Mirrored camera view, dithered outside the painted strokes'
-              : 'Visual demo of the dithered compositor with a synthetic wrist trajectory'
+              ? 'Mirrored camera view, dithered outside the strokes painted by both hands'
+              : 'Visual demo of the dithered compositor with a synthetic two-handed trajectory'
           }
           className="block h-full w-full rounded-lg border border-gray-4 bg-gray-1"
         />

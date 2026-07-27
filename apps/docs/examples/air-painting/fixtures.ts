@@ -10,20 +10,21 @@
  * 2. `createFixtureFrame()` — a license-clean camera stand-in, rasterized in pure
  *    TypeScript so the Node thumbnail, the unit tests and the no-camera visual
  *    demo all see byte-identical pixels with no webcam, network or codec.
- * 3. `syntheticKeypointFrames()` — a 24-sample synthetic wrist trajectory encoded
- *    as real `[1,1,17,3]` buffers. It drives the *production* wrist/paint/
- *    composite shaders deterministically.
+ * 3. `syntheticKeypointFrames()` — a 24-sample synthetic **two-handed** trajectory
+ *    encoded as real `[1,1,17,3]` buffers, wrists and elbows both. It drives the
+ *    *production* wrist/paint/composite shaders deterministically.
  *
  * (3) is a **visual** fixture. It proves the shaders and the lifetime plumbing,
  * and it proves nothing whatsoever about ORT interop — only a real browser can,
  * and the example says so in its own copy.
  */
 import {
+  BRUSH_LIMBS,
   brushSpaceToKeypoint,
   computeFrameTransform,
+  HAND_EXTRAPOLATION,
+  KEYPOINT_COUNT,
   KEYPOINT_ELEMENTS,
-  LEFT_WRIST_INDEX,
-  RIGHT_WRIST_INDEX,
   type FrameTransform,
   type Vec2,
 } from './pose-contract';
@@ -89,7 +90,7 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
  * Rasterizes the canned "camera" frame as tightly packed RGBA8.
  *
  * It is a synthetic figure, not a photograph: a key-lit head, torso and raised
- * arm that the synthetic wrist trajectory follows, against a soft pool of light.
+ * arm, against a soft pool of light, that the synthetic hand paths sweep across.
  *
  * Deliberately **neutral greyscale** (r = g = b). The compositor's palette is two
  * docs greys, so a coloured frame would drag a third and fourth hue into an
@@ -208,22 +209,33 @@ export const FIXTURE_FRAME_HASH = '2ebbb35c';
 export const SYNTHETIC_FRAME_COUNT = 24;
 /** Fixed timestep the synthetic sequence is authored for. */
 export const SYNTHETIC_DT = 1 / 30;
+/** Synthetic forearm length in brush units; sets where the elbow sits behind the hand. */
+export const SYNTHETIC_FOREARM = 0.18;
 
 /**
- * The synthetic wrist path in `brush` space (mirrored, normalized frame).
+ * The synthetic **hand** paths in `brush` space (mirrored, normalized frame),
+ * one per limb, both sweeping at once.
  *
- * A ribbon "S" that stays clear of the letterbox padding by construction and
- * sweeps across the figure's raised arm, so the revealed region shows real
- * image content rather than backdrop.
+ * Two ribbons rather than one: the author paints with both hands, so the canned
+ * demo and the thumbnail have to show both, or the feature is invisible to
+ * anyone who cannot grant a camera. They travel in opposite directions and stay
+ * in separate horizontal bands so they read as two independent strokes and not
+ * as one thick line, and both stay clear of the letterbox padding by
+ * construction.
  */
-export function syntheticBrushPath(count = SYNTHETIC_FRAME_COUNT): readonly Vec2[] {
+export function syntheticHandPath(
+  limb: 'left' | 'right',
+  count = SYNTHETIC_FRAME_COUNT,
+): readonly Vec2[] {
   const path: Vec2[] = [];
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
-    path.push({
-      x: 0.28 + 0.46 * t,
-      y: 0.5 + 0.26 * Math.sin(t * Math.PI * 1.9) * Math.cos(t * 1.1),
-    });
+    const wave = Math.sin(t * Math.PI * 1.6);
+    path.push(
+      limb === 'right'
+        ? { x: 0.32 + 0.36 * t, y: 0.36 + 0.18 * wave }
+        : { x: 0.68 - 0.36 * t, y: 0.7 - 0.18 * wave },
+    );
   }
   return path;
 }
@@ -239,35 +251,101 @@ export function syntheticConfidence(index: number, count = SYNTHETIC_FRAME_COUNT
   return 0.55 + 0.2 * Math.sin(t * Math.PI);
 }
 
+/** Unit travel direction along a path, from neighbouring samples. */
+function tangent(path: readonly Vec2[], index: number): Vec2 {
+  const a = path[Math.max(0, index - 1)]!;
+  const b = path[Math.min(path.length - 1, index + 1)]!;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > 1e-6)) return { x: 1, y: 0 };
+  return { x: dx / length, y: dy / length };
+}
+
 /**
- * Encodes the synthetic path as real `[1,1,17,3]` float32 buffers.
+ * Wrist and elbow, in brush space, that make `wrist.wgsl` extrapolate to exactly
+ * `hand`.
  *
- * Every keypoint is populated so the layout is exercised end to end, but only
- * index 10 carries a confident value; the rest sit below the enter threshold,
- * which is what the shader must ignore.
+ * Authoring runs backwards on purpose. The visible thing is the hand, so the
+ * hand is what the path describes; the elbow is then placed a forearm behind it
+ * along the direction of travel and **clamped into frame**, and the wrist is
+ * solved from both:
+ *
+ * ```
+ * hand = wrist + k·(wrist − elbow)   =>   wrist = (hand + k·elbow) / (1 + k)
+ * ```
+ *
+ * Because that wrist is a convex combination of two in-frame points it is always
+ * in frame itself, so clamping the elbow can never push a fixture keypoint into
+ * the letterbox padding — and the extrapolation still lands on the authored hand
+ * exactly, which is what lets the tests assert equality rather than proximity.
+ */
+export function syntheticArm(
+  hand: Vec2,
+  direction: Vec2,
+  factor = HAND_EXTRAPOLATION.factor,
+  forearm = SYNTHETIC_FOREARM,
+): { readonly wrist: Vec2; readonly elbow: Vec2 } {
+  const elbow: Vec2 = {
+    x: Math.min(1, Math.max(0, hand.x - direction.x * forearm)),
+    y: Math.min(1, Math.max(0, hand.y - direction.y * forearm)),
+  };
+  return {
+    wrist: {
+      x: (hand.x + factor * elbow.x) / (1 + factor),
+      y: (hand.y + factor * elbow.y) / (1 + factor),
+    },
+    elbow,
+  };
+}
+
+/**
+ * Encodes both synthetic hand paths as real `[1,1,17,3]` float32 buffers.
+ *
+ * Every keypoint is populated so the layout is exercised end to end. Both wrists
+ * (9, 10) carry the confidence ramp and both elbows (7, 8) sit above the elbow
+ * floor so the hand extrapolation runs for real; the remaining thirteen stay
+ * below the enter threshold, which is what the shader must ignore.
  */
 export function syntheticKeypointFrames(
   transform: FrameTransform = fixtureTransform(),
   count = SYNTHETIC_FRAME_COUNT,
 ): readonly Float32Array[] {
-  const path = syntheticBrushPath(count);
-  return path.map((point, index) => {
+  const paths = {
+    left: syntheticHandPath('left', count),
+    right: syntheticHandPath('right', count),
+  } as const;
+
+  const frames: Float32Array[] = [];
+  for (let index = 0; index < count; index++) {
     const keypoints = new Float32Array(KEYPOINT_ELEMENTS);
-    // Plausible low-confidence filler for the other 16 keypoints.
-    for (let k = 0; k < KEYPOINT_ELEMENTS / 3; k++) {
+    // Plausible low-confidence filler for every keypoint the brush ignores.
+    for (let k = 0; k < KEYPOINT_COUNT; k++) {
       const base = k * 3;
       keypoints[base] = 0.35 + 0.02 * k;
       keypoints[base + 1] = 0.45 + 0.01 * k;
       keypoints[base + 2] = 0.12;
     }
-    const left = LEFT_WRIST_INDEX * 3;
-    keypoints[left + 2] = 0.18;
 
-    const encoded = brushSpaceToKeypoint(point, transform);
-    const base = RIGHT_WRIST_INDEX * 3;
-    keypoints[base] = encoded.y;
-    keypoints[base + 1] = encoded.x;
-    keypoints[base + 2] = syntheticConfidence(index, count);
-    return keypoints;
-  });
+    for (const limb of BRUSH_LIMBS) {
+      const path = paths[limb.name];
+      const arm = syntheticArm(path[index]!, tangent(path, index));
+      const wrist = brushSpaceToKeypoint(arm.wrist, transform);
+      const elbow = brushSpaceToKeypoint(arm.elbow, transform);
+
+      const wristBase = limb.wrist * 3;
+      keypoints[wristBase] = wrist.y;
+      keypoints[wristBase + 1] = wrist.x;
+      keypoints[wristBase + 2] = syntheticConfidence(index, count);
+
+      const elbowBase = limb.elbow * 3;
+      keypoints[elbowBase] = elbow.y;
+      keypoints[elbowBase + 1] = elbow.x;
+      // Comfortably above HAND_EXTRAPOLATION.elbowConfidence: a real elbow is
+      // usually easier for the model to see than the hand at the end of it.
+      keypoints[elbowBase + 2] = 0.6;
+    }
+    frames.push(keypoints);
+  }
+  return frames;
 }

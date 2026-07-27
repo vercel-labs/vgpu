@@ -9,7 +9,7 @@
  * 3. It is the only mode that works on a software rasterizer, where the pose
  *    graph cannot complete a `session.run` in useful time.
  *
- * It replays the same canned frame and the same 24 golden `[1,1,17,3]` buffers
+ * It replays the same canned frame and the same 24 golden two-handed `[1,1,17,3]` buffers
  * the Node thumbnail uses, through the same production `wrist.wgsl`,
  * `paint.wgsl` and `composite.wgsl`. It therefore demonstrates the **visuals**
  * and the buffer plumbing, and it demonstrates nothing about ORT interop. The UI
@@ -66,6 +66,8 @@ export function createDemoRenderer(options: AirPaintDemoOptions): AirPaintDemoRe
   let pendingSize: RenderSize | undefined;
   let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
   let step = 0;
+  /** True while the finished painting is being held on screen before the reset. */
+  let holding = false;
   let nextStepAtMs: number | undefined;
   let pendingReset = false;
 
@@ -137,12 +139,20 @@ export function createDemoRenderer(options: AirPaintDemoOptions): AirPaintDemoRe
           step++;
           nextStepAtMs = nowMs + STEP_INTERVAL_SECONDS * 1000;
           status('running');
+        } else if (!holding) {
+          // Hold the *finished* pair of strokes on screen. The completed
+          // two-handed painting is the thing worth looking at, so it gets the
+          // longest slice of the loop; clearing first would leave the demo
+          // blank for most of every cycle.
+          holding = true;
+          nextStepAtMs = nowMs + LOOP_HOLD_SECONDS * 1000;
         } else {
           // Loop: clear the mask and break continuity, exactly like the button.
           pipeline.clearMask();
           pendingReset = true;
+          holding = false;
           step = 0;
-          nextStepAtMs = nowMs + LOOP_HOLD_SECONDS * 1000;
+          nextStepAtMs = nowMs + STEP_INTERVAL_SECONDS * 1000;
         }
       }
       pipeline.renderVisualFrame(surface, {
@@ -184,7 +194,7 @@ export function createDemoRenderer(options: AirPaintDemoOptions): AirPaintDemoRe
     }
     window.addEventListener('resize', onWindowResize);
     displayHandle = requestAnimationFrame(drawFrame);
-    status('running', 'Visual demo: synthetic trajectory, no pose model.');
+    status('running', 'Visual demo: synthetic two-handed trajectory, no pose model.');
   })().catch((error: unknown) => {
     handleFailure(error);
   });
