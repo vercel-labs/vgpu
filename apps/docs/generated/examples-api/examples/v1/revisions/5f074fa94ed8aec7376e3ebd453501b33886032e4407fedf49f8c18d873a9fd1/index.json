@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
-  "revision": "663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050",
+  "revision": "5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1",
   "source": {
     "repository": "https://github.com/vgpu/vgpu",
-    "gitCommit": "420e3e539a3a5a0e1cc81d8d8f789229d495879d"
+    "gitCommit": "addf604bfb19dd68c53bbedd496687813abc2815"
   },
   "examples": [
     {
@@ -24,8 +24,8 @@
       ],
       "fileCount": 3,
       "aggregateSha256": "08dafb4e2a6efb8dac4087aaecd1f6931f6483b322595cf207b679e6f0de0fb6",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/gradient/manifest.json",
-      "manifestSha256": "d19224324294634fdf37e16fa884175edbf010cf8535bd3e5d63d36330fb5201"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/gradient/manifest.json",
+      "manifestSha256": "e462dc501c4fd2c23394efc8c3841225ad751eb9ccc7e0f3baf43d296db543a0"
     },
     {
       "id": "triangle-led-front",
@@ -47,8 +47,8 @@
       ],
       "fileCount": 24,
       "aggregateSha256": "baa30bc2bb437229bd800c72c06e7fa44dc835739a456c5df0a8f726ad72ab5e",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/triangle-led-front/manifest.json",
-      "manifestSha256": "eeae75573aa4ac104bb65f2512485e0ea665dcb571b8cfebdaa2250eb317df00"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/triangle-led-front/manifest.json",
+      "manifestSha256": "7ba6427129eb482f3838805d10d04f60fdb099da5e317a61b402aa9b4cd63262"
     },
     {
       "id": "anti-aliasing",
@@ -69,8 +69,8 @@
       ],
       "fileCount": 7,
       "aggregateSha256": "10f2835045bdbd84fb30c7b12a4dc09ec74833ea73a524f16c31fe46ca96954d",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/anti-aliasing/manifest.json",
-      "manifestSha256": "a10ec5ae6ab7e7c5832d39cb4e92e6c0e031d8fdc0f0776e7b3aed19d21bab27"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/anti-aliasing/manifest.json",
+      "manifestSha256": "3e9dcd8928c0f970a4ba66b0645bbf09b68512191f608d72a28412a6a334c139"
     },
     {
       "id": "post-processing",
@@ -91,8 +91,8 @@
       ],
       "fileCount": 8,
       "aggregateSha256": "6809ecbd0e6e1072c937dd55aa91714f47c19a56e4070032bc8104589962b5ee",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/post-processing/manifest.json",
-      "manifestSha256": "83a428f95eaa0caff5bd0e8ac5935c7abb3c2b6e590e813539873e845057e5f6"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/post-processing/manifest.json",
+      "manifestSha256": "76bee1660a3d592cf132433a84263be65315515797a1504ae9670c04ce856d19"
     },
     {
       "id": "black-hole",
@@ -113,8 +113,8 @@
       ],
       "fileCount": 6,
       "aggregateSha256": "594c97b2b33db675478b2557e8eefa12ee9c4706881e2e6d3a6f896117334968",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/black-hole/manifest.json",
-      "manifestSha256": "cea77698854ef7c4cdedecd3e59d1eb7cf2e3ce520800c4317d805a037b1f961"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/black-hole/manifest.json",
+      "manifestSha256": "f72f54d65a7a7ec553f3a4732751a8d061b7d480da26646eaa4325f7efe85953"
     },
     {
       "id": "earth",
@@ -137,8 +137,8 @@
       ],
       "fileCount": 15,
       "aggregateSha256": "ca20be832893d2c97f8d6ae33834211155c57304474bd7e5128cfa0813031cd1",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/earth/manifest.json",
-      "manifestSha256": "05926437d1bf048dd6cbc7fb71d424826aae75c1aeb34a2b433d04ee0beccb0c"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/earth/manifest.json",
+      "manifestSha256": "1738a3eb972ca5f033236bc5e44f9e51f4c9968cf024f1525db986c2bd91f49a"
     },
     {
       "id": "fluid",
@@ -160,8 +160,8 @@
       ],
       "fileCount": 15,
       "aggregateSha256": "6a190fa99971efd10d6e99085254ad2481e052d9013b25f89276bdc38816e212",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/fluid/manifest.json",
-      "manifestSha256": "c1018581ec1155674a1e8684b6cc34a0ded91488b6d917a64d9ccd024c21d506"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/fluid/manifest.json",
+      "manifestSha256": "8e8701d0e5240d1596c53a586df4565686b8e09eca77e58b23bc3618563017cf"
     },
     {
       "id": "instanced-rendering",
@@ -181,8 +181,8 @@
       ],
       "fileCount": 6,
       "aggregateSha256": "c9b1b1b1c4df04f911e6fc127eeeb5962bc19508c015cf01dfb0ee48f65d640a",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/instanced-rendering/manifest.json",
-      "manifestSha256": "e43cf38bcb75af6838cea9cfc869a71119c3e1a14dc903d5ddea0fcc4e9b6c81"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/instanced-rendering/manifest.json",
+      "manifestSha256": "c16b8f49a76c3da0f159292e5927afca422d537397917acfb943e09dfde82e60"
     },
     {
       "id": "batch-rendering",
@@ -201,8 +201,8 @@
       ],
       "fileCount": 4,
       "aggregateSha256": "968413399682ac598690076f817070e8aecd46d3115497ce7fdecb26c68cff2d",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/batch-rendering/manifest.json",
-      "manifestSha256": "9fb8f41d09579bbb69d9260aa7d18af06932c11315fc00c53649926d2f546f38"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/batch-rendering/manifest.json",
+      "manifestSha256": "63f4568d302d996232f8a3b6392feb0aa46590aa015fbca76453251fa1461d7c"
     },
     {
       "id": "fft-ocean",
@@ -223,8 +223,8 @@
       ],
       "fileCount": 19,
       "aggregateSha256": "fb71b9f8eefa5e82b1777fcd5a1b65bdc37b000644f5ac69546428e01e11ec8f",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/fft-ocean/manifest.json",
-      "manifestSha256": "202a5194a8c6442f927d124e14f77d362b21e555e8e4c2e8693c5d13780a862b"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/fft-ocean/manifest.json",
+      "manifestSha256": "1b01358a58182b4094085abfeef5238aa5c3273c1263c20823f8d0a2cb2d3ab9"
     },
     {
       "id": "raymarched-fractal",
@@ -247,8 +247,8 @@
       ],
       "fileCount": 8,
       "aggregateSha256": "e482c2e45b41d0401c36a47d8c9640646c04c5036eb41dd9939af9889031528a",
-      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/663618558986cf6bbed9295881800df903954ccf5b3f7a4e125e6eb2c3105050/examples/raymarched-fractal/manifest.json",
-      "manifestSha256": "a240cc1dff9ed7c5c3fa91c0a17a739e9cb0c103aa7dd18af4ec9a8d4b7280b8"
+      "manifestUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/5f074fa94ed8aec7376e3ebd453501b33886032e4407fedf49f8c18d873a9fd1/examples/raymarched-fractal/manifest.json",
+      "manifestSha256": "8ca1fdf86fd07392a3887b810235233c34e0ee4c8ef4cdc5b8623d5835574091"
     }
   ]
 }
