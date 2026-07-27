@@ -1,0 +1,13 @@
+# Pinned toolchain for convert.sh and validate-cpu.py (Python 3.11).
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# Same pins as the MoveNet recipe this replaces
+# (apps/docs/examples/air-painting/convert-model/convert.sh), so both models in
+# the repository were produced by one auditable toolchain.
+pip==24.3.1
+tf2onnx==1.16.1
+tensorflow==2.15.1
+onnx==1.17.0
+onnxruntime==1.20.1
+numpy==1.26.4
+pillow==11.1.0
