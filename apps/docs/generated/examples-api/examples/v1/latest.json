@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
-  "revision": "84b2bcb6c8116c17fa29fadcc59a90e1afd7765eda72d2665deb45e0d09be14b",
-  "indexUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/84b2bcb6c8116c17fa29fadcc59a90e1afd7765eda72d2665deb45e0d09be14b/index.json",
-  "indexSha256": "f2f81e96536b9678b6be7e5e952ba6eb82b6b8805d07da5a0a031562f0e23d4a"
+  "revision": "a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4",
+  "indexUrl": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/index.json",
+  "indexSha256": "57b895973099d8bf30a997d8733ecb1f673c98bcc127b814906ad9be83f7c2d1"
 }
