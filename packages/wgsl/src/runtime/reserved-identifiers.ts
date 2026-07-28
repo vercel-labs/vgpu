@@ -1,6 +1,6 @@
 import type { Diagnostic } from "./diagnostic-types.ts";
 import { wgslError } from "./errors.ts";
-import type { Token } from "./scanner.ts";
+import { scan, type Token } from "./scanner.ts";
 import { WGSL_RESERVED_WORDS, WGSL_SPEC_KEYWORDS } from "./wgsl-identifiers.ts";
 
 export const RESERVED_IDENTIFIER_CODE = "VGPU-WGSL-RESERVED-IDENT";
@@ -61,6 +61,20 @@ export function reservedIdentifierDiagnostics(module: ReservedIdentifierModule):
     i = Math.max(start + 1, i + 1);
   }
   return found;
+}
+
+/**
+ * Convenience wrapper for callers that hold raw source instead of scanned tokens
+ * (leaf shaders in `compile()` and in the bundler loaders). Lexer failures are
+ * swallowed: unterminated comments/strings are reported by the callers that scan
+ * for emission, and this pass must never be the thing that breaks a build.
+ */
+export function reservedIdentifierDiagnosticsForSource(path: string, source: string): Diagnostic[] {
+  try {
+    return reservedIdentifierDiagnostics({ path, tokens: scan(source) });
+  } catch {
+    return [];
+  }
 }
 
 function visitStruct(tokens: readonly Token[], index: number, report: (index: number, site: DeclarationSite) => void): number {

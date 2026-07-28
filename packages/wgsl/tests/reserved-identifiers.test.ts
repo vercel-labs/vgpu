@@ -79,3 +79,45 @@ test("identifiers that merely contain a reserved word are not reported", async (
 test("predeclared type and builtin names stay legal identifiers", async () => {
   expect(await diagnosticsFor(`struct S { position: vec4f, length: f32 }\n${ENTRY}`)).toEqual([]);
 });
+
+test("nested type templates do not desynchronize the member walk", async () => {
+  const diagnostics = await diagnosticsFor([
+    "struct S {",
+    "  corners: array<vec4<f32>, 4>,",
+    "  weights: array<mat2x2<f32>, 2>,",
+    "  from: f32,",
+    "  tail: u32,",
+    "}",
+    ENTRY,
+  ].join("\n"));
+  expect(diagnostics).toHaveLength(1);
+  expect(diagnostics[0]).toMatchObject({ line: 4, column: 3 });
+  expect(diagnostics[0]!.message).toContain("'from'");
+});
+
+test("attributes with expression arguments do not hide the declared name", async () => {
+  const diagnostics = await diagnosticsFor([
+    "const SIZE: u32 = 4u;",
+    "struct S {",
+    "  @align(16) @size(32) valid: vec4f,",
+    "  @align(4 * 2) from: f32,",
+    "}",
+    "@fragment fn main(@location(0) @interpolate(flat) new: f32) -> @location(0) vec4f { return vec4f(new); }",
+  ].join("\n"));
+  expect(diagnostics.map((item) => item.message.split("'")[1])).toEqual(["from", "new"]);
+  expect(diagnostics[0]).toMatchObject({ line: 4, column: 17 });
+});
+
+test("comments between declaration tokens do not shift reported locations", async () => {
+  const diagnostics = await diagnosticsFor([
+    "struct /* here */ S {",
+    "  // a member follows",
+    "  from: f32, /* trailing */ to: f32,",
+    "}",
+    "fn /* name */ where() -> f32 { return 1.0; }",
+    ENTRY,
+  ].join("\n"));
+  expect(diagnostics.map((item) => item.message.split("'")[1])).toEqual(["from", "where"]);
+  expect(diagnostics[0]).toMatchObject({ line: 3, column: 3 });
+  expect(diagnostics[1]).toMatchObject({ line: 5, column: 15 });
+});
