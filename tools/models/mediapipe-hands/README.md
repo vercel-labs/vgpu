@@ -63,11 +63,19 @@ tools/models/mediapipe-hands/convert.sh /tmp/hand-conversion --venv /path/to/.ve
 
 ## Expected results
 
-| Artifact | Bytes | SHA-256 |
+| Artifact | Bytes | Digest |
 | --- | --- | --- |
-| `hand_landmarker.task` | 7,819,105 | `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1` |
-| `palm-detector.onnx` | 4,589,374 | `7830543b584df8b552d91ba51741678100039db8618df4de556434381ddabc9c` |
-| `hand-landmark.onnx` | 10,903,457 | `b76d35dedf4c23210c8a927944000a6361fb145acdea2650d40e88d8914d89ce` |
+| `hand_landmarker.task` (upstream) | 7,819,105 | SHA-256 `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1` |
+| `palm-detector.onnx` | 4,589,374 | graph `a19a133771a070d26591f473695b5cbcffb1af148c7b5165162eed8aeefd6ac2` |
+| `hand-landmark.onnx` | 10,903,457 | graph `416a84388303c48900c5edafc3f06d28126e0baf8772860af1c19e9d8a2052cc` |
+
+**Upstream artifacts are pinned by SHA-256; the converted ONNX files are pinned
+by a structural graph digest instead.** `tf2onnx` is not byte-reproducible: seven
+conversions of the same TFLite file with the same pinned toolchain on the same
+machine produced seven identically-sized files with seven different SHA-256
+digests, because generated tensor names come from a process-global counter. The
+operators and weights are identical every time, which is exactly what
+`graph-digest.py` measures and `convert.sh` enforces. See `PROVENANCE.md`.
 
 Contracts, both opset 18, both **float32** NHWC in and out:
 

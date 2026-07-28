@@ -29,15 +29,18 @@ readonly DETECTOR_TFLITE='hand_detector.tflite'
 readonly DETECTOR_TFLITE_SHA='945f713bc23570bd4ed60f848c401dc8eaf95713183d43ba14cf12e467d27a7d'
 readonly DETECTOR_TFLITE_BYTES=2339878
 readonly DETECTOR_ONNX='palm-detector.onnx'
-readonly DETECTOR_ONNX_SHA='7830543b584df8b552d91ba51741678100039db8618df4de556434381ddabc9c'
 readonly DETECTOR_ONNX_BYTES=4589374
+# Structural, name-independent digest (graph-digest.py). This is the
+# reproducibility contract: tf2onnx does NOT emit byte-identical files across
+# runs, but every run must describe the same graph with the same weights.
+readonly DETECTOR_ONNX_GRAPH='a19a133771a070d26591f473695b5cbcffb1af148c7b5165162eed8aeefd6ac2'
 
 readonly LANDMARK_TFLITE='hand_landmarks_detector.tflite'
 readonly LANDMARK_TFLITE_SHA='6acda74af3fbf40e68265c20c7394b2bad81a16a481dcd79ad7a081887c3d6b9'
 readonly LANDMARK_TFLITE_BYTES=5478949
 readonly LANDMARK_ONNX='hand-landmark.onnx'
-readonly LANDMARK_ONNX_SHA='b76d35dedf4c23210c8a927944000a6361fb145acdea2650d40e88d8914d89ce'
 readonly LANDMARK_ONNX_BYTES=10903457
+readonly LANDMARK_ONNX_GRAPH='416a84388303c48900c5edafc3f06d28126e0baf8772860af1c19e9d8a2052cc'
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workdir="${1:-}"
@@ -65,6 +68,34 @@ verify() {
   [[ "$bytes" == "$want_bytes" ]] || { echo "FAIL $path is $bytes bytes, expected $want_bytes" >&2; exit 1; }
   [[ "$actual" == "$want_sha" ]] || { echo "FAIL $path sha256 $actual, expected $want_sha" >&2; exit 1; }
   echo "OK   $path ($bytes bytes, sha256 $actual)"
+}
+
+# The ONNX outputs get a different check from the upstream inputs, because
+# tf2onnx is not byte-reproducible: three conversions of the same TFLite file on
+# the same machine with the same toolchain produce three files of identical
+# length and three different SHA-256 digests. The cause is that tf2onnx names
+# generated tensors from a process-global counter ("scales__278" in one run,
+# "scales__301" in the next), so a differing number of earlier internal name
+# allocations shifts every later name. Operators, topology and weights are
+# unchanged - verified by comparing the multiset of initializer contents.
+#
+# So the *contract* is the structural digest, which was confirmed stable across
+# seven independent conversions, and the byte digest is recorded per staged copy
+# as an integrity check rather than a reproducibility claim.
+verify_graph() {
+  local path="$1" want_graph="$2" want_bytes="$3" bytes actual_graph actual_sha
+  bytes=$(stat -c%s "$path")
+  [[ "$bytes" == "$want_bytes" ]] || { echo "FAIL $path is $bytes bytes, expected $want_bytes" >&2; exit 1; }
+  actual_graph=$("$venv/bin/python" "$here/graph-digest.py" "$path" | awk '{print $1}')
+  actual_sha=$(sha256sum "$path" | cut -d' ' -f1)
+  if [[ "$actual_graph" != "$want_graph" ]]; then
+    echo "FAIL $path graph digest $actual_graph, expected $want_graph" >&2
+    echo "     (a byte-level difference alone is expected; a graph-digest" >&2
+    echo "      difference means the operators or the weights changed)" >&2
+    exit 1
+  fi
+  echo "OK   $path ($bytes bytes, graph $actual_graph)"
+  echo "     byte sha256 $actual_sha (per-copy integrity, not reproducible)"
 }
 
 # 1. Pinned toolchain. A container digest would be better; Docker was not
@@ -111,8 +142,8 @@ verify "$LANDMARK_TFLITE" "$LANDMARK_TFLITE_SHA" "$LANDMARK_TFLITE_BYTES"
   --tflite "$LANDMARK_TFLITE" --output "$LANDMARK_ONNX" --opset 18 \
   2>&1 | tee conversion-landmark.log
 
-verify "$DETECTOR_ONNX" "$DETECTOR_ONNX_SHA" "$DETECTOR_ONNX_BYTES"
-verify "$LANDMARK_ONNX" "$LANDMARK_ONNX_SHA" "$LANDMARK_ONNX_BYTES"
+verify_graph "$DETECTOR_ONNX" "$DETECTOR_ONNX_GRAPH" "$DETECTOR_ONNX_BYTES"
+verify_graph "$LANDMARK_ONNX" "$LANDMARK_ONNX_GRAPH" "$LANDMARK_ONNX_BYTES"
 
 # 5. Contract inspection. PROVENANCE.md records both dumps; a custom-domain op
 #    or a changed dtype/shape here is a hard stop, not a warning.
@@ -126,9 +157,17 @@ for dump in graph-detector.json graph-landmark.json; do
   fi
 done
 
-printf '%s  %s\n' "$DETECTOR_ONNX_SHA" "$DETECTOR_ONNX" > SHA256SUMS
-printf '%s  %s\n' "$LANDMARK_ONNX_SHA" "$LANDMARK_ONNX" >> SHA256SUMS
+# Byte digests of *these* copies, so whatever consumes them (the gate page, a
+# future public/models staging step) can verify integrity of the exact files it
+# was handed. Not a reproducibility claim - see verify_graph above.
+sha256sum "$DETECTOR_ONNX" "$LANDMARK_ONNX" > SHA256SUMS
 sha256sum -c SHA256SUMS
+
+# Digests of the graphs themselves, which *are* reproducible.
+{
+  printf '%s  %s\n' "$DETECTOR_ONNX_GRAPH" "$DETECTOR_ONNX"
+  printf '%s  %s\n' "$LANDMARK_ONNX_GRAPH" "$LANDMARK_ONNX"
+} > GRAPHSUMS
 
 echo
 echo "OK: $workdir/{$DETECTOR_ONNX,$LANDMARK_ONNX} match the recorded digests."

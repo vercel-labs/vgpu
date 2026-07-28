@@ -36,13 +36,51 @@ The three sizes match the ones the plan measured independently before this work
 started, which is a second confirmation that the pinned URL is still serving the
 same bytes.
 
-## Verified bytes of the converted files
+## Verified identity of the converted files
 
-| File | Bytes | MiB | SHA-256 |
+**`tf2onnx` is not byte-reproducible, so a raw SHA-256 cannot be the contract
+here.** This was measured, not assumed: converting the same `hand_detector.tflite`
+seven times, on the same machine, with the same pinned toolchain, produced seven
+files of *identical length* and seven *different* SHA-256 digests.
+
+```
+49d01da944d7a352e845440bc712f148cc452f75ecdcf86259df9e38f0d4ee89  run 1
+97627dbf9449aa45642b8d1d7265793b3f0aba5210648941bd29c400eefbd914  run 2
+4ceefd830174d8f200fa9f977c59b2b31dfcca62411b907d6d52b3636583265a  run 3
+```
+
+The cause is small and boring. `tf2onnx` names generated tensors from a
+process-global counter, so the first differing initializer is `scales__278` in
+one run and `scales__301` in the next, and every later generated name shifts with
+it. Setting `PYTHONHASHSEED=0` does not fix it. The graphs are otherwise
+identical: node count, node order, node names and the **multiset of initializer
+contents** all compare equal across runs.
+
+The contract is therefore a **canonical structural digest** (`graph-digest.py`):
+a SHA-256 over the opsets, the I/O signature, every node in topological order,
+and every initializer's dtype/shape/contents — with generated names normalised
+away by content-addressing every edge. It was confirmed stable across all seven
+conversions.
+
+| File | Bytes | MiB | Graph digest (reproducible) |
 | --- | --- | --- | --- |
-| `palm-detector.onnx` | 4,589,374 | 4.38 | `7830543b584df8b552d91ba51741678100039db8618df4de556434381ddabc9c` |
-| `hand-landmark.onnx` | 10,903,457 | 10.40 | `b76d35dedf4c23210c8a927944000a6361fb145acdea2650d40e88d8914d89ce` |
+| `palm-detector.onnx` | 4,589,374 | 4.38 | `a19a133771a070d26591f473695b5cbcffb1af148c7b5165162eed8aeefd6ac2` |
+| `hand-landmark.onnx` | 10,903,457 | 10.40 | `416a84388303c48900c5edafc3f06d28126e0baf8772860af1c19e9d8a2052cc` |
 | **combined** | **15,492,831** | **14.78** | — |
+
+`convert.sh` fails hard if a graph digest or a file size changes; a byte-level
+difference alone is expected and is reported, not treated as an error. Byte
+digests of the specific staged copies are written to `SHA256SUMS` next to the
+models, and the gate page verifies the files it is served against that file — an
+integrity check on one copy, which is a genuine and useful guarantee, just not a
+reproducibility claim.
+
+> Note for a future reader: `apps/docs/examples/air-painting/convert-model/README.md`
+> asserts that "`tf2onnx` output is deterministic for a fixed input file and a
+> fixed toolchain". On this evidence that assertion is wrong. The MoveNet digest
+> may still happen to hold if that graph allocates a stable number of generated
+> names, but the general claim does not. Those files are out of scope for this
+> change and were left untouched.
 
 **Payload note, recorded rather than glossed over.** The plan's target for the
 checked-in payload is ≤12 MiB with a hard review at 16 MiB. The measured pair is
@@ -175,11 +213,13 @@ continue on a mismatch.
 
 ### Caveat on bit-exactness
 
-`tf2onnx` output is deterministic for a fixed input file and a fixed toolchain,
-which is why the digest checks are meaningful. It is *not* guaranteed across
-different `tf2onnx`/`onnx`/protobuf builds, so a mismatch means "your toolchain
-differs", not necessarily "the weights differ". Diff the graph dumps before
-assuming a problem.
+`tf2onnx` output is **not** bit-exact across runs; see "Verified identity of the
+converted files" above for the measurement. Only the structural graph digest is
+reproducible, and even that is only guaranteed for this pinned toolchain: a
+different `tf2onnx`/`onnx`/protobuf build may legitimately emit a different but
+equivalent graph. A graph-digest mismatch therefore means "your toolchain
+differs or the weights changed" — dump both graphs and diff them before assuming
+the worse of the two.
 
 ## Offline validation performed
 
