@@ -9,6 +9,7 @@
   "color-grading",
   "compute",
   "fft",
+  "flare",
   "fluid",
   "fractal",
   "fxaa",
@@ -33,5 +34,6 @@
   "sierpinski",
   "simulation",
   "ssaa",
-  "triangle"
+  "triangle",
+  "volumetric"
 ]
