@@ -54,7 +54,7 @@ struct BrushState {
   @size(28) strokes: f32,
 };
 
-/// One brush per hand; slot 0 is the person's left arm, slot 1 the right.
+/// One brush per hand, indexed by persistent track slot.
 /// The array length is spelled as a literal on the binding below because
 /// vgpu's auto-layout reflection requires one (VGPU-WGSL-REFLECT-ARRAY-LENGTH).
 const BRUSH_COUNT: u32 = 2u;
