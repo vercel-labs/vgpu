@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -19,10 +19,17 @@ const slugs = [
   'raymarched-fractal',
 ];
 
-function writeFixture(options: { foreign?: boolean; oversized?: boolean } = {}) {
+function writeFixture(options: { foreign?: boolean; oversized?: boolean; staleChunks?: boolean } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'example-bundles-'));
   const chunks = path.join(root, 'chunks');
   mkdirSync(chunks);
+
+  // A source tree the fixture controls the timestamps of, so the freshness
+  // check can be exercised without touching the real one.
+  const source = path.join(root, 'source');
+  mkdirSync(path.join(source, 'examples', 'gradient'), { recursive: true });
+  const sourceFile = path.join(source, 'examples', 'gradient', 'renderer.ts');
+  writeFileSync(sourceFile, 'export const renderer = 1;\n');
 
   const loaders = slugs.map((slug, index) => {
     const property = slug.includes('-') ? JSON.stringify(slug) : slug;
@@ -48,7 +55,18 @@ function writeFixture(options: { foreign?: boolean; oversized?: boolean } = {}) 
     exampleGrowth: { percent: 0, minimumBytes: options.oversized ? 0 : 1_000_000 },
   }));
 
-  return { chunks, budgetsPath };
+  // Fresh by default: the source predates the chunks, as it would right after
+  // a build. `staleChunks` reverses that, i.e. someone edited and did not build.
+  const chunkTime = new Date('2026-01-02T00:00:00Z');
+  const sourceTime = options.staleChunks
+    ? new Date('2026-01-03T00:00:00Z')
+    : new Date('2026-01-01T00:00:00Z');
+  utimesSync(sourceFile, sourceTime, sourceTime);
+  for (const name of ['host.js', ...slugs.map((slug) => `${slug}.js`)]) {
+    utimesSync(path.join(chunks, name), chunkTime, chunkTime);
+  }
+
+  return { chunks, budgetsPath, source };
 }
 
 function runFixture(fixture: ReturnType<typeof writeFixture>) {
@@ -58,6 +76,7 @@ function runFixture(fixture: ReturnType<typeof writeFixture>) {
       ...process.env,
       VGPU_EXAMPLE_CHUNKS_DIR: fixture.chunks,
       VGPU_EXAMPLE_BUDGETS_FILE: fixture.budgetsPath,
+      VGPU_EXAMPLE_SOURCE_DIR: fixture.source,
     },
   });
 }
@@ -75,4 +94,12 @@ test('fails when one preview chunk exceeds its gzip budget', () => {
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('/preview/gradient chunks are');
   expect(result.stderr).toContain('budget is 1 B');
+});
+
+test('refuses to grade chunks older than the sources they were built from', () => {
+  const result = runFixture(writeFixture({ staleChunks: true }));
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Stale chunks: examples/gradient/renderer.ts');
+  expect(result.stderr).toContain('pnpm --filter docs build');
 });
