@@ -6,12 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { exampleSources } from '../../../../../../../lib/examples-source.generated';
 import { adaptCanonicalSourceExport } from '../../../../../../../lib/examples-api/adapter-v1';
 import { generateExampleArtifacts, writeArtifactTree } from '../../../../../../../lib/examples-api/artifact-generator';
+import { sourceSnapshotIdentity } from '../../../../../../../lib/examples-api/hashing';
 import * as discoveryRoute from '../../../../../../.well-known/vgpu-examples.json/route';
 import * as latestRoute from '../../../latest.json/route';
 import * as revisionRoute from './route';
 
 const origin = 'https://vgpu.labs.vercel.dev';
-const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: '62d8f7227850d1d792e8bbf71b9568d74d4eb414' });
+const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: sourceSnapshotIdentity('canonical-source-snapshot-fixture\n') });
 const set = generateExampleArtifacts(graph);
 let root: string;
 const previousMode = process.env.VGPU_EXAMPLES_ARTIFACT_STORE;

@@ -15,6 +15,23 @@ pnpm changeset
 
 Choose each affected `@vgpu/*` package, select the appropriate semver bump (`patch`, `minor`, or `major`), and write a short summary. That summary becomes the changelog entry for the release.
 
+## Bundle budgets
+
+`pnpm bundle-check` enforces gzip budgets stored in each package's `package.json`. Budgets are tiered by audience:
+
+- `"client"` (default when unclassified) — browser-facing entries. **Hard gate**: one byte over budget fails.
+- `"tooling"` — loaders, the Node runtime, the CLI and package tarballs. **Soft gate**: over budget warns, and only fails past `vgpuBundleBudgetGrowthThreshold` (default 5%).
+
+Classify with `vgpuBundleAudience` (package-wide) or `vgpuExportBundleAudiences` (per export subpath). Tarball budgets measure published dist bytes: `*.docs.md` files, sourcemap `sourcesContent` and the budget metadata itself are excluded, so documenting the API never competes with the size gate.
+
+When growth is intentional, re-baseline instead of hand-editing numbers:
+
+```bash
+pnpm bundle-check --update   # budget = next 512 B multiple at least 512 B above measured
+```
+
+Run `pnpm build` first, since budgets are measured from `dist`.
+
 ## PR checklist
 
 - [ ] Code changes to a published package include a `.changeset/*.md` file.

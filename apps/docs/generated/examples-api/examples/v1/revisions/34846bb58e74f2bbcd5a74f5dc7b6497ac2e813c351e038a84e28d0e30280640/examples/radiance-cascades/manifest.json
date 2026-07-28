@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
   "revision": "34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640",
+========
+  "revision": "a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4",
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
   "id": "radiance-cascades",
   "title": "Radiance Cascades",
   "description": "Draw light with the pointer and watch it bounce: a jump-flooded distance field feeds six radiance cascades — base 4, geometric intervals, linear RGBA16F — merged top-down with visibility alpha into 2D global illumination.",
@@ -31,140 +35,220 @@
       "contentType": "text/typescript",
       "size": 1842,
       "sha256": "50dbd4322cb01e45b0be16a9ff4d608755d3c3c5466bd0b17bb6ee56633cce5a",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/index.tsx.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/index.tsx.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "controls.tsx",
       "contentType": "text/typescript",
       "size": 1712,
       "sha256": "e09be37d91034acc6cfd046104262f5d75f64cb37799f151ae6a6c73d9ce9ef5",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/controls.tsx.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/controls.tsx.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "types.ts",
       "contentType": "text/typescript",
       "size": 1924,
       "sha256": "587fb9d16217eeba076cdcb24572b594501a9cd07420c5f8e465d1eaf2c216d2",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/types.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/types.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "renderer.ts",
       "contentType": "text/typescript",
       "size": 7660,
       "sha256": "d9e1fda214e1582359bd9d483db55063768b2a5bd6157197ec3741552040d7b9",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/renderer.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/renderer.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "simulation.ts",
       "contentType": "text/typescript",
       "size": 12945,
       "sha256": "325bc127b9f04e1cae3bbcf0a5aaf4c6da480a2839b4ebe8aecb0fff1741dd2b",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/simulation.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/simulation.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "validation.ts",
       "contentType": "text/typescript",
       "size": 8339,
       "sha256": "d9c34a417c44dbfb63fc6290e4cf28162206e29a9705b4fdeaeaa04e5ca12e12",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/validation.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/validation.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "pointer-input.ts",
       "contentType": "text/typescript",
       "size": 3881,
       "sha256": "644d7e6aecf5c70c9f90ab9c1713aa8e0210a028eb9dffec403e1fd49006bfba",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/pointer-input.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/pointer-input.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "math.ts",
       "contentType": "text/typescript",
       "size": 13075,
       "sha256": "0387e50bdcb6fdb88f30e9a539791b7d7a60a4870f11ea968c1e097ba2979478",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/math.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/math.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "rc-directions.wgsl",
       "contentType": "text/wgsl",
       "size": 1906,
       "sha256": "e1d24dbe82afe40bf4e54e6304746c69c4de452f21a754f6213385f200e6d711",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/rc-directions.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/rc-directions.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "rc-intervals.wgsl",
       "contentType": "text/wgsl",
       "size": 1687,
       "sha256": "264872cf734e172af5677afebdee5013370b923ba73b6f2057ca76b4b823641f",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/rc-intervals.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/rc-intervals.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "rc-merge.wgsl",
       "contentType": "text/wgsl",
       "size": 1740,
       "sha256": "c9a0b089e50bc9a1bb3eaef1e6a5dc5c31392c0bb5bf8584e96f7e09664119d2",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/rc-merge.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/rc-merge.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "jfa-step.wgsl",
       "contentType": "text/wgsl",
       "size": 1796,
       "sha256": "58862194596d85644294f5469a3e970cb69059fbcd31ce262fd04247426586de",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/jfa-step.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/jfa-step.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "sdf-sample.wgsl",
       "contentType": "text/wgsl",
       "size": 4682,
       "sha256": "b0345492e9f159b31c9ef3894d6bc335b59f29ba58c7aedba9160ec2f14feccd",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/sdf-sample.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/sdf-sample.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "scene-grid.wgsl",
       "contentType": "text/wgsl",
       "size": 1620,
       "sha256": "477ee46da29467d62a1c7d7313e36f2e5740dd0cd23e60793c2762938cdb278a",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/scene-grid.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/scene-grid.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "paint-emitter.wgsl",
       "contentType": "text/wgsl",
       "size": 2466,
       "sha256": "b73b3f9a7ed3d9bd647ce0213df898e040a1a89fc0b77a16063aa61dd84cc686",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/paint-emitter.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/paint-emitter.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "jfa-init.wgsl",
       "contentType": "text/wgsl",
       "size": 921,
       "sha256": "927619a7c7a3d66a91413bb85b572e51d89ef72abddbc2d8e29a58b6e8356856",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/jfa-init.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/jfa-init.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "jfa-pass.wgsl",
       "contentType": "text/wgsl",
       "size": 1270,
       "sha256": "a90432bf73a4baaeb78fc46258ba8d6b8b9fe97bcff5296242512ccd949758de",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/jfa-pass.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/jfa-pass.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "sdf-finalize.wgsl",
       "contentType": "text/wgsl",
       "size": 993,
       "sha256": "bca1d0597fd20a377e3932bc05c0009d6cf1432ff1f3ac12696129a62fb359bf",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/sdf-finalize.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/sdf-finalize.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "radiance-cascade.wgsl",
       "contentType": "text/wgsl",
       "size": 4199,
       "sha256": "393e233ca1b65edf9b431ccc18e876fa81f60838af9f2b2c76ace65b5b5d16f2",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/radiance-cascade.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/radiance-cascade.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     },
     {
       "path": "present.wgsl",
       "contentType": "text/wgsl",
       "size": 3408,
       "sha256": "72a3982c297dfd14f692847a4c5d1ae59d6e24920dbb701ac043f4bb5b045c2e",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/radiance-cascades/files/present.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/files/present.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/radiance-cascades/manifest.json
     }
   ]
 }

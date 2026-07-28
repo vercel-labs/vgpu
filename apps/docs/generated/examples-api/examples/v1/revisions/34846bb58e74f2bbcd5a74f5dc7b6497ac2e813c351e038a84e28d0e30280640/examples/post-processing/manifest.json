@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
   "revision": "34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640",
+========
+  "revision": "a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4",
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
   "id": "post-processing",
   "title": "Post-Processing",
   "description": "A bloom → chromatic-aberration effect chain over crisp animated geometry, with each pass toggleable.",
@@ -25,56 +29,88 @@
       "contentType": "text/typescript",
       "size": 1556,
       "sha256": "2bf3930f16a773c4600d65da9823297a8c502865f52a1c29008bdd437ca97d7c",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/index.tsx.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/index.tsx.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "controls.tsx",
       "contentType": "text/typescript",
       "size": 987,
       "sha256": "cfac90a65581b43f878ae93bff044b335e18a67cd7d32185e49da39bc8862efb",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/controls.tsx.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/controls.tsx.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "types.ts",
       "contentType": "text/typescript",
       "size": 189,
       "sha256": "e8f935c6065c6ba82d6314c290d16dd99167d313d0ad4550547d284f5bd52124",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/types.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/types.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "renderer.ts",
       "contentType": "text/typescript",
       "size": 14087,
       "sha256": "d71e6647760d1b5969503c86243b5a70f7468c4b651b13e587ea7fbe776a6214",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/renderer.ts.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/renderer.ts.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "scene.wgsl",
       "contentType": "text/wgsl",
       "size": 1139,
       "sha256": "501f461280a02d9949d12bd54f71a9a0ed769197a958da47822e31ecb3edebf0",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/scene.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/scene.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "threshold.wgsl",
       "contentType": "text/wgsl",
       "size": 944,
       "sha256": "80fe7a829cc9dde96d8e4d51d85457307b9b1f35cf061128aa77b472984e360b",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/threshold.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/threshold.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "blur.wgsl",
       "contentType": "text/wgsl",
       "size": 1028,
       "sha256": "c5a872c12a3398f457291893270f74b0aa48b92c61ca0acb5aaff84a84d6cf7d",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/blur.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/blur.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     },
     {
       "path": "grade.wgsl",
       "contentType": "text/wgsl",
       "size": 1555,
       "sha256": "4e988cc0b61eb4d9758667260fb8385adca9a9746c75aa6d79647778920c1cc6",
+<<<<<<<< HEAD:apps/docs/generated/examples-api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/manifest.json
       "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/34846bb58e74f2bbcd5a74f5dc7b6497ac2e813c351e038a84e28d0e30280640/examples/post-processing/files/grade.wgsl.raw"
+========
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/files/grade.wgsl.raw"
+>>>>>>>> origin/main:apps/docs/generated/examples-api/examples/v1/revisions/a661734155fa77f61993aeed955089977ade085f95f5813d202a82135f4f03c4/examples/post-processing/manifest.json
     }
   ]
 }
