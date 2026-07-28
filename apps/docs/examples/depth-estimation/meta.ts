@@ -4,7 +4,7 @@ export const meta = {
   slug: 'depth-estimation',
   title: 'Depth Estimation',
   description:
-    'Estimate depth from a photo or webcam with ONNX Runtime Web on WebGPU, drawn beside the colour input as a grayscale depth map. The GPU-resident output tensor is shaded through a zero-copy vgpu buffer wrap, with three models to choose between.',
+    'Estimate depth from a photo or webcam with ONNX Runtime Web on WebGPU. Shade its GPU-resident output beside the input through a zero-copy vgpu buffer wrap.',
   tags: ['machine-learning', 'onnx', 'depth-estimation', 'shader'],
   capabilities: [
     'webgpu',

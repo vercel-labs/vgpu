@@ -6,7 +6,7 @@ export const meta = {
   // One or two sentences, like every other example. The interop and privacy
   // story is documented in the /ml section, not crammed in here.
   description:
-    'Wipe fog off the glass with your hands. ONNX Runtime Web runs MediaPipe palm detection and hand landmarks on WebGPU, and vgpu builds the crops and reads the GPU-resident landmarks zero-copy, so both palms clear a frosted camera feed that slowly fogs back up.',
+    'Wipe fog off the glass with your hands. ONNX Runtime Web tracks both palms on WebGPU to clear a frosted camera feed.',
   tags: ['machine-learning', 'onnx', 'hand-tracking', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
