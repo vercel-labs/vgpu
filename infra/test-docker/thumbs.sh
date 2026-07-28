@@ -4,10 +4,36 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 IMAGE_TAG=${IMAGE_TAG:-vgpu-test:s2}
 CONTAINER_NAME=${CONTAINER_NAME:-vgpu-thumbs-${$}}
-ARGS=("$@")
+THUMBS_SCRIPT=thumbs
+MODE=
+FORWARDED_ARGS=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --check)
+      if [ "$MODE" = update ]; then
+        echo "Use either --update or --check" >&2
+        exit 1
+      fi
+      MODE=check
+      THUMBS_SCRIPT=thumbs:check
+      ;;
+    --update)
+      if [ "$MODE" = check ]; then
+        echo "Use either --update or --check" >&2
+        exit 1
+      fi
+      MODE=update
+      ;;
+    *)
+      FORWARDED_ARGS+=("$arg")
+      ;;
+  esac
+done
+
 ARGS_QUOTED=""
-if [ ${#ARGS[@]} -gt 0 ]; then
-  printf -v ARGS_QUOTED ' %q' "${ARGS[@]}"
+if [ ${#FORWARDED_ARGS[@]} -gt 0 ]; then
+  printf -v ARGS_QUOTED ' %q' "${FORWARDED_ARGS[@]}"
 fi
 
 cleanup() {
@@ -37,4 +63,4 @@ docker run \
   --label vgpu-test=1 \
   -v "$ROOT_DIR/apps/docs/public/examples:/workspace/apps/docs/public/examples" \
   "$IMAGE_TAG" \
-  sh -lc "Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=\$!; VGPU_DOCKER_TEST=1 pnpm --filter docs thumbs${ARGS_QUOTED}; status=\$?; kill \$xvfb_pid; exit \$status"
+  sh -lc "Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=\$!; VGPU_DOCKER_TEST=1 pnpm --filter docs ${THUMBS_SCRIPT}${ARGS_QUOTED}; status=\$?; kill \$xvfb_pid; exit \$status"

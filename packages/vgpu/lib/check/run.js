@@ -14,15 +14,17 @@ export async function runCheck(args) {
   try {
     const { resolveShader } = await loadWgslRuntime();
     const result = await resolveShader({ entry: absEntry, rootDir: dirname(absEntry) });
+    const diagnostics = (result.diagnostics ?? []).map(serializeDiagnostic);
     const payload = {
       schemaVersion: 1,
       entry: absEntry,
       deps: result.deps,
-      diagnostics: result.diagnostics,
+      diagnostics,
       reflection: result.reflection,
       wgsl: result.wgsl,
     };
-    return { code: 0, stdout: `${JSON.stringify(payload, null, 2)}\n` };
+    const failed = diagnostics.some((diagnostic) => diagnostic.severity === "error");
+    return { code: failed ? 1 : 0, stdout: `${JSON.stringify(payload, null, 2)}\n` };
   } catch (error) {
     return { code: 1, stderr: `${formatError(error)}\n` };
   }
@@ -66,6 +68,25 @@ function findWorkspaceRoot(startDir) {
     if (existsSync(resolve(dir, "pnpm-workspace.yaml"))) return dir;
     if (dirname(dir) === dir) return undefined;
   }
+}
+
+/**
+ * Diagnostics are `Error` instances, whose `message` is not enumerable and would
+ * otherwise vanish from the JSON payload.
+ */
+function serializeDiagnostic(diagnostic) {
+  if (!diagnostic || typeof diagnostic !== "object") return diagnostic;
+  const payload = {
+    code: diagnostic.code ?? "VGPU-CHECK-UNKNOWN",
+    message: diagnostic.message ?? String(diagnostic),
+    severity: diagnostic.severity ?? "error",
+    line: diagnostic.line ?? null,
+    column: diagnostic.column ?? null,
+  };
+  if (diagnostic.range) payload.range = diagnostic.range;
+  if (diagnostic.metadata) payload.metadata = diagnostic.metadata;
+  if (diagnostic.relatedDiagnostics) payload.relatedDiagnostics = diagnostic.relatedDiagnostics;
+  return payload;
 }
 
 function formatError(error) {

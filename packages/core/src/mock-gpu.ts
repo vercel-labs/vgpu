@@ -1,5 +1,6 @@
 import { bufferUsageFlags } from "./gpu-constants.ts";
-import { isMockGPUBuffer, type MockGPUBuffer, type MockGPUTexture } from "./mock-gpu-storage.ts";
+import { isMockGPUBuffer, isMockGPUTexture, type MockGPUBuffer, type MockGPUTexture } from "./mock-gpu-storage.ts";
+import { textureReadbackFormat } from "./readback.ts";
 
 export interface MockGPUDeviceInstrumentation {
   readonly calls: {
@@ -49,7 +50,9 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
     },
     createTexture(desc: GPUTextureDescriptor): MockGPUTexture {
       const size = textureSize(desc.size);
-      const bytes = new Uint8Array(size.width * size.height * 4);
+      // Sized by the real format and layer count (layer-major, mip 0 only) so Texture.read()/readFloats()
+      // see the same byte layout as a real device and a write to layer N cannot clobber layer 0.
+      const bytes = new Uint8Array(size.width * size.height * size.depthOrArrayLayers * mockBytesPerPixel(desc.format));
       return {
         __vgpuMockBytes: bytes,
         label: desc.label ?? "",
@@ -171,6 +174,31 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
       writeBuffer(buffer: GPUBuffer, offset: number, data: BufferSource, dataOffset = 0, size?: number) {
         if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data).subarray(dataOffset, size ? dataOffset + size : undefined), offset);
       },
+      // Row-by-row upload into the mock texel storage, so writeTexture + Texture.read() round-trips
+      // on the mock adapter exactly as it does on a real device (bytesPerRow/rowsPerImage padding,
+      // origin and array layers included).
+      writeTexture(destination: GPUTexelCopyTextureInfo, data: BufferSource, dataLayout: GPUTexelCopyBufferLayout, size: GPUExtent3DStrict) {
+        const texture = destination.texture;
+        if (!isMockGPUTexture(texture)) return;
+        // The mock only stores mip 0; writing another level would silently corrupt it, so say so instead.
+        if (destination.mipLevel) throw new Error("createMockGPUDevice: queue.writeTexture only supports mipLevel 0, the mock stores mip 0 only");
+        const bytesPerPixel = mockBytesPerPixel(texture.format);
+        const extent = textureSize(size);
+        const origin = textureOrigin(destination.origin);
+        const source = bytesFrom(data);
+        const offset = Number(dataLayout.offset ?? 0);
+        const rowBytes = extent.width * bytesPerPixel;
+        const bytesPerRow = dataLayout.bytesPerRow ?? rowBytes;
+        const rowsPerImage = dataLayout.rowsPerImage ?? extent.height;
+        const layerBytes = texture.width * texture.height * bytesPerPixel;
+        for (let z = 0; z < extent.depthOrArrayLayers; z++) {
+          for (let y = 0; y < extent.height; y++) {
+            const src = offset + (z * rowsPerImage + y) * bytesPerRow;
+            const dst = (origin.z + z) * layerBytes + ((origin.y + y) * texture.width + origin.x) * bytesPerPixel;
+            texture.__vgpuMockBytes.set(source.subarray(src, src + rowBytes), dst);
+          }
+        }
+      },
       onSubmittedWorkDone: async () => undefined,
     },
   // Mock device: shape is intentionally partial but covers every member used by adapters/tests.
@@ -278,6 +306,19 @@ function textureSize(size: GPUExtent3DStrict): Required<GPUExtent3DDict> {
   if (Array.isArray(size)) return { width: size[0], height: size[1] ?? 1, depthOrArrayLayers: size[2] ?? 1 };
   const dict = size as GPUExtent3DDict;
   return { width: dict.width, height: dict.height ?? 1, depthOrArrayLayers: dict.depthOrArrayLayers ?? 1 };
+}
+
+function textureOrigin(origin: GPUOrigin3D | undefined): { x: number; y: number; z: number } {
+  if (!origin) return { x: 0, y: 0, z: 0 };
+  if (Array.isArray(origin)) return { x: origin[0] ?? 0, y: origin[1] ?? 0, z: origin[2] ?? 0 };
+  const dict = origin as GPUOrigin3DDict;
+  return { x: dict.x ?? 0, y: dict.y ?? 0, z: dict.z ?? 0 };
+}
+
+/** Mock texel storage size. Formats without a readback layout (depth/stencil, packed) fall back to 4 bytes. */
+function mockBytesPerPixel(format: GPUTextureFormat): number {
+  try { return textureReadbackFormat(format, "createMockGPUDevice.createTexture").bytesPerPixel; }
+  catch { return 4; }
 }
 
 function bytesFrom(data: BufferSource): Uint8Array {

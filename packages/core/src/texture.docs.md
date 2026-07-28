@@ -42,6 +42,7 @@ declare class Texture {
   createView(desc?: GPUTextureViewDescriptor): GPUTextureView;
   resize(size: readonly [number, number] | readonly [number, number, number]): boolean;
   read(): Promise<Uint8Array>;
+  readFloats(): Promise<Float32Array>;
   destroy(): void;
   dispose(): void;
 }
@@ -54,7 +55,7 @@ declare class Texture {
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
 | opts.size | `readonly [width: number, height: number, depthOrArrayLayers?: number]` | ✔ | — | Stored as tuple and converted to `{ width, height, depthOrArrayLayers: opts.size[2] ?? 1 }` for WebGPU. |
-| opts.format | `GPUTextureFormat` | ✔ | — | Forwarded to `GPUTextureDescriptor.format`. `read()` only supports `"rgba8unorm"` and `"rgba8unorm-srgb"`. |
+| opts.format | `GPUTextureFormat` | ✔ | — | Forwarded to `GPUTextureDescriptor.format`. `read()`/`readFloats()` support the color formats listed under [Readback formats](#readback-formats). |
 | opts.usage | `readonly TextureUsageName[]` | ✔ | — | Vgpu usage names mapped to `GPUTextureUsage` flags. |
 | opts.mipLevelCount | `number` | ✖ | WebGPU default (`1`) | Only included in the native descriptor when provided; getter returns `opts.mipLevelCount ?? 1`. |
 | opts.sampleCount | `1 \| 4` | ✖ | WebGPU default (`1`) | Only included when provided; getter returns `opts.sampleCount ?? 1`. Use `4` for MSAA where WebGPU allows it. |
@@ -86,15 +87,16 @@ Valid `TextureUsageName` values: `"copy_src"`, `"copy_dst"`, `"texture_binding"`
 - `texture.view` returns a cached default `GPUTextureView` created with no descriptor.
 - `createView(desc?)` returns a fresh `GPUTextureView`.
 - `resize(size)` returns `false` if the extent is unchanged, otherwise reallocates the raw texture and returns `true`.
-- `read()` returns `Promise<Uint8Array>` with unpadded pixel bytes.
+- `read()` returns `Promise<Uint8Array>` with unpadded texel bytes in the texture's own format: `byteLength` is `width * height * bytesPerPixel(format)` (4 for `rgba8unorm`, 8 for `rgba16float`, 16 for `rgba32float`, …). `bgra*` bytes are swizzled to RGBA order.
+- `readFloats()` returns `Promise<Float32Array>` with one f32 per component, row-major, `width * height * components(format)` long. Float formats keep their HDR values (no clamping to `[0, 1]`), `unorm8` formats are normalized by `/ 255` without srgb gamma conversion.
 - `destroy()` and `dispose()` return `void`.
 
 **Throws:**
 
-- `VGPU-CORE-TEXTURE-DESTROYED` when `view`, `resize(...)`, or `read()` is used after `destroy()`/`dispose()` — create a new texture instead.
+- `VGPU-CORE-TEXTURE-DESTROYED` when `view`, `resize(...)`, `read()`, or `readFloats()` is used after `destroy()`/`dispose()` — create a new texture instead.
 - `VGPU-CORE-EXTERNAL-TEXTURE` when `resize(...)` is called on a texture constructed with `ownership: "external"` — resize the owning canvas/swapchain/resource instead.
 - `VGPU-CORE-TEXTURE-RESIZE-LOCKED` when an internal resize lock is active — follow the lock message and resize through the owner that installed the lock.
-- `VGPU-CORE-UNSUPPORTED-FORMAT` when `read()` is called on a format other than `"rgba8unorm"` or `"rgba8unorm-srgb"` — use a supported readback format or implement a format conversion pass.
+- `VGPU-CORE-UNSUPPORTED-FORMAT` when `read()`/`readFloats()` is called on a format outside [Readback formats](#readback-formats) (depth/stencil, packed, snorm/uint/sint, and compressed formats) — blit into a supported format first, or read the data through a storage buffer.
 - Native WebGPU validation errors may occur for invalid size/format/usage combinations.
 
 ## Examples
@@ -137,10 +139,47 @@ console.log(pixels.byteLength); // width * height * 4
 device.destroy();
 ```
 
+```ts
+import { createMockAdapter } from "vgpu/mock";
+
+const device = await createMockAdapter().requestDevice();
+const hdr = device.createTexture({
+  size: [2, 2],
+  format: "rgba16float",
+  usage: ["render_attachment", "copy_src"],
+});
+
+const bytes = await hdr.read();
+console.log(bytes.byteLength); // 2 * 2 * 8 — raw half-float bytes
+
+const floats = await hdr.readFloats();
+console.log(floats.length); // 2 * 2 * 4 — decoded rgba components, values may exceed 1
+
+device.destroy();
+```
+
+## Readback formats
+
+| Format | Bytes per texel | Components | `readFloats()` decoding |
+|---|---:|---:|---|
+| `r8unorm` | 1 | 1 | `byte / 255` |
+| `rg8unorm` | 2 | 2 | `byte / 255` |
+| `rgba8unorm`, `rgba8unorm-srgb` | 4 | 4 | `byte / 255` (no srgb gamma conversion) |
+| `bgra8unorm`, `bgra8unorm-srgb` | 4 | 4 | `byte / 255`, channels swizzled to RGBA |
+| `r16float` | 2 | 1 | binary16 widened to f32 |
+| `rg16float` | 4 | 2 | binary16 widened to f32 |
+| `rgba16float` | 8 | 4 | binary16 widened to f32 |
+| `r32float` | 4 | 1 | verbatim f32 |
+| `rg32float` | 8 | 2 | verbatim f32 |
+| `rgba32float` | 16 | 4 | verbatim f32 |
+
+Subnormals, infinities, and NaN survive the binary16 → f32 widening unchanged.
+
 ## Notes
 
 - `texture.view` is cached and descriptorless. Use `createView(descriptor)` for mip, array-layer, cube, or format-specific views.
 - `resize(...)` preserves all descriptor fields except `size`; contents are not preserved. Rebuild bind groups or caches keyed by `texture.gpu` after a resize.
 - Prefer `texture.destroy()`/`texture.dispose()` over `texture.gpu.destroy()` so the wrapper invalidates cached views and emits lifecycle state correctly.
-- Include `"copy_src"` when you plan to call `read()` on real WebGPU devices; mock textures can still expose their mock bytes.
+- Include `"copy_src"` when you plan to call `read()`/`readFloats()` on real WebGPU devices; mock textures can still expose their mock bytes.
+- Prefer `readFloats()` for HDR textures (`rgba16float`, `rgba32float`): `read()` hands back the raw half/float bytes, which are only useful after a decode. `read()` remains the right call for `rgba8unorm` snapshots and PNG encoding.
 - **See also:** `Device`, `Buffer`, `Queue`, `cubeView`, `layerView`.

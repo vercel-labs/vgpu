@@ -54,6 +54,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Debugging shaders by extracting internal values** — A shader has no console.log.  `references/guides/shader-debugging.docs.md`
 - **Shader diagnostics and fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
 - **The default workflow for developing shaders with vgpu** — Follow these eight steps in order every time you write or change a shader.  `references/guides/shader-workflow.docs.md`
+- **Practical texture-format matrix** — Choose a target format from the operations it must support, not just its channel precision.  `references/guides/texture-formats.docs.md`
 
 ## API reference
 

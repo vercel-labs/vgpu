@@ -45,6 +45,8 @@ const helpers = ["fresnel.wgsl", "lod-selection.wgsl"]
   .join("\n");
 ```
 
+`gpu.effect()` reflects one raw WGSL string and therefore rejects any remaining `import` with `VGPU-WGSL-REFLECT-SOURCE-IMPORT`. Outside a WGSL-aware bundler, inline imports in the **entrypoint too**, not only in helpers: concatenate the stripped helper sources with the entry source after stripping its import lines and its `export` keywords. The same `inlineModule` transform above is sufficient for both.
+
 ## 2. Encode internals as pixels
 
 Render an 8×1 or 1×1 target where each pixel is a slot and each channel carries one internal value. Pick an encoding that survives `rgba8unorm` quantization, and keep every value in `[0, 1]`:
@@ -118,7 +120,7 @@ export function compare(reference: number[], pixels: Uint8Array, out: string): b
 export const reference = [fresnel(1.5, 0.2), fresnel(1.5, 0.5), fresnel(1.5, 1)];
 ```
 
-A passing run of the `transmission` harness reported `maxError: 0.0019` against `tolerance: 0.0078` across Fresnel, dispersion weights, LOD selection, refracted ray direction, cube-exit distance, and eleven cone samples. Exit non-zero when `pass` is false so the harness works in CI, and keep the JSON next to the PNGs as the evidence for your claim.
+A passing run of the `transmission` harness reported `maxError: 0.0019` against `tolerance: 0.0078` across Fresnel, dispersion weights, LOD selection, refracted ray direction, cube-exit distance, and eleven cone samples. `2 / 255` is only the quantization floor for values **stored** in `rgba8unorm`; for a derived or iterative quantity, set the budget from the algorithm's physical epsilon instead — for example, compare a sphere tracer's impact point after N steps over a filtered field against its hit-distance epsilon, not `2 / 255`. Exit non-zero when `pass` is false so the harness works in CI, and keep the JSON next to the PNGs as the evidence for your claim.
 
 ## 4. Dump the intermediate render targets
 
@@ -135,6 +137,31 @@ export async function dump(target: Target, file: string): Promise<void> {
   png.data.set(await target.read());
   writeFileSync(file, PNG.sync.write(png));
 }
+```
+
+### Encode HDR targets before reading
+
+`target.read()` returns 8-bit RGBA bytes and does not read HDR targets such as `rgba16float` or `rgba32float` directly (known limitation: [#193](https://github.com/vercel-labs/vgpu/issues/193)). Render an encode pass into a separate `rgba8unorm` target, then read that target. Choose an encoding for the quantity: the example maps signed directions with `x * 0.5 + 0.5`; use a fixed range appropriate to distances or radiance instead.
+
+```typescript
+import { init } from "vgpu/node";
+
+const gpu = await init();
+const hdr = gpu.target({ size: [64, 64], format: "rgba16float" });
+const encoded = gpu.target({ size: [64, 64], format: "rgba8unorm" });
+
+const encode = gpu.effect(`
+  @group(0) @binding(0) var source: texture_2d<f32>;
+  @group(0) @binding(1) var sourceSampler: sampler;
+
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    let value = textureSampleLevel(source, sourceSampler, uv, 0.0);
+    return vec4f(value.rgb * 0.5 + vec3f(0.5), 1.0); // signed direction -> [0, 1]
+  }
+`);
+encode.set({ source: hdr, sourceSampler: gpu.sampler({ minFilter: "linear", magFilter: "linear" }) }).draw(encoded);
+const pixels = await encoded.read();
+gpu.dispose();
 ```
 
 Dump each level of a blur pyramid (`pyramid-0.png` … `pyramid-7.png`), each G-buffer attachment, and the composite. This is how the two `transmission` bugs became obvious: the pyramid PNGs showed the top levels never being selected, because the blur LOD was clamped below the last level; and the back-face G-buffer PNG showed exit normals for the camera ray instead of the refracted ray. Neither was visible in the final image — both were unmistakable in the intermediates.

@@ -1,6 +1,8 @@
+import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
 import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { wgslError } from "../runtime/errors.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
+import { reservedIdentifierDiagnosticsForSource } from "../runtime/reserved-identifiers.ts";
 import { resolveShader } from "../runtime/resolve-shader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
@@ -21,12 +23,15 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
     // A leaf .wgsl can be a legitimate entry that declares bindings, so the
     // entry-only module-purity rule is intentionally enforced only when an
     // importer resolves a graph through resolveShader().
+    const path = this.resourcePath ?? "<webpack>";
+    assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(path, source), path);
     const wgsl = applyMinifyWgsl(source, options.minify);
     return shaderSourceModule(wgsl);
   }
   const done = this.async?.();
   const run = async () => {
     const resolved = await resolveShader({ entry: this.resourcePath ?? "<webpack>", validate: false, minify: options.minify });
+    assertNoErrorDiagnostics(resolved.diagnostics, this.resourcePath ?? "<webpack>");
     // Webpack loader API: https://webpack.js.org/api/loaders/#thisadddependency
     // Invalidate this loader's output when any transitively-imported .wgsl file changes.
     for (const dep of resolved.deps) if (dep !== this.resourcePath) this.addDependency?.(dep);

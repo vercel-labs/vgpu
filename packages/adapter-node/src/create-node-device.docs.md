@@ -289,10 +289,12 @@ escape-hatch/native interop cases where you also own the consequences.
 ## Troubleshooting snapshot tests
 
 - **Unsupported format**: `Texture.read()` supports the formats documented by
-  `Texture` readback, including `rgba8unorm` and `rgba8unorm-srgb`. Prefer
-  `rgba8unorm` for deterministic snapshots unless the test intentionally covers
-  another documented readback format. Unsupported formats throw
-  `VGPU-CORE-UNSUPPORTED-FORMAT`.
+  `Texture` readback, including `rgba8unorm`, `rgba8unorm-srgb`, and the float
+  formats `rgba16float` / `rgba32float` (plus their `r`/`rg` variants). Prefer
+  `rgba8unorm` for deterministic PNG snapshots; for HDR targets read components
+  with `Texture.readFloats()` (a `Float32Array`) instead of decoding the raw
+  half/float bytes yourself. Formats outside that table (depth/stencil, packed,
+  snorm/uint/sint, compressed) throw `VGPU-CORE-UNSUPPORTED-FORMAT`.
 - **Missing `copy_src` usage**: the render target must include `"copy_src"` in
   addition to `"render_attachment"`; otherwise readback copy validation fails.
 - **Unflushed queue**: submit the render commands and `await device.queue.flush()`

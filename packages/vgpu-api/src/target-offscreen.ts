@@ -37,6 +37,7 @@ export class OffscreenTarget implements Target {
   }
 
   async read(): Promise<Uint8Array> { return this.color.read(); }
+  async readFloats(): Promise<Float32Array> { return this.color.readFloats(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { return this.#destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.#texturesRecreatedCallbacks.add(cb); return () => { this.#texturesRecreatedCallbacks.delete(cb); }; }
   destroy(): void { this.#destroySignal.emit(this); this.#texturesRecreatedCallbacks.clear(); this.#destroyTextures(); }
