@@ -79,7 +79,12 @@ export const DEPTH_MODELS: readonly DepthModel[] = [
     semantics: 'metric',
     // Indoor domain: NYU Depth v2 is furniture-scale, so 0.35 m to 10 m covers
     // the useful range and the log curve spends resolution where objects are.
-    presentation: { mode: 'log-metric', nearMeters: 0.35, farMeters: 10 },
+    // Indoor band. A wider range would be safer in the abstract but wastes most
+    // of the ramp on distances a room does not contain, which leaves the depth
+    // panel a flat mid-grey; this model's output on interior scenes sits at
+    // roughly 1-8 m. Fixed rather than per-frame so the image does not pump as
+    // the camera moves.
+    presentation: { mode: 'log-metric', nearMeters: 0.6, farMeters: 8 },
     license: 'MIT',
   },
   {

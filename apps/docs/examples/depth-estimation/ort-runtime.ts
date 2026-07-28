@@ -25,7 +25,13 @@ import {
   preprocessDepthSource,
   type PreprocessScratch,
 } from './preprocess';
-import { createDepthBuffer, createSideBySidePipeline, type SideBySidePipeline } from './renderer';
+import {
+  createColourBuffer,
+  createDepthBuffer,
+  createSideBySidePipeline,
+  writeColour,
+  type SideBySidePipeline,
+} from './renderer';
 
 /**
  * Committed, CC0-licensed indoor photograph used as the default source.
@@ -147,8 +153,11 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
 
     setPhase('estimating');
     const { ort, session } = shared;
-    const pixels = preprocessDepthSource(frameSource, model, scratch);
-    const input = new ort.Tensor('float32', pixels, model.inputDims as unknown as number[]);
+    const prepared = preprocessDepthSource(frameSource, model, scratch);
+    // The colour half shows the exact crop the model was given, not the source
+    // image, so the two panels line up pixel for pixel.
+    writeColour(colour!, prepared.rgba);
+    const input = new ort.Tensor('float32', prepared.nchw, model.inputDims as unknown as number[]);
     const began = performance.now();
 
     let output: OrtTensor | undefined;

@@ -2,7 +2,7 @@
  * Node-only thumbnail entry.
  *
  * Kept separate from `renderer.ts` on purpose: the committed depth fixture is
- * 230 KB of base64 and the browser has no use for it, so importing it from a
+ * 580 KB of base64 with the colour half and the browser has no use for it, so importing it from a
  * module the example bundle pulls in would put it on the wire for every
  * visitor. Only `scripts/render-example-thumbs.mjs` imports this file.
  */
@@ -10,7 +10,13 @@ import type { Gpu, Target } from 'vgpu';
 import type { ThumbnailOptions } from '../../lib/example-renderer';
 import { decodeGoldenColour, decodeGoldenDepth, GOLDEN_MODEL_ID } from './fixtures';
 import { getDepthModel } from './model-contract';
-import { createDepthBuffer, createReliefPipeline, writeDepth } from './renderer';
+import {
+  createColourBuffer,
+  createDepthBuffer,
+  createSideBySidePipeline,
+  writeColour,
+  writeDepth,
+} from './renderer';
 
 /**
  * Deterministic thumbnail: uploads the depth field the default model produced
@@ -31,7 +37,7 @@ export async function renderThumbnail(
   try {
     writeDepth(depth, decodeGoldenDepth());
     writeColour(colour, decodeGoldenColour());
-    view.draw(gpu, target, depth, model, { hasResult: true, parallax: [0, 0] });
+    view.draw(gpu, target, depth, colour, model, { hasResult: true });
   } finally {
     await Promise.allSettled([
       Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
