@@ -45,7 +45,9 @@ missing it prescribes the exact package install or environment variable to
 set. Once healthy, render headless and read the pixels back — objective
 evidence instead of guesswork:
 
-```ts
+```typescript
+import { writeFileSync } from "node:fs";
+import { PNG } from "pngjs";
 import { init } from "vgpu/node";
 
 const SHADER = `
@@ -53,15 +55,30 @@ const SHADER = `
     return vec4f(0.25, 0.5, 0.75, 1.0);
   }
 `;
+const width = 160;
+const height = 90;
 const gpu = await init();
-const target = gpu.target({ size: [160, 90] }); // small targets stay fast, even on CPU
+const target = gpu.target({ size: [width, height] }); // small targets stay fast, even on CPU
 gpu.effect(SHADER).draw(target);
-const pixels = await target.read();             // RGBA bytes — assert on them or save a PNG
-gpu.dispose();                                  // stops Dawn's polling so the process exits
+const pixels = await target.read();                   // RGBA bytes — assert on them
+const png = new PNG({ width, height });               // ...and write a PNG you can open
+png.data.set(pixels);
+writeFileSync("frame.png", PNG.sync.write(png));
+gpu.dispose();                                        // stops Dawn's polling so the process exits
 ```
 
 Keep the loop tight: render → read → adjust → render. Every visual claim you
-make should be backed by pixels you actually read.
+make should be backed by pixels you actually read — assert on `pixels` when you
+know the expected value, and open `frame.png` when you need to judge
+composition. PNG encoding is project-owned: `pngjs` is one option, any encoder
+works.
+
+The full step-by-step playbook — from `vgpu docs` to browser validation — is
+[The default workflow for developing shaders with vgpu](shader-workflow.docs.md).
+When a shader is multi-pass or a user reports a visual bug, do not iterate by
+eye: extract the shader's internal values as pixels and diff them against a CPU
+reference, following
+[Debugging shaders by extracting internal values](shader-debugging.docs.md).
 
 ## Default choices
 

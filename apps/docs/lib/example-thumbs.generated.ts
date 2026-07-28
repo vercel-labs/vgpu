@@ -42,9 +42,17 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
   },
+  "nextjs-flare": {
+    "card": "/examples/nextjs-flare.card.png",
+    "hero": "/examples/nextjs-flare.hero.png"
+  },
   "post-processing": {
     "card": "/examples/post-processing.card.png",
     "hero": "/examples/post-processing.hero.png"
+  },
+  "radiance-cascades": {
+    "card": "/examples/radiance-cascades.card.png",
+    "hero": "/examples/radiance-cascades.hero.png"
   },
   "raymarched-fractal": {
     "card": "/examples/raymarched-fractal.card.png",

@@ -67,7 +67,7 @@
   "scripts": {
     "build": "tsc -b && node scripts/copy-cli.mjs",
     "test": "cd ../.. && vitest run packages/vgpu-api",
-    "prepack": "pnpm --dir ../vgpu generate:docs && node scripts/copy-cli.mjs"
+    "prepack": "pnpm --dir ../vgpu generate:docs"
   },
   "dependencies": {
     "@vgpu/adapter-mock": "workspace:*",

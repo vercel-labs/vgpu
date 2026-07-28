@@ -21,6 +21,7 @@ export const exampleComponentLoaders = {
   'raymarched-fractal': () => import('../examples/raymarched-fractal/index'),
   'environment-map': () => import('../examples/environment-map/index'),
   transmission: () => import('../examples/transmission/index'),
+  'radiance-cascades': () => import('../examples/radiance-cascades/index'),
   'nextjs-flare': () => import('../examples/nextjs-flare/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
