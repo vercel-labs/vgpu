@@ -36,7 +36,7 @@ interface InitOptions {
 | options | `InitOptions` | ✖ | `{}` | Device creation options only. Canvas size, DPR, and auto-resize belong to `gpu.surface(canvas, opts)`. |
 | options.adapter | `VGPUAdapter` | ✖ | `undefined` | Explicit adapter. If omitted in `vgpu`, `navigator.gpu.requestAdapter()` is used; `vgpu/node` and `vgpu/mock` provide adapter factories. |
 | options.powerPreference | `GPUPowerPreference` | ✖ | `undefined` | Forwarded to `navigator.gpu.requestAdapter({ powerPreference })`. |
-| options.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to `adapter.requestDevice`. |
+| options.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Optional device features to enable, forwarded to `adapter.requestDevice` (e.g. `"depth-clip-control"` for `DrawOptions.unclippedDepth`). Checked against the adapter's supported features first: a name the adapter lacks fails init with `VGPU-FEATURE-UNSUPPORTED` instead of a native rejection. `device.features` reflects exactly the requested features. |
 | options.requiredLimits | `RequiredDeviceLimits` | ✖ | `undefined` | Forwarded unchanged to `adapter.requestDevice`. Unsupported names/values reject device creation. |
 | options.label | `string` | ✖ | `undefined` | Reserved public option; current main API (`vgpu`) device creation does not use it as a debug label. |
 
@@ -44,7 +44,7 @@ interface InitOptions {
 `draw`, `effect`, `compute`, `mesh`, `frame` (with `frame.pass`), `storage`,
 `uniforms`, `sampler`, and `bundle`.
 
-**Throws:** `VGPU-RING1-UNSUPPORTED` when WebGPU is unavailable, adapter request returns `null`, or an entrypoint lacks an adapter factory — use `vgpu/mock` in tests, `vgpu/node` in Node, or pass a valid adapter.
+**Throws:** `VGPU-RING1-UNSUPPORTED` when WebGPU is unavailable, adapter request returns `null`, or an entrypoint lacks an adapter factory — use `vgpu/mock` in tests, `vgpu/node` in Node, or pass a valid adapter; `VGPU-FEATURE-UNSUPPORTED` when `requiredFeatures` names a feature the adapter does not support — remove the unsupported name(s) or run on an adapter that supports them.
 
 ## Examples
 
@@ -81,9 +81,27 @@ gpu.frame((frame) => {
 });
 ```
 
+```ts
+import { init, createMockAdapter } from "vgpu/mock";
+
+// Feature-gated device: GPU pass timing needs "timestamp-query".
+const gpu = await init({
+  adapter: createMockAdapter({ features: ["timestamp-query"] }),
+  requiredFeatures: ["timestamp-query"],
+});
+const timer = gpu.timer();
+timer.onResults((spans) => console.table(spans));
+```
+
+The granted feature makes `gpu.timer()` succeed. In a browser, drop the `adapter` option — `requiredFeatures` is forwarded to the real adapter the same way.
+
 ## Notes
 
+- Choose the entrypoint for the runtime: use `vgpu` in browsers with WebGPU; use `vgpu/node` for headless Node rendering with a real adapter; use `vgpu/mock` for deterministic tests that do not require a GPU. Keep application code on the same `init(options?)` shape so the switch is local.
+- Request optional features only when a code path uses them: `"timestamp-query"` enables `gpu.timer()`, `"depth-clip-control"` enables `DrawOptions.unclippedDepth`, and `"indirect-first-instance"` enables indirect draws that provide a non-zero first instance. Do not request features speculatively; unsupported names fail `init`.
+- In tests, declare and request a mock feature explicitly: `init({ adapter: createMockAdapter({ features: ["timestamp-query"] }), requiredFeatures: ["timestamp-query"] })` lets you exercise feature gates instead of silently relying on defaults.
 - `init(canvas)` is intentionally not supported. Create surfaces explicitly with `gpu.surface(canvas)`.
 - `size`, `dpr`, and `autoResize` are `SurfaceOptions`, not `InitOptions`.
 - The browser, node, and mock entrypoints all use the same `init(options?)` shape.
+- In `vgpu/mock`, the default adapter declares no optional features. Pass `adapter: createMockAdapter({ features: [...] })` to test feature-gated paths deterministically; `requiredFeatures` outside that set fails with `VGPU-FEATURE-UNSUPPORTED`, and granted features appear on `gpu.device.features`.
 - **See also:** `Gpu`, `Surface`, `Target`, `FrameRunner`.

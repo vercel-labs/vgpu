@@ -10,6 +10,7 @@
   "compute",
   "depth-estimation",
   "fft",
+  "flare",
   "fluid",
   "fractal",
   "frosted-glass",
@@ -39,5 +40,6 @@
   "sierpinski",
   "simulation",
   "ssaa",
-  "triangle"
+  "triangle",
+  "volumetric"
 ]

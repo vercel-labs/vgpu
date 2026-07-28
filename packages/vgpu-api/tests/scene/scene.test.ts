@@ -11,15 +11,15 @@ const SIMPLE_DRAW = `
 `;
 
 describe("vgpu/scene", () => {
-  test("gpu.mesh(box()) produces draw vertex-buffer layout", async () => {
+  test("gpu.geometry(box()) produces draw vertex-buffer layout", async () => {
     const gpu = await init();
-    const mesh = gpu.mesh(box({ size: 2 }));
+    const geometry = gpu.geometry(box({ size: 2 }));
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-    expect(mesh.vertexCount).toBe(36);
-    expect(mesh.indexBuffer).toBeUndefined();
-    expect(mesh.vertexBuffers).toHaveLength(1);
-    expect(mesh.vertexBufferLayouts).toEqual([
+    expect(geometry.vertexCount).toBe(36);
+    expect(geometry.indexBuffer).toBeUndefined();
+    expect(geometry.vertexBuffers).toHaveLength(1);
+    expect(geometry.vertexBufferLayouts).toEqual([
       {
         arrayStride: 24,
         attributes: [
@@ -51,10 +51,10 @@ describe("vgpu/scene", () => {
     ]);
   });
 
-  test("gpu.effect rejects mesh options and points to gpu.draw", async () => {
+  test("gpu.effect rejects geometry options and points to gpu.draw", async () => {
     const gpu = await init();
-    const mesh = gpu.mesh(box());
-    expect(() => gpu.effect(SIMPLE_DRAW, { mesh } as never)).toThrowError(/gpu\.effect\(\) never accepts vertex buffers; use gpu\.draw/);
+    const geometry = gpu.geometry(box());
+    expect(() => gpu.effect(SIMPLE_DRAW, { geometry } as never)).toThrowError(/gpu\.effect\(\) never accepts vertex buffers; use gpu\.draw/);
     gpu.dispose();
   });
 });

@@ -59,7 +59,7 @@ export function parseDeclarations(module: MangleModule): ParsedDecls {
       continue;
     }
     if (kind === "override") {
-      const result = parseOverrideDecl(tokens, i);
+      const result = parseOverrideDecl(tokens, i, attrs);
       if (result.item) overrides.push(result.item);
       i = result.next;
       continue;
@@ -132,11 +132,11 @@ export function parseEntryPointParams(tokens: readonly Token[]): EntryPointParam
   return params;
 }
 
-export function parseOverrideDecl(tokens: readonly Token[], index: number): ParseOverrideResult {
+export function parseOverrideDecl(tokens: readonly Token[], index: number, attrs: readonly Attr[]): ParseOverrideResult {
   const name = expectIdent(tokens[index + 1]);
   const end = skipUntil(tokens, index + 1, ";");
   const eq = findToken(tokens, index + 2, end, "=");
-  return { item: { name, mangledName: name, defaultValue: eq === undefined ? undefined : tokens.slice(eq + 1, end).map((t) => t.text).join("") }, next: end + 1 };
+  return { item: { name, mangledName: name, id: numericAttr(attrs, "id"), defaultValue: eq === undefined ? undefined : tokens.slice(eq + 1, end).map((t) => t.text).join("") }, next: end + 1 };
 }
 
 export function parseMembers(tokens: readonly Token[]): ParsedStructMember[] {

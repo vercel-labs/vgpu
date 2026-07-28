@@ -1,5 +1,7 @@
+import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
 import { shaderSourceModule } from "../loader-shared/emit.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
+import { reservedIdentifierDiagnosticsForSource } from "../runtime/reserved-identifiers.ts";
 import { resolveShader } from "../runtime/resolve-shader.ts";
 import { hasTopLevelImport } from "../runtime/scanner.ts";
 
@@ -30,10 +32,12 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
     // A leaf .wgsl can be a legitimate entry that declares bindings, so the
     // entry-only module-purity rule is intentionally enforced only when an
     // importer resolves a graph through resolveShader().
+    assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(opts.id, opts.source), opts.id);
     const wgsl = applyMinifyWgsl(opts.source, opts.minify);
     return { code: shaderSourceModule(wgsl), map: null };
   }
   const resolved = await resolveShader({ entry: opts.id, validate: false, minify: opts.minify });
+  assertNoErrorDiagnostics(resolved.diagnostics, opts.id);
   for (const dep of resolved.deps) if (dep !== opts.id) opts.onDependency?.(dep);
   return { code: shaderSourceModule(resolved.wgsl), map: null };
 }

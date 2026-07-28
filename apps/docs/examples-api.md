@@ -14,6 +14,20 @@ Handlers support only `GET`, `HEAD`, and `OPTIONS`; other methods return 405. Th
 
 Response caps are 32 KiB for discovery/latest, 1 MiB for index/revision documents, 256 KiB for example manifests, and 2 MiB per source file. Raw storage keys end in `.raw`; manifest `path` values remain the authored names and response bytes are unchanged.
 
+## Revision identity
+
+A revision is the SHA-256 of the canonical byte-graph serialization. Its snapshot input is a **content hash**: `sha256:<hex>` of the exact bytes of `apps/docs/lib/examples-source.generated.ts` (`sourceSnapshotIdentity` in `lib/examples-api/hashing.ts`), published as `source.gitCommit` in `index.json` because that key is fixed by the frozen v1 index schema. It is not a commit SHA and must never be used to build `…/commit/<value>` URLs.
+
+Consequences:
+
+- content-identical trees always produce byte-identical artifacts, whatever the git history or merge strategy (squash, rebase, synthetic PR merge refs);
+- regenerating the artifact tree belongs in the **same commit** as the source change — there is no post-commit regeneration step, and no revision churn when unrelated commits touch the snapshot's history;
+- generation requires no repository history at all, so `examples-api-generated` in CI runs on a default shallow checkout.
+
+Because the digest covers *physical* bytes, line endings are pinned in `.gitattributes` (`text eol=lf`) for the snapshot, the checked-in artifact tree, the frozen schema copies, and the generated contract files. A CRLF checkout (`core.autocrlf=true`) would otherwise digest different bytes for the same git tree and fail the gate; the snapshot is additionally asserted CR-free by `lib/examples-api/source-identity.test.ts`.
+
+Regenerate with `node apps/docs/scripts/generate-examples-api.mjs` and commit `apps/docs/generated/examples-api` together with the source change; `git status --porcelain` on that tree stays the drift gate.
+
 ## Publication transaction
 
 `node apps/docs/scripts/generate-examples-api.mjs --publish` performs this transaction:

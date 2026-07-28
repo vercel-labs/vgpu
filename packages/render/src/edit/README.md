@@ -19,7 +19,7 @@ that unwraps the handle is outside the public safety contract.
 import { box } from "vgpu/scene";
 import { toEditable, extrude, bevel } from "@vgpu/render/edit";
 
-const em = toEditable(gpu.mesh(box({ size: 1 })));
+const em = toEditable(gpu.geometry(box({ size: 1 })));
 const top = em.faces.scoreBy((f) => f.center[1]).top();
 const raised = extrude(em, top, { distance: 0.4 });
 const rounded = bevel(raised.mesh, raised.boundaryEdges, { offset: 0.04 });

@@ -3,6 +3,15 @@ export const EXAMPLE_BYTE_GRAPH_VERSION = 1 as const;
 
 export interface ExampleGraphSource {
   readonly repository: string;
+  /**
+   * Identity of the canonical source snapshot, `sha256:<hex>` of the exact bytes of
+   * `apps/docs/lib/examples-source.generated.ts` (see `sourceSnapshotIdentity`).
+   *
+   * The key name is fixed by the frozen `vgpu-examples/v1` index schema, but the value is a
+   * **content digest, not a commit SHA**: do not build `…/commit/<value>` URLs from it. Deriving it
+   * from content keeps artifacts byte-identical for content-identical trees regardless of git
+   * history or merge strategy (squash, rebase, synthetic merge refs).
+   */
   readonly gitCommit: string;
 }
 

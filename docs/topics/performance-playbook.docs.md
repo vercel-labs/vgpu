@@ -33,12 +33,12 @@ Use before the first visible frame or route transition. This compiles render pip
 
 Before:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 ```
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 await cube.compile(scene);
 gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
@@ -129,7 +129,7 @@ Default: if an input is static, bake it outside the loop with one `gpu.frame(...
 
 ## 6. Instancing (`instances`, `vertices`)
 
-Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed meshes ignore `vertices` and `firstVertex`.
+Use for N copies of the same geometry. `DrawOptions.instances/vertices/firstInstance` set defaults; `DrawCallOptions.instances/vertices/firstVertex/firstInstance` override per call. `instances: 0` is valid; indexed geometries ignore `vertices` and `firstVertex`.
 
 Before:
 ```text
@@ -208,13 +208,88 @@ Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and
 Before:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba8unorm" });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 ```
 After:
 ```text
 const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, mesh: gpu.mesh(box()) });
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
 await cube.compile(scene);
 gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
 Default: put depth/MSAA on the target; do not invent global render settings.
+
+## 10. Back-face culling (`cull: "back"`)
+
+Use for closed geometries. With the default `cull: "none"`, triangles facing away from the camera still rasterize; culling them drops roughly half of a closed geometry's fragment work.
+
+Before:
+```text
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+```
+After:
+```text
+const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()), cull: "back" });
+```
+Default: `cull: "back"` for closed geometries. Keep `"none"` for planes, alpha-tested foliage, and anything seen from both sides.
+
+## 11. Occlusion culling (`gpu.visibility`)
+
+Use for many-object scenes with large occluders. Query a cheap proxy — a bounding box — and skip the expensive draw when the GPU confirmed it was hidden.
+
+Before:
+```text
+f.pass({ target: scene }, (p) => {
+  p.draw(world);
+  p.draw(statue); // full cost even when a wall hides it
+});
+```
+After:
+```text
+const vis = gpu.visibility();
+const qStatue = vis.query("statue");
+gpu.frame.loop((f) => {
+  f.pass({ target: scene, visibility: vis }, (p) => {
+    p.draw(world); // occluders first
+    p.occlusion(qStatue, statueProxy); // cheap bounding-box proxy
+    if (!qStatue.hidden) p.draw(statue);
+  });
+});
+```
+Default: draw occluders first, query proxies, condition real draws on `hidden`. Results lag one or two frames and `hidden` stays `false` until a query confirms zero passing samples, so the fallback is always to draw. The pass target needs `depth: true`.
+
+## 12. Indirect draws and dispatches (`indirect`)
+
+Use when the GPU decides the counts — compute-driven particles, culled instance lists. Reading counts back to the CPU stalls on a round-trip; `indirect` keeps them on the GPU.
+
+Before:
+```text
+const data = await counts.read(); // GPU-to-CPU round-trip, a frame late
+p.draw(particles, { instances: decodeCount(data) });
+```
+After:
+```text
+const args = gpu.storage(16, { indirect: true });
+emit.dispatch(Math.ceil(COUNT / 64)); // compute writes the draw arguments into `args`
+gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles, { indirect: args })));
+```
+Default: counts produced on the GPU stay on the GPU. The same option shape drives compute: `sim.dispatch({ indirect: args })`.
+
+## 13. Time passes before optimizing (`gpu.timer`)
+
+Use before reaching for any pattern above. CPU timers see encoding only — encoders record commands, the GPU runs them later — so a "slow pass" verdict needs GPU timestamps.
+
+Before:
+```text
+const t0 = performance.now();
+gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(world)));
+const ms = performance.now() - t0; // encode + submit time, not GPU cost
+```
+After:
+```text
+const gpu = await init({ requiredFeatures: ["timestamp-query"] });
+const timer = gpu.timer();
+timer.onResults((spans) => console.log(`main ${spans.main}ms`));
+gpu.frame.loop((f) => f.pass({ target: scene, timer: timer.span("main") }, (p) => p.draw(world)));
+```
+Default: attach `timer.span(name)` to each pass you plan to touch and optimize the worst milliseconds first. Open `measuring` for what else to measure.

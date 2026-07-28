@@ -54,3 +54,19 @@ export class ValidationError extends VGPUError {
     this.name = "ValidationError";
   }
 }
+
+export function unsupportedFeaturesError(missing: readonly string[]): VGPUError {
+  return new VGPUError({
+    code: "VGPU-FEATURE-UNSUPPORTED",
+    message: `Adapter does not support requested feature(s): ${missing.map((name) => `"${name}"`).join(", ")}.`,
+    fix: "Remove the unsupported name(s) from init({ requiredFeatures: [...] }) or run on an adapter that supports them; gate optional code paths on device.features after init.",
+    where: "init",
+  });
+}
+
+/** Adapters call this before requestDevice so an unsupported requiredFeatures entry fails init with VGPU-FEATURE-UNSUPPORTED instead of a native rejection. An adapter that reports no feature set cannot be pre-checked; native requestDevice validation still applies. */
+export function validateRequiredFeatures(supported: { has(name: string): boolean } | undefined, required: readonly GPUFeatureName[] | undefined): void {
+  if (!supported) return;
+  const missing = (required ?? []).filter((feature) => !supported.has(feature));
+  if (missing.length) throw unsupportedFeaturesError(missing);
+}

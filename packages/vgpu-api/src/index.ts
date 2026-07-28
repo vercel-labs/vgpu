@@ -1,9 +1,9 @@
 import { createGpu, type InitOptions } from "./init.ts";
 
-export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, ExternalDeviceInitOptions, Gpu, ClearColor, GpuErrorListener, InitOptions, RequestedDeviceInitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent } from "./init.ts";
-export type { BlendComponentOptions, BlendOptions, BlendPreset, Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, MeshLike } from "./draw.ts";
-export { Mesh } from "./scene/mesh-descriptor.ts";
-export type { MeshAttributeOverride, MeshAttributes, MeshBuffer, MeshBufferOptions, MeshData, MeshOptions, MeshSlice, MeshSliceOptions } from "./scene/mesh-descriptor.ts";
+export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, DispatchOptions, ExternalDeviceInitOptions, Gpu, ClearColor, GpuErrorListener, InitOptions, RequestedDeviceInitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, SurfaceResizeEvent, Timer, TimerSpan, Visibility, VisibilityOptions, VisibilityQuery } from "./init.ts";
+export type { BlendComponentOptions, BlendOptions, BlendPreset, DepthOptions, Draw, DrawOptions, DrawCallOptions, DrawLayoutOptions, GeometryLike, StencilFaceOptions, StencilOptions } from "./draw.ts";
+export { Geometry } from "./scene/geometry-descriptor.ts";
+export type { GeometryAttributeOverride, GeometryAttributes, GeometryBuffer, GeometryBufferOptions, GeometryData, GeometryOptions, GeometrySlice, GeometrySliceOptions } from "./scene/geometry-descriptor.ts";
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "./frame.ts";
 export type { Effect, EffectOptions } from "./effect.ts";
 export type { CompileTarget, Target, TargetOptions, TargetSignature, TargetTextureOptions } from "./target.ts";

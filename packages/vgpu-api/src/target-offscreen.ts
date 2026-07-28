@@ -1,6 +1,6 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import type { Target, TargetOptions, TargetTextureOptions } from "./target.ts";
-import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions, type ClearColor } from "./target-utils.ts";
+import type { RenderPassDescriptorOptions, Target, TargetOptions, TargetTextureOptions } from "./target.ts";
+import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions } from "./target-utils.ts";
 
 /** Offscreen render target. MSAA targets render into sampleCount=4 attachments and resolve into `.color`. */
 export class OffscreenTarget implements Target {
@@ -37,14 +37,16 @@ export class OffscreenTarget implements Target {
   }
 
   async read(): Promise<Uint8Array> { return this.color.read(); }
+  async readFloats(): Promise<Float32Array> { return this.color.readFloats(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { return this.#destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.#texturesRecreatedCallbacks.add(cb); return () => { this.#texturesRecreatedCallbacks.delete(cb); }; }
   destroy(): void { this.#destroySignal.emit(this); this.#texturesRecreatedCallbacks.clear(); this.#destroyTextures(); }
 
-  renderPassDescriptor(clear: ClearColor = [0, 0, 0, 1], preserve?: boolean): GPURenderPassDescriptor {
+  renderPassDescriptor(opts: RenderPassDescriptorOptions = {}): GPURenderPassDescriptor {
+    const { clear = [0, 0, 0, 1], preserve, clearDepth, clearStencil, depthReadOnly } = opts;
     return {
       colorAttachments: this.#currentColors.map((resolved, index) => colorAttachment(resolved, this.#currentMsaaColors?.[index], clear, preserve)),
-      depthStencilAttachment: this.#currentDepth ? depthAttachment(this.#currentDepth, preserve) : undefined,
+      depthStencilAttachment: this.#currentDepth ? depthAttachment(this.#currentDepth, preserve, clearDepth, clearStencil, depthReadOnly) : undefined,
     };
   }
 
@@ -89,10 +91,11 @@ export class OffscreenTarget implements Target {
 
   #createDepth(): Texture | undefined {
     const format = depthFormatFor(this.options);
+    // texture_binding lets read-only depth passes bind `target.depth` as a sampled texture in the same pass.
     return format ? this.device.createTexture({
       size: this.#currentSize,
       format,
-      usage: ["render_attachment"],
+      usage: ["render_attachment", "texture_binding"],
       sampleCount: this.sampleCount,
       label: this.options.label ? `${this.options.label}.depth` : undefined,
     }) : undefined;

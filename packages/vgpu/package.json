@@ -36,7 +36,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "generate:docs": "node lib/docs/generate/cli.js",
+    "generate:docs": "node lib/docs/generate/cli.js && node ../vgpu-api/scripts/copy-cli.mjs",
     "prepack": "node lib/docs/generate/cli.js",
     "test": "cd ../.. && vitest run packages/vgpu"
   },

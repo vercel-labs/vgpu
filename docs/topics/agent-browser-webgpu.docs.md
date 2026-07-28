@@ -68,6 +68,8 @@ agent-browser --session "$SESSION" close
 
 A low or zero standard deviation indicates a uniform or black capture. Also inspect vgpu error overlays: `Preview error`, `WebGPU is not available`, and `No WebGPU adapter was found`.
 
+`agent-browser` does not support `text=` selectors. Use CSS selectors instead; a `text=` attempt can fail silently, which is another reason pixel validation must be the assertion of record.
+
 `agent-browser eval` returns JSON-escaped output. Unescape it before grepping or parsing it:
 
 ```bash

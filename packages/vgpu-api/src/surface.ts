@@ -1,6 +1,6 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import { colorValue, sameSize, type ClearColor } from "./target-utils.ts";
-import type { Target } from "./target.ts";
+import { colorValue, sameSize } from "./target-utils.ts";
+import type { RenderPassDescriptorOptions, Target } from "./target.ts";
 import {
   surfaceAutoResizeUnsupportedError,
   surfaceContextError,
@@ -128,10 +128,13 @@ export class CanvasSurface implements Surface {
   }
 
   async read(): Promise<Uint8Array> { this.#assertLive(); return this.color.read(); }
+  async readFloats(): Promise<Float32Array> { this.#assertLive(); return this.color.readFloats(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { this.#assertLive(); return this.#destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.#assertLive(); this.#texturesRecreatedCallbacks.add(cb); return () => { this.#texturesRecreatedCallbacks.delete(cb); }; }
 
-  renderPassDescriptor(clear: ClearColor = [0, 0, 0, 1], preserve?: boolean): GPURenderPassDescriptor {
+  renderPassDescriptor(opts: RenderPassDescriptorOptions = {}): GPURenderPassDescriptor {
+    // Surfaces have no depth attachment; clearDepth, clearStencil, and depthReadOnly cannot apply.
+    const { clear = [0, 0, 0, 1], preserve } = opts;
     this.#assertLive();
     const attachment: GPURenderPassColorAttachment = { view: this.context.getCurrentTexture().createView(), loadOp: preserve ? "load" : "clear", storeOp: "store" };
     if (!preserve) attachment.clearValue = colorValue(clear);

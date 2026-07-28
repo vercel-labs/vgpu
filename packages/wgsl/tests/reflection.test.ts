@@ -146,6 +146,20 @@ test("reflectSource reflects raw WGSL strings through the frozen ReflectionFacad
   expect(reflection.bindings[1]).toMatchObject({ name: "tex", kind: "texture", bindingLayout: { kind: "texture" } });
 });
 
+test("reflectSource lists override declarations with @id and default presence", () => {
+  const reflection = reflectSource(`
+    @id(7) override SAMPLES: u32 = 4u;
+    override gain: f32;
+    override height = 2.0 * gain;
+    @fragment fn main() -> @location(0) vec4f { return vec4f(f32(SAMPLES) * gain * height); }
+  `);
+  expect(reflection.overrides).toEqual([
+    { name: "SAMPLES", mangledName: "SAMPLES", id: 7, defaultValue: "4u" },
+    { name: "gain", mangledName: "gain", id: undefined, defaultValue: undefined },
+    { name: "height", mangledName: "height", id: undefined, defaultValue: "2.0*gain" },
+  ]);
+});
+
 test("reflectSource rejects import graphs and points callers to resolveShader", () => {
   expect(() => reflectSource(`import { color } from "./palette.wgsl";`)).toThrowError(/resolveShader/);
   try {

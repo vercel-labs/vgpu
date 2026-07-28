@@ -117,3 +117,5 @@ postprocessing.draw(canvasSurface); // rendering an effect creates a pass
 The one-shot `draw()` runs after the frame has submitted, so the scene is already rendered when postprocessing reads it. Under the hood it creates an encoder, opens a render pass on `canvasSurface`, encodes the draw, and submits — the same GPU work you would write by hand with `frame.pass`.
 
 > Good to know: `frame.pass()` always needs a target. Use a canvas-backed [`Surface`](/reference/vgpu/surface#surface) from `gpu.surface(canvas)` or an offscreen [`Target`](/reference/vgpu/target#target) from `gpu.target({ size })`.
+
+> Good to know: a pass takes more than a target and a clear color. [`FramePassOptions`](/reference/vgpu/frame#framepassoptions) also sets `clearDepth` (`0` for reversed-Z), `clearStencil`, a `viewport` or `scissor` rectangle for split-screen and partial redraws, `depthReadOnly` to depth-test while sampling the depth texture, a `timer` span for GPU timing, and `visibility` for occlusion queries.

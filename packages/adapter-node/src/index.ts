@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { Device, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
+import { Device, validateRequiredFeatures, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
 import { resolveWebGPU, type WebGPUModule } from "./dawn-loader.ts";
 import { createPrivateSoftwareRendererCopy, getCachedSoftwareRenderer } from "./software-renderer-cache.ts";
 type NodeAdapterFlags = { readonly backendFlags?: readonly string[] };
@@ -89,6 +89,7 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
     }
   }
 
+  validateRequiredFeatures(adapter.features, opts.requiredFeatures);
   const device = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
   if (opts.label) device.label = opts.label;
   const info = software

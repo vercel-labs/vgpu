@@ -2,7 +2,7 @@
 
 # Camera
 
-Type alias for immutable scene cameras returned by `perspectiveCamera()` and `orthographicCamera()`. Use it when storing a camera without caring which helper produced it.
+Type alias for scene cameras returned by `perspectiveCamera()` and `orthographicCamera()`. Use it when storing a camera without caring which helper produced it.
 
 ## Import
 
@@ -49,7 +49,7 @@ const camera: Camera = perspectiveCamera({
 
 # SceneCamera
 
-Immutable camera object with the data shaders need: a column-major view-projection matrix plus the camera position.
+Common contract of stateful camera nodes: column-major matrices plus the camera position, exposed as stable `Float32Array` identities that are updated in place by `set()` / `lookAt()`.
 
 ## Import
 
@@ -64,6 +64,9 @@ interface SceneCamera {
   readonly viewProjection: Float32Array;
   readonly viewProjectionMatrix: Float32Array;
   readonly position: Float32Array;
+  readonly view: Float32Array;
+  readonly projection: Float32Array;
+  readonly worldPosition: Float32Array;
 }
 ```
 
@@ -73,7 +76,10 @@ interface SceneCamera {
 |---|---|---|---|---|
 | viewProjection | `Float32Array` | ✔ | — | Column-major projection × view matrix. Bind this to your WGSL uniforms. |
 | viewProjectionMatrix | `Float32Array` | ✔ | — | Alias of `viewProjection`, kept for naming continuity. |
-| position | `Float32Array` | ✔ | — | Camera world position used for specular highlights or parallax. |
+| position | `Float32Array` | ✔ | — | Local position (world position for unparented cameras). Mutate via `set()`. |
+| view | `Float32Array` | ✔ | — | Inverse of the camera node's world matrix. |
+| projection | `Float32Array` | ✔ | — | Projection matrix derived from the camera's parameters. |
+| worldPosition | `Float32Array` | ✔ | — | World position used for specular highlights or parallax. |
 
 **Returns:** Not a callable — the interface describes what camera helpers return.
 
@@ -96,9 +102,9 @@ void camera.viewProjection;
 
 ## Notes
 
-- Objects are frozen; call the helper again when camera parameters change.
+- Cameras are scene nodes: update them in place with `set()` / `lookAt()` instead of recreating them.
 - `viewProjectionMatrix` is a duplicate reference so existing consumer code keeps working.
-- **See also:** `Camera`, `CameraVec3`, `perspectiveCamera`.
+- **See also:** `Camera`, `CameraVec3`, `perspectiveCamera`, `SceneNode`.
 
 ---
 

@@ -131,6 +131,8 @@ gpu.frame.loop((frame) => {
 });
 ```
 
+Some draws must stay on the dynamic side. Draws that set a `blendConstant` or a `stencil` `ref` cannot be recorded — bundle encoders have no way to set those pass-level values — so encode them with `pass.draw()`. A bundle also cannot replay inside a `depthReadOnly` pass, because bundles always record with writable depth. Indirect draws record fine: the GPU re-reads the argument buffer on every replay.
+
 ## Resizes and sampled targets
 
 A bundle matches replay targets by render signature, not size, so drawing onto a resized surface keeps working:

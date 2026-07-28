@@ -2,6 +2,16 @@
 
 Optimize one pass by first deciding what changes every frame.
 
+## 0. Measure first
+
+Attach a `gpu.timer()` span (requires `init({ requiredFeatures: ["timestamp-query"] })`) and judge every change by the reported GPU milliseconds:
+
+```text
+const timer = gpu.timer();
+timer.onResults((spans) => console.log(`pass ${spans.pass}ms`));
+gpu.frame.loop((f) => f.pass({ target, timer: timer.span("pass") }, (p) => p.draw(effect)));
+```
+
 ## 1. Static commands
 
 If the draw list is static, record it once:

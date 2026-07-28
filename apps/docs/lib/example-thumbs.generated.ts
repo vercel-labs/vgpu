@@ -6,10 +6,6 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
-  "air-painting": {
-    "card": "/examples/air-painting.card.png",
-    "hero": "/examples/air-painting.hero.png"
-  },
   "anti-aliasing": {
     "card": "/examples/anti-aliasing.card.png",
     "hero": "/examples/anti-aliasing.hero.png"
@@ -22,9 +18,13 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/black-hole.card.png",
     "hero": "/examples/black-hole.hero.png"
   },
-  "depth-estimation": {
-    "card": "/examples/depth-estimation.card.png",
-    "hero": "/examples/depth-estimation.hero.png"
+  "earth": {
+    "card": "/examples/earth.card.png",
+    "hero": "/examples/earth.hero.png"
+  },
+  "environment-map": {
+    "card": "/examples/environment-map.card.png",
+    "hero": "/examples/environment-map.hero.png"
   },
   "fft-ocean": {
     "card": "/examples/fft-ocean.card.png",
@@ -42,17 +42,25 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
   },
-  "mnist-classifier": {
-    "card": "/examples/mnist-classifier.card.png",
-    "hero": "/examples/mnist-classifier.hero.png"
+  "nextjs-flare": {
+    "card": "/examples/nextjs-flare.card.png",
+    "hero": "/examples/nextjs-flare.hero.png"
   },
   "post-processing": {
     "card": "/examples/post-processing.card.png",
     "hero": "/examples/post-processing.hero.png"
   },
+  "radiance-cascades": {
+    "card": "/examples/radiance-cascades.card.png",
+    "hero": "/examples/radiance-cascades.hero.png"
+  },
   "raymarched-fractal": {
     "card": "/examples/raymarched-fractal.card.png",
     "hero": "/examples/raymarched-fractal.hero.png"
+  },
+  "transmission": {
+    "card": "/examples/transmission.card.png",
+    "hero": "/examples/transmission.hero.png"
   },
   "triangle-led-front": {
     "card": "/examples/triangle-led-front.card.png",

@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -7,11 +6,14 @@ import { build } from 'esbuild';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = resolve(root, process.env.VGPU_EXAMPLES_OUTPUT_DIR ?? 'apps/docs/generated/examples-api');
-// Address the canonical source snapshot, not the generator commit (avoids self-changing output).
-const commit = process.env.VGPU_EXAMPLES_GIT_COMMIT ?? execFileSync(
-  'git', ['log', '-1', '--format=%H', '--', 'apps/docs/lib/examples-source.generated.ts'],
-  { cwd: root, encoding: 'utf8' },
-).trim();
+// Address the canonical source snapshot by CONTENT, not by commit: a content digest keeps
+// content-identical trees byte-identical regardless of git history or merge strategy (squash,
+// rebase, synthetic merge refs), so no git command and no repository history is required here.
+const sourceFile = resolve(root, 'apps/docs/lib/examples-source.generated.ts');
+const identityOverride = process.env.VGPU_EXAMPLES_SOURCE_IDENTITY;
+const sourceIdentityExpression = identityOverride
+  ? JSON.stringify(identityOverride)
+  : `sourceSnapshotIdentity(await readFile(${JSON.stringify(sourceFile)}))`;
 const publish = process.argv.includes('--publish');
 const deploymentUrl = process.env.VERCEL_DEPLOYMENT_URL;
 if (publish && !deploymentUrl) throw new Error('Missing VERCEL_DEPLOYMENT_URL for pre-pointer verification');
@@ -27,8 +29,10 @@ try {
         import { generateExampleArtifacts, writeArtifactTree } from ${JSON.stringify(resolve(root, 'apps/docs/lib/examples-api/artifact-generator.ts'))};
         import { publishArtifactSet } from ${JSON.stringify(resolve(root, 'apps/docs/lib/examples-api/publisher.ts'))};
         import { VercelBlobPublisher } from ${JSON.stringify(resolve(root, 'apps/docs/lib/examples-api/vercel-blob-publisher.ts'))};
-        import { sha256 } from ${JSON.stringify(resolve(root, 'apps/docs/lib/examples-api/hashing.ts'))};
-        const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: ${JSON.stringify(commit)} });
+        import { sha256, sourceSnapshotIdentity } from ${JSON.stringify(resolve(root, 'apps/docs/lib/examples-api/hashing.ts'))};
+        import { readFile } from 'node:fs/promises';
+        const sourceIdentity = ${sourceIdentityExpression};
+        const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: sourceIdentity });
         const set = generateExampleArtifacts(graph, ${JSON.stringify(process.env.VGPU_EXAMPLES_ORIGIN ?? 'https://vgpu.labs.vercel.dev')});
         await writeArtifactTree(set, ${JSON.stringify(output)});
         const verifyDeployed = async ({ artifacts }) => {

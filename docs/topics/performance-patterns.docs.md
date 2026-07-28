@@ -16,7 +16,7 @@ Create the pass/draw once and call `.set({ changedValue })`. Do not allocate a n
 
 ## Many objects
 
-Use `instances` when geometry and material are shared. Use `UniformPool` + `draw.group()` + dynamic offsets when each object needs a different uniform block.
+Use `instances` when geometry and material are shared. Use `UniformPool` + `draw.group()` + dynamic offsets when each object needs a different uniform block. Skip draws hidden behind occluders with `gpu.visibility()` proxy queries. When a compute pass decides the counts, draw with `indirect` arguments instead of reading them back to the CPU.
 
 ## Shared globals
 

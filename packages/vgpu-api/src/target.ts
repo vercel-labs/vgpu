@@ -21,6 +21,20 @@ export interface TargetSignature {
 
 export type CompileTarget = Target | TargetSignature;
 
+/** Options bag for `Target.renderPassDescriptor()`. `Frame.pass` supplies these from `FramePassOptions`. */
+export interface RenderPassDescriptorOptions {
+  /** Clear color for all color attachments unless `preserve` is true. Defaults to `[0, 0, 0, 1]`. */
+  readonly clear?: ClearColor;
+  /** When true, color and depth attachments load existing contents and omit clear values. */
+  readonly preserve?: boolean;
+  /** Depth clear value used when the pass clears. Defaults to `1`. */
+  readonly clearDepth?: number;
+  /** Stencil clear value used when the pass clears. Defaults to `0`. */
+  readonly clearStencil?: number;
+  /** Builds the depth-stencil attachment read-only, omitting its load/store ops (stencil aspect included). */
+  readonly depthReadOnly?: boolean;
+}
+
 export interface Target {
   readonly gpu: unknown;
   readonly size: readonly [number, number];
@@ -32,9 +46,12 @@ export interface Target {
   readonly sampleCount: 1 | 4;
   readonly resourceIdentity: ResourceIdentity;
   resize(size: readonly [number, number]): void;
+  /** Raw unpadded bytes of `color` in the target's own format (`bgra*` swizzled to RGBA). */
   read(): Promise<Uint8Array>;
+  /** Components of `color` decoded to f32 — the HDR-friendly readback for `rgba16float`/`rgba32float` targets. */
+  readFloats(): Promise<Float32Array>;
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy;
-  renderPassDescriptor(clear?: ClearColor, preserve?: boolean): GPURenderPassDescriptor;
+  renderPassDescriptor(opts?: RenderPassDescriptorOptions): GPURenderPassDescriptor;
 }
 
 export { OffscreenTarget } from "./target-offscreen.ts";

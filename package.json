@@ -12,7 +12,7 @@
     "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json && tsc -p packages/vgpu-api/tests/uniforms/tsconfig.types.json",
     "docs:verify-snippets": "node scripts/verify-docs-snippets.mjs",
     "test": "vitest run",
-    "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render",
+    "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render scripts",
     "test:docker": "bash infra/test-docker/run.sh",
     "test:doctor:docker": "bash infra/test-docker-doctor/run.sh",
     "thumbs:docker": "bash infra/test-docker/thumbs.sh",

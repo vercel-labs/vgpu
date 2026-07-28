@@ -66,6 +66,8 @@ Modules cannot declare bindings — export the struct and declare it in your ent
 **Throws:** `VGPU-WGSL-MINIFY-BLOCK`, `VGPU-WGSL-LEX-UNTERM-COMMENT`, or `VGPU-WGSL-LEX-UNTERM-STRING` for unterminated WGSL comments/strings during scanning/minification — close the token.
 **Throws:** `VGPU-WGSL-NAGA-UNKNOWN` when validation is active and WebGPU/Naga rejects emitted WGSL or no validation adapter is available — fix the WGSL reported by the diagnostic.
 
+**Diagnostic:** `VGPU-WGSL-RESERVED-IDENT` (severity `error`, never thrown) for every declared identifier that WGSL reserves — struct names, struct members, type aliases, module-scope variables, overrides, functions, parameters, and local variables. Each diagnostic carries the offending name, `line`/`column`, and a `range` pointing at the source module. Rename the declaration; Dawn/Tint would otherwise reject the shader only at pipeline creation.
+
 ## Examples
 
 ```ts
@@ -128,5 +130,6 @@ console.log(resolved.deps.length);
 - `resolveShader()` is for setup, tests, loaders, and build tooling. Do not call it per frame; resolve and create pipelines off the render hot path.
 - Declaration-level DCE always runs before validation/minification when entry points exist. There is no DCE opt-out in this release.
 - `minify: true` is the production preset. Safe identifier minification is conservative and does not rename entry points, resources, overrides, structs, fields, import/export names, attributes, builtins, or predeclared WGSL names.
+- Reserved-word diagnostics are collected per loaded module before emission, so imported modules report their own file/line. `import`/`export`/`from`/`as` module syntax is exempt; only declared identifiers are checked.
 - Validation maps diagnostics back to generated module headers. Columns can be approximate when substituted identifiers appear; those diagnostics include `VGPU-WGSL-COL-APPROX` metadata.
 - **See also:** `compile`, `ShaderSource`, `wgslVitePlugin`, `wgslWebpackLoader`, `@vgpu/wgsl-std/hash`.

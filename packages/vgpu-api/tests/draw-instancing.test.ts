@@ -100,12 +100,12 @@ test("per-call instances override draw defaults while vertices fall back to draw
   }
 });
 
-test("mesh vertexCount wins over DrawOptions.vertices unless call vertices override it", async () => {
+test("geometry vertexCount wins over DrawOptions.vertices unless call vertices override it", async () => {
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const mesh = { vertexCount: 5 };
-    const draw = gpu.draw({ shader: INSTANCED_SHADER, label: "mesh-draw", mesh, vertices: 6, instances: 2 });
+    const geometry = { vertexCount: 5 };
+    const draw = gpu.draw({ shader: INSTANCED_SHADER, label: "geometry-draw", geometry, vertices: 6, instances: 2 });
     const target = gpu.target({ size: [4, 4] });
 
     gpu.frame((frame) => frame.pass({ target }, (pass) => {

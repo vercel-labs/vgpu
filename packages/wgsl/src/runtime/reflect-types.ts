@@ -75,7 +75,8 @@ export interface EntryPointInfo {
   readonly samplingPairs?: readonly SamplingPair[];
 }
 
-export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly defaultValue?: string }
+/** Pipeline-overridable constant (`override`) declaration. `id` is the `@id(N)` pipeline constant ID when the declaration has one; `defaultValue` is the raw initializer expression, present only when the declaration has a default. */
+export interface OverrideInfo { readonly name: string; readonly mangledName: string; readonly id?: number; readonly defaultValue?: string }
 
 export interface AliasInfo { readonly name: string; readonly mangledName: string; readonly target: WGSLType }
 export interface StructInfo { readonly name: string; readonly mangledName: string; readonly members: readonly StructMemberInfo[] }

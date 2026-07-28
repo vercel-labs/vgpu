@@ -1,27 +1,36 @@
-export const WGSL_KEYWORDS: ReadonlySet<string> = new Set([
+/** WGSL keywords, verbatim from the spec keyword summary (https://www.w3.org/TR/WGSL/#keyword-summary). */
+export const WGSL_SPEC_KEYWORDS: ReadonlySet<string> = new Set([
   "alias", "break", "case", "const", "const_assert", "continue", "continuing", "default", "diagnostic", "discard",
   "else", "enable", "false", "fn", "for", "if", "let", "loop", "override", "requires", "return", "struct",
   "switch", "true", "var", "while",
-  // vgpu module syntax extensions accepted by this package before WGSL emission.
-  "import", "export", "from", "as",
 ] as const);
 
+/** vgpu module syntax extensions accepted by this package before WGSL emission. */
+export const VGPU_MODULE_KEYWORDS: ReadonlySet<string> = new Set(["import", "export", "from", "as"] as const);
+
+export const WGSL_KEYWORDS: ReadonlySet<string> = new Set([...WGSL_SPEC_KEYWORDS, ...VGPU_MODULE_KEYWORDS]);
+
+/** WGSL reserved words, verbatim from the spec (https://www.w3.org/TR/WGSL/#reserved-words). */
 export const WGSL_RESERVED_WORDS: ReadonlySet<string> = new Set([
   "NULL", "Self", "abstract", "active", "alignas", "alignof", "as", "asm", "asm_fragment", "async", "attribute",
-  "auto", "await", "become", "binding_array", "cast", "catch", "class", "co_await", "co_return", "co_yield", "coherent",
+  "auto", "await", "become", "cast", "catch", "class", "co_await", "co_return", "co_yield", "coherent",
   "column_major", "common", "compile", "compile_fragment", "concept", "const_cast", "consteval", "constexpr", "constinit",
   "crate", "debugger", "decltype", "delete", "demote", "demote_to_helper", "do", "dynamic_cast", "enum", "explicit",
   "export", "extends", "extern", "external", "fallthrough", "filter", "final", "finally", "friend", "from", "fxgroup",
   "get", "goto", "groupshared", "highp", "impl", "implements", "import", "inline", "instanceof", "interface", "layout",
   "lowp", "macro", "macro_rules", "match", "mediump", "meta", "mod", "module", "move", "mut", "mutable", "namespace",
-  "new", "nil", "noexcept", "noinline", "nointerpolation", "noperspective", "null", "nullptr", "of", "operator", "package",
+  "new", "nil", "noexcept", "noinline", "nointerpolation", "non_coherent", "noncoherent", "noperspective", "null",
+  "nullptr", "of", "operator", "package",
   "packoffset", "partition", "pass", "patch", "pixelfragment", "precise", "precision", "premerge", "priv", "protected",
   "pub", "public", "readonly", "ref", "regardless", "register", "reinterpret_cast", "require", "resource", "restrict",
   "self", "set", "shared", "sizeof", "smooth", "snorm", "static", "static_assert", "static_cast", "std", "subroutine",
-  "super", "target", "template", "this", "thread_local", "throw", "trait", "try", "typedef", "typeid", "typename",
+  "super", "target", "template", "this", "thread_local", "throw", "trait", "try", "type", "typedef", "typeid", "typename",
   "typeof", "union", "unless", "unorm", "unsafe", "unsized", "use", "using", "varying", "virtual", "volatile", "wgsl",
   "where", "with", "writeonly", "yield",
 ] as const);
+
+/** Reserved by earlier WGSL drafts and by shipping implementations; never safe to generate. */
+export const WGSL_LEGACY_RESERVED_WORDS: ReadonlySet<string> = new Set(["binding_array"] as const);
 
 export const WGSL_PREDECLARED_TYPES: ReadonlySet<string> = new Set([
   "array", "atomic", "bool", "f16", "f32", "i32", "mat2x2", "mat2x3", "mat2x4", "mat3x2", "mat3x3", "mat3x4",
@@ -67,6 +76,7 @@ export const WGSL_TEXEL_FORMAT_NAMES: ReadonlySet<string> = new Set([
 export const WGSL_RENAME_FORBIDDEN_IDENTIFIERS: ReadonlySet<string> = new Set([
   ...WGSL_KEYWORDS,
   ...WGSL_RESERVED_WORDS,
+  ...WGSL_LEGACY_RESERVED_WORDS,
   ...WGSL_PREDECLARED_TYPES,
   ...WGSL_PREDECLARED_VALUES,
   ...WGSL_BUILTIN_VALUES,

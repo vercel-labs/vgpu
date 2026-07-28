@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { exampleSources } from '../examples-source.generated';
 import { adaptCanonicalSourceExport } from './adapter-v1';
 import { generateExampleArtifacts, writeArtifactTree } from './artifact-generator';
-import { canonicalRevisionBytes, sha256 } from './hashing';
+import { canonicalRevisionBytes, sha256, sourceSnapshotIdentity } from './hashing';
 
-const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: '62d8f7227850d1d792e8bbf71b9568d74d4eb414' });
+const graph = adaptCanonicalSourceExport(exampleSources, { repository: 'https://github.com/vgpu/vgpu', gitCommit: sourceSnapshotIdentity('canonical-source-snapshot-fixture\n') });
 
 async function tree(root: string, dir = root): Promise<Record<string, string>> {
   const output: Record<string, string> = {};

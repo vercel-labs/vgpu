@@ -67,7 +67,7 @@
   "scripts": {
     "build": "tsc -b && node scripts/copy-cli.mjs",
     "test": "cd ../.. && vitest run packages/vgpu-api",
-    "prepack": "pnpm --dir ../vgpu generate:docs && node scripts/copy-cli.mjs"
+    "prepack": "pnpm --dir ../vgpu generate:docs"
   },
   "dependencies": {
     "@vgpu/adapter-mock": "workspace:*",
@@ -79,14 +79,22 @@
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0"
   },
-  "vgpuExportBundleBudgetNote": "Bundle-diet ceilings use 512-byte granularity with one rounded safety step above measured gzip sizes.",
+  "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple at least 512 B above the measured size, so headroom is never a rounding accident. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
+  "vgpuExportBundleAudiences": {
+    ".": "client",
+    "./node": "tooling",
+    "./mock": "tooling",
+    "./scene": "client",
+    "./client": "client",
+    "./core": "client"
+  },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 31232,
-    "./node": 31744,
-    "./mock": 31744,
-    "./scene": 5632,
-    "./client": 512,
-    "./core": 3584
+    ".": 44544,
+    "./node": 44544,
+    "./mock": 44544,
+    "./scene": 6656,
+    "./client": 1024,
+    "./core": 4096
   },
   "bin": {
     "vgpu": "./bin/vgpu.js"

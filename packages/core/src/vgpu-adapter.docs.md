@@ -33,7 +33,7 @@ interface VGPUAdapter {
 |---|---|---:|---|---|
 | opts | `CreateDeviceOptions` | ✖ | `undefined` | Device request options. Concrete adapters may accept additional adapter-specific keys, but this is the core portable subset. |
 | opts.powerPreference | `GPUPowerPreference` | ✖ | `undefined` | Passed to adapter selection by browser/node implementations. The mock adapter ignores it. |
-| opts.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to native `adapter.requestDevice({ requiredFeatures })` by browser/node implementations. The mock adapter ignores it. |
+| opts.requiredFeatures | `readonly GPUFeatureName[]` | ✖ | `undefined` | Forwarded to native `adapter.requestDevice({ requiredFeatures })` by browser/node implementations after a `validateRequiredFeatures` check against the adapter's supported features (unsupported names throw `VGPU-FEATURE-UNSUPPORTED`). The mock adapter honors it against its declared `createMockAdapter({ features })` set and enables exactly the requested features on the device. |
 | opts.requiredLimits | `RequiredDeviceLimits` | ✖ | `undefined` | Forwarded unchanged to native `adapter.requestDevice({ requiredLimits })`; custom/mock adapters receive the same option. |
 | opts.label | `string` | ✖ | `undefined` | Node adapter assigns it to `GPUDevice.label`; browser core request path currently does not assign it in `vgpu-api`, and the mock adapter ignores it. |
 
@@ -43,7 +43,8 @@ interface VGPUAdapter {
 
 - `VGPU-RING1-UNSUPPORTED` may be thrown by higher-level browser/node initialization paths when no adapter factory or browser adapter is available — provide a concrete adapter such as `createMockAdapter()` or run in a WebGPU-capable environment.
 - Adapter-specific `VGPU-*` errors can be thrown before the core `Device` exists, for example Node adapter binary/adapter failures — inspect `.code`, `.message`, and `.fix` on `VGPUError`.
-- Native WebGPU request errors may be thrown when `requiredFeatures` or `requiredLimits` are unsupported — request only capabilities reported by the chosen adapter.
+- `VGPU-FEATURE-UNSUPPORTED` is thrown before device creation when `requiredFeatures` names a feature the adapter does not support — remove the unsupported name(s) or use an adapter that supports them.
+- Native WebGPU request errors may be thrown when `requiredLimits` values are unsupported — request only capabilities reported by the chosen adapter.
 
 ## Examples
 
@@ -82,6 +83,6 @@ device.destroy();
 
 - `VGPUAdapter` is an interface, not a class. Import it with `import type` unless you only need documentation prose.
 - The core interface intentionally has a small portable option set. Concrete adapters can extend it without changing `VGPUAdapter`.
-- The mock adapter ignores `CreateDeviceOptions`; do not use a passing mock request as proof that native required features/limits are available.
+- The mock adapter honors `requiredFeatures` against its declared `createMockAdapter({ features })` set (default none) and ignores the other `CreateDeviceOptions`; do not use a passing mock request as proof that native required features/limits are available.
 - Use `Device.features` and `Device.limits` after request to gate optional code paths.
 - **See also:** `Device`, `CreateDeviceOptions`, `VGPUError`, `createMockAdapter`.

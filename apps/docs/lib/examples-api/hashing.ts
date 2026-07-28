@@ -18,6 +18,18 @@ export function sha256(bytes: Uint8Array | string): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** Prefix that marks a source snapshot identity as a content digest rather than a commit SHA. */
+export const SOURCE_SNAPSHOT_PREFIX = 'sha256:' as const;
+
+/**
+ * Content identity of the canonical source snapshot (`apps/docs/lib/examples-source.generated.ts`).
+ * Replaces the former `git log -1 --format=%H -- <snapshot>` input so content-identical trees produce
+ * byte-identical artifacts regardless of git history or merge strategy.
+ */
+export function sourceSnapshotIdentity(bytes: Uint8Array | string): string {
+  return `${SOURCE_SNAPSHOT_PREFIX}${sha256(bytes)}`;
+}
+
 function field(value: string): string {
   return `${encoder.encode(value).byteLength}:${value}\n`;
 }

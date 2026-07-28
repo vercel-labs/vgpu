@@ -35,7 +35,7 @@ const draw = gpu.draw({ shader });
 
 **Cause:** bindings statically reached by the selected entry point count against `maxStorageBuffersInVertexStage` or `maxStorageBuffersInFragmentStage` (falling back to `maxStorageBuffersPerShaderStage` when a stage-specific property is unavailable). Unused declarations and resources used only by another stage do not count.
 
-**Fix:** if the adapter supports it, request the reported count through `init({ requiredLimits: { maxStorageBuffersInVertexStage: count } })` or the fragment sibling. For vertex data, prefer `gpu.mesh(...)` vertex streams where possible. Otherwise reduce the number of storage buffers reached by that stage. The error detail includes `stage`, `entryPoint`, `count`, `limit`, and the `{ name, group, binding }` bindings that were counted.
+**Fix:** if the adapter supports it, request the reported count through `init({ requiredLimits: { maxStorageBuffersInVertexStage: count } })` or the fragment sibling. For vertex data, prefer `gpu.geometry(...)` vertex streams where possible. Otherwise reduce the number of storage buffers reached by that stage. The error detail includes `stage`, `entryPoint`, `count`, `limit`, and the `{ name, group, binding }` bindings that were counted.
 
 ## Missing binding: `VGPU-R1-BINDING-NEVER-SET`
 
