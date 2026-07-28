@@ -185,24 +185,110 @@ export function measuredTarballPayload(entries) {
 
 const TAR_BLOCK = 512;
 
-/** Minimal ustar reader: npm/pnpm tarballs only hold regular files, directories and GNU long names. */
+/** Entry types this reader understands. Anything else is an error rather than a silent skip. */
+const TAR_FILE_TYPES = new Set(["0", "\0", "7"]);
+const TAR_SKIPPED_TYPES = new Set(["5", "1", "2", "3", "4", "6"]);
+
+/**
+ * Minimal tar reader for npm/pnpm tarballs (ustar with optional GNU long names and PAX headers).
+ *
+ * This feeds a size gate, so it is deliberately fail-closed: anything it cannot interpret exactly
+ * -- an unknown entry type, a non-octal or out-of-range size, a truncated body, a missing
+ * end-of-archive marker, an empty archive -- throws instead of returning fewer bytes than the
+ * tarball really holds. A silently under-counted measurement would turn a budget into a false pass.
+ */
 export function parseTarEntries(buffer) {
   const entries = [];
   let offset = 0;
-  let longName;
+  let terminated = false;
+  let pathOverride;
+  let sizeOverride;
   while (offset + TAR_BLOCK <= buffer.length) {
     const header = buffer.subarray(offset, offset + TAR_BLOCK);
-    if (header.every((byte) => byte === 0)) break;
-    const name = readField(header, 0, 100);
-    const size = Number.parseInt(readField(header, 124, 12).trim() || "0", 8);
+    if (header.every((byte) => byte === 0)) {
+      requireEndOfArchive(buffer, offset);
+      terminated = true;
+      break;
+    }
     const type = String.fromCharCode(header[156] || 0x30);
-    const body = buffer.subarray(offset + TAR_BLOCK, offset + TAR_BLOCK + size);
-    if (type === "L") longName = body.toString("utf8").replace(/\0+$/, "");
-    else if (type === "0" || type === "\0") entries.push({ path: longName ?? joinTarPath(readField(header, 345, 155), name), contents: Buffer.from(body) });
-    if (type !== "L") longName = undefined;
-    offset += TAR_BLOCK + Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
+    const isFile = TAR_FILE_TYPES.has(type);
+    const dataSize = isFile && sizeOverride !== undefined ? sizeOverride : readTarSize(header, offset);
+    const paddedSize = Math.ceil(dataSize / TAR_BLOCK) * TAR_BLOCK;
+    if (offset + TAR_BLOCK + paddedSize > buffer.length) {
+      throw new Error(`tar entry at offset ${offset} claims ${dataSize} B but the archive ends after ${buffer.length - offset - TAR_BLOCK} B (truncated archive)`);
+    }
+    const body = buffer.subarray(offset + TAR_BLOCK, offset + TAR_BLOCK + dataSize);
+    if (type === "L") {
+      pathOverride = body.toString("utf8").replace(/\0+$/, "");
+    } else if (type === "x") {
+      const records = parsePaxRecords(body, offset);
+      if (records.path !== undefined) pathOverride = records.path;
+      if (records.size !== undefined) sizeOverride = readPaxSize(records.size, offset);
+    } else if (type === "g") {
+      const records = parsePaxRecords(body, offset);
+      for (const key of ["path", "size"]) {
+        if (records[key] !== undefined) throw new Error(`tar global PAX header at offset ${offset} overrides "${key}" for every entry, which this reader does not support`);
+      }
+    } else if (isFile) {
+      entries.push({ path: pathOverride ?? joinTarPath(readField(header, 345, 155), readField(header, 0, 100)), contents: Buffer.from(body) });
+      pathOverride = undefined;
+      sizeOverride = undefined;
+    } else if (TAR_SKIPPED_TYPES.has(type)) {
+      pathOverride = undefined;
+      sizeOverride = undefined;
+    } else {
+      throw new Error(`unsupported tar entry type ${JSON.stringify(type)} at offset ${offset} (${JSON.stringify(readField(header, 0, 100))})`);
+    }
+    offset += TAR_BLOCK + paddedSize;
   }
+  if (!terminated) throw new Error(`tar is missing its end-of-archive marker after ${offset} B (truncated archive)`);
+  if (!entries.length) throw new Error("tar contains no files, refusing to measure an empty archive");
   return entries;
+}
+
+/** The archive must end with two zero blocks and nothing but zero padding after them. */
+function requireEndOfArchive(buffer, offset) {
+  const tail = buffer.subarray(offset);
+  if (tail.length < 2 * TAR_BLOCK) throw new Error(`tar ends with ${tail.length} B of zero padding, expected at least two ${TAR_BLOCK} B zero blocks`);
+  const trailing = tail.findIndex((byte) => byte !== 0);
+  if (trailing !== -1) throw new Error(`tar has ${tail.length - trailing} B of data after its end-of-archive marker at offset ${offset + trailing}`);
+}
+
+function readTarSize(header, offset) {
+  if (header[124] & 0x80) throw new Error(`tar entry at offset ${offset} uses a base-256 size field, which this reader does not support`);
+  const raw = readField(header, 124, 12).trim();
+  if (!/^[0-7]+$/.test(raw)) throw new Error(`tar entry at offset ${offset} has a malformed octal size field ${JSON.stringify(raw)}`);
+  const size = Number.parseInt(raw, 8);
+  if (!Number.isSafeInteger(size) || size < 0) throw new Error(`tar entry at offset ${offset} has an out-of-range size ${JSON.stringify(raw)}`);
+  return size;
+}
+
+function readPaxSize(raw, offset) {
+  const size = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(size)) throw new Error(`tar PAX header at offset ${offset} has a malformed size record ${JSON.stringify(raw)}`);
+  return size;
+}
+
+/** PAX extended headers are `"<length> <key>=<value>\n"` records; a malformed one is fatal. */
+function parsePaxRecords(body, offset) {
+  const records = {};
+  let cursor = 0;
+  while (cursor < body.length) {
+    const space = body.indexOf(0x20, cursor);
+    if (space === -1) throw new Error(`tar PAX header at offset ${offset} has a record without a length separator`);
+    const rawLength = body.subarray(cursor, space).toString("utf8");
+    const length = Number(rawLength);
+    if (!/^\d+$/.test(rawLength) || !Number.isSafeInteger(length) || length <= space - cursor + 1 || cursor + length > body.length) {
+      throw new Error(`tar PAX header at offset ${offset} has a record with an invalid length ${JSON.stringify(rawLength)}`);
+    }
+    if (body[cursor + length - 1] !== 0x0a) throw new Error(`tar PAX header at offset ${offset} has a record that does not end with a newline`);
+    const record = body.subarray(space + 1, cursor + length - 1).toString("utf8");
+    const separator = record.indexOf("=");
+    if (separator === -1) throw new Error(`tar PAX header at offset ${offset} has a record without "=": ${JSON.stringify(record)}`);
+    records[record.slice(0, separator)] = record.slice(separator + 1);
+    cursor += length;
+  }
+  return records;
 }
 
 function joinTarPath(prefix, name) {

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { expect, test } from "vitest";
 import {
   BUDGET_NOTE,
@@ -137,6 +138,112 @@ test("the measured payload is the filtered, stripped, path-sorted file bytes", (
   expect(payload).not.toContain("docs");
 });
 
+test("the tar reader resolves GNU long names", () => {
+  const longPath = `package/dist/${"nested/".repeat(20)}index.js`;
+  expect(longPath.length).toBeGreaterThan(100);
+  const entries = parseTarEntries(
+    tar([
+      { path: "././@LongLink", type: "L", contents: Buffer.from(`${longPath}\0`) },
+      { path: longPath.slice(0, 100), contents: Buffer.from("export const a = 1;") },
+    ]),
+  );
+  expect(entries.map((entry) => entry.path)).toEqual([longPath]);
+});
+
+test("the tar reader resolves ustar prefix fields", () => {
+  const entries = parseTarEntries(tar([{ path: "index.js", prefix: "package/dist", contents: Buffer.from("a") }]));
+  expect(entries[0].path).toBe("package/dist/index.js");
+});
+
+test("the tar reader applies PAX path overrides, so filtering and stripping still see real paths", () => {
+  const manifest = { name: "@vgpu/core", version: "1.0.0", vgpuBundleAudience: "tooling", vgpuBundleBudgetGzipBytes: 32768 };
+  const buffer = tar([
+    { path: "PaxHeaders.0/package.json", type: "x", contents: paxRecords({ path: "package/package.json" }) },
+    { path: "truncated-name", contents: Buffer.from(JSON.stringify(manifest)) },
+    { path: "PaxHeaders.0/docs", type: "x", contents: paxRecords({ path: "package/src/index.docs.md" }) },
+    { path: "truncated-docs", contents: Buffer.from("# docs\n".repeat(100)) },
+  ]);
+  const entries = parseTarEntries(buffer);
+  expect(entries.map((entry) => entry.path)).toEqual(["package/package.json", "package/src/index.docs.md"]);
+  // The PAX path is what makes the docs file excludable and the manifest metadata strippable.
+  const payload = measuredTarballPayload(entries).toString();
+  expect(payload).not.toContain("docs");
+  expect(payload).not.toContain("vgpuBundleBudgetGzipBytes");
+  expect(JSON.parse(payload)).toEqual({ name: "@vgpu/core", version: "1.0.0" });
+});
+
+test("the tar reader honours PAX size overrides", () => {
+  const contents = Buffer.from("export const a = 1;");
+  const entries = parseTarEntries(
+    tar([
+      { path: "PaxHeaders.0/index.js", type: "x", contents: paxRecords({ size: `${contents.length}` }) },
+      { path: "package/dist/index.js", contents, sizeField: `${(0).toString(8).padStart(11, "0")}\0` },
+    ]),
+  );
+  expect(entries).toHaveLength(1);
+  expect(entries[0].contents.toString()).toBe("export const a = 1;");
+});
+
+test("the tar reader fails closed instead of under-measuring", () => {
+  const file = { path: "package/dist/index.js", contents: Buffer.from("export const a = 1;") };
+
+  // A malformed size field used to yield NaN, an empty body and a silently truncated walk.
+  expect(() => parseTarEntries(tar([{ ...file, sizeField: "not-octal!!!\0" }]))).toThrow(/malformed octal size field/);
+  expect(() => parseTarEntries(tar([{ ...file, sizeField: "000000000098\0" }]))).toThrow(/malformed octal size field/);
+
+  // A body larger than the archive used to be silently clipped.
+  expect(() => parseTarEntries(tar([{ ...file, sizeField: `${(4096).toString(8).padStart(11, "0")}\0` }]))).toThrow(/truncated archive/);
+  expect(() => parseTarEntries(tar([file]).subarray(0, 512))).toThrow(/truncated archive/);
+  expect(() => parseTarEntries(tar([file], { terminate: false }))).toThrow(/missing its end-of-archive marker/);
+
+  // Unknown entry types (and PAX globals that rewrite paths or sizes) must not be skipped quietly.
+  expect(() => parseTarEntries(tar([{ path: "package/link", type: "K", contents: Buffer.from("x") }, file]))).toThrow(/unsupported tar entry type "K"/);
+  expect(() => parseTarEntries(tar([{ path: "pax_global", type: "g", contents: paxRecords({ path: "package/elsewhere" }) }, file]))).toThrow(/global PAX header .* overrides "path"/);
+  expect(() => parseTarEntries(tar([{ path: "PaxHeaders.0/x", type: "x", contents: Buffer.from("999 path=package/x\n") }, file]))).toThrow(/invalid length/);
+  expect(() => parseTarEntries(tar([{ path: "PaxHeaders.0/x", type: "x", contents: Buffer.from("17 pathpackage/x\n") }, file]))).toThrow(/without "="/);
+  expect(() => parseTarEntries(tar([{ path: "PaxHeaders.0/x", type: "x", contents: paxRecords({ size: "-1" }) }, file]))).toThrow(/malformed size record/);
+
+  // An empty archive would measure zero bytes and pass every budget.
+  expect(() => parseTarEntries(Buffer.alloc(1024))).toThrow(/no files/);
+  expect(() => parseTarEntries(tar([{ path: "package/dist/", type: "5" }]))).toThrow(/no files/);
+
+  // Trailing junk after the end-of-archive marker means the walk stopped early.
+  expect(() => parseTarEntries(Buffer.concat([tar([file]), Buffer.from("junk")]))).toThrow(/data after its end-of-archive marker/);
+  expect(() => parseTarEntries(Buffer.concat([tar([file], { terminate: false }), Buffer.alloc(512)]))).toThrow(/expected at least two 512 B zero blocks/);
+
+  // Directory entries are still skipped, and real files after them are still measured.
+  expect(parseTarEntries(tar([{ path: "package/dist/", type: "5" }, file])).map((entry) => entry.path)).toEqual([file.path]);
+});
+
+test("the tar reader accepts what pnpm pack actually produces", () => {
+  const root = mkdtempSync(join(tmpdir(), "bundle-budgets-pack-"));
+  mkdirSync(join(root, "dist"));
+  mkdirSync(join(root, "src"));
+  writeFileSync(join(root, "dist", "index.js"), "export const a = 1;\n//# sourceMappingURL=index.js.map\n");
+  writeFileSync(join(root, "dist", "index.js.map"), JSON.stringify({ version: 3, sources: ["../src/index.ts"], sourcesContent: ["export const a = 1;".repeat(200)], mappings: "AAAA" }));
+  writeFileSync(join(root, "src", "index.docs.md"), "# docs\n".repeat(200));
+  writeFileSync(
+    join(root, "package.json"),
+    `${JSON.stringify({ name: "pack-sample", version: "0.0.0", files: ["dist", "src/**/*.docs.md"], vgpuBundleAudience: "tooling", vgpuBundleBudgetGzipBytes: 1024 }, null, 2)}\n`,
+  );
+  const packed = spawnSync("pnpm", ["--dir", root, "pack", "--pack-destination", root], { encoding: "utf8" });
+  expect(packed.status, packed.stderr).toBe(0);
+
+  const entries = parseTarEntries(gunzipSync(readFileSync(join(root, "pack-sample-0.0.0.tgz"))));
+  const paths = entries.map((entry) => entry.path);
+  expect(paths).toContain("package/package.json");
+  expect(paths).toContain("package/dist/index.js");
+  expect(paths).toContain("package/dist/index.js.map");
+  expect(paths).toContain("package/src/index.docs.md");
+  for (const entry of entries) expect(entry.contents.length).toBeGreaterThan(0);
+
+  const payload = measuredTarballPayload(entries).toString();
+  expect(payload).toContain("export const a = 1;");
+  expect(payload).not.toContain("# docs");
+  expect(payload).not.toContain("sourcesContent");
+  expect(payload).not.toContain("vgpuBundleBudgetGzipBytes");
+});
+
 test("bundle-check gates, warns and re-baselines a workspace", () => {
   const root = writeFixture();
   const manifest = join(root, "packages", "demo", "package.json");
@@ -210,19 +317,33 @@ function run(cwd: string, ...args: string[]) {
   return spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" });
 }
 
+type TarBlock = { path: string; contents?: Buffer; type?: string; sizeField?: string; prefix?: string };
+
 /** Minimal ustar writer, so the tar reader is exercised against real headers. */
-function tar(files: { path: string; contents: Buffer }[]) {
-  const blocks = files.map(({ path, contents }) => {
-    const header = Buffer.alloc(512);
-    header.write(path, 0, 100, "utf8");
-    header.write("000644 \0", 100, 8, "utf8");
-    header.write(`${contents.length.toString(8).padStart(11, "0")}\0`, 124, 12, "utf8");
-    header.write("        ", 148, 8, "utf8");
-    header.write("0", 156, 1, "utf8");
-    header.write("ustar\x0000", 257, 8, "utf8");
-    const checksum = header.reduce((sum, byte) => sum + byte, 0);
-    header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "utf8");
-    return Buffer.concat([header, contents, Buffer.alloc((512 - (contents.length % 512)) % 512)]);
-  });
-  return Buffer.concat([...blocks, Buffer.alloc(1024)]);
+function tarBlock({ path, contents = Buffer.alloc(0), type = "0", sizeField, prefix = "" }: TarBlock) {
+  const header = Buffer.alloc(512);
+  header.write(path, 0, 100, "utf8");
+  header.write("000644 \0", 100, 8, "utf8");
+  header.write(sizeField ?? `${contents.length.toString(8).padStart(11, "0")}\0`, 124, 12, "utf8");
+  header.write("        ", 148, 8, "utf8");
+  header.write(type, 156, 1, "utf8");
+  header.write("ustar\x0000", 257, 8, "utf8");
+  if (prefix) header.write(prefix, 345, 155, "utf8");
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "utf8");
+  return Buffer.concat([header, contents, Buffer.alloc((512 - (contents.length % 512)) % 512)]);
+}
+
+function tar(files: TarBlock[], { terminate = true } = {}) {
+  return Buffer.concat([...files.map(tarBlock), ...(terminate ? [Buffer.alloc(1024)] : [])]);
+}
+
+function paxRecords(records: Record<string, string>) {
+  return Buffer.concat(
+    Object.entries(records).map(([key, value]) => {
+      const payload = ` ${key}=${value}\n`;
+      const length = `${payload.length + 1}`.length + payload.length;
+      return Buffer.from(`${length}${payload}`, "utf8");
+    }),
+  );
 }
