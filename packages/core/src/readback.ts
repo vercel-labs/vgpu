@@ -115,13 +115,9 @@ const readbackFormats = {
 /** Color formats supported by texture readback. */
 export type ReadableTextureFormat = keyof typeof readbackFormats;
 
-function lookupReadbackFormat(format: GPUTextureFormat): TextureReadbackFormatInfo | undefined {
-  return (readbackFormats as Partial<Record<GPUTextureFormat, TextureReadbackFormatInfo>>)[format];
-}
-
 /** Readback layout for `format`, or `VGPU-CORE-UNSUPPORTED-FORMAT` when the format cannot be read back. */
 export function textureReadbackFormat(format: GPUTextureFormat, where: string): TextureReadbackFormatInfo {
-  const info = lookupReadbackFormat(format);
+  const info = (readbackFormats as Partial<Record<GPUTextureFormat, TextureReadbackFormatInfo>>)[format];
   if (info) return info;
   throw new ValidationError({
     code: "VGPU-CORE-UNSUPPORTED-FORMAT",
@@ -164,11 +160,9 @@ function halfToFloat(bits: number): number {
  * Mock-texture equivalent of `readTexture`: mock storage is tightly packed in the texture's own
  * format and holds every layer, so take layer 0 (what `copyTextureToBuffer` copies for a
  * `[width, height]` extent) and apply the same channel swizzle a real copy does.
- * Formats without a readback layout keep their raw stored bytes — `readFloats()` still rejects them.
+ * Callers pass an already validated layout, so mock and real devices reject the same formats.
  */
-export function readMockTextureBytes(stored: Uint8Array, size: readonly [number, number, number?], format: GPUTextureFormat): Uint8Array {
-  const info = lookupReadbackFormat(format);
-  if (!info) return stored.slice();
+export function readMockTextureBytes(stored: Uint8Array, size: readonly [number, number, number?], info: TextureReadbackFormatInfo): Uint8Array {
   const pixels = stored.slice(0, size[0] * size[1] * info.bytesPerPixel);
   if (info.swizzle === "bgra-to-rgba") swizzleBgraToRgba(pixels);
   return pixels;

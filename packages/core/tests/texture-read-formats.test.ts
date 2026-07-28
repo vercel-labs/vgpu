@@ -105,6 +105,15 @@ test("rg formats read back two components per texel", async () => {
   device.destroy();
 });
 
+test("read() rejects formats that have no readback layout, exactly like a real device", async () => {
+  const device = mockDevice();
+  const depth = createTexture(device, "depth24plus", [1, 1]);
+
+  // The mock must not resolve raw stored bytes where Readback.readTexture would throw.
+  await expect(depth.read()).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
+  device.destroy();
+});
+
 test("readFloats() rejects formats that have no readback layout", async () => {
   const device = mockDevice();
   const depth = createTexture(device, "depth24plus", [1, 1]);

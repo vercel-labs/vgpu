@@ -100,7 +100,9 @@ export class Texture {
    */
   async read(): Promise<Uint8Array> {
     this.assertAlive();
-    if (isMockGPUTexture(this.gpu)) return readMockTextureBytes(this.gpu.__vgpuMockBytes, this.options.size, this.options.format);
+    // Validated before the mock branch: a mock device must reject the same formats a real one does.
+    const info = textureReadbackFormat(this.options.format, "Texture.read");
+    if (isMockGPUTexture(this.gpu)) return readMockTextureBytes(this.gpu.__vgpuMockBytes, this.options.size, info);
     return this.device.readback.readTexture(this.gpu, this.options.size, this.options.format);
   }
 
