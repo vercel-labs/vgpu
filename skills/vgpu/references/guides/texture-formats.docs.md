@@ -2,25 +2,39 @@
 
 # Practical texture-format matrix
 
-Choose a target format from the operations it must support, not just its channel precision. In vgpu, `format` is passed through to WebGPU for render-target capability; the API rejects a filtering binding for 32-bit float textures unless the device was initialized with `float32-filterable` support. `target.read()` is a deliberately narrower convenience API (known limitation: [#193](https://github.com/vercel-labs/vgpu/issues/193)).
+Choose a target format from the operations it must support, not just its channel precision. In vgpu, `format` is passed through to WebGPU for render-target capability; the API rejects a filtering binding for 32-bit float textures unless the device was initialized with `float32-filterable` support. `target.read()` returns raw texel bytes and `target.readFloats()` decodes them to f32 components, so HDR and scalar targets read back directly.
 
 ## Common color and scalar formats
 
-| Format | Render target | `sampler` with linear filtering | `target.read()` | Practical use |
-|---|---:|---:|---:|---|
-| `rgba8unorm` | Yes | Yes | Yes | Default target; screenshots, debug probes, and LDR color. |
-| `rgba8unorm-srgb` | Yes | Yes | Yes | LDR color encoded as sRGB; do color math in linear space. |
-| `rgba16float` | Yes | Yes | No | Filterable HDR color, bloom, and lighting intermediates. |
-| `rgba32float` | Yes | No by default | No | Full-precision HDR/data; requires `float32-filterable` to bind to a filtering sampler. |
-| `r16float` | Yes | Yes | No | Filterable scalar data such as a height or distance field. |
-| `r32float` | Yes | No by default | No | Full-precision scalar data; requires `float32-filterable` for linear sampling. |
-| `r8unorm` | Yes | Yes | No | Compact normalized scalar/mask data. |
+| Format | Render target | `sampler` with linear filtering | Readback | Practical use |
+|---|---:|---:|---|---|
+| `rgba8unorm` | Yes | Yes | `read()` — 4 bytes/texel | Default target; screenshots, debug probes, and LDR color. |
+| `rgba8unorm-srgb` | Yes | Yes | `read()` — 4 bytes/texel | LDR color encoded as sRGB; do color math in linear space. |
+| `rgba16float` | Yes | Yes | `readFloats()` — 4 f32/texel | Filterable HDR color, bloom, and lighting intermediates. |
+| `rgba32float` | Yes | No by default | `readFloats()` — 4 f32/texel | Full-precision HDR/data; requires `float32-filterable` to bind to a filtering sampler. |
+| `r16float` | Yes | Yes | `readFloats()` — 1 f32/texel | Filterable scalar data such as a height or distance field. |
+| `r32float` | Yes | No by default | `readFloats()` — 1 f32/texel | Full-precision scalar data; requires `float32-filterable` for linear sampling. |
+| `r8unorm` | Yes | Yes | `read()` — 1 byte/texel | Compact normalized scalar/mask data. |
+
+`rg8unorm`, `rg16float`, `rg32float`, and the `bgra8unorm` canvas formats read back too; `read()` always hands back the raw unpadded texel bytes of the format, and `readFloats()` decodes any of them to a `Float32Array` of components (`unorm8` normalized to `[0, 1]`). Depth/stencil, packed (`rgb10a2unorm`, `rg11b10ufloat`), snorm/uint/sint, and compressed formats still throw `VGPU-CORE-UNSUPPORTED-FORMAT`.
 
 “Render target” means the format can be requested through `gpu.target({ format })` as a color attachment in the normal WebGPU profile; use an adapter that supports the requested format and feature set. `rgba32float` is renderable even though it is not linearly filterable by default.
 
-## Readback is an encode step for HDR and scalar targets
+## Reading HDR and scalar targets
 
-The core readback implementation returns `Uint8Array` pixels for 8-bit RGBA/BGRA formats; it does not decode floating-point or one-channel formats. For a target that the table marks **No**, render a fullscreen encode pass into a separate `rgba8unorm` target and call `read()` there. Map the value to `[0, 1]` deliberately (for example, `direction * 0.5 + 0.5`) so the bytes have a documented decode rule. See [Debugging shaders by extracting internal values](shader-debugging.docs.md) for a complete HDR encode-pass recipe.
+`read()` returns `Uint8Array` raw texel bytes for every supported format — 4 bytes per texel for `rgba8unorm`, 8 for `rgba16float`, 16 for `rgba32float` — with row padding removed and BGRA swizzled to RGBA. For anything but 8-bit formats, prefer `readFloats()`, which decodes half/float texels into a `Float32Array` of components and preserves values above `1` and below `0`:
+
+```typescript
+import { init } from "vgpu/node";
+
+const gpu = await init();
+const hdr = gpu.target({ size: [256, 256], format: "rgba16float" });
+// ...render into hdr...
+const floats = await hdr.readFloats(); // 256 * 256 * 4 components, HDR values intact
+console.log(floats[0]);
+```
+
+An encode pass into an `rgba8unorm` target (mapping values to `[0, 1]`, for example `direction * 0.5 + 0.5`) is still the right tool when the goal is a PNG snapshot or a byte-exact visual diff. See [Debugging shaders by extracting internal values](shader-debugging.docs.md) for that recipe. For formats without a readback layout, blit into a supported format first, or write the data into a storage buffer and use `StorageBuffer.read()`.
 
 ## Filtering 32-bit float textures
 
