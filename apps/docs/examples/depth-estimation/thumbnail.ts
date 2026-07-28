@@ -8,7 +8,7 @@
  */
 import type { Gpu, Target } from 'vgpu';
 import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { decodeGoldenDepth, GOLDEN_MODEL_ID } from './fixtures';
+import { decodeGoldenColour, decodeGoldenDepth, GOLDEN_MODEL_ID } from './fixtures';
 import { getDepthModel } from './model-contract';
 import { createDepthBuffer, createReliefPipeline, writeDepth } from './renderer';
 
@@ -25,17 +25,20 @@ export async function renderThumbnail(
   _options: ThumbnailOptions = {},
 ): Promise<void> {
   const model = getDepthModel(GOLDEN_MODEL_ID);
-  const relief = createReliefPipeline(gpu, 'depth-estimation-thumb');
+  const view = createSideBySidePipeline(gpu, 'depth-estimation-thumb');
   const depth = createDepthBuffer(gpu, model, 'depth-estimation-thumb');
+  const colour = createColourBuffer(gpu, model, 'depth-estimation-thumb');
   try {
     writeDepth(depth, decodeGoldenDepth());
-    relief.draw(gpu, target, depth, model, { hasResult: true, parallax: [0, 0] });
+    writeColour(colour, decodeGoldenColour());
+    view.draw(gpu, target, depth, model, { hasResult: true, parallax: [0, 0] });
   } finally {
     await Promise.allSettled([
       Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
       Promise.resolve().then(() => gpu.settled()),
     ]);
-    relief.dispose();
+    view.dispose();
     depth.dispose();
+    colour.dispose();
   }
 }

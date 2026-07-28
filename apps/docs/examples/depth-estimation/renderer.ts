@@ -18,16 +18,16 @@ import {
   type DepthModel,
 } from './model-contract';
 import reduceRangeWgsl from './reduce-range.wgsl';
-import reliefWgsl from './relief.wgsl';
+import sideBySideWgsl from './side-by-side.wgsl';
 
 /** Byte view for `Buffer.write`; narrows TypeScript's ArrayBufferLike generic. */
-function asWriteData(view: Float32Array | Uint32Array): Uint8Array<ArrayBuffer> {
+function asWriteData(view: Float32Array | Uint32Array | Uint8ClampedArray): Uint8Array<ArrayBuffer> {
   return new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
 }
 
-export interface ReliefPipeline {
+export interface SideBySidePipeline {
   /**
-   * Draws one frame.
+   * Draws one frame: the colour input on the left, its depth on the right.
    *
    * `depth` may be a non-owning wrap of ORT's output buffer, so this only reads
    * it inside the submitted pass and never retains it past the call.
@@ -36,14 +36,15 @@ export interface ReliefPipeline {
     gpu: Gpu,
     output: Surface | Target,
     depth: Buffer,
+    colour: Buffer,
     model: DepthModel,
-    options?: { hasResult?: boolean; parallax?: readonly [number, number] },
+    options?: { hasResult?: boolean },
   ): void;
   dispose(): void;
 }
 
-export function createReliefPipeline(gpu: Gpu, label = 'depth-estimation'): ReliefPipeline {
-  const effect: Effect = gpu.effect(reliefWgsl, { label: `${label}-relief` });
+export function createSideBySidePipeline(gpu: Gpu, label = 'depth-estimation'): SideBySidePipeline {
+  const effect: Effect = gpu.effect(sideBySideWgsl, { label: `${label}-view` });
   const reducer: Compute = gpu.compute(reduceRangeWgsl, { label: `${label}-range` });
   // Two u32 keys: the min and max of the current depth tensor.
   const range: Buffer = gpu.device.createBuffer({
@@ -53,9 +54,8 @@ export function createReliefPipeline(gpu: Gpu, label = 'depth-estimation'): Reli
   });
 
   return {
-    draw(currentGpu, output, depth, model, options = {}) {
+    draw(currentGpu, output, depth, colour, model, options = {}) {
       const hasResult = options.hasResult ?? true;
-      const [px, py] = options.parallax ?? [0, 0];
       const autoRange = model.presentation.mode === 'auto-range';
 
       if (hasResult && autoRange) {
@@ -75,10 +75,10 @@ export function createReliefPipeline(gpu: Gpu, label = 'depth-estimation'): Reli
             model.presentation.mode === 'log-metric' ? model.presentation.nearMeters : 0.35,
           far_meters: model.presentation.mode === 'log-metric' ? model.presentation.farMeters : 10,
           has_result: hasResult ? 1 : 0,
-          parallax: [px, py],
         },
         depth,
         range,
+        colour,
       });
       currentGpu.frame((frame) => frame.pass({ target: output }, (pass) => pass.draw(effect)));
     },
@@ -99,4 +99,17 @@ export function createDepthBuffer(gpu: Gpu, model: DepthModel, label = 'depth-es
 
 export function writeDepth(buffer: Buffer, values: Float32Array): void {
   buffer.write(asWriteData(values));
+}
+
+/** vgpu-owned buffer holding one RGBA8 frame for the colour half. */
+export function createColourBuffer(gpu: Gpu, model: DepthModel, label = 'depth-estimation'): Buffer {
+  return gpu.device.createBuffer({
+    size: model.width * model.height * 4,
+    usage: ['storage', 'copy_dst'],
+    label: `${label}-colour`,
+  });
+}
+
+export function writeColour(buffer: Buffer, rgba: Uint8ClampedArray): void {
+  buffer.write(asWriteData(rgba));
 }

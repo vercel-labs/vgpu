@@ -10,6 +10,7 @@
  * Imported by the thumbnail entry and the tests, never by the browser bundle.
  */
 import {
+  GOLDEN_COLOUR_BASE64,
   GOLDEN_DEPTH_BASE64,
   GOLDEN_HEIGHT,
   GOLDEN_SCALE_METERS,
@@ -63,4 +64,27 @@ export function decodeGoldenDepth(): Float32Array {
   const scale = GOLDEN_SCALE_METERS / 65535;
   for (let i = 0; i < expected; i += 1) depth[i] = aligned[i]! * scale;
   return depth;
+}
+
+/**
+ * The colour half of the committed capture, expanded to RGBA8.
+ *
+ * Stored as RGB because the Node thumbnail path has no image decoder and the
+ * source is a JPEG; the alpha byte is added here so the result can be written
+ * straight into the same buffer layout the live camera path uploads.
+ */
+export function decodeGoldenColour(): Uint8ClampedArray {
+  const rgb = decodeBase64(GOLDEN_COLOUR_BASE64);
+  const pixels = GOLDEN_WIDTH * GOLDEN_HEIGHT;
+  if (rgb.byteLength !== pixels * 3) {
+    throw new Error(`golden colour fixture is ${rgb.byteLength} bytes, expected ${pixels * 3}.`);
+  }
+  const rgba = new Uint8ClampedArray(pixels * 4);
+  for (let i = 0; i < pixels; i += 1) {
+    rgba[i * 4] = rgb[i * 3];
+    rgba[i * 4 + 1] = rgb[i * 3 + 1];
+    rgba[i * 4 + 2] = rgb[i * 3 + 2];
+    rgba[i * 4 + 3] = 255;
+  }
+  return rgba;
 }

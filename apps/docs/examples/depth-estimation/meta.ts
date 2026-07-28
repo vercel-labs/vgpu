@@ -4,7 +4,7 @@ export const meta = {
   slug: 'depth-estimation',
   title: 'Depth Estimation',
   description:
-    'Estimate depth from a photo or webcam with ONNX Runtime Web on WebGPU, then light the GPU-resident depth tensor as a contour-shaded relief through a zero-copy vgpu buffer wrap. Three models are selectable, from a 5 MiB convnet to a 94 MiB transformer.',
+    'Estimate depth from a photo or webcam with ONNX Runtime Web on WebGPU, drawn beside the colour input as a grayscale depth map. The GPU-resident output tensor is shaded through a zero-copy vgpu buffer wrap, with three models to choose between.',
   tags: ['machine-learning', 'onnx', 'depth-estimation', 'shader'],
   capabilities: [
     'webgpu',
@@ -16,12 +16,11 @@ export const meta = {
     'compute-shader',
     'camera-input',
     'select-control',
-    'pointer-input',
     'demand-rendering',
     'responsive-canvas',
   ],
   // The thumbnail draws a committed depth capture; no model and no time dependence.
-  thumb: { warmupFrames: 1, dt: 0, note: 'Deterministic fixture depth; no ORT in the Node path.' },
+  thumb: { warmupFrames: 1, dt: 0, note: 'Deterministic fixture capture; no ORT in the Node path.' },
   files: [
     'index.tsx',
     'renderer.ts',
@@ -29,7 +28,8 @@ export const meta = {
     'model-contract.ts',
     'preprocess.ts',
     'inference-pump.ts',
-    'relief.wgsl',
+    'model-switch.ts',
+    'side-by-side.wgsl',
     'reduce-range.wgsl',
   ],
 } as const satisfies ExampleMetaDefinition;

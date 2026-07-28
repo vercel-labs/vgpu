@@ -25,7 +25,7 @@ import {
   preprocessDepthSource,
   type PreprocessScratch,
 } from './preprocess';
-import { createDepthBuffer, createReliefPipeline, type ReliefPipeline } from './renderer';
+import { createDepthBuffer, createSideBySidePipeline, type SideBySidePipeline } from './renderer';
 
 /**
  * Committed, CC0-licensed indoor photograph used as the default source.
@@ -79,8 +79,9 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   let shared: SharedDeviceSession | undefined;
   let gpu: Gpu | undefined;
   let surface: Surface | undefined;
-  let relief: ReliefPipeline | undefined;
+  let view: SideBySidePipeline | undefined;
   let idleDepth: Buffer | undefined;
+  let colour: Buffer | undefined;
   let scratch: PreprocessScratch | undefined;
 
   let image: HTMLImageElement | undefined;
@@ -93,7 +94,6 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
    * change may still be in flight; it must clean up but must not paint.
    */
   let generation = 0;
-  let parallax: readonly [number, number] = [0, 0];
 
   const status = () => {
     options.onStatus?.({ phase, modelId, source, lastInferenceMs });
@@ -131,8 +131,8 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
 
   /** Paints the panel colour so the canvas is never an empty white box. */
   function drawIdle(): void {
-    if (!gpu || !surface || !relief || !idleDepth) return;
-    relief.draw(gpu, surface, idleDepth, model, { hasResult: false, parallax });
+    if (!gpu || !surface || !view || !idleDepth || !colour) return;
+    view.draw(gpu, surface, idleDepth, colour, model, { hasResult: false });
   }
 
   function currentSource(): CanvasImageSource | undefined {
@@ -141,7 +141,7 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   }
 
   async function runOnce(startedAt: number): Promise<void> {
-    if (disposed || !shared || !gpu || !surface || !relief || !scratch) return;
+    if (disposed || !shared || !gpu || !surface || !view || !scratch) return;
     const frameSource = currentSource();
     if (!frameSource) return;
 
@@ -165,7 +165,7 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       if (disposed || startedAt !== generation) return;
 
       await withWrappedTensor(gpu, raw, (wrapped) => {
-        relief!.draw(gpu!, surface!, wrapped, model, { hasResult: true, parallax });
+        view!.draw(gpu!, surface!, wrapped, colour!, model, { hasResult: true });
       });
       lastInferenceMs = performance.now() - began;
       setPhase('ready');
@@ -180,10 +180,12 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   async function teardownSession(): Promise<void> {
     pump.stop();
     await pump.active?.catch(() => {});
-    relief?.dispose();
-    relief = undefined;
+    view?.dispose();
+    view = undefined;
     idleDepth?.dispose();
     idleDepth = undefined;
+    colour?.dispose();
+    colour = undefined;
     surface?.dispose();
     surface = undefined;
     gpu = undefined;
@@ -216,8 +218,9 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     shared = session;
     gpu = session.gpu;
     surface = gpu.surface(options.canvas, { dpr: [1, 2] });
-    relief = createReliefPipeline(gpu);
+    view = createSideBySidePipeline(gpu);
     idleDepth = createDepthBuffer(gpu, model);
+    colour = createColourBuffer(gpu, model);
     scratch ??= createPreprocessScratch(model.width, model.height);
 
     measure();
@@ -262,24 +265,6 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     }
   }
 
-  // Pointer drives the relief's parallax. The shader reads it as a uniform, so
-  // the value only reaches the screen on the next inference; the pump coalesces
-  // and rate-limits those, which is what keeps a heavy model from being asked
-  // to re-run on every mouse move.
-  const onPointerMove = (event: PointerEvent) => {
-    const rect = options.canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    parallax = [
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      ((event.clientY - rect.top) / rect.height) * 2 - 1,
-    ];
-    pump.request();
-  };
-  const onPointerLeave = () => {
-    parallax = [0, 0];
-    pump.request();
-  };
-
   const boot = async () => {
     const element = new Image();
     element.decoding = 'async';
@@ -290,8 +275,6 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
 
     observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     observer?.observe(options.canvas);
-    options.canvas.addEventListener('pointermove', onPointerMove);
-    options.canvas.addEventListener('pointerleave', onPointerLeave);
     await initialize();
   };
 
@@ -335,8 +318,6 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       if (disposed) return;
       disposed = true;
       observer?.disconnect();
-      options.canvas.removeEventListener('pointermove', onPointerMove);
-      options.canvas.removeEventListener('pointerleave', onPointerLeave);
       stopCamera();
       // Drain an in-flight switch first, so teardown cannot race a session
       // that is still being created.

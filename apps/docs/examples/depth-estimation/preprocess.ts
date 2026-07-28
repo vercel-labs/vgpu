@@ -105,6 +105,13 @@ export function sourceSize(source: CanvasImageSource): { width: number; height: 
   return { width: Number(candidate.width ?? 0), height: Number(candidate.height ?? 0) };
 }
 
+export interface PreprocessedFrame {
+  /** Planar NCHW input for the model. */
+  readonly nchw: Float32Array;
+  /** The same crop as RGBA8, uploaded as-is for the colour half of the view. */
+  readonly rgba: Uint8ClampedArray;
+}
+
 /**
  * Full browser path: crop, scale, and normalize one frame for `model`.
  *
@@ -115,7 +122,7 @@ export function preprocessDepthSource(
   source: CanvasImageSource,
   model: DepthModel,
   scratch: PreprocessScratch,
-): Float32Array {
+): PreprocessedFrame {
   const { width: sourceWidth, height: sourceHeight } = sourceSize(source);
   if (!sourceWidth || !sourceHeight) {
     throw new Error('depth-estimation: source has no intrinsic size yet.');
@@ -130,5 +137,5 @@ export function preprocessDepthSource(
   context.imageSmoothingQuality = 'high';
   context.drawImage(source, sx, sy, sw, sh, 0, 0, model.width, model.height);
   const { data } = context.getImageData(0, 0, model.width, model.height);
-  return rgbaToNchw(data, model.width, model.height, model.normalization);
+  return { nchw: rgbaToNchw(data, model.width, model.height, model.normalization), rgba: data };
 }
