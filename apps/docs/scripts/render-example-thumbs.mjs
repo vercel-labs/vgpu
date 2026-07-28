@@ -31,6 +31,7 @@ const rendererEntries = [
   { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'environment-map', module: '../examples/environment-map/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'transmission', module: '../examples/transmission/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'radiance-cascades', module: '../examples/radiance-cascades/renderer.ts', exportName: 'renderThumbnail' },
 ];
 
 const sizes = args.proofDir ? { proof: [160, 90] } : {
@@ -85,7 +86,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
@@ -113,6 +114,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels;
     const modePixels = aaModePixels ?? postProcessingModePixels;
     let fluidState;
+    let radianceStats;
     if (renderer) {
       await renderer(gpu, target, {
         warmupFrames: args.proofDir ? (slug === 'fluid' ? 24 : 3) : (metaThumb.warmupFrames ?? 60),
@@ -127,9 +129,15 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
         onIntermediateRendered: slug === 'fft-ocean' && process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR
           ? (kind, raw, mapSize) => writeFftOceanIntermediate(kind, raw, mapSize, process.env.VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR)
           : undefined,
+        // Radiance cascades always render with the scripted strokes in the deterministic
+        // path: `renderThumb` asserts its own stats, so a thumbnail that stops lighting
+        // the grid, stops painting, or goes non-finite fails here.
+        scriptedStroke: slug === 'radiance-cascades',
         scriptedDrag: slug === 'fluid' && args.fluidDrag,
         soak: slug === 'fluid' && args.fluidSoak,
-        onStateValidated: slug === 'fluid' ? (stats) => { assertFluidState(stats); fluidState = stats; } : undefined,
+        onStateValidated: slug === 'fluid'
+          ? (stats) => { assertFluidState(stats); fluidState = stats; }
+          : slug === 'radiance-cascades' ? (stats) => { radianceStats = stats; } : undefined,
       });
     } else {
       const fragmentFile = resolveFragmentFile(example, exampleSources);
@@ -183,7 +191,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, fluidMetrics, fluidState };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, fluidMetrics, fluidState, radianceStats };
   } finally {
     gpu.dispose();
   }

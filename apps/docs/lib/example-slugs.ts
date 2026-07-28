@@ -12,6 +12,7 @@ export const exampleSlugs = [
   'raymarched-fractal',
   'environment-map',
   'transmission',
+  'radiance-cascades',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

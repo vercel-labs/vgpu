@@ -14,7 +14,8 @@
     "instanced-rendering": 13376,
     "batch-rendering": 13243,
     "fft-ocean": 9235,
-    "raymarched-fractal": 3995
+    "raymarched-fractal": 3995,
+    "radiance-cascades": 13076
   },
   "exampleGrowth": {
     "percent": 2,
