@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4",
+  "id": "air-painting",
+  "title": "Air Painting",
+  "description": "Wipe fog off the glass with your hands. ONNX Runtime Web tracks both palms on WebGPU to clear a frosted camera feed.",
+  "tags": [
+    "machine-learning",
+    "onnx",
+    "hand-tracking",
+    "frosted-glass",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "machine-learning",
+    "external-device",
+    "zero-copy",
+    "gpu-buffer-interop",
+    "storage-buffers",
+    "compute-shader",
+    "camera-input",
+    "textures",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "d241a844e359270d73697523f25510513fd18e5b3676aa5a06cbd561ffb521b6",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 6354,
+      "sha256": "fd1aa46cbae0f275ace3ac90f7954305588cee769dc81556e694b16637d432e6",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 3772,
+      "sha256": "95aacaa5cc014c331f960568806c47c515e89bc780492387fddffa1d39f659f7",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/renderer.ts.raw"
+    },
+    {
+      "path": "ort-runtime.ts",
+      "contentType": "text/typescript",
+      "size": 21232,
+      "sha256": "276d19f80022b1873d6a66441910a529f55cd8ba7c730fb384167a4f1a30e7c5",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/ort-runtime.ts.raw"
+    },
+    {
+      "path": "visual-pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 19652,
+      "sha256": "f8dc55cfe10feff2041b78e7ae48dc9f78150f664bba480576c72e19438e48bc",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/visual-pipeline.ts.raw"
+    },
+    {
+      "path": "inference-scheduler.ts",
+      "contentType": "text/typescript",
+      "size": 3140,
+      "sha256": "420a015cebff31bd0c46a6b8c6d6960ad07653347dfbb75f69ea67768f2be514",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/inference-scheduler.ts.raw"
+    },
+    {
+      "path": "camera-source.ts",
+      "contentType": "text/typescript",
+      "size": 6685,
+      "sha256": "5a5c01e72ea41c55514b509c9344645acfdd13ff67e4718c527521eea24b3a4d",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/camera-source.ts.raw"
+    },
+    {
+      "path": "hand-model-contract.ts",
+      "contentType": "text/typescript",
+      "size": 8661,
+      "sha256": "e730aeedd7e322a8110535dc614cc18dcb77678ca793cbb196b91a7792ca7869",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand-model-contract.ts.raw"
+    },
+    {
+      "path": "hand-pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 16600,
+      "sha256": "33cc49ec16220f93f9fc6b0c0c87cd1796d1dfdb0a7e51e39049b01b1cd051ad",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand-pipeline.ts.raw"
+    },
+    {
+      "path": "hand-tracker.ts",
+      "contentType": "text/typescript",
+      "size": 14299,
+      "sha256": "75b8e4ca75c332bf4eab66223a061d6a33178c07955948ea2cb98d77a7037676",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand-tracker.ts.raw"
+    },
+    {
+      "path": "hand-preprocess.ts",
+      "contentType": "text/typescript",
+      "size": 5848,
+      "sha256": "95ec92783e281ff38c7e268bdad6140bd9724a830eb028276fc0816c35f53d9c",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand-preprocess.ts.raw"
+    },
+    {
+      "path": "brush-contract.ts",
+      "contentType": "text/typescript",
+      "size": 15663,
+      "sha256": "4e4a05ea731531d8d0061bcbaedaf80743d53d5448f8b36bb9c30e22718fb5cb",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/brush-contract.ts.raw"
+    },
+    {
+      "path": "fixtures.ts",
+      "contentType": "text/typescript",
+      "size": 16573,
+      "sha256": "ff7719812e81c4e97be3f6b585c1d94f9d5035bf0b421a903cf1ebc270b3c560",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/fixtures.ts.raw"
+    },
+    {
+      "path": "hand-crop.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3394,
+      "sha256": "3537ba9dca91fb9365c51fb91815d0c6dfbdd514405bbd492e18d63577015a5e",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand-crop.wgsl.raw"
+    },
+    {
+      "path": "hand.wgsl",
+      "contentType": "text/wgsl",
+      "size": 10996,
+      "sha256": "f3671be7c34617302649ad96d131b9d3c733df7d81c21259feef5f4674a1bdd3",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/hand.wgsl.raw"
+    },
+    {
+      "path": "paint.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4336,
+      "sha256": "60e521305638d08d9ba9dcdb22539eb72b46c797c9bd3e5bc7f986861e915520",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/paint.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 7732,
+      "sha256": "e7db473585e81c7b0e573f875c3ea673117adb797fab4187df9505216bf66309",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/composite.wgsl.raw"
+    },
+    {
+      "path": "frost.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2502,
+      "sha256": "37c9d47a8e1c252c2d6b540a09cd1baf6f4cc7e0f5f7a4c2957f7d0846fc47a8",
+      "url": "https://vgpu.labs.vercel.dev/api/examples/v1/revisions/f3f1f3717f12bab1fb3dfac5efa50f1cf734e01ceb4ef1989a0c876032ffe0a4/examples/air-painting/files/frost.wgsl.raw"
+    }
+  ]
+}

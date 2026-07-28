@@ -6,6 +6,10 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
+  "air-painting": {
+    "card": "/examples/air-painting.card.png",
+    "hero": "/examples/air-painting.hero.png"
+  },
   "anti-aliasing": {
     "card": "/examples/anti-aliasing.card.png",
     "hero": "/examples/anti-aliasing.hero.png"
@@ -17,6 +21,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "black-hole": {
     "card": "/examples/black-hole.card.png",
     "hero": "/examples/black-hole.hero.png"
+  },
+  "depth-estimation": {
+    "card": "/examples/depth-estimation.card.png",
+    "hero": "/examples/depth-estimation.hero.png"
   },
   "earth": {
     "card": "/examples/earth.card.png",
@@ -41,6 +49,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "instanced-rendering": {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
+  },
+  "mnist-classifier": {
+    "card": "/examples/mnist-classifier.card.png",
+    "hero": "/examples/mnist-classifier.hero.png"
   },
   "nextjs-flare": {
     "card": "/examples/nextjs-flare.card.png",
