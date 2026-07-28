@@ -22,6 +22,7 @@ export class FlarePipeline {
   private readonly output: Target;
   private targets: FlareTargets | undefined;
   private size: readonly [number, number] = [1, 1];
+  private supersample = 1;
   private readonly sampler: GPUSampler;
   private readonly blueNoiseTexture: GPUTexture;
   private readonly effects: FrameEffects;
@@ -55,18 +56,32 @@ export class FlarePipeline {
     return Boolean(this.targets);
   }
 
-  async resize(size: readonly [number, number]): Promise<boolean> {
+  async resize(size: readonly [number, number], supersample = 1): Promise<boolean> {
     const nextSize = size.map((value) => Math.max(1, Math.floor(value))) as [number, number];
-    if (nextSize[0] === this.size[0] && nextSize[1] === this.size[1] && this.targets) {
+    if (
+      nextSize[0] === this.size[0] &&
+      nextSize[1] === this.size[1] &&
+      this.supersample === supersample &&
+      this.targets
+    ) {
       return false;
     }
     const needsCompile = !this.targets;
     this.size = nextSize;
+    this.supersample = supersample;
     this.output.resize(nextSize);
     this.destroyTargets();
     const full = { size: nextSize, format: 'rgba8unorm' as const };
+    // The ink mask is the pipeline's only hard-edged source: rendering it
+    // supersampled and letting every consumer's linear sampler box-filter it
+    // back down antialiases the glyph diagonals on low-DPR screens. Rim and
+    // blur stay at output resolution; they are smooth fields already.
+    const scene = {
+      size: [nextSize[0] * supersample, nextSize[1] * supersample] as [number, number],
+      format: 'rgba8unorm' as const,
+    };
     this.targets = {
-      scene: this.gpu.target(full),
+      scene: this.gpu.target(scene),
       rim: this.gpu.target(full),
       rimA: this.gpu.target(full),
       rimB: this.gpu.target(full),

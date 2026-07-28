@@ -71,6 +71,7 @@ export function createRenderer(options: BrowserRendererOptions): ExampleRenderer
   let pendingSize: RenderSize | undefined;
   let applyingResize = false;
   let appliedBacking: readonly [number, number] = [0, 0];
+  let appliedSupersample = 0;
   let reportedError = false;
 
   const uploadLogo = (source: HTMLCanvasElement) => {
@@ -85,15 +86,26 @@ export function createRenderer(options: BrowserRendererOptions): ExampleRenderer
   const applySize = async (size: RenderSize) => {
     if (!pipeline) return;
     const backing = backingDimensions(size.width, size.height, size.dpr);
-    if (backing[0] === appliedBacking[0] && backing[1] === appliedBacking[1]) return;
+    // Below ~1.5 DPR the glyph's 1px diagonals alias: the ink mask renders
+    // at 2x (with the SVG rasterized to match) and every consumer's linear
+    // sampler box-filters it back down.
+    const supersample = size.dpr < 1.5 ? 2 : 1;
+    if (
+      backing[0] === appliedBacking[0] &&
+      backing[1] === appliedBacking[1] &&
+      supersample === appliedSupersample
+    ) {
+      return;
+    }
     appliedBacking = backing;
-    await pipeline.resize(backing);
+    appliedSupersample = supersample;
+    await pipeline.resize(backing, supersample);
     if (disposed) return;
     // The reference size is the virtual square the glyph box is measured
-    // against; rasterizing at backing resolution keeps the strokes crisp.
+    // against; rasterizing at scene resolution keeps the strokes crisp.
     const reference = Math.min(backing[0], backing[1]);
     placement = centeredPlacement(backing[0], backing[1], reference);
-    const logo = await rasterizeLogo(reference, 1);
+    const logo = await rasterizeLogo(reference * supersample, 1);
     if (disposed) return;
     uploadLogo(logo);
   };
@@ -247,7 +259,7 @@ export async function renderThumbnail(
   const pipeline = new FlarePipeline(gpu, target);
   let logoTexture: GPUTexture | undefined;
   try {
-    await pipeline.resize(target.size);
+    await pipeline.resize(target.size, 2);
     const [width, height] = target.size;
     const placement = centeredPlacement(width, height, height);
     const rgba = await bakedLogoRgba();
