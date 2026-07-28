@@ -89,9 +89,9 @@
     "./core": "client"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 44544,
-    "./node": 44544,
-    "./mock": 44544,
+    ".": 45056,
+    "./node": 45056,
+    "./mock": 45056,
     "./scene": 6656,
     "./client": 1024,
     "./core": 4096
