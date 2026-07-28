@@ -3,73 +3,81 @@
  *
  * Three separate things live here, and they make different claims:
  *
- * 1. `EVIDENCE_KEYPOINTS` — real `[y, x, score]` wrist values the committed model
- *    produced on real GPU hardware for two COCO val2017 photos. They pin the
- *    letterbox/unletterbox math against the model's actual output. The photos
- *    themselves are not redistributed; only these numbers are.
+ * 1. `HAND_EVIDENCE` — real measurements the committed model pair produced on
+ *    real photographs, recorded so the geometry has something to be checked
+ *    against that is not itself synthetic. The photos are not redistributed by
+ *    the example; only these numbers are.
  * 2. `createFixtureFrame()` — a license-clean camera stand-in, rasterized in pure
  *    TypeScript so the Node thumbnail, the unit tests and the no-camera visual
  *    demo all see byte-identical pixels with no webcam, network or codec.
- * 3. `syntheticKeypointFrames()` — a 24-sample synthetic **two-handed** trajectory
- *    encoded as real `[1,1,17,3]` buffers, wrists and elbows both. It drives the
- *    *production* wrist/paint/composite shaders deterministically.
+ * 3. `syntheticHandFrames()` — a 24-sample synthetic **two-handed** trajectory
+ *    encoded as real `[1,63]` landmark buffers plus the ROIs they were cropped
+ *    through. It drives the *production* `hand.wgsl` / `paint.wgsl` /
+ *    `composite.wgsl` deterministically.
  *
- * (3) is a **visual** fixture. It proves the shaders and the lifetime plumbing,
- * and it proves nothing whatsoever about ORT interop — only a real browser can,
- * and the example says so in its own copy.
+ * (3) is a **visual** fixture. It proves the shaders, the inverse crop transform
+ * and the lifetime plumbing, and it proves nothing whatsoever about ORT interop
+ * — only a real browser can, and the example says so in its own copy.
+ *
+ * The synthetic landmarks are authored **backwards**, which is what lets the
+ * tests assert equality rather than proximity: a canonical hand is built with
+ * its MCP centroid at the exact centre of the crop, and the ROI is then placed
+ * with its centre on the point the path wants painted. Because the centre of a
+ * crop maps to the centre of its ROI under any rotation, the measured centroid
+ * lands on the authored point exactly, whatever angle the fixture uses.
  */
-import {
-  BRUSH_LIMBS,
-  brushSpaceToKeypoint,
-  computeFrameTransform,
-  HAND_EXTRAPOLATION,
-  KEYPOINT_COUNT,
-  KEYPOINT_ELEMENTS,
-  type FrameTransform,
-  type Vec2,
-} from './pose-contract';
+import { brushToSource } from './hand-preprocess';
+import { LANDMARK_SIZE, MCP_LANDMARKS, NUM_LANDMARKS } from './hand-model-contract';
+import { sourceToCrop, type HandRoi, type Vec2 } from './hand-pipeline';
 
 /** Canned frame size; 16:9 like a typical webcam crop, small enough to author in TS. */
 export const FIXTURE_FRAME_WIDTH = 640;
 export const FIXTURE_FRAME_HEIGHT = 360;
 export const FIXTURE_FRAME_BYTES = FIXTURE_FRAME_WIDTH * FIXTURE_FRAME_HEIGHT * 4;
 
-/** Transform the fixtures are authored against. */
-export function fixtureTransform(): FrameTransform {
-  return computeFrameTransform(FIXTURE_FRAME_WIDTH, FIXTURE_FRAME_HEIGHT);
-}
-
 /**
- * Right-wrist `[y, x, score]` the committed `movenet-lightning.onnx` produced on
- * the author's discrete GPU (ORT 1.27.0, WebGPU EP, `gpu-buffer` output) for two
- * COCO val2017 single-person photos. Left wrist is recorded too, to document
- * that index 9 and 10 are genuinely different points.
+ * Measurements the committed `palm-detector.onnx` + `hand-landmark.onnx` pair
+ * produced through the full host pipeline on two Creative-Commons photographs,
+ * via the ONNX Runtime CPU execution provider.
  *
- * See public/models/movenet/PROVENANCE.md for the full gate table.
+ * These are recorded for one reason: they are the only numbers in this file that
+ * a bug in the geometry could not have produced, because they came out of the
+ * real models on real hands. See tools/models/mediapipe-hands/image-credits.md
+ * for the sources and licenses.
+ *
+ * The `presence` column is the interesting one. Two other candidate photographs
+ * scored 0.578 and 0.583 at the **detector** and came back with presence 0.044
+ * and 0.017 — confident-looking palms that the landmark model correctly refused
+ * to vouch for. That gap is why confidence in this example is hand presence and
+ * never a carried-over detector score.
  */
-export interface EvidenceSample {
+export interface HandEvidenceSample {
   readonly image: string;
-  readonly sourceWidth: number;
-  readonly sourceHeight: number;
-  /** `[y, x, score]`, normalized to the 192x192 letterboxed input. */
-  readonly rightWrist: readonly [number, number, number];
-  readonly leftWrist: readonly [number, number, number];
+  readonly hands: readonly {
+    /** Palm detector confidence after weighted NMS. */
+    readonly detectorScore: number;
+    /** Landmark model hand presence. This is what gates the brush. */
+    readonly presence: number;
+    /** ROI rotation in degrees; the fixtures were chosen to span a wide range. */
+    readonly rotationDegrees: number;
+    /** MCP centroid in source pixels. */
+    readonly centroid: readonly [number, number];
+  }[];
 }
 
-export const EVIDENCE_KEYPOINTS: readonly EvidenceSample[] = [
+export const HAND_EVIDENCE: readonly HandEvidenceSample[] = [
   {
-    image: 'COCO val2017 000000000785.jpg',
-    sourceWidth: 640,
-    sourceHeight: 425,
-    rightWrist: [0.4549751579761505, 0.466286838054657, 0.506779670715332],
-    leftWrist: [0.4403899013996124, 0.710444986820221, 0.28623420000076294],
+    image: 'Open Hands Facing The Heavens (CC BY-SA 4.0), 960px rendition',
+    hands: [
+      { detectorScore: 0.866, presence: 0.99, rotationDegrees: 72.5, centroid: [862, 954] },
+      { detectorScore: 0.735, presence: 0.995, rotationDegrees: -59.8, centroid: [136, 902] },
+    ],
   },
   {
-    image: 'COCO val2017 000000397133.jpg',
-    sourceWidth: 640,
-    sourceHeight: 427,
-    rightWrist: [0.45636311173439026, 0.6833707094197, 0.19550147652626038],
-    leftWrist: [0.46639949083328247, 0.7544093728065491, 0.3228681981563568],
+    image: 'Pride.be 2018 DSC08078 (CC BY-SA 2.0), 960px rendition',
+    hands: [
+      { detectorScore: 0.693, presence: 0.954, rotationDegrees: 87.8, centroid: [889, 1079] },
+    ],
   },
 ];
 
@@ -173,7 +181,6 @@ function disc(
   return smoothstep(radius, radius * 0.35, d);
 }
 
-
 function clamp255(value: number): number {
   return Math.min(255, Math.max(0, Math.round(value)));
 }
@@ -188,40 +195,98 @@ export function hashBytes(bytes: Uint8Array): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-/** Pins `createFixtureFrame()`; regenerate deliberately, never casually. */
+/**
+ * Pins `createFixtureFrame()`; regenerate deliberately, never casually.
+ *
+ * Unchanged by the hand swap: the fixture image is the *camera stand-in*, and
+ * swapping the estimator does not change what a camera would have seen.
+ */
 export const FIXTURE_FRAME_HASH = '4f6e2a49';
 
 /** Number of synthetic results the thumbnail and the visual demo replay. */
 export const SYNTHETIC_FRAME_COUNT = 24;
 /** Fixed timestep the synthetic sequence is authored for. */
 export const SYNTHETIC_DT = 1 / 30;
-/** Synthetic forearm length in brush units; sets where the elbow sits behind the hand. */
-export const SYNTHETIC_FOREARM = 0.18;
+/** Synthetic ROI side as a fraction of the frame's short edge. */
+export const SYNTHETIC_ROI_FRACTION = 0.34;
 
 /**
- * The synthetic **hand** paths in `brush` space (mirrored, normalized frame),
- * one per limb, both sweeping at once.
+ * A plausible open right hand in **crop-normalized** coordinates, in MediaPipe's
+ * landmark order: wrist, then thumb, index, middle, ring and pinky from base to
+ * tip.
+ *
+ * Hand-authored rather than captured, because a fixture that came out of the
+ * model could not be used to test the model's own geometry. What matters is only
+ * that the proportions are sane: the MCP knuckles roughly in a row across the
+ * middle, the wrist below them, the fingers fanning above.
+ */
+const RAW_HAND: readonly (readonly [number, number])[] = [
+  [0.5, 0.88],
+  [0.34, 0.78],
+  [0.26, 0.68],
+  [0.2, 0.6],
+  [0.15, 0.53],
+  [0.4, 0.5],
+  [0.38, 0.38],
+  [0.37, 0.3],
+  [0.36, 0.23],
+  [0.5, 0.48],
+  [0.5, 0.35],
+  [0.5, 0.26],
+  [0.5, 0.19],
+  [0.6, 0.5],
+  [0.61, 0.37],
+  [0.62, 0.29],
+  [0.63, 0.22],
+  [0.7, 0.54],
+  [0.72, 0.44],
+  [0.73, 0.37],
+  [0.74, 0.31],
+];
+
+/**
+ * {@link RAW_HAND} recentred so the mean of the four MCP knuckles is exactly the
+ * centre of the crop.
+ *
+ * This is the trick the whole fixture rests on. The centre of a crop maps to the
+ * centre of its ROI under any rotation and any scale, so once the canonical hand
+ * is centred this way, placing the ROI at a point guarantees the measured MCP
+ * centroid comes back at that same point — exactly, not approximately. The tests
+ * can then assert the inverse transform to floating-point tolerance instead of
+ * to some hand-waved pixel budget.
+ */
+export function canonicalHandLandmarks(): readonly Vec2[] {
+  let cx = 0;
+  let cy = 0;
+  for (const index of MCP_LANDMARKS) {
+    cx += RAW_HAND[index]![0];
+    cy += RAW_HAND[index]![1];
+  }
+  cx /= MCP_LANDMARKS.length;
+  cy /= MCP_LANDMARKS.length;
+  return RAW_HAND.map(([x, y]) => ({ x: x - cx + 0.5, y: y - cy + 0.5 }));
+}
+
+/**
+ * The synthetic hand paths in `brush` space (mirrored, normalized frame), one
+ * per track slot, both sweeping at once.
  *
  * Two ribbons rather than one: the author paints with both hands, so the canned
  * demo and the thumbnail have to show both, or the feature is invisible to
  * anyone who cannot grant a camera. They travel in opposite directions and stay
  * in separate horizontal bands so they read as two independent strokes and not
- * as one thick line, and both stay clear of the letterbox padding by
- * construction.
+ * as one thick line.
  */
-export function syntheticHandPath(
-  limb: 'left' | 'right',
-  count = SYNTHETIC_FRAME_COUNT,
-): readonly Vec2[] {
+export function syntheticHandPath(slot: number, count = SYNTHETIC_FRAME_COUNT): readonly Vec2[] {
   const path: Vec2[] = [];
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
     const wave = Math.sin(t * Math.PI * 1.6);
     // The bands are pushed apart and the wave flattened so the closest approach
     // still clears three brush radii. A palm-sized brush is 60 texels across, and
-    // at the old spacing the two wipes merged into a single smear.
+    // at tighter spacing the two wipes merge into a single smear.
     path.push(
-      limb === 'right'
+      slot === 0
         ? { x: 0.32 + 0.36 * t, y: 0.28 + 0.12 * wave }
         : { x: 0.68 - 0.36 * t, y: 0.78 - 0.12 * wave },
     );
@@ -230,11 +295,11 @@ export function syntheticHandPath(
 }
 
 /**
- * Confidence ramp for the synthetic sequence: it crosses the 0.45 enter
- * threshold on the second sample and then stays above the 0.30 stay threshold,
- * which exercises acquisition without exercising a dropout.
+ * Presence ramp for the synthetic sequence: it crosses the 0.45 enter threshold
+ * on the first sample and then stays above the 0.30 stay threshold, which
+ * exercises acquisition without exercising a dropout.
  */
-export function syntheticConfidence(index: number, count = SYNTHETIC_FRAME_COUNT): number {
+export function syntheticPresence(index: number, count = SYNTHETIC_FRAME_COUNT): number {
   if (index === 0) return 0.52;
   const t = count === 1 ? 1 : index / (count - 1);
   return 0.55 + 0.2 * Math.sin(t * Math.PI);
@@ -251,90 +316,106 @@ function tangent(path: readonly Vec2[], index: number): Vec2 {
   return { x: dx / length, y: dy / length };
 }
 
-/**
- * Wrist and elbow, in brush space, that make `wrist.wgsl` extrapolate to exactly
- * `hand`.
- *
- * Authoring runs backwards on purpose. The visible thing is the hand, so the
- * hand is what the path describes; the elbow is then placed a forearm behind it
- * along the direction of travel and **clamped into frame**, and the wrist is
- * solved from both:
- *
- * ```
- * hand = wrist + k·(wrist − elbow)   =>   wrist = (hand + k·elbow) / (1 + k)
- * ```
- *
- * Because that wrist is a convex combination of two in-frame points it is always
- * in frame itself, so clamping the elbow can never push a fixture keypoint into
- * the letterbox padding — and the extrapolation still lands on the authored hand
- * exactly, which is what lets the tests assert equality rather than proximity.
- */
-export function syntheticArm(
-  hand: Vec2,
-  direction: Vec2,
-  factor = HAND_EXTRAPOLATION.factor,
-  forearm = SYNTHETIC_FOREARM,
-): { readonly wrist: Vec2; readonly elbow: Vec2 } {
-  const elbow: Vec2 = {
-    x: Math.min(1, Math.max(0, hand.x - direction.x * forearm)),
-    y: Math.min(1, Math.max(0, hand.y - direction.y * forearm)),
-  };
-  return {
-    wrist: {
-      x: (hand.x + factor * elbow.x) / (1 + factor),
-      y: (hand.y + factor * elbow.y) / (1 + factor),
-    },
-    elbow,
-  };
+/** One slot's synthetic result: what the landmark model would have returned. */
+export interface SyntheticHandResult {
+  readonly slot: number;
+  /** The ROI this crop was taken through, in source pixels. */
+  readonly roi: HandRoi;
+  /** `[1,63]` xyz in **crop pixels**, exactly as the graph emits them. */
+  readonly landmarks: Float32Array;
+  readonly presence: number;
+  /** Where this result should land in `brush` space; the assertion target. */
+  readonly expected: Vec2;
+}
+
+export interface SyntheticHandFrame {
+  readonly results: readonly SyntheticHandResult[];
 }
 
 /**
- * Encodes both synthetic hand paths as real `[1,1,17,3]` float32 buffers.
+ * Encodes both synthetic hand paths as real `[1,63]` landmark buffers plus the
+ * ROIs they came from.
  *
- * Every keypoint is populated so the layout is exercised end to end. Both wrists
- * (9, 10) carry the confidence ramp and both elbows (7, 8) sit above the elbow
- * floor so the hand extrapolation runs for real; the remaining thirteen stay
- * below the enter threshold, which is what the shader must ignore.
+ * The rotation is taken from the direction of travel, so the sequence sweeps
+ * through a wide range of angles and a broken rotation term in the inverse
+ * transform cannot pass unnoticed — an unrotated fixture would let a dropped
+ * `sin` through, which is exactly the kind of bug that looks fine until a real
+ * hand tilts.
  */
-export function syntheticKeypointFrames(
-  transform: FrameTransform = fixtureTransform(),
+export function syntheticHandFrames(
+  sourceWidth = FIXTURE_FRAME_WIDTH,
+  sourceHeight = FIXTURE_FRAME_HEIGHT,
   count = SYNTHETIC_FRAME_COUNT,
-): readonly Float32Array[] {
-  const paths = {
-    left: syntheticHandPath('left', count),
-    right: syntheticHandPath('right', count),
-  } as const;
+): readonly SyntheticHandFrame[] {
+  const canonical = canonicalHandLandmarks();
+  const size = Math.min(sourceWidth, sourceHeight) * SYNTHETIC_ROI_FRACTION;
+  const paths = [syntheticHandPath(0, count), syntheticHandPath(1, count)];
+  const frames: SyntheticHandFrame[] = [];
 
-  const frames: Float32Array[] = [];
   for (let index = 0; index < count; index++) {
-    const keypoints = new Float32Array(KEYPOINT_ELEMENTS);
-    // Plausible low-confidence filler for every keypoint the brush ignores.
-    for (let k = 0; k < KEYPOINT_COUNT; k++) {
-      const base = k * 3;
-      keypoints[base] = 0.35 + 0.02 * k;
-      keypoints[base + 1] = 0.45 + 0.01 * k;
-      keypoints[base + 2] = 0.12;
+    const results: SyntheticHandResult[] = [];
+    for (let slot = 0; slot < paths.length; slot++) {
+      const path = paths[slot]!;
+      const expected = path[index]!;
+      const centre = brushToSource(expected, sourceWidth, sourceHeight);
+      const direction = tangent(path, index);
+      // Mirrored back into source space, so the angle tracks the drawn stroke.
+      const rotation = Math.atan2(direction.y, -direction.x);
+      const roi: HandRoi = { cx: centre.x, cy: centre.y, size, rotation };
+
+      const landmarks = new Float32Array(NUM_LANDMARKS * 3);
+      for (let k = 0; k < NUM_LANDMARKS; k++) {
+        const point = canonical[k]!;
+        landmarks[k * 3] = point.x * LANDMARK_SIZE;
+        landmarks[k * 3 + 1] = point.y * LANDMARK_SIZE;
+        // z is emitted by the graph and ignored by this example; a plausible
+        // non-zero value keeps the buffer honest about its real layout.
+        landmarks[k * 3 + 2] = (point.y - 0.5) * 0.1 * LANDMARK_SIZE;
+      }
+      results.push({
+        slot,
+        roi,
+        landmarks,
+        presence: syntheticPresence(index, count),
+        expected,
+      });
     }
-
-    for (const limb of BRUSH_LIMBS) {
-      const path = paths[limb.name];
-      const arm = syntheticArm(path[index]!, tangent(path, index));
-      const wrist = brushSpaceToKeypoint(arm.wrist, transform);
-      const elbow = brushSpaceToKeypoint(arm.elbow, transform);
-
-      const wristBase = limb.wrist * 3;
-      keypoints[wristBase] = wrist.y;
-      keypoints[wristBase + 1] = wrist.x;
-      keypoints[wristBase + 2] = syntheticConfidence(index, count);
-
-      const elbowBase = limb.elbow * 3;
-      keypoints[elbowBase] = elbow.y;
-      keypoints[elbowBase + 1] = elbow.x;
-      // Comfortably above HAND_EXTRAPOLATION.elbowConfidence: a real elbow is
-      // usually easier for the model to see than the hand at the end of it.
-      keypoints[elbowBase + 2] = 0.6;
-    }
-    frames.push(keypoints);
+    frames.push({ results });
   }
   return frames;
+}
+
+/**
+ * Packs an ROI into the four floats `hand-crop.wgsl` and `hand.wgsl` read.
+ *
+ * Layout is `vec2f center, f32 size, f32 rotation`, which is 16 bytes and needs
+ * no padding.
+ */
+export function packRoi(roi: HandRoi, out = new Float32Array(4), offset = 0): Float32Array {
+  out[offset] = roi.cx;
+  out[offset + 1] = roi.cy;
+  out[offset + 2] = roi.size;
+  out[offset + 3] = roi.rotation;
+  return out;
+}
+
+/**
+ * Round-trips a synthetic result back to the point it was authored from.
+ *
+ * Used by the tests as an independent check that the fixture really is
+ * self-consistent, rather than trusting the construction above.
+ */
+export function cropSpaceMcpCentroid(result: SyntheticHandResult): Vec2 {
+  let x = 0;
+  let y = 0;
+  for (const index of MCP_LANDMARKS) {
+    x += result.landmarks[index * 3]! / LANDMARK_SIZE;
+    y += result.landmarks[index * 3 + 1]! / LANDMARK_SIZE;
+  }
+  return { x: x / MCP_LANDMARKS.length, y: y / MCP_LANDMARKS.length };
+}
+
+/** Inverse helper for tests: where a source point sits inside a result's crop. */
+export function sourcePointInCrop(result: SyntheticHandResult, point: Vec2): Vec2 {
+  return sourceToCrop(point, result.roi);
 }

@@ -25,6 +25,16 @@ export const ORT_VERSION = '1.27.0';
 export const ORT_WASM_PATH = '/ort/';
 
 export type OrtModule = typeof import('onnxruntime-web/webgpu');
+/** ORT's own session-options type, so this module cannot drift from it. */
+export type OrtSessionOptions = NonNullable<
+  Parameters<OrtModule['InferenceSession']['create']>[1]
+>;
+/**
+ * Where ORT should leave each output: one location for all of them, or a map
+ * from output name to location. A two-stage pipeline wants both — bulk tensors
+ * on the device, scalars the host has to branch on back on the CPU.
+ */
+export type OrtOutputLocation = OrtSessionOptions['preferredOutputLocation'];
 export type OrtTensor = import('onnxruntime-web/webgpu').Tensor;
 export type OrtSession = import('onnxruntime-web/webgpu').InferenceSession;
 
@@ -264,4 +274,142 @@ export async function withWrappedTensor<T>(
   } finally {
     wrapped.dispose();
   }
+}
+
+/**
+ * {@link withWrappedTensor} for several borrowed buffers consumed by one
+ * dispatch.
+ *
+ * A two-stage model produces one output per stage per hand, and they all have to
+ * be live in the *same* dispatch — the shader reads both hands' landmarks to
+ * update both brushes. Nesting `withWrappedTensor` would work but would tie the
+ * wrapper lifetimes to callback nesting depth; this keeps the retain/wrap/submit/
+ * flush/dispose order flat and identical no matter how many slots ran.
+ *
+ * Wrappers are disposed in reverse order of creation, and every one of them is
+ * disposed even if an earlier disposal throws.
+ */
+export async function withWrappedTensors<T>(
+  gpu: Gpu,
+  raws: readonly GPUBuffer[],
+  consume: (wrapped: readonly Buffer[]) => T,
+): Promise<T> {
+  const wrapped: Buffer[] = [];
+  try {
+    for (const raw of raws) {
+      const buffer = gpu.device.wrapBuffer(raw);
+      wrapped.push(buffer);
+      if (buffer.gpu !== raw) {
+        throw new OrtEnvironmentError(
+          'wrapBuffer lost raw GPUBuffer identity; the wrap was not zero-copy.',
+        );
+      }
+    }
+    const result = consume(wrapped);
+    await gpu.device.queue.flush();
+    return result;
+  } finally {
+    for (let i = wrapped.length - 1; i >= 0; i--) {
+      try {
+        wrapped[i]!.dispose();
+      } catch {
+        // Every wrapper must get its dispose call, even if one of them throws.
+      }
+    }
+  }
+}
+
+export interface SiblingSessionOptions {
+  /** Same-origin URL of the `.onnx` model. */
+  readonly modelUrl: string;
+  readonly label: string;
+  readonly isCancelled?: () => boolean;
+  /**
+   * Per-output location map or a single location. A two-stage pipeline usually
+   * wants its bulk output on the GPU and a scalar or two on the CPU.
+   */
+  readonly preferredOutputLocation?: OrtOutputLocation;
+  readonly sessionOptions?: Record<string, unknown>;
+}
+
+export interface SiblingSession {
+  readonly session: OrtSession;
+  readonly modelByteLength: number;
+  readonly inputNames: readonly string[];
+  readonly outputNames: readonly string[];
+  /** Idempotent. Callers must drain in-flight runs first. */
+  release(): Promise<void>;
+}
+
+/**
+ * Creates a second session on the **same** ONNX Runtime instance, and therefore
+ * on the same `GPUDevice`, as an existing {@link SharedDeviceSession}.
+ *
+ * A two-stage model needs two graphs that can hand GPU buffers to each other, so
+ * they must agree on the device. ORT creates its device once per module
+ * instance, so the sibling is created simply by reusing the already-imported
+ * module — but "simply" is doing a lot of work in that sentence, and getting it
+ * wrong yields two devices whose buffers are silently incompatible. This helper
+ * exists so there is one place that does it and one place that asserts it.
+ *
+ * The device identity is re-checked after creation rather than assumed.
+ */
+export async function createSiblingSession(
+  shared: SharedDeviceSession,
+  options: SiblingSessionOptions,
+): Promise<SiblingSession> {
+  const cancelled = () => options.isCancelled?.() === true;
+  const checkpoint = () => {
+    if (cancelled()) throw new OrtInitCancelled();
+  };
+
+  checkpoint();
+  const response = await fetch(options.modelUrl);
+  checkpoint();
+  if (!response.ok) {
+    throw new OrtEnvironmentError(
+      `Model ${options.modelUrl} failed to load (HTTP ${response.status}).`,
+    );
+  }
+  const modelBytes = new Uint8Array(await response.arrayBuffer());
+  checkpoint();
+
+  let session: OrtSession;
+  try {
+    session = await shared.ort.InferenceSession.create(modelBytes, {
+      executionProviders: ['webgpu'],
+      preferredOutputLocation: options.preferredOutputLocation ?? 'gpu-buffer',
+      ...options.sessionOptions,
+    });
+  } catch (error) {
+    throw new OrtEnvironmentError(
+      `ONNX Runtime Web could not create a WebGPU session for ${options.label}. This example does not fall back to the CPU/WASM execution provider, because that would not demonstrate device sharing.`,
+      error,
+    );
+  }
+
+  try {
+    checkpoint();
+    const device = (await shared.ort.env.webgpu.device) as GPUDevice | undefined;
+    if (device !== shared.device) {
+      throw new OrtEnvironmentError(
+        `${options.label} was created on a different GPUDevice than its sibling session, so the two stages cannot exchange GPU buffers.`,
+      );
+    }
+  } catch (error) {
+    await session.release().catch(() => undefined);
+    throw error;
+  }
+
+  let released: Promise<void> | undefined;
+  return {
+    session,
+    modelByteLength: modelBytes.byteLength,
+    inputNames: session.inputNames,
+    outputNames: session.outputNames,
+    release() {
+      released ??= session.release();
+      return released;
+    },
+  };
 }

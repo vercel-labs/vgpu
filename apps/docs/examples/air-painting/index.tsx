@@ -174,7 +174,7 @@ export function Example() {
 
 function cameraTone(phase: AirPaintStatus['phase']): Tone {
   if (phase === 'painting') return 'painting';
-  if (phase === 'waiting-for-pose') return 'live';
+  if (phase === 'waiting-for-hand') return 'live';
   return 'starting';
 }
 

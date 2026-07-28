@@ -6,8 +6,8 @@ export const meta = {
   // One or two sentences, like every other example. The interop and privacy
   // story is documented in the /ml section, not crammed in here.
   description:
-    'Wipe fog off the glass with your hands. ONNX Runtime Web runs MoveNet on WebGPU and vgpu reads the GPU-resident keypoints zero-copy, so both hands clear a frosted camera feed that slowly fogs back up.',
-  tags: ['machine-learning', 'onnx', 'pose-estimation', 'frosted-glass', 'shader'],
+    'Wipe fog off the glass with your hands. ONNX Runtime Web runs MediaPipe palm detection and hand landmarks on WebGPU, and vgpu builds the crops and reads the GPU-resident landmarks zero-copy, so both palms clear a frosted camera feed that slowly fogs back up.',
+  tags: ['machine-learning', 'onnx', 'hand-tracking', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
     'machine-learning',
@@ -22,12 +22,12 @@ export const meta = {
     'responsive-canvas',
   ],
   // The thumbnail frosts a procedural stand-in frame and wipes it with the 24
-  // golden keypoint buffers, through the production shaders at a fixed dt. No
+  // golden landmark buffers, through the production shaders at a fixed dt. No
   // ORT, webcam or network, and nothing depending on wall-clock time.
   thumb: {
     warmupFrames: 1,
     dt: 1 / 30,
-    note: 'Procedural frame frosted and wiped by the golden two-handed [1,1,17,3] trajectory through the real frost/wrist/paint/composite shaders; no ORT in the Node path.',
+    note: 'Procedural frame frosted and wiped by the golden two-handed [1,63] landmark trajectory through the real frost/hand/paint/composite shaders; no ORT in the Node path.',
   },
   files: [
     'index.tsx',
@@ -36,10 +36,14 @@ export const meta = {
     'visual-pipeline.ts',
     'inference-scheduler.ts',
     'camera-source.ts',
-    'preprocess.ts',
-    'pose-contract.ts',
+    'hand-model-contract.ts',
+    'hand-pipeline.ts',
+    'hand-tracker.ts',
+    'hand-preprocess.ts',
+    'brush-contract.ts',
     'fixtures.ts',
-    'wrist.wgsl',
+    'hand-crop.wgsl',
+    'hand.wgsl',
     'paint.wgsl',
     'composite.wgsl',
     'frost.wgsl',
