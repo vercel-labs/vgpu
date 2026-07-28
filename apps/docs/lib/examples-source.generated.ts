@@ -1135,7 +1135,7 @@ export const exampleSources = {
   "nextjs-flare": {
     "slug": "nextjs-flare",
     "title": "Next.js Flare",
-    "description": "The vercel.com Next.js hero light, verbatim — a rim-lit N glyph with volumetric scattering: a 48-step ray walk jittered by blue noise over a separable Gaussian blur chain, breathing autonomously until the pointer takes over.",
+    "description": "Next.js logo shader — a rim-lit N glyph with volumetric scattering: a 48-step ray walk jittered by blue noise over a separable Gaussian blur chain, breathing autonomously until the pointer takes over.",
     "tags": [
       "flare",
       "volumetric",
