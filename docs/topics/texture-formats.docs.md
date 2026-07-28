@@ -1,0 +1,27 @@
+# Practical texture-format matrix
+
+Choose a target format from the operations it must support, not just its channel precision. In vgpu, `format` is passed through to WebGPU for render-target capability; the API rejects a filtering binding for 32-bit float textures unless the device was initialized with `float32-filterable` support. `target.read()` is a deliberately narrower convenience API (known limitation: [#193](https://github.com/vercel-labs/vgpu/issues/193)).
+
+## Common color and scalar formats
+
+| Format | Render target | `sampler` with linear filtering | `target.read()` | Practical use |
+|---|---:|---:|---:|---|
+| `rgba8unorm` | Yes | Yes | Yes | Default target; screenshots, debug probes, and LDR color. |
+| `rgba8unorm-srgb` | Yes | Yes | Yes | LDR color encoded as sRGB; do color math in linear space. |
+| `rgba16float` | Yes | Yes | No | Filterable HDR color, bloom, and lighting intermediates. |
+| `rgba32float` | Yes | No by default | No | Full-precision HDR/data; requires `float32-filterable` to bind to a filtering sampler. |
+| `r16float` | Yes | Yes | No | Filterable scalar data such as a height or distance field. |
+| `r32float` | Yes | No by default | No | Full-precision scalar data; requires `float32-filterable` for linear sampling. |
+| `r8unorm` | Yes | Yes | No | Compact normalized scalar/mask data. |
+
+“Render target” means the format can be requested through `gpu.target({ format })` as a color attachment in the normal WebGPU profile; use an adapter that supports the requested format and feature set. `rgba32float` is renderable even though it is not linearly filterable by default.
+
+## Readback is an encode step for HDR and scalar targets
+
+The core readback implementation returns `Uint8Array` pixels for 8-bit RGBA/BGRA formats; it does not decode floating-point or one-channel formats. For a target that the table marks **No**, render a fullscreen encode pass into a separate `rgba8unorm` target and call `read()` there. Map the value to `[0, 1]` deliberately (for example, `direction * 0.5 + 0.5`) so the bytes have a documented decode rule. See [Debugging shaders by extracting internal values](shader-debugging.docs.md) for a complete HDR encode-pass recipe.
+
+## Filtering 32-bit float textures
+
+A texture declaration and a sampler must agree. On the default device, bind `rgba32float` and `r32float` with a non-filtering sampler and use `textureLoad`, or select a lower-precision filterable format such as `rgba16float`/`r16float`. If the adapter exposes and the application requests `float32-filterable`, linear sampling becomes valid for the 32-bit float formats.
+
+See also: [Effects](concepts-effects.docs.md) for chaining targets, and [Debugging shaders by extracting internal values](shader-debugging.docs.md) for readback workflows.
