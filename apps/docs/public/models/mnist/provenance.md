@@ -21,8 +21,8 @@ example performs no third-party download at runtime.
 | Size | 26,143 bytes |
 | SHA-256 | `5c688690f8bacf667d4c2074af5ad0646ca328d7ab03eccf944a65b320171bdd` |
 
-Both values match the Git LFS pointer recorded upstream. `SHA256SUMS` in this
-directory is the checked-in digest; verify with `sha256sum -c SHA256SUMS`.
+Both values match the Git LFS pointer recorded upstream. `sha256sums` in this
+directory is the checked-in digest; verify with `sha256sum -c sha256sums`.
 
 ## Model contract
 
@@ -60,8 +60,8 @@ this copy keeps the model-specific MIT notice so attribution stays accurate.
 | --- | --- |
 | `mnist-12.onnx` | the redistributed model |
 | `LICENSE` | MIT notice that applies to the model |
-| `SHA256SUMS` | checked-in digest of the model |
-| `PROVENANCE.md` | this record |
+| `sha256sums` | checked-in digest of the model |
+| `provenance.md` | this record |
 
 The examples source API (`apps/docs/lib/examples-api`) is UTF-8 text only, so
 this binary is deliberately absent from `meta.files` and from anything

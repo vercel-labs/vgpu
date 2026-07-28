@@ -9,7 +9,7 @@
  */
 import { hashPixels, preprocessDigit } from './preprocess';
 
-/** Same-origin model asset; see public/models/mnist/PROVENANCE.md. */
+/** Same-origin model asset; see public/models/mnist/provenance.md. */
 export const MODEL_URL = '/models/mnist/mnist-12.onnx';
 export const MODEL_SHA256 = '5c688690f8bacf667d4c2074af5ad0646ca328d7ab03eccf944a65b320171bdd';
 export const MODEL_BYTES = 26_143;

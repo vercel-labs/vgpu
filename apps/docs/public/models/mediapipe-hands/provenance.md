@@ -39,8 +39,8 @@ two TFLite graphs, both of which are pinned separately:
 | `palm-detector.onnx` | 4,589,374 (4.38 MiB) | `836e25f3f6d365cd7a67c36ad69876c3da9b540cb434a26e9d100a00938cfd2e` |
 | `hand-landmark.onnx` | 10,903,457 (10.40 MiB) | `6d98325697613ffb250a29bedd78450f87ecf1968797f9c54829cda45b44c00c` |
 
-`SHA256SUMS` in this directory is the checked-in digest; verify with
-`sha256sum -c SHA256SUMS`. These are actual bytes, not Git LFS pointers.
+`sha256sums` in this directory is the checked-in digest; verify with
+`sha256sum -c sha256sums`. These are actual bytes, not Git LFS pointers.
 
 ### Payload size, stated plainly
 

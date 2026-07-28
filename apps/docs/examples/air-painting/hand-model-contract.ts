@@ -10,12 +10,12 @@
  * pipeline, and this module is where that boundary is written down.
  *
  * Every number here was measured off the converted graphs and confirmed in a
- * browser on real hardware by `/hand-gate/` (see PROVENANCE.md for the run).
+ * browser on real hardware by `/hand-gate/` (see provenance.md for the run).
  * Nothing is copied from a model card: the card for this family is wrong about
  * dtypes in the same way MoveNet's was.
  */
 
-/** Same-origin model assets; see public/models/mediapipe-hands/PROVENANCE.md. */
+/** Same-origin model assets; see public/models/mediapipe-hands/provenance.md. */
 export const DETECTOR_URL = '/models/mediapipe-hands/palm-detector.onnx';
 export const LANDMARK_URL = '/models/mediapipe-hands/hand-landmark.onnx';
 

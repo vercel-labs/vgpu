@@ -20,7 +20,7 @@
  * What it proves: the visual pipeline, the geometry, the state machine and the
  * accumulation are correct and deterministic. What it does **not** prove:
  * anything at all about ORT interop, device adoption, or zero-copy. Only the
- * real-browser evidence in `public/models/mediapipe-hands/PROVENANCE.md` does
+ * real-browser evidence in `public/models/mediapipe-hands/provenance.md` does
  * that.
  */
 import type { Gpu, Target } from 'vgpu';
