@@ -24,6 +24,8 @@ Consequences:
 - regenerating the artifact tree belongs in the **same commit** as the source change — there is no post-commit regeneration step, and no revision churn when unrelated commits touch the snapshot's history;
 - generation requires no repository history at all, so `examples-api-generated` in CI runs on a default shallow checkout.
 
+Because the digest covers *physical* bytes, line endings are pinned in `.gitattributes` (`text eol=lf`) for the snapshot, the checked-in artifact tree, the frozen schema copies, and the generated contract files. A CRLF checkout (`core.autocrlf=true`) would otherwise digest different bytes for the same git tree and fail the gate; the snapshot is additionally asserted CR-free by `lib/examples-api/source-identity.test.ts`.
+
 Regenerate with `node apps/docs/scripts/generate-examples-api.mjs` and commit `apps/docs/generated/examples-api` together with the source change; `git status --porcelain` on that tree stays the drift gate.
 
 ## Publication transaction

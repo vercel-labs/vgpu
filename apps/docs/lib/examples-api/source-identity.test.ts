@@ -32,6 +32,16 @@ describe('content-derived source snapshot identity', () => {
     expect(changed.revision).not.toBe(first.revision);
   });
 
+  it('pins an LF checkout for the byte-compared paths so the digest is platform independent', async () => {
+    // A CRLF checkout (`core.autocrlf=true` on Windows) would change the physical bytes of a
+    // content-identical tree and therefore the revision, so the EOL is versioned in .gitattributes.
+    expect(snapshotBytes.includes(0x0d)).toBe(false);
+    const attributes = await readFile(resolve('.gitattributes'), 'utf8');
+    for (const path of [SNAPSHOT_FILE, `${GENERATED_TREE}/**`]) {
+      expect(attributes, `.gitattributes must pin ${path} to LF`).toContain(`${path} text eol=lf\n`);
+    }
+  });
+
   it('keeps the revision independent of git history and merge strategy', async () => {
     // The generator must not derive identity from commits: any `git log`/child-process call would
     // reintroduce squash-merge and shallow-checkout staleness (see issue #199).
