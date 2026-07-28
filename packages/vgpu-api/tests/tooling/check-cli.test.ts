@@ -46,6 +46,23 @@ test("vgpu check surfaces Phase-1 fix-it text verbatim", async () => {
   expect(result.stderr).toContain("VGPUError: `bool` is not host-shareable in uniform/storage. Fix: use `u32` (0 | 1) → struct Params { enabled: u32 }");
 });
 
+test("vgpu check fails on WGSL reserved words used as identifiers", async () => {
+  const result = await runCheck([resolve(fixtureRoot, "reserved-word.wgsl")]);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toBeUndefined();
+  const output = JSON.parse(result.stdout ?? "{}");
+  expect(output.diagnostics).toEqual([
+    {
+      code: "VGPU-WGSL-RESERVED-IDENT",
+      message: "'from' is a reserved word in WGSL and cannot be used as an identifier; rename this struct member (for example 'from_')",
+      severity: "error",
+      line: 2,
+      column: 3,
+      range: { file: resolve(fixtureRoot, "reserved-word.wgsl"), start: { line: 2, column: 3 } },
+    },
+  ]);
+});
+
 test("vgpu check rejects imported modules that declare bindings", async () => {
   const result = await runCheck([resolve(fixtureRoot, "module-binding-entry.wgsl")]);
   expect(result.code).toBe(1);
