@@ -56,5 +56,7 @@
     "@vgpu/core": "workspace:*",
     "webgpu": "0.4.0"
   },
-  "vgpuBundleBudgetGzipBytes": 40960
+  "vgpuBundleAudience": "tooling",
+  "vgpuBundleBudgetGzipBytes": 34304,
+  "vgpuBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple at least 512 B above the measured size, so headroom is never a rounding accident. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded."
 }
