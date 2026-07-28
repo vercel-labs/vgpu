@@ -249,8 +249,6 @@ export function Example() {
         <span className="text-gray-11">
           {status.phase === 'classifying' ? 'running inference…' : `inferences: ${status.runs ?? 0}`}
         </span>
-        <span className="text-gray-6">·</span>
-        <span>40 bytes of logits, softmax in WGSL, no readback</span>
       </p>
     </div>
   );
