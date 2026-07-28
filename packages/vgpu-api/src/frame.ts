@@ -5,7 +5,7 @@ import { replayBundles, type Bundle } from "./bundle.ts";
 import { drawStencilWritingOps, drawWritesDepth, encodeDraw, type Draw, type DrawCallOptions, type InternalDraw } from "./draw.ts";
 import { effectDraw, type Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
-import { claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, visibilityInvalidError, visibilityNoDepthError } from "./errors.ts";
+import { VGPUError, claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, visibilityInvalidError, visibilityNoDepthError } from "./errors.ts";
 import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
 import { hasStencilAspect, isTarget, type ClearColor } from "./target-utils.ts";
 import { isTimerSpan, type InternalTimer, type TimerSpan } from "./timer.ts";
@@ -467,6 +467,12 @@ function previewValue(value: unknown): string {
   return String(value);
 }
 
+/** True for the "the device this frame belongs to is gone" errors raised by the liveness guards. */
+function isDeviceGoneError(error: unknown): boolean {
+  const code = (error as VGPUError | undefined)?.code;
+  return code === "VGPU-DEVICE-DISPOSED" || code === "VGPU-DEVICE-LOST";
+}
+
 export class FrameRunner {
   #running = false;
   /**
@@ -484,7 +490,15 @@ export class FrameRunner {
       const frame = this.createFrame();
       if (cb) {
         try { cb(frame); }
-        finally { frame.submit(); }
+        finally {
+          // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
+          // exactly that). The device is then gone and the frame has nothing left to flush, so this
+          // implicit submit swallows that one error instead of throwing over the callback's own
+          // intent — the same reason a canceled frame submits as a no-op. An explicit
+          // frame.submit() on a dead device still reports it.
+          try { frame.submit(); }
+          catch (error) { if (!isDeviceGoneError(error)) throw error; }
+        }
       }
       return frame;
     } finally {
