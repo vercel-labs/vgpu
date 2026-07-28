@@ -101,6 +101,16 @@ if (hostGzip > hostLimit) {
   throw new Error(`Shared preview host is ${hostGzip} B gzip; budget is ${hostLimit} B (${budgets.sharedHost.gzipBytes} B baseline + ${budgets.sharedHost.maxGrowthBytes} B growth).`);
 }
 
+/*
+ * Turbopack preserves `apps/docs/examples/<slug>/` virtual paths for inlined
+ * WGSL, but not for ordinary TypeScript modules. The marker check below is
+ * therefore supplementary evidence only: it catches a foreign renderer/WGSL
+ * when that path survives minification, but cannot prove source isolation for
+ * examples whose chunks contain no such marker (including the current ML
+ * routes). Unique route-owned chunks are still enforced above; use a bundler
+ * manifest with module-to-chunk attribution before treating this as a complete
+ * cross-contamination guarantee.
+ */
 const chunkOwners = new Map();
 const results = [];
 for (const slug of slugs) {
