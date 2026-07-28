@@ -18,6 +18,7 @@ import {
   type SharedDeviceSession,
 } from '../../lib/ort-webgpu';
 import { createInferencePump, type InferencePump } from './inference-pump';
+import { createSwitchQueue } from './model-switch';
 import { DEFAULT_MODEL_ID, getDepthModel, type DepthModel, type DepthModelId } from './model-contract';
 import {
   createPreprocessScratch,
@@ -108,6 +109,10 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     minIntervalMs: 500,
   });
 
+  // Model switches are serialized: see model-switch.ts for why overlapping
+  // teardowns and loading every model clicked past are both unacceptable.
+  const switches = createSwitchQueue<DepthModelId>((error) => fail(error));
+
   function fail(error: unknown): void {
     if (disposed || error instanceof OrtInitCancelled) return;
     if (!reportedError) {
@@ -195,6 +200,13 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       modelUrl: model.url,
       label: `depth-estimation ${model.id}`,
       isCancelled: () => disposed || generation !== target,
+      // Error and above. The transformer graphs pin their shape arithmetic to
+      // CPU and ONNX Runtime says so at warning level on every session create;
+      // that is expected and harmless, but it reaches the browser console as
+      // console.error, where Next's dev overlay presents it as a crash. Raising
+      // the threshold silences it at the source instead of filtering the
+      // console, so genuine errors are still logged and still thrown.
+      sessionOptions: { logSeverityLevel: 3 },
     });
     if (disposed || generation !== target) {
       await session.release();
@@ -293,15 +305,18 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       generation += 1;
       lastInferenceMs = undefined;
       scratch = undefined;
-      void (async () => {
-        try {
-          await teardownSession();
-          if (disposed) return;
-          await initialize();
-        } catch (error) {
-          fail(error);
-        }
-      })();
+      // Report the choice before awaiting anything. The picker is a controlled
+      // input bound to this status, so if the new id only appears once the
+      // session is ready -- seconds away, and a 94 MiB download for the largest
+      // model -- React restores the previous value and the click looks
+      // rejected, which is exactly what a failed switch looks like.
+      setPhase('loading-model');
+      switches.push(id, async () => {
+        await teardownSession();
+        // Superseded while the old session drained.
+        if (disposed || id !== modelId) return;
+        await initialize();
+      });
     },
     setSource(next) {
       if (disposed || next === source) return;
@@ -323,7 +338,12 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       options.canvas.removeEventListener('pointermove', onPointerMove);
       options.canvas.removeEventListener('pointerleave', onPointerLeave);
       stopCamera();
-      void teardownSession().catch(() => {});
+      // Drain an in-flight switch first, so teardown cannot race a session
+      // that is still being created.
+      void Promise.resolve(switches.active)
+        .catch(() => {})
+        .then(() => teardownSession())
+        .catch(() => {});
     },
   };
 }
