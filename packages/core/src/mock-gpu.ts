@@ -50,8 +50,9 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
     },
     createTexture(desc: GPUTextureDescriptor): MockGPUTexture {
       const size = textureSize(desc.size);
-      // Sized by the real format so Texture.read()/readFloats() see the same byte layout as a real device.
-      const bytes = new Uint8Array(size.width * size.height * mockBytesPerPixel(desc.format));
+      // Sized by the real format and layer count (layer-major, mip 0 only) so Texture.read()/readFloats()
+      // see the same byte layout as a real device and a write to layer N cannot clobber layer 0.
+      const bytes = new Uint8Array(size.width * size.height * size.depthOrArrayLayers * mockBytesPerPixel(desc.format));
       return {
         __vgpuMockBytes: bytes,
         label: desc.label ?? "",
@@ -174,21 +175,28 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
         if (isMockGPUBuffer(buffer)) buffer.__vgpuMockBytes.set(bytesFrom(data).subarray(dataOffset, size ? dataOffset + size : undefined), offset);
       },
       // Row-by-row upload into the mock texel storage, so writeTexture + Texture.read() round-trips
-      // on the mock adapter exactly as it does on a real device (bytesPerRow padding included).
+      // on the mock adapter exactly as it does on a real device (bytesPerRow/rowsPerImage padding,
+      // origin and array layers included).
       writeTexture(destination: GPUTexelCopyTextureInfo, data: BufferSource, dataLayout: GPUTexelCopyBufferLayout, size: GPUExtent3DStrict) {
         const texture = destination.texture;
         if (!isMockGPUTexture(texture)) return;
+        // The mock only stores mip 0; writing another level would silently corrupt it, so say so instead.
+        if (destination.mipLevel) throw new Error("createMockGPUDevice: queue.writeTexture only supports mipLevel 0, the mock stores mip 0 only");
         const bytesPerPixel = mockBytesPerPixel(texture.format);
         const extent = textureSize(size);
         const origin = textureOrigin(destination.origin);
         const source = bytesFrom(data);
         const offset = Number(dataLayout.offset ?? 0);
-        const bytesPerRow = dataLayout.bytesPerRow ?? extent.width * bytesPerPixel;
         const rowBytes = extent.width * bytesPerPixel;
-        for (let y = 0; y < extent.height; y++) {
-          const src = offset + y * bytesPerRow;
-          const dst = ((origin.y + y) * texture.width + origin.x) * bytesPerPixel;
-          texture.__vgpuMockBytes.set(source.subarray(src, src + rowBytes), dst);
+        const bytesPerRow = dataLayout.bytesPerRow ?? rowBytes;
+        const rowsPerImage = dataLayout.rowsPerImage ?? extent.height;
+        const layerBytes = texture.width * texture.height * bytesPerPixel;
+        for (let z = 0; z < extent.depthOrArrayLayers; z++) {
+          for (let y = 0; y < extent.height; y++) {
+            const src = offset + (z * rowsPerImage + y) * bytesPerRow;
+            const dst = (origin.z + z) * layerBytes + ((origin.y + y) * texture.width + origin.x) * bytesPerPixel;
+            texture.__vgpuMockBytes.set(source.subarray(src, src + rowBytes), dst);
+          }
         }
       },
       onSubmittedWorkDone: async () => undefined,
@@ -300,11 +308,11 @@ function textureSize(size: GPUExtent3DStrict): Required<GPUExtent3DDict> {
   return { width: dict.width, height: dict.height ?? 1, depthOrArrayLayers: dict.depthOrArrayLayers ?? 1 };
 }
 
-function textureOrigin(origin: GPUOrigin3D | undefined): { x: number; y: number } {
-  if (!origin) return { x: 0, y: 0 };
-  if (Array.isArray(origin)) return { x: origin[0] ?? 0, y: origin[1] ?? 0 };
+function textureOrigin(origin: GPUOrigin3D | undefined): { x: number; y: number; z: number } {
+  if (!origin) return { x: 0, y: 0, z: 0 };
+  if (Array.isArray(origin)) return { x: origin[0] ?? 0, y: origin[1] ?? 0, z: origin[2] ?? 0 };
   const dict = origin as GPUOrigin3DDict;
-  return { x: dict.x ?? 0, y: dict.y ?? 0 };
+  return { x: dict.x ?? 0, y: dict.y ?? 0, z: dict.z ?? 0 };
 }
 
 /** Mock texel storage size. Formats without a readback layout (depth/stencil, packed) fall back to 4 bytes. */

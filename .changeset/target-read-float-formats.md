@@ -11,6 +11,6 @@ New `Texture.readFloats()` / `Target.readFloats()` / `Surface.readFloats()` retu
 
 Formats outside that table (depth/stencil, packed such as `rgb10a2unorm` / `rg11b10ufloat`, snorm/uint/sint, and compressed) still throw `VGPU-CORE-UNSUPPORTED-FORMAT`, now listing the supported formats in the message.
 
-The mock device also gained a real `queue.writeTexture` and allocates its texel storage from the texture's format, so `writeTexture` + `read()` / `readFloats()` round-trips per format on the mock adapter.
+The mock device also gained a real `queue.writeTexture` and allocates its texel storage from the texture's format and layer count, so `writeTexture` + `read()` / `readFloats()` round-trips per format on the mock adapter with the same byte layout a real device produces: `bytesPerRow` / `rowsPerImage` padding, `origin` (including array layers) and the `bgra*` → RGBA swizzle all behave as they do on a real readback, and `read()` returns layer 0 like `copyTextureToBuffer` does. The mock stores mip 0 only, so `writeTexture` with `mipLevel > 0` now throws instead of silently corrupting mip 0.
 
 Note for custom `Target` implementers (pre-1.0): the `Target` interface gained a required `readFloats(): Promise<Float32Array>` member. Delegating to `this.color.readFloats()` — what `gpu.target()` and `gpu.surface()` do — is enough.

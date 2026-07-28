@@ -1,7 +1,7 @@
 import { ValidationError } from "./errors.ts";
 import { textureUsageFlags } from "./gpu-constants.ts";
 import { isMockGPUTexture } from "./mock-gpu-storage.ts";
-import { decodeTextureFloats, textureReadbackFormat } from "./readback.ts";
+import { decodeTextureFloats, readMockTextureBytes, textureReadbackFormat } from "./readback.ts";
 import { createResourceIdentity, DestroySignal, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "./resource-lifecycle.ts";
 import type { Device } from "./device.ts";
 import type { TextureOptions } from "./types.ts";
@@ -100,7 +100,7 @@ export class Texture {
    */
   async read(): Promise<Uint8Array> {
     this.assertAlive();
-    if (isMockGPUTexture(this.gpu)) return this.gpu.__vgpuMockBytes.slice();
+    if (isMockGPUTexture(this.gpu)) return readMockTextureBytes(this.gpu.__vgpuMockBytes, this.options.size, this.options.format);
     return this.device.readback.readTexture(this.gpu, this.options.size, this.options.format);
   }
 
