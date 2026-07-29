@@ -105,7 +105,7 @@ if [[ -z "$venv" ]]; then
   venv="$workdir/.venv"
   if [[ ! -x "$venv/bin/python" ]]; then
     python3 -m venv "$venv"
-    "$venv/bin/pip" install --no-input -r "$here/requirements.txt"
+    "$venv/bin/pip" install --no-input -r "$here/requirements-convert.txt"
   fi
 fi
 [[ -x "$venv/bin/python" ]] || { echo "FAIL no python in $venv" >&2; exit 1; }

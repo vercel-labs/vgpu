@@ -192,7 +192,7 @@ which is, unrolled:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r tools/models/mediapipe-hands/requirements.txt
+.venv/bin/pip install -r tools/models/mediapipe-hands/requirements-convert.txt
 
 curl -fL --max-time 300 \
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' \
