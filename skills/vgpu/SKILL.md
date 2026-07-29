@@ -14,7 +14,7 @@ doc you can load on demand with the CLI — **load only what you need, don't rea
 
 vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL reflection) → vgpu/scene (geometry/camera helpers). Lower layers are always accessible and interoperable.
 
-Glossary: **Surface** means a canvas-backed render target (swapchain) created with `gpu.surface(canvas)`; do not confuse it with the general phrase ‘API surface’.
+Glossary: **Surface** means a canvas-backed render target (swapchain) created with `surface(gpu, canvas)`; do not confuse it with the general phrase ‘API surface’.
 
 ```sh
 npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols
@@ -29,7 +29,7 @@ Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bak
 - **Context** — Everything in vgpu starts from one call.  `references/guides/concepts-context.docs.md`
 - **Draws** — A Draw renders geometry with custom vertex buffers: you write both the vertex and the fragment stage, and a geometry supplies the buffers.  `references/guides/concepts-draws.docs.md`
 - **Compilation** — Pipelines compile lazily: the first draw() against a new target pays the pipeline creation cost, and that cost lands inside your frame.  `references/guides/concepts-compilation.docs.md`
-- **Effects** — An Effect is a full-screen fragment shader created with gpu.effect(source).  `references/guides/concepts-effects.docs.md`
+- **Effects** — An Effect is a full-screen fragment shader created with effect(gpu, source).  `references/guides/concepts-effects.docs.md`
 - **Passes** — A pass is a render-pass section inside a frame.  `references/guides/concepts-passes.docs.md`
 - **Frames** — A frame is one unit of GPU work.  `references/guides/concepts-frames.docs.md`
 - **Render bundles** — A render loop re-encodes every pipeline, bind group, and draw on every tick — even when nothing changed.  `references/guides/concepts-render-bundles.docs.md`
@@ -44,7 +44,8 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 - **WebGPU screenshots with agent-browser** — Use agent-browser to verify and capture vgpu previews that run WebGPU on Linux, including containers without a GPU.  `references/guides/agent-browser-webgpu.docs.md`
 - **Authoring shaders for performance** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
-- **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), gpu.surface(canvas, opts), explicit targets, and deterministic frame submission.  `references/guides/browser-testing.docs.md`
+- **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), surface(gpu, canvas, opts), explicit targets, and deterministic frame submiss…  `references/guides/browser-testing.docs.md`
+- **External ticker** — By default vgpu owns the clock: every frame(gpu) moves clock(gpu).time forward by the wall-clock delta since the last frame, and frameLoop(gpu, cb)…  `references/guides/external-ticker.docs.md`
 - **Getting started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
 - **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
 - **Overview** — Share one GPUDevice between vgpu and a machine learning runtime so model outputs stay on the GPU.  `references/guides/ml.docs.md`
@@ -62,7 +63,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-245 symbols across 17 packages — open `references/<package>/<file>` or `npx --package @vgpu/cli vgpu docs cat <symbol>`:
+247 symbols across 17 packages — open `references/<package>/<file>` or `npx --package @vgpu/cli vgpu docs cat <symbol>`:
 
 - `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
 - `@vgpu/render/edit` — bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, EdgeView, EditableMesh, EditableMeshValue, ElementDomain, ElementSelection, ElementSet, extrude, FaceView, fillHole, gridFill, healManifold, inset, KernelHandle, loopCut, mergeByDistance, MeshEditError, MeshEditWarning, recomputeNormals, ScoredSelection, subdivideEdges, subdivideFaces, toEditable, toEditableWithDiagnostics, VertexView
@@ -77,7 +78,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - `@vgpu/wgsl/loader-vite` — transformWgsl, ViteLoadResult, wgslVitePlugin
 - `@vgpu/wgsl/loader-webpack` — wgslWebpackLoader
 - `@vgpu/wgsl/runtime` — ResolvedShader, ResolveOptions, resolveShader, SourceMap, WGSLAst, WGSLModule
-- `vgpu` — Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawCallOptions, DrawLayoutOptions, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FramePass, FramePassOptions, FrameRunner, Geometry, GeometryLike, Gpu, init, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent, Target, TargetOptions, TargetTextureOptions, Timer, TimerSpan, Uniform, UniformOptions, Visibility, VisibilityOptions, VisibilityQuery
+- `vgpu` — Bundle, BundleOptions, BundleRecorder, clock, Clock, Compute, ComputeOptions, Draw, DrawCallOptions, DrawLayoutOptions, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FramePass, FramePassOptions, FrameRunner, Geometry, GeometryLike, Gpu, init, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent, Target, TargetOptions, TargetTextureOptions, Timer, TimerSpan, Uniform, UniformOptions, Visibility, VisibilityOptions, VisibilityQuery
 - `vgpu/core` — bind, Buffer, BufferOptions, createBindGroup, createBindGroupLayout, CreateDeviceOptions, createPipelineLayout, createRenderBundle, createSampler, Device, DeviceOptions, Queue, RenderBundleOptions, RenderBundleRecorder, ScalarUniformType, StorageBuffer, StorageBufferOptions, StructuredUniform, StructuredUniformOptions, Texture, TextureOptions, Uniform, UniformField, UniformLayout, UniformLayoutInfo, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, UniformValues, ValidationError, VectorUniformInput, VGPUAdapter, VGPUError, WgslUniformType
 - `vgpu/mock` — createMockAdapter
 - `vgpu/scene` — ambientLight, AmbientLight, AmbientLightOptions, AmbientLightValues, box, BoxOptions, Camera, CameraVec3, capsule, CapsuleOptions, ColorMaterialOptions, ColorMaterialValues, cone, ConeOptions, cylinder, CylinderOptions, degToRad, directionalLight, DirectionalLight, DirectionalLightOptions, DirectionalLightValues, disk, DiskOptions, dodecahedron, fullscreenQuad, FullscreenQuadOptions, geometries, GeometryKind, group, icosahedron, icosphere, IcosphereOptions, lambertMaterial, LambertMaterial, Mat4, MaterialBlend, mesh, MeshNode, NodeOptions, NodeTransformValues, normalMaterial, NormalMaterial, octahedron, orbit, orbitControls, OrbitControls, OrbitControlsElement, OrbitControlsOptions, OrbitControlsValues, OrbitOptions, orthographicCamera, OrthographicCamera, OrthographicCameraOptions, OrthographicCameraValues, perspectiveCamera, PerspectiveCamera, PerspectiveCameraOptions, PerspectiveCameraValues, plane, PlaneOptions, PolyhedronOptions, QuatLike, ring, RingOptions, scene, SceneCamera, SceneGeometry, SceneGeometryOfKind, SceneMaterial, SceneMaterialKind, SceneNode, SceneNodeKind, shaderMaterial, ShaderMaterial, ShaderMaterialOptions, sphere, SphereOptions, srgb, tetrahedron, torus, TorusOptions, unlitMaterial, UnlitMaterial, Vec3, Vec3Like

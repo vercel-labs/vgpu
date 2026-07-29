@@ -6,12 +6,12 @@ Optimize one pass by first deciding what changes every frame.
 
 ## 0. Measure first
 
-Attach a `gpu.timer()` span (requires `init({ requiredFeatures: ["timestamp-query"] })`) and judge every change by the reported GPU milliseconds:
+Attach a `timer(gpu)` span (requires `init({ requiredFeatures: ["timestamp-query"] })`) and judge every change by the reported GPU milliseconds:
 
 ```text
-const timer = gpu.timer();
+const timer = timer(gpu);
 timer.onResults((spans) => console.log(`pass ${spans.pass}ms`));
-gpu.frame.loop((f) => f.pass({ target, timer: timer.span("pass") }, (p) => p.draw(effect)));
+frameLoop(gpu, (f) => f.pass({ target, timer: timer.span("pass") }, (p) => p.draw(effect)));
 ```
 
 ## 1. Static commands
@@ -19,11 +19,11 @@ gpu.frame.loop((f) => f.pass({ target, timer: timer.span("pass") }, (p) => p.dra
 If the draw list is static, record it once:
 
 ```text
-const effectBundle = gpu.bundle({ target }, (b) => {
+const effectBundle = bundle(gpu, { target }, (b) => {
   b.draw(background);
   b.draw(grid);
 });
-gpu.frame.loop((f) => f.pass(target, (p) => p.bundles(effectBundle)));
+frameLoop(gpu, (f) => f.pass(target, (p) => p.bundles(effectBundle)));
 ```
 
 ## 2. Animated scalar/vector values
@@ -31,9 +31,10 @@ gpu.frame.loop((f) => f.pass(target, (p) => p.bundles(effectBundle)));
 Keep the pass object and write values in place:
 
 ```text
-const effect = gpu.effect(WGSL, { set: { time: 0, exposure: 1 } });
-gpu.frame.loop((f) => {
-  effect.set({ time: gpu.time });
+const effect = effect(gpu, WGSL, { set: { time: 0, exposure: 1 } });
+const time = clock(gpu);
+frameLoop(gpu, (f) => {
+  effect.set({ time: time.time });
   f.pass(target, effect);
 });
 ```
@@ -43,8 +44,8 @@ gpu.frame.loop((f) => {
 Use ping-pong rather than allocating a new target or storage buffer:
 
 ```text
-const state = gpu.pingPong(512, 512, { format: "rgba16float" });
-gpu.frame.loop((f) => {
+const state = pingPong(gpu, 512, 512, { format: "rgba16float" });
+frameLoop(gpu, (f) => {
   step.set({ src: state.read.color });
   f.pass(state.write, step);
   state.swap();

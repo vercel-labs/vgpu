@@ -13,10 +13,10 @@ pnpm add -D @vgpu/adapter-mock
 ## Usage
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, storage } from "vgpu/mock";
 
 const gpu = await init();
-const buffer = gpu.storage(16);
+const buffer = storage(gpu, 16);
 buffer.write(new Float32Array([1, 2, 3, 4]));
 await buffer.read();
 gpu.dispose();

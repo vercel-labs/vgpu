@@ -1,6 +1,9 @@
 import type { Buffer, Device } from "@vgpu/core";
 import type { BindingInfo, HostShareableLayout } from "@vgpu/wgsl/reflect-source";
-import type { SharedUniforms } from "./gpu.ts";
+import type { SharedUniforms } from "./api-types.ts";
+import type { Gpu } from "./kernel.ts";
+import { liveKernel, ownResource } from "./live-kernel.ts";
+import { BINDING_RESOURCE, type BindingResourceProvider } from "./draw-protocols.ts";
 import type { NormalizedBindingResource } from "./set-resources.ts";
 import { sharedUniformLayoutMismatchError, unsupportedError } from "./errors.ts";
 import { writeLayoutValue } from "./set-packing.ts";
@@ -20,7 +23,7 @@ interface SharedUniformLayoutState {
  * Values-first shared uniform/storage buffer. The WGSL layout is adopted lazily from
  * the first shader that binds this object, keeping the backing buffer identity stable.
  */
-export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T> {
+export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T>, BindingResourceProvider {
   readonly #values: Record<string, unknown>;
   #state?: SharedUniformLayoutState;
   #bufferRef?: Buffer;
@@ -38,8 +41,13 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     this.#writeCurrentValues();
   }
 
-  /** Adopts or validates the reflected binding layout, then returns a user-owned resource. */
-  asBindingResource(binding: BindingInfo, sourceHint: string): NormalizedBindingResource {
+  /**
+   * Adopts or validates the reflected binding layout, then returns a user-owned resource.
+   *
+   * Keyed by the nominal protocol symbol so `set-resources.ts` recognizes a shared uniforms block
+   * without importing this module: binding a plain buffer must not link the layout machinery.
+   */
+  [BINDING_RESOURCE](binding: BindingInfo, sourceHint: string): NormalizedBindingResource {
     ensureBufferBinding(binding);
     const adopted = this.#ensureLayout(binding, sourceHint);
     const buffer = this.#requiredBuffer();
@@ -80,7 +88,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   #assertCompatibleLayout(binding: BindingInfo, layout: HostShareableLayout, addressSpace: "uniform" | "storage", sourceHint: string): void {
     const state = this.#state!;
     if (state.addressSpace !== addressSpace) {
-      throw unsupportedError("gpu.uniforms", `shared uniforms '${state.bindingName}' already adopted address space ${state.addressSpace}; '${binding.name}' uses ${addressSpace}.`);
+      throw unsupportedError("uniforms", `shared uniforms '${state.bindingName}' already adopted address space ${state.addressSpace}; '${binding.name}' uses ${addressSpace}.`);
     }
     if (sharedUniformLayoutSignature(layout) === state.layoutSignature) return;
     throw sharedUniformLayoutMismatchError({
@@ -98,8 +106,18 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   }
 
   #requiredBuffer(): Buffer {
-    if (!this.#bufferRef) throw unsupportedError("gpu.uniforms", "shared uniforms have not adopted a layout yet.");
+    if (!this.#bufferRef) throw unsupportedError("uniforms", "shared uniforms have not adopted a layout yet.");
     return this.#bufferRef;
+  }
+
+  /**
+   * Frees the backing buffer, if the layout was already adopted. Idempotent, and a no-op for an
+   * object that no shader ever bound — the buffer only exists after adoption.
+   *
+   * @internal Lifetime is the gpu's: `gpu.dispose()` runs this in the resource phase.
+   */
+  destroy(): void {
+    this.#bufferRef?.destroy();
   }
 }
 
@@ -107,18 +125,26 @@ export function createSharedUniforms<T extends Record<string, unknown>>(device: 
   return new SharedUniformsImpl(device, values);
 }
 
-export function isSharedUniformsValue(value: unknown): value is SharedUniformsImpl<Record<string, unknown>> {
-  return value instanceof SharedUniformsImpl;
+/**
+ * Values-first shared uniform/storage block for this gpu. Bind the same object in several shaders:
+ * the WGSL layout is adopted from the first binding that uses it and validated against the rest, so
+ * one `set()` updates every consumer through a single buffer.
+ *
+ * The buffer (created on adoption) is freed by `gpu.dispose()`.
+ */
+export function uniforms<T extends Record<string, unknown>>(gpu: Gpu, values: T): SharedUniforms<T> {
+  const kernel = liveKernel(gpu, "uniforms");
+  return ownResource(kernel, new SharedUniformsImpl(kernel.device, values), (shared) => shared.destroy());
 }
 
 function ensureBufferBinding(binding: BindingInfo): void {
   if (binding.bindingLayout?.kind === "buffer") return;
-  throw unsupportedError("gpu.uniforms", `Binding '${binding.name}' does not accept shared uniforms; the shader reflected ${binding.bindingLayout?.kind ?? "none"}.`);
+  throw unsupportedError("uniforms", `Binding '${binding.name}' does not accept shared uniforms; the shader reflected ${binding.bindingLayout?.kind ?? "none"}.`);
 }
 
 function staticBindingLayout(binding: BindingInfo): HostShareableLayout & { readonly size: number } {
-  if (!binding.layout) throw unsupportedError("gpu.uniforms", `Binding '${binding.name}' does not expose a host-shareable layout.`);
-  if (binding.layout.size === undefined) throw unsupportedError("gpu.uniforms", `Binding '${binding.name}' has a runtime-sized layout; it cannot be shared.`);
+  if (!binding.layout) throw unsupportedError("uniforms", `Binding '${binding.name}' does not expose a host-shareable layout.`);
+  if (binding.layout.size === undefined) throw unsupportedError("uniforms", `Binding '${binding.name}' has a runtime-sized layout; it cannot be shared.`);
   return binding.layout as HostShareableLayout & { readonly size: number };
 }
 

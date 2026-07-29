@@ -2,7 +2,7 @@
 
 # frameClock
 
-Creates a monotonic time source with pause/resume support for ad-hoc render loops. Use it when you need consistent elapsed seconds outside the built-in `gpu.frame` loop.
+Creates a monotonic time source with pause/resume support for ad-hoc render loops. Use it when you need consistent elapsed seconds outside the built-in `frame()` loop.
 
 ## Import
 

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createMockAdapter, init } from "../src/mock.ts";
+import { createMockAdapter, init, effect, frame, target, timer, visibility } from "../src/mock.ts";
 import type { FramePass } from "../src/frame.ts";
 
 function initWithTimestampQuery() {
@@ -10,18 +10,18 @@ test("cancel() releases every telemetry retain the frame took", async () => {
   const gpu = await initWithTimestampQuery();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  const frame = gpu.frame();
-  frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => p.occlusion(vis.query("statue"), () => undefined));
-  timer.dispose();
+  const currentFrame = frame(gpu);
+  currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => p.occlusion(vis.query("statue"), () => undefined));
+  gpuTimer.dispose();
   vis.dispose();
   // Both query sets are referenced by the open frame's pass descriptor: destruction is deferred.
   expect(destroyed).toEqual([]);
 
-  frame.cancel();
+  currentFrame.cancel();
 
   // Without cancel() this frame would hold both rings until gpu.dispose() — it may still be submitted.
   expect([...destroyed].sort()).toEqual([0, 1]);
@@ -34,16 +34,16 @@ test("cancel() submits nothing and reports no phantom telemetry", async () => {
   const gpu = await initWithTimestampQuery();
   const ops = spyFrameEncoders(gpu.device.gpu);
   const submits = spyQueueSubmits(gpu.device.gpu);
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue"); // slot 0 reads back the mock's fake value 0 -> a phantom "hidden"
 
-  const frame = gpu.frame();
-  frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => p.occlusion(query, () => undefined));
-  frame.cancel();
+  const currentFrame = frame(gpu);
+  currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => p.occlusion(query, () => undefined));
+  currentFrame.cancel();
   await gpu.settled();
 
   // No resolve is encoded, the encoder is never finished, and nothing reaches the queue.
@@ -52,7 +52,7 @@ test("cancel() submits nothing and reports no phantom telemetry", async () => {
   expect(results).toEqual([]);
   expect(query.state).toBe("unknown");
   expect(query.hidden).toBe(false);
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
   vi.restoreAllMocks();
@@ -61,36 +61,36 @@ test("cancel() submits nothing and reports no phantom telemetry", async () => {
 test("cancel() is idempotent and submit() after cancel() is a no-op", async () => {
   const gpu = await initWithTimestampQuery();
   const submits = spyQueueSubmits(gpu.device.gpu);
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
 
-  const frame = gpu.frame();
-  frame.pass({ target, timer: timer.span("main") }, () => undefined);
-  frame.cancel();
-  expect(() => frame.cancel()).not.toThrow();
+  const currentFrame = frame(gpu);
+  currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("main") }, () => undefined);
+  currentFrame.cancel();
+  expect(() => currentFrame.cancel()).not.toThrow();
   // submit() treats a closed frame as "nothing left to flush", exactly like a repeated submit().
-  expect(() => frame.submit()).not.toThrow();
+  expect(() => currentFrame.submit()).not.toThrow();
   await gpu.settled();
 
   expect(submits.count).toBe(0);
   expect(results).toEqual([]);
-  timer.dispose();
+  gpuTimer.dispose();
   gpu.dispose();
   vi.restoreAllMocks();
 });
 
 test("cancel() after submit() throws VGPU-FRAME-SUBMITTED", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  const frame = gpu.frame();
-  frame.pass(target, () => undefined);
-  frame.submit();
+  const currentFrame = frame(gpu);
+  currentFrame.pass(colorTarget, () => undefined);
+  currentFrame.submit();
 
-  expect(() => frame.cancel()).toThrowError(/already submitted/);
-  try { frame.cancel(); }
+  expect(() => currentFrame.cancel()).toThrowError(/already submitted/);
+  try { currentFrame.cancel(); }
   catch (error) { expect(error).toMatchObject({ code: "VGPU-FRAME-SUBMITTED", where: "Frame.cancel" }); }
   await gpu.settled();
   gpu.dispose();
@@ -98,13 +98,13 @@ test("cancel() after submit() throws VGPU-FRAME-SUBMITTED", async () => {
 
 test("pass() after cancel() throws VGPU-FRAME-CANCELED", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  const frame = gpu.frame();
-  frame.cancel();
+  const currentFrame = frame(gpu);
+  currentFrame.cancel();
 
-  expect(() => frame.pass(target, () => undefined)).toThrowError(/canceled/);
-  try { frame.pass(target, () => undefined); }
+  expect(() => currentFrame.pass(colorTarget, () => undefined)).toThrowError(/canceled/);
+  try { currentFrame.pass(colorTarget, () => undefined); }
   catch (error) { expect(error).toMatchObject({ code: "VGPU-FRAME-CANCELED", where: "Frame.pass" }); }
   gpu.dispose();
 });
@@ -113,20 +113,20 @@ test("cancel() rejects while a pass callback is active and keeps descriptor reso
   const gpu = await init();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const frame = gpu.frame();
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const currentFrame = frame(gpu);
 
-  frame.pass({ target: scene, visibility: vis }, () => {
+  currentFrame.pass({ target: scene, visibility: vis }, () => {
     vis.dispose();
-    expect(() => frame.cancel()).toThrowError(/pass callback is active/);
-    try { frame.cancel(); }
+    expect(() => currentFrame.cancel()).toThrowError(/pass callback is active/);
+    try { currentFrame.cancel(); }
     catch (error) { expect(error).toMatchObject({ code: "VGPU-FRAME-PASS-ACTIVE", where: "Frame.cancel" }); }
     // The active native pass descriptor still owns this query set, so cancel must not release it.
     expect(destroyed).toEqual([]);
   });
 
-  frame.cancel();
+  currentFrame.cancel();
   expect(destroyed).toEqual([0]);
   gpu.dispose();
   vi.restoreAllMocks();
@@ -134,59 +134,59 @@ test("cancel() rejects while a pass callback is active and keeps descriptor reso
 
 test("a FramePass retained by user code cannot encode after its frame is canceled", async () => {
   const gpu = await init();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const vis = gpu.visibility();
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const vis = visibility(gpu);
   const query = vis.query("statue");
-  const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-  const frame = gpu.frame();
+  const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const currentFrame = frame(gpu);
   let stalePass: FramePass | undefined;
 
-  frame.pass({ target: scene, visibility: vis }, (pass) => { stalePass = pass; });
-  frame.cancel();
+  currentFrame.pass({ target: scene, visibility: vis }, (pass) => { stalePass = pass; });
+  currentFrame.cancel();
 
-  expect(() => stalePass?.draw(effect)).toThrowError(/frame was canceled/);
+  expect(() => stalePass?.draw(shader)).toThrowError(/frame was canceled/);
   expect(() => stalePass?.occlusion(query, () => undefined)).toThrowError(/frame was canceled/);
   vis.dispose();
   gpu.dispose();
 });
 
-test("cancel() inside gpu.frame(cb) leaves the submit in finally a no-op", async () => {
+test("cancel() inside frame(gpu, cb) leaves the submit in finally a no-op", async () => {
   const gpu = await initWithTimestampQuery();
   const submits = spyQueueSubmits(gpu.device.gpu);
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
 
-  gpu.frame((frame) => {
-    frame.pass({ target, timer: timer.span("main") }, () => undefined);
-    frame.cancel(); // e.g. the app noticed the frame is stale before it reached the queue
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("main") }, () => undefined);
+    currentFrame.cancel(); // e.g. the app noticed the frame is stale before it reached the queue
   });
   await gpu.settled();
 
   expect(submits.count).toBe(0);
   expect(results).toEqual([]);
-  timer.dispose();
+  gpuTimer.dispose();
   gpu.dispose();
   vi.restoreAllMocks();
 });
 
 test("a canceled frame leaves the telemetry usable on the next frame", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue");
 
-  const canceled = gpu.frame();
-  canceled.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => p.occlusion(query, () => undefined));
+  const canceled = frame(gpu);
+  canceled.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => p.occlusion(query, () => undefined));
   canceled.cancel();
   await gpu.settled();
   expect(results).toEqual([]);
 
-  gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
   }));
   await gpu.settled();
@@ -194,7 +194,7 @@ test("a canceled frame leaves the telemetry usable on the next frame", async () 
   // Mock fake timestamp for query i is i*i * 1e6 ns: the pair (0, 1) decodes to 1 ms.
   expect(results).toEqual([{ main: 1 }]);
   expect(query.state).toBe("hidden"); // slot 0 -> mock fake value 0
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
@@ -203,14 +203,14 @@ test("cancelling one open frame keeps the other open frame's retain", async () =
   const gpu = await initWithTimestampQuery();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  const first = gpu.frame();
-  first.pass({ target, timer: timer.span("first") }, () => undefined);
-  const second = gpu.frame();
-  second.pass({ target, timer: timer.span("second") }, () => undefined);
-  timer.dispose();
+  const first = frame(gpu);
+  first.pass({ target: colorTarget, timer: gpuTimer.span("first") }, () => undefined);
+  const second = frame(gpu);
+  second.pass({ target: colorTarget, timer: gpuTimer.span("second") }, () => undefined);
+  gpuTimer.dispose();
   expect(destroyed).toEqual([]);
 
   first.cancel();
@@ -277,3 +277,12 @@ function spyFrameEncoders(device: GPUDevice): { readonly encodeOps: EncodeOp[] }
   });
   return { encodeOps };
 }
+
+test("gpu.dispose cancels outstanding manual frames before resource teardown", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [1, 1] });
+  const manual = frame(gpu);
+  gpu.dispose();
+  expect(() => manual.pass(colorTarget, () => undefined)).toThrowError(/frame was canceled/);
+  manual.submit();
+});

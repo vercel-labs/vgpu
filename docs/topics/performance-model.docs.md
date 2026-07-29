@@ -25,7 +25,7 @@ p.draw(draw, { offsets: { 1: [offset] } });
 ## Cost model defaults
 
 - Pre-warm pipelines with `await draw.compile(target)`.
-- Share globals with `gpu.uniforms()`.
+- Share globals with `uniforms(gpu)`.
 - Use `instances` for repeated geometry.
 - Use ping-pong for iterative read/write resources.
 - Put depth/MSAA/format on targets, not global state.

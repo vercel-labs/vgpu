@@ -21,7 +21,9 @@ vi.mock("node:module", async (importOriginal) => {
   return {
     ...original,
     createRequire: () => (id: string) => {
-      if (id !== "webgpu") throw new Error(`Unexpected require: ${id}`);
+      // The verified loader requires a private temporary copy of the cached native binary;
+      // direct package mode still requires the package name.
+      if (id !== "webgpu" && !id.endsWith(".node")) throw new Error(`Unexpected require: ${id}`);
       return {
         globals: {},
         create: (flags: string[]) => {

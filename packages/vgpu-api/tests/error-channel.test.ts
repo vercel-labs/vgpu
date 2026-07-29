@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, frame, target, draw, effect } from "../src/mock.ts";
 
 const RAW_GROUP_SHADER = `
 struct Globals { tint: f32 }
@@ -21,12 +21,12 @@ afterEach(() => vi.restoreAllMocks());
 
 test("Draw.draw returns void while claimed group validation errors go to gpu.onError", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const { draw, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "drawVoid");
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const { draw: drawable, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "drawVoid");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));
 
-  const result = draw.draw({ target, offsets: { 1: [0] } });
+  const result = drawable.draw({ target: colorTarget, offsets: { 1: [0] } });
   expect(result).toBeUndefined();
 
   resolveRawClaimFailure(popResolvers, "raw group mismatch");
@@ -44,13 +44,13 @@ test("Draw.draw returns void while claimed group validation errors go to gpu.onE
 
 test("Frame.done resolves after R4 validation is delivered exactly once through gpu.onError", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const { draw, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "frameDone");
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const { draw: drawable, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "frameDone");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));
 
-  const frame = gpu.frame((f) => f.pass({ target }, (p) => p.draw(draw, { offsets: { 1: [0] } })));
-  const done = expect(frame.done).resolves.toBeUndefined();
+  const currentFrame = frame(gpu, (f) => f.pass({ target: colorTarget }, (p) => p.draw(drawable, { offsets: { 1: [0] } })));
+  const done = expect(currentFrame.done).resolves.toBeUndefined();
 
   resolveRawAndFinalizeFailures(popResolvers, "frame raw group mismatch");
   await done;
@@ -69,15 +69,15 @@ test("Frame.done resolves after R4 validation is delivered exactly once through 
 
 test("missing error listener reports exactly once to console.error without unhandled rejection", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const { draw, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "noListener");
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const { draw: drawable, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "noListener");
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const unhandled: unknown[] = [];
   const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
   process.on("unhandledRejection", onUnhandled);
 
   try {
-    draw.draw({ target, offsets: { 1: [0] } });
+    drawable.draw({ target: colorTarget, offsets: { 1: [0] } });
     resolveRawClaimFailure(popResolvers, "no listener");
     await gpu.settled();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -97,8 +97,8 @@ test("missing error listener reports exactly once to console.error without unhan
 
 test("onError supports multiple listeners, unsubscribe order, and throwing listeners", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const { draw, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "listeners");
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const { draw: drawable, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "listeners");
   const listenerError = new Error("bad listener");
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const events: string[] = [];
@@ -108,7 +108,7 @@ test("onError supports multiple listeners, unsubscribe order, and throwing liste
   const unsubD = gpu.onError(() => events.push("d"));
   unsubD();
 
-  draw.draw({ target, offsets: { 1: [0] } });
+  drawable.draw({ target: colorTarget, offsets: { 1: [0] } });
   unsubA();
   resolveRawClaimFailure(popResolvers, "listeners");
   await gpu.settled();
@@ -120,16 +120,16 @@ test("onError supports multiple listeners, unsubscribe order, and throwing liste
 
 test("gpu.settled snapshots pending validation deliveries", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
   const errors: string[] = [];
   gpu.onError((error) => errors.push(error.detail?.drawLabel ?? "unknown"));
 
   const first = rawClaimedDrawWithDeferredScopes(gpu, "firstSettled");
-  first.draw.draw({ target, offsets: { 1: [0] } });
+  first.draw.draw({ target: colorTarget, offsets: { 1: [0] } });
   const firstSettled = gpu.settled();
 
   const second = rawClaimedDrawWithDeferredScopes(gpu, "secondSettled");
-  second.draw.draw({ target, offsets: { 1: [0] } });
+  second.draw.draw({ target: colorTarget, offsets: { 1: [0] } });
 
   resolveRawClaimFailure(first.popResolvers, "first");
   await firstSettled;
@@ -143,14 +143,14 @@ test("gpu.settled snapshots pending validation deliveries", async () => {
 
 test("sync pipeline creation throws are delivered once through gpu.onError", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const draw = gpu.draw({ shader: SIMPLE_SHADER, label: "syncThrow" });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const drawable = draw(gpu, { shader: SIMPLE_SHADER, label: "syncThrow" });
   const nativeError = new Error("native createRenderPipeline failed");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));
   vi.spyOn(gpu.device.gpu, "createRenderPipeline").mockImplementation(() => { throw nativeError; });
 
-  expect(() => draw.draw(target)).not.toThrow();
+  expect(() => drawable.draw(colorTarget)).not.toThrow();
   await gpu.settled();
 
   expect(errors).toHaveLength(1);
@@ -164,23 +164,23 @@ test("sync pipeline creation throws are delivered once through gpu.onError", asy
 
 test("Frame.done awaits queue.onSubmittedWorkDone even without claimed groups", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const effect = gpu.effect(SIMPLE_SHADER);
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const shader1 = effect(gpu, SIMPLE_SHADER);
   let resolveSubmitted!: () => void;
   let submitted = false;
   vi.spyOn(gpu.device.gpu.queue, "onSubmittedWorkDone").mockImplementation(() => new Promise<void>((resolve) => {
     resolveSubmitted = () => { submitted = true; resolve(); };
   }));
 
-  const frame = gpu.frame((f) => f.pass({ target }, (p) => p.draw(effect)));
+  const currentFrame = frame(gpu, (f) => f.pass({ target: colorTarget }, (p) => p.draw(shader1)));
   let done = false;
-  void frame.done.then(() => { done = true; });
+  void currentFrame.done.then(() => { done = true; });
   await Promise.resolve();
 
   expect(done).toBe(false);
   expect(submitted).toBe(false);
   resolveSubmitted();
-  await frame.done;
+  await currentFrame.done;
   expect(done).toBe(true);
   expect(submitted).toBe(true);
   gpu.dispose();
@@ -208,7 +208,7 @@ function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>,
   gpuDevice.pushErrorScope = vi.fn();
   gpuDevice.popErrorScope = vi.fn(() => new Promise<GPUError | null>((resolve) => popResolvers.push(resolve)));
 
-  const draw = gpu.draw({ shader: `${RAW_GROUP_SHADER}
+  const drawable = draw(gpu, { shader: `${RAW_GROUP_SHADER}
 // ${label}`, label, set: { globals: { tint: 1 } } });
   const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: 64 });
   const rawLayout = gpu.device.gpu.createBindGroupLayout({
@@ -220,7 +220,32 @@ function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>,
     layout: rawLayout,
     entries: [{ binding: 0, resource: { buffer: rawBuffer, offset: 0, size: 4 } }],
   });
-  draw.layout(1, { dynamicOffsets: true });
-  draw.group(1, rawBindGroup);
-  return { draw, popResolvers };
+  drawable.layout(1, { dynamicOffsets: true });
+  drawable.group(1, rawBindGroup);
+  return { draw: drawable, popResolvers };
 }
+
+test("a disposed gpu stops delivering errors and keeps settled() resolving", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const { draw: drawable, popResolvers } = rawClaimedDrawWithDeferredScopes(gpu, "afterDispose");
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
+
+  drawable.draw({ target: colorTarget, offsets: { 1: [0] } });
+  gpu.dispose();
+  resolveRawClaimFailure(popResolvers, "after dispose");
+  await expect(gpu.settled()).resolves.toBeUndefined();
+
+  expect(errors).toEqual([]);
+  expect(consoleError).not.toHaveBeenCalled();
+});
+
+test("onError unsubscribe is idempotent and survives dispose", async () => {
+  const gpu = await init();
+  const unsub = gpu.onError(() => undefined);
+  gpu.dispose();
+  expect(() => { unsub(); unsub(); }).not.toThrow();
+  expect(gpu.disposed).toBe(true);
+});

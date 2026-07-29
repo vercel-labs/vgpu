@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: triangle-led-front LED emitter stream.
+// geometry(gpu, ...) v2 fixture: triangle-led-front LED emitter stream.
 // Expected mesh buffer: stride 24 with float32x2 position @0, float32x2 local @8, float32 led_index @16.
 struct VertexOut {
   @builtin(position) position: vec4f,

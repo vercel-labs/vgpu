@@ -55,6 +55,6 @@ void paused;
 
 ## Notes
 
-- `orbit` does not read global time. Pass `gpu.time` from the main API (`vgpu`) or your own clock explicitly.
+- `orbit` does not read global time. Pass `clock(gpu).time` from the main API (`vgpu`) or your own clock explicitly.
 - The matrix is column-major, matching WebGPU/WGSL matrix memory order and the scene camera helpers.
 - **See also:** `Mat4`, `degToRad`, `perspectiveCamera`.

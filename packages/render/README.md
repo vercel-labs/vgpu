@@ -14,15 +14,15 @@ New applications should use the public `vgpu` package. `@vgpu/render` remains as
 ## Preferred rendering API
 
 ```ts
-import { init } from "vgpu";
+import { init, draw, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
-const surface = gpu.surface(canvas);
-const draw = gpu.draw({ shader: WGSL, targets: [surface] });
-gpu.frame.loop((f) => f.pass({ target: surface }, (p) => p.draw(draw)));
+const canvasSurface = surface(gpu, canvas);
+const drawable = draw(gpu, { shader: WGSL, targets: [canvasSurface] });
+frameLoop(gpu, (f) => f.pass({ target: canvasSurface }, (p) => p.draw(drawable)));
 ```
 
-Keep performance-sensitive rendering in `vgpu`: use `gpu.bundle()` for static replay, `targets: [...]` for pipeline pre-warm, `gpu.uniforms()` for shared values, and `draw.group()` with dynamic offsets for many objects.
+Keep performance-sensitive rendering in `vgpu`: use `bundle(gpu)` for static replay, `targets: [...]` for pipeline pre-warm, `uniforms(gpu)` for shared values, and `draw.group()` with dynamic offsets for many objects.
 
 ## License
 

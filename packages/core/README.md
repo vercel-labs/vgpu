@@ -13,14 +13,14 @@ pnpm add vgpu
 ## Use from the main API (`vgpu`)
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, draw } from "vgpu/mock";
 import { UniformPool } from "vgpu/core";
 
 const gpu = await init();
-const draw = gpu.draw({ shader: OBJ_WGSL });
+const drawable = draw(gpu, { shader: OBJ_WGSL });
 const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
-const slot = pool.alloc({ size: 64, bindGroupLayout: draw.layout(1, { dynamicOffsets: true }) });
-draw.group(1, slot.bindGroup);
+const slot = pool.alloc({ size: 64, bindGroupLayout: drawable.layout(1, { dynamicOffsets: true }) });
+drawable.group(1, slot.bindGroup);
 ```
 
 Use raw `.gpu` handles deliberately. Wrapper lifecycle methods (`buffer.destroy()`, `texture.destroy()`, `device.destroy()`) remain preferred for resources created through vgpu.

@@ -130,11 +130,14 @@ for (const slug of slugs) {
   for (const chunk of chunks) {
     const source = chunkSources.get(chunk);
     if (!source) throw new Error(`/preview/${slug} references missing chunk ${chunk}.`);
-    const owner = chunkOwners.get(chunk);
-    if (owner && owner !== slug) throw new Error(`${chunk} is shared by ${owner} and ${slug}; example chunks must be isolated.`);
-    chunkOwners.set(chunk, slug);
-
     const markerSlugs = new Set([...source.toString('utf8').matchAll(/apps\/docs\/examples\/([a-z0-9-]+)\//g)].map((match) => match[1]));
+    // Turbopack may factor shared library code into a dependency chunk referenced by several lazy
+    // routes. Only chunks containing example source must have exactly one example owner.
+    if (markerSlugs.size > 0) {
+      const owner = chunkOwners.get(chunk);
+      if (owner && owner !== slug) throw new Error(`${chunk} is shared by ${owner} and ${slug}; example chunks must be isolated.`);
+      chunkOwners.set(chunk, slug);
+    }
     const foreign = [...markerSlugs].filter((marker) => marker !== slug);
     if (foreign.length) throw new Error(`/preview/${slug} chunk ${chunk} contains another example's renderer/WGSL: ${foreign.join(', ')}.`);
 

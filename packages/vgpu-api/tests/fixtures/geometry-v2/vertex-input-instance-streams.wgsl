@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: one vertex stream plus one instance stream.
+// geometry(gpu, ...) v2 fixture: one vertex stream plus one instance stream.
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) color: vec4f,

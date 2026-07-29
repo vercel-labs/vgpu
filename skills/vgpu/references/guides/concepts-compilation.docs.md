@@ -26,19 +26,19 @@ Pipelines compile lazily: the first `draw()` against a new target pays the pipel
 Most of the time you already have the target in hand. `await draw.compile(target)` and `await effect.compile(target)` warm exactly that signature and resolve back to the same object:
 
 ```ts
-import { init } from "vgpu";
+import { init, draw, effect, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
+const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
-const ocean = gpu.effect(`
+const ocean = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.8, 1.0);
   }
 `);
-const tri = gpu.draw({
+const tri = draw(gpu, {
   shader: `
     struct Out { @builtin(position) position: vec4f }
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> Out {
@@ -51,9 +51,9 @@ const tri = gpu.draw({
   `,
 });
 
-await Promise.all([ocean.compile(surface), tri.compile(surface)]);
-tri.draw(surface);
-ocean.draw(surface);
+await Promise.all([ocean.compile(canvasSurface), tri.compile(canvasSurface)]);
+tri.draw(canvasSurface);
+ocean.draw(canvasSurface);
 ```
 
 The pipelines are cached per signature at the device level, so those first `draw()` calls — and every draw after them — just encode work.
@@ -63,12 +63,12 @@ The pipelines are cached per signature at the device level, so those first `draw
 Sometimes the target doesn't exist yet. Pass a signature object instead: `colors` is required, `depth` and `sampleCount` are optional.
 
 ```ts
-import { init } from "vgpu";
+import { init, draw, geometry } from "vgpu";
 import { box } from "vgpu/scene";
 
 const gpu = await init();
 const sceneShader = `/* vertex + fragment WGSL */`;
-const msaaScene = gpu.draw({ shader: sceneShader, geometry: gpu.geometry(box({ size: 1 })) });
+const msaaScene = draw(gpu, { shader: sceneShader, geometry: geometry(gpu, box({ size: 1 })) });
 
 await msaaScene.compile({
   colors: ['bgra8unorm'],
@@ -84,11 +84,11 @@ await msaaScene.compile({
 `compileSync(target)` is the blocking twin: same cache, same signatures, but it creates the pipeline right now. Use it in tools and tests where jank doesn't matter. If an async `compile()` for the same signature is in flight, the synchronous result wins and the pending promise resolves with it.
 
 ```ts
-import { init } from "vgpu";
+import { init, draw, target } from "vgpu";
 
 const gpu = await init();
-const offscreen = gpu.target({ size: [2048, 2048], depth: true });
-const grid = gpu.draw({
+const offscreen = target(gpu, { size: [2048, 2048], depth: true });
+const grid = draw(gpu, {
   shader: `
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var pts = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
@@ -108,10 +108,10 @@ grid.compileSync(offscreen);
 A failed `compile()` rejects its promise — the error belongs to the call site, so catch it where you scheduled the warm-up:
 
 ```ts
-import { init } from "vgpu";
+import { init, draw } from "vgpu";
 
 const gpu = await init();
-const tri = gpu.draw({ shader: `@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0); }` });
+const tri = draw(gpu, { shader: `@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0); }` });
 
 try {
   await tri.compile({ colors: ['bgra8unorm'] });

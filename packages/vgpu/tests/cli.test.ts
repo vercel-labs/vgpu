@@ -95,8 +95,8 @@ test("cats getting-started guide from forgiving guide names", () => {
 });
 
 test("greps content with case and package options", () => {
-  expect(success(["docs", "grep", "gpu.uniforms"])).toContain("gpu.uniforms");
-  expect(runCli(["docs", "grep", "GPU.UNIFORMS"]).code).toBe(1);
+  expect(success(["docs", "grep", "uniforms(gpu"])).toContain("uniforms(gpu");
+  expect(runCli(["docs", "grep", "UNIFORMS(GPU"]).code).toBe(1);
   const filtered = success(["docs", "grep", "-i", "--package", "@vgpu/wgsl", "MINIFY"]);
   expect(filtered).toContain("/@vgpu/wgsl/");
 });

@@ -25,22 +25,22 @@ export function meshToReadable(mesh: Mesh, device: Device): Promise<Mesh>;
 
 **Returns:** `Promise<Mesh>` — resolves to the original mesh when it already has `copy_src` usage or to a frozen clone that shares all metadata but replaces `vertexBuffer` with a readable copy.
 
-**Throws:** `VGPU-CORE-INVALID-USAGE` when the source vertex buffer exposes an invalid `GPUBuffer.usage` mask (non-finite); fix by creating the geometry through `gpu.geometry(...)` or adding `copy_src` when constructing buffers manually.
+**Throws:** `VGPU-CORE-INVALID-USAGE` when the source vertex buffer exposes an invalid `GPUBuffer.usage` mask (non-finite); fix by creating the geometry through `geometry(gpu, ...)` or adding `copy_src` when constructing buffers manually.
 
 ## Examples
 
 ```ts
 import { createMockAdapter } from "@vgpu/adapter-mock";
 import { meshToReadable } from "@vgpu/render/inspect";
-import { init } from "vgpu/mock";
+import { init, geometry } from "vgpu/mock";
 import { box } from "vgpu/scene";
 
 async function main(): Promise<void> {
   const adapter = createMockAdapter();
   const gpu = await init({ adapter });
-  const geometry = gpu.geometry(box({ size: 1 }));
+  const geo = geometry(gpu, box({ size: 1 }));
 
-  const readable = await meshToReadable(geometry as never, gpu.device);
+  const readable = await meshToReadable(geo as never, gpu.device);
   const vertices = await readable.vertexBuffer.read(readable.vertexBuffer.options.size);
   console.log("Readable bytes", new Float32Array(vertices));
 }

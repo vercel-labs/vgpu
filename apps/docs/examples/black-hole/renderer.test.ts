@@ -1,7 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 
 import { createRenderer, renderThumbnail } from './renderer';
 
@@ -51,6 +56,7 @@ function setup(options: { failCompile?: boolean } = {}) {
     time: 0,
     gpu: { queue: { onSubmittedWorkDone: vi.fn(async () => {}) } },
     settled: vi.fn(async () => {}),
+    dispose: vi.fn(), fns: {
     surface: vi.fn(() => surface),
     target: vi.fn(() => {
       const target = { size: [200, 100], texelSize: [1 / 200, 1 / 100], resize: vi.fn(), destroy: vi.fn(), format: 'rgba16float', read: vi.fn(async () => new Uint8Array()) };
@@ -59,9 +65,8 @@ function setup(options: { failCompile?: boolean } = {}) {
     }),
     effect: vi.fn(effect),
     sampler: vi.fn(() => ({})),
-    frame: Object.assign(vi.fn(), { loop: vi.fn(() => ({ stop })) }),
-    dispose: vi.fn(),
-  };
+    frame: vi.fn(),
+    frameLoop: vi.fn(() => ({ stop })) }};
   mocks.init.mockResolvedValueOnce(gpu);
   return { canvas, canvasListeners, windowListeners, frames, disconnect, targetObjects, surface, gpu, stop };
 }
@@ -72,7 +77,7 @@ test('coalesces resize work and cleans loop, observer, and pointer capture', asy
   const env = setup();
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
-  expect(env.gpu.frame.loop).toHaveBeenCalledOnce();
+  expect(env.gpu.fns.frameLoop).toHaveBeenCalledOnce();
   expect(env.canvasListeners.has('pointermove')).toBe(true);
 
   env.canvasListeners.get('pointerdown')?.({ isPrimary: true, pointerId: 7 } as unknown as Event);
@@ -81,7 +86,7 @@ test('coalesces resize work and cleans loop, observer, and pointer capture', asy
   renderer.resize({ width: 400, height: 200, dpr: 1.6 });
   expect(env.frames.size).toBe(1);
   [...env.frames.values()][0]?.(16);
-  expect(env.gpu.target).toHaveBeenCalledTimes(6);
+  expect(env.gpu.fns.target).toHaveBeenCalledTimes(6);
   for (const target of env.targetObjects.slice(0, 3)) expect(target.destroy).toHaveBeenCalledOnce();
   for (const target of env.targetObjects.slice(3)) expect(target.destroy).not.toHaveBeenCalled();
 

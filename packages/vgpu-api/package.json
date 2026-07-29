@@ -79,7 +79,7 @@
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0"
   },
-  "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple at least 512 B above the measured size, so headroom is never a rounding accident. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
+  "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
   "vgpuExportBundleAudiences": {
     ".": "client",
     "./node": "tooling",
@@ -89,14 +89,22 @@
     "./core": "client"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 45056,
-    "./node": 45056,
-    "./mock": 45056,
-    "./scene": 6656,
-    "./client": 1024,
-    "./core": 4096
+    ".": 38400,
+    "./node": 38400,
+    "./mock": 38400,
+    "./scene": 12800,
+    "./client": 512,
+    "./core": 3584
   },
   "bin": {
     "vgpu": "./bin/vgpu.js"
-  }
+  },
+  "vgpuExperienceBundleBudgetsGzipBytes": {
+    "init-only": 1024,
+    "effect-only": 25600,
+    "triangle-low-level": 28672,
+    "draw-recipe-box": 29696,
+    "full-root": 38400
+  },
+  "vgpuSceneBundleBudgetNote": "The scene barrel retains all recipe builders after the geometry redesign; direct primitive imports retain only their selected mesh, as the experience fixtures assert."
 }

@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createMockAdapter, init } from "../src/mock.ts";
-import { InternalTimer, isTimerSpan } from "../src/timer.ts";
+import { InternalTimer, type InternalTimerSpan } from "../src/timer.ts";
 import { InternalVisibility } from "../src/visibility.ts";
 
 /**
@@ -117,10 +117,9 @@ test("visibility.frameAbandoned drops the encoded resolve, so no handle latches 
   gpu.dispose();
 });
 
-function timerSpan(timer: InternalTimer, name: string) {
-  const span = timer.span(name);
-  if (!isTimerSpan(span)) throw new Error("timer.span did not return an internal span");
-  return span;
+/** Timer.span() hands back the public handle; these tests drive the frame hooks on the span itself. */
+function timerSpan(timer: InternalTimer, name: string): InternalTimerSpan {
+  return timer.span(name) as InternalTimerSpan;
 }
 
 /** Records the creation index of every query set destroyed, matching timer.test.ts / visibility.test.ts. */

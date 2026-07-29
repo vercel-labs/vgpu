@@ -6,7 +6,6 @@ export {
   disk,
   dodecahedron,
   fullscreenQuad,
-  geometries,
   icosahedron,
   icosphere,
   octahedron,
@@ -16,6 +15,7 @@ export {
   tetrahedron,
   torus,
 } from "./scene/geometry.ts";
+export { geometries } from "./scene/geometries.ts";
 export type {
   BoxOptions,
   CapsuleOptions,

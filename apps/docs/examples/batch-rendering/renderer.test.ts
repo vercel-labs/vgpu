@@ -1,7 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 vi.mock('vgpu/scene', () => ({ perspectiveCamera: () => ({ viewProjection: new Float32Array(16) }) }));
 
 import { createRenderer, renderThumbnail } from './renderer';
@@ -43,6 +48,7 @@ function setup() {
     time: 0,
     gpu: { queue: { onSubmittedWorkDone: drain } },
     settled,
+    dispose: vi.fn(), fns: {
     surface: vi.fn(() => surface),
     target: vi.fn(() => target),
     effect: vi.fn(() => ({ set: vi.fn(), compile: vi.fn(async () => {}) })),
@@ -50,9 +56,8 @@ function setup() {
     geometry: vi.fn(() => geometry),
     draw: vi.fn(draw),
     bundle: vi.fn(() => ({})),
-    frame: Object.assign(vi.fn(), { loop: vi.fn(() => ({ stop })) }),
-    dispose: vi.fn(),
-  };
+    frame: vi.fn(),
+    frameLoop: vi.fn(() => ({ stop })) }};
   return { canvas, windowListeners, frames, disconnect, surface, target, geometry, stop, drain, settled, gpu };
 }
 
@@ -65,7 +70,7 @@ test('drains and settles before destroying thumbnail resources after render fail
   const settledPending = deferred<void>();
   env.drain.mockReturnValueOnce(drainPending.promise);
   env.settled.mockReturnValueOnce(settledPending.promise);
-  env.gpu.frame.mockImplementationOnce(() => { throw error; });
+  env.gpu.fns.frame.mockImplementationOnce(() => { throw error; });
   const output = { size: [160, 90], format: 'rgba8unorm' };
   const rendering = renderThumbnail(env.gpu as never, output as never);
   await vi.waitFor(() => {
@@ -86,7 +91,7 @@ test('owns one loop, coalesces offscreen resize, and disposes twice safely', asy
   mocks.init.mockResolvedValueOnce(env.gpu);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
-  expect(env.gpu.frame.loop).toHaveBeenCalledOnce();
+  expect(env.gpu.fns.frameLoop).toHaveBeenCalledOnce();
   renderer.resize({ width: 400, height: 200, dpr: 1 });
   renderer.resize({ width: 500, height: 250, dpr: 2 });
   expect(env.frames.size).toBe(1);

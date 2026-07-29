@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, effect, frame, pingPong } from "vgpu/node";
 
 export const FILL = /* wgsl */ `
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.5, 1.0); }
@@ -14,11 +14,11 @@ struct Params { texel: vec2f }
 
 export async function runPingPongExample() {
   const gpu = await init();
-  const buf = gpu.pingPong(8, 8, { format: "rgba8unorm" });
-  const fill = gpu.effect(FILL, { label: "fill" });
-  const copy = gpu.effect(COPY, { label: "copy" });
-  gpu.frame((frame) => frame.pass({ target: buf.write }, (p) => p.draw(fill)));
+  const buf = pingPong(gpu, 8, 8, { format: "rgba8unorm" });
+  const fill = effect(gpu, FILL, { label: "fill" });
+  const copy = effect(gpu, COPY, { label: "copy" });
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: buf.write }, (p) => p.draw(fill)));
   buf.swap();
-  gpu.frame((frame) => frame.pass({ target: buf.write }, (p) => { copy.set({ src: buf.read, texel: buf.read.texelSize }); p.draw(copy); }));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: buf.write }, (p) => { copy.set({ src: buf.read, texel: buf.read.texelSize }); p.draw(copy); }));
   return { gpu, target: buf.write };
 }

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, draw, effect, frame, target } from "../src/mock.ts";
 
 const EFFECT_SHADER = `
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -30,10 +30,10 @@ test("frame.pass accepts a bare target with a callback", async () => {
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const target = gpu.target({ size: [4, 4] });
-    const effect = gpu.effect(EFFECT_SHADER, { label: "target-callback" });
+    const colorTarget = target(gpu, { size: [4, 4] });
+    const shader1 = effect(gpu, EFFECT_SHADER, { label: "target-callback" });
 
-    gpu.frame((frame) => frame.pass(target, (pass) => pass.draw(effect)));
+    frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (pass) => pass.draw(shader1)));
 
     expect(drawCalls).toEqual([[3, 1, 0, 0]]);
   } finally {
@@ -46,13 +46,13 @@ test("frame.pass routes Effect and Draw shortcut bodies through FramePass.draw",
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const effectTarget = gpu.target({ size: [4, 4] });
-    const drawTarget = gpu.target({ size: [4, 4] });
-    const effect = gpu.effect(EFFECT_SHADER, { label: "shortcut-effect" });
-    const draw = gpu.draw({ shader: DRAW_SHADER, label: "shortcut-draw", vertices: 3 });
+    const effectTarget = target(gpu, { size: [4, 4] });
+    const drawTarget = target(gpu, { size: [4, 4] });
+    const shader1 = effect(gpu, EFFECT_SHADER, { label: "shortcut-effect" });
+    const drawable = draw(gpu, { shader: DRAW_SHADER, label: "shortcut-draw", vertices: 3 });
 
-    gpu.frame((frame) => frame.pass(effectTarget, effect));
-    gpu.frame((frame) => frame.pass(drawTarget, draw));
+    frame(gpu, (currentFrame) => currentFrame.pass(effectTarget, shader1));
+    frame(gpu, (currentFrame) => currentFrame.pass(drawTarget, drawable));
 
     expect(drawCalls).toEqual([
       [3, 1, 0, 0],
@@ -68,10 +68,10 @@ test("frame.pass keeps option bags and honors clear with an Effect shortcut", as
   const gpu = await init();
   const renderPasses = spyRenderPassDescriptors(gpu.device.gpu);
   try {
-    const target = gpu.target({ size: [4, 4] });
-    const effect = gpu.effect(EFFECT_SHADER, { label: "clear-shortcut" });
+    const colorTarget = target(gpu, { size: [4, 4] });
+    const shader1 = effect(gpu, EFFECT_SHADER, { label: "clear-shortcut" });
 
-    gpu.frame((frame) => frame.pass({ target, clear: [1, 0, 0, 1] }, effect));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [1, 0, 0, 1] }, shader1));
 
     expect(renderPasses[0]?.colorAttachments?.[0]?.clearValue).toEqual({ r: 1, g: 0, b: 0, a: 1 });
   } finally {
@@ -84,11 +84,11 @@ test("effect.draw accepts a bare target and keeps DrawCallOptions bags", async (
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const target = gpu.target({ size: [4, 4] });
-    const effect = gpu.effect(EFFECT_SHADER, { label: "effect-overload" });
+    const colorTarget = target(gpu, { size: [4, 4] });
+    const shader1 = effect(gpu, EFFECT_SHADER, { label: "effect-overload" });
 
-    effect.draw(target);
-    effect.draw({ target, instances: 2 });
+    shader1.draw(colorTarget);
+    shader1.draw({ target: colorTarget, instances: 2 });
 
     expect(drawCalls).toEqual([
       [3, 1, 0, 0],
@@ -104,11 +104,11 @@ test("draw.draw accepts a bare target and keeps DrawCallOptions bags", async () 
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const target = gpu.target({ size: [4, 4] });
-    const draw = gpu.draw({ shader: DRAW_SHADER, label: "draw-overload", vertices: 3 });
+    const colorTarget = target(gpu, { size: [4, 4] });
+    const drawable = draw(gpu, { shader: DRAW_SHADER, label: "draw-overload", vertices: 3 });
 
-    draw.draw(target);
-    draw.draw({ target, instances: 2 });
+    drawable.draw(colorTarget);
+    drawable.draw({ target: colorTarget, instances: 2 });
     await gpu.settled();
 
     expect(drawCalls).toEqual([
@@ -124,10 +124,10 @@ test("draw.draw accepts a bare target and keeps DrawCallOptions bags", async () 
 test("frame.pass overloads preserve existing target and drawable validation errors", async () => {
   const gpu = await init();
   try {
-    const target = gpu.target({ size: [4, 4] });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    expectThrown(() => gpu.frame((frame) => frame.pass({} as never, () => {})), { code: "VGPU-TARGET-REQUIRED" });
-    expect(() => gpu.frame((frame) => frame.pass(target, {} as never))).toThrowError(/Invalid Effect instance/);
+    expectThrown(() => frame(gpu, (currentFrame) => currentFrame.pass({} as never, () => {})), { code: "VGPU-TARGET-REQUIRED" });
+    expect(() => frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, {} as never))).toThrowError(/Invalid Effect instance/);
   } finally {
     gpu.dispose();
   }

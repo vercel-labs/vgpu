@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { UniformPool } from "../../src/core.ts";
-import { init } from "../../src/node.ts";
+import { init, bundle, draw, effect, frame, target } from "../../src/node.ts";
 
 const SOLID_GREEN = `
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -45,12 +45,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("§9 bundle replay and dynamic draw coexist in one pass", async () => {
     const gpu = await init();
     try {
-      const scene = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-      const floor = gpu.effect(SOLID_GREEN, { label: "floor" });
-      const player = gpu.effect(RIGHT_RED, { label: "player" });
-      const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => b.draw(floor));
+      const scene = target(gpu, { size: [8, 8], format: "rgba8unorm" });
+      const floor = effect(gpu, SOLID_GREEN, { label: "floor" });
+      const player = effect(gpu, RIGHT_RED, { label: "player" });
+      const staticScene = bundle(gpu, { target: scene, label: "staticScene" }, (b) => b.draw(floor));
 
-      gpu.frame((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => {
+      frame(gpu, (f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => {
         p.bundles(staticScene);
         p.draw(player);
       }));
@@ -70,8 +70,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("R4 wraps native async validation for raw claimed bind groups without metadata", async () => {
     const gpu = await init();
     try {
-      const cube = gpu.draw({ shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
-      const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
+      const cube = draw(gpu, { shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
+      const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: GPUBufferUsage.UNIFORM });
       const rawLayout = gpu.device.gpu.createBindGroupLayout({
         label: "raw.static-layout",
@@ -87,9 +87,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       cube.group(1, rawBindGroup);
       const errors: unknown[] = [];
       gpu.onError((error) => errors.push(error));
-      const frame = gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(cube, { offsets: { 1: [0] } })));
+      const currentFrame = frame(gpu, (f) => f.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => p.draw(cube, { offsets: { 1: [0] } })));
 
-      await expect(frame.done).resolves.toBeUndefined();
+      await expect(currentFrame.done).resolves.toBeUndefined();
       expect(errors).toEqual([
         expect.objectContaining({
           code: "VGPU-R4-GROUP-VALIDATION",
@@ -106,7 +106,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("§10 UniformPool dynamic offsets can draw 1000 pushed objects and sample selected offsets", async () => {
     const gpu = await init();
     try {
-      const cube = gpu.draw({ shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
+      const cube = draw(gpu, { shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
       const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
       const slot = pool.alloc({
         size: 4,
@@ -119,12 +119,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const offsets = Array.from({ length: 1000 }, (_, index) => pool.push(slot, index / 999));
       pool.endFrame();
 
-      const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-      gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => {
+      const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      frame(gpu, (f) => f.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => {
         for (const offset of offsets) p.draw(cube, { offsets: { 1: [offset] } });
       }));
 
-      const pixel = rgbaAt(await target.read(), 4, 2, 2);
+      const pixel = rgbaAt(await colorTarget.read(), 4, 2, 2);
       expect(pixel[0]).toBeGreaterThan(240);
     } finally {
       gpu.dispose();
@@ -134,20 +134,20 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("§9 ping-pong with bundles uses two explicit recordings without staleness", async () => {
     const gpu = await init();
     try {
-      let read = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-      let write = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-      const seed = gpu.effect(SOLID_GREEN, { label: "seed" });
-      const sim = gpu.effect(COPY, { label: "sim" });
-      gpu.frame((f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
+      let read = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      let write = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      const seed = effect(gpu, SOLID_GREEN, { label: "seed" });
+      const sim = effect(gpu, COPY, { label: "sim" });
+      frame(gpu, (f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
 
-      const even = gpu.bundle({ target: write, label: "even" }, (b) => { sim.set({ src: read }); b.draw(sim); });
+      const even = bundle(gpu, { target: write, label: "even" }, (b) => { sim.set({ src: read }); b.draw(sim); });
       [read, write] = [write, read];
-      const odd = gpu.bundle({ target: write, label: "odd" }, (b) => { sim.set({ src: read }); b.draw(sim); });
+      const odd = bundle(gpu, { target: write, label: "odd" }, (b) => { sim.set({ src: read }); b.draw(sim); });
       [read, write] = [write, read];
 
-      gpu.frame((f) => f.pass({ target: write }, (p) => p.bundles(even)));
+      frame(gpu, (f) => f.pass({ target: write }, (p) => p.bundles(even)));
       [read, write] = [write, read];
-      gpu.frame((f) => f.pass({ target: write }, (p) => p.bundles(odd)));
+      frame(gpu, (f) => f.pass({ target: write }, (p) => p.bundles(odd)));
       [read, write] = [write, read];
 
       const pixel = rgbaAt(await read.read(), 4, 2, 2);

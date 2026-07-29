@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: vertex input struct should flatten to @location fields.
+// geometry(gpu, ...) v2 fixture: vertex input struct should flatten to @location fields.
 struct VSIn {
   @location(0) position: vec3f,
   @location(1) normal: vec3f,

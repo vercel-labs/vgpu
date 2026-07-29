@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, bundle, draw, frame, storage, target } from "../src/mock.ts";
 
 const PARTICLES_STORAGE = `
 struct Particle { position: vec2f }
@@ -49,17 +49,17 @@ struct VertexOut {
 }
 `;
 
-test("gpu.draw records storage-driven vertices and instances without vertex buffers", async () => {
+test("draw(gpu, opts) records storage-driven vertices and instances without vertex buffers", async () => {
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const count = 8;
-    const dots = gpu.draw({ shader: PARTICLES_STORAGE, label: "dots", instances: count, vertices: 6 });
-    const particles = gpu.storage(count * 8, "read");
+    const dots = draw(gpu, { shader: PARTICLES_STORAGE, label: "dots", instances: count, vertices: 6 });
+    const particles = storage(gpu, count * 8, "read");
     dots.set({ particles });
-    const target = gpu.target({ size: [4, 4] });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(dots)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(dots)));
 
     expect(drawCalls).toEqual([[6, count, 0, 0]]);
   } finally {
@@ -72,10 +72,10 @@ test("instances zero is a valid no-instance draw", async () => {
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "zero-dots", instances: 0, vertices: 6 });
-    const target = gpu.target({ size: [4, 4] });
+    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "zero-dots", instances: 0, vertices: 6 });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(dots)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(dots)));
 
     expect(drawCalls).toEqual([[6, 0, 0, 0]]);
   } finally {
@@ -88,10 +88,10 @@ test("per-call instances override draw defaults while vertices fall back to draw
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "dots", instances: 10, vertices: 6, firstInstance: 2 });
-    const target = gpu.target({ size: [4, 4] });
+    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "dots", instances: 10, vertices: 6, firstInstance: 2 });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(dots, { instances: 3 })));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(dots, { instances: 3 })));
 
     expect(drawCalls).toEqual([[6, 3, 0, 2]]);
   } finally {
@@ -105,12 +105,12 @@ test("geometry vertexCount wins over DrawOptions.vertices unless call vertices o
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const geometry = { vertexCount: 5 };
-    const draw = gpu.draw({ shader: INSTANCED_SHADER, label: "geometry-draw", geometry, vertices: 6, instances: 2 });
-    const target = gpu.target({ size: [4, 4] });
+    const drawable = draw(gpu, { shader: INSTANCED_SHADER, label: "geometry-draw", geometry, vertices: 6, instances: 2 });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => {
-      pass.draw(draw);
-      pass.draw(draw, { vertices: 4, firstVertex: 1, firstInstance: 3 });
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => {
+      pass.draw(drawable);
+      pass.draw(drawable, { vertices: 4, firstVertex: 1, firstInstance: 3 });
     }));
 
     expect(drawCalls).toEqual([
@@ -128,16 +128,16 @@ test("bundle recording preserves per-call instance counts and replays the bundle
   const bundleDrawCalls = spyRenderBundleDraws(gpu.device.gpu);
   const bundleExecutions = spyRenderPassBundleExecutions(gpu.device.gpu);
   try {
-    const dots = gpu.draw({ shader: INSTANCED_SHADER, label: "bundle-dots", instances: 9, vertices: 6 });
-    const target = gpu.target({ size: [4, 4] });
+    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "bundle-dots", instances: 9, vertices: 6 });
+    const colorTarget = target(gpu, { size: [4, 4] });
 
-    const bundle = gpu.bundle({ target, label: "instanced-dots" }, (recorder) => {
+    const recorded1 = bundle(gpu, { target: colorTarget, label: "instanced-dots" }, (recorder) => {
       recorder.draw(dots, { instances: 4 });
     });
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.bundles(bundle)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.bundles(recorded1)));
 
     expect(bundleDrawCalls).toEqual([[6, 4, 0, 0]]);
-    expect(bundleExecutions).toEqual([[bundle.gpu]]);
+    expect(bundleExecutions).toEqual([[recorded1.gpu]]);
   } finally {
     gpu.dispose();
     vi.restoreAllMocks();
@@ -162,10 +162,10 @@ test("draw count options reject negative and non-integer values with VGPU errors
   for (const testCase of cases) {
     const gpu = await init();
     try {
-      const target = gpu.target({ size: [4, 4] });
-      const draw = gpu.draw({ shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });
+      const colorTarget = target(gpu, { size: [4, 4] });
+      const drawable = draw(gpu, { shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });
 
-      expect(() => gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw, testCase.callOpts)))).toThrowError(
+      expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(drawable, testCase.callOpts)))).toThrowError(
         /VGPU-R1-DRAW-COUNT|must be an integer >= 0/,
       );
     } finally {

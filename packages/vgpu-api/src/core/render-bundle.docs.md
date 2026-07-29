@@ -1,6 +1,6 @@
 # createRenderBundle
 
-Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `gpu.bundle({ target }, cb)` when recording main API (`vgpu`) `Draw`/`Effect` commands because it derives formats from `Target` and performs stale-bundle checks (`VGPU-R3-BUNDLE-STALE`).
+Low-level render bundle helper around `GPUDevice.createRenderBundleEncoder`. Prefer main API (`vgpu`) `bundle(gpu, { target }, cb)` when recording main API (`vgpu`) `Draw`/`Effect` commands because it derives formats from `Target` and performs stale-bundle checks (`VGPU-R3-BUNDLE-STALE`).
 
 ## Import
 
@@ -74,7 +74,7 @@ declare function createRenderBundle(device: { readonly gpu: GPUDevice }, opts: R
 
 **Returns:** `createRenderBundle()` returns `GPURenderBundle`; recorder methods return `void`.
 
-**Throws:** No custom `VGPU-*` errors are thrown here. Native WebGPU validation errors occur for incompatible formats, pipelines, bind groups, buffers, or draw parameters. main API (`vgpu`) stale errors (`VGPU-R3-BUNDLE-STALE`, `VGPU-R3-BUNDLE-INVALID`) are available only through `gpu.bundle()` / `FramePass.bundles()`.
+**Throws:** No custom `VGPU-*` errors are thrown here. Native WebGPU validation errors occur for incompatible formats, pipelines, bind groups, buffers, or draw parameters. main API (`vgpu`) stale errors (`VGPU-R3-BUNDLE-STALE`, `VGPU-R3-BUNDLE-INVALID`) are available only through `bundle(gpu)` / `FramePass.bundles()`.
 
 ## Examples
 
@@ -95,15 +95,15 @@ void bundle;
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, target } from "vgpu/mock";
 import { createRenderBundle } from "vgpu/core";
 
 const gpu = await init();
-const target = gpu.target({ size: [16, 16] });
+const colorTarget = target(gpu, { size: [16, 16] });
 const bundle = createRenderBundle(gpu.device, {
-  colorFormats: target.colors.map((color) => color.format),
-  depthStencilFormat: target.depth?.format,
-  sampleCount: target.sampleCount,
+  colorFormats: colorTarget.colors.map((color) => color.format),
+  depthStencilFormat: colorTarget.depth?.format,
+  sampleCount: colorTarget.sampleCount,
   record(recorder) {
     recorder.draw({ vertexCount: 0, instanceCount: 0 });
   },
@@ -114,6 +114,6 @@ void bundle;
 ## Notes
 
 - This helper intentionally does not know about main API (`vgpu`) `Draw`, `Effect`, or `Target`; you must supply formats and native commands yourself.
-- Use `gpu.bundle()` for public API examples unless you are already managing native pipelines.
+- Use `bundle(gpu)` for public API examples unless you are already managing native pipelines.
 - `RenderBundleRecorder.draw(number, ...)` defaults to `(instanceCount=1, firstVertex=0, firstInstance=0)`; object overload has the same defaults.
 - **See also:** `Bundle`, `FramePass.bundles`, `Draw`, `Target`.

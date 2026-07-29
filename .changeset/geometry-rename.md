@@ -6,7 +6,7 @@
 
 | Old (0.1.x) | New (0.2.0) |
 |---|---|
-| `gpu.mesh(geometry)` / `gpu.mesh(options)` | `gpu.geometry(descriptor)` / `gpu.geometry(options)` |
+| `gpu.mesh(geometry)` / `gpu.mesh(options)` | `geometry(gpu, descriptor)` / `geometry(gpu, options)` |
 | `DrawOptions.mesh` | `DrawOptions.geometry` |
 | `Mesh` | `Geometry` |
 | `MeshOptions` | `GeometryOptions` |
@@ -17,23 +17,18 @@
 | `slice.mesh` (parent back-reference) | `slice.geometry` |
 | `SceneMesh` (`vgpu/scene`) | `Geometry` (re-exported as a type from `vgpu/scene`) |
 
-Migration:
+Migration — the 0.1.x `Mesh` names become `Geometry` names, and the factory is the free function of 0.2.0 (see the free-functions changeset):
 
 ```ts
-// before
-import type { Mesh, MeshLike, MeshSlice } from "vgpu";
-const cube: Mesh = gpu.mesh(box({ size: 1 }));
-const half = cube.slice({ vertexCount: 18 });
-const draw = gpu.draw({ shader, mesh: cube });
-
-// after
+import { draw, geometry } from "vgpu";
 import type { Geometry, GeometryLike, GeometrySlice } from "vgpu";
-const cube: Geometry = gpu.geometry(box({ size: 1 }));
-const half = cube.slice({ vertexCount: 18 });
-const draw = gpu.draw({ shader, geometry: cube });
+
+const cube: Geometry = geometry(gpu, box({ size: 1 }));
+const half: GeometrySlice = cube.slice({ vertexCount: 18 });
+const cubeDraw = draw(gpu, { shader, geometry: cube });
 ```
 
-`SceneGeometry` (the pure, device-agnostic descriptor produced by `box()`, `sphere()`, …) keeps its name, and the scene-tree `mesh()` / `MeshNode` exports of `vgpu/scene` are unchanged. Error codes stay `VGPU-MESH-*` (they are scope-bound identifiers), but their `where`/message text now teaches the new names — e.g. `gpu.geometry`, `geometry.slice`, `GeometryLike.vertexCount`.
+`SceneGeometry` (the pure, device-agnostic descriptor produced by `box()`, `sphere()`, …) keeps its name, and the scene-tree `mesh()` / `MeshNode` exports of `vgpu/scene` are unchanged. Error codes stay `VGPU-MESH-*` (they are scope-bound identifiers), but their `where`/message text now teaches the new names — e.g. `geometry`, `geometry.slice`, `GeometryLike.vertexCount`.
 
 Also in 0.2.0, scene cameras and controls validate their inputs instead of silently producing broken matrices — these are observable behavior changes for call sites that were passing degenerate values:
 

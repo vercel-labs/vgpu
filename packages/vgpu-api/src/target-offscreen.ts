@@ -1,6 +1,19 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { RenderPassDescriptorOptions, Target, TargetOptions, TargetTextureOptions } from "./target.ts";
-import { colorAttachment, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateTargetOptions } from "./target-utils.ts";
+import { BUILT_IN_CLEAR_COLOR, colorAttachment, copyClearColor, colorSpecsFor, depthAttachment, depthFormatFor, sampleCountFor, sameSize, validateClearColor, validateTargetOptions, type ClearColor } from "./target-utils.ts";
+import { liveKernel } from "./live-kernel.ts";
+import type { Gpu } from "./kernel.ts";
+
+/**
+ * Offscreen render target: color attachments (plus optional depth and MSAA) sized in pixels.
+ *
+ * Its textures belong to the gpu's device, so `gpu.dispose()` releases them with the device; the
+ * target is not registered as a separate kernel resource because there is nothing to tear down
+ * ahead of the device — unlike a surface, which must unconfigure its canvas context first.
+ */
+export function target(gpu: Gpu, opts: TargetOptions): Target {
+  return new OffscreenTarget(liveKernel(gpu, "target").device, opts);
+}
 
 /** Offscreen render target. MSAA targets render into sampleCount=4 attachments and resolve into `.color`. */
 export class OffscreenTarget implements Target {
@@ -11,9 +24,11 @@ export class OffscreenTarget implements Target {
   #currentColors: [Texture, ...Texture[]];
   #currentMsaaColors?: [Texture, ...Texture[]];
   #currentDepth?: Texture;
+  #clearColor: ClearColor;
 
   constructor(private readonly device: Device, private readonly options: TargetOptions) {
     validateTargetOptions(options, device);
+    this.#clearColor = options.clearColor === undefined ? BUILT_IN_CLEAR_COLOR : validateClearColor(options.clearColor, "target.clearColor");
     this.#currentSize = options.size;
     this.#currentColors = this.#createResolvedColors();
     this.#currentMsaaColors = this.sampleCount === 4 ? this.#createMsaaColors() : undefined;
@@ -29,6 +44,9 @@ export class OffscreenTarget implements Target {
   get colors(): readonly [Texture, ...Texture[]] { return this.#currentColors; }
   get depth(): Texture | undefined { return this.#currentDepth; }
   get format(): GPUTextureFormat { return colorSpecsFor(this.options)[0]?.format ?? "rgba8unorm"; }
+  /** Default clear color of this target; passes that clear without naming a color use it. */
+  get clearColor(): ClearColor { return copyClearColor(this.#clearColor); }
+  set clearColor(value: ClearColor) { this.#clearColor = validateClearColor(value, "target.clearColor"); }
   get sampleCount(): 1 | 4 { return sampleCountFor(this.options); }
 
   resize(size: readonly [number, number]): void {

@@ -2,7 +2,7 @@
 
 # Effect
 
-Fullscreen-fragment render unit created by `gpu.effect()`. Use it for post-processing, gradients, blurs, and screen/target copies; use `gpu.draw()` for meshes, vertex buffers, instancing, or explicit vertex counts.
+Fullscreen-fragment render unit created by `effect(gpu)`. Use it for post-processing, gradients, blurs, and screen/target copies; use `draw(gpu)` for meshes, vertex buffers, instancing, or explicit vertex counts.
 
 ## Import
 
@@ -41,8 +41,8 @@ interface Effect {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| gpu.effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
-| gpu.effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; effects have no vertex buffers. |
+| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
+| effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; effects have no vertex buffers. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes first-set binding ownership and validates reflected bindings. |
 | opts.label | `string` | ✖ | `"effect"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |
 | opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state passed through to the fullscreen draw. Presets and defaults match `DrawOptions.blend`; omitted explicit `alpha` copies `color`, and `op` defaults to `"add"`. |
@@ -51,7 +51,7 @@ interface Effect {
 | effect.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot render pass. Pass a bare target for the common case, or an options bag when setting per-call draw options. |
 | opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
 
-The `uv` varying that `gpu.effect()` injects is top-origin: `(0, 0)` is the
+The `uv` varying that `effect(gpu)` injects is top-origin: `(0, 0)` is the
 top-left corner and `v` grows downward — the same convention as WebGPU texture
 coordinates, `@builtin(position)`, and `target.read()`. Sampling any texture
 with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
@@ -59,18 +59,18 @@ image exactly. If you are porting a WebGL or Shadertoy shader that assumes
 `v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep
 everything else flip-free.
 
-**Returns:** `gpu.effect()` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
+**Returns:** `effect(gpu)` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
 
-**Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `gpu.effect()` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler). Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
+**Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `effect(gpu)` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler). Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
 
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, clock, effect, frame, target } from "vgpu/mock";
 
 const gpu = await init();
-const target = gpu.target({ size: [64, 64] });
-const effect = gpu.effect(`
+const colorTarget = target(gpu, { size: [64, 64] });
+const shader = effect(gpu, `
   struct Params { time: f32, speed: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -79,21 +79,21 @@ const effect = gpu.effect(`
   }
 `, { label: "wave", set: { params: { time: 0, speed: 2 } } });
 
-effect.set({ params: { time: gpu.time, speed: 2 } });
-gpu.frame((frame) => frame.pass(target, effect));
+shader.set({ params: { time: clock(gpu).time, speed: 2 } });
+frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, shader));
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, effect, target } from "vgpu/mock";
 
 const gpu = await init();
-const target = gpu.target({ size: [32, 32] });
-const copy = gpu.effect(`
+const colorTarget = target(gpu, { size: [32, 32] });
+const copy = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv.x, uv.y, 0.0, 1.0);
   }
 `);
-copy.draw(target);
+copy.draw(colorTarget);
 ```
 
 ## Pipeline pre-warm
@@ -103,8 +103,8 @@ Effects compile lazily for the target signature they draw into. Use `await effec
 ## Notes
 
 - A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle. Fragment-only resources receive fragment visibility only, so storage does not consume `maxStorageBuffersInVertexStage`.
-- `blend` and `writeMask` are immutable pipeline state, fixed at `gpu.effect()` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
-- One-shot `effect.draw()` does not join a surrounding frame. Inside `gpu.frame()`, draw through `frame.pass()`.
+- `blend` and `writeMask` are immutable pipeline state, fixed at `effect(gpu)` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
+- One-shot `effect.draw()` does not join a surrounding frame. Inside `frame(gpu)`, draw through `frame.pass()`.
 - There is no implicit screen target. Browser code should create a `Surface` and pass it as `target`.
-- Do not rely on implicit uniforms like time or resolution; pass `gpu.time`, `target.size`, or `target.texelSize` explicitly through `set()`.
-- **See also:** `Gpu.effect`, `Draw`, `FramePass.draw`, `Surface`, `Target`, `SharedUniforms`.
+- Do not rely on implicit uniforms like time or resolution; pass `clock(gpu).time`, `target.size`, or `target.texelSize` explicitly through `set()`.
+- **See also:** `effect`, `Draw`, `FramePass.draw`, `Surface`, `Target`, `SharedUniforms`.

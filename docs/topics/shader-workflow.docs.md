@@ -52,20 +52,20 @@ Do not open a browser to see whether a shader draws. Render one frame headless, 
 ```ts
 import { writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
-import { init } from "vgpu/node";
+import { init, effect, target } from "vgpu/node";
 
 const width = 320;
 const height = 180;
 const gpu = await init();
-const target = gpu.target({ size: [width, height] });
+const colorTarget = target(gpu, { size: [width, height] });
 
-gpu.effect(`
+effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.5, 1.0);
   }
-`).draw(target);
+`).draw(colorTarget);
 
-const pixels = await target.read();          // RGBA bytes, row-major, no padding
+const pixels = await colorTarget.read();          // RGBA bytes, row-major, no padding
 const png = new PNG({ width, height });
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));
@@ -76,7 +76,7 @@ Keep the target small (a few hundred pixels wide) so the loop stays fast on a CP
 
 ## 7. Connect it to the browser when the shader ships to a browser
 
-Port the same code to `vgpu` (not `vgpu/node`) with `gpu.surface(canvas, ...)` and drive it from `gpu.frame.loop(...)`. Test it the way users run it, with the public API and deterministic frame submission: [Browser testing with Playwright WebGPU](browser-testing.docs.md).
+Port the same code to `vgpu` (not `vgpu/node`) with `surface(gpu, canvas, ...)` and drive it from `frameLoop(gpu, ...)`. Test it the way users run it, with the public API and deterministic frame submission: [Browser testing with Playwright WebGPU](browser-testing.docs.md).
 
 ## 8. Validate visually with agent-browser
 

@@ -26,13 +26,14 @@ pnpm add -D @webgpu/types
 ## Browser quick start
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
-const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.effect(WAVE_WGSL, { set: { speed: 2 } });
-gpu.frame.loop(() => {
-  wave.set({ time: gpu.time });
+const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
+const wave = effect(gpu, WAVE_WGSL, { set: { speed: 2 } });
+const time = clock(gpu);
+frameLoop(gpu, () => {
+  wave.set({ time: time.time });
   wave.draw();
 });
 ```
@@ -40,13 +41,13 @@ gpu.frame.loop(() => {
 ## Node quick start
 
 ```ts
-import { init } from "vgpu/node";
+import { init, draw, frame, target } from "vgpu/node";
 
 const gpu = await init();
-const target = gpu.target({ size: [256, 256], format: "rgba8unorm" });
-const draw = gpu.draw({ shader: TRIANGLE_WGSL, targets: [target] });
-gpu.frame((f) => f.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(draw)));
-const pixels = await target.read();
+const colorTarget = target(gpu, { size: [256, 256], format: "rgba8unorm" });
+const drawable = draw(gpu, { shader: TRIANGLE_WGSL, targets: [colorTarget] });
+frame(gpu, (f) => f.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => p.draw(drawable)));
+const pixels = await colorTarget.read();
 gpu.dispose();
 ```
 

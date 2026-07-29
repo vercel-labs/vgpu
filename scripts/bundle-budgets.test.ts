@@ -16,6 +16,8 @@ import {
   measuredTarballPayload,
   nextBudgetBytes,
   parseTarEntries,
+  prohibitedExperienceInputs,
+  retainedMetafileInputs,
   resolveExportAudience,
   resolvePackageAudience,
   resolveThreshold,
@@ -26,21 +28,61 @@ import {
 
 const script = fileURLToPath(new URL("./check-bundle-size.mjs", import.meta.url));
 
-test("a budget is the next 512 B multiple at least 512 B above measured", () => {
-  expect(nextBudgetBytes(0)).toBe(512);
-  expect(nextBudgetBytes(1)).toBe(1024);
-  expect(nextBudgetBytes(512)).toBe(1024);
-  expect(nextBudgetBytes(688)).toBe(1536);
-  expect(nextBudgetBytes(1023)).toBe(1536);
-  expect(nextBudgetBytes(21753)).toBe(22528);
+test("experience metafile exclusions inspect retained primitive inputs, not deleted factory modules", () => {
+  expect(
+    prohibitedExperienceInputs("effect-only", [
+      "packages/vgpu-api/dist/effect.js",
+      "packages/vgpu-api/dist/scene/geometry-src/mesh-box.js",
+      "packages/vgpu-api/dist/timer.js",
+      "packages/vgpu-api/dist/storage.js",
+      "packages/vgpu-api/dist/scene/geometry-descriptor.js",
+      "packages/vgpu-api/dist/query-ring.js",
+    ]),
+  ).toEqual([
+    { category: "scene primitive mesh", input: "packages/vgpu-api/dist/scene/geometry-src/mesh-box.js" },
+    { category: "timer", input: "packages/vgpu-api/dist/timer.js" },
+    { category: "storage", input: "packages/vgpu-api/dist/storage.js" },
+    { category: "geometry descriptor", input: "packages/vgpu-api/dist/scene/geometry-descriptor.js" },
+    { category: "query ring", input: "packages/vgpu-api/dist/query-ring.js" },
+  ]);
+  expect(prohibitedExperienceInputs("triangle-low-level", ["packages/vgpu-api/dist/draw.js"])).toEqual([]);
+  expect(prohibitedExperienceInputs("triangle-low-level", ["packages\\vgpu-api\\dist\\scene\\geometry-src\\mesh-box.js"])).toEqual([
+    { category: "scene primitive mesh", input: "packages/vgpu-api/dist/scene/geometry-src/mesh-box.js" },
+  ]);
+  expect(prohibitedExperienceInputs("draw-recipe-box", [
+    "packages/vgpu-api/dist/scene/geometry-src/mesh-box.js",
+    "packages/vgpu-api/dist/scene/geometry-src/mesh-cache.js",
+    "packages/vgpu-api/dist/scene/geometry-src/mesh-torus.js",
+  ])).toEqual([
+    { category: "non-box scene primitive mesh", input: "packages/vgpu-api/dist/scene/geometry-src/mesh-torus.js" },
+  ]);
 });
 
-test("every derived budget keeps at least 512 B of headroom and stays 512 B aligned", () => {
+test("experience input lists use bytes retained in the output, not all scanned metafile inputs", () => {
+  expect(retainedMetafileInputs({
+    inputs: {
+      "fixtures/effect-only.ts": { bytesInOutput: 121 },
+      "src/effect.ts": { bytesInOutput: 97 },
+      "src/scene/geometry-src/mesh-torus.ts": { bytesInOutput: 0 },
+    },
+  })).toEqual(["fixtures/effect-only.ts", "src/effect.ts"]);
+});
+
+test("a budget is the next strictly greater 512 B multiple", () => {
+  expect(nextBudgetBytes(0)).toBe(512);
+  expect(nextBudgetBytes(1)).toBe(512);
+  expect(nextBudgetBytes(512)).toBe(1024);
+  expect(nextBudgetBytes(688)).toBe(1024);
+  expect(nextBudgetBytes(1023)).toBe(1024);
+  expect(nextBudgetBytes(21753)).toBe(22016);
+});
+
+test("every derived budget stays 512 B aligned and is strictly above its measurement", () => {
   for (let measured = 0; measured < 4096; measured += 7) {
     const budget = nextBudgetBytes(measured);
     expect(budget % 512).toBe(0);
-    expect(budget - measured).toBeGreaterThanOrEqual(512);
-    expect(budget - measured).toBeLessThan(1024 + 512);
+    expect(budget).toBeGreaterThan(measured);
+    expect(budget - measured).toBeLessThanOrEqual(512);
   }
 });
 
@@ -52,7 +94,7 @@ test("nextBudgetBytes rejects unmeasurable sizes", () => {
 test("client budgets are a hard gate", () => {
   expect(evaluateBudget({ measuredBytes: 1024, budgetBytes: 1024, audience: "client" }).status).toBe("ok");
   const verdict = evaluateBudget({ measuredBytes: 1025, budgetBytes: 1024, audience: "client" });
-  expect(verdict).toMatchObject({ status: "fail", soft: false, limitBytes: 1024, overBudgetBytes: 1, suggestedBudgetBytes: 2048 });
+  expect(verdict).toMatchObject({ status: "fail", soft: false, limitBytes: 1024, overBudgetBytes: 1, suggestedBudgetBytes: 1536 });
 });
 
 test("tooling budgets warn inside the growth threshold and fail past it", () => {
@@ -101,7 +143,7 @@ test("failures name the budget field, the entry, both sizes and the update comma
   expect(message).toContain("1600 B");
   expect(message).toContain("1536 B");
   expect(message).toContain("pnpm bundle-check --update");
-  expect(message).toContain("2560 B");
+  expect(message).toContain("2048 B");
 });
 
 test("tarball measurement drops *.docs.md and sourcemap sourcesContent", () => {

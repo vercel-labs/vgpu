@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: mixed direct params, struct inputs, and builtins.
+// geometry(gpu, ...) v2 fixture: mixed direct params, struct inputs, and builtins.
 struct InstanceIn {
   @location(2) instance_offset: vec3f,
   @location(3) instance_tint: vec4f,

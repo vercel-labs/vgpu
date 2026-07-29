@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { init } from 'vgpu/node';
+import { init, compute, pingPongStorage, storage } from 'vgpu/node';
 
 const W = 16, H = 9, N = W * H;
 const DIVERGENCE = `
@@ -24,12 +24,12 @@ fn ix(p:vec2i)->u32{let q=clamp(p,vec2i(0),vec2i(sim.size)-1);return u32(q.y)*si
 async function projectionFixture(seed: boolean) {
   const gpu = await init();
   try {
-    const velocity = gpu.storage(N * 8, 'read-write'); const projected = gpu.storage(N * 8, 'read-write');
-    const before = gpu.storage(N * 4, 'read-write'); const after = gpu.storage(N * 4, 'read-write'); const pressure = gpu.pingPongStorage(N * 4);
+    const velocity = storage(gpu, N * 8, 'read-write'); const projected = storage(gpu, N * 8, 'read-write');
+    const before = storage(gpu, N * 4, 'read-write'); const after = storage(gpu, N * 4, 'read-write'); const pressure = pingPongStorage(gpu, N * 4);
     const initial = new Float32Array(N * 2);
     if (seed) for (let y=0;y<H;y++) for(let x=0;x<W;x++){const i=(y*W+x)*2;initial[i]=Math.sin(x*.71+y*.23)*.7;initial[i+1]=Math.cos(x*.19-y*.83)*.6;}
     velocity.write(initial); projected.write(new Float32Array(N*2)); pressure.read.write(new Float32Array(N)); pressure.write.write(new Float32Array(N));
-    const sim={size:[W,H]}; const div=gpu.compute(DIVERGENCE); const jacobi=gpu.compute(PRESSURE); const project=gpu.compute(PROJECT);
+    const sim={size:[W,H]}; const div=compute(gpu, DIVERGENCE); const jacobi=compute(gpu, PRESSURE); const project=compute(gpu, PROJECT);
     div.set({sim,velocity,divergence:before}).dispatch(2,2);
     for(let i=0;i<8;i++){jacobi.set({sim,src:pressure.read,divergence:before,dst:pressure.write}).dispatch(2,2);pressure.swap();}
     project.set({sim,src:velocity,pressure:pressure.read,dst:projected}).dispatch(2,2);

@@ -1,6 +1,6 @@
 # orbitControls
 
-Creates shared drag-orbit + wheel-zoom controls that drive a camera (or any node) around a target point. Input adjusts goal values; `update(deltaTime)` eases the current state toward them and writes the node's transform, so it composes with `gpu.frame.loop` and on-demand rendering alike.
+Creates shared drag-orbit + wheel-zoom controls that drive a camera (or any node) around a target point. Input adjusts goal values; `update(deltaTime)` eases the current state toward them and writes the node's transform, so it composes with `frameLoop()` and on-demand rendering alike.
 
 ## Import
 
@@ -36,7 +36,7 @@ declare function orbitControls(
 ## Examples
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, frameLoop } from "vgpu";
 import { orbitControls, perspectiveCamera } from "vgpu/scene";
 
 declare const canvas: HTMLCanvasElement;
@@ -45,8 +45,8 @@ const gpu = await init();
 const camera = perspectiveCamera({ fov: 45, position: [2, 2, 3], target: [0, 0, 0] });
 const controls = orbitControls(camera, { element: canvas, damping: 0.1 });
 
-gpu.frame.loop(() => {
-  controls.update(gpu.deltaTime); // explicit update, no hidden rAF
+frameLoop(gpu, () => {
+  controls.update(clock(gpu).deltaTime); // explicit update, no hidden rAF
 });
 ```
 

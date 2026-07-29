@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, effect, frame, target } from "../../src/node.ts";
 
 const WAVE = `
 struct Params { time: f32, speed: f32 }
@@ -31,11 +31,11 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   test("by-example §2 fullscreen happy path renders via explicit time set", async () => {
     const gpu = await init();
     try {
-      const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-      const wave = gpu.effect(WAVE, { label: "wave", set: { speed: 2 } });
+      const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
+      const wave = effect(gpu, WAVE, { label: "wave", set: { speed: 2 } });
       wave.set({ time: Math.PI / 4 });
-      gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(wave)));
-      const pixels = await target.read();
+      frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(wave)));
+      const pixels = await colorTarget.read();
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(pixel[2]).toBeGreaterThan(245);
       expect(pixel[3]).toBe(255);
@@ -47,19 +47,19 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   test("by-example §7 first half renders HDR target and post pass; rgba8unorm MSAA exercises resolve", async () => {
     const gpu = await init();
     try {
-      const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
+      const scene = target(gpu, { size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
       expect(scene.sampleCount).toBe(1);
-      const msaaScene = gpu.target({ size: [8, 8], format: "rgba8unorm", depth: true, msaa: true, label: "msaaScene" });
+      const msaaScene = target(gpu, { size: [8, 8], format: "rgba8unorm", depth: true, msaa: true, label: "msaaScene" });
       expect(msaaScene.sampleCount).toBe(4);
       expect(msaaScene.color.sampleCount).toBe(1);
       expect(msaaScene.depth?.sampleCount).toBe(4);
-      const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
-      const solid = gpu.effect(SOLID, { label: "solid" });
-      const post = gpu.effect(POST, { label: "post" });
-      gpu.frame((frame) => {
-        frame.pass({ target: msaaScene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
-        frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
-        frame.pass({ target: output }, (p) => {
+      const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "output" });
+      const solid = effect(gpu, SOLID, { label: "solid" });
+      const post = effect(gpu, POST, { label: "post" });
+      frame(gpu, (currentFrame) => {
+        currentFrame.pass({ target: msaaScene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
+        currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
+        currentFrame.pass({ target: output }, (p) => {
           post.set({ src: scene, texel: scene.texelSize });
           p.draw(post);
         });
@@ -82,14 +82,14 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   test.skipIf(dockerDawnCompatMode)("by-example §7 exact HDR+MSAA path renders on devices capable of multisampling rgba16float", async () => {
     const gpu = await init();
     try {
-      const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "sceneHdrMsaa" });
+      const scene = target(gpu, { size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "sceneHdrMsaa" });
       expect(scene.sampleCount).toBe(4);
-      const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "outputHdrMsaa" });
-      const solid = gpu.effect(SOLID, { label: "solidHdrMsaa" });
-      const post = gpu.effect(POST, { label: "postHdrMsaa" });
-      gpu.frame((frame) => {
-        frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
-        frame.pass({ target: output }, (p) => { post.set({ src: scene, texel: scene.texelSize }); p.draw(post); });
+      const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "outputHdrMsaa" });
+      const solid = effect(gpu, SOLID, { label: "solidHdrMsaa" });
+      const post = effect(gpu, POST, { label: "postHdrMsaa" });
+      frame(gpu, (currentFrame) => {
+        currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
+        currentFrame.pass({ target: output }, (p) => { post.set({ src: scene, texel: scene.texelSize }); p.draw(post); });
       });
       const pixels = await output.read();
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
@@ -104,7 +104,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
   test.skipIf(!dockerDawnCompatMode)("Dawn compat mode explicitly rejects rgba16float+msaa instead of silently degrading", async () => {
     const gpu = await init();
     try {
-      expect(() => gpu.target({ size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/Dawn compatibility mode/);
+      expect(() => target(gpu, { size: [8, 8], format: "rgba16float", depth: true, msaa: true, label: "unsupportedHdrMsaa" })).toThrowError(/Dawn compatibility mode/);
     } finally {
       gpu.dispose();
     }

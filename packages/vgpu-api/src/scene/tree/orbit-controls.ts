@@ -59,7 +59,7 @@ const TMP_PARENT_INVERSE = new Float32Array(16);
 /**
  * Shared drag-orbit + wheel-zoom controls around a target point. Input adjusts goal values;
  * `update(deltaTime)` eases the current state toward them and writes the node's transform,
- * so it composes with `gpu.frame.loop` and on-demand rendering alike.
+ * so it composes with `frame.loop` and on-demand rendering alike.
  */
 export class OrbitControls {
   readonly label: string | undefined;

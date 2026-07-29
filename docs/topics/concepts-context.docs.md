@@ -20,21 +20,21 @@ order: 10
 Everything in vgpu starts from one call. `init()` requests the WebGPU adapter and device and returns a [`Gpu`](/reference/vgpu/gpu#gpu) context. Every other object — surfaces, targets, effects, draws, frames — is created from that context, so all of them share one device.
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, surface, target } from "vgpu";
 
 const gpu = await init();
 
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas); // the canvas you render into
-const target = gpu.target({ size: [256, 256] }); // an offscreen texture
-const gradient = gpu.effect(`
+const canvasSurface = surface(gpu, canvas); // the canvas you render into
+const colorTarget = target(gpu, { size: [256, 256] }); // an offscreen texture
+const gradient = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.4, 1.0);
   }
 `);
 
 // Render the gradient onto the canvas once
-gradient.draw(surface);
+gradient.draw(canvasSurface);
 ```
 
 ## Create resources once, draw every frame

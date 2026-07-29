@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, effect, frame, surface, target } from "../../src/node.ts";
 
 const RED = `
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -34,16 +34,16 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     const gpu = await init();
     try {
       const canvas = gpuCanvasLike(8, 8, true);
-      const surface = gpu.surface(canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
-      const red = gpu.effect(RED, { label: "surfaceRed" });
-      gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.draw(red)));
-      expect(rgbaAt(await surface.read(), 8, 4, 4)).toEqual([255, 0, 0, 255]);
+      const canvasSurface = surface(gpu, canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
+      const red = effect(gpu, RED, { label: "surfaceRed" });
+      frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(red)));
+      expect(rgbaAt(await canvasSurface.read(), 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
-      surface.resize([12, 4]);
-      const green = gpu.effect(GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: surface.size } });
-      gpu.frame((frame) => frame.pass({ target: surface }, (pass) => pass.draw(green)));
-      const pixels = await surface.read();
-      expect(surface.size).toEqual([12, 4]);
+      canvasSurface.resize([12, 4]);
+      const green = effect(gpu, GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
+      frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(green)));
+      const pixels = await canvasSurface.read();
+      expect(canvasSurface.size).toEqual([12, 4]);
       expect(pixels.byteLength).toBe(12 * 4 * 4);
       const pixel = rgbaAt(pixels, 12, 6, 2);
       expect(pixel[0]).toBeGreaterThan(40);
@@ -64,14 +64,14 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
   test("§7.16 multi-canvas surfaces render and read back independently", async () => {
     const gpu = await init();
     try {
-      const a = gpu.surface(gpuCanvasLike(6, 6, true), { dpr: 1, label: "surfaceA" });
-      const b = gpu.surface(gpuCanvasLike(5, 5, true), { dpr: 1, label: "surfaceB" });
-      const blue = gpu.effect(BLUE, { label: "blue" });
-      const yellow = gpu.effect(YELLOW, { label: "yellow" });
+      const a = surface(gpu, gpuCanvasLike(6, 6, true), { dpr: 1, label: "surfaceA" });
+      const b = surface(gpu, gpuCanvasLike(5, 5, true), { dpr: 1, label: "surfaceB" });
+      const blue = effect(gpu, BLUE, { label: "blue" });
+      const yellow = effect(gpu, YELLOW, { label: "yellow" });
 
-      gpu.frame((frame) => {
-        frame.pass({ target: a }, (pass) => pass.draw(blue));
-        frame.pass({ target: b }, (pass) => pass.draw(yellow));
+      frame(gpu, (currentFrame) => {
+        currentFrame.pass({ target: a }, (pass) => pass.draw(blue));
+        currentFrame.pass({ target: b }, (pass) => pass.draw(yellow));
       });
 
       expect(rgbaAt(await a.read(), 6, 3, 3)).toEqual([0, 0, 255, 255]);
@@ -131,17 +131,17 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
   const code = `
     const { parentPort } = require("node:worker_threads");
     (async () => {
-      const { init } = await import(${JSON.stringify(new URL("../../dist/node.js", import.meta.url).href)});
+      const { init, surface: createSurface, target, effect: createEffect, frame } = await import(${JSON.stringify(new URL("../../dist/node.js", import.meta.url).href)});
       const gpu = await init();
       try {
         const canvas = (${workerCanvasSource()})(16, 8);
-        const surface = gpu.surface(canvas);
-        const half = gpu.target({ size: [Math.max(1, surface.size[0] / 2), Math.max(1, surface.size[1] / 2)] });
-        const effect = gpu.effect(${JSON.stringify(BLUE)});
+        const surface = createSurface(gpu, canvas);
+        const half = target(gpu, { size: [Math.max(1, surface.size[0] / 2), Math.max(1, surface.size[1] / 2)] });
+        const effect = createEffect(gpu, ${JSON.stringify(BLUE)});
         surface.onResize(({ width, height }) => half.resize([width / 2, height / 2]));
         const initial = [...surface.size];
         surface.resize([20, 10]);
-        gpu.frame((frame) => frame.pass({ target: half }, (p) => p.draw(effect)));
+        frame(gpu, (frame) => frame.pass({ target: half }, (p) => p.draw(effect)));
         const pixels = await half.read();
         const offset = 4 * (2 * half.size[0] + 5);
         parentPort.postMessage({ initial, resized: [...surface.size], half: [...half.size], pixel: [pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3]] });

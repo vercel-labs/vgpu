@@ -1,6 +1,6 @@
 # Gpu
 
-The main API (`vgpu`) facade returned by `init()`. It owns device lifetime, frame clocks, canvas surfaces, offscreen targets, and public factories for render, compute, storage, uniforms, samplers, and bundles.
+The main API (`vgpu`) context returned by `init()`. It owns device lifetime and the frame clock; every resource — canvas surfaces, offscreen targets, render, compute, storage, uniforms, samplers, and bundles — is created by a free function that takes the `Gpu` as its first argument.
 
 ## Import
 
@@ -12,40 +12,43 @@ import { init } from "vgpu/mock";
 ## Signature
 
 ```ts
-import type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, Draw, DrawOptions, Frame, FrameRunner, Effect, EffectOptions, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
+import type { Bundle, BundleOptions, BundleRecorder, Clock, Compute, ComputeOptions, Draw, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FrameLoopOptions, Geometry, GeometryOptions, GeometryRecipe, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
 import type { Device } from "vgpu/core";
 import type { ShaderSource } from "vgpu";
 
 interface Gpu {
   readonly device: Device;
   readonly gpu: GPUDevice;
-  time: number;
-  deltaTime: number;
-  frameCount: number;
-  surface(canvas: HTMLCanvasElement | OffscreenCanvas, opts?: SurfaceOptions): Surface;
-  effect(source: string | ShaderSource, opts?: EffectOptions): Effect;
-  draw(opts: DrawOptions): Draw;
-  target(opts: TargetOptions): Target;
-  readonly frame: FrameRunner & ((cb?: (frame: Frame) => void) => Frame);
-  sampler(desc?: GPUSamplerDescriptor): GPUSampler;
-  geometry(descriptor: unknown): import("vgpu").GeometryLike;
+  /** True once `dispose()` ran. Reads stay legal; new work does not. */
+  readonly disposed: boolean;
   dispose(): void;
-  compute(source: string | ShaderSource, opts?: ComputeOptions): Compute;
-  storage(bytes: number, access?: StorageAccess | StorageOptions): StorageBuffer;
-  timer(): Timer;
-  visibility(options?: VisibilityOptions): Visibility;
-  pingPong(width: number, height: number, opts?: TargetTextureOptions): PingPongTargets;
-  pingPongStorage(bytes: number): PingPongStorage;
-  uniforms<T extends Record<string, unknown>>(values: T): SharedUniforms<T>;
-  bundle(opts: BundleOptions, cb: (recorder: BundleRecorder) => void): Bundle;
   onError(cb: GpuErrorListener): () => void;
   settled(): Promise<void>;
 }
+
+// The creation API: named exports of `vgpu`, `vgpu/node` and `vgpu/mock`, all gpu-first.
+declare function surface(gpu: Gpu, canvas: HTMLCanvasElement | OffscreenCanvas, opts?: SurfaceOptions): Surface;
+declare function effect(gpu: Gpu, source: string | ShaderSource, opts?: EffectOptions): Effect;
+declare function draw(gpu: Gpu, opts: DrawOptions): Draw;
+declare function target(gpu: Gpu, opts: TargetOptions): Target;
+declare function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame;
+declare function frameLoop(gpu: Gpu, cb: (frame: Frame) => void, opts?: FrameLoopOptions): FrameLoopHandle;
+declare function sampler(gpu: Gpu, desc?: GPUSamplerDescriptor): GPUSampler;
+declare function geometry(gpu: Gpu, input: GeometryOptions | GeometryRecipe): Geometry;
+declare function compute(gpu: Gpu, source: string | ShaderSource, opts?: ComputeOptions): Compute;
+declare function storage(gpu: Gpu, bytes: number, access?: StorageAccess | StorageOptions): StorageBuffer;
+declare function timer(gpu: Gpu): Timer;
+declare function visibility(gpu: Gpu, options?: VisibilityOptions): Visibility;
+declare function pingPong(gpu: Gpu, width: number, height: number, opts?: TargetTextureOptions): PingPongTargets;
+declare function pingPongStorage(gpu: Gpu, bytes: number): PingPongStorage;
+declare function uniforms<T extends Record<string, unknown>>(gpu: Gpu, values: T): SharedUniforms<T>;
+declare function bundle(gpu: Gpu, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle;
+declare function clock(gpu: Gpu): Clock;
 ```
 
 ## Parameters
 
-`Gpu` is an object, not a callable constructor. Method parameters:
+`Gpu` is an object, not a callable constructor: it carries no creation methods. Every factory below takes it as `gpu`, its first argument.
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
@@ -56,8 +59,8 @@ interface Gpu {
 | draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
 | frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits automatically in `finally`; if omitted, caller must call `frame.submit()`. |
-| sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `gpu.sampler()` is the canonical default sampler. |
-| mesh.geometry | `unknown` | ✔ | — | Usually a `vgpu/scene` geometry descriptor such as `box()` or `plane()`. |
+| sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `sampler(gpu)` is the canonical default sampler. |
+| geometry.input | `GeometryOptions \\| GeometryRecipe` | ✔ | — | A raw buffer descriptor, or a `vgpu/scene` recipe such as `box()` or `plane()`. |
 | compute.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. Must contain a `@compute` entry point. |
 | compute.opts | `ComputeOptions` | ✖ | `{}` | `label` defaults to `"compute"`; `set` defaults to no initial bindings. |
 | storage.bytes | `number` | ✔ | — | Byte size for a main API (`vgpu`) storage buffer. |
@@ -72,19 +75,20 @@ interface Gpu {
 | bundle.opts | `BundleOptions` | ✔ | — | Requires a `target` or target signature. |
 | bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Records bundle commands immediately. |
 | onError.cb | `GpuErrorListener` | ✔ | — | Receives asynchronous vgpu errors; returns an unsubscribe function. |
+| clock | — | — | — | No parameters. The frame clock of this gpu: `{ time, deltaTime, frameCount, advance(dtSeconds) }`, one instance per gpu. See `Clock`. |
 
-**Returns:** `Gpu` methods return the resources named in their signatures. `dispose()` and frame/pass callbacks return `void`.
+**Returns:** each factory returns the resource named in its signature. `dispose()` and frame/pass callbacks return `void`.
 
-**Throws:** `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `gpu.target()` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
+**Throws:** `VGPU-GPU-DISPOSED` when any factory (or `clock(gpu)`) runs after `gpu.dispose()` — the device and everything it owned are gone, so the handle it would return could only fail later; create resources before disposing, or `init()` a new gpu; `VGPU-GPU-FOREIGN` when the first argument was not created by `init()` (a plain object, a `GPUDevice`, a gpu from another library): it carries no vgpu kernel, so pass the object returned by `init()` from `vgpu`, `vgpu/node` or `vgpu/mock`; `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `target(gpu)` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
 
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, draw, frame, target } from "vgpu/mock";
 
 const gpu = await init();
-const target = gpu.target({ size: [128, 128], depth: true });
-const draw = gpu.draw({
+const colorTarget = target(gpu, { size: [128, 128], depth: true });
+const drawable = draw(gpu, {
   shader: `
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
@@ -93,25 +97,25 @@ const draw = gpu.draw({
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0, 1, 1); }
   `,
   // optional sync pre-warm; `await draw.compile(target)` is preferred during browser load
-  targets: [target],
+  targets: [colorTarget],
 });
 
-gpu.frame((frame) => {
-  frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => pass.draw(draw));
+frame(gpu, (currentFrame) => {
+  currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(drawable));
 });
 ```
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, frameLoop, surface } from "vgpu";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
-const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }`);
+const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
+const wave = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }`);
 
-gpu.frame.loop((frame) => {
-  frame.pass({ target: surface }, (pass) => pass.draw(wave));
+frameLoop(gpu, (frame) => {
+  frame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
 });
 ```
 
@@ -124,9 +128,10 @@ gpu.frame.loop((frame) => {
 ## Notes
 
 - There is no implicit screen property and no implicit default target. Pass `target` explicitly to frame passes and one-shot draws.
-- Canvas-specific `size`, `dpr`, and `autoResize` live on `gpu.surface(canvas, opts)`, not on `init()`.
-- Time is explicit JS state. Pass `gpu.time`, `gpu.deltaTime`, or `gpu.frameCount` through `set()` or `SharedUniforms` when shaders need them.
-- **See also:** `init`, `Surface`, `Effect`, `Draw`, `Compute`, `Frame`, `Target`, `Bundle`, `SharedUniforms`, `Timer`, `Visibility`.
+- Canvas-specific `size`, `dpr`, and `autoResize` live on `surface(gpu, canvas, opts)`, not on `init()`.
+- Time is explicit JS state, and it lives on the clock, not on the context: read `clock(gpu).time` / `.deltaTime` / `.frameCount` and pass them through `set()` or `SharedUniforms` when shaders need them.
+- Every factory rejects a disposed gpu with `VGPU-GPU-DISPOSED`, and an object vgpu did not create with `VGPU-GPU-FOREIGN`. Both are thrown synchronously, from the call that made the mistake.
+- **See also:** `init`, `Clock`, `Surface`, `Effect`, `Draw`, `Compute`, `Frame`, `Target`, `Bundle`, `SharedUniforms`, `Timer`, `Visibility`.
 
 ## Sampled float texture layouts
 

@@ -1,7 +1,9 @@
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, bundle, compute, draw, frame, geometry, target } from "../src/mock.ts";
 import type { StorageBuffer } from "../src/mock.ts";
+import { storage } from "../src/storage.ts";
+import { pingPong } from "../src/ping-pong.ts";
 
 const DRAW_SHADER = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -28,15 +30,15 @@ function gpuBufferOf(buffer: StorageBuffer): GPUBuffer {
   return (buffer as StorageBuffer & { readonly gpu: GPUBuffer }).gpu;
 }
 
-test("gpu.storage({ indirect: true }) appends the indirect usage and keeps access defaults", async () => {
+test("storage(gpu, { indirect: true }) appends the indirect usage and keeps access defaults", async () => {
   const gpu = await init();
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-  const plain = gpu.storage(16);
+  const plain = storage(gpu, 16);
   const plainUsage = mock.createBufferDescriptors.at(-1)!.usage;
-  const args = gpu.storage(16, { indirect: true });
+  const args = storage(gpu, 16, { indirect: true });
   const argsUsage = mock.createBufferDescriptors.at(-1)!.usage;
-  const readArgs = gpu.storage(16, { access: "read", indirect: true });
+  const readArgs = storage(gpu, 16, { access: "read", indirect: true });
 
   expect(plainUsage & GPU_BUFFER_USAGE_INDIRECT).toBe(0);
   expect(argsUsage & GPU_BUFFER_USAGE_INDIRECT).toBe(GPU_BUFFER_USAGE_INDIRECT);
@@ -45,17 +47,17 @@ test("gpu.storage({ indirect: true }) appends the indirect usage and keeps acces
   expect(plain.access).toBe("read-write");
   expect(args.access).toBe("read-write");
   expect(readArgs.access).toBe("read");
-  expect(gpu.storage(16, "read").access).toBe("read");
+  expect(storage(gpu, 16, "read").access).toBe("read");
   gpu.dispose();
 });
 
 test("non-indexed indirect draws emit drawIndirect with the buffer and a default offset of 0", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(16, { indirect: true });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 16, { indirect: true });
 
-  gpu.draw({ shader: DRAW_SHADER, label: "gpu-driven" }).draw({ target, indirect: args });
+  draw(gpu, { shader: DRAW_SHADER, label: "gpu-driven" }).draw({ target: colorTarget, indirect: args });
 
   expect(ops).toEqual([["setPipeline"], ["drawIndirect", gpuBufferOf(args), 0]]);
   gpu.dispose();
@@ -65,12 +67,12 @@ test("non-indexed indirect draws emit drawIndirect with the buffer and a default
 test("indirect accepts { buffer, offset } and forwards the custom offset", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(48, { indirect: true });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "offset-draw" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 48, { indirect: true });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "offset-draw" });
 
-  draw.draw({ target, indirect: { buffer: args } });
-  draw.draw({ target, indirect: { buffer: args, offset: 32 } });
+  drawable.draw({ target: colorTarget, indirect: { buffer: args } });
+  drawable.draw({ target: colorTarget, indirect: { buffer: args, offset: 32 } });
 
   expect(ops).toEqual([["setPipeline"], ["drawIndirect", gpuBufferOf(args), 0], ["setPipeline"], ["drawIndirect", gpuBufferOf(args), 32]]);
   gpu.dispose();
@@ -80,13 +82,13 @@ test("indirect accepts { buffer, offset } and forwards the custom offset", async
 test("indexed geometries emit drawIndexedIndirect with the index buffer still set", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2] });
-  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
-  const args = gpu.storage(20, { indirect: true });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const geo = geometry(gpu, { buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const args = storage(gpu, 20, { indirect: true });
 
-  gpu.draw({ shader: MESH_SHADER, label: "indexed-gpu-driven", geometry }).draw({ target, indirect: args });
+  draw(gpu, { shader: MESH_SHADER, label: "indexed-gpu-driven", geometry: geo }).draw({ target: colorTarget, indirect: args });
 
-  expect(ops).toEqual([["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geometry.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(args), 0]]);
+  expect(ops).toEqual([["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geo.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(args), 0]]);
   gpu.dispose();
   vi.restoreAllMocks();
 });
@@ -94,11 +96,11 @@ test("indexed geometries emit drawIndexedIndirect with the index buffer still se
 test("indirect draws work in frame passes", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(16, { indirect: true });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "frame-gpu-driven" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 16, { indirect: true });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "frame-gpu-driven" });
 
-  gpu.frame((frame) => frame.pass(target, (p) => p.draw(draw, { indirect: args })));
+  frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (p) => p.draw(drawable, { indirect: args })));
 
   expect(ops).toEqual([["setPipeline"], ["drawIndirect", gpuBufferOf(args), 0]]);
   gpu.dispose();
@@ -108,80 +110,80 @@ test("indirect draws work in frame passes", async () => {
 test("bundles record and replay indirect draws end-to-end", async () => {
   const gpu = await init();
   const bundleOps = spyBundleEncoderOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2] });
-  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
-  const drawArgs = gpu.storage(16, { indirect: true });
-  const indexedArgs = gpu.storage(20, { indirect: true });
-  const plain = gpu.draw({ shader: DRAW_SHADER, label: "bundled-gpu-driven" });
-  const indexed = gpu.draw({ shader: MESH_SHADER, label: "bundled-indexed-gpu-driven", geometry });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const geo = geometry(gpu, { buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const drawArgs = storage(gpu, 16, { indirect: true });
+  const indexedArgs = storage(gpu, 20, { indirect: true });
+  const plain = draw(gpu, { shader: DRAW_SHADER, label: "bundled-gpu-driven" });
+  const indexed = draw(gpu, { shader: MESH_SHADER, label: "bundled-indexed-gpu-driven", geometry: geo });
 
-  const bundle = gpu.bundle({ target, label: "gpuDriven" }, (b) => {
+  const recorded = bundle(gpu, { target: colorTarget, label: "gpuDriven" }, (b) => {
     b.draw(plain, { indirect: drawArgs });
     b.draw(indexed, { indirect: { buffer: indexedArgs, offset: 0 } });
   });
 
   expect(bundleOps).toEqual([
     ["setPipeline"], ["drawIndirect", gpuBufferOf(drawArgs), 0],
-    ["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geometry.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(indexedArgs), 0],
+    ["setPipeline"], ["setVertexBuffer", 0], ["setIndexBuffer", geo.indexBuffer, "uint16"], ["drawIndexedIndirect", gpuBufferOf(indexedArgs), 0],
   ]);
-  expect(() => gpu.frame((f) => f.pass(target, (p) => p.bundles(bundle)))).not.toThrow();
+  expect(() => frame(gpu, (f) => f.pass(colorTarget, (p) => p.bundles(recorded)))).not.toThrow();
   gpu.dispose();
   vi.restoreAllMocks();
 });
 
 test("indirect draws require a buffer created with the indirect flag", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(16);
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "no-usage" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 16);
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "no-usage" });
 
-  expect(() => draw.draw({ target, indirect: args })).toThrowError(/VGPU-INDIRECT-INVALID|gpu\.storage\(16, \{ indirect: true \}\)/);
+  expect(() => drawable.draw({ target: colorTarget, indirect: args })).toThrowError(/VGPU-INDIRECT-INVALID|storage\(gpu, 16, \{ indirect: true \}\)/);
   gpu.dispose();
 });
 
 test("indirect offsets must be 4-aligned non-negative integers", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(64, { indirect: true });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "bad-offset" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 64, { indirect: true });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "bad-offset" });
   const expectInvalid = (offset: number): void => {
-    expect(() => draw.draw({ target, indirect: { buffer: args, offset } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+    expect(() => drawable.draw({ target: colorTarget, indirect: { buffer: args, offset } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
   };
 
   expectInvalid(6);
   expectInvalid(2);
   expectInvalid(-4);
   expectInvalid(1.5);
-  expect(() => draw.draw({ target, indirect: { buffer: args, offset: 8 } })).not.toThrow();
+  expect(() => drawable.draw({ target: colorTarget, indirect: { buffer: args, offset: 8 } })).not.toThrow();
   gpu.dispose();
 });
 
 test("indirect arguments must fit: 16 bytes for drawIndirect, 20 for drawIndexedIndirect, 12 for dispatchWorkgroupsIndirect", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
-  const geometry = gpu.geometry({ buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "too-small" });
-  const indexed = gpu.draw({ shader: MESH_SHADER, label: "too-small-indexed", geometry });
-  const sim = gpu.compute(COMPUTE_SHADER, { label: "too-small-sim" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const geo = geometry(gpu, { buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }], indices: new Uint16Array([0, 1, 2]) });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "too-small" });
+  const indexed = draw(gpu, { shader: MESH_SHADER, label: "too-small-indexed", geometry: geo });
+  const sim = compute(gpu, COMPUTE_SHADER, { label: "too-small-sim" });
 
   // drawIndirect reads 4 u32s: a 12-byte buffer, or 16 bytes at offset 4, cannot hold them.
-  expect(() => draw.draw({ target, indirect: gpu.storage(12, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
-  expect(() => draw.draw({ target, indirect: { buffer: gpu.storage(16, { indirect: true }), offset: 4 } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => drawable.draw({ target: colorTarget, indirect: storage(gpu, 12, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => drawable.draw({ target: colorTarget, indirect: { buffer: storage(gpu, 16, { indirect: true }), offset: 4 } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
   // drawIndexedIndirect reads 5 32-bit values: 16 bytes are not enough.
-  expect(() => indexed.draw({ target, indirect: gpu.storage(16, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
-  expect(() => indexed.draw({ target, indirect: gpu.storage(20, { indirect: true }) })).not.toThrow();
+  expect(() => indexed.draw({ target: colorTarget, indirect: storage(gpu, 16, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => indexed.draw({ target: colorTarget, indirect: storage(gpu, 20, { indirect: true }) })).not.toThrow();
   // dispatchWorkgroupsIndirect reads 3 u32s: 8 bytes are not enough.
-  expect(() => sim.dispatch({ indirect: gpu.storage(8, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
-  expect(() => sim.dispatch({ indirect: gpu.storage(12, { indirect: true }) })).not.toThrow();
+  expect(() => sim.dispatch({ indirect: storage(gpu, 8, { indirect: true }) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => sim.dispatch({ indirect: storage(gpu, 12, { indirect: true }) })).not.toThrow();
   gpu.dispose();
 });
 
 test("malformed indirect values fail with VGPU-INDIRECT-INVALID", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "bad-shape" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "bad-shape" });
   const expectInvalid = (indirect: unknown): void => {
-    expect(() => draw.draw({ target, indirect: indirect as never })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+    expect(() => drawable.draw({ target: colorTarget, indirect: indirect as never })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
   };
 
   expectInvalid(16);
@@ -194,24 +196,24 @@ test("malformed indirect values fail with VGPU-INDIRECT-INVALID", async () => {
 
 test("indirect conflicts with CPU-side counts in the same draw call", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2] });
-  const args = gpu.storage(64, { indirect: true });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "conflict" });
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 64, { indirect: true });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "conflict" });
   const conflicts = [{ vertices: 3 }, { indices: 3 }, { instances: 2 }, { firstVertex: 1 }, { firstIndex: 1 }, { baseVertex: 1 }, { firstInstance: 1 }] as const;
 
   for (const conflict of conflicts) {
-    expect(() => draw.draw({ target, indirect: args, ...conflict })).toThrowError(/VGPU-INDIRECT-INVALID|ignored/);
+    expect(() => drawable.draw({ target: colorTarget, indirect: args, ...conflict })).toThrowError(/VGPU-INDIRECT-INVALID|ignored/);
   }
   // Constructor-level defaults are not per-call conflicts; only same-call counts throw.
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "defaults-ok", instances: 2 }).draw({ target, indirect: args })).not.toThrow();
+  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "defaults-ok", instances: 2 }).draw({ target: colorTarget, indirect: args })).not.toThrow();
   gpu.dispose();
 });
 
 test("compute dispatch indirect emits dispatchWorkgroupsIndirect and keeps positional dispatch unchanged", async () => {
   const gpu = await init();
   const ops = spyComputePassOps(gpu.device.gpu);
-  const args = gpu.storage(24, { indirect: true });
-  const sim = gpu.compute(COMPUTE_SHADER, { label: "sim" });
+  const args = storage(gpu, 24, { indirect: true });
+  const sim = compute(gpu, COMPUTE_SHADER, { label: "sim" });
 
   sim.dispatch(4);
   sim.dispatch(2, 3, 4);
@@ -230,12 +232,12 @@ test("compute dispatch indirect emits dispatchWorkgroupsIndirect and keeps posit
 
 test("compute indirect validation mirrors the draw rules", async () => {
   const gpu = await init();
-  const sim = gpu.compute(COMPUTE_SHADER, { label: "sim-invalid" });
+  const sim = compute(gpu, COMPUTE_SHADER, { label: "sim-invalid" });
 
-  expect(() => sim.dispatch({ indirect: gpu.storage(12) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
-  expect(() => sim.dispatch({ indirect: { buffer: gpu.storage(64, { indirect: true }), offset: 6 } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => sim.dispatch({ indirect: storage(gpu, 12) })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => sim.dispatch({ indirect: { buffer: storage(gpu, 64, { indirect: true }), offset: 6 } })).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
   // Explicit workgroup counts alongside indirect are dead options.
-  expect(() => (sim.dispatch as (x: unknown, y?: number) => void)({ indirect: gpu.storage(12, { indirect: true }) }, 2)).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
+  expect(() => (sim.dispatch as (x: unknown, y?: number) => void)({ indirect: storage(gpu, 12, { indirect: true }) }, 2)).toThrowError(/VGPU-INDIRECT-INVALID|Invalid indirect/);
   gpu.dispose();
 });
 
@@ -300,3 +302,57 @@ function spyComputePassOps(device: GPUDevice): PassOp[] {
   });
   return ops;
 }
+
+// --- gpu-first factories (T202-03) -------------------------------------------------------------
+
+test("storage(gpu, bytes, opts) reproduces the facade's usage flags and access semantics", async () => {
+  const gpu = await init();
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+
+  const plain = storage(gpu, 16);
+  const plainUsage = mock.createBufferDescriptors.at(-1)!.usage;
+  const args = storage(gpu, 16, { indirect: true });
+  const argsUsage = mock.createBufferDescriptors.at(-1)!.usage;
+
+  expect(plainUsage & GPU_BUFFER_USAGE_INDIRECT).toBe(0);
+  expect(argsUsage & GPU_BUFFER_USAGE_INDIRECT).toBe(GPU_BUFFER_USAGE_INDIRECT);
+  expect(argsUsage & plainUsage).toBe(plainUsage);
+  expect(plain.access).toBe("read-write");
+  expect(storage(gpu, 16, "read").access).toBe("read");
+  expect(storage(gpu, 16, { access: "read", indirect: true }).access).toBe("read");
+  gpu.dispose();
+});
+
+test("a storage(gpu) buffer drives an indirect draw and keeps the missing-usage diagnostic", async () => {
+  const gpu = await init();
+  const ops = spyRenderPassOps(gpu.device.gpu);
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const args = storage(gpu, 16, { indirect: true });
+  args.write(new Uint32Array([3, 1, 0, 0]));
+
+  draw(gpu, { shader: DRAW_SHADER, label: "gpu-driven" }).draw({ target: colorTarget, indirect: args });
+  expect(ops).toEqual([["setPipeline"], ["drawIndirect", gpuBufferOf(args), 0]]);
+
+  const plain = storage(gpu, 16);
+  expect(() => draw(gpu, { shader: DRAW_SHADER }).draw({ target: colorTarget, indirect: plain }))
+    .toThrowError(/VGPU-INDIRECT-INVALID|storage\(gpu, 16, \{ indirect: true \}\)/);
+  gpu.dispose();
+});
+
+test("pingPong(gpu, w, h) swaps two owned targets and destroys both with the gpu", async () => {
+  const gpu = await init();
+  const targets = pingPong(gpu, 8, 4, { label: "blur" });
+  const first = targets.read;
+  const second = targets.write;
+
+  expect(first).not.toBe(second);
+  targets.swap();
+  expect(targets.read).toBe(second);
+  expect(targets.write).toBe(first);
+
+  const destroyed: string[] = [];
+  first.onDestroy(() => destroyed.push("read"));
+  second.onDestroy(() => destroyed.push("write"));
+  gpu.dispose();
+  expect(destroyed.sort()).toEqual(["read", "write"]);
+});

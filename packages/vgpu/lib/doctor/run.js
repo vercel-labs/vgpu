@@ -184,13 +184,13 @@ async function softwareRendererState() {
 }
 
 async function realRender() {
-  const { init } = await import("vgpu/node");
+  const { init, effect, frame, target } = await import("vgpu/node");
   const gpu = await init();
   try {
-    const target = gpu.target({ size: [16, 16], format: "rgba8unorm", label: "vgpu-doctor" });
-    const effect = gpu.effect("@fragment fn main() -> @location(0) vec4f { return vec4f(0.25, 0.5, 0.75, 1.0); }");
-    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(effect)));
-    const pixels = await target.read();
+    const colorTarget = target(gpu, { size: [16, 16], format: "rgba8unorm", label: "vgpu-doctor" });
+    const probe = effect(gpu, "@fragment fn main() -> @location(0) vec4f { return vec4f(0.25, 0.5, 0.75, 1.0); }");
+    frame(gpu, (current) => current.pass({ target: colorTarget }, (encoder) => encoder.draw(probe)));
+    const pixels = await colorTarget.read();
     if (!pixels || pixels.byteLength < 16 * 16 * 4) throw new Error("render readback returned too few bytes");
     const info = gpu.device?.adapterInfo ?? {};
     const name = info.description || info.device || info.vendor || "unknown adapter";

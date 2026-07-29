@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { init as initBrowser } from "../../src/index.ts";
+import { init as initBrowser, bundle, effect, frame, surface } from "../../src/index.ts";
 import { createMockAdapter } from "../../src/mock.ts";
 
 const SOLID = `
@@ -10,13 +10,13 @@ const SOLID = `
 
 test("surface bundles do not stale just because getCurrentTexture returns a fresh wrapper", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
-  const surface = gpu.surface(mockCanvas(), { size: [4, 4] });
-  const draw = gpu.effect(SOLID, { label: "surfaceStatic" });
+  const canvasSurface = surface(gpu, mockCanvas(), { size: [4, 4] });
+  const draw = effect(gpu, SOLID, { label: "surfaceStatic" });
 
-  const bundle = gpu.bundle({ target: { colors: [surface.format] }, label: "surfaceBundle" }, (b) => b.draw(draw));
+  const recorded = bundle(gpu, { target: { colors: [canvasSurface.format] }, label: "surfaceBundle" }, (b) => b.draw(draw));
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
-  expect(() => gpu.frame((frame) => frame.pass({ target: surface }, (p) => p.bundles(bundle)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (p) => p.bundles(recorded)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (p) => p.bundles(recorded)))).not.toThrow();
   gpu.dispose();
 });
 

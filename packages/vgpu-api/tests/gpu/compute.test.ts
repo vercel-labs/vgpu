@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, compute, effect, frame, pingPong, pingPongStorage } from "../../src/node.ts";
 
 const GRAVITY_COMPUTE = `
 struct Sim { dt: f32 }
@@ -28,8 +28,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping
     try {
       const COUNT = 4;
       const dt = 0.125;
-      const sim = gpu.compute(GRAVITY_COMPUTE, { label: "gravity" });
-      const buffers = gpu.pingPongStorage(COUNT * 16);
+      const sim = compute(gpu, GRAVITY_COMPUTE, { label: "gravity" });
+      const buffers = pingPongStorage(gpu, COUNT * 16);
       const initial = new Float32Array([
         0, 10, 0, 1,
         0, 5, 0, 1,
@@ -57,18 +57,18 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping
   test("§8 ping-pong render feedback accumulates color on read target", async () => {
     const gpu = await init();
     try {
-      const pingPong = gpu.pingPong(4, 4, { format: "rgba8unorm", label: "pingpong" });
-      const feedback = gpu.effect(PING_PONG_PASS, { label: "feedback" });
-      for (let frame = 0; frame < 4; frame += 1) {
-        gpu.frame((f) => {
-          f.pass({ target: pingPong.write, clear: [0, 0, 0, 1] }, (p) => {
-            feedback.set({ src: pingPong.read });
+      const pair = pingPong(gpu, 4, 4, { format: "rgba8unorm", label: "pingpong" });
+      const feedback = effect(gpu, PING_PONG_PASS, { label: "feedback" });
+      for (let currentFrame = 0; currentFrame < 4; currentFrame += 1) {
+        frame(gpu, (f) => {
+          f.pass({ target: pair.write, clear: [0, 0, 0, 1] }, (p) => {
+            feedback.set({ src: pair.read });
             p.draw(feedback);
           });
         });
-        pingPong.swap();
+        pair.swap();
       }
-      const pixels = await pingPong.read.read();
+      const pixels = await pair.read.read();
       const pixel = pixels.slice(0, 4);
       expect(pixel[0]).toBeGreaterThan(240);
       expect(pixel[3]).toBe(255);

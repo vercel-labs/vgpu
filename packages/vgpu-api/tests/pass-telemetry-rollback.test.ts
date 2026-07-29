@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createMockAdapter, init } from "../src/mock.ts";
+import { createMockAdapter, init, draw, frame, target, timer, visibility } from "../src/mock.ts";
 
 const SOLID = `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`;
 
@@ -10,12 +10,12 @@ function initWithTimestampQuery() {
 test("a throwing pass callback leaves no phantom timer result", async () => {
   const gpu = await initWithTimestampQuery();
   const ops = spyFrameEncoders(gpu.device.gpu);
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, timer: timer.span("main") }, () => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("main") }, () => {
     throw new Error("draw setup failed");
   }))).toThrowError(/draw setup failed/);
   await gpu.settled();
@@ -24,58 +24,91 @@ test("a throwing pass callback leaves no phantom timer result", async () => {
   // dropped instead of resolved/read back as if the pass had run.
   expect(results).toEqual([]);
   expect(ops.encodeOps).toEqual([["finish"]]);
-  timer.dispose();
+  gpuTimer.dispose();
   gpu.dispose();
   vi.restoreAllMocks();
 });
 
 test("a pass setup failure after attaching a timer leaves no phantom result", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const colorOnly = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const colorOnly = target(gpu, { size: [4, 4] });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
 
   // Timer attachment succeeds first; visibility validation then fails before beginRenderPass.
-  expect(() => gpu.frame((frame) => frame.pass({ target: colorOnly, timer: timer.span("main"), visibility: vis }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorOnly, timer: gpuTimer.span("main"), visibility: vis }, () => undefined)))
     .toThrowError(/no depth attachment/);
   await gpu.settled();
 
   expect(results).toEqual([]);
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
 
 test("a timer validation failure after an earlier pass drops the frame's partial result", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
 
-  expect(() => gpu.frame((frame) => {
-    frame.pass({ target, timer: timer.span("duplicate") }, () => undefined);
-    frame.pass({ target, timer: timer.span("duplicate") }, () => undefined);
+  expect(() => frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("duplicate") }, () => undefined);
+    currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("duplicate") }, () => undefined);
   })).toThrowError(/duplicate span|VGPU-TIMER-INVALID/);
   await gpu.settled();
 
   expect(results).toEqual([]);
-  timer.dispose();
+  gpuTimer.dispose();
+  gpu.dispose();
+});
+
+test("a failed attach drops every telemetry instance of that frame, not only its own", async () => {
+  const gpu = await initWithTimestampQuery();
+  const shadows = timer(gpu);
+  const main = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const shadowResults: Array<Readonly<Record<string, number>>> = [];
+  const mainResults: Array<Readonly<Record<string, number>>> = [];
+  shadows.onResults((spans) => { shadowResults.push(spans); });
+  main.onResults((spans) => { mainResults.push(spans); });
+
+  expect(() => frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: colorTarget, timer: shadows.span("shadows") }, () => undefined);
+    currentFrame.pass({ target: colorTarget, timer: main.span("duplicate") }, () => undefined);
+    currentFrame.pass({ target: colorTarget, timer: main.span("duplicate") }, () => undefined);
+  })).toThrowError(/duplicate span|VGPU-TIMER-INVALID/);
+  await gpu.settled();
+
+  // The failing attachment mutated its own bookkeeping before throwing and, through the nominal
+  // attach protocol, cannot report whose it was: the frame drops every owner rather than report a
+  // half-encoded frame. `shadows` ran fine and is still dropped — conservative on purpose.
+  expect(mainResults).toEqual([]);
+  expect(shadowResults).toEqual([]);
+
+  // The next frame is unaffected: only that frame's bookkeeping was discarded.
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, timer: shadows.span("shadows") }, () => undefined));
+  await gpu.settled();
+  expect(shadowResults).toEqual([{ shadows: 1 }]);
+
+  shadows.dispose();
+  main.dispose();
   gpu.dispose();
 });
 
 test("a throwing pass callback leaves no phantom visibility result", async () => {
   const gpu = await init();
   const ops = spyFrameEncoders(gpu.device.gpu);
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const proxy = gpu.draw({ shader: SOLID, label: "proxy" });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const proxy = draw(gpu, { shader: SOLID, label: "proxy" });
   // Slot 0 reads back the mock's fake value 0 — a phantom "hidden" would cull the object forever.
   const query = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(query, proxy);
     throw new Error("scene traversal failed");
   }))).toThrowError(/scene traversal failed/);
@@ -92,16 +125,16 @@ test("a throwing pass callback leaves no phantom visibility result", async () =>
 
 test("a failed pass drops the whole frame's telemetry, including earlier passes of that frame", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => {
-    frame.pass({ target: scene, timer: timer.span("shadows") }, () => undefined);
-    frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, timer: gpuTimer.span("shadows") }, () => undefined);
+    currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
       p.occlusion(query, () => undefined);
       throw new Error("boom");
     });
@@ -112,55 +145,55 @@ test("a failed pass drops the whole frame's telemetry, including earlier passes 
   // whole frame is dropped rather than reported with a phantom entry.
   expect(results).toEqual([]);
   expect(query.state).toBe("unknown");
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
 
 test("re-attaching the same telemetry after a failed pass stays dropped for that frame", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue");
 
-  const frame = gpu.frame();
-  expect(() => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  const currentFrame = frame(gpu);
+  expect(() => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
     throw new Error("boom");
   })).toThrowError(/boom/);
   // Recovering inside the same frame cannot resurrect the frame's telemetry: the failed pass's
   // span pair and occlusion slot are still in the instances' per-frame bookkeeping.
-  frame.pass({ target: scene, timer: timer.span("retry"), visibility: vis }, (p) => p.occlusion(vis.query("tower"), () => undefined));
-  frame.submit();
+  currentFrame.pass({ target: scene, timer: gpuTimer.span("retry"), visibility: vis }, (p) => p.occlusion(vis.query("tower"), () => undefined));
+  currentFrame.submit();
   await gpu.settled();
 
   expect(results).toEqual([]);
   expect(query.state).toBe("unknown");
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
 
 test("telemetry keeps flowing on the frame after a failed pass", async () => {
   const gpu = await initWithTimestampQuery();
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
     throw new Error("boom");
   }))).toThrowError(/boom/);
   await gpu.settled();
   expect(results).toEqual([]);
 
-  gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
   }));
   await gpu.settled();
@@ -168,7 +201,7 @@ test("telemetry keeps flowing on the frame after a failed pass", async () => {
   // Mock fake timestamp for query i is i*i * 1e6 ns: the pair (0, 1) decodes to 1 ms.
   expect(results).toEqual([{ main: 1 }]);
   expect(query.state).toBe("hidden"); // slot 0 -> mock fake value 0
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
@@ -176,14 +209,14 @@ test("telemetry keeps flowing on the frame after a failed pass", async () => {
 test("a frame whose finish fails reports nothing and leaves telemetry usable next frame", async () => {
   const gpu = await initWithTimestampQuery();
   const failingFinish = spyFrameEncoders(gpu.device.gpu, { failFinish: true });
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const results: Array<Readonly<Record<string, number>>> = [];
-  timer.onResults((spans) => { results.push(spans); });
+  gpuTimer.onResults((spans) => { results.push(spans); });
   const query = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
   }))).toThrowError(/finish failed/);
   await gpu.settled();
@@ -195,14 +228,14 @@ test("a frame whose finish fails reports nothing and leaves telemetry usable nex
   expect(query.state).toBe("unknown");
 
   vi.restoreAllMocks();
-  gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(query, () => undefined);
   }));
   await gpu.settled();
 
   expect(results).toEqual([{ main: 1 }]);
   expect(query.state).toBe("hidden");
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   gpu.dispose();
 });
@@ -211,17 +244,17 @@ test("a throwing pass callback still releases the frame's query set retain", asy
   const gpu = await initWithTimestampQuery();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const timer = gpu.timer();
-  const target = gpu.target({ size: [4, 4] });
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, timer: timer.span("main") }, () => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("main") }, () => {
     // dispose() lands while the pass descriptor still references the query set, so destruction is
     // deferred to the retain's release — which only happens if the dropped pass releases it.
-    timer.dispose();
+    gpuTimer.dispose();
     throw new Error("draw setup failed");
   }))).toThrowError(/draw setup failed/);
 
-  // gpu.frame() submits in a finally: dropping the telemetry must not drop the retain with it.
+  // frame(gpu) submits in a finally: dropping the telemetry must not drop the retain with it.
   expect(destroyed).toEqual([0]);
   await gpu.settled();
   gpu.dispose();
@@ -233,18 +266,18 @@ test("a frame whose finish fails releases every telemetry retain it took", async
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
   spyFrameEncoders(gpu.device.gpu, { failFinish: true });
-  const timer = gpu.timer();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const gpuTimer = timer(gpu);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, timer: timer.span("main"), visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, timer: gpuTimer.span("main"), visibility: vis }, (p) => {
     p.occlusion(vis.query("statue"), () => undefined);
   }))).toThrowError(/finish failed/);
 
   // The frame never reached the queue, but both instances took a retain when they were attached:
   // without the release, these dispose()s would leave both query sets alive forever.
   expect(destroyed).toEqual([]);
-  timer.dispose();
+  gpuTimer.dispose();
   vis.dispose();
   expect([...destroyed].sort()).toEqual([0, 1]);
   gpu.dispose();

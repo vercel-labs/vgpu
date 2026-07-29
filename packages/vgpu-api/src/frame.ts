@@ -1,20 +1,68 @@
 import type { Device } from "@vgpu/core";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
-import { replayBundles, type Bundle } from "./bundle.ts";
-import { drawStencilWritingOps, drawWritesDepth, encodeDraw, type Draw, type DrawCallOptions, type InternalDraw } from "./draw.ts";
-import { effectDraw, type Effect } from "./effect.ts";
+import type { Bundle } from "./bundle.ts";
+import type { Draw, DrawCallOptions } from "./draw.ts";
+import type { Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
-import { VGPUError, claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, visibilityInvalidError, visibilityNoDepthError } from "./errors.ts";
-import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
-import { hasStencilAspect, isTarget, type ClearColor } from "./target-utils.ts";
-import { isTimerSpan, type InternalTimer, type TimerSpan } from "./timer.ts";
-import { isVisibility, type InternalVisibility, type Visibility, type VisibilityQuery } from "./visibility.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
+import { claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, VGPUError, visibilityInvalidError } from "./errors.ts";
+import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
+import { BUILT_IN_CLEAR_COLOR, hasStencilAspect, isTarget, type ClearColor } from "./target-utils.ts";
+import type { TimerSpan } from "./timer.ts";
+import type { Visibility, VisibilityQuery } from "./visibility.ts";
+import { FRAME_PASS_ATTACHMENT, frameBundleOf, frameDrawableOf, framePassAttachmentOf, type FrameDrawableProtocol, type FrameOcclusionSource, type FrameOwner, type FramePassAttachResult } from "./frame-protocols.ts";
+import { frameState } from "./frame-state.ts";
+import { liveKernel } from "./live-kernel.ts";
+import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
+
+/**
+ * Opens a frame on `gpu`: advances the frame clock, runs `cb` against a fresh command encoder and
+ * submits it when the callback returns (or on the way out of a throw).
+ *
+ * Without a callback the frame is yours: encode passes at your own pace and finish it with
+ * `frame.submit()` or `frame.cancel()` — an unfinished frame holds every retain its passes took.
+ * Frames are not reentrant: opening one from inside another (or from a surface resize callback)
+ * throws `VGPU-FRAME-REENTRANT`.
+ */
+export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
+  return frameRunner(liveKernel(gpu, "frame")).frame(cb);
+}
+
+/**
+ * Runs `cb` once per animation frame until the returned handle is stopped.
+ *
+ * The loop belongs to the gpu's `scheduler` phase, so `gpu.dispose()` stops it before anything it
+ * could encode against is torn down; a loop that stops on its own drops that registration.
+ */
+export function frameLoop(gpu: Gpu, cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
+  return frameRunner(liveKernel(gpu, "frameLoop")).loop(cb, opts);
+}
+
+/**
+ * One runner per gpu: it carries the reentrancy guard, the frame clock and the loop registrations,
+ * so `frame()` and `frameLoop()` share the same state. Created on the first frame, never at `init()`.
+ */
+const frameRunnerToken = serviceToken<FrameRunner>("frame-runner");
+function frameRunner(kernel: Kernel): FrameRunner {
+  return kernel.service(frameRunnerToken, (self) => {
+    const state = frameState(self);
+    return new FrameRunner(
+      () => {
+        let release = () => {};
+        const frame = new Frame(self.device, undefined, (error) => self.reportError(error), (promise) => { void self.trackDelivery(promise); }, () => release());
+        release = self.own("scheduler", () => frame.cancel());
+        return frame;
+      },
+      () => state.tick(),
+      (handle) => self.own("scheduler", () => handle.stop()),
+    );
+  });
+}
 
 export interface FramePassOptions {
   readonly target: Target;
-  /** Omit or pass true to clear with gpu.clearColor; pass false to preserve color/depth; pass a color to clear with it. */
+  /** Omit or pass true to clear with `target.clearColor`; pass false to preserve color/depth; pass a color to clear this pass with it. */
   readonly clear?: boolean | ClearColor;
   /** Depth clear value used when the pass clears. Defaults to 1. Use 0 with depth: { compare: "greater" } for reversed-Z. */
   readonly clearDepth?: number;
@@ -33,9 +81,9 @@ export interface FramePassOptions {
   };
   /** Scissor rectangle [x, y, width, height] for every draw in this pass. Integers. Note: does not affect the clear — loadOp "clear" always clears the full attachment. */
   readonly scissor?: readonly [number, number, number, number];
-  /** Times this pass on the GPU: pass `timer.span(name)` from a `gpu.timer()`. The pass duration lands in `timer.onResults` under `name`, in milliseconds. One span name per frame. */
+  /** Times this pass on the GPU: pass `timer.span(name)` from a `timer(gpu)`. The pass duration lands in `timer.onResults` under `name`, in milliseconds. One span name per frame. */
   readonly timer?: TimerSpan;
-  /** Enables occlusion queries in this pass: pass a `gpu.visibility()` instance, then wrap proxy draws in `pass.occlusion(handle, body)`. Requires a target with a depth attachment. */
+  /** Enables occlusion queries in this pass: pass a `visibility(gpu)` instance, then wrap proxy draws in `pass.occlusion(handle, body)`. Requires a target with a depth attachment. */
   readonly visibility?: Visibility;
 }
 
@@ -54,15 +102,19 @@ export class Frame {
   done: Promise<void> = Promise.resolve();
   readonly #encoder: GPUCommandEncoder;
   readonly #validations: ClaimedGroupValidationResult[] = [];
-  readonly #timers = new Set<InternalTimer>();
-  readonly #visibilities = new Set<InternalVisibility>();
   /**
-   * Telemetry instances whose per-frame bookkeeping a failed pass invalidated: their frame is
-   * neither finalized nor read back, so a throwing pass callback cannot leave a phantom result.
-   * Kept alongside the sets so a later pass re-attaching the same instance in this frame stays
-   * dropped too — the failed pass's span/slots are still in that instance's frame bookkeeping.
+   * Everything a pass of this frame attached, as opaque {@link FrameOwner}s: timers and
+   * visibilities today, scene view generations later. The frame never learns what they are — it
+   * only guarantees each one sees exactly one `frameSubmitted` or `frameAbandoned`.
    */
-  readonly #discardedTelemetry = new Set<InternalTimer | InternalVisibility>();
+  readonly #owners = new Set<FrameOwner>();
+  /**
+   * Owners whose per-frame bookkeeping a failed pass invalidated: their frame is neither finalized
+   * nor read back, so a throwing pass callback cannot leave a phantom result. Kept alongside the
+   * live set so a later pass re-attaching the same instance in this frame stays dropped too — the
+   * failed pass's span/slots are still in that instance's frame bookkeeping.
+   */
+  readonly #discardedOwners = new Set<FrameOwner>();
   #submitted = false;
   #canceled = false;
   #passActive = false;
@@ -71,7 +123,7 @@ export class Frame {
     private readonly defaultTarget?: Target,
     private readonly errorSink?: ValidationErrorSink,
     private readonly trackSettled?: (promise: Promise<unknown>) => void,
-    private readonly defaultClearColor: () => ClearColor = () => [0, 0, 0, 1],
+    private readonly releaseLifecycle?: () => void,
   ) {
     assertDeviceUsable(device, "Frame.constructor");
     this.#encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
@@ -80,10 +132,12 @@ export class Frame {
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
-    assertDeviceUsable(this.device, "Frame.pass");
     // A canceled frame dropped its encoder: encoding into it would silently never run (and would
-    // re-take the telemetry retains cancel() just released), so reject the call instead.
+    // re-take the telemetry retains cancel() just released), so reject the call instead. Checked
+    // before the device: `gpu.dispose()` cancels outstanding frames and *then* drops the device, so
+    // cancellation is the proximate cause there and names it better than a generic disposed device.
     if (this.#canceled) throw frameCanceledError("Frame.pass");
+    assertDeviceUsable(this.device, "Frame.pass");
     const targetOnly = isTarget(target);
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
@@ -132,27 +186,28 @@ export class Frame {
     }
     const viewport = targetOnly ? undefined : validatedViewport(target.viewport, this.device.gpu.limits, resolvedTarget.size);
     const scissor = targetOnly ? undefined : validatedScissor(target.scissor, resolvedTarget.size);
-    let timer: { readonly owner: InternalTimer; readonly timestampWrites: GPURenderPassTimestampWrites | undefined } | undefined;
-    let visibility: InternalVisibility | undefined;
+    // Owners this pass attached, in attach order: the rollback set if anything below throws.
+    const attached: FrameOwner[] = [];
     let encoder: GPURenderPassEncoder | undefined;
     try {
       // Attaching telemetry mutates per-frame bookkeeping before the native pass opens. Keep the whole
       // attach/setup/body sequence atomic so any later validation/native setup failure rolls it back,
       // not only exceptions thrown by the user callback.
-      timer = targetOnly ? undefined : this.#attachTimerSpan(target.timer);
-      const timestampWrites = timer?.timestampWrites;
-      visibility = targetOnly ? undefined : this.#attachVisibility(target.visibility, resolvedTarget);
+      const timer = targetOnly || target.timer === undefined ? undefined : this.#attach(target.timer, resolvedTarget, attached, timerAttachmentInvalidError);
+      const visibility = targetOnly || target.visibility === undefined ? undefined : this.#attach(target.visibility, resolvedTarget, attached, visibilityAttachmentInvalidError);
+      const occlusion = visibility?.occlusion;
       // timestampWrites and occlusionQuerySet are target-independent pass state: decorate the descriptor after obtaining it from the target.
-      let descriptor = resolvedTarget.renderPassDescriptor({ clear: clear === undefined || clear === true || clear === false ? this.defaultClearColor() : clear, preserve, clearDepth, clearStencil, depthReadOnly });
-      if (timestampWrites) descriptor = { ...descriptor, timestampWrites };
+      // Clear color precedence: the pass color, then the target's own default, then the built-in.
+      let descriptor = resolvedTarget.renderPassDescriptor({ clear: clear === undefined || clear === true || clear === false ? resolvedTarget.clearColor ?? BUILT_IN_CLEAR_COLOR : clear, preserve, clearDepth, clearStencil, depthReadOnly });
+      if (timer?.timestampWrites) descriptor = { ...descriptor, timestampWrites: timer.timestampWrites };
       // Mirrors the WebGPU pass descriptor rule: occlusionQuerySet must be a valid query set of type "occlusion".
-      if (visibility) descriptor = { ...descriptor, occlusionQuerySet: visibility.querySet };
+      if (occlusion) descriptor = { ...descriptor, occlusionQuerySet: occlusion.querySet };
       encoder = this.#encoder.beginRenderPass(descriptor);
       if (viewport) encoder.setViewport(viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth);
       if (scissor) encoder.setScissorRect(scissor[0], scissor[1], scissor[2], scissor[3]);
       this.#passActive = true;
       try {
-        cb(new FramePass(encoder, resolvedTarget, this.#validations, depthReadOnly === true, visibility, this, (where) => {
+        cb(new FramePass(encoder, resolvedTarget, this.#validations, depthReadOnly === true, occlusion, this, (where) => {
           // Retained external devices can be destroyed mid-pass, so every FramePass entry point
           // re-checks the device here instead of taking it as a separate constructor argument.
           assertDeviceUsable(this.device, where);
@@ -164,7 +219,7 @@ export class Frame {
     } catch (error) {
       // A failed pass — during setup or in its body — never ran successfully. Leaving telemetry
       // registered makes submit() resolve unwritten queries as phantom results.
-      this.#discardTelemetry(timer?.owner, visibility);
+      this.#discardOwners(attached);
       discardClaimedGroupValidationResults(this.#validations);
       this.#validations.length = 0;
       discardClaimedGroupValidationScopes(this.device);
@@ -175,16 +230,17 @@ export class Frame {
   }
 
   submit(): void {
-    assertDeviceUsable(this.device, "Frame.submit");
     // Closed either way: a re-submit has nothing left to flush, and a canceled frame dropped its
-    // encoder. Both are silent no-ops so `gpu.frame(cb)`'s submit-in-finally never masks a cancel()
-    // (or an exception) from inside the callback.
+    // encoder. Both are silent no-ops so `frame(gpu, cb)`'s submit-in-finally never masks a cancel()
+    // (or an exception) from inside the callback. Checked before the device so that submitting an
+    // already-closed frame stays a no-op even after `gpu.dispose()` took the device with it.
     if (this.#submitted || this.#canceled) return;
+    assertDeviceUsable(this.device, "Frame.submit");
     this.#submitted = true;
+    this.releaseLifecycle?.();
     // Timed and occlusion-queried frames append one resolveQuerySet of each instance's contiguous
     // used range (plus the staging copy) to the still-open frame encoder — zero extra submissions.
-    for (const timer of this.#liveTimers()) timer.finalizeFrame(this, this.#encoder);
-    for (const visibility of this.#liveVisibilities()) visibility.finalizeFrame(this, this.#encoder);
+    for (const owner of this.#liveOwners()) owner.finalizeFrame(this, this.#encoder);
     let commandBuffer: GPUCommandBuffer;
     const finishContext = this.#validations[0]?.context;
     if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
@@ -192,7 +248,7 @@ export class Frame {
     catch (error) {
       // finish() failed, so the resolves encoded above never reach the queue: nothing may be read
       // back, but every instance still has to release the retain it took when it was attached.
-      this.#abandonTelemetry(this.#frameTelemetry());
+      this.#abandonOwners(this.#frameOwners());
       const result = finishContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
@@ -211,7 +267,7 @@ export class Frame {
     catch (error) {
       // Same as the finish() failure: the command buffer never ran, so release the retains and read
       // nothing back — the resolve's staging bytes are stale, not this frame's results.
-      this.#abandonTelemetry(this.#frameTelemetry());
+      this.#abandonOwners(this.#frameOwners());
       const result = submitContext ? popLastClaimedGroupValidationScope(this.device) : undefined;
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
@@ -224,19 +280,18 @@ export class Frame {
       const result = popLastClaimedGroupValidationScope(this.device);
       if (result) this.#validations[0] = this.#validations[0] ? preferClaimedGroupValidationResult(result, this.#validations[0]) : result;
     }
-    // The submit succeeded: start each timer's and visibility's non-blocking readback of this frame's resolve.
-    for (const timer of this.#liveTimers()) timer.frameSubmitted(this);
-    for (const visibility of this.#liveVisibilities()) visibility.frameSubmitted(this);
+    // The submit succeeded: start each owner's non-blocking readback of this frame's resolve.
+    for (const owner of this.#liveOwners()) owner.frameSubmitted(this);
     // Instances a failed pass dropped are skipped above, so they still hold this frame's retain.
-    this.#abandonTelemetry(this.#discardedTelemetry);
+    this.#abandonOwners(this.#discardedOwners);
     this.done = this.#trackDone(claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }));
   }
 
   /**
    * Discards the frame without submitting it: the command encoder is dropped (nothing this frame
    * encoded ever runs) and every telemetry instance it attached releases the retain it took on its
-   * query ring, so a `gpu.timer()` / `gpu.visibility()` can be disposed for good without waiting for
-   * `gpu.dispose()`. This is the explicit way out of the leak a manual `gpu.frame()` would otherwise
+   * query ring, so a `timer(gpu)` / `visibility(gpu)` can be disposed for good without waiting for
+   * `gpu.dispose()`. This is the explicit way out of the leak a manual `frame(gpu)` would otherwise
    * hold: a frame is never assumed abandoned, because an old frame can still be submitted.
    *
    * Idempotent, like `submit()`: cancelling twice is a no-op, and `submit()` after `cancel()` does
@@ -251,12 +306,12 @@ export class Frame {
     // could destroy them before encoder.end(), and the callback could keep encoding after cancel.
     if (this.#passActive) throw framePassActiveError("Frame.cancel");
     this.#canceled = true;
+    this.releaseLifecycle?.();
     // Nothing is finalized and nothing is read back: the encoded passes never reach the queue, so
     // decoding a resolve would report stale staging bytes as a phantom duration or "hidden".
-    this.#abandonTelemetry(this.#frameTelemetry());
-    this.#timers.clear();
-    this.#visibilities.clear();
-    this.#discardedTelemetry.clear();
+    this.#abandonOwners(this.#frameOwners());
+    this.#owners.clear();
+    this.#discardedOwners.clear();
     // The claimed-group validation promises of the dropped encoder are never delivered: no draw of
     // this frame ran, so any native error they carry is about work that was thrown away.
     discardClaimedGroupValidationResults(this.#validations);
@@ -272,66 +327,49 @@ export class Frame {
    * state as it releases: a resolve that never reached the queue must not be decoded — its staging
    * buffer holds stale bytes, which would surface as a phantom duration or a phantom "hidden".
    */
-  #abandonTelemetry(owners: Iterable<InternalTimer | InternalVisibility>): void {
-    for (const owner of owners) owner.frameAbandoned(this);
+  #abandonOwners(owners: Iterable<FrameOwner>): void {
+    for (const owner of [...owners]) owner.frameAbandoned(this);
   }
 
-  /** Every telemetry instance this frame attached, discarded ones included. */
-  #frameTelemetry(): (InternalTimer | InternalVisibility)[] {
-    return [...this.#timers, ...this.#visibilities, ...this.#discardedTelemetry];
+  /** Every owner this frame attached, discarded ones included. */
+  #frameOwners(): FrameOwner[] {
+    return [...this.#owners, ...this.#discardedOwners];
   }
 
-  #discardTelemetry(timer: InternalTimer | undefined, visibility: InternalVisibility | undefined): void {
-    if (timer) {
-      this.#timers.delete(timer);
-      this.#discardedTelemetry.add(timer);
-    }
-    if (visibility) {
-      this.#visibilities.delete(visibility);
-      this.#discardedTelemetry.add(visibility);
+  /** Moves owners out of this frame's live set: they are neither finalized nor read back. */
+  #discardOwners(owners: Iterable<FrameOwner>): void {
+    for (const owner of [...owners]) {
+      this.#owners.delete(owner);
+      this.#discardedOwners.add(owner);
     }
   }
 
-  #liveTimers(): InternalTimer[] {
-    return [...this.#timers].filter((timer) => !this.#discardedTelemetry.has(timer));
+  #liveOwners(): FrameOwner[] {
+    return [...this.#owners].filter((owner) => !this.#discardedOwners.has(owner));
   }
 
-  #liveVisibilities(): InternalVisibility[] {
-    return [...this.#visibilities].filter((visibility) => !this.#discardedTelemetry.has(visibility));
-  }
-
-  /** Registers the span for this frame; returns the owning timer so a failed pass can roll its telemetry back. */
-  #attachTimerSpan(span: TimerSpan | undefined): { readonly owner: InternalTimer; readonly timestampWrites: GPURenderPassTimestampWrites | undefined } | undefined {
-    if (span === undefined) return undefined;
-    if (!isTimerSpan(span)) {
-      throw timerInvalidError(`FramePassOptions.timer received ${previewValue(span)}; expected a TimerSpan from timer.span(name).`, `Create const timer = gpu.timer() once, then pass timer.span("name") per pass.`, "Frame.pass");
-    }
-    const owner = span.owner;
-    const alreadyAttached = this.#timers.has(owner);
+  /**
+   * Attaches one `FramePassOptions` telemetry value to this pass through the nominal attachment
+   * protocol, so the frame never learns whether it is a timer span, a visibility or a future
+   * scene-view generation: it only records the owner it must settle exactly once.
+   */
+  #attach(value: unknown, target: Target, attached: FrameOwner[], invalid: (value: unknown) => VGPUError): FramePassAttachResult {
+    const attachment = framePassAttachmentOf(value);
+    if (!attachment) throw invalid(value);
+    let result: FramePassAttachResult;
     try {
-      const timestampWrites = owner.attachSpan(span, this, this.device);
-      this.#timers.add(owner);
-      return { owner, timestampWrites };
+      result = attachment[FRAME_PASS_ATTACHMENT]({ frame: this, device: this.device, target });
     } catch (error) {
-      // A duplicate/capacity error can occur after this timer already contributed an earlier pass
-      // to the frame. The outer assignment has not completed yet, so discard it here rather than
-      // letting submit() report that earlier pass as a successful partial frame.
-      if (alreadyAttached) this.#discardTelemetry(owner, undefined);
+      // A duplicate/capacity failure can land after the same instance already contributed an
+      // earlier pass to this frame, and a failed attach cannot report whose bookkeeping it left
+      // half-written. Drop every owner of the frame rather than let submit() report the earlier
+      // pass as a successful partial frame.
+      this.#discardOwners(this.#owners);
       throw error;
     }
-  }
-
-  #attachVisibility(visibility: Visibility | undefined, resolvedTarget: Target): InternalVisibility | undefined {
-    if (visibility === undefined) return undefined;
-    if (!isVisibility(visibility)) {
-      throw visibilityInvalidError(`FramePassOptions.visibility received ${previewValue(visibility)}; expected a Visibility from gpu.visibility().`, "Create const vis = gpu.visibility() once, then pass { target, visibility: vis } per pass.", "Frame.pass");
-    }
-    // Spec-legal but a dead option for culling: without a depth attachment nothing is depth-tested,
-    // so any rasterized sample passes and every query reports "visible". Start strict.
-    if (!resolvedTarget.depth) throw visibilityNoDepthError();
-    visibility.attachFrame(this, this.device);
-    this.#visibilities.add(visibility);
-    return visibility;
+    this.#owners.add(result.owner);
+    attached.push(result.owner);
+    return result;
   }
 
   async #deliverValidationError(label: string, group: number, cause: unknown): Promise<void> {
@@ -350,11 +388,12 @@ export class Frame {
 
 export class FramePass {
   #occlusionActive = false;
-  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly visibility?: InternalVisibility, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void) {}
+  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly occlusionSource?: FrameOcclusionSource, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void) {}
   draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
     this.assertFrameOpen?.("FramePass.draw");
-    if (this.depthReadOnly) assertDrawableAllowedInReadOnlyPass(drawable, this.target);
-    encodeFrameDrawable(drawable, this.encoder, this.target, opts, (result) => this.validations.push(result));
+    const encodable = frameDrawable(drawable);
+    if (this.depthReadOnly) assertDrawableAllowedInReadOnlyPass(encodable, this.target);
+    encodable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result));
   }
   /**
    * Wraps one or more draws in begin/endOcclusionQuery. The body ALWAYS executes; condition your
@@ -362,10 +401,10 @@ export class FramePass {
    */
   occlusion(query: VisibilityQuery, body: Draw | Effect | (() => void)): void {
     this.assertFrameOpen?.("FramePass.occlusion");
-    if (!this.visibility) throw queryNoVisibilityError();
+    if (!this.occlusionSource) throw queryNoVisibilityError();
     // WebGPU beginOcclusionQuery: "no occlusion query must be active for this" — one scope at a time.
     if (this.#occlusionActive) throw queryNestedError();
-    const index = this.visibility.beginQuery(query, this.frame);
+    const index = this.occlusionSource.beginQuery(query, this.frame);
     this.encoder.beginOcclusionQuery(index);
     this.#occlusionActive = true;
     try {
@@ -381,11 +420,15 @@ export class FramePass {
   bundles(...bundles: readonly Bundle[]): void {
     this.assertFrameOpen?.("FramePass.bundles");
     // WebGPU executeBundles: "If this.[[depthReadOnly]] is true, bundle.[[depthReadOnly]] must be true.
-    // If this.[[stencilReadOnly]] is true, bundle.[[stencilReadOnly]] must be true." gpu.bundle always
+    // If this.[[stencilReadOnly]] is true, bundle.[[stencilReadOnly]] must be true." bundle always
     // records bundles with both flags false, so no recorded bundle can replay into a read-only pass;
     // reject up front instead of leaving it to native validation.
-    if (this.depthReadOnly) throw passDepthReadOnlyError("pass cannot replay bundles: gpu.bundle records bundles with writable depth/stencil, and WebGPU only executes read-only-recorded bundles in a read-only pass.", "Encode the draws directly with pass.draw(...) inside the depthReadOnly pass.", "FramePass.bundles");
-    replayBundles(this.target, bundles, (gpuBundles) => this.encoder.executeBundles(gpuBundles));
+    if (this.depthReadOnly) throw passDepthReadOnlyError("pass cannot replay bundles: bundle records bundles with writable depth/stencil, and WebGPU only executes read-only-recorded bundles in a read-only pass.", "Encode the draws directly with pass.draw(...) inside the depthReadOnly pass.", "FramePass.bundles");
+    const recorded = bundles.map((entry) => frameBundleOf(entry) ?? invalidBundle());
+    // Staleness is checked for every bundle before the first one replays: a pass either replays the
+    // whole list or none of it.
+    for (const entry of recorded) entry.assertReplayable(this.target);
+    this.encoder.executeBundles(recorded.map((entry) => entry.gpu));
   }
 }
 
@@ -395,22 +438,37 @@ export class FramePass {
  * false." A depthReadOnly pass marks the stencil aspect read-only too (combined formats), so both are
  * validated here with actionable errors before encoding.
  */
-function assertDrawableAllowedInReadOnlyPass(drawable: Draw | Effect, target: Target): void {
-  const draw = ("layout" in drawable ? drawable : effectDraw(drawable)) as InternalDraw;
-  if (drawWritesDepth(draw)) {
-    throw passDepthReadOnlyError(`pass cannot encode draw '${draw.label}': its depth state writes depth (the default is write: true). Give the draw depth: { write: false } (or depth: false to disable depth testing).`, "Use depth: { write: false } on the draw, or open the pass without depthReadOnly.", "FramePass.draw");
+function assertDrawableAllowedInReadOnlyPass(drawable: FrameDrawableProtocol, target: Target): void {
+  if (drawable.writesDepth()) {
+    throw passDepthReadOnlyError(`pass cannot encode draw '${drawable.label}': its depth state writes depth (the default is write: true). Give the draw depth: { write: false } (or depth: false to disable depth testing).`, "Use depth: { write: false } on the draw, or open the pass without depthReadOnly.", "FramePass.draw");
   }
   if (hasStencilAspect(target.depth?.format)) {
-    const ops = drawStencilWritingOps(draw);
+    const ops = drawable.stencilWritingOps();
     if (ops.length) {
-      throw passDepthReadOnlyError(`pass cannot encode draw '${draw.label}': its stencil ops can write (${ops.join(", ")}), and the pass's stencil aspect is read-only too.`, `Use "keep" for those ops or stencil writeMask: 0, or open the pass without depthReadOnly.`, "FramePass.draw");
+      throw passDepthReadOnlyError(`pass cannot encode draw '${drawable.label}': its stencil ops can write (${ops.join(", ")}), and the pass's stencil aspect is read-only too.`, `Use "keep" for those ops or stencil writeMask: 0, or open the pass without depthReadOnly.`, "FramePass.draw");
     }
   }
 }
 
-function encodeFrameDrawable(drawable: Draw | Effect, encoder: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation: (result: ClaimedGroupValidationResult) => void): void {
-  if ("layout" in drawable) return encodeDraw(drawable as never, encoder, target, opts, claimValidation);
-  encodeDraw(effectDraw(drawable), encoder, target, opts, claimValidation);
+/** Nominal drawable protocol of a `Draw` or an `Effect`; the frame never imports either module. */
+function frameDrawable(drawable: Draw | Effect): FrameDrawableProtocol {
+  const encodable = frameDrawableOf(drawable);
+  // Historical message kept: "Invalid Effect instance" is what an unrecognized drawable reported
+  // when the frame resolved it by shape.
+  if (!encodable) throw new TypeError("Invalid Effect instance: pass.draw() expects a Draw or an Effect created by this library.");
+  return encodable;
+}
+
+function invalidBundle(): never {
+  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() expected bundles created by bundle(gpu, { target }, cb).", where: "FramePass.bundles" });
+}
+
+function timerAttachmentInvalidError(value: unknown): VGPUError {
+  return timerInvalidError(`FramePassOptions.timer received ${previewValue(value)}; expected a TimerSpan from timer.span(name).`, `Create const passTimer = timer(gpu) once, then pass passTimer.span("name") per pass.`, "Frame.pass");
+}
+
+function visibilityAttachmentInvalidError(value: unknown): VGPUError {
+  return visibilityInvalidError(`FramePassOptions.visibility received ${previewValue(value)}; expected a Visibility from visibility(gpu).`, "Create const vis = visibility(gpu) once, then pass { target, visibility: vis } per pass.", "Frame.pass");
 }
 
 /**

@@ -27,6 +27,8 @@ vgpu PingPongStorage packages/vgpu-api/src/target.docs.md
 vgpu SharedUniforms packages/vgpu-api/src/uniforms.docs.md
 vgpu StorageBuffer packages/vgpu-api/src/compute.docs.md
 vgpu StorageAccess packages/vgpu-api/src/compute.docs.md
+vgpu clock packages/vgpu-api/src/clock.docs.md
+vgpu Clock packages/vgpu-api/src/clock.docs.md
 vgpu Timer packages/vgpu-api/src/timer.docs.md
 vgpu TimerSpan packages/vgpu-api/src/timer.docs.md
 vgpu Uniform packages/vgpu-api/src/core/uniform.docs.md

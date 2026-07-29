@@ -2,7 +2,7 @@
 
 ---
 title: Frames
-summary: gpu.frame() encodes your passes and submits once; gpu.frame.loop() drives animation.
+summary: frame(gpu, cb) encodes your passes and submits once; frameLoop(gpu, cb) drives animation.
 relatedSymbols:
   - Frame
   - FrameRunner
@@ -23,15 +23,15 @@ A frame is one unit of GPU work. Inside it you open passes, each drawing into a 
 
 ## Render a single frame
 
-[`gpu.frame()`](/reference/vgpu/frame#framerunner) runs synchronously and renders immediately — every pass inside is encoded into one command encoder and submitted once. That single submit is what the frame is for:
+[`frame(gpu)`](/reference/vgpu/frame#framerunner) runs synchronously and renders immediately — every pass inside is encoded into one command encoder and submitted once. That single submit is what the frame is for:
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, frame, sampler, surface, target } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const pulseEffect = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const pulseEffect = effect(gpu, `
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -39,7 +39,7 @@ const pulseEffect = gpu.effect(`
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
 `, { set: { params: { time: 0 } } });
-const postEffect = gpu.effect(`
+const postEffect = effect(gpu, `
   @group(0) @binding(0) var src: texture_2d<f32>;
   @group(0) @binding(1) var samp: sampler;
 
@@ -50,35 +50,35 @@ const postEffect = gpu.effect(`
 `);
 
 // ---cut---
-const sceneTarget = gpu.target({ size: [canvasTarget.size[0], canvasTarget.size[1]] });
+const sceneTarget = target(gpu, { size: [canvasTarget.size[0], canvasTarget.size[1]] });
 postEffect.set({
   src: sceneTarget,
-  samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
+  samp: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
 });
 
-gpu.frame((frame) => {
-  frame.pass(sceneTarget, pulseEffect);
-  frame.pass(canvasTarget, postEffect);
+frame(gpu, (currentFrame) => {
+  currentFrame.pass(sceneTarget, pulseEffect);
+  currentFrame.pass(canvasTarget, postEffect);
 }); // two passes, one encoder, one submit
 ```
 
-One-shot draws like `pulseEffect.draw(canvasTarget)` are the simple default for a single pass. Multi-pass hot paths should use `gpu.frame()` to batch passes into one command encoder and one submit. One-shot draws never join a surrounding frame; inside `gpu.frame()`, always go through `frame.pass()`.
+One-shot draws like `pulseEffect.draw(canvasTarget)` are the simple default for a single pass. Multi-pass hot paths should use `frame(gpu)` to batch passes into one command encoder and one submit. One-shot draws never join a surrounding frame; inside `frame(gpu)`, always go through `frame.pass()`.
 
-> Warning: one-shot `draw()` calls do not join a surrounding frame — inside a frame callback they submit on their own immediately. Inside `gpu.frame()`, always draw through `frame.pass()`.
+> Warning: one-shot `draw()` calls do not join a surrounding frame — inside a frame callback they submit on their own immediately. Inside `frame(gpu)`, always draw through `frame.pass()`.
 
-> Warning: Do not call `gpu.frame()` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
+> Warning: Do not call `frame(gpu)` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
 
 ## Render loops
 
-For animation, use [`gpu.frame.loop()`](/reference/vgpu/frame#framerunner) — it runs your frame every tick:
+For animation, use [`frameLoop(gpu)`](/reference/vgpu/frame#framerunner) — it runs your frame every tick:
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const pulseEffect = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const pulseEffect = effect(gpu, `
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -88,25 +88,26 @@ const pulseEffect = gpu.effect(`
 `, { set: { params: { time: 0 } } });
 
 // ---cut---
-const handle = gpu.frame.loop((frame) => {
-  pulseEffect.set({ params: { time: gpu.time } }); // update uniforms every tick
+const time = clock(gpu);
+const handle = frameLoop(gpu, (frame) => {
+  pulseEffect.set({ params: { time: time.time } }); // update uniforms every tick
   frame.pass(canvasTarget, pulseEffect);
 }, { fps: 30 });
 
 handle.stop(); // call it when your component unmounts
 ```
 
-The loop advances `gpu.time`, `gpu.deltaTime`, and `gpu.frameCount`, and runs surface auto-resize before each tick. The optional `fps` throttles it.
+The loop advances the frame clock — `clock(gpu).time`, `deltaTime` and `frameCount` — and runs surface auto-resize before each tick. The optional `fps` throttles it.
 
 This is what the same loop looks like by hand with `requestAnimationFrame`:
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const pulseEffect = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const pulseEffect = effect(gpu, `
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -124,6 +125,6 @@ function tick() {
 requestAnimationFrame(tick);
 ```
 
-Both work. `gpu.frame.loop()` is the same loop with the clock, throttling, and resize handling done for you.
+Both work. `frameLoop(gpu)` is the same loop with the clock, throttling, and resize handling done for you.
 
 See it live: the [fluid example](/examples/fluid) runs a compute-driven simulation with exactly this frame loop shape.

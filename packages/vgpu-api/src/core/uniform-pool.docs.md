@@ -81,12 +81,12 @@ declare class UniformPool {
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, clock, draw, frame, target } from "vgpu/mock";
 import { UniformPool, type UniformLayout } from "vgpu/core";
 
 const gpu = await init();
-const target = gpu.target({ size: [32, 32] });
-const draw = gpu.draw({ shader: `
+const colorTarget = target(gpu, { size: [32, 32] });
+const drawable = draw(gpu, { shader: `
   struct Object { model: mat4x4f }
   @group(0) @binding(0) var<uniform> object: Object;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -99,19 +99,19 @@ const draw = gpu.draw({ shader: `
 type ObjectUniforms = { model: Float32Array };
 const objectLayout: UniformLayout<ObjectUniforms> = {
   size: 64,
-  bindGroupLayout: draw.layout(0, { dynamicOffsets: true }),
+  bindGroupLayout: drawable.layout(0, { dynamicOffsets: true }),
   encode(value, dst, byteOffset) {
     new Float32Array(dst, byteOffset, 16).set(value.model);
   },
 };
 const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
 const slot = pool.alloc(objectLayout);
-draw.group(0, slot.bindGroup);
+drawable.group(0, slot.bindGroup);
 
-pool.beginFrame(gpu.frameCount);
+pool.beginFrame(clock(gpu).frameCount);
 const offset = slot.push({ model: new Float32Array(16) });
 pool.endFrame();
-gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw, { offsets: { 0: [offset] } })));
+frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(drawable, { offsets: { 0: [offset] } })));
 ```
 
 ```ts

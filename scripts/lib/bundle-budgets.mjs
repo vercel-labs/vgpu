@@ -4,9 +4,6 @@
 /** Budgets are always multiples of this many bytes. */
 export const BUDGET_STEP = 512;
 
-/** Minimum guaranteed headroom between a measured size and its budget. */
-export const MIN_HEADROOM = 512;
-
 /** Default growth threshold for `tooling` budgets: 5% over budget still passes (with a warning). */
 export const DEFAULT_GROWTH_THRESHOLD = 0.05;
 
@@ -24,12 +21,11 @@ export const EXPORT_NOTE_FIELD = "vgpuExportBundleBudgetNote";
 export const PACKAGE_NOTE_FIELD = "vgpuBundleBudgetNote";
 
 /**
- * Convention: the smallest multiple of 512 that sits at least 512 B above the measured size, so
- * headroom is never an accident of rounding (see issue #200).
+ * Convention: the smallest 512 B multiple strictly greater than the measured size.
  */
 export function nextBudgetBytes(measuredBytes) {
   if (!Number.isFinite(measuredBytes) || measuredBytes < 0) throw new Error(`cannot derive a budget from ${measuredBytes}`);
-  return Math.ceil((measuredBytes + MIN_HEADROOM) / BUDGET_STEP) * BUDGET_STEP;
+  return (Math.floor(measuredBytes / BUDGET_STEP) + 1) * BUDGET_STEP;
 }
 
 /** Soft ceiling for `tooling` budgets: growth up to this size warns instead of failing. */
@@ -118,7 +114,7 @@ export function formatFailure({ label, field, manifestPath, verdict }) {
   } else {
     lines.push(`  audience: client (hard gate) -> browser bytes, ${verdict.overBudgetBytes} B over budget; prefer shrinking the entry over raising the budget`);
   }
-  lines.push(`  fix: if the growth is intentional run \`pnpm bundle-check --update\` to re-baseline (would write ${verdict.suggestedBudgetBytes} B: next ${BUDGET_STEP} B multiple at least ${MIN_HEADROOM} B above measured)`);
+  lines.push(`  fix: if the growth is intentional run \`pnpm bundle-check --update\` to re-baseline (would write ${verdict.suggestedBudgetBytes} B: next ${BUDGET_STEP} B multiple strictly above measured)`);
   return lines.join("\n");
 }
 
@@ -130,7 +126,7 @@ export function exportLabel(pkgName, subpath) {
   return `${pkgName}${subpath === "." ? "" : subpath.slice(1)}`;
 }
 
-export const BUDGET_NOTE = `Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple at least 512 B above the measured size, so headroom is never a rounding accident. Regenerate with \`pnpm bundle-check --update\`. ${PACKAGE_AUDIENCE_FIELD}/${EXPORT_AUDIENCE_FIELD} select the gate: "client" entries ship to browsers and fail on any byte over budget; "tooling" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes ${THRESHOLD_FIELD} (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.`;
+export const BUDGET_NOTE = `Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with \`pnpm bundle-check --update\`. ${PACKAGE_AUDIENCE_FIELD}/${EXPORT_AUDIENCE_FIELD} select the gate: "client" entries ship to browsers and fail on any byte over budget; "tooling" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes ${THRESHOLD_FIELD} (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.`;
 
 /**
  * Tarball measurement (issue #200 C): count published dist bytes only. Co-located `*.docs.md`
@@ -299,4 +295,49 @@ function readField(header, start, length) {
   const raw = header.subarray(start, start + length);
   const end = raw.indexOf(0);
   return raw.subarray(0, end === -1 ? raw.length : end).toString("utf8");
+}
+
+/**
+ * Structural exclusions for consumer-experience bundles (T202-06). The checker receives esbuild's
+ * metafile input paths and reports the exact retained modules rather than relying on gzip size as
+ * a proxy for tree-shaking. Paths may point at either src or dist and are normalized to `/` first.
+ */
+const EXPERIENCE_EXCLUSIONS = {
+  "effect-only": [
+    ["scene primitive mesh", /(?:^|\/)mesh-[^/]+(?:\.[^/]+)?$/],
+    ["timer", /(?:^|\/)timer(?:\.[^/]+)?$/],
+    ["visibility", /(?:^|\/)visibility(?:\.[^/]+)?$/],
+    ["query ring", /(?:^|\/)query-ring(?:\.[^/]+)?$/],
+    ["compute", /(?:^|\/)compute(?:\.[^/]+)?$/],
+    ["bundle", /(?:^|\/)bundle(?:\.[^/]+)?$/],
+    ["uniforms", /(?:^|\/)uniforms(?:\.[^/]+)?$/],
+    ["storage", /(?:^|\/)storage(?:\.[^/]+)?$/],
+    ["geometry descriptor", /(?:^|\/)geometry-descriptor(?:\.[^/]+)?$/],
+  ],
+  "triangle-low-level": [
+    ["scene primitive mesh", /(?:^|\/)mesh-[^/]+(?:\.[^/]+)?$/],
+  ],
+  // A recipe may retain its own generator and shared cache, but must not pull in the other 14.
+  "draw-recipe-box": [
+    ["non-box scene primitive mesh", /(?:^|\/)mesh-(?:capsule|cone|cylinder|disk|dodecahedron|fullscreen-quad|icosahedron|icosphere|octahedron|plane|ring|sphere|tetrahedron|torus)(?:\.[^/]+)?$/],
+  ],
+};
+
+/**
+ * Inputs actually retained in an esbuild output. `metafile.inputs` alone lists every scanned
+ * module, including dead branches of a barrel, so it cannot support tree-shaking assertions.
+ */
+export function retainedMetafileInputs(output) {
+  return Object.entries(output.inputs ?? {})
+    .filter(([, details]) => details.bytesInOutput > 0)
+    .map(([input]) => input);
+}
+
+/** Returns retained forbidden modules as `{ category, input }`, suitable for CI diagnostics. */
+export function prohibitedExperienceInputs(experience, inputs) {
+  const exclusions = EXPERIENCE_EXCLUSIONS[experience] ?? [];
+  return inputs.flatMap((input) => {
+    const normalized = input.replaceAll("\\", "/");
+    return exclusions.filter(([, pattern]) => pattern.test(normalized)).map(([category]) => ({ category, input: normalized }));
+  });
 }

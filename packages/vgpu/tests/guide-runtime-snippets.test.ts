@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { init } from "vgpu/mock";
+import { init, clock, effect, frame, sampler, surface, target } from "vgpu/mock";
 
 const root = resolve(import.meta.dirname, "../../..");
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -13,56 +13,57 @@ test("getting-started TypeScript fences execute against vgpu/mock", async () => 
   expect(blocks.length).toBeGreaterThan(0);
   for (const block of blocks) {
     const executable = block
-      .replace(/^import \{ init \} from ["']vgpu(?:\/node)?["'];?\n/mu, "")
+      .replace(/^import \{[^}]*\} from ["']vgpu(?:\/node)?["'];?\n/mu, "")
       .replace(/const canvas = document\.querySelector\(["']canvas["']\)!;/u, "const canvas = createMockCanvas();")
-      .replace(/gpu\.frame\.loop\(/gu, "gpu.frame(");
+      // The mock has no animation frames: run the loop body once, as a plain frame.
+      .replace(/frameLoop\(gpu, /gu, "frame(gpu, ");
 
-    await new AsyncFunction("init", "createMockCanvas", `${executable}\ngpu.dispose();`)(init, createMockCanvas);
+    await new AsyncFunction("init", "createMockCanvas", "surface", "effect", "frame", "clock", `${executable}\ngpu.dispose();`)(init, createMockCanvas, surface, effect, frame, clock);
   }
 });
 
 test("corrected playbook and post-processing patterns run against vgpu/mock", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [64, 64] });
-  const output = gpu.target({ size: [64, 64] });
-  const wave = gpu.effect(`
+  const colorTarget = target(gpu, { size: [64, 64] });
+  const output = target(gpu, { size: [64, 64] });
+  const wave = effect(gpu, `
     struct Params { time: f32, speed: f32 }
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn fs_main() -> @location(0) vec4f {
       return vec4f(params.time * 0.0, params.speed * 0.0, 0.0, 1.0);
     }
   `, { set: { params: { time: 0, speed: 2 } } });
-  const post = gpu.effect(`
+  const post = effect(gpu, `
     @group(0) @binding(0) var src: texture_2d<f32>;
     @group(0) @binding(1) var samp: sampler;
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       return textureSampleLevel(src, samp, uv, 0.0);
     }
   `, { set: {
-    src: target,
-    samp: gpu.sampler({ minFilter: "linear", magFilter: "linear" }),
+    src: colorTarget,
+    samp: sampler(gpu, { minFilter: "linear", magFilter: "linear" }),
   } });
 
-  wave.set({ params: { time: gpu.time } });
-  gpu.frame((frame) => {
-    frame.pass(target, wave);
-    frame.pass(output, post);
+  wave.set({ params: { time: clock(gpu).time } });
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass(colorTarget, wave);
+    currentFrame.pass(output, post);
   });
 
-  const surface = gpu.surface(createMockCanvas());
-  const bloom = gpu.target({ size: [32, 32] });
-  const bright = gpu.effect(`
+  const canvasSurface = surface(gpu, createMockCanvas());
+  const bloom = target(gpu, { size: [32, 32] });
+  const bright = effect(gpu, `
     struct Params { resolution: vec2f }
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn fs_main() -> @location(0) vec4f {
       return vec4f(params.resolution * 0.0, 0.0, 1.0);
     }
   `, { set: { params: { resolution: bloom.size } } });
-  surface.onResize(({ width, height }) => {
+  canvasSurface.onResize(({ width, height }) => {
     bloom.resize([width / 2, height / 2]);
     bright.set({ params: { resolution: bloom.size } });
   });
-  gpu.frame((frame) => frame.pass(bloom, bright));
+  frame(gpu, (currentFrame) => currentFrame.pass(bloom, bright));
   gpu.dispose();
 });
 

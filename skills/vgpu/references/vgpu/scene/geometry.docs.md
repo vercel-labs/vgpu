@@ -2,7 +2,7 @@
 
 # box
 
-Creates a pure cube descriptor for `gpu.geometry()`. Descriptors are device-agnostic, so you can serialize or clone them freely and upload later.
+Creates a pure cube descriptor for `geometry(gpu)`. Descriptors are device-agnostic, so you can serialize or clone them freely and upload later.
 
 ## Import
 
@@ -38,7 +38,7 @@ console.log(tallCube.kind); // "box"
 
 ## Notes
 
-- Descriptors contain zero GPU state; call `gpu.geometry(descriptor)` per device.
+- Descriptors contain zero GPU state; call `geometry(gpu, descriptor)` per device.
 - **See also:** `BoxOptions`, `SceneGeometryOfKind`.
 
 ---
@@ -113,7 +113,7 @@ declare function sphere(options?: import("vgpu/scene").SphereOptions): import("v
 
 **Returns:** `SceneGeometryOfKind<"sphere">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(sphere(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, segment counts drop below limits, or `(widthSegments + 1) * (heightSegments + 1)` exceeds the uint16 vertex cap (65 535).
+**Throws:** None while creating the descriptor. `geometry(gpu, sphere(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, segment counts drop below limits, or `(widthSegments + 1) * (heightSegments + 1)` exceeds the uint16 vertex cap (65 535).
 
 ## Examples
 
@@ -206,7 +206,7 @@ declare function plane(options?: import("vgpu/scene").PlaneOptions): import("vgp
 
 **Returns:** `SceneGeometryOfKind<"plane">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(plane(...))` throws `VGPU-CORE-INVALID-USAGE` if width/height `<= 0`, segment counts `< 1`, or tessellation exceeds 65 535 vertices.
+**Throws:** None while creating the descriptor. `geometry(gpu, plane(...))` throws `VGPU-CORE-INVALID-USAGE` if width/height `<= 0`, segment counts `< 1`, or tessellation exceeds 65 535 vertices.
 
 ## Examples
 
@@ -304,7 +304,7 @@ declare function torus(options?: import("vgpu/scene").TorusOptions): import("vgp
 
 **Returns:** `SceneGeometryOfKind<"torus">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(torus(...))` throws `VGPU-CORE-INVALID-USAGE` if radii are invalid, segment counts fall below limits, `arc <= 0`, or vertex counts exceed 65 535.
+**Throws:** None while creating the descriptor. `geometry(gpu, torus(...))` throws `VGPU-CORE-INVALID-USAGE` if radii are invalid, segment counts fall below limits, `arc <= 0`, or vertex counts exceed 65 535.
 
 ## Examples
 
@@ -376,7 +376,7 @@ const tight: TorusOptions = { radius: 0.75, tube: 0.3 };
 
 # fullscreenQuad
 
-Descriptor for a clip-space fullscreen quad (two triangles, six vertices). Use it for fragment-only passes recorded via `gpu.draw()`.
+Descriptor for a clip-space fullscreen quad (two triangles, six vertices). Use it for fragment-only passes recorded via `draw(gpu)`.
 
 ## Import
 
@@ -483,7 +483,7 @@ declare function capsule(options?: import("vgpu/scene").CapsuleOptions): import(
 
 **Returns:** `SceneGeometryOfKind<"capsule">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(capsule(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, height `< 0`, segment counts fall below limits, or vertex counts exceed 65 535.
+**Throws:** None while creating the descriptor. `geometry(gpu, capsule(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, height `< 0`, segment counts fall below limits, or vertex counts exceed 65 535.
 
 ## Examples
 
@@ -546,7 +546,7 @@ const short: CapsuleOptions = { height: 0.5 };
 
 ## Notes
 
-- Negative heights are rejected when uploading through `gpu.geometry()`.
+- Negative heights are rejected when uploading through `geometry(gpu)`.
 - **See also:** `capsule`, `SceneGeometry`.
 
 ---
@@ -583,7 +583,7 @@ declare function cone(options?: import("vgpu/scene").ConeOptions): import("vgpu/
 
 **Returns:** `SceneGeometryOfKind<"cone">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(cone(...))` throws `VGPU-CORE-INVALID-USAGE` for invalid radius/height, low segment counts, zero sweep, or vertex counts above 65 535.
+**Throws:** None while creating the descriptor. `geometry(gpu, cone(...))` throws `VGPU-CORE-INVALID-USAGE` for invalid radius/height, low segment counts, zero sweep, or vertex counts above 65 535.
 
 ## Examples
 
@@ -691,7 +691,7 @@ declare function cylinder(options?: import("vgpu/scene").CylinderOptions): impor
 
 **Returns:** `SceneGeometryOfKind<"cylinder">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(cylinder(...))` throws `VGPU-CORE-INVALID-USAGE` if you provide both uniform and explicit radii, resolve radii below zero, keep both radii at zero, use low segment counts, or exceed the vertex limit.
+**Throws:** None while creating the descriptor. `geometry(gpu, cylinder(...))` throws `VGPU-CORE-INVALID-USAGE` if you provide both uniform and explicit radii, resolve radii below zero, keep both radii at zero, use low segment counts, or exceed the vertex limit.
 
 ## Examples
 
@@ -764,7 +764,7 @@ const frustum: CylinderOptions = { radiusTop: 0.25, radiusBottom: 0.6 };
 
 ## Notes
 
-- Validation occurs when `gpu.geometry()` uploads the descriptor.
+- Validation occurs when `geometry(gpu)` uploads the descriptor.
 - **See also:** `cylinder`, `SceneGeometry`.
 
 ---
@@ -797,7 +797,7 @@ declare function disk(options?: import("vgpu/scene").DiskOptions): import("vgpu/
 
 **Returns:** `SceneGeometryOfKind<"disk">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(disk(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, segment counts `< 3`, sweep `<= 0`, or vertex counts exceed the uint16 limit.
+**Throws:** None while creating the descriptor. `geometry(gpu, disk(...))` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`, segment counts `< 3`, sweep `<= 0`, or vertex counts exceed the uint16 limit.
 
 ## Examples
 
@@ -858,7 +858,7 @@ const slice: DiskOptions = { thetaLength: Math.PI };
 
 ## Notes
 
-- Validation occurs when uploading through `gpu.geometry()`.
+- Validation occurs when uploading through `geometry(gpu)`.
 - **See also:** `disk`, `ring`.
 
 ---
@@ -888,7 +888,7 @@ declare function dodecahedron(options?: import("vgpu/scene").PolyhedronOptions):
 
 **Returns:** `SceneGeometryOfKind<"dodecahedron">`.
 
-**Throws:** None while creating the descriptor. Uploading this descriptor with `gpu.geometry(...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
+**Throws:** None while creating the descriptor. Uploading this descriptor with `geometry(gpu, ...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
 
 ## Examples
 
@@ -970,7 +970,7 @@ Same as `dodecahedron`; omit or override `radius`.
 
 **Returns:** `SceneGeometryOfKind<"icosahedron">`.
 
-**Throws:** None while creating the descriptor. Uploading this descriptor with `gpu.geometry(...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
+**Throws:** None while creating the descriptor. Uploading this descriptor with `geometry(gpu, ...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
 
 ## Examples
 
@@ -1014,7 +1014,7 @@ declare function icosphere(options?: import("vgpu/scene").IcosphereOptions): imp
 
 **Returns:** `SceneGeometryOfKind<"icosphere">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(icosphere(...))` throws `VGPU-CORE-INVALID-USAGE` if radius/subdivision constraints are violated or vertex counts exceed 65 535.
+**Throws:** None while creating the descriptor. `geometry(gpu, icosphere(...))` throws `VGPU-CORE-INVALID-USAGE` if radius/subdivision constraints are violated or vertex counts exceed 65 535.
 
 ## Examples
 
@@ -1100,7 +1100,7 @@ Same as `dodecahedron`.
 
 **Returns:** `SceneGeometryOfKind<"octahedron">`.
 
-**Throws:** None while creating the descriptor. Uploading this descriptor with `gpu.geometry(...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
+**Throws:** None while creating the descriptor. Uploading this descriptor with `geometry(gpu, ...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
 
 ## Examples
 
@@ -1146,7 +1146,7 @@ declare function ring(options?: import("vgpu/scene").RingOptions): import("vgpu/
 
 **Returns:** `SceneGeometryOfKind<"ring">`.
 
-**Throws:** None while creating the descriptor. `gpu.geometry(ring(...))` throws `VGPU-CORE-INVALID-USAGE` if the radii relationship is invalid, segment counts `< 3`, or vertex counts exceed 65 535.
+**Throws:** None while creating the descriptor. `geometry(gpu, ring(...))` throws `VGPU-CORE-INVALID-USAGE` if the radii relationship is invalid, segment counts `< 3`, or vertex counts exceed 65 535.
 
 ## Examples
 
@@ -1236,7 +1236,7 @@ Same as `dodecahedron`.
 
 **Returns:** `SceneGeometryOfKind<"tetrahedron">`.
 
-**Throws:** None while creating the descriptor. Uploading this descriptor with `gpu.geometry(...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
+**Throws:** None while creating the descriptor. Uploading this descriptor with `geometry(gpu, ...)` throws `VGPU-CORE-INVALID-USAGE` if radius `<= 0`.
 
 ## Examples
 

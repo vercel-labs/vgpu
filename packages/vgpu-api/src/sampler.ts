@@ -1,4 +1,18 @@
 import type { Device } from "@vgpu/core";
+import { liveKernel } from "./live-kernel.ts";
+import type { Gpu } from "./kernel.ts";
+import { renderService } from "./render-service.ts";
+
+/**
+ * Cached `GPUSampler` for this gpu: identical descriptors return the identical sampler, so bind
+ * groups keyed on resource identity stay stable across frames.
+ *
+ * The cache lives in the gpu's render service — the same one `draw()` and `effect()` use — and is
+ * created on first use, not at `init()`.
+ */
+export function sampler(gpu: Gpu, desc?: GPUSamplerDescriptor): GPUSampler {
+  return renderService(liveKernel(gpu, "sampler")).sampler(desc);
+}
 
 export interface SamplerCache {
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;

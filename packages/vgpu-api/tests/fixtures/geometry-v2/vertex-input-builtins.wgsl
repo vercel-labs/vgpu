@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: @builtin parameters are ignored by name matching.
+// geometry(gpu, ...) v2 fixture: @builtin parameters are ignored by name matching.
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) color: vec4f,

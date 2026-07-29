@@ -11,10 +11,42 @@ import { normalizeConstantsOptions, normalizeSignature, pipelineKeyOf, selectEnt
 import { hasStencilAspect, isTarget } from "./target-utils.ts";
 import { blendConstantInvalidError, blendInvalidError, claimedGroupNativeValidationError, colorsInvalidError, cullInvalidError, depthInvalidError, entryInvalidError, frontFaceInvalidError, indirectInvalidError, meshRangeInvalidError, multisampleInvalidError, stencilInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, unclippedDepthInvalidError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
-import { geometryLayoutResolver, type GeometryLayoutResolvable } from "./scene/geometry-descriptor.ts";
-import { resolveIndirect } from "./storage.ts";
-import type { StorageBuffer } from "./gpu.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
+import { geometryLayoutResolver, type GeometryLayoutResolvable } from "./draw-protocols.ts";
+import { resolveIndirect } from "./indirect.ts";
+import type { StorageBuffer } from "./api-types.ts";
+import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
+import { liveKernel } from "./live-kernel.ts";
+import { renderService } from "./render-service.ts";
+import { toWgsl } from "./shader-source.ts";
+import type { Gpu } from "./kernel.ts";
+
+/**
+ * Renderable shader unit of this gpu: a WGSL shader plus its pipeline state, bindings and
+ * optional geometry. Encode it with `pass.draw(triangle)` or call `triangle.draw(target)`.
+ *
+ * Pipelines, bind groups, shader modules and layouts come from the gpu's single render service, so
+ * two draws with the same shader and target signature share one compiled pipeline — and an
+ * `effect()` shares that same cache set. Nothing here exists until the first render call: `init()`
+ * creates no cache.
+ */
+export function draw(gpu: Gpu, opts: DrawOptions): Draw {
+  const kernel = liveKernel(gpu, "draw");
+  const render = renderService(kernel);
+  const shader = toWgsl(opts.shader);
+  return new InternalDraw(
+    kernel.device,
+    shader,
+    { ...opts, shader },
+    render.binds,
+    undefined,
+    render.pipelines,
+    render.shaderModules,
+    render.pipelineLayouts,
+    (error) => kernel.reportError(error),
+    (promise) => { void kernel.trackDelivery(promise); },
+  );
+}
 
 export type BlendPreset = "alpha" | "additive" | "premultiplied";
 
@@ -225,9 +257,9 @@ export interface Draw {
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
   draw(target?: Target | DrawCallOptions): void;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
   compile(target?: CompileTarget): Promise<this>;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside gpu.frame(). */
+  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
   compileSync(target?: CompileTarget): this;
 }
 
@@ -255,8 +287,8 @@ export class InternalDraw implements Draw {
     // Entry selection runs before everything derived from the selected entries — binding visibility,
     // storage-stage limits, bind group layouts, and vertex input layouts all reflect the chosen variant.
     const entryNames = normalizeEntryOptions(this.label, opts.entry);
-    const vertexEntry = selectEntryPoint(this.label, reflection.entryPoints, "vertex", entryNames.vertex, "gpu.draw");
-    const fragmentEntry = selectEntryPoint(this.label, reflection.entryPoints, "fragment", entryNames.fragment, "gpu.draw");
+    const vertexEntry = selectEntryPoint(this.label, reflection.entryPoints, "vertex", entryNames.vertex, "draw");
+    const fragmentEntry = selectEntryPoint(this.label, reflection.entryPoints, "fragment", entryNames.fragment, "draw");
     const entryKey = entryKeyFor(reflection, vertexEntry, fragmentEntry);
     const selectedEntries = [vertexEntry, fragmentEntry].filter((entry): entry is EntryPointInfo => !!entry);
     const visibility = visibilityForEntries(reflection.bindings, selectedEntries);
@@ -274,7 +306,7 @@ export class InternalDraw implements Draw {
     const depthOptions = normalizeDepthOptions(device, this.label, opts);
     const stencilOptions = normalizeStencilOptions(this.label, opts);
     const multisampleOptions = normalizeMultisampleOptions(this.label, opts);
-    const constantsOptions = normalizeConstantsOptions(this.label, opts.constants, reflection.overrides, "gpu.draw");
+    const constantsOptions = normalizeConstantsOptions(this.label, opts.constants, reflection.overrides, "draw");
     const setCore = createSetCore({
       device,
       label: this.label,
@@ -298,6 +330,17 @@ export class InternalDraw implements Draw {
     return undefined;
   }
   get targets(): readonly Target[] | undefined { return drawState(this).opts.targets; }
+
+  /**
+   * Frame drawable protocol: a `Frame` encodes through this instead of importing draw.ts, so a
+   * program that never draws never pulls this module. The instance is its own protocol object —
+   * `encode`, `label` and the depth/stencil metadata below are exactly what a pass needs.
+   */
+  get [FRAME_DRAWABLE](): FrameDrawableProtocol { return this; }
+  /** @internal Frame drawable protocol; see {@link drawWritesDepth}. */
+  writesDepth(): boolean { return drawWritesDepth(this); }
+  /** @internal Frame drawable protocol; see {@link drawStencilWritingOps}. */
+  stencilWritingOps(): readonly string[] { return drawStencilWritingOps(this); }
 
   set(values: SetBag): this {
     const state = drawState(this);
@@ -1018,10 +1061,10 @@ export function drawBindingState(draw: Draw, name: string): BindingState | undef
 
 export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
 
-/** Render bundle encoders cannot set the pass blend constant; gpu.bundle uses this to reject such draws at recording. */
+/** Render bundle encoders cannot set the pass blend constant; bundle uses this to reject such draws at recording. */
 export function drawUsesBlendConstant(draw: Draw): boolean { return drawState(draw).blendConstant !== undefined; }
 
-/** Render bundle encoders cannot set the pass stencil reference; gpu.bundle uses this to reject such draws at recording. */
+/** Render bundle encoders cannot set the pass stencil reference; bundle uses this to reject such draws at recording. */
 export function drawUsesStencilReference(draw: Draw): boolean { return drawState(draw).stencilRef !== undefined; }
 
 /**

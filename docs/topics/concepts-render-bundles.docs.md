@@ -1,6 +1,6 @@
 ---
 title: Render bundles
-summary: gpu.bundle() records draws once; replaying them each frame skips re-encoding.
+summary: bundle(gpu, opts, record) records draws once; replaying them each frame skips re-encoding.
 relatedSymbols:
   - Bundle
   - BundleOptions
@@ -18,15 +18,15 @@ A render loop re-encodes every pipeline, bind group, and draw on every tick — 
 
 ## Record once, replay every frame
 
-[`gpu.bundle()`](/reference/vgpu/bundle#bundle) records draws against a target and returns a [`Bundle`](/reference/vgpu/bundle#bundle). Replay it inside a pass with `pass.bundles()`:
+[`bundle(gpu)`](/reference/vgpu/bundle#bundle) records draws against a target and returns a [`Bundle`](/reference/vgpu/bundle#bundle). Replay it inside a pass with `pass.bundles()`:
 
 ```ts
-import { init } from "vgpu";
+import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const ocean = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const ocean = effect(gpu, `
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -34,20 +34,21 @@ const ocean = gpu.effect(`
     return vec4f(0.1, 0.3, sin(params.time + uv.y) * 0.2 + 0.6, 1.0);
   }
 `, { set: { params: { time: 0 } } });
-const boat = gpu.effect(`
+const boat = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(0.6, 0.4, 0.2, step(distance(uv, vec2f(0.5, 0.6)), 0.1));
   }
 `);
 
 // ---cut---
-const scene = gpu.bundle({ target: canvasTarget }, (b) => {
+const scene = bundle(gpu, { target: canvasTarget }, (b) => {
   b.draw(ocean);
   b.draw(boat);
 }); // encoded once, right here
 
-gpu.frame.loop((frame) => {
-  ocean.set({ params: { time: gpu.time } }); // uniforms still animate
+const time = clock(gpu);
+frameLoop(gpu, (frame) => {
+  ocean.set({ params: { time: time.time } }); // uniforms still animate
   frame.pass(canvasTarget, (pass) => pass.bundles(scene)); // replay — no re-encoding
 });
 ```
@@ -58,22 +59,22 @@ Record what doesn't change, `set()` what does: the bundle references your buffer
 
 ## Compilation at record time
 
-`gpu.bundle()` encodes right when you call it, so it needs every pipeline immediately: any draw whose pipeline isn't cached yet for the recording signature compiles synchronously, on the spot. That's the one place vgpu still blocks on pipeline creation — and the reason to [pre-warm](/concepts/compilation) before recording. If one of those synchronous creates fails, the error reports through `gpu.onError`, like any lazy compile.
+`bundle(gpu)` encodes right when you call it, so it needs every pipeline immediately: any draw whose pipeline isn't cached yet for the recording signature compiles synchronously, on the spot. That's the one place vgpu still blocks on pipeline creation — and the reason to [pre-warm](/concepts/compilation) before recording. If one of those synchronous creates fails, the error reports through `gpu.onError`, like any lazy compile.
 
 The `target` option also takes a plain signature, so you can pre-warm and record during load, before the real target exists:
 
 ```ts
-import { init } from "vgpu";
+import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const ocean = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const ocean = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(0.1, 0.3, 0.6, 1.0);
   }
 `);
-const boat = gpu.effect(`
+const boat = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(0.6, 0.4, 0.2, 1.0);
   }
@@ -85,12 +86,12 @@ await Promise.all([
   boat.compile({ colors: ['bgra8unorm'] }),
 ]);
 
-const scene = gpu.bundle({ target: { colors: ['bgra8unorm'] } }, (b) => {
+const scene = bundle(gpu, { target: { colors: ['bgra8unorm'] } }, (b) => {
   b.draw(ocean);
   b.draw(boat);
 }); // everything was pre-warmed — recording creates nothing
 
-gpu.frame.loop((frame) => {
+frameLoop(gpu, (frame) => {
   frame.pass(canvasTarget, (pass) => pass.bundles(scene));
 });
 ```
@@ -102,17 +103,17 @@ Two caveats. Bindings must be `set()` before recording — the signature relaxes
 A pass can replay bundles and encode fresh draws side by side:
 
 ```ts
-import { init } from "vgpu";
+import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const ocean = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const ocean = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(0.1, 0.3, 0.6, 1.0);
   }
 `);
-const cursor = gpu.effect(`
+const cursor = effect(gpu, `
   struct Params { pos: vec2f }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -120,10 +121,10 @@ const cursor = gpu.effect(`
     return vec4f(1.0, 1.0, 1.0, step(distance(uv, params.pos), 0.02));
   }
 `, { set: { params: { pos: [0.5, 0.5] } } });
-const scene = gpu.bundle({ target: canvasTarget }, (b) => b.draw(ocean));
+const scene = bundle(gpu, { target: canvasTarget }, (b) => b.draw(ocean));
 
 // ---cut---
-gpu.frame.loop((frame) => {
+frameLoop(gpu, (frame) => {
   frame.pass(canvasTarget, (pass) => {
     pass.bundles(scene); // the static part, replayed
     pass.draw(cursor); // the dynamic part, encoded fresh on top
@@ -138,12 +139,12 @@ Some draws must stay on the dynamic side. Draws that set a `blendConstant` or a 
 A bundle matches replay targets by render signature, not size, so drawing onto a resized surface keeps working:
 
 ```ts
-import { init } from "vgpu";
+import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasTarget = gpu.surface(canvas);
-const ocean = gpu.effect(`
+const canvasTarget = surface(gpu, canvas);
+const ocean = effect(gpu, `
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(0.1, 0.3, 0.6, 1.0);
   }
@@ -151,19 +152,19 @@ const ocean = gpu.effect(`
 
 // ---cut---
 function recordScene() {
-  return gpu.bundle({ target: canvasTarget }, (b) => b.draw(ocean));
+  return bundle(gpu, { target: canvasTarget }, (b) => b.draw(ocean));
 }
 
 let scene = recordScene();
 canvasTarget.onResize(() => { scene = recordScene(); }); // needed only if the bundle samples resized resources
 
-gpu.frame.loop((frame) => {
+frameLoop(gpu, (frame) => {
   frame.pass(canvasTarget, (pass) => pass.bundles(scene));
 });
 ```
 
 ## When not to bother
 
-Recording is not free, and a couple of draws per frame cost almost nothing to encode. Bundles pay off with many draws in a hot loop. The full ladder: `effect.draw(target)` for a single pass, `gpu.frame()` to batch passes into one submit, `gpu.bundle()` to skip re-encoding what never changes.
+Recording is not free, and a couple of draws per frame cost almost nothing to encode. Bundles pay off with many draws in a hot loop. The full ladder: `effect.draw(target)` for a single pass, `frame(gpu)` to batch passes into one submit, `bundle(gpu)` to skip re-encoding what never changes.
 
 See it live: the [batch rendering example](/examples/batch-rendering) packs four primitive types into one buffer and replays them from a single bundle.

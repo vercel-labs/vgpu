@@ -2,7 +2,7 @@
 
 # Bundle
 
-Main API (`vgpu`) render bundle recorded by `gpu.bundle({ target }, cb)`. Bundles freeze commands, attachment formats, sample count, and bind-group identities for static work; `FramePass.bundles()` checks signature and resource staleness (`VGPU-R3-BUNDLE-STALE`) when replaying.
+Main API (`vgpu`) render bundle recorded by `bundle(gpu, { target }, cb)`. Bundles freeze commands, attachment formats, sample count, and bind-group identities for static work; `FramePass.bundles()` checks signature and resource staleness (`VGPU-R3-BUNDLE-STALE`) when replaying.
 
 ## Import
 
@@ -34,26 +34,26 @@ interface Bundle {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| gpu.bundle.opts | `BundleOptions` | ✔ | — | Recording options. |
+| bundle.opts | `BundleOptions` | ✔ | — | Recording options. |
 | opts.target | `Target \| TargetSignature` | ✔ | — | Formats, depth format, and sample count are recorded. Signature form is `{ colors: [...], depth?, sampleCount? }`; `colors` is required. |
 | opts.label | `string` | ✖ | `` `bundle${n}` `` | Bundle id and GPU label. Auto id increments from `bundle1`. |
-| gpu.bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Called immediately to encode commands. |
+| bundle.cb | `(recorder: BundleRecorder) => void` | ✔ | — | Called immediately to encode commands. |
 | recorder.draw.drawable | `Draw \| Effect` | ✔ | — | Draw or fullscreen effect to encode into the bundle. |
 | recorder.draw.opts | `DrawCallOptions` | ✖ | `{}` | Counts and offsets captured in the recorded commands. `indirect` records fine — render bundle encoders support `drawIndirect`/`drawIndexedIndirect` — and the GPU re-reads the argument buffer on every replay. |
-| framePass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Replayed bundles; must be created by `gpu.bundle`. |
+| framePass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Replayed bundles; must be created by `bundle()`. |
 
-**Returns:** `gpu.bundle()` returns `Bundle` with `id` and native `gpu` render bundle; `BundleRecorder.draw()` returns `void`; `FramePass.bundles()` returns `void`.
+**Returns:** `bundle(gpu)` returns `Bundle` with `id` and native `gpu` render bundle; `BundleRecorder.draw()` returns `void`; `FramePass.bundles()` returns `void`.
 
-**Throws:** `VGPU-R3-BUNDLE-STALE` when replay target formats/depth/sample count differ from the recorded signature or when a recorded draw's bound resource identity / claimed group changed after recording; `VGPU-R3-BUNDLE-INVALID` when replay receives an object not created by `gpu.bundle`; `VGPU-BUNDLE-BLEND-CONSTANT` when recording a draw with `blendConstant` (the blend constant is render-pass state that render bundle encoders cannot set; encode such draws in a frame pass instead); `VGPU-BUNDLE-STENCIL-REF` when recording a draw whose `stencil` has `ref` (the stencil reference is likewise render-pass state; stencil state without `ref` records fine); `VGPU-SURFACE-DISPOSED` when replaying against a disposed surface; draw binding errors such as `VGPU-R1-BINDING-NEVER-SET` can throw during recording. Signature mismatch messages print both recorded and actual signature keys.
+**Throws:** `VGPU-R3-BUNDLE-STALE` when replay target formats/depth/sample count differ from the recorded signature or when a recorded draw's bound resource identity / claimed group changed after recording; `VGPU-R3-BUNDLE-INVALID` when replay receives an object not created by `bundle()`; `VGPU-BUNDLE-BLEND-CONSTANT` when recording a draw with `blendConstant` (the blend constant is render-pass state that render bundle encoders cannot set; encode such draws in a frame pass instead); `VGPU-BUNDLE-STENCIL-REF` when recording a draw whose `stencil` has `ref` (the stencil reference is likewise render-pass state; stencil state without `ref` records fine); `VGPU-SURFACE-DISPOSED` when replaying against a disposed surface; draw binding errors such as `VGPU-R1-BINDING-NEVER-SET` can throw during recording. Signature mismatch messages print both recorded and actual signature keys.
 
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, bundle, draw, frame, target } from "vgpu/mock";
 
 const gpu = await init();
-const target = gpu.target({ size: [64, 64] });
-const draw = gpu.draw({ shader: `
+const colorTarget = target(gpu, { size: [64, 64] });
+const drawable = draw(gpu, { shader: `
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
@@ -61,29 +61,29 @@ const draw = gpu.draw({ shader: `
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 1, 0, 1); }
 ` });
 
-const statics = gpu.bundle({ target, label: "static" }, (bundle) => {
-  bundle.draw(draw);
+const statics = bundle(gpu, { target: colorTarget, label: "static" }, (recorded) => {
+  recorded.draw(drawable);
 });
 
-gpu.frame((frame) => {
-  frame.pass({ target }, (pass) => pass.bundles(statics));
+frame(gpu, (currentFrame) => {
+  currentFrame.pass({ target: colorTarget }, (pass) => pass.bundles(statics));
 });
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, bundle, effect, frame, surface } from "vgpu/mock";
 
 const gpu = await init();
-const surface = gpu.surface(mockCanvas());
-const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-let statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
+const canvasSurface = surface(gpu, mockCanvas());
+const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+let statics = bundle(gpu, { target: canvasSurface, label: "surfaceStatics" }, (recorded) => recorded.draw(shader));
 
-surface.onResize(() => {
-  statics = gpu.bundle({ target: surface, label: "surfaceStatics" }, (bundle) => bundle.draw(effect));
+canvasSurface.onResize(() => {
+  statics = bundle(gpu, { target: canvasSurface, label: "surfaceStatics" }, (recorded) => recorded.draw(shader));
 });
 
-gpu.frame((frame) => {
-  frame.pass({ target: surface }, (p) => p.bundles(statics));
+frame(gpu, (currentFrame) => {
+  currentFrame.pass({ target: canvasSurface }, (p) => p.bundles(statics));
 });
 
 function mockCanvas(): HTMLCanvasElement {
@@ -98,24 +98,24 @@ function mockCanvas(): HTMLCanvasElement {
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, bundle, clock, effect, frame, pingPong } from "vgpu/mock";
 
 const gpu = await init();
-const ping = gpu.pingPong(32, 32);
-const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-const even = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
+const ping = pingPong(gpu, 32, 32);
+const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const even = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));
 ping.swap();
-const odd = gpu.bundle({ target: ping.write }, (b) => b.draw(effect));
+const odd = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));
 ping.swap();
 
-gpu.frame((frame) => {
-  frame.pass({ target: ping.write }, (p) => p.bundles(gpu.frameCount % 2 ? odd : even));
+frame(gpu, (currentFrame) => {
+  currentFrame.pass({ target: ping.write }, (p) => p.bundles(clock(gpu).frameCount % 2 ? odd : even));
 });
 ```
 
 ## Signature-arm recording
 
-`gpu.bundle({ target: { colors: ["bgra8unorm"], depth: "depth24plus", sampleCount: 4 } }, cb)` records before a target exists. This relaxes only the replay target: any resources sampled by draws still need to be set before recording. Cold signature recording creates missing pipelines synchronously, which can jank; pre-warm first with `await draw.compile(signature)` or `await effect.compile(signature)`.
+`bundle(gpu, { target: { colors: ["bgra8unorm"], depth: "depth24plus", sampleCount: 4 } }, cb)` records before a target exists. This relaxes only the replay target: any resources sampled by draws still need to be set before recording. Cold signature recording creates missing pipelines synchronously, which can jank; pre-warm first with `await draw.compile(signature)` or `await effect.compile(signature)`.
 
 For future canvas surfaces, use `navigator.gpu.getPreferredCanvasFormat()` when building the signature. A bundle recorded for `bgra8unorm` will not replay on an `rgba8unorm` surface, and the stale error prints both keys.
 

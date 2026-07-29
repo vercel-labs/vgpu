@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, effect, frame, target } from "vgpu/node";
 
 export const SOLID = /* wgsl */ `
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(0.25 + uv.x * 0.5, 0.5, 0.75, 1.0); }
@@ -15,13 +15,13 @@ struct PostParams { texel: vec2f }
 
 export async function runHdrPostExample() {
   const gpu = await init();
-  const scene = gpu.target({ size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
-  const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "output" });
-  const solid = gpu.effect(SOLID, { label: "solid" });
-  const post = gpu.effect(POST, { label: "post" });
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
-    frame.pass({ target: output }, (p) => { post.set({ src: scene.color, texel: scene.texelSize }); p.draw(post); });
+  const scene = target(gpu, { size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
+  const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "output" });
+  const solid = effect(gpu, SOLID, { label: "solid" });
+  const post = effect(gpu, POST, { label: "post" });
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
+    currentFrame.pass({ target: output }, (p) => { post.set({ src: scene.color, texel: scene.texelSize }); p.draw(post); });
   });
   return { gpu, scene, output };
 }

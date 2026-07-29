@@ -4,13 +4,13 @@
 
 This guide is for LLMs and humans writing shaders. Treat these as default shapes, not late-stage optimizations: each **After** snippet is the pattern to copy when the situation matches.
 
-## 1. Bundles / replay (`gpu.bundle` + `p.bundles`)
+## 1. Bundles / replay (`bundle()` + `p.bundles`)
 
 Use when static draws repeat every frame. Bundles freeze commands, bind groups, target formats, sample count, and attachment identity; they do **not** freeze buffer contents.
 
 Before:
 ```text
-gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
+frameLoop(gpu, (f) => f.pass({ target: scene }, (p) => {
   p.draw(floor);
   p.draw(walls);
   p.draw(player);
@@ -18,11 +18,11 @@ gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
 ```
 After:
 ```text
-const staticScene = gpu.bundle({ target: scene }, (b) => {
+const staticScene = bundle(gpu, { target: scene }, (b) => {
   b.draw(floor);
   b.draw(walls);
 });
-gpu.frame.loop((f) => f.pass({ target: scene }, (p) => {
+frameLoop(gpu, (f) => f.pass({ target: scene }, (p) => {
   p.bundles(staticScene);
   p.draw(player);
 }));
@@ -35,14 +35,14 @@ Use before the first visible frame or route transition. This compiles render pip
 
 Before:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
-const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+const scene = target(gpu, { size: [256, 256], format: "rgba16float", depth: true, msaa: true });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
 await cube.compile(scene);
-gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(cube)));
+frame(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
 Default: `await draw.compile(target)` for every target signature a draw will hit before the hitch-sensitive frame. `targets: [target]` remains synchronous creation-time sugar when blocking is acceptable.
 
@@ -73,8 +73,8 @@ const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
 const slot = pool.alloc(objectLayout);
 cube.group(1, slot.bindGroup);
 
-gpu.frame.loop((f) => {
-  pool.beginFrame(gpu.frameCount);
+frameLoop(gpu, (f) => {
+  pool.beginFrame(clock(gpu).frameCount);
   f.pass({ target: scene }, (p) => {
     for (const obj of objects) {
       const offset = slot.push({ model: obj.model });
@@ -92,17 +92,17 @@ Use for animated JS values. The first `set()` latches ownership: plain JS values
 
 Before:
 ```text
-const wave = gpu.effect(WAVE_WGSL, { set: { time: 0, speed: 2 } });
-gpu.frame.loop((frame) => {
-  wave.set({ time: gpu.time, speed: 2 });
+const wave = effect(gpu, WAVE_WGSL, { set: { time: 0, speed: 2 } });
+frameLoop(gpu, (frame) => {
+  wave.set({ time: clock(gpu).time, speed: 2 });
   frame.pass(target, wave);
 });
 ```
 After:
 ```text
-const wave = gpu.effect(WAVE_WGSL, { set: { time: 0, speed: 2 } });
-gpu.frame.loop((frame) => {
-  wave.set({ time: gpu.time });
+const wave = effect(gpu, WAVE_WGSL, { set: { time: 0, speed: 2 } });
+frameLoop(gpu, (frame) => {
+  wave.set({ time: clock(gpu).time });
   frame.pass(target, wave);
 });
 ```
@@ -115,7 +115,7 @@ Use when a heavy pass produces a texture that does not change every frame.
 
 Before:
 ```text
-gpu.frame.loop((f) => {
+frameLoop(gpu, (f) => {
   f.pass({ target: baked }, (p) => p.draw(heavyScene));
   post.set({ src: baked.color, texel: baked.texelSize });
   f.pass({ target: screen }, (p) => p.draw(post));
@@ -123,11 +123,11 @@ gpu.frame.loop((f) => {
 ```
 After:
 ```text
-gpu.frame((f) => f.pass({ target: baked }, (p) => p.draw(heavyScene)));
+frame(gpu, (f) => f.pass({ target: baked }, (p) => p.draw(heavyScene)));
 post.set({ src: baked.color, texel: baked.texelSize });
-gpu.frame.loop((f) => f.pass({ target: screen }, (p) => p.draw(post)));
+frameLoop(gpu, (f) => f.pass({ target: screen }, (p) => p.draw(post)));
 ```
-Default: if an input is static, bake it outside the loop with one `gpu.frame(...)`.
+Default: if an input is static, bake it outside the loop with one `frame(gpu, ...)`.
 
 ## 6. Instancing (`instances`, `vertices`)
 
@@ -142,37 +142,38 @@ for (let i = 0; i < COUNT; i++) {
 ```
 After:
 ```text
-const particles = gpu.draw({ shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
+const particles = draw(gpu, { shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
 await particles.compile(scene);
 particles.set({ particleBuffer });
-gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles)));
+frameLoop(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(particles)));
 ```
 Default: one draw with `instances` beats N draw calls.
 
-## 7. `gpu.uniforms()` shared values
+## 7. `uniforms(gpu)` shared values
 
 Use when many shaders consume the same time, camera, mouse, or exposure values.
 
 Before:
 ```text
-wave.set({ time: gpu.time, mouse });
-blur.set({ time: gpu.time, mouse });
-post.set({ time: gpu.time, mouse });
+const time = clock(gpu);
+wave.set({ time: time.time, mouse });
+blur.set({ time: time.time, mouse });
+post.set({ time: time.time, mouse });
 ```
 After:
 ```text
-const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-const wave = gpu.effect(WAVE_WGSL, { set: { globals } });
-const blur = gpu.effect(BLUR_WGSL, { set: { globals } });
-gpu.frame.loop((frame) => {
-  globals.set({ time: gpu.time, mouse });
+const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
+const wave = effect(gpu, WAVE_WGSL, { set: { globals } });
+const blur = effect(gpu, BLUR_WGSL, { set: { globals } });
+frameLoop(gpu, (frame) => {
+  globals.set({ time: clock(gpu).time, mouse });
   frame.pass(target, (pass) => {
     pass.draw(wave);
     pass.draw(blur);
   });
 });
 ```
-Default: shared values belong in one `gpu.uniforms()` object.
+Default: shared values belong in one `uniforms(gpu)` object.
 
 ## 8. Ping-pong (`pingPong`) without churn + two bundles
 
@@ -180,8 +181,8 @@ Use for iterative effects. Ping-pong keeps two stable identities, so bind-group 
 
 Before:
 ```text
-gpu.frame.loop((f) => {
-  const tmp = gpu.target({ size: [256, 256], format: "rgba16float" });
+frameLoop(gpu, (f) => {
+  const tmp = target(gpu, { size: [256, 256], format: "rgba16float" });
   sim.set({ src: previous.color });
   f.pass({ target: tmp }, (p) => p.draw(sim));
   previous = tmp;
@@ -189,13 +190,13 @@ gpu.frame.loop((f) => {
 ```
 After:
 ```text
-const state = gpu.pingPong(512, 512, { format: "rgba16float" });
-const even = gpu.bundle({ target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
+const state = pingPong(gpu, 512, 512, { format: "rgba16float" });
+const even = bundle(gpu, { target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
 state.swap();
-const odd = gpu.bundle({ target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
+const odd = bundle(gpu, { target: state.write }, (b) => { sim.set({ src: state.read.color }); b.draw(sim); });
 state.swap();
 let parity = 0;
-gpu.frame.loop((f) => {
+frameLoop(gpu, (f) => {
   f.pass({ target: state.write }, (p) => p.bundles(parity === 0 ? even : odd));
   state.swap();
   parity ^= 1;
@@ -209,15 +210,15 @@ Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and
 
 Before:
 ```text
-const scene = gpu.target({ size: [256, 256], format: "rgba8unorm" });
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+const scene = target(gpu, { size: [256, 256], format: "rgba8unorm" });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
-const scene = gpu.target({ size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+const scene = target(gpu, { size: [256, 256], format: "rgba16float", depth: true, msaa: true });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
 await cube.compile(scene);
-gpu.frame.loop((f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
+frameLoop(gpu, (f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
 Default: put depth/MSAA on the target; do not invent global render settings.
 
@@ -227,15 +228,15 @@ Use for closed geometries. With the default `cull: "none"`, triangles facing awa
 
 Before:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()) });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
-const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box()), cull: "back" });
+const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()), cull: "back" });
 ```
 Default: `cull: "back"` for closed geometries. Keep `"none"` for planes, alpha-tested foliage, and anything seen from both sides.
 
-## 11. Occlusion culling (`gpu.visibility`)
+## 11. Occlusion culling (`visibility()`)
 
 Use for many-object scenes with large occluders. Query a cheap proxy — a bounding box — and skip the expensive draw when the GPU confirmed it was hidden.
 
@@ -248,9 +249,9 @@ f.pass({ target: scene }, (p) => {
 ```
 After:
 ```text
-const vis = gpu.visibility();
+const vis = visibility(gpu);
 const qStatue = vis.query("statue");
-gpu.frame.loop((f) => {
+frameLoop(gpu, (f) => {
   f.pass({ target: scene, visibility: vis }, (p) => {
     p.draw(world); // occluders first
     p.occlusion(qStatue, statueProxy); // cheap bounding-box proxy
@@ -271,27 +272,27 @@ p.draw(particles, { instances: decodeCount(data) });
 ```
 After:
 ```text
-const args = gpu.storage(16, { indirect: true });
+const args = storage(gpu, 16, { indirect: true });
 emit.dispatch(Math.ceil(COUNT / 64)); // compute writes the draw arguments into `args`
-gpu.frame.loop((f) => f.pass({ target: scene }, (p) => p.draw(particles, { indirect: args })));
+frameLoop(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(particles, { indirect: args })));
 ```
 Default: counts produced on the GPU stay on the GPU. The same option shape drives compute: `sim.dispatch({ indirect: args })`.
 
-## 13. Time passes before optimizing (`gpu.timer`)
+## 13. Time passes before optimizing (`timer()`)
 
 Use before reaching for any pattern above. CPU timers see encoding only — encoders record commands, the GPU runs them later — so a "slow pass" verdict needs GPU timestamps.
 
 Before:
 ```text
 const t0 = performance.now();
-gpu.frame((f) => f.pass({ target: scene }, (p) => p.draw(world)));
+frame(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(world)));
 const ms = performance.now() - t0; // encode + submit time, not GPU cost
 ```
 After:
 ```text
 const gpu = await init({ requiredFeatures: ["timestamp-query"] });
-const timer = gpu.timer();
+const timer = timer(gpu);
 timer.onResults((spans) => console.log(`main ${spans.main}ms`));
-gpu.frame.loop((f) => f.pass({ target: scene, timer: timer.span("main") }, (p) => p.draw(world)));
+frameLoop(gpu, (f) => f.pass({ target: scene, timer: timer.span("main") }, (p) => p.draw(world)));
 ```
 Default: attach `timer.span(name)` to each pass you plan to touch and optimize the worst milliseconds first. Open `measuring` for what else to measure.

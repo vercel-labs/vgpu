@@ -28,9 +28,13 @@ export class Buffer {
 
   #assertUsable(where = "Buffer"): void {
     if (this.destroyed) {
+      // Checked before the device: a destroyed buffer is the proximate cause even when its gpu is
+      // going down too (`gpu.dispose()` destroys owned buffers and then the device), so naming the
+      // buffer beats reporting the device. Keeps the message the native runtime used for this case,
+      // since callers and docs already match on it, and adds a code for programmatic handling.
       throw new ValidationError({
         code: "VGPU-BUFFER-DISPOSED",
-        message: "The buffer wrapper has been disposed.",
+        message: "Buffer is destroyed.",
         where,
         fix: "Wrap or create a live GPUBuffer before using it.",
       });

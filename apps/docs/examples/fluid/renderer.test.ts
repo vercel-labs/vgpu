@@ -9,7 +9,12 @@ const mocks = vi.hoisted(() => ({
   stepFluid: vi.fn(),
   inputDispose: vi.fn(),
 }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 vi.mock('./simulation', () => ({
   createFluid: mocks.createFluid,
   destroyFluid: mocks.destroyFluid,
@@ -39,7 +44,7 @@ function setup() {
   vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observerCallback = callback; } observe() {} disconnect() {} });
   let surfaceResizeCallback: (() => void) | undefined;
   const surface = { onResize: vi.fn((callback: () => void) => { surfaceResizeCallback = callback; return vi.fn(); }), dispose: vi.fn(), size: [100, 50], format: 'bgra8unorm' };
-  const gpu = { surface: vi.fn(() => surface), dispose: vi.fn() };
+  const gpu = { dispose: vi.fn() , fns: { surface: vi.fn(() => surface) }};
   mocks.init.mockResolvedValueOnce(gpu);
   const canvas = {
     style: { touchAction: '' },

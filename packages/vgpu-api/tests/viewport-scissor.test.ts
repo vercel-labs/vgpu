@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, draw, frame, target } from "../src/mock.ts";
 
 const DRAW_SHADER = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -12,10 +12,10 @@ const DRAW_SHADER = `
 test("viewport is emitted once at pass open with defaults filled", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [4, 4] });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "vp" });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "vp" });
 
-  gpu.frame((frame) => frame.pass({ target, viewport: { width: 2, height: 1 } }, (p) => { p.draw(draw); p.draw(draw); }));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { width: 2, height: 1 } }, (p) => { p.draw(drawable); p.draw(drawable); }));
 
   // x/y default to 0 and minDepth/maxDepth to 0/1; the viewport is pass state, not per draw.
   expect(ops).toEqual([["setViewport", 0, 0, 2, 1, 0, 1], ["setPipeline"], ["draw"], ["setPipeline"], ["draw"]]);
@@ -26,10 +26,10 @@ test("viewport is emitted once at pass open with defaults filled", async () => {
 test("viewport passes all fields through and allows fractional floats", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
   // setViewport arguments are floats; fractional values and negative x/y are valid.
-  gpu.frame((frame) => frame.pass({ target, viewport: { x: -0.5, y: 1.25, width: 1.5, height: 0.75, minDepth: 0.25, maxDepth: 0.75 } }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { x: -0.5, y: 1.25, width: 1.5, height: 0.75, minDepth: 0.25, maxDepth: 0.75 } }, () => undefined));
 
   expect(ops).toEqual([["setViewport", -0.5, 1.25, 1.5, 0.75, 0.25, 0.75]]);
   gpu.dispose();
@@ -39,10 +39,10 @@ test("viewport passes all fields through and allows fractional floats", async ()
 test("scissor is emitted once at pass open", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [4, 4] });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "sc" });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "sc" });
 
-  gpu.frame((frame) => frame.pass({ target, scissor: [1, 0, 2, 3] }, (p) => p.draw(draw)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor: [1, 0, 2, 3] }, (p) => p.draw(drawable)));
 
   expect(ops).toEqual([["setScissorRect", 1, 0, 2, 3], ["setPipeline"], ["draw"]]);
   gpu.dispose();
@@ -52,9 +52,9 @@ test("scissor is emitted once at pass open", async () => {
 test("viewport and scissor together emit viewport first", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  gpu.frame((frame) => frame.pass({ target, viewport: { x: 1, y: 1, width: 2, height: 2 }, scissor: [1, 1, 2, 2] }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { x: 1, y: 1, width: 2, height: 2 }, scissor: [1, 1, 2, 2] }, () => undefined));
 
   expect(ops).toEqual([["setViewport", 1, 1, 2, 2, 0, 1], ["setScissorRect", 1, 1, 2, 2]]);
   gpu.dispose();
@@ -64,12 +64,12 @@ test("viewport and scissor together emit viewport first", async () => {
 test("passes without viewport or scissor emit neither", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [4, 4] });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "plain" });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "plain" });
 
-  gpu.frame((frame) => {
-    frame.pass(target, (p) => p.draw(draw));
-    frame.pass({ target, clear: false }, (p) => p.draw(draw));
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass(colorTarget, (p) => p.draw(drawable));
+    currentFrame.pass({ target: colorTarget, clear: false }, (p) => p.draw(drawable));
   });
 
   expect(ops).toEqual([["setPipeline"], ["draw"], ["setPipeline"], ["draw"]]);
@@ -79,9 +79,9 @@ test("passes without viewport or scissor emit neither", async () => {
 
 test("invalid viewport shapes and values fail at pass open", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
   const expectInvalid = (viewport: unknown): void => {
-    expect(() => gpu.frame((frame) => frame.pass({ target, viewport: viewport as never }, () => undefined))).toThrowError(/VGPU-PASS-VIEWPORT-INVALID|Invalid viewport/);
+    expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: viewport as never }, () => undefined))).toThrowError(/VGPU-PASS-VIEWPORT-INVALID|Invalid viewport/);
   };
   expectInvalid("full");
   expectInvalid([0, 0, 2, 2]);
@@ -98,11 +98,11 @@ test("invalid viewport shapes and values fail at pass open", async () => {
 
 test("viewport bounds mirror device limits, not the target size", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
   const max = gpu.device.gpu.limits.maxTextureDimension2D;
   const maxViewportRange = max * 2;
   const expectInvalid = (viewport: unknown): void => {
-    expect(() => gpu.frame((frame) => frame.pass({ target, viewport: viewport as never }, () => undefined))).toThrowError(/VGPU-PASS-VIEWPORT-INVALID|Invalid viewport/);
+    expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: viewport as never }, () => undefined))).toThrowError(/VGPU-PASS-VIEWPORT-INVALID|Invalid viewport/);
   };
   expectInvalid({ width: -1, height: 2 }); // 0 <= width
   expectInvalid({ width: max + 1, height: 2 }); // width <= maxTextureDimension2D
@@ -111,23 +111,23 @@ test("viewport bounds mirror device limits, not the target size", async () => {
   expectInvalid({ x: maxViewportRange - 1, width: 1, height: 2 }); // x + width <= 2 * maxTextureDimension2D - 1
   expectInvalid({ y: maxViewportRange - 1, width: 2, height: 1 }); // y + height <= 2 * maxTextureDimension2D - 1
   // Unlike scissor, the viewport may exceed the attachment and reach into negative space.
-  expect(() => gpu.frame((frame) => frame.pass({ target, viewport: { x: -8, y: -8, width: 16, height: 16 } }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { x: -8, y: -8, width: 16, height: 16 } }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
 test("out-of-limit viewport errors report the target's current pixel size", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [6, 3] });
+  const colorTarget = target(gpu, { size: [6, 3] });
   const max = gpu.device.gpu.limits.maxTextureDimension2D;
-  expect(() => gpu.frame((frame) => frame.pass({ target, viewport: { width: max + 1, height: 2 } }, () => undefined))).toThrowError(/6x3px/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { width: max + 1, height: 2 } }, () => undefined))).toThrowError(/6x3px/);
   gpu.dispose();
 });
 
 test("invalid scissor shapes and values fail at pass open", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
   const expectInvalid = (scissor: unknown): void => {
-    expect(() => gpu.frame((frame) => frame.pass({ target, scissor: scissor as never }, () => undefined))).toThrowError(/VGPU-PASS-SCISSOR-INVALID|Invalid scissor/);
+    expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor: scissor as never }, () => undefined))).toThrowError(/VGPU-PASS-SCISSOR-INVALID|Invalid scissor/);
   };
   expectInvalid("full");
   expectInvalid({ x: 0, y: 0, width: 2, height: 2 });
@@ -142,27 +142,27 @@ test("invalid scissor shapes and values fail at pass open", async () => {
 
 test("out-of-bounds scissor errors report the target's current pixel size", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 2] });
+  const colorTarget = target(gpu, { size: [4, 2] });
   const expectOutOfBounds = (scissor: readonly [number, number, number, number]): void => {
-    expect(() => gpu.frame((frame) => frame.pass({ target, scissor }, () => undefined))).toThrowError(/VGPU-PASS-SCISSOR-INVALID.*4x2px|4x2px/);
+    expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor }, () => undefined))).toThrowError(/VGPU-PASS-SCISSOR-INVALID.*4x2px|4x2px/);
   };
   expectOutOfBounds([0, 0, 5, 2]); // x + width <= attachment width
   expectOutOfBounds([2, 0, 3, 2]);
   expectOutOfBounds([0, 1, 4, 2]); // y + height <= attachment height
-  expect(() => gpu.frame((frame) => frame.pass({ target, scissor: [0, 0, 4, 2] }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor: [0, 0, 4, 2] }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
 test("scissor bounds re-validate against the target's current size after resize", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const opts = { target, scissor: [0, 0, 4, 4] } as const;
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const opts = { target: colorTarget, scissor: [0, 0, 4, 4] } as const;
 
-  expect(() => gpu.frame((frame) => frame.pass(opts, () => undefined))).not.toThrow();
-  target.resize([2, 2]);
-  expect(() => gpu.frame((frame) => frame.pass(opts, () => undefined))).toThrowError(/2x2px/);
-  target.resize([8, 8]);
-  expect(() => gpu.frame((frame) => frame.pass(opts, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass(opts, () => undefined))).not.toThrow();
+  colorTarget.resize([2, 2]);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass(opts, () => undefined))).toThrowError(/2x2px/);
+  colorTarget.resize([8, 8]);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass(opts, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
@@ -170,9 +170,9 @@ test("scissor does not affect the clear; the pass still clears the full attachme
   const gpu = await init();
   const descriptors: GPURenderPassDescriptor[] = [];
   const ops = spyRenderPassOps(gpu.device.gpu, descriptors);
-  const target = gpu.target({ size: [4, 4], depth: true });
+  const colorTarget = target(gpu, { size: [4, 4], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target, scissor: [1, 1, 2, 2] }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor: [1, 1, 2, 2] }, () => undefined));
 
   // The clear comes from loadOp "clear" on the full attachment at beginRenderPass; the scissor only applies to draws.
   const colorAttachment = [...(descriptors[0]?.colorAttachments ?? [])][0];

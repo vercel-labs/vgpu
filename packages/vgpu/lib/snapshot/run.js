@@ -17,7 +17,7 @@ export async function runSnapshotCommand(options = {}) {
   if (loaded.error) return { code: 1, stderr: loaded.error };
 
   const baselinePath = resolve(workspaceRoot(), parsed.baselinePath ?? options.baselinePath ?? DEFAULT_BASELINE);
-  const rendered = await renderRepresentativeSnapshot(loaded.init);
+  const rendered = await renderRepresentativeSnapshot(loaded.api);
   const result = await comparePngSnapshot(baselinePath, rendered.pixels, rendered.width, rendered.height, { update: parsed.update });
 
   if (result.status === "missing") {
@@ -58,8 +58,9 @@ function snapshotUsage() {
 
 async function loadNodeInit() {
   try {
-    const { init } = await import("vgpu/node");
-    return { init };
+    // The whole namespace: the render needs `init` plus the free functions it calls.
+    const api = await import("vgpu/node");
+    return { api };
   } catch (error) {
     if (error?.code !== "ERR_MODULE_NOT_FOUND" && error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
     return { error: "vgpu snapshot requires the peer package `vgpu` with its `vgpu/node` entry installed. Install it with `pnpm add vgpu` or run this command from the VGPU workspace.\n" };

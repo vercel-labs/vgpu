@@ -29,15 +29,15 @@ npm install vgpu
 Create a context, wrap your canvas in a [`Surface`](/reference/vgpu/surface#surface), and draw an effect:
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, surface } from "vgpu";
 import gradientSource from "./gradient.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
-const gradient = gpu.effect(gradientSource);
+const canvasSurface = surface(gpu, canvas);
+const gradient = effect(gpu, gradientSource);
 
-gradient.draw(surface); // renders immediately
+gradient.draw(canvasSurface); // renders immediately
 ```
 
 ```wgsl

@@ -1,6 +1,6 @@
 import { bindGroupLayoutMetadata } from "@vgpu/core";
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, draw, frame, sampler, target } from "../../src/node.ts";
 
 const FULLSCREEN = `
 struct FullscreenOut { @builtin(position) position: vec4f, @location(0) uv: vec2f }
@@ -64,15 +64,15 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
     const gpu = await init();
     try {
       expect(gpu.device.features.has("float32-filterable")).toBe(false);
-      const source = gpu.target({ size: [8, 8], format: "rgba32float", label: "load-only-hdr" });
-      const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "load-only-output" });
-      const solid = gpu.draw({ shader: SOLID, vertices: 3 });
-      const loaded = gpu.draw({ shader: LOAD_SHAPE, vertices: 3 });
+      const source = target(gpu, { size: [8, 8], format: "rgba32float", label: "load-only-hdr" });
+      const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "load-only-output" });
+      const solid = draw(gpu, { shader: SOLID, vertices: 3 });
+      const loaded = draw(gpu, { shader: LOAD_SHAPE, vertices: 3 });
       expect(textureSampleType(loaded.layout(0), 0)).toBe("unfilterable-float");
       expect(() => loaded.set({ source })).not.toThrow();
-      gpu.frame((frame) => {
-        frame.pass({ target: source }, (pass) => pass.draw(solid));
-        frame.pass({ target: output }, (pass) => pass.draw(loaded));
+      frame(gpu, (currentFrame) => {
+        currentFrame.pass({ target: source }, (pass) => pass.draw(solid));
+        currentFrame.pass({ target: output }, (pass) => pass.draw(loaded));
       });
       expect(pixelAt(await output.read(), 8, 4, 4)[1]).toBeGreaterThan(100);
     } finally { gpu.dispose(); }
@@ -81,9 +81,9 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
   test("rgba32float ordinary sampling reports the structured facade error before native validation", async () => {
     const gpu = await init();
     try {
-      const source = gpu.target({ size: [1, 1], format: "rgba32float", label: "sampled-hdr" });
-      const sampled = gpu.draw({ shader: BLOOM_SHAPE, label: "sampled-hdr-draw", vertices: 3 });
-      expect(() => sampled.set({ source, linearSampler: gpu.sampler() })).toThrow(expect.objectContaining({
+      const source = target(gpu, { size: [1, 1], format: "rgba32float", label: "sampled-hdr" });
+      const sampled = draw(gpu, { shader: BLOOM_SHAPE, label: "sampled-hdr-draw", vertices: 3 });
+      expect(() => sampled.set({ source, linearSampler: sampler(gpu) })).toThrow(expect.objectContaining({
         code: "VGPU-SET-TEXTURE-FILTERABILITY",
         detail: expect.objectContaining({ format: "rgba32float", bindingName: "source", samplerName: "linearSampler" }),
       }));
@@ -98,15 +98,15 @@ async function renderSampledFixture(
   textureName: string,
   samplerName: string,
 ): Promise<void> {
-  const source = gpu.target({ size: [8, 8], format: "rgba8unorm", label: `${label}-source` });
-  const output = gpu.target({ size: [8, 8], format: "rgba8unorm", label: `${label}-output` });
-  const solid = gpu.draw({ shader: SOLID, label: `${label}-solid`, vertices: 3 });
-  const sampled = gpu.draw({ shader, label, vertices: 3 });
+  const source = target(gpu, { size: [8, 8], format: "rgba8unorm", label: `${label}-source` });
+  const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: `${label}-output` });
+  const solid = draw(gpu, { shader: SOLID, label: `${label}-solid`, vertices: 3 });
+  const sampled = draw(gpu, { shader, label, vertices: 3 });
   expect(textureSampleType(sampled.layout(0), 0)).toBe("float");
-  sampled.set({ [textureName]: source, [samplerName]: gpu.sampler({ minFilter: "linear", magFilter: "linear" }) });
-  gpu.frame((frame) => {
-    frame.pass({ target: source }, (pass) => pass.draw(solid));
-    frame.pass({ target: output }, (pass) => pass.draw(sampled));
+  sampled.set({ [textureName]: source, [samplerName]: sampler(gpu, { minFilter: "linear", magFilter: "linear" }) });
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: source }, (pass) => pass.draw(solid));
+    currentFrame.pass({ target: output }, (pass) => pass.draw(sampled));
   });
   const pixel = pixelAt(await output.read(), 8, 4, 4);
   expect(pixel[1]).toBeGreaterThan(100);

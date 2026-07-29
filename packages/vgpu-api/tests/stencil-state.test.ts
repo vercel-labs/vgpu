@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, bundle, draw, frame, target } from "../src/mock.ts";
 import { pipelineKeyOf } from "../src/pipeline-store.ts";
 
 const DRAW_SHADER = `
@@ -15,8 +15,8 @@ const KEEP_FACE = { compare: "always", failOp: "keep", depthFailOp: "keep", pass
 
 test("stencil faces and masks thread into the pipeline depthStencil state", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  gpu.draw({
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  draw(gpu, {
     shader: DRAW_SHADER,
     label: "stencil-full",
     stencil: {
@@ -25,7 +25,7 @@ test("stencil faces and masks thread into the pipeline depthStencil state", asyn
       readMask: 0x0F,
       writeMask: 0xF0,
     },
-  }).draw(target);
+  }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.depthStencil).toEqual({
@@ -42,8 +42,8 @@ test("stencil faces and masks thread into the pipeline depthStencil state", asyn
 
 test("omitted back mirrors the normalized front", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-mirror", stencil: { front: { compare: "equal", pass: "replace" } } }).draw(target);
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-mirror", stencil: { front: { compare: "equal", pass: "replace" } } }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   const face = { compare: "equal", failOp: "keep", depthFailOp: "keep", passOp: "replace" };
@@ -54,8 +54,8 @@ test("omitted back mirrors the normalized front", async () => {
 
 test("omitted front keeps spec defaults when only back is given", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-back-only", stencil: { back: { fail: "zero" } } }).draw(target);
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-back-only", stencil: { back: { fail: "zero" } } }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   // WebGPU applies GPUStencilFaceState defaults to the omitted front; the descriptor stays byte-identical there.
@@ -66,10 +66,10 @@ test("omitted front keeps spec defaults when only back is given", async () => {
 
 test("stencil merges with depth options and depth defaults", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-with-depth", depth: { write: false, compare: "greater" }, stencil: { front: {} } }).draw(target);
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-depth-off", depth: false, stencil: { readMask: 1 } }).draw(target);
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-no-depth-option", stencil: { writeMask: 2 } }).draw(target);
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-with-depth", depth: { write: false, compare: "greater" }, stencil: { front: {} } }).draw(colorTarget);
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-depth-off", depth: false, stencil: { readMask: 1 } }).draw(colorTarget);
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-no-depth-option", stencil: { writeMask: 2 } }).draw(colorTarget);
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors;
   expect(descs.at(-3)?.depthStencil).toEqual({ format: "depth24plus-stencil8", depthWriteEnabled: false, depthCompare: "greater", stencilFront: KEEP_FACE, stencilBack: KEEP_FACE });
@@ -81,8 +81,8 @@ test("stencil merges with depth options and depth defaults", async () => {
 
 test("absent stencil keeps the depthStencil descriptor free of stencil fields", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  gpu.draw({ shader: DRAW_SHADER, label: "stencil-absent" }).draw(target);
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  draw(gpu, { shader: DRAW_SHADER, label: "stencil-absent" }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.depthStencil).toEqual({ format: "depth24plus-stencil8", depthWriteEnabled: true, depthCompare: "less-equal" });
@@ -92,12 +92,12 @@ test("absent stencil keeps the depthStencil descriptor free of stencil fields", 
 test("stencil ref is emitted as setStencilReference only when provided", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
 
-  gpu.draw({ shader: DRAW_SHADER, label: "ref-value", stencil: { front: { compare: "equal" }, ref: 3 } }).draw(target);
-  gpu.draw({ shader: DRAW_SHADER, label: "ref-zero", stencil: { front: { pass: "replace" }, ref: 0 } }).draw(target);
-  gpu.draw({ shader: DRAW_SHADER, label: "ref-absent", stencil: { front: { compare: "equal" } } }).draw(target);
-  gpu.draw({ shader: DRAW_SHADER, label: "ref-only", stencil: { ref: 7 } }).draw(target);
+  draw(gpu, { shader: DRAW_SHADER, label: "ref-value", stencil: { front: { compare: "equal" }, ref: 3 } }).draw(colorTarget);
+  draw(gpu, { shader: DRAW_SHADER, label: "ref-zero", stencil: { front: { pass: "replace" }, ref: 0 } }).draw(colorTarget);
+  draw(gpu, { shader: DRAW_SHADER, label: "ref-absent", stencil: { front: { compare: "equal" } } }).draw(colorTarget);
+  draw(gpu, { shader: DRAW_SHADER, label: "ref-only", stencil: { ref: 7 } }).draw(colorTarget);
 
   expect(ops).toEqual([
     ["setPipeline"], ["setStencilReference", 3], ["draw"],
@@ -113,11 +113,11 @@ test("stencil ref is emitted as setStencilReference only when provided", async (
 test("stencil ref is emitted per draw inside frame passes", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const masked = gpu.draw({ shader: DRAW_SHADER, label: "masked", stencil: { front: { compare: "equal" }, ref: 5 } });
-  const plain = gpu.draw({ shader: DRAW_SHADER, label: "plain" });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const masked = draw(gpu, { shader: DRAW_SHADER, label: "masked", stencil: { front: { compare: "equal" }, ref: 5 } });
+  const plain = draw(gpu, { shader: DRAW_SHADER, label: "plain" });
 
-  gpu.frame((frame) => frame.pass(target, (p) => { p.draw(masked); p.draw(plain); }));
+  frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (p) => { p.draw(masked); p.draw(plain); }));
 
   expect(ops).toEqual([["setPipeline"], ["setStencilReference", 5], ["draw"], ["setPipeline"], ["draw"]]);
   gpu.dispose();
@@ -126,40 +126,40 @@ test("stencil ref is emitted per draw inside frame passes", async () => {
 
 test("bundles reject recording draws with stencil ref but record ref-less stencil", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const withRef = gpu.draw({ shader: DRAW_SHADER, label: "with-ref", stencil: { front: { compare: "equal" }, ref: 1 } });
-  const withoutRef = gpu.draw({ shader: DRAW_SHADER, label: "without-ref", stencil: { front: { compare: "equal" }, writeMask: 0xFF } });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const withRef = draw(gpu, { shader: DRAW_SHADER, label: "with-ref", stencil: { front: { compare: "equal" }, ref: 1 } });
+  const withoutRef = draw(gpu, { shader: DRAW_SHADER, label: "without-ref", stencil: { front: { compare: "equal" }, writeMask: 0xFF } });
 
-  expect(() => gpu.bundle({ target, label: "refBundle" }, (b) => b.draw(withRef))).toThrowError(/VGPU-BUNDLE-STENCIL-REF|stencil\.ref/);
-  expect(() => gpu.bundle({ target, label: "plainBundle" }, (b) => b.draw(withoutRef))).not.toThrow();
+  expect(() => bundle(gpu, { target: colorTarget, label: "refBundle" }, (b) => b.draw(withRef))).toThrowError(/VGPU-BUNDLE-STENCIL-REF|stencil\.ref/);
+  expect(() => bundle(gpu, { target: colorTarget, label: "plainBundle" }, (b) => b.draw(withoutRef))).not.toThrow();
   gpu.dispose();
 });
 
 test("stencil requires a target signature whose depth format has a stencil aspect", async () => {
   const gpu = await init();
-  const stencilTarget = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const depthOnly = gpu.target({ size: [2, 2], depth: true });
-  const noDepth = gpu.target({ size: [2, 2] });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "needs-stencil", stencil: { front: { compare: "equal" } } });
-  const refOnly = gpu.draw({ shader: DRAW_SHADER, label: "ref-needs-stencil", stencil: { ref: 1 } });
+  const stencilTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const depthOnly = target(gpu, { size: [2, 2], depth: true });
+  const noDepth = target(gpu, { size: [2, 2] });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "needs-stencil", stencil: { front: { compare: "equal" } } });
+  const refOnly = draw(gpu, { shader: DRAW_SHADER, label: "ref-needs-stencil", stencil: { ref: 1 } });
 
-  expect(() => draw.draw(depthOnly)).toThrowError(/VGPU-STENCIL-INVALID|depth24plus-stencil8/);
-  expect(() => draw.draw(noDepth)).toThrowError(/VGPU-STENCIL-INVALID|no depth/);
+  expect(() => drawable.draw(depthOnly)).toThrowError(/VGPU-STENCIL-INVALID|depth24plus-stencil8/);
+  expect(() => drawable.draw(noDepth)).toThrowError(/VGPU-STENCIL-INVALID|no depth/);
   expect(() => refOnly.draw(depthOnly)).toThrowError(/VGPU-STENCIL-INVALID|depth24plus-stencil8/);
-  expect(() => draw.compileSync({ colors: ["rgba8unorm"], depth: "depth32float" })).toThrowError(/VGPU-STENCIL-INVALID|stencil aspect/);
-  expect(() => draw.compileSync({ colors: ["rgba8unorm"], depth: "depth16unorm" })).toThrowError(/VGPU-STENCIL-INVALID|stencil aspect/);
-  expect(() => draw.compileSync({ colors: ["rgba8unorm"], depth: "depth24plus-stencil8" })).not.toThrow();
-  expect(() => draw.compileSync({ colors: ["rgba8unorm"], depth: "depth32float-stencil8" })).not.toThrow();
-  expect(() => draw.draw(stencilTarget)).not.toThrow();
-  // targets: [...] compiles at construction, so the mismatch surfaces from gpu.draw itself.
-  expect(() => gpu.draw({ shader: DRAW_SHADER, label: "eager-needs-stencil", targets: [depthOnly], stencil: { front: { compare: "equal" } } })).toThrowError(/VGPU-STENCIL-INVALID|depth24plus-stencil8/);
+  expect(() => drawable.compileSync({ colors: ["rgba8unorm"], depth: "depth32float" })).toThrowError(/VGPU-STENCIL-INVALID|stencil aspect/);
+  expect(() => drawable.compileSync({ colors: ["rgba8unorm"], depth: "depth16unorm" })).toThrowError(/VGPU-STENCIL-INVALID|stencil aspect/);
+  expect(() => drawable.compileSync({ colors: ["rgba8unorm"], depth: "depth24plus-stencil8" })).not.toThrow();
+  expect(() => drawable.compileSync({ colors: ["rgba8unorm"], depth: "depth32float-stencil8" })).not.toThrow();
+  expect(() => drawable.draw(stencilTarget)).not.toThrow();
+  // targets: [...] compiles at construction, so the mismatch surfaces from draw itself.
+  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "eager-needs-stencil", targets: [depthOnly], stencil: { front: { compare: "equal" } } })).toThrowError(/VGPU-STENCIL-INVALID|depth24plus-stencil8/);
   gpu.dispose();
 });
 
 test("invalid stencil options fail at draw construction", async () => {
   const gpu = await init();
   const expectInvalid = (label: string, stencil: unknown): void => {
-    expect(() => gpu.draw({ shader: DRAW_SHADER, label, stencil: stencil as never })).toThrowError(/VGPU-STENCIL-INVALID|Invalid stencil/);
+    expect(() => draw(gpu, { shader: DRAW_SHADER, label, stencil: stencil as never })).toThrowError(/VGPU-STENCIL-INVALID|Invalid stencil/);
   };
   expectInvalid("st-true", true);
   expectInvalid("st-null", null);
@@ -182,10 +182,10 @@ test("invalid stencil options fail at draw construction", async () => {
 test("frame.pass clearStencil threads into the depth-stencil attachment", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
 
-  gpu.frame((frame) => frame.pass({ target, clearStencil: 0xAB }, () => undefined));
-  gpu.frame((frame) => frame.pass(target, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: 0xAB }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, () => undefined));
 
   expect(descriptors[0]?.depthStencilAttachment).toMatchObject({ stencilLoadOp: "clear", stencilClearValue: 0xAB });
   expect(descriptors[1]?.depthStencilAttachment).toMatchObject({ stencilLoadOp: "clear", stencilClearValue: 0 });
@@ -195,19 +195,19 @@ test("frame.pass clearStencil threads into the depth-stencil attachment", async 
 
 test("frame.pass validates clearStencil range, preserve, and stencil aspect", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const depthOnly = gpu.target({ size: [2, 2], depth: true });
-  const noDepth = gpu.target({ size: [2, 2] });
-  expect(() => gpu.frame((frame) => frame.pass({ target, clearStencil: 0.5 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, clearStencil: -1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, clearStencil: 0x1_0000_0000 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, clearStencil: Number.NaN }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, clear: false, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-PRESERVE-CLEARSTENCIL|preserves stencil/);
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const depthOnly = target(gpu, { size: [2, 2], depth: true });
+  const noDepth = target(gpu, { size: [2, 2] });
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: 0.5 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: -1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: 0x1_0000_0000 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: Number.NaN }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|clearStencil/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: false, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-PRESERVE-CLEARSTENCIL|preserves stencil/);
   // Dead option: the value is masked to the stencil aspect's bit width, but a missing stencil aspect can never see it.
-  expect(() => gpu.frame((frame) => frame.pass({ target: depthOnly, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|no stencil aspect/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: noDepth, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|no stencil aspect/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: depthOnly, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|no stencil aspect/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: noDepth, clearStencil: 1 }, () => undefined))).toThrowError(/VGPU-PASS-CLEARSTENCIL-INVALID|no stencil aspect/);
   // In-u32-range values above the 8-bit aspect width are legal; WebGPU masks them to the LSBs.
-  expect(() => gpu.frame((frame) => frame.pass({ target, clearStencil: 0x1FF }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clearStencil: 0x1FF }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 

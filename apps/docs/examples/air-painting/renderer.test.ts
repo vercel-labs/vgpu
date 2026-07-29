@@ -32,6 +32,23 @@ import {
 import { renderThumbnail, THUMB_DT } from './renderer';
 import { createVisualPipeline, ROI_LOOPBACK_SCALE } from './visual-pipeline';
 
+// 0.2.0 replaced the `Gpu` facade with free functions, and a real one resolves a kernel this
+// file's fake gpu does not have ("no vgpu kernel"). The double now stands in for the free
+// functions instead, delegating to the recorder methods the fake already exposes — so the
+// assertions below still observe every dispatch, uniform and release without a device.
+vi.mock('vgpu', () => {
+  type FakeGpu = Record<string, (...args: never[]) => unknown>;
+  const delegate = (name: string) => (gpu: FakeGpu, ...args: never[]) => gpu[name]!(...args);
+  return {
+    compute: delegate('compute'),
+    effect: delegate('effect'),
+    frame: delegate('frame'),
+    sampler: delegate('sampler'),
+    surface: delegate('surface'),
+    target: delegate('target'),
+  };
+});
+
 const here = dirname(fileURLToPath(import.meta.url));
 
 interface Dispatch {

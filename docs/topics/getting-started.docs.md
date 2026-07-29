@@ -1,28 +1,29 @@
 # Getting started
 
-Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from JavaScript (`gpu.time`, `gpu.deltaTime`, `gpu.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
+Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from the frame clock (`clock(gpu).time`, `.deltaTime`, `.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, effect, frameLoop, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const gradient = gpu.effect(`
+const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
+const gradient = effect(gpu, `
 struct Params { time: f32, texel: vec2f }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
 }
-`, { set: { params: { time: 0, texel: surface.texelSize } } });
+`, { set: { params: { time: 0, texel: canvasSurface.texelSize } } });
 
-surface.onResize(() => {
-  gradient.set({ params: { texel: surface.texelSize } });
+canvasSurface.onResize(() => {
+  gradient.set({ params: { texel: canvasSurface.texelSize } });
 });
 
-gpu.frame.loop((frame) => {
-  gradient.set({ params: { time: gpu.time } });
-  frame.pass(surface, gradient);
+const time = clock(gpu);
+frameLoop(gpu, (frame) => {
+  gradient.set({ params: { time: time.time } });
+  frame.pass(canvasSurface, gradient);
 });
 ```
 
@@ -48,7 +49,7 @@ evidence instead of guesswork:
 ```typescript
 import { writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
-import { init } from "vgpu/node";
+import { init, effect, target } from "vgpu/node";
 
 const SHADER = `
   @fragment fn main() -> @location(0) vec4f {
@@ -58,9 +59,9 @@ const SHADER = `
 const width = 160;
 const height = 90;
 const gpu = await init();
-const target = gpu.target({ size: [width, height] }); // small targets stay fast, even on CPU
-gpu.effect(SHADER).draw(target);
-const pixels = await target.read();                   // RGBA bytes — assert on them
+const colorTarget = target(gpu, { size: [width, height] }); // small targets stay fast, even on CPU
+effect(gpu, SHADER).draw(colorTarget);
+const pixels = await colorTarget.read();                   // RGBA bytes — assert on them
 const png = new PNG({ width, height });               // ...and write a PNG you can open
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));
@@ -82,12 +83,12 @@ reference, following
 
 ## Default choices
 
-- Use `gpu.effect()` for fullscreen fragment work.
-- Use `gpu.draw()` for vertex shaders, meshes, storage-driven vertices, instancing, MRT, and depth.
-- Use `effect.draw(target)` for simple single-pass draws; use `gpu.frame((f) => ...)` to batch multi-pass work and `gpu.frame.loop(...)` for animation.
+- Use `effect(gpu)` for fullscreen fragment work.
+- Use `draw(gpu)` for vertex shaders, meshes, storage-driven vertices, instancing, MRT, and depth.
+- Use `effect.draw(target)` for simple single-pass draws; use `frame(gpu, (f) => ...)` to batch multi-pass work and `frameLoop(gpu, ...)` for animation.
 - Use `set()` for every binding declared in WGSL; missing bindings fail with `VGPU-R1-BINDING-NEVER-SET`.
 - Keep plain JS values plain from their first `set()`; if you need user-owned lifetime, pass a resource from the first `set()`.
-- Request optional device capabilities at startup with `init({ requiredFeatures: [...] })` — for example `"timestamp-query"` for `gpu.timer()`; a name the adapter lacks fails init with `VGPU-FEATURE-UNSUPPORTED`.
+- Request optional device capabilities at startup with `init({ requiredFeatures: [...] })` — for example `"timestamp-query"` for `timer(gpu)`; a name the adapter lacks fails init with `VGPU-FEATURE-UNSUPPORTED`.
 
 ## Where to go next
 
@@ -95,7 +96,7 @@ Read the concept guides in order — each builds on the previous one:
 
 ```sh
 vgpu docs cat concepts-context.md         # the Gpu context, surfaces, targets
-vgpu docs cat concepts-draws.md           # gpu.draw, meshes, instancing
+vgpu docs cat concepts-draws.md           # draw(), meshes, instancing
 vgpu docs cat concepts-compilation.md     # compile() and pipeline warmup
 vgpu docs cat concepts-effects.md         # fragment effects and set()
 vgpu docs cat concepts-passes.md          # frame.pass and multi-pass work

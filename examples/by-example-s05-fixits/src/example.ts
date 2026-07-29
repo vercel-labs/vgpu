@@ -1,4 +1,4 @@
-import { init } from "vgpu/mock";
+import { init, effect, target } from "vgpu/mock";
 
 const NEEDS_SAMPLER = /* wgsl */ `
 @group(0) @binding(0) var samp: sampler;
@@ -15,10 +15,10 @@ struct Params { speed: f32 }
 export async function collectFixitMessages() {
   const gpu = await init();
   try {
-    const missing = gpu.effect(NEEDS_SAMPLER, { label: "lighting" });
-    const ownership = gpu.effect(SPEED, { label: "wave", set: { speed: 2 } });
+    const missing = effect(gpu, NEEDS_SAMPLER, { label: "lighting" });
+    const ownership = effect(gpu, SPEED, { label: "wave", set: { speed: 2 } });
     const messages: string[] = [];
-    try { missing.draw({ target: gpu.target({ size: [4, 4] }) }); } catch (error) { messages.push(String((error as Error).message)); }
+    try { missing.draw({ target: target(gpu, { size: [4, 4] }) }); } catch (error) { messages.push(String((error as Error).message)); }
     try { ownership.set({ speed: gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] }) }); } catch (error) { messages.push(String((error as Error).message)); }
     return messages;
   } finally {

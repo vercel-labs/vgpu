@@ -15,7 +15,7 @@ const MAP_READ = (globalThis.GPUMapMode?.READ ?? 1) as GPUMapModeFlags;
 
 /**
  * Options for the internal query resolve/readback ring shared by query-based
- * features (gpu.timer today, occlusion queries next).
+ * features (timer today, occlusion queries next).
  *
  * @internal
  */
@@ -38,7 +38,7 @@ export interface QueryRingOptions {
 }
 
 /**
- * Host hooks shared by the query-based features built on the ring (gpu.timer(), gpu.visibility()).
+ * Host hooks shared by the query-based features built on the ring (timer(gpu), visibility(gpu)).
  *
  * @internal
  */

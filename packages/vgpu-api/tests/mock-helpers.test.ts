@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { createMockGpu, getMockDeviceInstrumentation } from "../test-utils/mock.ts";
+import { effect, frame, target } from "../src/index.ts";
 
 const SHADER = `
 struct Params { value: f32 }
@@ -12,9 +13,9 @@ struct Params { value: f32 }
 test("test-utils mock helper runs vgpu without loading Dawn", async () => {
   const gpu = await createMockGpu({ size: [4, 4] });
   try {
-    const effect = gpu.effect(SHADER, { label: "mock-helper", set: { value: 1 } });
-    const target = gpu.target({ size: [4, 4], format: "rgba8unorm" });
-    gpu.frame((frame) => frame.pass({ target }, (encoder) => encoder.draw(effect)));
+    const shader = effect(gpu, SHADER, { label: "mock-helper", set: { value: 1 } });
+    const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (encoder) => encoder.draw(shader)));
     const instrumentation = getMockDeviceInstrumentation(gpu);
     expect(instrumentation.calls.createRenderPipeline).toBe(1);
     expect(instrumentation.calls.createCommandEncoder).toBe(1);

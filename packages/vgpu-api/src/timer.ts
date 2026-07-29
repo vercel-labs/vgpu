@@ -1,5 +1,8 @@
 import type { Device } from "@vgpu/core";
 import { timerCapacityError, timerInvalidError } from "./errors.ts";
+import { FRAME_PASS_ATTACHMENT, type FramePassAttachContext, type FramePassAttachment, type FramePassAttachResult } from "./frame-protocols.ts";
+import type { Gpu } from "./kernel.ts";
+import { liveKernel, ownQueryFeature } from "./live-kernel.ts";
 import { createQueryRing, type QueryHostOptions, type QueryRing } from "./query-ring.ts";
 
 /**
@@ -11,7 +14,7 @@ export interface TimerSpan {
   readonly name: string;
 }
 
-/** GPU pass timer created by `gpu.timer()`. Needs the "timestamp-query" device feature. */
+/** GPU pass timer created by `timer(gpu)`. Needs the "timestamp-query" device feature. */
 export interface Timer {
   /** Marks a pass for timing. Pass the result as FramePassOptions.timer. One name per frame. */
   span(name: string): TimerSpan;
@@ -27,18 +30,38 @@ const INITIAL_SPAN_CAPACITY = 32;
 const MAX_QUERIES = 4096;
 const MAX_SPANS_PER_FRAME = MAX_QUERIES / 2;
 const MS_PER_NS = 1 / 1_000_000;
-class InternalTimerSpan implements TimerSpan {
+class InternalTimerSpan implements TimerSpan, FramePassAttachment {
   constructor(readonly name: string, readonly owner: InternalTimer) {}
+
+  /**
+   * Frame pass attachment: registering the span is what returns the descriptor's `timestampWrites`
+   * (undefined when the span is dropped this frame because the query set is full). The owner is the
+   * timer, not the span, so a frame that attaches two spans of the same timer bookkeeps one owner.
+   */
+  [FRAME_PASS_ATTACHMENT](ctx: FramePassAttachContext): FramePassAttachResult {
+    return { owner: this.owner, timestampWrites: this.owner.attachSpan(this, ctx.frame, ctx.device) };
+  }
 }
 
-/** @internal Frame.pass guard: FramePassOptions.timer must be a span produced by Timer.span(). */
-export function isTimerSpan(value: unknown): value is InternalTimerSpan {
-  return value instanceof InternalTimerSpan;
-}
+/** @internal The concrete span, for tests that need the internal shape behind the TimerSpan handle. */
+export type { InternalTimerSpan };
 
 /** @internal */
 export function createTimer(device: Device, host: QueryHostOptions = {}): Timer {
   return new InternalTimer(device, host);
+}
+
+/**
+ * GPU pass timing for this gpu. Needs the "timestamp-query" device feature — request it at init:
+ * `init({ requiredFeatures: ["timestamp-query"] })`.
+ *
+ * The timer owns a query ring: its readbacks join `gpu.settled()`, a dropped readback is reported
+ * on `gpu.onError`, and `gpu.dispose()` releases the query set (deferring destruction while a frame
+ * in flight still references it). `timer.dispose()` releases it earlier and drops the registration.
+ */
+export function timer(gpu: Gpu): Timer {
+  const kernel = liveKernel(gpu, "timer");
+  return ownQueryFeature(kernel, (host) => new InternalTimer(kernel.device, host));
 }
 
 interface FrameSpan {
@@ -85,7 +108,7 @@ export class InternalTimer {
     // createQuerySet would throw a TypeError for a timestamp set without it. Fail at creation instead.
     if (!device.features.has("timestamp-query")) {
       throw timerInvalidError(
-        `gpu.timer() needs the "timestamp-query" device feature — request it at init: init({ requiredFeatures: ["timestamp-query"] }).`,
+        `timer(gpu) needs the "timestamp-query" device feature — request it at init: init({ requiredFeatures: ["timestamp-query"] }).`,
         `Pass init({ requiredFeatures: ["timestamp-query"] }) on an adapter that supports it; gate optional timing on gpu.device.features.has("timestamp-query").`,
       );
     }
@@ -136,7 +159,7 @@ export class InternalTimer {
   attachSpan(span: InternalTimerSpan, frame: unknown, frameDevice: Device): GPURenderPassTimestampWrites | undefined {
     this.#assertUsable("Frame.pass");
     if (frameDevice !== this.#device) {
-      throw timerInvalidError(`span '${span.name}' belongs to a timer created on a different gpu; timestamp queries cannot cross devices.`, "Create one gpu.timer() per gpu and use its spans only with that gpu's frames.", "Frame.pass");
+      throw timerInvalidError(`span '${span.name}' belongs to a timer created on a different gpu; timestamp queries cannot cross devices.`, "Create one timer(gpu) per gpu and use its spans only with that gpu's frames.", "Frame.pass");
     }
     if (frame !== this.#frame) this.#beginFrame(frame);
     if (this.#frameNames.has(span.name)) {
@@ -251,7 +274,7 @@ export class InternalTimer {
   }
 
   #assertUsable(where: string): void {
-    if (this.#disposed) throw timerInvalidError("the timer is disposed.", "Create a new timer with gpu.timer().", where);
+    if (this.#disposed) throw timerInvalidError("the timer is disposed.", "Create a new timer with timer(gpu).", where);
   }
 }
 

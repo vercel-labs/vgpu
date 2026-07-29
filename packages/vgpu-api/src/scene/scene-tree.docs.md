@@ -108,7 +108,7 @@ ball.set({ rotation: [0, 1, 0] });
 
 ## Notes
 
-- This is the scene-tree `mesh()`; the low-level vertex-buffer API remains `gpu.geometry(...)` on the main `vgpu` entrypoint.
+- This is the scene-tree `mesh()`; the low-level vertex-buffer API remains `geometry(gpu, ...)` on the main `vgpu` entrypoint.
 - **See also:** `MeshNode`, `SceneMaterial`, `SceneGeometry`, `group`.
 
 ---

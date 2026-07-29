@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, draw, target } from "../src/mock.ts";
 
 const MRT_SHADER = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -21,16 +21,16 @@ const ADDITIVE_BLEND = { color: { srcFactor: "one", dstFactor: "one", operation:
 
 test("per-color-target blend and writeMask reach each render pipeline target by index", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba16float" }] });
+  const colorTarget = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba16float" }] });
 
-  gpu.draw({
+  draw(gpu, {
     shader: MRT_SHADER,
     label: "mrt",
     colors: [
       { blend: "alpha", writeMask: ["r", "g"] },
       { blend: { color: { src: "one", dst: "one" } }, writeMask: ["a"] },
     ],
-  }).draw(target);
+  }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.fragment?.targets).toEqual([
@@ -42,15 +42,15 @@ test("per-color-target blend and writeMask reach each render pipeline target by 
 
 test("null, missing, and empty entries inherit the top-level blend and writeMask per field", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }, { format: "rgba8unorm" }] });
+  const colorTarget = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }, { format: "rgba8unorm" }] });
 
-  gpu.draw({
+  draw(gpu, {
     shader: MRT_SHADER,
     label: "inherit",
     blend: "alpha",
     writeMask: ["r", "g", "b"],
     colors: [null, {}, { blend: "additive" }],
-  }).draw(target);
+  }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   // Entries override per field: colors[2] pins blend but still inherits the top-level writeMask.
@@ -64,10 +64,10 @@ test("null, missing, and empty entries inherit the top-level blend and writeMask
 
 test("absent colors keeps the uniform top-level state on every attachment", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba16float" }] });
+  const colorTarget = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba16float" }] });
 
-  gpu.draw({ shader: MRT_SHADER, label: "uniform", blend: "additive", writeMask: ["r"] }).draw(target);
-  gpu.draw({ shader: MRT_SHADER, label: "plain" }).draw(target);
+  draw(gpu, { shader: MRT_SHADER, label: "uniform", blend: "additive", writeMask: ["r"] }).draw(colorTarget);
+  draw(gpu, { shader: MRT_SHADER, label: "plain" }).draw(colorTarget);
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors;
   expect(descs.at(-2)?.fragment?.targets).toEqual([
@@ -80,9 +80,9 @@ test("absent colors keeps the uniform top-level state on every attachment", asyn
 
 test("writeMask [] silences one attachment without touching its siblings", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
+  const colorTarget = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
 
-  gpu.draw({ shader: MRT_SHADER, label: "silence", colors: [null, { writeMask: [] }] }).draw(target);
+  draw(gpu, { shader: MRT_SHADER, label: "silence", colors: [null, { writeMask: [] }] }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.fragment?.targets).toEqual([
@@ -94,40 +94,40 @@ test("writeMask [] silences one attachment without touching its siblings", async
 
 test("colors length must match the target signature's color attachment count", async () => {
   const gpu = await init();
-  const single = gpu.target({ size: [2, 2] });
-  const mrt = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
-  const draw = gpu.draw({ shader: MRT_SHADER, label: "mismatch", colors: [{ writeMask: [] }] });
+  const single = target(gpu, { size: [2, 2] });
+  const mrt = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
+  const drawable = draw(gpu, { shader: MRT_SHADER, label: "mismatch", colors: [{ writeMask: [] }] });
 
-  expect(() => draw.draw(mrt)).toThrowError(/VGPU-COLORS-INVALID|colors has 1, but the target signature has 2/);
-  expect(() => draw.compileSync({ colors: ["rgba8unorm", "rgba8unorm", "rgba8unorm"] })).toThrowError(/colors has 1, but the target signature has 3/);
-  expect(() => draw.draw(single)).not.toThrow();
-  // targets: [...] compiles at construction, so the mismatch surfaces from gpu.draw itself.
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "eager-mismatch", targets: [mrt], colors: [null] })).toThrowError(/VGPU-COLORS-INVALID|colors has 1, but the target signature has 2/);
+  expect(() => drawable.draw(mrt)).toThrowError(/VGPU-COLORS-INVALID|colors has 1, but the target signature has 2/);
+  expect(() => drawable.compileSync({ colors: ["rgba8unorm", "rgba8unorm", "rgba8unorm"] })).toThrowError(/colors has 1, but the target signature has 3/);
+  expect(() => drawable.draw(single)).not.toThrow();
+  // targets: [...] compiles at construction, so the mismatch surfaces from draw itself.
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "eager-mismatch", targets: [mrt], colors: [null] })).toThrowError(/VGPU-COLORS-INVALID|colors has 1, but the target signature has 2/);
   gpu.dispose();
 });
 
 test("invalid colors options fail at draw construction", async () => {
   const gpu = await init();
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "not-array", colors: "rgba" as never })).toThrowError(/VGPU-COLORS-INVALID|must be an array/);
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "bad-entry", colors: [42] as never })).toThrowError(/VGPU-COLORS-INVALID|colors\[0\]/);
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "array-entry", colors: [["r"]] as never })).toThrowError(/VGPU-COLORS-INVALID|colors\[0\]/);
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "bad-blend", colors: [{ blend: "screen" }] as never })).toThrowError(/VGPU-BLEND-INVALID|Invalid blend/);
-  expect(() => gpu.draw({ shader: MRT_SHADER, label: "bad-mask", colors: [{ writeMask: ["x"] }] as never })).toThrowError(/VGPU-WRITEMASK-INVALID|Invalid writeMask/);
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "not-array", colors: "rgba" as never })).toThrowError(/VGPU-COLORS-INVALID|must be an array/);
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "bad-entry", colors: [42] as never })).toThrowError(/VGPU-COLORS-INVALID|colors\[0\]/);
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "array-entry", colors: [["r"]] as never })).toThrowError(/VGPU-COLORS-INVALID|colors\[0\]/);
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "bad-blend", colors: [{ blend: "screen" }] as never })).toThrowError(/VGPU-BLEND-INVALID|Invalid blend/);
+  expect(() => draw(gpu, { shader: MRT_SHADER, label: "bad-mask", colors: [{ writeMask: ["x"] }] as never })).toThrowError(/VGPU-WRITEMASK-INVALID|Invalid writeMask/);
   gpu.dispose();
 });
 
 test("colors participate in shared pipeline cache keys", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
-  const a = gpu.draw({ shader: MRT_SHADER, label: "colors-a", blend: "alpha", colors: [null, { writeMask: [] }] });
-  const b = gpu.draw({ shader: MRT_SHADER, label: "colors-b", blend: "alpha", colors: [{ writeMask: [] }, null] });
-  const c = gpu.draw({ shader: MRT_SHADER, label: "colors-c", blend: "alpha", colors: [null, { writeMask: [] }] });
-  const uniform = gpu.draw({ shader: MRT_SHADER, label: "colors-none", blend: "alpha" });
+  const colorTarget = target(gpu, { size: [2, 2], colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }] });
+  const a = draw(gpu, { shader: MRT_SHADER, label: "colors-a", blend: "alpha", colors: [null, { writeMask: [] }] });
+  const b = draw(gpu, { shader: MRT_SHADER, label: "colors-b", blend: "alpha", colors: [{ writeMask: [] }, null] });
+  const c = draw(gpu, { shader: MRT_SHADER, label: "colors-c", blend: "alpha", colors: [null, { writeMask: [] }] });
+  const uniform = draw(gpu, { shader: MRT_SHADER, label: "colors-none", blend: "alpha" });
 
-  a.draw(target);
-  b.draw(target);
-  c.draw(target);
-  uniform.draw(target);
+  a.draw(colorTarget);
+  b.draw(colorTarget);
+  c.draw(colorTarget);
+  uniform.draw(colorTarget);
 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(mock.calls.createShaderModule).toBe(1);

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, compute, draw, effect } from "../src/mock.ts";
 import { drawReflection } from "../src/draw.ts";
 import { effectDraw } from "../src/effect.ts";
 
@@ -27,36 +27,36 @@ struct Params { value: f32 }
 @compute @workgroup_size(1) fn main() { _ = params.value; }
 `;
 
-test("gpu.effect accepts string and ShaderSource with identical reflection", async () => {
+test("effect(gpu, ...) accepts string and ShaderSource with identical reflection", async () => {
   const gpu = await init();
-  const fromString = gpu.effect(FRAGMENT, { label: "shader" });
-  const fromArtifact = gpu.effect({ version: 1, wgsl: FRAGMENT }, { label: "shader" });
+  const fromString = effect(gpu, FRAGMENT, { label: "shader" });
+  const fromArtifact = effect(gpu, { version: 1, wgsl: FRAGMENT }, { label: "shader" });
 
   expect(drawReflection(effectDraw(fromArtifact)).bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })))
     .toEqual(drawReflection(effectDraw(fromString)).bindings.map(({ name, mangledName, group, binding, kind }) => ({ name, mangledName, group, binding, kind })));
   gpu.dispose();
 });
 
-test("gpu.draw accepts ShaderSource and keeps Draw internals string-only", async () => {
+test("draw(gpu, ...) accepts ShaderSource and keeps Draw internals string-only", async () => {
   const gpu = await init();
-  const draw = gpu.draw({ shader: { version: 1, wgsl: DRAW }, label: "artifact-draw" });
+  const drawable = draw(gpu, { shader: { version: 1, wgsl: DRAW }, label: "artifact-draw" });
 
-  expect(drawReflection(draw).bindings[0]).toMatchObject({ name: "params", group: 0, binding: 0 });
+  expect(drawReflection(drawable).bindings[0]).toMatchObject({ name: "params", group: 0, binding: 0 });
   gpu.dispose();
 });
 
-test("gpu.compute accepts ShaderSource", async () => {
+test("compute(gpu, ...) accepts ShaderSource", async () => {
   const gpu = await init();
-  const compute = gpu.compute({ version: 1, wgsl: COMPUTE }, { label: "artifact-compute" });
+  const job = compute(gpu, { version: 1, wgsl: COMPUTE }, { label: "artifact-compute" });
 
-  compute.set({ params: { value: 1 } });
+  job.set({ params: { value: 1 } });
   gpu.dispose();
 });
 
 test("malformed ShaderSource without version throws VGPU-SHADER-SOURCE-INVALID", async () => {
   const gpu = await init();
 
-  expect(() => gpu.effect({ wgsl: FRAGMENT } as never)).toThrowError(
+  expect(() => effect(gpu, { wgsl: FRAGMENT } as never)).toThrowError(
     /VGPU-SHADER-SOURCE-INVALID: expected WGSL or \{ version, wgsl \}, got .* Fix: configure @vgpu\/wgsl loader-vite or loader-webpack\./,
   );
   gpu.dispose();
@@ -65,7 +65,7 @@ test("malformed ShaderSource without version throws VGPU-SHADER-SOURCE-INVALID",
 test("unsupported ShaderSource version throws VGPU-SHADER-SOURCE-INVALID", async () => {
   const gpu = await init();
 
-  expect(() => gpu.effect({ version: 2, wgsl: FRAGMENT } as never)).toThrowError(
+  expect(() => effect(gpu, { version: 2, wgsl: FRAGMENT } as never)).toThrowError(
     "VGPU-SHADER-SOURCE-INVALID: unsupported ShaderSource v2; expected v1. Fix: update vgpu or regenerate it.",
   );
   gpu.dispose();

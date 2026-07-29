@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, effect, frame, target, uniforms } from "vgpu/node";
 
 export const WAVE = /* wgsl */ `
 struct Globals { time: f32, mouse: vec2f }
@@ -18,14 +18,14 @@ struct Globals { time: f32, mouse: vec2f }
 
 export async function runSharedUniformsExample() {
   const gpu = await init();
-  const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-  const globals = gpu.uniforms({ time: 0.2, mouse: [0.4, 0.6] });
-  const wave = gpu.effect(WAVE, { label: "wave", set: { globals } });
-  const tint = gpu.effect(TINT, { label: "tint", set: { g: globals } });
+  const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
+  const globals = uniforms(gpu, { time: 0.2, mouse: [0.4, 0.6] });
+  const wave = effect(gpu, WAVE, { label: "wave", set: { globals } });
+  const tint = effect(gpu, TINT, { label: "tint", set: { g: globals } });
   globals.set({ time: 0.8 });
-  gpu.frame((frame) => {
-    frame.pass({ target, clear: [0, 0, 0, 1] }, (p) => p.draw(wave));
-    frame.pass({ target }, (p) => p.draw(tint));
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => p.draw(wave));
+    currentFrame.pass({ target: colorTarget }, (p) => p.draw(tint));
   });
-  return { gpu, target };
+  return { gpu, target: colorTarget };
 }

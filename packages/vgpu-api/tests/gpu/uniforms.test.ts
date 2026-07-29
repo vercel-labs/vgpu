@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, effect, frame, target, uniforms } from "../../src/node.ts";
 
 const WAVE_WGSL = `
 struct Globals { time: f32, mouse: vec2f }
@@ -19,16 +19,16 @@ fn globalsValue() -> f32 { return g.time; }
 fn globalsMouse() -> f32 { return g.mouse.x; }
 `;
 
-describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("gpu.uniforms() Docker GPU", () => {
+describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("uniforms(gpu) Docker GPU", () => {
   test("wave and blur share one animated globals object", async () => {
     const gpu = await init();
     const createBufferCount = countCreateBufferCalls(gpu.gpu);
     try {
-      const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-      const wave = gpu.effect(WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-      const blur = gpu.effect(BLUR_WGSL, { label: "BLUR_WGSL", set: { g: globals } });
-      const waveTarget = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "waveTarget" });
-      const blurTarget = gpu.target({ size: [8, 8], format: "rgba8unorm", label: "blurTarget" });
+      const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
+      const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+      const blur = effect(gpu, BLUR_WGSL, { label: "BLUR_WGSL", set: { g: globals } });
+      const waveTarget = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "waveTarget" });
+      const blurTarget = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "blurTarget" });
 
       globals.set({ time: 0.25, mouse: [0.5, 0] });
       renderPair(gpu, waveTarget, blurTarget, wave, blur);
@@ -62,15 +62,15 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("gpu.uniforms() Docker GPU
   });
 });
 
-function renderPair(gpu: Awaited<ReturnType<typeof init>>, waveTarget: ReturnType<typeof gpu.target>, blurTarget: ReturnType<typeof gpu.target>, wave: ReturnType<typeof gpu.effect>, blur: ReturnType<typeof gpu.effect>): void {
-  gpu.frame((frame) => {
-    frame.pass({ target: waveTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(wave));
-    frame.pass({ target: blurTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(blur));
+function renderPair(gpu: Awaited<ReturnType<typeof init>>, waveTarget: ReturnType<typeof target>, blurTarget: ReturnType<typeof target>, wave: ReturnType<typeof effect>, blur: ReturnType<typeof effect>): void {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: waveTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(wave));
+    currentFrame.pass({ target: blurTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(blur));
   });
 }
 
-async function centerPixel(target: ReturnType<Awaited<ReturnType<typeof init>>["target"]>): Promise<readonly number[]> {
-  const pixels = await target.read();
+async function centerPixel(colorTarget: ReturnType<Awaited<ReturnType<typeof init>>["target"]>): Promise<readonly number[]> {
+  const pixels = await colorTarget.read();
   return [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
 }
 

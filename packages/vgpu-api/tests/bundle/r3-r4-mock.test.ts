@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { bind, createBindGroup, createBindGroupLayout } from "@vgpu/core";
 import { UniformPool } from "../../src/core.ts";
-import { init } from "../../src/mock.ts";
+import { init, bundle, draw, effect, frame, target } from "../../src/mock.ts";
 
 const FLOOR = `
 struct Fog { fogDensity: f32 }
@@ -30,26 +30,26 @@ struct Obj { value: f32 }
 
 test("R3 bundle replay stays valid after JS value writes and stales on bind-group identity changes", async () => {
   const gpu = await init();
-  const scene = gpu.target({ size: [4, 4] });
-  const tex1 = gpu.target({ size: [4, 4] });
-  const tex2 = gpu.target({ size: [4, 4] });
-  const floor = gpu.effect(FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
-  const walls = gpu.effect(WALLS, { label: "walls" });
+  const scene = target(gpu, { size: [4, 4] });
+  const tex1 = target(gpu, { size: [4, 4] });
+  const tex2 = target(gpu, { size: [4, 4] });
+  const floor = effect(gpu, FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
+  const walls = effect(gpu, WALLS, { label: "walls" });
   walls.set({ detail: tex1 });
 
-  const staticScene = gpu.bundle({ target: scene, label: "staticScene" }, (b) => {
+  const staticScene = bundle(gpu, { target: scene, label: "staticScene" }, (b) => {
     b.draw(floor);
     b.draw(walls);
   });
 
   floor.set({ fogDensity: 0.2 });
-  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).not.toThrow();
+  expect(() => frame(gpu, (f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).not.toThrow();
 
   walls.set({ detail: tex2 });
-  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).toThrowError(
+  expect(() => frame(gpu, (f) => f.pass({ target: scene }, (p) => p.bundles(staticScene)))).toThrowError(
     "bundle 'staticScene' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
       "  'walls' changed resource after recording. Bundles freeze commands and bind groups.\n" +
-      "  Fix: re-record it → staticScene = gpu.bundle({ target: scene }, ...)\n" +
+      "  Fix: re-record it → staticScene = bundle(gpu, { target: scene }, ...)\n" +
       "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
@@ -57,30 +57,30 @@ test("R3 bundle replay stays valid after JS value writes and stales on bind-grou
 
 test("R3 bundle sampling a repeatedly resized target stales through binding identity each time", async () => {
   const gpu = await init();
-  const scene = gpu.target({ size: [4, 4] });
-  const source = gpu.target({ size: [4, 4] });
-  const post = gpu.effect(WALLS, { label: "post", set: { detail: source } });
-  const recordBundle = (label: string) => gpu.bundle({ target: scene, label }, (b) => {
+  const scene = target(gpu, { size: [4, 4] });
+  const source = target(gpu, { size: [4, 4] });
+  const post = effect(gpu, WALLS, { label: "post", set: { detail: source } });
+  const recordBundle = (label: string) => bundle(gpu, { target: scene, label }, (b) => {
     b.draw(post);
   });
 
   const firstBundle = recordBundle("postBundleA");
   source.resize([8, 8]);
 
-  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
+  expect(() => frame(gpu, (f) => f.pass({ target: scene }, (p) => p.bundles(firstBundle)))).toThrowError(
     "bundle 'postBundleA' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
       "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
-      "  Fix: re-record it → postBundleA = gpu.bundle({ target: scene }, ...)\n" +
+      "  Fix: re-record it → postBundleA = bundle(gpu, { target: scene }, ...)\n" +
       "  (re-recording is always your responsibility; the library only detects this).",
   );
 
   const secondBundle = recordBundle("postBundleB");
   source.resize([16, 16]);
 
-  expect(() => gpu.frame((f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
+  expect(() => frame(gpu, (f) => f.pass({ target: scene }, (p) => p.bundles(secondBundle)))).toThrowError(
     "bundle 'postBundleB' is stale: binding `detail` (@group(0) @binding(0)) of draw\n" +
       "  'post' changed resource after recording. Bundles freeze commands and bind groups.\n" +
-      "  Fix: re-record it → postBundleB = gpu.bundle({ target: scene }, ...)\n" +
+      "  Fix: re-record it → postBundleB = bundle(gpu, { target: scene }, ...)\n" +
       "  (re-recording is always your responsibility; the library only detects this).",
   );
   gpu.dispose();
@@ -88,7 +88,7 @@ test("R3 bundle sampling a repeatedly resized target stales through binding iden
 
 test("R4 raw claim validation stays attributed when frames overlap", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
   const popResolvers: ((error: GPUError | null) => void)[] = [];
   const gpuDevice = gpu.device.gpu as GPUDevice & {
     pushErrorScope(filter: GPUErrorFilter): void;
@@ -100,11 +100,11 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
   const cubeA = rawClaimedDraw(gpu, "cubeA");
   const cubeB = rawClaimedDraw(gpu, "cubeB");
 
-  const frameA = gpu.frame();
-  frameA.pass({ target }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
+  const frameA = frame(gpu);
+  frameA.pass({ target: colorTarget }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));
   expect(popResolvers).toHaveLength(2); // pipeline sync-create scope, then R4 raw-claim scope.
-  const frameB = gpu.frame();
-  frameB.pass({ target }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
+  const frameB = frame(gpu);
+  frameB.pass({ target: colorTarget }, (p) => p.draw(cubeB, { offsets: { 1: [0] } }));
   expect(popResolvers).toHaveLength(3); // cubeB reuses the device pipeline; only its R4 raw-claim scope is new.
 
   const errors: unknown[] = [];
@@ -141,7 +141,7 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 });
 
 function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
-  const cube = gpu.draw({ shader: OBJECTS, label, set: { globals: { tint: 1 } } });
+  const cube = draw(gpu, { shader: OBJECTS, label, set: { globals: { tint: 1 } } });
   const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: 64 });
   const rawLayout = gpu.device.gpu.createBindGroupLayout({
     label: `${label}.raw-static-layout`,
@@ -159,8 +159,8 @@ function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
 
 test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
-  const cube = gpu.draw({ shader: OBJECTS, label: "cube", set: { globals: { tint: 1 } } });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const cube = draw(gpu, { shader: OBJECTS, label: "cube", set: { globals: { tint: 1 } } });
   const offsets: readonly number[][] = [];
   const originalCreateCommandEncoder = gpu.device.gpu.createCommandEncoder.bind(gpu.device.gpu);
   vi.spyOn(gpu.device.gpu, "createCommandEncoder").mockImplementation((desc?: GPUCommandEncoderDescriptor) => {
@@ -207,7 +207,7 @@ test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", a
 
   pool.beginFrame(1);
   const offset = pool.push(slot, 3);
-  gpu.frame((f) => f.pass({ target }, (p) => p.draw(cube, { offsets: { 1: [offset] } })));
+  frame(gpu, (f) => f.pass({ target: colorTarget }, (p) => p.draw(cube, { offsets: { 1: [offset] } })));
 
   expect(offsets).toEqual([[offset]]);
   gpu.dispose();

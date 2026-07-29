@@ -1,4 +1,4 @@
-// gpu.geometry v2 fixture: direct vertex parameters matched by attribute name.
+// geometry(gpu, ...) v2 fixture: direct vertex parameters matched by attribute name.
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,

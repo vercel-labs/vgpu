@@ -47,7 +47,7 @@ const helpers = ["fresnel.wgsl", "lod-selection.wgsl"]
   .join("\n");
 ```
 
-`gpu.effect()` reflects one raw WGSL string and therefore rejects any remaining `import` with `VGPU-WGSL-REFLECT-SOURCE-IMPORT`. Outside a WGSL-aware bundler, inline imports in the **entrypoint too**, not only in helpers: concatenate the stripped helper sources with the entry source after stripping its import lines and its `export` keywords. The same `inlineModule` transform above is sufficient for both.
+`effect(gpu)` reflects one raw WGSL string and therefore rejects any remaining `import` with `VGPU-WGSL-REFLECT-SOURCE-IMPORT`. Outside a WGSL-aware bundler, inline imports in the **entrypoint too**, not only in helpers: concatenate the stripped helper sources with the entry source after stripping its import lines and its `export` keywords. The same `inlineModule` transform above is sufficient for both.
 
 ## 2. Encode internals as pixels
 
@@ -61,7 +61,7 @@ Render an 8×1 or 1×1 target where each pixel is a slot and each channel carrie
 | distance, thickness | `distance * scale` with a fixed scale | `byte / 255 / scale` |
 
 ```ts
-import { init } from "vgpu/node";
+import { init, effect, target } from "vgpu/node";
 
 const helpers = `
   fn dielectric_fresnel(ior: f32, facing: f32) -> f32 {
@@ -74,9 +74,9 @@ const helpers = `
 `;
 
 const gpu = await init();
-const target = gpu.target({ size: [8, 1] });
+const colorTarget = target(gpu, { size: [8, 1] });
 
-gpu.effect(`
+effect(gpu, `
   ${helpers}
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     let slot = i32(floor(uv.x * 8.0));
@@ -87,9 +87,9 @@ gpu.effect(`
     // normalized LOD: divide by levels - 1 so full roughness reaches exactly 1.0
     return vec4f(transmission_lod(0.0, 8.0) / 7.0, transmission_lod(0.5, 8.0) / 7.0, transmission_lod(1.0, 8.0) / 7.0, 1.0);
   }
-`).draw(target);
+`).draw(colorTarget);
 
-const pixels = await target.read();
+const pixels = await colorTarget.read();
 const slot0 = [...pixels.slice(0, 3)].map((byte) => byte / 255);
 console.log(slot0);
 gpu.dispose();
@@ -146,13 +146,13 @@ export async function dump(target: Target, file: string): Promise<void> {
 `target.read()` returns 8-bit RGBA bytes and does not read HDR targets such as `rgba16float` or `rgba32float` directly (known limitation: [#193](https://github.com/vercel-labs/vgpu/issues/193)). Render an encode pass into a separate `rgba8unorm` target, then read that target. Choose an encoding for the quantity: the example maps signed directions with `x * 0.5 + 0.5`; use a fixed range appropriate to distances or radiance instead.
 
 ```typescript
-import { init } from "vgpu/node";
+import { init, effect, sampler, target } from "vgpu/node";
 
 const gpu = await init();
-const hdr = gpu.target({ size: [64, 64], format: "rgba16float" });
-const encoded = gpu.target({ size: [64, 64], format: "rgba8unorm" });
+const hdr = target(gpu, { size: [64, 64], format: "rgba16float" });
+const encoded = target(gpu, { size: [64, 64], format: "rgba8unorm" });
 
-const encode = gpu.effect(`
+const encode = effect(gpu, `
   @group(0) @binding(0) var source: texture_2d<f32>;
   @group(0) @binding(1) var sourceSampler: sampler;
 
@@ -161,7 +161,7 @@ const encode = gpu.effect(`
     return vec4f(value.rgb * 0.5 + vec3f(0.5), 1.0); // signed direction -> [0, 1]
   }
 `);
-encode.set({ source: hdr, sourceSampler: gpu.sampler({ minFilter: "linear", magFilter: "linear" }) }).draw(encoded);
+encode.set({ source: hdr, sourceSampler: sampler(gpu, { minFilter: "linear", magFilter: "linear" }) }).draw(encoded);
 const pixels = await encoded.read();
 gpu.dispose();
 ```
@@ -172,7 +172,7 @@ Dump each level of a blur pyramid (`pyramid-0.png` … `pyramid-7.png`), each G-
 
 Evidence is only evidence if it reproduces byte for byte. In debug renders:
 
-- Do not read a clock. Pass time in as a fixed constant, never `Date.now()` or `gpu.time`.
+- Do not read a clock. Pass time in as a fixed constant, never `Date.now()` or `clock(gpu).time`.
 - Use a fixed number of warmup frames before the frame you read, and always the same number.
 - Jitter by pixel hash, never by frame index — a stable per-pixel rotation breaks up banding without changing between runs:
 

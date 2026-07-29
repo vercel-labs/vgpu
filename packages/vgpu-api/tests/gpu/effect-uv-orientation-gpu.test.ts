@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, draw, effect, sampler, target } from "../../src/node.ts";
 
 const SIZE = 8;
 
@@ -39,10 +39,10 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
   test("uses v=0 for the top row", async () => {
     const gpu = await init();
     try {
-      const target = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
-      gpu.effect(UV_PATTERN).draw(target);
+      const colorTarget = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      effect(gpu, UV_PATTERN).draw(colorTarget);
 
-      const pixels = await target.read();
+      const pixels = await colorTarget.read();
       const top = pixelAt(pixels, 0, 0);
       const bottom = pixelAt(pixels, 0, SIZE - 1);
       expect(top[0]).toBeLessThan(32);
@@ -59,13 +59,13 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
   test("copies a target pixel-for-pixel when sampling at the injected uv", async () => {
     const gpu = await init();
     try {
-      const source = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
-      const output = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
-      gpu.effect(UV_PATTERN).draw(source);
-      gpu.effect(IDENTITY_COPY, {
+      const source = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      const output = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      effect(gpu, UV_PATTERN).draw(source);
+      effect(gpu, IDENTITY_COPY, {
         set: {
           src: source,
-          srcSampler: gpu.sampler({ minFilter: "nearest", magFilter: "nearest" }),
+          srcSampler: sampler(gpu, { minFilter: "nearest", magFilter: "nearest" }),
         },
       }).draw(output);
 
@@ -78,10 +78,10 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
   test("matches the @vgpu/wgsl-std fullscreenTriangleUv orientation", async () => {
     const gpu = await init();
     try {
-      const injected = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
-      const helper = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
-      gpu.effect(UV_PATTERN).draw(injected);
-      gpu.draw({ shader: WGSL_STD_ORIENTATION, vertices: 3 }).draw(helper);
+      const injected = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      const helper = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      effect(gpu, UV_PATTERN).draw(injected);
+      draw(gpu, { shader: WGSL_STD_ORIENTATION, vertices: 3 }).draw(helper);
 
       expect(await injected.read()).toEqual(await helper.read());
     } finally {

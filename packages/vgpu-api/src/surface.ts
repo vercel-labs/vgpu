@@ -1,15 +1,24 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import { colorValue, sameSize } from "./target-utils.ts";
+import { BUILT_IN_CLEAR_COLOR, colorValue, copyClearColor, sameSize, validateClearColor, type ClearColor } from "./target-utils.ts";
 import type { RenderPassDescriptorOptions, Target } from "./target.ts";
 import {
   surfaceAutoResizeUnsupportedError,
   surfaceContextError,
   surfaceDisposedError,
+  surfaceDuplicateError,
   surfaceResizeReentrantError,
 } from "./errors.ts";
+import { frameState } from "./frame-state.ts";
+import { liveKernel } from "./live-kernel.ts";
+import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
 
 export interface SurfaceOptions {
   readonly autoResize?: boolean;
+  /**
+   * Default clear color of this surface, used by passes that clear without naming a color.
+   * Defaults to `[0, 0, 0, 1]`; mutable at runtime through `surface.clearColor`.
+   */
+  readonly clearColor?: ClearColor;
   readonly dpr?: number | readonly [number, number];
   readonly size?: readonly [number, number];
   readonly format?: GPUTextureFormat;
@@ -38,6 +47,39 @@ export interface Surface extends Target {
 
 export type SurfaceCanvas = HTMLCanvasElement | OffscreenCanvas;
 
+/**
+ * Canvas render target of this gpu: configures the canvas context and keeps it sized.
+ *
+ * One live surface per canvas — a second `surface(gpu, canvas)` on the same canvas throws
+ * `VGPU-SURFACE-DUPLICATE`, because reconfiguring a context out from under a live surface silently
+ * invalidates its textures. Disposing the surface frees the canvas for a new one.
+ *
+ * Lifecycle: the surface resizes itself right after the frame clock advances (auto-resize is a
+ * frame-state hook, so no rAF of its own), and it goes down with the gpu in the `resource` phase —
+ * after the loops stopped, before the caches and the device.
+ */
+export function surface(gpu: Gpu, canvas: SurfaceCanvas, opts: SurfaceOptions = {}): Surface {
+  const kernel = liveKernel(gpu, "surface");
+  const open = openSurfaces(kernel);
+  const existing = open.get(canvas);
+  if (existing && !existing.disposed) throw surfaceDuplicateError(existing.label);
+  const created = new CanvasSurface(kernel.device, canvas, opts, (disposed) => {
+    if (open.get(disposed.canvas) === disposed) open.delete(disposed.canvas);
+    releaseAutoResize();
+    releaseOwnership();
+  });
+  const releaseAutoResize = frameState(kernel).onAdvance(() => created.applyAutoResize());
+  const releaseOwnership = kernel.own("resource", () => created.dispose());
+  open.set(canvas, created);
+  return created;
+}
+
+/** Live surfaces of a gpu, keyed by canvas: the duplicate-configure guard, created on first surface. */
+const openSurfacesToken = serviceToken<Map<SurfaceCanvas, CanvasSurface>>("surfaces");
+function openSurfaces(kernel: Kernel): Map<SurfaceCanvas, CanvasSurface> {
+  return kernel.service(openSurfacesToken, () => new Map<SurfaceCanvas, CanvasSurface>());
+}
+
 let resizeCallbackDepth = 0;
 let frameDepth = 0;
 export function isSurfaceResizeCallbackActive(): boolean { return resizeCallbackDepth > 0; }
@@ -57,6 +99,7 @@ export class CanvasSurface implements Surface {
   readonly #callbacks = new Set<(event: SurfaceResizeEvent) => void>();
   readonly #texturesRecreatedCallbacks = new Set<() => void>();
   #currentDpr: number;
+  #clearColor: ClearColor;
   #isDisposed = false;
   #notifying = false;
 
@@ -67,6 +110,7 @@ export class CanvasSurface implements Surface {
     private readonly unregister: (surface: CanvasSurface) => void,
   ) {
     this.label = options.label;
+    this.#clearColor = options.clearColor === undefined ? BUILT_IN_CLEAR_COLOR : validateClearColor(options.clearColor, "surface.clearColor");
     const context = canvas.getContext("webgpu") as GPUCanvasContext | null;
     if (!context) throw surfaceContextError();
     this.context = context;
@@ -102,6 +146,9 @@ export class CanvasSurface implements Surface {
   get depth(): undefined { this.#assertLive(); return undefined; }
   get sampleCount(): 1 { this.#assertLive(); return 1; }
   get dpr(): number { return this.#currentDpr; }
+  /** Default clear color of this surface; passes that clear without naming a color use it. */
+  get clearColor(): ClearColor { return copyClearColor(this.#clearColor); }
+  set clearColor(value: ClearColor) { this.#clearColor = validateClearColor(value, "surface.clearColor"); }
   get disposed(): boolean { return this.#isDisposed; }
 
   resize(size: readonly [number, number]): void {

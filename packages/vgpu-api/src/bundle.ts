@@ -5,6 +5,22 @@ import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
 import { bundleBlendConstantError, bundleStencilReferenceError, surfaceNotInFrameError, VGPUError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
+import { FRAME_BUNDLE, type FrameBundleProtocol } from "./frame-protocols.ts";
+import { liveKernel } from "./live-kernel.ts";
+import type { Gpu } from "./kernel.ts";
+
+/**
+ * Records an explicit WebGPU render bundle: the draws in `record` are encoded once and replayed
+ * with `pass.bundles(bundle)`.
+ *
+ * A bundle freezes its commands, its bind groups and the target signature it was recorded for; the
+ * recorded state is re-checked at replay and a mismatch throws `VGPU-R3-BUNDLE-STALE` instead of
+ * drawing something stale. Recording against a `Surface` is only legal inside a frame, because the
+ * surface's current texture — and therefore its format — is only defined there.
+ */
+export function bundle(gpu: Gpu, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle {
+  return createBundle(liveKernel(gpu, "bundle").device, opts, record);
+}
 
 export interface BundleOptions {
   readonly target: CompileTarget;
@@ -26,7 +42,7 @@ let recordingDepth = 0;
 /** Records explicit WebGPU render bundles and keeps the R3 stale signature checked at replay time. */
 export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle {
   const id = opts.label ?? `bundle${nextBundleId++}`;
-  if (isSurface(opts.target) && !isFrameActive()) throw surfaceNotInFrameError("gpu.bundle");
+  if (isSurface(opts.target) && !isFrameActive()) throw surfaceNotInFrameError("bundle");
   const signature = normalizeBundleSignature(opts.target);
   const bundle = new RecordedBundle(device, id, signature);
   bundle.record(record);
@@ -53,6 +69,12 @@ class RecordedBundle implements Bundle, BundleBackReference {
     });
     for (const draw of this.#draws) registerDrawBundle(draw, this);
   }
+
+  /**
+   * Frame bundle protocol: `pass.bundles()` replays through this, so `frame.ts` never imports
+   * bundle.ts. The recorded bundle is its own protocol object — `gpu` and the staleness check.
+   */
+  get [FRAME_BUNDLE](): FrameBundleProtocol { return this; }
 
   markStale(event: BundleStaleEvent): void {
     if (recordingDepth > 0) return;
@@ -95,32 +117,23 @@ class ExplicitBundleRecorder implements BundleRecorder {
 
 function normalizeBundleSignature(target: CompileTarget): TargetSignature {
   const signature = normalizeSignature(target);
-  validateTargetSignature(signature, "gpu.bundle");
+  validateTargetSignature(signature, "bundle");
   return signature;
 }
 
 function targetSignatureStaleMessage(id: string, recordedKey: string, actualKey: string): string {
-  return `bundle '${id}' is stale: the replay target signature does not match the recorded signature. Bundles freeze format/depth/sampleCount and bind groups.\n  Recorded signature: ${recordedKey}\n  Actual signature: ${actualKey}\n  Fix: re-record the bundle for this target → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
+  return `bundle '${id}' is stale: the replay target signature does not match the recorded signature. Bundles freeze format/depth/sampleCount and bind groups.\n  Recorded signature: ${recordedKey}\n  Actual signature: ${actualKey}\n  Fix: re-record the bundle for this target → ${id} = bundle(gpu, { target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function staleEventMessage(id: string, event: BundleStaleEvent): string {
   if (event.kind === "group-claim") {
-    return `bundle '${id}' is stale: group ${event.group} of draw\n  '${event.drawLabel}' changed bind group after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
+    return `bundle '${id}' is stale: group ${event.group} of draw\n  '${event.drawLabel}' changed bind group after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = bundle(gpu, { target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
   }
-  return `bundle '${id}' is stale: binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) of draw\n  '${event.drawLabel}' changed resource after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = gpu.bundle({ target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
+  return `bundle '${id}' is stale: binding \`${event.bindingName}\` (@group(${event.group}) @binding(${event.binding})) of draw\n  '${event.drawLabel}' changed resource after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = bundle(gpu, { target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
 }
 
 function bundleStaleError(id: string, message: string): VGPUError {
   return new VGPUError({ code: "VGPU-R3-BUNDLE-STALE", message, where: `bundle '${id}' replay` });
 }
 
-export function replayBundles(target: Target, bundles: readonly Bundle[], execute: (bundles: readonly GPURenderBundle[]) => void): void {
-  const recorded = bundles.map((bundle) => assertRecordedBundle(bundle));
-  for (const bundle of recorded) bundle.assertReplayable(target);
-  execute(recorded.map((bundle) => bundle.gpu));
-}
 
-function assertRecordedBundle(bundle: Bundle): RecordedBundle {
-  if (bundle instanceof RecordedBundle) return bundle;
-  throw new VGPUError({ code: "VGPU-R3-BUNDLE-INVALID", message: "p.bundles() expected bundles created by gpu.bundle({ target }, cb).", where: "FramePass.bundles" });
-}

@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, effect, frame, target } from "vgpu/node";
 
 export const WAVE = /* wgsl */ `
 struct Params { time: f32, speed: f32 }
@@ -10,9 +10,9 @@ struct Params { time: f32, speed: f32 }
 
 export async function runFullscreenExample() {
   const gpu = await init();
-  const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-  const wave = gpu.effect(WAVE, { label: "wave", set: { speed: 2 } });
+  const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
+  const wave = effect(gpu, WAVE, { label: "wave", set: { speed: 2 } });
   wave.set({ time: Math.PI / 4 });
-  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(wave)));
-  return { gpu, target };
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(wave)));
+  return { gpu, target: colorTarget };
 }

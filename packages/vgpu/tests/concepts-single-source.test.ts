@@ -16,12 +16,12 @@ const nav = [
 ];
 const metadata = {
   context: ["Context", "init() creates the Gpu context; every surface, target, effect, and frame is created from it.", "/get-started/node", "/concepts/draws"],
-  draws: ["Draws", "gpu.draw() renders geometry with custom vertex buffers — you write the vertex stage, gpu.geometry() supplies the buffers.", "/concepts/context", "/concepts/compilation"],
+  draws: ["Draws", "draw(gpu, opts) renders geometry with custom vertex buffers — you write the vertex stage, geometry(gpu, ...) supplies the buffers.", "/concepts/context", "/concepts/compilation"],
   compilation: ["Compilation", "Pipelines compile lazily on first use; pre-warm them during load so the first frame doesn't hitch.", "/concepts/draws", "/concepts/effects"],
   effects: ["Effects", "An effect is a full-screen fragment shader; chain effects by binding a target as another effect's input.", "/concepts/compilation", "/concepts/passes"],
   passes: ["Passes", "A pass composites any number of draws into one target; a single shader can draw directly.", "/concepts/effects", "/concepts/frames"],
-  frames: ["Frames", "gpu.frame() encodes your passes and submits once; gpu.frame.loop() drives animation.", "/concepts/passes", "/concepts/render-bundles"],
-  "render-bundles": ["Render bundles", "gpu.bundle() records draws once; replaying them each frame skips re-encoding.", "/concepts/frames", undefined],
+  frames: ["Frames", "frame(gpu, cb) encodes your passes and submits once; frameLoop(gpu, cb) drives animation.", "/concepts/passes", "/concepts/render-bundles"],
+  "render-bundles": ["Render bundles", "bundle(gpu, opts, record) records draws once; replaying them each frame skips re-encoding.", "/concepts/frames", undefined],
 } as const;
 const headingIds = {
   context: ["create-resources-once-draw-every-frame"],

@@ -16,11 +16,11 @@ order: 40
 
 # Effects
 
-An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `gpu.effect(source)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. See [Compilation](/concepts/compilation) for the full pre-warm flow. Every draw fills the whole target — you only write the fragment.
+An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `effect(gpu, source)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. See [Compilation](/concepts/compilation) for the full pre-warm flow. Every draw fills the whole target — you only write the fragment.
 
 Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
 
-The `uv` varying that `gpu.effect()` injects is top-origin: `(0, 0)` is the
+The `uv` varying that `effect(gpu)` injects is top-origin: `(0, 0)` is the
 top-left corner and `v` grows downward — the same convention as WebGPU texture
 coordinates, `@builtin(position)`, and `target.read()`. Sampling any texture
 with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
@@ -29,11 +29,11 @@ image exactly. If you are porting a WebGL or Shadertoy shader that assumes
 everything else flip-free.
 
 ```ts
-import { init } from "vgpu";
+import { init, effect, sampler, surface, target } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const surface = gpu.surface(canvas);
+const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
 const sceneSource = `
@@ -53,17 +53,17 @@ const postSource = `
   }
 `;
 
-const scene = gpu.target({ size: [1280, 720] });
+const scene = target(gpu, { size: [1280, 720] });
 
-const sceneEffect = gpu.effect(sceneSource);
-const post = gpu.effect(postSource);
+const sceneEffect = effect(gpu, sceneSource);
+const post = effect(gpu, postSource);
 post.set({
   src: scene,
-  samp: gpu.sampler({ minFilter: 'linear', magFilter: 'linear' }),
+  samp: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
 }); // the offscreen result becomes the post input
 
 sceneEffect.draw(scene); // render the scene offscreen
-post.draw(surface); // invert it onto the canvas
+post.draw(canvasSurface); // invert it onto the canvas
 ```
 
 Reach for `textureLoad` only when you need exact texels or an unfilterable
@@ -90,11 +90,11 @@ vertical blur, say), create two effects; they are cheap, and each owns its
 uniforms.
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, effect, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasSurface = gpu.surface(canvas);
+const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
 const pulseSource = `
@@ -107,7 +107,7 @@ const pulseSource = `
   }
 `;
 
-const pulse = gpu.effect(pulseSource, {
+const pulse = effect(gpu, pulseSource, {
   // initial uniform defaults
   set: {
     params: {
@@ -121,7 +121,7 @@ const pulse = gpu.effect(pulseSource, {
 // update uniforms before drawing
 pulse.set({
   params: {
-    time: gpu.time,
+    time: clock(gpu).time,
   },
 });
 
@@ -131,12 +131,12 @@ pulse.draw(canvasSurface);
 You should also only update uniforms when they need to change, for example, react to canvas size changes:
 
 ```ts
-import { init } from "vgpu";
+import { clock, init, effect, surface } from "vgpu";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-const canvasSurface = gpu.surface(canvas);
-const pulse = gpu.effect(`
+const canvasSurface = surface(gpu, canvas);
+const pulse = effect(gpu, `
   struct Params { time: f32, width: f32, height: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 

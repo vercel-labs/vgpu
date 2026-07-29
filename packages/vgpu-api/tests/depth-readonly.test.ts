@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { init } from "../src/mock.ts";
+import { init, bundle, draw, effect, frame, target } from "../src/mock.ts";
 
 const DRAW_SHADER = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -21,9 +21,9 @@ const DEPTH_SAMPLING_SHADER = `
 test("depthReadOnly marks the depth attachment read-only and omits its ops", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: true });
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, () => undefined));
 
   const attachment = descriptors[0]?.depthStencilAttachment;
   expect(attachment).toMatchObject({ depthReadOnly: true });
@@ -41,9 +41,9 @@ test("depthReadOnly marks the depth attachment read-only and omits its ops", asy
 test("depthReadOnly on combined formats marks the stencil aspect read-only too", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
 
-  gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, () => undefined));
 
   const attachment = descriptors[0]?.depthStencilAttachment;
   expect(attachment).toMatchObject({ depthReadOnly: true, stencilReadOnly: true });
@@ -59,10 +59,10 @@ test("depthReadOnly on combined formats marks the stencil aspect read-only too",
 test("color attachments still clear normally alongside depthReadOnly", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: true });
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target, depthReadOnly: true, clear: [0.5, 0, 0, 1] }, () => undefined));
-  gpu.frame((frame) => frame.pass({ target, depthReadOnly: true, clear: false }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true, clear: [0.5, 0, 0, 1] }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true, clear: false }, () => undefined));
 
   const colors = [...(descriptors[0]?.colorAttachments ?? [])];
   expect(colors[0]).toMatchObject({ loadOp: "clear", clearValue: { r: 0.5, g: 0, b: 0, a: 1 } });
@@ -76,9 +76,9 @@ test("color attachments still clear normally alongside depthReadOnly", async () 
 test("depthReadOnly false behaves like a normal writable pass", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: true });
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target, depthReadOnly: false, clearDepth: 0 }, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: false, clearDepth: 0 }, () => undefined));
 
   expect(descriptors[0]?.depthStencilAttachment).toMatchObject({ depthLoadOp: "clear", depthStoreOp: "store", depthClearValue: 0 });
   expect(descriptors[0]?.depthStencilAttachment?.depthReadOnly).toBeUndefined();
@@ -88,24 +88,24 @@ test("depthReadOnly false behaves like a normal writable pass", async () => {
 
 test("a depth-writing draw is rejected in a depthReadOnly pass", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: true });
-  const defaultDepth = gpu.draw({ shader: DRAW_SHADER, label: "writes-by-default" });
-  const explicitWrite = gpu.draw({ shader: DRAW_SHADER, label: "writes-explicitly", depth: { write: true, compare: "greater" } });
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
+  const defaultDepth = draw(gpu, { shader: DRAW_SHADER, label: "writes-by-default" });
+  const explicitWrite = draw(gpu, { shader: DRAW_SHADER, label: "writes-explicitly", depth: { write: true, compare: "greater" } });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(defaultDepth))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(defaultDepth))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|write: false/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(explicitWrite))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(explicitWrite))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|write: false/);
   gpu.dispose();
 });
 
 test("non-writing draws encode in a depthReadOnly pass", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: true });
-  const testOnly = gpu.draw({ shader: DRAW_SHADER, label: "test-only", depth: { write: false, compare: "less-equal" } });
-  const depthOff = gpu.draw({ shader: DRAW_SHADER, label: "depth-off", depth: false });
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
+  const testOnly = draw(gpu, { shader: DRAW_SHADER, label: "test-only", depth: { write: false, compare: "less-equal" } });
+  const depthOff = draw(gpu, { shader: DRAW_SHADER, label: "depth-off", depth: false });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => {
     pass.draw(testOnly);
     pass.draw(depthOff);
   }))).not.toThrow();
@@ -114,14 +114,14 @@ test("non-writing draws encode in a depthReadOnly pass", async () => {
 
 test("stencil-writing draws are rejected on combined formats, keep-only draws encode", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const writes = gpu.draw({ shader: DRAW_SHADER, label: "stencil-writes", depth: { write: false }, stencil: { front: { pass: "replace" } } });
-  const comparesOnly = gpu.draw({ shader: DRAW_SHADER, label: "stencil-compares", depth: { write: false }, stencil: { front: { compare: "equal" }, ref: 1 } });
-  const maskedOff = gpu.draw({ shader: DRAW_SHADER, label: "stencil-masked", depth: { write: false }, stencil: { front: { pass: "replace" }, writeMask: 0 } });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const writes = draw(gpu, { shader: DRAW_SHADER, label: "stencil-writes", depth: { write: false }, stencil: { front: { pass: "replace" } } });
+  const comparesOnly = draw(gpu, { shader: DRAW_SHADER, label: "stencil-compares", depth: { write: false }, stencil: { front: { compare: "equal" }, ref: 1 } });
+  const maskedOff = draw(gpu, { shader: DRAW_SHADER, label: "stencil-masked", depth: { write: false }, stencil: { front: { pass: "replace" }, writeMask: 0 } });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(writes))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(writes))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|pass: "replace"/);
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => {
     pass.draw(comparesOnly);
     // writeMask 0 mirrors the spec's [[writesStencil]]: ops cannot write masked-off bits.
     pass.draw(maskedOff);
@@ -131,90 +131,90 @@ test("stencil-writing draws are rejected on combined formats, keep-only draws en
 
 test("culled stencil faces do not count as stencil writes", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
+  const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
   // Only the front face has writing ops and it is culled; the explicit back face keeps everything.
-  const culledFront = gpu.draw({ shader: DRAW_SHADER, label: "culled-front", cull: "front", depth: { write: false }, stencil: { front: { pass: "replace" }, back: {} } });
+  const culledFront = draw(gpu, { shader: DRAW_SHADER, label: "culled-front", cull: "front", depth: { write: false }, stencil: { front: { pass: "replace" }, back: {} } });
   // Same ops without culling must still be rejected.
-  const unculled = gpu.draw({ shader: DRAW_SHADER, label: "unculled-front", depth: { write: false }, stencil: { front: { pass: "replace" }, back: {} } });
+  const unculled = draw(gpu, { shader: DRAW_SHADER, label: "unculled-front", depth: { write: false }, stencil: { front: { pass: "replace" }, back: {} } });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(culledFront)))).not.toThrow();
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(unculled))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(culledFront)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(unculled))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|pass: "replace"/);
   gpu.dispose();
 });
 
 test("depthReadOnly contradiction rules throw at pass open", async () => {
   const gpu = await init();
-  const depthTarget = gpu.target({ size: [2, 2], depth: true });
-  const stencilTarget = gpu.target({ size: [2, 2], depth: "depth24plus-stencil8" });
-  const colorOnly = gpu.target({ size: [2, 2] });
+  const depthTarget = target(gpu, { size: [2, 2], depth: true });
+  const stencilTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
+  const colorOnly = target(gpu, { size: [2, 2] });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: depthTarget, depthReadOnly: true, clearDepth: 0 }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: depthTarget, depthReadOnly: true, clearDepth: 0 }, () => undefined)))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|clearDepth/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: stencilTarget, depthReadOnly: true, clearStencil: 1 }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: stencilTarget, depthReadOnly: true, clearStencil: 1 }, () => undefined)))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|clearStencil/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: colorOnly, depthReadOnly: true }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorOnly, depthReadOnly: true }, () => undefined)))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|no depth attachment/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: depthTarget, depthReadOnly: "yes" as never }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: depthTarget, depthReadOnly: "yes" as never }, () => undefined)))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|expected a boolean/);
   // depthReadOnly: false is inert; the dead-option rules do not apply.
-  expect(() => gpu.frame((frame) => frame.pass({ target: colorOnly, depthReadOnly: false }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorOnly, depthReadOnly: false }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
 test("depthReadOnly is rejected on an MSAA target", async () => {
   const gpu = await init();
-  const msaa = gpu.target({ size: [2, 2], depth: true, msaa: true });
+  const msaa = target(gpu, { size: [2, 2], depth: true, msaa: true });
   expect(msaa.sampleCount).toBe(4);
 
   // Multisampled depth is stored with storeOp "discard", so a read-only pass would depth-test
   // against discarded contents — silent garbage, not an error the driver reports.
-  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, depthReadOnly: true }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: msaa, depthReadOnly: true }, () => undefined)))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY-MSAA|storeOp "discard"/);
   // Symmetric to the clear:false rule on MSAA targets.
-  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, clear: false }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: msaa, clear: false }, () => undefined)))
     .toThrowError(/VGPU-PASS-PRESERVE-MSAA|cannot preserve MSAA/);
   // depthReadOnly: false stays inert on MSAA targets.
-  expect(() => gpu.frame((frame) => frame.pass({ target: msaa, depthReadOnly: false }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: msaa, depthReadOnly: false }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
 test("clearDepth on a target without depth throws instead of being silently dropped", async () => {
   const gpu = await init();
-  const colorOnly = gpu.target({ size: [2, 2] });
-  const depthTarget = gpu.target({ size: [2, 2], depth: true });
+  const colorOnly = target(gpu, { size: [2, 2] });
+  const depthTarget = target(gpu, { size: [2, 2], depth: true });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: colorOnly, clearDepth: 0 }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorOnly, clearDepth: 0 }, () => undefined)))
     .toThrowError(/VGPU-PASS-CLEARDEPTH-INVALID|no depth attachment/);
   // Range and preserve rules still take precedence, and the same option is fine with depth.
-  expect(() => gpu.frame((frame) => frame.pass({ target: colorOnly, clearDepth: 2 }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorOnly, clearDepth: 2 }, () => undefined)))
     .toThrowError(/VGPU-PASS-CLEARDEPTH-INVALID|expected a number in \[0, 1\]/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: depthTarget, clearDepth: 0 }, () => undefined))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: depthTarget, clearDepth: 0 }, () => undefined))).not.toThrow();
   gpu.dispose();
 });
 
 test("bundles cannot replay into a depthReadOnly pass", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: true });
-  const draw = gpu.draw({ shader: DRAW_SHADER, label: "bundled", depth: { write: false } });
-  const bundle = gpu.bundle({ target }, (recorder) => recorder.draw(draw));
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
+  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "bundled", depth: { write: false } });
+  const recorded = bundle(gpu, { target: colorTarget }, (recorder) => recorder.draw(drawable));
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.bundles(bundle))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.bundles(recorded))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|read-only/);
-  expect(() => gpu.frame((frame) => frame.pass(target, (pass) => pass.bundles(bundle)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (pass) => pass.bundles(recorded)))).not.toThrow();
   gpu.dispose();
 });
 
 test("the pass target's depth texture can be sampled inside its own depthReadOnly pass", async () => {
   const gpu = await init();
   const descriptors = spyRenderPassDescriptors(gpu.device.gpu);
-  const target = gpu.target({ size: [2, 2], depth: true });
-  expect(target.depth?.usage).toContain("texture_binding");
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
+  expect(colorTarget.depth?.usage).toContain("texture_binding");
 
-  const draw = gpu.draw({ shader: DEPTH_SAMPLING_SHADER, label: "depth-sampler", depth: { write: false } });
-  draw.set({ depthTex: target.depth! });
+  const drawable = draw(gpu, { shader: DEPTH_SAMPLING_SHADER, label: "depth-sampler", depth: { write: false } });
+  drawable.set({ depthTex: colorTarget.depth! });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(draw)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(drawable)))).not.toThrow();
   expect(descriptors[0]?.depthStencilAttachment).toMatchObject({ depthReadOnly: true });
   gpu.dispose();
   vi.restoreAllMocks();
@@ -222,10 +222,10 @@ test("the pass target's depth texture can be sampled inside its own depthReadOnl
 
 test("effects keep the default depth write and are rejected in depthReadOnly passes", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [2, 2], depth: true });
-  const effect = gpu.effect(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`);
+  const colorTarget = target(gpu, { size: [2, 2], depth: true });
+  const shader1 = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`);
 
-  expect(() => gpu.frame((frame) => frame.pass({ target, depthReadOnly: true }, (pass) => pass.draw(effect))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, depthReadOnly: true }, (pass) => pass.draw(shader1))))
     .toThrowError(/VGPU-PASS-DEPTH-READONLY|write: false/);
   gpu.dispose();
 });

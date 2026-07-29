@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, compute } from "vgpu/node";
 
 export const SIM = /* wgsl */ `
 struct Sim { dt: f32 }
@@ -16,7 +16,7 @@ export async function runComputeExample() {
   const src = gpu.device.createBuffer({ size: 16, usage: ["storage", "copy_dst", "copy_src"], label: "src" });
   const dst = gpu.device.createBuffer({ size: 16, usage: ["storage", "copy_dst", "copy_src"], label: "dst" });
   src.write(new Float32Array([1, 2, 3, 4]));
-  const sim = gpu.compute(SIM, { label: "sim" });
+  const sim = compute(gpu, SIM, { label: "sim" });
   sim.set({ dt: 0.5, src, dst });
   sim.dispatch(1);
   return { gpu, dst };

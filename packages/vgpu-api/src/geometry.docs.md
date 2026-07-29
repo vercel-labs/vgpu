@@ -1,6 +1,6 @@
-# gpu.geometry
+# geometry()
 
-Creates an immutable vertex/index layout plus mutable GPU buffers for `gpu.draw()`. The v2 descriptor form accepts named attributes, multiple vertex streams, instancing streams, indices, topology, writes, and slices. Existing scene geometry descriptors such as `box()` continue to work as primitive sugar.
+Creates an immutable vertex/index layout plus mutable GPU buffers for `draw(gpu)`. The v2 descriptor form accepts named attributes, multiple vertex streams, instancing streams, indices, topology, writes, and slices. Existing scene geometry descriptors such as `box()` continue to work as primitive sugar.
 
 ## Import
 
@@ -129,7 +129,7 @@ interface DrawCallOptions {
 | geometry.write.data | `GeometryData` | ✔ | — | Writes to buffer 0 using `queue.writeBuffer`. No resize. |
 | geometry.writeIndices.data | `Uint16Array \| Uint32Array` | ✔ | — | Writes to an index buffer owned from `options.indices`. Write caller-owned `indexBuffer` objects directly. No resize. |
 
-**Returns:** `gpu.geometry()` returns `Geometry`; `geometry.slice()` returns `GeometrySlice`; `write()`, `writeIndices()`, and `destroy()` return `void`.
+**Returns:** `geometry(gpu)` returns `Geometry`; `geometry.slice()` returns `GeometrySlice`; `write()`, `writeIndices()`, and `destroy()` return `void`.
 
 ## Error codes
 
@@ -148,7 +148,7 @@ interface DrawCallOptions {
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, geometry } from "vgpu/mock";
 
 const gpu = await init();
 const positions = new Float32Array([
@@ -157,7 +157,7 @@ const positions = new Float32Array([
    0,  1, 0,
 ]);
 
-const triangle = gpu.geometry({
+const triangle = geometry(gpu, {
   buffers: [{
     data: positions,
     attributes: { position: "float32x3" },
@@ -166,11 +166,11 @@ const triangle = gpu.geometry({
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, geometry } from "vgpu/mock";
 
 const gpu = await init();
 const ledVertices = new Float32Array(6 * 6);
-const ledGeometry = gpu.geometry({
+const ledGeometry = geometry(gpu, {
   label: "triangle-led-front-led-emitters",
   buffers: [{
     data: ledVertices,
@@ -185,12 +185,12 @@ const ledGeometry = gpu.geometry({
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, geometry } from "vgpu/mock";
 
 const gpu = await init();
 const quadCorners = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 const instanceData = new Float32Array(4 * 10);
-const particles = gpu.geometry({
+const particles = geometry(gpu, {
   topology: "triangle-strip",
   buffers: [
     { data: quadCorners, attributes: { corner: "float32x2" } },
@@ -203,12 +203,12 @@ const particles = gpu.geometry({
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, draw, geometry } from "vgpu/mock";
 
 const gpu = await init();
 const vertexData = new Float32Array(3 * 4500);
 const allIndices = new Uint32Array(4500);
-const gltfGeometry = gpu.geometry({
+const gltfGeometry = geometry(gpu, {
   buffers: [{ data: vertexData, attributes: { position: "float32x3" } }],
   indices: allIndices,
 });
@@ -216,35 +216,35 @@ const hull = gltfGeometry.slice({ firstIndex: 0, indexCount: 3600 });
 const glass = gltfGeometry.slice({ firstIndex: 3600, indexCount: 900, label: "glass" });
 const pbrWgsl = "@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }";
 
-gpu.draw({ shader: pbrWgsl, geometry: hull });
-gpu.draw({ shader: pbrWgsl, geometry: glass, blend: "alpha" });
+draw(gpu, { shader: pbrWgsl, geometry: hull });
+draw(gpu, { shader: pbrWgsl, geometry: glass, blend: "alpha" });
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, draw, geometry, target } from "vgpu/mock";
 
 const gpu = await init();
 const glyphQuads = new Float32Array(4 * 4);
 const quadIndices = new Uint16Array([0, 1, 2, 2, 1, 3]);
-const text = gpu.geometry({
+const text = geometry(gpu, {
   buffers: [{ data: glyphQuads, attributes: { pos: "float32x2", uv: "float32x2" } }],
   indices: quadIndices,
 });
 const sdfTextWgsl = "@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }";
-const textDraw = gpu.draw({ shader: sdfTextWgsl, geometry: text });
-const target = gpu.target({ size: [640, 480] });
+const textDraw = draw(gpu, { shader: sdfTextWgsl, geometry: text });
+const colorTarget = target(gpu, { size: [640, 480] });
 
 text.write(new Float32Array(4 * 4));
 text.writeIndices(new Uint16Array([0, 1, 2, 2, 1, 3]));
-textDraw.draw({ target, indices: 6 });
+textDraw.draw({ target: colorTarget, indices: 6 });
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, geometry } from "vgpu/mock";
 import { box } from "vgpu/scene";
 
 const gpu = await init();
-const cube = gpu.geometry(box({ size: 2 }));
+const cube = geometry(gpu, box({ size: 2 }));
 ```
 
 ## Notes

@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn(), createHeroRenderer: vi.fn() }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 vi.mock('./scene-renderer', () => ({ createHeroRenderer: mocks.createHeroRenderer }));
 
 import { Controls } from './controls';
@@ -49,7 +54,7 @@ function setup() {
   } as unknown as HTMLCanvasElement;
   const stop = vi.fn();
   const surface = { dpr: 1, size: [200, 100], format: 'bgra8unorm', dispose: vi.fn() };
-  const gpu = { time: 0, deltaTime: 1 / 60, surface: vi.fn(() => surface), frame: { loop: vi.fn(() => ({ stop })) }, dispose: vi.fn() };
+  const gpu = { clock: { time: 0, deltaTime: 1 / 60, frameCount: 0 }, fns: { surface: vi.fn(() => surface), frameLoop: vi.fn(() => ({ stop })) }, dispose: vi.fn() };
   const scene = {
     setOutputTarget: vi.fn(), setHero: vi.fn(), prewarm: vi.fn(async () => {}), setBrush: vi.fn(),
     setRgbDeployActive: vi.fn(), renderFrame: vi.fn(), rebuild: vi.fn(), destroy: vi.fn(), hero: {},
@@ -189,7 +194,7 @@ test('thumbnail failure settles submitted work before destroying the scene', asy
     throw renderError;
   });
   const gpu = {
-    frame,
+    fns: { frame },
     gpu: { queue: { onSubmittedWorkDone: vi.fn(async () => {
       events.push('drain');
       throw new Error('queue drain failed');

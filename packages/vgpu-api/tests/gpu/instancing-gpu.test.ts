@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init } from "../../src/node.ts";
+import { init, draw, frame, target } from "../../src/node.ts";
 
 const INSTANCED_QUADS = `
 struct VertexOut {
@@ -28,12 +28,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu instancing GPU accep
   test("instanced quads render more than one visible copy", async () => {
     const gpu = await init();
     try {
-      const target = gpu.target({ size: [32, 16], format: "rgba8unorm" });
-      const quads = gpu.draw({ shader: INSTANCED_QUADS, label: "instanced-quads", vertices: 6, instances: 2 });
+      const colorTarget = target(gpu, { size: [32, 16], format: "rgba8unorm" });
+      const quads = draw(gpu, { shader: INSTANCED_QUADS, label: "instanced-quads", vertices: 6, instances: 2 });
 
-      gpu.frame((frame) => frame.pass({ target, clear: [0, 0, 0, 1] }, (pass) => pass.draw(quads)));
+      frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(quads)));
 
-      const pixels = await target.read();
+      const pixels = await colorTarget.read();
       const left = pixelAt(pixels, 32, 8, 8);
       const right = pixelAt(pixels, 32, 23, 8);
 

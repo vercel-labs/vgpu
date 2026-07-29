@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, draw, frame, geometry, target } from "vgpu/node";
 import { box, orbit, perspectiveCamera } from "vgpu/scene";
 
 export const LIT_WGSL = /* wgsl */ `
@@ -24,10 +24,10 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3
 
 export async function runSceneExample() {
   const gpu = await init();
-  const target = gpu.target({ size: [32, 32], format: "rgba8unorm", depth: true });
+  const colorTarget = target(gpu, { size: [32, 32], format: "rgba8unorm", depth: true });
   const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
-  const cube = gpu.draw({ shader: LIT_WGSL, geometry: gpu.geometry(box({ size: 1 })), label: "cube", targets: [target] });
+  const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box({ size: 1 })), label: "cube", targets: [colorTarget] });
   cube.set({ camera: { viewProjection: cam.viewProjection }, model: { model: orbit(0) }, light: { direction: [-1, -1, -1], intensity: 1 } });
-  gpu.frame((frame) => frame.pass({ target, clear: [0.05, 0.05, 0.08, 1] }, (p) => p.draw(cube)));
-  return { gpu, target };
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0.05, 0.05, 0.08, 1] }, (p) => p.draw(cube)));
+  return { gpu, target: colorTarget };
 }

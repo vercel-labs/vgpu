@@ -1,4 +1,4 @@
-import { init, Uniform } from "vgpu/node";
+import { init, Uniform, draw, frame, target } from "vgpu/node";
 
 export const SHARED_CAMERA = /* wgsl */ `
 struct Camera { exposure: f32 }
@@ -34,20 +34,20 @@ ${SHARED_CAMERA}
 
 export async function runSharingExample() {
   const gpu = await init();
-  const target = gpu.target({ size: [16, 16], format: "rgba8unorm" });
+  const colorTarget = target(gpu, { size: [16, 16], format: "rgba8unorm" });
   const camera = new Uniform(gpu.device, { size: 16, label: "camera" });
   camera.write(new Float32Array([1, 0, 0, 0]));
 
-  const cube = gpu.draw({ shader: CUBE, label: "cube" });
-  const floor = gpu.draw({ shader: FLOOR, label: "floor" });
+  const cube = draw(gpu, { shader: CUBE, label: "cube" });
+  const floor = draw(gpu, { shader: FLOOR, label: "floor" });
   cube.set({ camera, params: { color: [1, 0, 0, 1] } });
   floor.set({ camera, params: { color: [0, 1, 0, 1] } });
 
-  gpu.frame((frame) => {
-    frame.pass({ target, clear: [0, 0, 0, 1] }, (p) => {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => {
       p.draw(cube);
       p.draw(floor);
     });
   });
-  return { gpu, target, camera };
+  return { gpu, target: colorTarget, camera };
 }

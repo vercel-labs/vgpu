@@ -1,4 +1,4 @@
-import { init } from "vgpu/node";
+import { init, effect, target } from "vgpu/node";
 
 export const GRADIENT = /* wgsl */ `
 struct Params { time: f32, speed: f32 }
@@ -10,9 +10,9 @@ struct Params { time: f32, speed: f32 }
 
 export async function renderGradientHeadless() {
   const gpu = await init();
-  const target = gpu.target({ size: [8, 8], format: "rgba8unorm" });
-  const p = gpu.effect(GRADIENT, { label: "gradient" });
+  const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
+  const p = effect(gpu, GRADIENT, { label: "gradient" });
   p.set({ time: 1.25, speed: 1 });
-  p.draw({ target });
-  return { gpu, target };
+  p.draw({ target: colorTarget });
+  return { gpu, target: colorTarget };
 }

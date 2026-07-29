@@ -1,14 +1,15 @@
 import Link from 'next/link';
 import { CodeBlock } from '@/components/code-block';
 
-const heroCode = `import { init } from "vgpu";
+const heroCode = `import { clock, effect, frameLoop, init, surface } from "vgpu";
 
 const gpu = await init();
-const surface = gpu.surface(canvas, { dpr: [1, 2] });
-const wave = gpu.effect(WAVE_WGSL, { set: { speed: 2 } });
+const view = surface(gpu, canvas, { dpr: [1, 2] });
+const wave = effect(gpu, WAVE_WGSL, { set: { speed: 2 } });
+const time = clock(gpu);
 
-gpu.frame.loop(() => {
-  wave.set({ time: gpu.time });
+frameLoop(gpu, () => {
+  wave.set({ time: time.time });
   wave.draw();
 });`;
 

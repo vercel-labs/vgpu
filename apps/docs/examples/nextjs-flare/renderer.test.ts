@@ -1,7 +1,14 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+vi.mock('vgpu', () => ({
+  init: mocks.init,
+  surface: (gpu: any, canvas: any, options: any) => gpu.surface(canvas, options),
+  sampler: (gpu: any, options: any) => gpu.sampler(options),
+  effect: (gpu: any, shader: any, options: any) => gpu.effect(shader, options),
+  target: (gpu: any, options: any) => gpu.target(options),
+  frame: (gpu: any, callback: any) => gpu.frame(callback),
+}));
 vi.mock('./logo-raster', () => ({
   rasterizeLogo: vi.fn(async () => ({ width: 130, height: 156 })),
 }));

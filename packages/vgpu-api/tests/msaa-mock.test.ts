@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, effect, frame, target } from "../src/mock.ts";
 
 const SOLID = `
 @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
@@ -19,8 +19,8 @@ struct Out { @location(0) a: vec4f, @location(1) b: vec4f }
 test("MSAA render pass descriptors resolve color and discard transient attachments while non-MSAA stores", async () => {
   const gpu = await init();
   try {
-    const msaa = gpu.target({ size: [4, 4], depth: true, msaa: true });
-    const plain = gpu.target({ size: [4, 4], depth: true });
+    const msaa = target(gpu, { size: [4, 4], depth: true, msaa: true });
+    const plain = target(gpu, { size: [4, 4], depth: true });
 
     const msaaDesc = msaa.renderPassDescriptor();
     const plainDesc = plain.renderPassDescriptor();
@@ -41,10 +41,10 @@ test("MSAA render pass descriptors resolve color and discard transient attachmen
 test("MSAA targets compile pipelines with sample count 4", async () => {
   const gpu = await init();
   try {
-    const target = gpu.target({ size: [4, 4], depth: true, msaa: true });
-    const draw = gpu.effect(SOLID, { label: "msaa-solid" });
+    const colorTarget = target(gpu, { size: [4, 4], depth: true, msaa: true });
+    const draw = effect(gpu, SOLID, { label: "msaa-solid" });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(draw)));
 
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
     expect(mock.createRenderPipelineDescriptors.at(-1)?.multisample?.count).toBe(4);
@@ -57,7 +57,7 @@ test("invalid runtime msaa values throw VGPU-TARGET-MSAA-INVALID", async () => {
   const gpu = await init();
   try {
     for (const msaa of [2, 8]) {
-      expectThrown(() => gpu.target({ size: [4, 4], msaa } as never), { code: "VGPU-TARGET-MSAA-INVALID" });
+      expectThrown(() => target(gpu, { size: [4, 4], msaa } as never), { code: "VGPU-TARGET-MSAA-INVALID" });
     }
   } finally {
     gpu.dispose();
@@ -68,10 +68,10 @@ test("MSAA target with blend keeps resolve descriptor and blend pipeline state",
   const gpu = await init();
   const renderPasses = spyRenderPassDescriptors(gpu.device.gpu);
   try {
-    const target = gpu.target({ size: [4, 4], format: "rgba8unorm", msaa: true });
-    const draw = gpu.effect(SOLID, { label: "msaa-blend", blend: "alpha" });
+    const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm", msaa: true });
+    const draw = effect(gpu, SOLID, { label: "msaa-blend", blend: "alpha" });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(draw)));
 
     expect(renderPasses[0]?.colorAttachments[0]?.resolveTarget).toBeDefined();
     expect(renderPasses[0]?.colorAttachments[0]?.storeOp).toBe("discard");
@@ -89,14 +89,14 @@ test("MRT MSAA targets resolve every color and compile all color states with sam
   const gpu = await init();
   const renderPasses = spyRenderPassDescriptors(gpu.device.gpu);
   try {
-    const target = gpu.target({
+    const colorTarget = target(gpu, {
       size: [4, 4],
       colors: [{ format: "rgba8unorm" }, { format: "rgba8unorm" }],
       msaa: true,
     });
-    const draw = gpu.effect(MRT, { label: "mrt-msaa" });
+    const draw = effect(gpu, MRT, { label: "mrt-msaa" });
 
-    gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(draw)));
+    frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(draw)));
 
     expect(renderPasses[0]?.colorAttachments).toHaveLength(2);
     for (const attachment of renderPasses[0]?.colorAttachments ?? []) {

@@ -2,7 +2,7 @@
 
 # SharedUniforms
 
-Values-first shared uniform/storage object created by `gpu.uniforms(values)`. It adopts binary WGSL layout lazily from the first compatible shader binding and reuses one stable buffer across shaders.
+Values-first shared uniform/storage object created by `uniforms(gpu, values)`. It adopts binary WGSL layout lazily from the first compatible shader binding and reuses one stable buffer across shaders.
 
 ## Import
 
@@ -22,22 +22,22 @@ interface SharedUniforms<T extends Record<string, unknown> = Record<string, unkn
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| gpu.uniforms.values | `T extends Record<string, unknown>` | ✔ | — | Initial values are cloned. Layout and buffer are not created until first binding to a reflected uniform/storage buffer. |
+| uniforms.values | `T extends Record<string, unknown>` | ✔ | — | Initial values are cloned. Layout and buffer are not created until first binding to a reflected uniform/storage buffer. |
 | shared.set.values | `Partial<T>` | ✔ | — | Deep-merges plain objects and clones arrays/typed arrays before writing current values to the adopted layout. |
 
-**Returns:** `gpu.uniforms()` returns `SharedUniforms<T>`; `shared.set()` returns `void`.
+**Returns:** `uniforms(gpu)` returns `SharedUniforms<T>`; `shared.set()` returns `void`.
 
 **Throws:** `VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH` when a later shader declares a structurally different layout for the same shared object; `VGPU-RING1-UNSUPPORTED` when address spaces differ, the binding is not a buffer, the binding has no host-shareable layout, or the layout is runtime-sized; packing may throw core validation errors for values that do not match the adopted WGSL layout.
 
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, clock, effect, frame, target, uniforms } from "vgpu/mock";
 
 const gpu = await init();
-const target = gpu.target({ size: [64, 64] });
-const globals = gpu.uniforms({ time: 0, mouse: [0, 0] });
-const wave = gpu.effect(`
+const colorTarget = target(gpu, { size: [64, 64] });
+const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
+const wave = effect(gpu, `
   struct Globals { time: f32, mouse: vec2f }
   @group(0) @binding(0) var<uniform> globals: Globals;
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -45,15 +45,15 @@ const wave = gpu.effect(`
   }
 `, { set: { globals } });
 
-globals.set({ time: gpu.time });
-gpu.frame((frame) => frame.pass({ target }, (pass) => pass.draw(wave)));
+globals.set({ time: clock(gpu).time });
+frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(wave)));
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, uniforms } from "vgpu/mock";
 
 const gpu = await init();
-const globals = gpu.uniforms({ exposure: 1, tint: [1, 1, 1] });
+const globals = uniforms(gpu, { exposure: 1, tint: [1, 1, 1] });
 globals.set({ exposure: 1.25 });
 ```
 
@@ -61,5 +61,5 @@ globals.set({ exposure: 1.25 });
 
 - The first shader to bind the object chooses the WGSL layout. Keep struct member names/types/order aligned for every later shader that reuses it.
 - Use shared uniforms for values like time, mouse, camera, exposure, and viewport data consumed by many passes.
-- If one shader needs a different layout, create a second `gpu.uniforms()` object rather than mutating the first layout.
-- **See also:** `Gpu.uniforms`, `Effect.set`, `Draw.set`, `Uniform`, `StructuredUniform`.
+- If one shader needs a different layout, create a second `uniforms(gpu)` object rather than mutating the first layout.
+- **See also:** `uniforms`, `Effect.set`, `Draw.set`, `Uniform`, `StructuredUniform`.

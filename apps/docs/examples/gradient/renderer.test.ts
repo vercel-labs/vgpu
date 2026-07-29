@@ -3,7 +3,12 @@ import { afterEach, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   init: vi.fn(),
 }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 
 import { createRenderer, renderThumbnail } from './renderer';
 
@@ -40,10 +45,12 @@ function gpu() {
   const stop = vi.fn();
   const surface = { size: [100, 50], resize: vi.fn(), dispose: vi.fn() };
   const instance = {
-    time: 0,
-    surface: vi.fn(() => surface),
-    effect: vi.fn(() => ({ set: vi.fn() })),
-    frame: { loop: vi.fn(() => ({ stop })) },
+    clock: { time: 0, deltaTime: 1 / 60, frameCount: 0 },
+    fns: {
+      surface: vi.fn(() => surface),
+      effect: vi.fn(() => ({ set: vi.fn() })),
+      frameLoop: vi.fn(() => ({ stop })),
+    },
     dispose: vi.fn(),
   };
   return { instance, surface, stop };
@@ -66,14 +73,14 @@ test('dispose during init cleans a late GPU without starting a loop', async () =
   pending.resolve(late.instance);
   await renderer.ready;
   expect(late.instance.dispose).toHaveBeenCalledOnce();
-  expect(late.instance.frame.loop).not.toHaveBeenCalled();
+  expect(late.instance.fns.frameLoop).not.toHaveBeenCalled();
 });
 
 test('reports an initialization failure once, rejects ready, and self-disposes', async () => {
   const { canvas } = browser();
   const failed = gpu();
   const error = new Error('surface failed');
-  failed.instance.surface.mockImplementationOnce(() => { throw error; });
+  failed.instance.fns.surface.mockImplementationOnce(() => { throw error; });
   mocks.init.mockResolvedValueOnce(failed.instance);
   const onError = vi.fn(() => { throw new Error('reporter failed'); });
   const renderer = createRenderer({ canvas, onError });
@@ -93,8 +100,10 @@ test('drains and settles submitted work when thumbnail rendering throws', async 
   const thumbnailGpu = {
     gpu: { queue: { onSubmittedWorkDone: drain } },
     settled,
-    effect: vi.fn(() => ({ set: vi.fn() })),
-    frame: vi.fn(() => { throw error; }),
+    fns: {
+      effect: vi.fn(() => ({ set: vi.fn() })),
+      frame: vi.fn(() => { throw error; }),
+    },
   };
   const target = { size: [160, 90] };
   const rendering = renderThumbnail(thumbnailGpu as never, target as never);
@@ -116,7 +125,7 @@ test('owns one loop, applies the latest coalesced resize, and removes resources'
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas });
   await renderer.ready;
-  expect(live.instance.frame.loop).toHaveBeenCalledOnce();
+  expect(live.instance.fns.frameLoop).toHaveBeenCalledOnce();
   renderer.resize({ width: 200, height: 100, dpr: 1 });
   renderer.resize({ width: 300, height: 150, dpr: 2 });
   expect(frames.size).toBe(1);

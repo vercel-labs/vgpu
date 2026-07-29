@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../../src/mock.ts";
+import { init, effect, geometry } from "../../src/mock.ts";
 import { box, orbit, perspectiveCamera } from "../../src/scene.ts";
 
 const SIMPLE_DRAW = `
@@ -11,15 +11,15 @@ const SIMPLE_DRAW = `
 `;
 
 describe("vgpu/scene", () => {
-  test("gpu.geometry(box()) produces draw vertex-buffer layout", async () => {
+  test("geometry(gpu, box()) produces draw vertex-buffer layout", async () => {
     const gpu = await init();
-    const geometry = gpu.geometry(box({ size: 2 }));
+    const geo = geometry(gpu, box({ size: 2 }));
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-    expect(geometry.vertexCount).toBe(36);
-    expect(geometry.indexBuffer).toBeUndefined();
-    expect(geometry.vertexBuffers).toHaveLength(1);
-    expect(geometry.vertexBufferLayouts).toEqual([
+    expect(geo.vertexCount).toBe(36);
+    expect(geo.indexBuffer).toBeUndefined();
+    expect(geo.vertexBuffers).toHaveLength(1);
+    expect(geo.vertexBufferLayouts).toEqual([
       {
         arrayStride: 24,
         attributes: [
@@ -51,10 +51,10 @@ describe("vgpu/scene", () => {
     ]);
   });
 
-  test("gpu.effect rejects geometry options and points to gpu.draw", async () => {
+  test("effect() rejects geometry options and points to draw()", async () => {
     const gpu = await init();
-    const geometry = gpu.geometry(box());
-    expect(() => gpu.effect(SIMPLE_DRAW, { geometry } as never)).toThrowError(/gpu\.effect\(\) never accepts vertex buffers; use gpu\.draw/);
+    const geo = geometry(gpu, box());
+    expect(() => effect(gpu, SIMPLE_DRAW, { geometry: geo } as never)).toThrowError(/effect\(\) never accepts vertex buffers; use draw\(gpu, /);
     gpu.dispose();
   });
 });

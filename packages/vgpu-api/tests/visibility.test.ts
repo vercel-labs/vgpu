@@ -1,13 +1,14 @@
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, bundle, draw, effect, frame, target } from "../src/mock.ts";
+import { visibility } from "../src/visibility.ts";
 
 const SOLID = `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`;
 
-test("gpu.visibility() needs no device feature and creates one occlusion query set of the declared capacity", async () => {
+test("visibility(gpu) needs no device feature and creates one occlusion query set of the declared capacity", async () => {
   const gpu = await init();
   expect(gpu.device.features.size).toBe(0);
-  const vis = gpu.visibility({ capacity: 8 });
+  const vis = visibility(gpu, { capacity: 8 });
 
   const instrumentation = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(instrumentation.createQuerySetDescriptors).toEqual([
@@ -20,12 +21,12 @@ test("gpu.visibility() needs no device feature and creates one occlusion query s
 test("a visibility pass carries the occlusion query set in its descriptor; other passes stay clean", async () => {
   const gpu = await init();
   const ops = spyFrameEncoders(gpu.device.gpu);
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, () => undefined);
-    frame.pass(scene, () => undefined);
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, () => undefined);
+    currentFrame.pass(scene, () => undefined);
   });
 
   // Pass descriptor rule: occlusionQuerySet must be a valid query set of type "occlusion".
@@ -40,23 +41,23 @@ test("a visibility pass carries the occlusion query set in its descriptor; other
 
 test("occlusion() wraps single-draw, callback, and effect bodies with contiguous indices in allocation order", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const proxy = gpu.draw({ shader: SOLID, label: "proxy" });
-  const effect = gpu.effect(SOLID);
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const proxy = draw(gpu, { shader: SOLID, label: "proxy" });
+  const shader1 = effect(gpu, SOLID);
   const qA = vis.query("a");
   const qB = vis.query("b");
   const qC = vis.query("c");
 
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => {
       p.draw(proxy); // outside any scope: does not count toward a query
       p.occlusion(qA, proxy);
       p.occlusion(qB, () => {
         p.draw(proxy);
         p.draw(proxy);
       });
-      p.occlusion(qC, effect);
+      p.occlusion(qC, shader1);
     });
   });
 
@@ -73,13 +74,13 @@ test("occlusion() wraps single-draw, callback, and effect bodies with contiguous
 test("one resolve of the contiguous used range is appended before finish", async () => {
   const gpu = await init();
   const ops = spyFrameEncoders(gpu.device.gpu);
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const qA = vis.query("a");
   const qB = vis.query("b");
 
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => {
       p.occlusion(qA, () => undefined);
       p.occlusion(qB, () => undefined);
     });
@@ -97,8 +98,8 @@ test("one resolve of the contiguous used range is appended before finish", async
 
 test("results decode zero vs non-zero only: slot 0 confirms hidden, other slots visible, unused stays unknown", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const qHidden = vis.query("statue");
   const qVisible = vis.query("tower");
   const qUnused = vis.query("bird");
@@ -106,8 +107,8 @@ test("results decode zero vs non-zero only: slot 0 confirms hidden, other slots 
   expect([qHidden.state, qVisible.state, qUnused.state]).toEqual(["unknown", "unknown", "unknown"]);
   expect([qHidden.hidden, qVisible.hidden, qUnused.hidden]).toEqual([false, false, false]);
 
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => {
       p.occlusion(qHidden, () => undefined); // slot 0 — mock fake value 0 (confirmed zero samples)
       p.occlusion(qVisible, () => undefined); // slot 1 — mock fake value 1e6 (non-zero)
     });
@@ -128,12 +129,12 @@ test("results decode zero vs non-zero only: slot 0 confirms hidden, other slots 
 
 test("re-allocation order changes slots per frame, and newer results overwrite older ones", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const qA = vis.query("a");
   const qB = vis.query("b");
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(qA, () => undefined);
     p.occlusion(qB, () => undefined);
   }));
@@ -141,7 +142,7 @@ test("re-allocation order changes slots per frame, and newer results overwrite o
   expect([qA.state, qB.state]).toEqual(["hidden", "visible"]);
 
   // Allocation resets each frame: swapping call order swaps the slots and the decoded results.
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(qB, () => undefined);
     p.occlusion(qA, () => undefined);
   }));
@@ -153,22 +154,22 @@ test("re-allocation order changes slots per frame, and newer results overwrite o
 
 test("allocation is contiguous across passes of one frame and resets on the next frame", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const sceneA = gpu.target({ size: [4, 4], depth: true });
-  const sceneB = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const sceneA = target(gpu, { size: [4, 4], depth: true });
+  const sceneB = target(gpu, { size: [4, 4], depth: true });
   const qA = vis.query("a");
   const qB = vis.query("b");
   const instrumentation = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-  gpu.frame((frame) => {
-    frame.pass({ target: sceneA, visibility: vis }, (p) => p.occlusion(qA, () => undefined));
-    frame.pass({ target: sceneB, visibility: vis }, (p) => p.occlusion(qB, () => undefined));
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: sceneA, visibility: vis }, (p) => p.occlusion(qA, () => undefined));
+    currentFrame.pass({ target: sceneB, visibility: vis }, (p) => p.occlusion(qB, () => undefined));
   });
   expect(instrumentation.occlusionQueryOps).toEqual([["begin", 0], ["end"], ["begin", 1], ["end"]]);
 
   instrumentation.occlusionQueryOps.length = 0;
-  gpu.frame((frame) => {
-    frame.pass({ target: sceneA, visibility: vis }, (p) => p.occlusion(qB, () => undefined));
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: sceneA, visibility: vis }, (p) => p.occlusion(qB, () => undefined));
   });
   expect(instrumentation.occlusionQueryOps).toEqual([["begin", 0], ["end"]]);
   vis.dispose();
@@ -177,21 +178,21 @@ test("allocation is contiguous across passes of one frame and resets on the next
 
 test("age is Infinity before any result, 0 when a result lands, and advances with the frame counter", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const q = vis.query("statue");
 
   expect(q.age).toBe(Infinity);
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
   expect(q.age).toBe(0);
 
-  gpu.frame((frame) => frame.pass(scene, () => undefined)); // frame without the query
+  frame(gpu, (currentFrame) => currentFrame.pass(scene, () => undefined)); // frame without the query
   expect(q.age).toBe(1);
-  gpu.frame((frame) => frame.pass(scene, () => undefined));
+  frame(gpu, (currentFrame) => currentFrame.pass(scene, () => undefined));
   expect(q.age).toBe(2);
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
   expect(q.age).toBe(0);
   vis.dispose();
@@ -200,11 +201,11 @@ test("age is Infinity before any result, 0 when a result lands, and advances wit
 
 test("reset() flips state to unknown immediately and discards in-flight pre-reset readbacks", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const q = vis.query("statue");
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   // Reset before the readback applies: the pre-reset frame's result must NOT resurrect.
   q.reset();
   expect(q.state).toBe("unknown");
@@ -214,7 +215,7 @@ test("reset() flips state to unknown immediately and discards in-flight pre-rese
   expect(q.age).toBe(Infinity);
 
   // A post-reset frame applies normally again.
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
   expect(q.state).toBe("hidden");
 
@@ -228,12 +229,12 @@ test("reset() flips state to unknown immediately and discards in-flight pre-rese
 
 test("Visibility.reset() resets every live handle", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const qA = vis.query("a");
   const qB = vis.query("b");
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(qA, () => undefined);
     p.occlusion(qB, () => undefined);
   }));
@@ -248,16 +249,16 @@ test("Visibility.reset() resets every live handle", async () => {
 
 test("bundles executed inside an occlusion scope encode between begin and end (their draws count toward the query)", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const draw = gpu.draw({ shader: SOLID, label: "bundled" });
-  const bundle = gpu.bundle({ target: scene, label: "proxyBundle" }, (b) => b.draw(draw));
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const drawable = draw(gpu, { shader: SOLID, label: "bundled" });
+  const recorded = bundle(gpu, { target: scene, label: "proxyBundle" }, (b) => b.draw(drawable));
   const q = vis.query("statue");
   const ops: string[] = [];
   spyExecuteBundlesAndOcclusion(gpu.device.gpu, ops);
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
-    p.occlusion(q, () => p.bundles(bundle));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
+    p.occlusion(q, () => p.bundles(recorded));
   }));
 
   expect(ops).toEqual(["beginOcclusionQuery:0", "executeBundles", "endOcclusionQuery"]);
@@ -268,14 +269,14 @@ test("bundles executed inside an occlusion scope encode between begin and end (t
 
 test("a depthReadOnly pass supports visibility and occlusion scopes", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const proxy = gpu.draw({ shader: SOLID, label: "roProxy", depth: { write: false } });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const proxy = draw(gpu, { shader: SOLID, label: "roProxy", depth: { write: false } });
   const q = vis.query("statue");
 
-  gpu.frame((frame) => {
-    frame.pass(scene, () => undefined); // lay down depth
-    frame.pass({ target: scene, clear: false, depthReadOnly: true, visibility: vis }, (p) => {
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass(scene, () => undefined); // lay down depth
+    currentFrame.pass({ target: scene, clear: false, depthReadOnly: true, visibility: vis }, (p) => {
       p.occlusion(q, proxy);
     });
   });
@@ -289,40 +290,40 @@ test("a depthReadOnly pass supports visibility and occlusion scopes", async () =
 
 test("an MSAA depth target works with visibility", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true, msaa: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true, msaa: true });
   const q = vis.query("statue");
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
   expect(q.state).toBe("hidden");
   vis.dispose();
   gpu.dispose();
 });
 
-test("VGPU-VIS-CAPACITY-LIMIT rejects non-integer, < 1, and > 4096 capacities at gpu.visibility()", async () => {
+test("VGPU-VIS-CAPACITY-LIMIT rejects non-integer, < 1, and > 4096 capacities at visibility(gpu)", async () => {
   const gpu = await init();
   for (const capacity of [0, -1, 1.5, 4097, Number.NaN]) {
-    expect(() => gpu.visibility({ capacity })).toThrowError(/VGPU-VIS-CAPACITY-LIMIT|expected an integer in \[1, 4096\]/);
+    expect(() => visibility(gpu, { capacity })).toThrowError(/VGPU-VIS-CAPACITY-LIMIT|expected an integer in \[1, 4096\]/);
   }
-  expect(() => gpu.visibility({ capacity: 4096 }).dispose()).not.toThrow();
+  expect(() => visibility(gpu, { capacity: 4096 }).dispose()).not.toThrow();
   gpu.dispose();
 });
 
 test("VGPU-VIS-CAPACITY throws at the occlusion() call that overflows the declared capacity", async () => {
   const gpu = await init();
-  const vis = gpu.visibility({ capacity: 2 });
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu, { capacity: 2 });
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const queries = [vis.query("a"), vis.query("b"), vis.query("c")];
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     expect(() => p.occlusion(queries[0]!, () => undefined)).not.toThrow();
     expect(() => p.occlusion(queries[1]!, () => undefined)).not.toThrow();
     p.occlusion(queries[2]!, () => undefined); // the call that overflows throws
   }))).toThrowError(/VGPU-VIS-CAPACITY|more than the declared 2/);
 
   // Capacity is per frame: the same instance encodes fine again next frame.
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(queries[0]!, () => undefined);
     p.occlusion(queries[1]!, () => undefined);
   }))).not.toThrow();
@@ -332,7 +333,7 @@ test("VGPU-VIS-CAPACITY throws at the occlusion() call that overflows the declar
 
 test("VGPU-VIS-LABEL-DUPLICATE rejects a live label; dispose() frees it for reuse", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
+  const vis = visibility(gpu);
   const q = vis.query("statue");
 
   expect(() => vis.query("statue")).toThrowError(/VGPU-VIS-LABEL-DUPLICATE|already live/);
@@ -344,11 +345,11 @@ test("VGPU-VIS-LABEL-DUPLICATE rejects a live label; dispose() frees it for reus
 
 test("a disposed handle's in-flight readback is skipped, and a new same-label handle never receives it", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const q = vis.query("statue");
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   q.dispose(); // before the readback applies
   const reborn = vis.query("statue"); // label freed immediately — safe: results route by handle object, not label
   await gpu.settled();
@@ -363,23 +364,23 @@ test("a disposed handle's in-flight readback is skipped, and a new same-label ha
 
 test("VGPU-VIS-DISPOSED covers disposed handles and disposed visibility instances", async () => {
   const gpu = await init();
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  const vis = gpu.visibility();
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const vis = visibility(gpu);
   const q = vis.query("statue");
   q.dispose();
   expect(() => q.reset()).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)))).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)))).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
   expect(() => q.dispose()).not.toThrow(); // idempotent
 
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const vis2 = gpu.visibility();
+  const vis2 = visibility(gpu);
   const q2 = vis2.query("tower");
   vis2.dispose();
   expect(destroyed).toEqual([0]);
   expect(() => vis2.query("x")).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
   expect(() => vis2.reset()).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis2 }, (p) => p.occlusion(q2, () => undefined)))).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis2 }, (p) => p.occlusion(q2, () => undefined)))).toThrowError(/VGPU-VIS-DISPOSED|disposed/);
   expect(() => vis2.dispose()).not.toThrow();
   vis.dispose();
   gpu.dispose();
@@ -388,10 +389,10 @@ test("VGPU-VIS-DISPOSED covers disposed handles and disposed visibility instance
 
 test("VGPU-VIS-NO-DEPTH rejects visibility on a pass whose target has no depth attachment", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const flat = gpu.target({ size: [4, 4] });
+  const vis = visibility(gpu);
+  const flat = target(gpu, { size: [4, 4] });
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: flat, visibility: vis }, () => undefined)))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: flat, visibility: vis }, () => undefined)))
     .toThrowError(/VGPU-VIS-NO-DEPTH|no depth attachment/);
   vis.dispose();
   gpu.dispose();
@@ -399,11 +400,11 @@ test("VGPU-VIS-NO-DEPTH rejects visibility on a pass whose target has no depth a
 
 test("VGPU-QUERY-NO-VISIBILITY rejects occlusion() in a pass opened without visibility", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const q = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => frame.pass(scene, (p) => p.occlusion(q, () => undefined))))
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass(scene, (p) => p.occlusion(q, () => undefined))))
     .toThrowError(/VGPU-QUERY-NO-VISIBILITY|no occlusionQuerySet/);
   vis.dispose();
   gpu.dispose();
@@ -411,17 +412,17 @@ test("VGPU-QUERY-NO-VISIBILITY rejects occlusion() in a pass opened without visi
 
 test("VGPU-QUERY-NESTED rejects occlusion() inside an active occlusion() body", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const qA = vis.query("a");
   const qB = vis.query("b");
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(qA, () => p.occlusion(qB, () => undefined));
   }))).toThrowError(/VGPU-QUERY-NESTED|cannot nest/);
 
   // The throwing scope still closed its query: sequential scopes keep working in a later frame.
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(qA, () => undefined);
     p.occlusion(qB, () => undefined);
   }))).not.toThrow();
@@ -431,23 +432,23 @@ test("VGPU-QUERY-NESTED rejects occlusion() inside an active occlusion() body", 
 
 test("VGPU-QUERY-DUPLICATE rejects reusing a handle within one frame, across passes too", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const vis = visibility(gpu);
+  const scene = target(gpu, { size: [4, 4], depth: true });
   const q = vis.query("statue");
 
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => {
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => {
     p.occlusion(q, () => undefined);
     p.occlusion(q, () => undefined);
   }))).toThrowError(/VGPU-QUERY-DUPLICATE|already used this frame/);
 
   // Cross-pass reuse silently overwrites the earlier result in native WebGPU; vgpu forbids it.
-  expect(() => gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
-    frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
+  expect(() => frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
   })).toThrowError(/VGPU-QUERY-DUPLICATE|already used this frame/);
 
   // The same handle is fine again on the next frame.
-  expect(() => gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)))).not.toThrow();
+  expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)))).not.toThrow();
   vis.dispose();
   gpu.dispose();
 });
@@ -455,22 +456,22 @@ test("VGPU-QUERY-DUPLICATE rejects reusing a handle within one frame, across pas
 test("mismatched instances are rejected: foreign handles, foreign gpus, and non-visibility values", async () => {
   const gpuA = await init();
   const gpuB = await init();
-  const visA = gpuA.visibility();
-  const visA2 = gpuA.visibility();
-  const sceneA = gpuA.target({ size: [4, 4], depth: true });
-  const sceneB = gpuB.target({ size: [4, 4], depth: true });
+  const visA = visibility(gpuA);
+  const visA2 = visibility(gpuA);
+  const sceneA = target(gpuA, { size: [4, 4], depth: true });
+  const sceneB = target(gpuB, { size: [4, 4], depth: true });
   const foreign = visA2.query("statue");
 
   // Handle from another Visibility instance.
-  expect(() => gpuA.frame((frame) => frame.pass({ target: sceneA, visibility: visA }, (p) => p.occlusion(foreign, () => undefined))))
+  expect(() => frame(gpuA, (currentFrame) => currentFrame.pass({ target: sceneA, visibility: visA }, (p) => p.occlusion(foreign, () => undefined))))
     .toThrowError(/VGPU-VIS-INVALID|different visibility instance/);
   // Visibility from another gpu.
-  expect(() => gpuB.frame((frame) => frame.pass({ target: sceneB, visibility: visA }, () => undefined)))
+  expect(() => frame(gpuB, (currentFrame) => currentFrame.pass({ target: sceneB, visibility: visA }, () => undefined)))
     .toThrowError(/VGPU-VIS-INVALID|different gpu/);
   // Non-Visibility pass option and non-handle occlusion argument.
-  expect(() => gpuA.frame((frame) => frame.pass({ target: sceneA, visibility: {} as never }, () => undefined)))
+  expect(() => frame(gpuA, (currentFrame) => currentFrame.pass({ target: sceneA, visibility: {} as never }, () => undefined)))
     .toThrowError(/VGPU-VIS-INVALID|expected a Visibility/);
-  expect(() => gpuA.frame((frame) => frame.pass({ target: sceneA, visibility: visA }, (p) => p.occlusion({ label: "statue" } as never, () => undefined))))
+  expect(() => frame(gpuA, (currentFrame) => currentFrame.pass({ target: sceneA, visibility: visA }, (p) => p.occlusion({ label: "statue" } as never, () => undefined))))
     .toThrowError(/VGPU-VIS-INVALID|expected a VisibilityQuery/);
 
   visA.dispose();
@@ -481,7 +482,7 @@ test("mismatched instances are rejected: foreign handles, foreign gpus, and non-
 
 test("invalid query labels fail at query()", async () => {
   const gpu = await init();
-  const vis = gpu.visibility();
+  const vis = visibility(gpu);
   for (const label of ["", 1, null, undefined, {}]) {
     expect(() => vis.query(label as never)).toThrowError(/VGPU-VIS-INVALID|non-empty string/);
   }
@@ -491,18 +492,18 @@ test("invalid query labels fail at query()", async () => {
 
 test("canonical usage: stable handles created once, proxies always drawn, real draws conditioned on q.hidden", async () => {
   const gpu = await init();
-  const scene = gpu.target({ size: [8, 8], depth: true });
-  const world = gpu.effect(SOLID);
-  const statue = gpu.draw({ shader: SOLID, label: "statue" });
-  const statueProxy = gpu.draw({ shader: SOLID, label: "statueProxy" });
-  const towerProxy = gpu.draw({ shader: SOLID, label: "towerProxy" });
+  const scene = target(gpu, { size: [8, 8], depth: true });
+  const world = effect(gpu, SOLID);
+  const statue = draw(gpu, { shader: SOLID, label: "statue" });
+  const statueProxy = draw(gpu, { shader: SOLID, label: "statueProxy" });
+  const towerProxy = draw(gpu, { shader: SOLID, label: "towerProxy" });
 
-  const vis = gpu.visibility({ capacity: 8 });
+  const vis = visibility(gpu, { capacity: 8 });
   const qStatue = vis.query("statue");
   const qTower = vis.query("tower");
 
   const statueDrawnPerFrame: boolean[] = [];
-  const encodeFrame = () => gpu.frame((f) => {
+  const encodeFrame = () => frame(gpu, (f) => {
     f.pass({ target: scene, visibility: vis }, (p) => {
       p.draw(world);
       p.occlusion(qStatue, statueProxy);
@@ -528,12 +529,12 @@ test("dispose() mid-frame keeps the occlusion query set alive until the frame is
   const gpu = await init();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const vis = gpu.visibility({ capacity: 4 });
+  const vis = visibility(gpu, { capacity: 4 });
   const q = vis.query("statue");
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  gpu.frame((frame) => {
-    frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined));
     // The pass descriptor's occlusionQuerySet already points at this set: destroying it mid-frame
     // would invalidate the frame being encoded, so destruction is deferred.
     vis.dispose();
@@ -558,11 +559,11 @@ test("a readback that fails is reported on gpu.onError and leaves handles untouc
   });
   const errors: Array<{ code: string; message: string }> = [];
   gpu.onError((error) => { errors.push(error); });
-  const vis = gpu.visibility();
+  const vis = visibility(gpu);
   const q = vis.query("statue");
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
 
   // Dropped readback: no state change (never a silent "hidden"), but not swallowed either.
@@ -579,10 +580,10 @@ test("gpu.dispose() releases visibility instances created by that gpu", async ()
   const gpu = await init();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const vis = gpu.visibility();
+  const vis = visibility(gpu);
   const q = vis.query("statue");
-  const scene = gpu.target({ size: [4, 4], depth: true });
-  gpu.frame((frame) => frame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
   await gpu.settled();
 
   gpu.dispose();
@@ -596,13 +597,13 @@ test("two frames open at once each retain the query set; the newest frame's resu
   const gpu = await init();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
-  const vis = gpu.visibility({ capacity: 4 });
+  const vis = visibility(gpu, { capacity: 4 });
   const statue = vis.query("statue");
-  const scene = gpu.target({ size: [4, 4], depth: true });
+  const scene = target(gpu, { size: [4, 4], depth: true });
 
-  const first = gpu.frame();
+  const first = frame(gpu);
   first.pass({ target: scene, visibility: vis }, (p) => p.occlusion(statue, () => undefined));
-  const second = gpu.frame();
+  const second = frame(gpu);
   second.pass({ target: scene, visibility: vis }, (p) => p.occlusion(statue, () => undefined));
 
   // Submitting the older frame first must not release the newer frame's retain, and it reads nothing
@@ -690,4 +691,68 @@ function spyQuerySetDestroys(device: GPUDevice, destroyed: number[]): void {
     querySet.destroy = () => { destroyed.push(index); originalDestroy(); };
     return querySet;
   });
+}
+
+// --- gpu-first factory (T202-03) --------------------------------------------------------------
+
+test("visibility(gpu) declares its capacity, latches results and ages through the kernel's frame clock", async () => {
+  const gpu = await init();
+  const vis = visibility(gpu, { capacity: 8 });
+  const scene = target(gpu, { size: [4, 4], depth: true });
+  const q = vis.query("statue");
+
+  expect(getMockGPUDeviceInstrumentation(gpu.device.gpu).createQuerySetDescriptors).toEqual([
+    { type: "occlusion", count: 8, label: "vgpu.visibility" },
+  ]);
+  expect(q.age).toBe(Infinity);
+
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, visibility: vis }, (p) => p.occlusion(q, () => undefined)));
+  await gpu.settled();
+  // The mock resolves occlusion queries to 0 samples, so the latch confirms "hidden" — the point
+  // here is that a result landed at all: the handle left "unknown" and stamped the current frame.
+  expect(q.state).toBe("hidden");
+  expect(q.hidden).toBe(true);
+  expect(q.age).toBe(0);
+
+  // The clock the age reads is the kernel's frame state, the same one the frame runner advances.
+  frame(gpu, (currentFrame) => currentFrame.pass(scene, () => undefined));
+  expect(q.age).toBe(1);
+  gpu.dispose();
+});
+
+test("a visibility(gpu) left open goes down with the gpu, and disposing it first drops its registration", async () => {
+  const gpu = await init();
+  const destroyed: number[] = [];
+  spyQuerySetDestroys(gpu.device.gpu, destroyed);
+  const owned = visibility(gpu);
+  const released = visibility(gpu);
+
+  released.dispose();
+  expect(destroyed).toEqual([1]);
+
+  gpu.dispose();
+  expect([...destroyed].sort()).toEqual([0, 1]);
+  expect(() => owned.dispose()).not.toThrow();
+  vi.restoreAllMocks();
+});
+
+test("visibility(gpu) validates the gpu before touching the device", async () => {
+  const gpu = await init();
+  gpu.dispose();
+  expect(thrownBy(() => visibility(gpu))).toMatchObject({ code: "VGPU-GPU-DISPOSED", where: "visibility" });
+  expect(thrownBy(() => visibility({ disposed: false } as never))).toMatchObject({ code: "VGPU-GPU-FOREIGN" });
+});
+
+test("visibility(gpu) still rejects a capacity outside the WebGPU query-set limit", async () => {
+  const gpu = await init();
+  expect(thrownBy(() => visibility(gpu, { capacity: 4097 }))).toMatchObject({ code: "VGPU-VIS-CAPACITY-LIMIT" });
+  expect(thrownBy(() => visibility(gpu, { capacity: 0 }))).toMatchObject({ code: "VGPU-VIS-CAPACITY-LIMIT" });
+  gpu.dispose();
+});
+
+/** Returns what `run` threw, so an assertion can inspect the VGPUError's code instead of its message. */
+function thrownBy(run: () => unknown): unknown {
+  try { run(); }
+  catch (error) { return error; }
+  throw new Error("expected the call to throw");
 }

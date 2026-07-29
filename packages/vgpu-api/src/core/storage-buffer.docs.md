@@ -1,6 +1,6 @@
 # StorageBuffer
 
-Low-level user-owned storage buffer with a stable bind group at binding `0`. Use it for arrays, large data, compute scratch buffers, or storage-driven rendering when main API (`vgpu`) `gpu.storage()` is not enough.
+Low-level user-owned storage buffer with a stable bind group at binding `0`. Use it for arrays, large data, compute scratch buffers, or storage-driven rendering when main API (`vgpu`) `storage(gpu)` is not enough.
 
 ## Import
 
@@ -53,19 +53,19 @@ declare class StorageBuffer {
 
 **Returns:** Constructor returns `StorageBuffer`; `gpu` returns the underlying `GPUBuffer`; `write()`, `destroy()`, and `dispose()` return `void`.
 
-**Throws:** No custom `VGPU-*` errors are thrown directly by this class. Native/core validation can fail for invalid size, incompatible reused layouts, or bad writes. Compute aliasing with the same buffer can throw `VGPU-R1-STORAGE-ALIASING` when used through `gpu.compute()`.
+**Throws:** No custom `VGPU-*` errors are thrown directly by this class. Native/core validation can fail for invalid size, incompatible reused layouts, or bad writes. Compute aliasing with the same buffer can throw `VGPU-R1-STORAGE-ALIASING` when used through `compute(gpu)`.
 
 ## Examples
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, compute } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
 
 const gpu = await init();
 const values = new StorageBuffer(gpu.device, { size: 4 * 16, label: "values" });
 values.write(new Float32Array(16));
 
-const sim = gpu.compute(`
+const sim = compute(gpu, `
   @group(0) @binding(0) var<storage, read> values: array<f32>;
   @compute @workgroup_size(1)
   fn cs_main(@builtin(global_invocation_id) id: vec3u) { _ = values[id.x]; }
@@ -74,11 +74,11 @@ sim.dispatch(1);
 ```
 
 ```ts
-import { init } from "vgpu/mock";
+import { init, draw } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
 
 const gpu = await init();
-const draw = gpu.draw({ shader: `
+const drawable = draw(gpu, { shader: `
   @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return positions[vi]; }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
@@ -86,15 +86,15 @@ const draw = gpu.draw({ shader: `
 const positions = new StorageBuffer(gpu.device, {
   size: 3 * 16,
   visibility: GPUShaderStage.VERTEX,
-  bindGroupLayout: draw.layout(0),
+  bindGroupLayout: drawable.layout(0),
 });
 positions.write(new Float32Array(12));
-draw.set({ positions });
+drawable.set({ positions });
 ```
 
 ## Notes
 
 - Default visibility is fragment + compute, not vertex. Vertex-stage storage is legal only on adapters with the needed limits; opt in explicitly and request limits when creating the device.
 - `access: "read-write"` cannot be used from the vertex stage in WebGPU.
-- For main API (`vgpu`) readback and ping-pong helpers, use `gpu.storage()` and `gpu.pingPongStorage()`.
-- **See also:** `Compute`, `gpu.storage`, `Uniform`, `UniformPool`, `Draw.set`.
+- For main API (`vgpu`) readback and ping-pong helpers, use `storage(gpu)` and `pingPongStorage(gpu)`.
+- **See also:** `Compute`, `storage()`, `Uniform`, `UniformPool`, `Draw.set`.

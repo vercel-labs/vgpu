@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import { init } from 'vgpu/node';
+import { init, effect, frame, target } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
@@ -52,16 +52,16 @@ const compareOptions = {
 const aaModeNames = new Map([[0, 'off'], [1, 'msaa-4x'], [2, 'ssaa-2x'], [3, 'fxaa']]);
 const postProcessingModeNames = ['all-off', 'bloom-only', 'ca-only'];
 
-function renderFragmentThumb(gpu, target, fragmentSource, { time }) {
-  const effect = gpu.effect(fragmentSource);
-  const [width, height] = target.size;
-  effect.set({
+function renderFragmentThumb(gpu, colorTarget, fragmentSource, { time }) {
+  const shader = effect(gpu, fragmentSource);
+  const [width, height] = colorTarget.size;
+  shader.set({
     uniforms: {
       time,
       resolution: [width, height],
     },
   });
-  gpu.frame((frame) => frame.pass({ target }, (p) => p.draw(effect)));
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(shader)));
 }
 
 await mkdir(outDir, { recursive: true });
@@ -108,7 +108,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
   const slug = example.meta.slug;
   const gpu = await init();
   try {
-    const target = gpu.target({ size, format: 'rgba8unorm', label: `docs-example-${slug}` });
+    const colorTarget = target(gpu, { size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
     const postProcessingModePixels = slug === 'post-processing' ? new Map() : undefined;
@@ -120,7 +120,7 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     let fluidState;
     let radianceStats;
     if (renderer) {
-      await renderer(gpu, target, {
+      await renderer(gpu, colorTarget, {
         warmupFrames: args.proofDir ? (slug === 'fluid' ? 24 : 3) : (metaThumb.warmupFrames ?? 60),
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
@@ -149,12 +149,12 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
       const fragmentSource = sourceFor(exampleSources, slug, fragmentFile);
       renderFragmentThumb(
         gpu,
-        target,
+        colorTarget,
         fragmentSource,
         { time: metaThumb.time ?? defaultFragmentTime },
       );
     }
-    const pixels = await target.read();
+    const pixels = await colorTarget.read();
     const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
     const postProcessingMetrics = postProcessingModePixels && !args.proofDir
       ? assertPostProcessingMetrics(postProcessingModePixels, pixels, size[0], size[1])

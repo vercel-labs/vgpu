@@ -3,6 +3,11 @@ import type { Texture, ResourceDestroyCallback, ResourceIdentity, UnsubscribeRes
 
 export interface TargetTextureOptions {
   readonly format?: GPUTextureFormat;
+  /**
+   * Default clear color of this target, used by passes that clear without naming a color.
+   * Defaults to `[0, 0, 0, 1]`; mutable at runtime through `target.clearColor`.
+   */
+  readonly clearColor?: ClearColor;
   readonly colors?: readonly { readonly format: GPUTextureFormat }[];
   readonly depth?: boolean | GPUTextureFormat;
   readonly msaa?: boolean | 4;
@@ -44,6 +49,12 @@ export interface Target {
   readonly depth?: Texture;
   readonly format: GPUTextureFormat;
   readonly sampleCount: 1 | 4;
+  /**
+   * Default clear color of this target: the color a pass uses when it clears without naming one
+   * (`pass(target, body)` or `clear: true`). Writable at runtime, validated on assignment.
+   * Precedence: pass `clear` color > `target.clearColor` > the built-in `[0, 0, 0, 1]`.
+   */
+  clearColor: ClearColor;
   readonly resourceIdentity: ResourceIdentity;
   resize(size: readonly [number, number]): void;
   /** Raw unpadded bytes of `color` in the target's own format (`bgra*` swizzled to RGBA). */

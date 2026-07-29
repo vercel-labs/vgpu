@@ -1,7 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock('vgpu', () => ({ init: mocks.init }));
+const vgpuFns = vi.hoisted(() => Object.fromEntries(
+  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
+    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
+    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
+)) as Record<string, unknown>;
+vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 
 import { createRenderer, renderThumbnail } from './renderer';
 
@@ -27,7 +32,7 @@ test('thumbnail prewarm failure waits for submitted work and destroys all target
     color: { destroy: destroyed[targetIndex++]! }, resize: vi.fn(),
   }));
   const onSubmittedWorkDone = vi.fn(async () => {});
-  const gpu = { effect, sampler: vi.fn(() => ({})), target, gpu: { queue: { onSubmittedWorkDone } } };
+  const gpu = { gpu: { queue: { onSubmittedWorkDone } } , fns: { effect, sampler: vi.fn(() => ({})), target }};
   await expect(renderThumbnail(gpu as never, { size: [100, 50], format: 'rgba8unorm' } as never)).rejects.toBe(failure);
   expect(onSubmittedWorkDone).toHaveBeenCalledOnce();
   for (const destroy of destroyed) expect(destroy).toHaveBeenCalledOnce();

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init } from "../src/mock.ts";
+import { init, compute, draw, target } from "../src/mock.ts";
 
 const OVERRIDE_WGSL = `
 override SCALE: f32 = 1.0;
@@ -56,9 +56,9 @@ override seed: u32;
 
 test("constants reach both render stages; @id overrides are keyed by the decimal id string", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  gpu.draw({ shader: OVERRIDE_WGSL, label: "consts", constants: { SCALE: 2, "7": 4 } }).draw(target);
+  draw(gpu, { shader: OVERRIDE_WGSL, label: "consts", constants: { SCALE: 2, "7": 4 } }).draw(colorTarget);
 
   // WebGPU keys constants module-level ("The pipeline-overridable constant is not required to be statically
   // used by entryPoint"), so the full record is valid for — and passed to — both stages.
@@ -70,9 +70,9 @@ test("constants reach both render stages; @id overrides are keyed by the decimal
 
 test("an override used only by the fragment entry point is still valid for both stages", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  gpu.draw({ shader: FRAGMENT_ONLY_WGSL, label: "frag-only", constants: { SHADE: 0.25 } }).draw(target);
+  draw(gpu, { shader: FRAGMENT_ONLY_WGSL, label: "frag-only", constants: { SHADE: 0.25 } }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.vertex.constants).toEqual({ SHADE: 0.25 });
@@ -82,9 +82,9 @@ test("an override used only by the fragment entry point is still valid for both 
 
 test("boolean values are allowed and convert to 1/0 doubles", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  gpu.draw({ shader: BOOL_WGSL, label: "bool-consts", constants: { USE_LIGHT: false } }).draw(target);
+  draw(gpu, { shader: BOOL_WGSL, label: "bool-consts", constants: { USE_LIGHT: false } }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.vertex.constants).toEqual({ USE_LIGHT: 0 });
@@ -94,10 +94,10 @@ test("boolean values are allowed and convert to 1/0 doubles", async () => {
 
 test("absent constants and an empty record keep descriptors byte-identical", async () => {
   const gpu = await init();
-  const target = gpu.target({ size: [4, 4] });
+  const colorTarget = target(gpu, { size: [4, 4] });
 
-  gpu.draw({ shader: OVERRIDE_WGSL, label: "absent" }).draw(target);
-  gpu.draw({ shader: OVERRIDE_WGSL, label: "empty", constants: {} }).draw(target);
+  draw(gpu, { shader: OVERRIDE_WGSL, label: "absent" }).draw(colorTarget);
+  draw(gpu, { shader: OVERRIDE_WGSL, label: "empty", constants: {} }).draw(colorTarget);
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors;
   expect(descs.at(-1)?.vertex.constants).toBeUndefined();
@@ -108,34 +108,34 @@ test("absent constants and an empty record keep descriptors byte-identical", asy
 
 test("unknown constants keys fail at construction listing the available overrides", async () => {
   const gpu = await init();
-  expect(() => gpu.draw({ shader: OVERRIDE_WGSL, label: "unknown", constants: { NOPE: 1 } })).toThrowError(/VGPU-CONSTANTS-INVALID|"SCALE", "7" \(@id of SAMPLES\)/);
+  expect(() => draw(gpu, { shader: OVERRIDE_WGSL, label: "unknown", constants: { NOPE: 1 } })).toThrowError(/VGPU-CONSTANTS-INVALID|"SCALE", "7" \(@id of SAMPLES\)/);
   // An @id override is identified only by the decimal id string, never by its name.
-  expect(() => gpu.draw({ shader: OVERRIDE_WGSL, label: "id-by-name", constants: { SAMPLES: 4 } })).toThrowError(/VGPU-CONSTANTS-INVALID|available overrides/);
-  expect(() => gpu.draw({ shader: FRAGMENT_ONLY_WGSL, label: "not-object", constants: [1] as never })).toThrowError(/VGPU-CONSTANTS-INVALID|expected \{ overrideNameOrId/);
+  expect(() => draw(gpu, { shader: OVERRIDE_WGSL, label: "id-by-name", constants: { SAMPLES: 4 } })).toThrowError(/VGPU-CONSTANTS-INVALID|available overrides/);
+  expect(() => draw(gpu, { shader: FRAGMENT_ONLY_WGSL, label: "not-object", constants: [1] as never })).toThrowError(/VGPU-CONSTANTS-INVALID|expected \{ overrideNameOrId/);
   gpu.dispose();
 });
 
 test("non-finite values fail at construction; strings are rejected", async () => {
   const gpu = await init();
   for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, "2"]) {
-    expect(() => gpu.draw({ shader: FRAGMENT_ONLY_WGSL, label: "bad-value", constants: { SHADE: value } as never })).toThrowError(/VGPU-CONSTANTS-INVALID|finite number or a boolean/);
+    expect(() => draw(gpu, { shader: FRAGMENT_ONLY_WGSL, label: "bad-value", constants: { SHADE: value } as never })).toThrowError(/VGPU-CONSTANTS-INVALID|finite number or a boolean/);
   }
   gpu.dispose();
 });
 
 test("an override without a default must be provided", async () => {
   const gpu = await init();
-  expect(() => gpu.draw({ shader: NO_DEFAULT_WGSL, label: "missing" })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'gain' has no default value/);
-  expect(() => gpu.draw({ shader: NO_DEFAULT_WGSL, label: "still-missing", constants: {} })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'gain' has no default value/);
-  expect(() => gpu.draw({ shader: NO_DEFAULT_WGSL, label: "provided", constants: { gain: 0.5 } })).not.toThrow();
+  expect(() => draw(gpu, { shader: NO_DEFAULT_WGSL, label: "missing" })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'gain' has no default value/);
+  expect(() => draw(gpu, { shader: NO_DEFAULT_WGSL, label: "still-missing", constants: {} })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'gain' has no default value/);
+  expect(() => draw(gpu, { shader: NO_DEFAULT_WGSL, label: "provided", constants: { gain: 0.5 } })).not.toThrow();
   gpu.dispose();
 });
 
 test("compute constants reach the compute stage; @id keys and omission behave like draws", async () => {
   const gpu = await init();
 
-  gpu.compute(COMPUTE_WGSL, { label: "sim", constants: { STEP: 0.5, "3": 4 } });
-  gpu.compute(COMPUTE_WGSL, { label: "sim-absent" });
+  compute(gpu, COMPUTE_WGSL, { label: "sim", constants: { STEP: 0.5, "3": 4 } });
+  compute(gpu, COMPUTE_WGSL, { label: "sim-absent" });
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createComputePipelineDescriptors;
   expect(descs.at(-2)?.compute.constants).toEqual({ STEP: 0.5, "3": 4 });
@@ -144,11 +144,11 @@ test("compute constants reach the compute stage; @id keys and omission behave li
   gpu.dispose();
 });
 
-test("compute constants validate at construction with where gpu.compute", async () => {
+test("compute constants validate at construction with where compute", async () => {
   const gpu = await init();
-  expect(() => gpu.compute(COMPUTE_WGSL, { label: "unknown", constants: { LIMIT: 4 } })).toThrowError(/VGPU-CONSTANTS-INVALID|"STEP", "3" \(@id of LIMIT\)/);
-  expect(() => gpu.compute(COMPUTE_WGSL, { label: "nan", constants: { STEP: Number.NaN } })).toThrowError(/VGPU-CONSTANTS-INVALID|finite number or a boolean/);
-  expect(() => gpu.compute(COMPUTE_NO_DEFAULT_WGSL, { label: "missing" })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'seed' has no default value/);
-  expect(() => gpu.compute(COMPUTE_NO_DEFAULT_WGSL, { label: "provided", constants: { seed: 1 } })).not.toThrow();
+  expect(() => compute(gpu, COMPUTE_WGSL, { label: "unknown", constants: { LIMIT: 4 } })).toThrowError(/VGPU-CONSTANTS-INVALID|"STEP", "3" \(@id of LIMIT\)/);
+  expect(() => compute(gpu, COMPUTE_WGSL, { label: "nan", constants: { STEP: Number.NaN } })).toThrowError(/VGPU-CONSTANTS-INVALID|finite number or a boolean/);
+  expect(() => compute(gpu, COMPUTE_NO_DEFAULT_WGSL, { label: "missing" })).toThrowError(/VGPU-CONSTANTS-INVALID|override 'seed' has no default value/);
+  expect(() => compute(gpu, COMPUTE_NO_DEFAULT_WGSL, { label: "provided", constants: { seed: 1 } })).not.toThrow();
   gpu.dispose();
 });

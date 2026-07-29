@@ -89,7 +89,7 @@ Valid `BufferUsageName` values: `"map_read"`, `"map_write"`, `"copy_src"`, `"cop
 **Throws:**
 
 - `VGPU-CORE-INVALID-USAGE` from `Device.createBuffer(...)` when `opts.size` is non-finite, `opts.size <= 0`, or `opts.usage.length === 0` — pass a positive byte length and at least one usage.
-- `Error("Buffer is destroyed")` when `write(...)` or `read(...)` is called after `destroy()`/`dispose()` — create a new buffer instead of reusing a destroyed wrapper.
+- `VGPU-BUFFER-DISPOSED` (`"Buffer is destroyed."`) when `write(...)` or `read(...)` is called after `destroy()`/`dispose()` — create a new buffer instead of reusing a destroyed wrapper. Reported for a wrapper you disposed and for one destroyed with its gpu, and in preference to the owning device's own disposal error.
 - Native WebGPU validation errors may occur if usage flags do not allow the operation, for example reading a buffer without `"copy_src"` or writing without `"copy_dst"`.
 
 ## Examples

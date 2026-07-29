@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { PNG } from 'pngjs';
-import { init } from 'vgpu/node';
+import { init, effect, sampler, target } from 'vgpu/node';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -101,7 +101,7 @@ async function inlineModule(name) {
 /**
  * An entry shader with its imports inlined.
  *
- * `gpu.effect()` takes a single raw WGSL string — the import graph is a build-time feature
+ * `effect(gpu, ...)` takes a single raw WGSL string — the import graph is a build-time feature
  * of the loader — so the harness resolves it the same way the guide describes: concatenate
  * the pure modules and strip the module keywords. The entry point itself is byte-for-byte
  * the file the browser ships.
@@ -113,9 +113,9 @@ async function entryShader(name, dependencies) {
 }
 
 async function readSlots(shader, slots, targetOptions = {}) {
-  const target = gpu.target({ size: [slots, 1], format: 'rgba8unorm', ...targetOptions });
-  gpu.effect(shader).draw(target);
-  const pixels = new Uint8Array(await target.read());
+  const colorTarget = target(gpu, { size: [slots, 1], format: 'rgba8unorm', ...targetOptions });
+  effect(gpu, shader).draw(colorTarget);
+  const pixels = new Uint8Array(await colorTarget.read());
   return Array.from({ length: slots }, (_, slot) => [0, 1, 2, 3].map((channel) => pixels[slot * 4 + channel] / 255));
 }
 
@@ -294,25 +294,25 @@ async function checkJumpFloodAndTrace() {
   //    the radiance *is* the hit position and the second chunk can measure where the march
   //    landed in pixels.
   const MASK = '(p.x == 2.5 && p.y == 3.5) || (p.x == 6.5 && p.y == 1.5)';
-  const emitter = gpu.target({ size, format: 'rgba8unorm', label: 'rc-harness-emitter' });
-  gpu.effect(`
+  const emitter = target(gpu, { size, format: 'rgba8unorm', label: 'rc-harness-emitter' });
+  effect(gpu, `
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       let p = floor(uv * 8.0) + 0.5;
       return vec4f(0.9, 0.5, 0.2, select(0.0, 1.0, ${MASK}));
     }
   `).draw(emitter);
-  const emitterRamp = gpu.target({ size, format: 'rgba8unorm', label: 'rc-harness-emitter-ramp' });
-  gpu.effect(`
+  const emitterRamp = target(gpu, { size, format: 'rgba8unorm', label: 'rc-harness-emitter-ramp' });
+  effect(gpu, `
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       let p = floor(uv * 8.0) + 0.5;
       return vec4f(p.x / 8.0, p.y / 8.0, 0.5, select(0.0, 1.0, ${MASK}));
     }
   `).draw(emitterRamp);
 
-  const jfaInit = gpu.effect(await entryShader('jfa-init.wgsl', ['jfa-step.wgsl']), { label: 'rc-harness-jfa-init' });
+  const jfaInit = effect(gpu, await entryShader('jfa-init.wgsl', ['jfa-step.wgsl']), { label: 'rc-harness-jfa-init' });
   const seeds = [
-    gpu.target({ size, format: 'rgba32float', label: 'rc-harness-seed-a' }),
-    gpu.target({ size, format: 'rgba32float', label: 'rc-harness-seed-b' }),
+    target(gpu, { size, format: 'rgba32float', label: 'rc-harness-seed-a' }),
+    target(gpu, { size, format: 'rgba32float', label: 'rc-harness-seed-b' }),
   ];
   jfaInit.set({ jfa: { size, threshold: 0.5, _pad: 0 }, emitter });
   jfaInit.draw(seeds[0]);
@@ -321,7 +321,7 @@ async function checkJumpFloodAndTrace() {
   let read = seeds[0];
   let write = seeds[1];
   for (const jump of jumps) {
-    const step = gpu.effect(await entryShader('jfa-pass.wgsl', ['jfa-step.wgsl']), { label: `rc-harness-jfa-${jump}` });
+    const step = effect(gpu, await entryShader('jfa-pass.wgsl', ['jfa-step.wgsl']), { label: `rc-harness-jfa-${jump}` });
     step.set({ jfa: { size, jump, _pad: 0 }, seeds: read });
     step.draw(write);
     const previous = read;
@@ -329,8 +329,8 @@ async function checkJumpFloodAndTrace() {
     write = previous;
   }
 
-  const sdf = gpu.target({ size, format: 'rgba8unorm', label: 'rc-harness-sdf' });
-  const finalize = gpu.effect(await entryShader('sdf-finalize.wgsl', ['jfa-step.wgsl']), { label: 'rc-harness-sdf-finalize' });
+  const sdf = target(gpu, { size, format: 'rgba8unorm', label: 'rc-harness-sdf' });
+  const finalize = effect(gpu, await entryShader('sdf-finalize.wgsl', ['jfa-step.wgsl']), { label: 'rc-harness-sdf-finalize' });
   finalize.set({ sdf: { size, far, encode_scale: encodeScale }, seeds: read });
   finalize.draw(sdf);
 
@@ -391,19 +391,19 @@ fn trace_case(origin: vec2f, direction: vec2f, start: f32, end: f32) -> vec4f {
 fn oracle_case(origin: vec2f, direction: vec2f, start: f32, end: f32) -> vec4f {
   return fixed_step_trace(sdf_tex, sdf_samp, emitter_tex, emitter_samp, SIZE, origin, direction, start, end, SCALE, 512);
 }`;
-  const sampler = gpu.sampler({ minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+  const samplerState = sampler(gpu, { minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
   const runTrace = async (table, emitterTexture, label) => {
-    const target = gpu.target({ size: [cases.length, 1], format: 'rgba8unorm', label });
-    const effect = gpu.effect(`${traceHelpers}${bindings}
+    const colorTarget = target(gpu, { size: [cases.length, 1], format: 'rgba8unorm', label });
+    const shader1 = effect(gpu, `${traceHelpers}${bindings}
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let slot = i32(floor(uv.x * ${cases.length}.0));
 ${table}
   return vec4f(0.0);
 }`, { label });
-    effect.set({ sdf_tex: sdf, sdf_samp: sampler, emitter_tex: emitterTexture, emitter_samp: sampler });
-    effect.draw(target);
-    const pixels = new Uint8Array(await target.read());
+    shader1.set({ sdf_tex: sdf, sdf_samp: samplerState, emitter_tex: emitterTexture, emitter_samp: samplerState });
+    shader1.draw(colorTarget);
+    const pixels = new Uint8Array(await colorTarget.read());
     return cases.map((_, index) => [0, 1, 2, 3].map((channel) => pixels[index * 4 + channel] / 255));
   };
 
@@ -485,19 +485,19 @@ ${table}
   };
   console.log(`- sdf-sample-vs-fixed-step-oracle: visibility ${visibilityMatches ? 'identical' : 'DIVERGED'}, max hit offset ${maxHitOffset.toFixed(3)} px (budget ${oracleBudget})`);
 
-  return { sampler };
+  return { sampler: samplerState };
 }
 
 /** Dumps every intermediate render target of a real 96x54 frame, twice, and hashes both. */
-async function dumpPipeline({ sampler }) {
+async function dumpPipeline({ sampler: samplerState }) {
   const { validation } = reference;
   const hashes = new Map();
 
   for (const run of [1, 2]) {
     const seen = [];
-    const scene = await validation.renderStaged(gpu, DUMP_SIZE, async (name, target) => {
+    const scene = await validation.renderStaged(gpu, DUMP_SIZE, async (name, colorTarget) => {
       const file = `${name}.png`;
-      const bytes = await encodeStage(name, target, sampler);
+      const bytes = await encodeStage(name, colorTarget, samplerState);
       if (run === 1) await writePng(path.join(outDir, file), bytes.pixels, bytes.width, bytes.height);
       seen.push(file);
       const digest = createHash('sha256').update(bytes.pixels).digest('hex');
@@ -506,7 +506,7 @@ async function dumpPipeline({ sampler }) {
     }, { scriptedStroke: true });
 
     // The composed image, through the same present pass the browser uses.
-    const finalTarget = gpu.target({ size: DUMP_SIZE, format: 'rgba8unorm', label: 'rc-harness-final' });
+    const finalTarget = target(gpu, { size: DUMP_SIZE, format: 'rgba8unorm', label: 'rc-harness-final' });
     reference.simulation.presentScene(scene, finalTarget, 'final');
     await gpu.gpu.queue.onSubmittedWorkDone();
     const finalPixels = new Uint8Array(await finalTarget.read());
@@ -532,9 +532,9 @@ async function dumpPipeline({ sampler }) {
 }
 
 /** Encodes one intermediate into displayable bytes; HDR and seed targets are not readable. */
-async function encodeStage(name, target, sampler) {
-  const [width, height] = target.size;
-  const readable = gpu.target({ size: [width, height], format: 'rgba8unorm', label: `rc-dump-${name}` });
+async function encodeStage(name, colorTarget, samplerState) {
+  const [width, height] = colorTarget.size;
+  const readable = target(gpu, { size: [width, height], format: 'rgba8unorm', label: `rc-dump-${name}` });
   let shader;
   if (name.includes('jfa')) {
     // Seed field: each texel takes the colour of the emitter it points at — the classic
@@ -564,9 +564,9 @@ async function encodeStage(name, target, sampler) {
         return vec4f(linear_to_srgb(tonemap_aces(c.rgb)), 1.0);
       }`;
   }
-  const effect = gpu.effect(shader, { label: `rc-dump-${name}` });
-  effect.set({ src: target });
-  effect.draw(readable);
+  const shader1 = effect(gpu, shader, { label: `rc-dump-${name}` });
+  shader1.set({ src: colorTarget });
+  shader1.draw(readable);
   await gpu.gpu.queue.onSubmittedWorkDone();
   return { pixels: new Uint8Array(await readable.read()), width, height };
 }

@@ -34,13 +34,13 @@ struct Globals {
 ## JavaScript defaults
 
 ```text
-const globals = gpu.uniforms({ time: 0, mouse: [0, 0], enabled: 1 });
-const draw = gpu.draw({ shader: WGSL, set: { globals } });
+const globals = uniforms(gpu, { time: 0, mouse: [0, 0], enabled: 1 });
+const draw = draw(gpu, { shader: WGSL, set: { globals } });
 await draw.compile(target);
-gpu.frame.loop((f) => {
-  globals.set({ time: gpu.time, mouse });
+frameLoop(gpu, (f) => {
+  globals.set({ time: clock(gpu).time, mouse });
   f.pass({ target }, (p) => p.draw(draw));
 });
 ```
 
-Use the performance playbook before writing a new shader: bundles for static draws, `compile()` for pre-warm, `draw.group()` for many objects, `gpu.uniforms()` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.
+Use the performance playbook before writing a new shader: bundles for static draws, `compile()` for pre-warm, `draw.group()` for many objects, `uniforms(gpu)` for shared state, ping-pong for iterative effects, and target-owned depth/MSAA.

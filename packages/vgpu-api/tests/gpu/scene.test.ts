@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
-import { init } from "../../src/node.ts";
+import { init, draw, geometry, target } from "../../src/node.ts";
 import { drawReflection } from "../../src/draw.ts";
 import { box, orbit, perspectiveCamera } from "../../src/scene.ts";
 
@@ -18,9 +18,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
       const shader = await resolveShader({ entry });
       expect(shader.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/light/index.wgsl"))).toBe(true);
 
-      const geometry = gpu.geometry(box({ size: 1 }));
-      const lit = await renderCube(gpu, shader.wgsl, geometry, [-1, 1, -1]);
-      const inverted = await renderCube(gpu, shader.wgsl, geometry, [1, -1, 1]);
+      const geo = geometry(gpu, box({ size: 1 }));
+      const lit = await renderCube(gpu, shader.wgsl, geo, [-1, 1, -1]);
+      const inverted = await renderCube(gpu, shader.wgsl, geo, [1, -1, 1]);
 
       const litBrightFace = averageLuma(lit, 48, { x: 24, y: 24, width: 10, height: 10 });
       const litShadowFace = averageLuma(lit, 48, { x: 20, y: 9, width: 8, height: 8 });
@@ -36,9 +36,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
   });
 });
 
-async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, geometry: ReturnType<Awaited<ReturnType<typeof init>>["geometry"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
-  const target = gpu.target({ size: [48, 48], format: "rgba8unorm", depth: true, label: "litCube" });
-  const cube = gpu.draw({ shader, geometry, targets: [target] });
+async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, geo: ReturnType<Awaited<ReturnType<typeof init>>["geometry"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
+  const colorTarget = target(gpu, { size: [48, 48], format: "rgba8unorm", depth: true, label: "litCube" });
+  const cube = draw(gpu, { shader, geometry: geo, targets: [colorTarget] });
   const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
 
   const camera = bindingName(cube, 0);
@@ -49,12 +49,12 @@ async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string,
     [model]: { matrix: orbit(0, { radius: 0 }) },
     [light]: { direction, color: [1, 1, 1], intensity: 1 },
   });
-  cube.draw({ target });
-  return target.read();
+  cube.draw({ target: colorTarget });
+  return colorTarget.read();
 }
 
-function bindingName(draw: Parameters<typeof drawReflection>[0], binding: number): string {
-  const name = drawReflection(draw).bindings.find((item) => item.group === 0 && item.binding === binding)?.name;
+function bindingName(drawable: Parameters<typeof drawReflection>[0], binding: number): string {
+  const name = drawReflection(drawable).bindings.find((item) => item.group === 0 && item.binding === binding)?.name;
   if (!name) throw new Error(`Missing reflected binding ${binding}`);
   return name;
 }
