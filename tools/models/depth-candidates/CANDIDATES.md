@@ -127,8 +127,10 @@ times the ≤16 MiB exception.
 
 Relevant precedent already in this repository:
 
-- the largest **tracked** binary is `apps/docs/public/models/movenet/movenet-lightning.onnx`
-  at 9,402,989 B (8.97 MiB), sitting right on the ≤9 MiB line;
+- the largest **tracked** binary at the time of this decision was
+  `apps/docs/public/models/movenet/movenet-lightning.onnx` at 9,402,989 B
+  (8.97 MiB), sitting right on the ≤9 MiB line; that MoveNet model has since
+  been removed, so the precedent is historical rather than current;
 - `apps/docs/public/ort/` is **gitignored** (`apps/docs/.gitignore: public/ort`)
   and staged at build time by `apps/docs/scripts/prepare-ort-assets.mjs` — the
   24,254,953 B (23.1 MiB) ORT asyncify wasm already ships to users this way
