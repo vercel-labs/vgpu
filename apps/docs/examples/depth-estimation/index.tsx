@@ -42,6 +42,10 @@ export function Example() {
     status.phase === 'initializing' ||
     status.phase === 'loading-model' ||
     status.phase === 'estimating';
+  const downloadPercent =
+    status.downloadLoadedBytes !== undefined && status.downloadTotalBytes
+      ? Math.min(100, (status.downloadLoadedBytes / status.downloadTotalBytes) * 100)
+      : undefined;
 
   return (
     <div className="flex h-full w-full flex-col gap-3 bg-black p-4 text-gray-11">
@@ -97,6 +101,22 @@ export function Example() {
           <span className="font-mono text-[11px] text-gray-9">camera unavailable</span>
         )}
       </div>
+
+      {downloadPercent !== undefined && (
+        <div
+          role="progressbar"
+          aria-label="Downloading depth model"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(downloadPercent)}
+          className="h-0.5 w-full overflow-hidden rounded-full bg-gray-3"
+        >
+          <div
+            className="h-full bg-blue-9 transition-[width] duration-150"
+            style={{ width: `${downloadPercent}%` }}
+          />
+        </div>
+      )}
 
       <canvas
         ref={canvasRef}

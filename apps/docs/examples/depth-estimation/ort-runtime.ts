@@ -57,6 +57,8 @@ export interface DepthStatus {
   readonly source: DepthSource;
   /** Milliseconds of the last completed inference, once there is one. */
   readonly lastInferenceMs?: number;
+  readonly downloadLoadedBytes?: number;
+  readonly downloadTotalBytes?: number;
 }
 
 export interface DepthRendererOptions {
@@ -81,6 +83,8 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   let source: DepthSource = 'image';
   let phase: DepthPhase = 'initializing';
   let lastInferenceMs: number | undefined;
+  let downloadLoadedBytes: number | undefined;
+  let downloadTotalBytes: number | undefined;
 
   let shared: SharedDeviceSession | undefined;
   let gpu: Gpu | undefined;
@@ -100,9 +104,34 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
    * change may still be in flight; it must clean up but must not paint.
    */
   let generation = 0;
+  let firstFrameGeneration = -1;
+  let diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
+  let diagnosticStage: string | undefined;
+
+  const logStage = (stage: string, targetModel = modelId) => {
+    if (diagnosticTimer !== undefined) clearTimeout(diagnosticTimer);
+    diagnosticStage = stage;
+    console.info(`[depth switch] ${new Date().toISOString()} ${stage}`, { modelId: targetModel });
+    if (stage.endsWith('-start')) {
+      diagnosticTimer = setTimeout(() => {
+        console.warn(`[depth switch] STUCK STAGE after 20s: ${diagnosticStage}`, {
+          modelId: targetModel,
+        });
+      }, 20_000);
+    } else {
+      diagnosticTimer = undefined;
+    }
+  };
 
   const status = () => {
-    options.onStatus?.({ phase, modelId, source, lastInferenceMs });
+    options.onStatus?.({
+      phase,
+      modelId,
+      source,
+      lastInferenceMs,
+      downloadLoadedBytes,
+      downloadTotalBytes,
+    });
   };
   const setPhase = (next: DepthPhase) => {
     phase = next;
@@ -177,6 +206,10 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
         view!.draw(gpu!, surface!, wrapped, colour!, model, { hasResult: true });
       });
       lastInferenceMs = performance.now() - began;
+      if (firstFrameGeneration !== startedAt) {
+        firstFrameGeneration = startedAt;
+        logStage('first-frame');
+      }
       setPhase('ready');
     } finally {
       // Ordering matters: the wrapper is already gone by here, so releasing the
@@ -187,7 +220,8 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
   }
 
   async function teardownSession(): Promise<void> {
-    pump.stop();
+    logStage('teardown-start');
+    pump.pause();
     await pump.active?.catch(() => {});
     view?.dispose();
     view = undefined;
@@ -202,15 +236,41 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     // device is never destroyed here.
     await shared?.release();
     shared = undefined;
+    logStage('teardown-done');
   }
 
-  async function initialize(): Promise<void> {
+  async function initialize(signal?: AbortSignal): Promise<void> {
     setPhase('loading-model');
     const target = generation;
+    const initializingModel = model;
+    let reportedProgressBucket = -1;
     const session = await createSharedDeviceSession({
-      modelUrl: model.url,
-      label: `depth-estimation ${model.id}`,
+      modelUrl: initializingModel.url,
+      label: `depth-estimation ${initializingModel.id}`,
+      signal,
       isCancelled: () => disposed || generation !== target,
+      onStage(stage) {
+        if (stage === 'model') logStage('fetch-start', initializingModel.id);
+        if (stage === 'session') {
+          logStage('fetch-done', initializingModel.id);
+          logStage('create-start', initializingModel.id);
+        }
+        if (stage === 'ready') logStage('create-done', initializingModel.id);
+      },
+      onModelProgress(loaded, total) {
+        downloadLoadedBytes = loaded;
+        downloadTotalBytes = total;
+        const bucket = total ? Math.floor((loaded / total) * 10) : Math.floor(loaded / (5 * 1024 * 1024));
+        if (bucket !== reportedProgressBucket) {
+          reportedProgressBucket = bucket;
+          console.info(`[depth switch] ${new Date().toISOString()} fetch-progress`, {
+            modelId: initializingModel.id,
+            loadedBytes: loaded,
+            totalBytes: total,
+          });
+        }
+        status();
+      },
       // Error and above. The transformer graphs pin their shape arithmetic to
       // CPU and ONNX Runtime says so at warning level on every session create;
       // that is expected and harmless, but it reaches the browser console as
@@ -233,7 +293,11 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     scratch ??= createPreprocessScratch(model.width, model.height);
 
     measure();
+    downloadLoadedBytes = undefined;
+    downloadTotalBytes = undefined;
     setPhase('ready');
+    logStage('first-frame-start');
+    pump.resume();
     if (source === 'camera') pump.startContinuous();
     else pump.request();
   }
@@ -284,7 +348,14 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
 
     observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     observer?.observe(options.canvas);
-    await initialize();
+    // Put initial creation behind the same queue as later selections. A user
+    // can change the picker while the first model is still downloading.
+    if (generation === 0) {
+      switches.push(modelId, async (_selected, signal) => initialize(signal));
+    } else {
+      // A switch may already have initialized before the image decoded.
+      pump.request();
+    }
   };
 
   void boot().catch(fail);
@@ -296,6 +367,8 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       model = getDepthModel(id);
       generation += 1;
       lastInferenceMs = undefined;
+      downloadLoadedBytes = undefined;
+      downloadTotalBytes = undefined;
       scratch = undefined;
       // Report the choice before awaiting anything. The picker is a controlled
       // input bound to this status, so if the new id only appears once the
@@ -303,11 +376,11 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
       // model -- React restores the previous value and the click looks
       // rejected, which is exactly what a failed switch looks like.
       setPhase('loading-model');
-      switches.push(id, async () => {
+      switches.push(id, async (_selected, signal) => {
         await teardownSession();
         // Superseded while the old session drained.
-        if (disposed || id !== modelId) return;
-        await initialize();
+        if (disposed || signal.aborted || id !== modelId) return;
+        await initialize(signal);
       });
     },
     setSource(next) {
@@ -326,8 +399,11 @@ export function createDepthRenderer(options: DepthRendererOptions): DepthRendere
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (diagnosticTimer !== undefined) clearTimeout(diagnosticTimer);
       observer?.disconnect();
       stopCamera();
+      pump.stop();
+      switches.cancel();
       // Drain an in-flight switch first, so teardown cannot race a session
       // that is still being created.
       void Promise.resolve(switches.active)

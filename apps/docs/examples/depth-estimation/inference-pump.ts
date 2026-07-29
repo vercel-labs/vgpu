@@ -31,7 +31,11 @@ export interface InferencePump {
   /** Keeps requesting until `stop()`; used by webcam mode. */
   startContinuous(): void;
   stopContinuous(): void;
-  /** Prevents further runs. Returns the in-flight run, if any, so callers can drain. */
+  /** Temporarily prevents runs and drops pending work while a session is replaced. */
+  pause(): Promise<void> | undefined;
+  /** Allows requests again after a session replacement. */
+  resume(): void;
+  /** Permanently prevents further runs. Returns the in-flight run for draining. */
   stop(): Promise<void> | undefined;
   readonly active: Promise<void> | undefined;
   readonly continuous: boolean;
@@ -44,6 +48,7 @@ export function createInferencePump(options: InferencePumpOptions): InferencePum
   const clearTimer = options.clearTimer ?? ((handle: number) => clearTimeout(handle));
 
   let stopped = false;
+  let paused = false;
   let continuous = false;
   let pending = false;
   let timer: number | undefined;
@@ -58,7 +63,7 @@ export function createInferencePump(options: InferencePumpOptions): InferencePum
   };
 
   const maybeRun = () => {
-    if (stopped || active || timer !== undefined) return;
+    if (stopped || paused || active || timer !== undefined) return;
     if (!pending && !continuous) return;
 
     const elapsed = lastFinishedAt === undefined ? Number.POSITIVE_INFINITY : now() - lastFinishedAt;
@@ -102,8 +107,21 @@ export function createInferencePump(options: InferencePumpOptions): InferencePum
       continuous = false;
       if (!pending) clearPendingTimer();
     },
+    pause() {
+      paused = true;
+      continuous = false;
+      pending = false;
+      clearPendingTimer();
+      return active;
+    },
+    resume() {
+      if (stopped) return;
+      paused = false;
+      maybeRun();
+    },
     stop() {
       stopped = true;
+      paused = true;
       continuous = false;
       pending = false;
       clearPendingTimer();

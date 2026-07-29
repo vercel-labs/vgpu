@@ -45,7 +45,10 @@ export interface SharedDeviceSessionOptions {
   readonly label: string;
   /** Called after every await so a disposed renderer can abandon initialization. */
   readonly isCancelled?: () => boolean;
+  /** Aborts cancellable initialization work such as the model download. */
+  readonly signal?: AbortSignal;
   readonly onStage?: (stage: SharedDeviceStage) => void;
+  readonly onModelProgress?: (loadedBytes: number, totalBytes: number | undefined) => void;
   /** Extra ORT session options (free dimension overrides, graph optimization, ...). */
   readonly sessionOptions?: Record<string, unknown>;
 }
@@ -132,14 +135,52 @@ export async function createSharedDeviceSession(
   ort.env.wasm.wasmPaths = ORT_WASM_PATH;
 
   options.onStage?.('model');
-  const response = await fetch(options.modelUrl);
+  let response: Response;
+  try {
+    response = await fetch(options.modelUrl, { signal: options.signal });
+  } catch (error) {
+    if (options.signal?.aborted || cancelled()) throw new OrtInitCancelled();
+    throw error;
+  }
   checkpoint();
   if (!response.ok) {
     throw new OrtEnvironmentError(
       `Model ${options.modelUrl} failed to load (HTTP ${response.status}).`,
     );
   }
-  const modelBytes = new Uint8Array(await response.arrayBuffer());
+  const declaredLength = Number(response.headers.get('content-length')) || undefined;
+  let modelBytes: Uint8Array;
+  if (response.body && options.onModelProgress) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.byteLength;
+        options.onModelProgress(loaded, declaredLength);
+        checkpoint();
+      }
+    } catch (error) {
+      if (options.signal?.aborted || cancelled()) throw new OrtInitCancelled();
+      throw error;
+    }
+    modelBytes = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      modelBytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+  } else {
+    try {
+      modelBytes = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      if (options.signal?.aborted || cancelled()) throw new OrtInitCancelled();
+      throw error;
+    }
+  }
   checkpoint();
 
   options.onStage?.('session');

@@ -63,6 +63,34 @@ describe('createSwitchQueue', () => {
     expect(started).toEqual(['a', 'c']);
   });
 
+  it('aborts obsolete active work and starts only the newest replacement after it settles', async () => {
+    const started: string[] = [];
+    const aborted: string[] = [];
+    const queue = createSwitchQueue<string>(() => {});
+
+    queue.push('slow', (value, signal) => {
+      started.push(value);
+      return new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => {
+          aborted.push(value);
+          resolve();
+        });
+      });
+    });
+    queue.push('skipped', (value) => {
+      started.push(value);
+      return Promise.resolve();
+    });
+    queue.push('latest', (value) => {
+      started.push(value);
+      return Promise.resolve();
+    });
+    await settle();
+
+    expect(aborted).toEqual(['slow']);
+    expect(started).toEqual(['slow', 'latest']);
+  });
+
   it('reports a failure and keeps accepting later switches', async () => {
     const errors: unknown[] = [];
     const started: string[] = [];

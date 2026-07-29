@@ -126,6 +126,20 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(3);
   });
 
+  it('pauses while a session is replaced and resumes inference on the new session', async () => {
+    const h = harness();
+    h.pump.request();
+    const active = h.pump.pause();
+    await h.finish();
+    await active;
+
+    h.pump.request();
+    expect(h.started).toBe(1);
+    h.pump.resume();
+    h.pump.request();
+    expect(h.started).toBe(2);
+  });
+
   it('stops scheduling after stop() and hands back the in-flight run', async () => {
     const h = harness();
     h.pump.startContinuous();
