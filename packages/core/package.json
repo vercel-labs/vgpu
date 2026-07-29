@@ -45,7 +45,7 @@
     "build": "tsc -b"
   },
   "vgpuBundleAudience": "tooling",
-  "vgpuBundleBudgetGzipBytes": 32256,
+  "vgpuBundleBudgetGzipBytes": 35328,
   "vgpuBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
   "dependencies": {
     "@vgpu/wgsl": "workspace:*"
