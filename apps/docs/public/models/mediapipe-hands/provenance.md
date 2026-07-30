@@ -125,6 +125,14 @@ machine that produced these files, so a pinned virtual environment was used
 instead of a container digest. Host: aarch64 Linux, Python 3.11.2. TensorFlow
 resolved to the `tensorflow-cpu-aws==2.15.1` wheel on that platform.
 
+The files in this directory were produced by that toolchain (`tf2onnx` 1.16.1 /
+TensorFlow 2.15.1 / `onnx` 1.17.0). `requirements-convert.txt` has since been
+bumped to `tf2onnx` 1.17.0 / TensorFlow 2.19.0 / `onnx` 1.22.0 to retire a CVE
+in the old `onnx` pin. Re-running `convert.sh` today therefore yields files 2
+bytes shorter than the ones here, **with both graph digests below unchanged** —
+the graphs, and the CPU validation results, are identical. These copies were
+kept rather than re-staged; `sha256sums` describes exactly these bytes.
+
 ```bash
 tools/models/mediapipe-hands/convert.sh --work /tmp/hand-conversion
 ```

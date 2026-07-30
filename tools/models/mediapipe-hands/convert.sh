@@ -13,6 +13,21 @@
 # The `.task` bundle is a plain zip. Two graphs, two conversions, no fusion:
 # the plan explicitly rejects a fused detector+crop ONNX.
 #
+# Toolchain note (tf2onnx 1.16.1 -> 1.17.0, TensorFlow 2.15.1 -> 2.19.0, onnx
+# 1.17.0 -> 1.22.0; see requirements-convert.txt for why the old onnx ceiling
+# is gone). Both structural graph digests below are unchanged under the new
+# toolchain - that is the reproducibility contract and it still holds exactly.
+# The byte *lengths* moved by 2 bytes each, so the *_ONNX_BYTES constants below
+# describe the current toolchain's output.
+#
+# The copies already staged in apps/docs/public/models/mediapipe-hands/ were
+# produced by the previous toolchain and are 2 bytes longer (4589374 and
+# 10903457). They were deliberately NOT regenerated: they carry the identical
+# structural digests, and validate-cpu.py reproduces the recorded golden.json
+# landmark-for-landmark from either set, so re-staging would churn 15 MB of
+# committed binaries for no behavioural change. apps/docs/public/models/
+# mediapipe-hands/sha256sums still describes those staged bytes correctly.
+#
 # Usage:
 #   tools/models/mediapipe-hands/convert.sh <workdir>
 #   tools/models/mediapipe-hands/convert.sh <workdir> --venv /path/to/.venv
@@ -29,7 +44,7 @@ readonly DETECTOR_TFLITE='hand_detector.tflite'
 readonly DETECTOR_TFLITE_SHA='945f713bc23570bd4ed60f848c401dc8eaf95713183d43ba14cf12e467d27a7d'
 readonly DETECTOR_TFLITE_BYTES=2339878
 readonly DETECTOR_ONNX='palm-detector.onnx'
-readonly DETECTOR_ONNX_BYTES=4589374
+readonly DETECTOR_ONNX_BYTES=4589372
 # Structural, name-independent digest (graph-digest.py). This is the
 # reproducibility contract: tf2onnx does NOT emit byte-identical files across
 # runs, but every run must describe the same graph with the same weights.
@@ -39,7 +54,7 @@ readonly LANDMARK_TFLITE='hand_landmarks_detector.tflite'
 readonly LANDMARK_TFLITE_SHA='6acda74af3fbf40e68265c20c7394b2bad81a16a481dcd79ad7a081887c3d6b9'
 readonly LANDMARK_TFLITE_BYTES=5478949
 readonly LANDMARK_ONNX='hand-landmark.onnx'
-readonly LANDMARK_ONNX_BYTES=10903457
+readonly LANDMARK_ONNX_BYTES=10903455
 readonly LANDMARK_ONNX_GRAPH='416a84388303c48900c5edafc3f06d28126e0baf8772860af1c19e9d8a2052cc'
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -68,6 +68,13 @@ conversions.
 | `hand-landmark.onnx` | 10,903,457 | 10.40 | `416a84388303c48900c5edafc3f06d28126e0baf8772860af1c19e9d8a2052cc` |
 | **combined** | **15,492,831** | **14.78** | — |
 
+The byte counts above are those of the copies staged under
+`apps/docs/public/models/mediapipe-hands/`, which were produced by the original
+`tf2onnx` 1.16.1 / TensorFlow 2.15.1 toolchain. The current pinned toolchain
+(`tf2onnx` 1.17.0 / TensorFlow 2.19.0 / `onnx` 1.22.0) emits files 2 bytes
+shorter — 4,589,372 and 10,903,455 — with **both graph digests unchanged**, so
+`convert.sh` carries the shorter lengths. See "Caveat on bit-exactness".
+
 `convert.sh` fails hard if a graph digest or a file size changes; a byte-level
 difference alone is expected and is reported, not treated as an error. Byte
 digests of the specific staged copies are written to `SHA256SUMS` next to the
@@ -179,10 +186,16 @@ above starts from Google's own version-pinned file, so the lineage is direct.
 
 Local Docker was unavailable on the machine that produced these files, so a
 pinned virtual environment was used instead of a container digest. Host:
-aarch64 Linux, Python 3.11.2. TensorFlow resolved to the
-`tensorflow-cpu-aws==2.15.1` wheel on that platform. These are the same pins the
-MoveNet recipe used, so one toolchain accounts for every converted model in the
-repository.
+aarch64 Linux, Python 3.11.2.
+
+The staged models were produced with `tf2onnx` 1.16.1 / TensorFlow 2.15.1
+(resolving to the `tensorflow-cpu-aws==2.15.1` wheel) / `onnx` 1.17.0 — the same
+pins the MoveNet recipe used. `requirements-convert.txt` now pins `tf2onnx`
+1.17.0 / TensorFlow 2.19.0 / `onnx` 1.22.0, which retires the CVE-2025-51480
+exposure the old `onnx` pin had to accept. The change was gated on the
+reproducibility contract: the newer toolchain emits **both recorded graph
+digests unchanged**, and `validate-cpu.py` over both fixtures reproduces the
+recorded golden landmark-for-landmark. Only the byte lengths shrank by 2 each.
 
 ```bash
 tools/models/mediapipe-hands/convert.sh /tmp/hand-conversion
@@ -215,11 +228,21 @@ continue on a mismatch.
 
 `tf2onnx` output is **not** bit-exact across runs; see "Verified identity of the
 converted files" above for the measurement. Only the structural graph digest is
-reproducible, and even that is only guaranteed for this pinned toolchain: a
-different `tf2onnx`/`onnx`/protobuf build may legitimately emit a different but
+reproducible, and in general even that is only guaranteed for a fixed toolchain:
+a different `tf2onnx`/`onnx`/protobuf build may legitimately emit a different but
 equivalent graph. A graph-digest mismatch therefore means "your toolchain
 differs or the weights changed" — dump both graphs and diff them before assuming
 the worse of the two.
+
+In this recipe's one measured toolchain change that caveat did **not** bite.
+Moving from `tf2onnx` 1.16.1 / TensorFlow 2.15.1 / `onnx` 1.17.0 to `tf2onnx`
+1.17.0 / TensorFlow 2.19.0 / `onnx` 1.22.0 (protobuf 3.20.3 → 5.29.6,
+ml-dtypes 0.3.2 → 0.5.4) reproduced both graph digests exactly —
+`a19a1337…` over 144 nodes / 140 initializers and `416a8438…` over 97 nodes /
+105 initializers — while the byte lengths shrank by 2 each. So the structural
+digest survived a four-minor TensorFlow jump and a protobuf major, which is
+stronger evidence for it as the contract than the single-toolchain measurement
+above could give.
 
 ## Offline validation performed
 

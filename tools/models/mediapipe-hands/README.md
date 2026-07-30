@@ -20,7 +20,7 @@ stage the untracked `/hand-gate/` payload the author runs on real hardware.
 | `hand_pipeline.py` | Pure-Python reference for everything the two graphs do **not** contain: SSD anchors, weighted NMS, palm→rotated-ROI, the rotated crop, the inverse transform, the MCP centroid, and the landmark→next-ROI loopback. |
 | `validate-cpu.py` | Runs both graphs through onnxruntime's CPU EP over fixture photographs, checks geometry and presence, and can render overlay PNGs. |
 | `stage-gate.sh` | Rebuilds the untracked `apps/docs/public/hand-gate/` payload: both models, the pinned ORT runtime, the fixtures, and the CPU golden. |
-| `requirements-convert.txt` | The pinned conversion toolchain (same pins as the MoveNet recipe). Holds `onnx` at 1.17.0 because tf2onnx 1.16.1 and TensorFlow 2.15.1 cannot resolve against a newer one; the file records the exact conflicts. |
+| `requirements-convert.txt` | The pinned conversion toolchain. Carries the same current, CVE-patched `onnx` 1.22.0 as `requirements.txt`: tf2onnx 1.17.0 dropped the `protobuf~=3.20` ceiling and TensorFlow 2.19.0 raised its `ml-dtypes` ceiling, so the two resolver conflicts that previously forced `onnx` down to 1.17.0 here are gone. The file records that history. |
 | `requirements.txt` | The pinned validation toolchain for `validate-cpu.py` (current, CVE-patched `onnx`). |
 | `PROVENANCE.md` | Upstream source, every hash, both graph contracts, the license reading and modification notice, and the measured offline results. |
 | `image-credits.md` | Attribution and pinned digests for the fixture photographs. |

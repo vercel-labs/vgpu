@@ -1,13 +1,12 @@
 # Pinned conversion toolchain for convert.sh (Python 3.11).
 #   python3 -m venv .venv && .venv/bin/pip install -r requirements-convert.txt
 #
-# Same pins as the MoveNet recipe this replaces
-# (apps/docs/examples/air-painting/convert-model/convert.sh), so both models in
-# the repository were produced by one auditable toolchain.
+# onnx is 1.22.0 here, matching requirements.txt: one auditable onnx across both
+# the conversion and the validation toolchain.
 #
-# Why onnx stays at 1.17.0 here while requirements.txt carries 1.22.0:
-# tf2onnx 1.16.1 is its last release (Feb 2024) and it cannot be resolved
-# against a current onnx. pip reports two *independent* hard conflicts:
+# History, because this file used to say the opposite. It previously held onnx
+# at 1.17.0 with tf2onnx 1.16.1 + tensorflow 2.15.1, and recorded two hard,
+# independent resolver conflicts as the reason:
 #
 #   tf2onnx 1.16.1            depends on protobuf~=3.20
 #   onnx >= 1.18              depends on protobuf>=4.25.1
@@ -15,18 +14,26 @@
 #   tensorflow-cpu-aws 2.15.1 depends on ml-dtypes~=0.3.1
 #   onnx 1.22.0               depends on ml_dtypes>=0.5.4
 #
-# So 1.17.0 is the highest onnx this toolchain can install, and neither
-# conflict can be resolved without replacing tf2onnx or TensorFlow, which would
-# invalidate the recorded graph digests this recipe exists to reproduce.
+# Both conflicts are gone as of this bump:
+#   * tf2onnx 1.17.0 (released 2026-03-04, after the note above was written)
+#     drops the protobuf upper bound: it now requires only protobuf>=3.20.
+#   * tensorflow 2.19.0 requires ml-dtypes>=0.5.1,<1.0.0, which admits the
+#     ml_dtypes>=0.5.4 that onnx 1.22.0 needs.
+# The environment resolves to protobuf 5.29.6 and ml-dtypes 0.5.4.
 #
-# The residual CVE-2025-51480 exposure is accepted deliberately and is bounded:
-# this file is tooling only - never installed by the docs build, the example, or
-# CI - and the only models it ever loads are the two hash-pinned Google
-# artifacts that convert.sh downloads and verifies before use. That CVE needs an
-# attacker-supplied model path, which this recipe never has. Anything that reads
-# third-party or user-supplied ONNX uses requirements.txt (onnx 1.22.0).
+# This retires the CVE-2025-51480 exposure that the old onnx==1.17.0 pin
+# accepted deliberately, so that risk-acceptance note is no longer needed.
+#
+# The conversion output was re-verified against the reproducibility contract
+# before this toolchain was adopted: graph-digest.py reproduces both recorded
+# structural digests exactly (palm a19a1337..., landmark 416a8438...), and
+# validate-cpu.py over both fixtures reproduces the recorded golden.json
+# landmark-for-landmark. Only the byte *lengths* moved, by 2 bytes each
+# (4589374 -> 4589372, 10903457 -> 10903455) - the same tensor-naming
+# non-determinism PROVENANCE.md already documents. See convert.sh for the
+# byte constants and PROVENANCE.md for the full record.
 pip==26.2
-tf2onnx==1.16.1
-tensorflow==2.15.1
-onnx==1.17.0
+tf2onnx==1.17.0
+tensorflow==2.19.0
+onnx==1.22.0
 numpy==1.26.4

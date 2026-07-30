@@ -1,10 +1,11 @@
 # Pinned toolchain for validate-cpu.py (Python 3.11).
 #   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 #
-# Validation only. The conversion toolchain moved to requirements-convert.txt:
-# TensorFlow 2.15.1 and tf2onnx 1.16.1 both cap dependencies that a current,
-# CVE-patched onnx requires, so one file could not carry both. The exact
-# resolver conflicts are recorded in requirements-convert.txt.
+# Validation only; the conversion toolchain lives in requirements-convert.txt.
+# The two files are separate because conversion additionally needs TensorFlow
+# and tf2onnx, not because they disagree about onnx: both now pin onnx 1.22.0.
+# requirements-convert.txt records the resolver conflicts that used to force
+# that file down to onnx 1.17.0, and why they no longer apply.
 onnx==1.22.0
 onnxruntime==1.20.1
 numpy==1.26.4
