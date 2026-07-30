@@ -33,5 +33,11 @@ jobs:
         run: pnpm build
       - name: Install pinned experiment dependencies
         run: npm ci --prefix experiments/ort-init-device
+      # The E2E runs these files through `node --experimental-strip-types`, which erases types
+      # without checking them, so an API drift like `gpu.compute` -> `compute(gpu, ...)` only
+      # surfaced as a runtime TypeError. The experiment is outside the root tsconfig's project
+      # references, so `tsc -b` never covered it either. Check it explicitly, before the E2E.
+      - name: Typecheck the experiment
+        run: npm run --prefix experiments/ort-init-device typecheck
       - name: Run generic-WASM negative and asyncify Node recipe
         run: npm run --prefix experiments/ort-init-device e2e:node

@@ -1,4 +1,4 @@
-import type { Buffer, Gpu } from "vgpu";
+import { compute, type Buffer, type Gpu } from "vgpu";
 import { COUNT, EXPECTED, numericMatch } from "./fixtures.ts";
 
 const WGSL = `
@@ -32,9 +32,9 @@ export async function runPipeline(gpu: Gpu, raw: GPUBuffer, mode: Mode): Promise
     }
     const destination = gpu.device.createBuffer({ size: bytes, usage: ["storage", "copy_src"], label: `ort-${mode}-result` });
     try {
-      const compute = gpu.compute(WGSL, { label: `ort-${mode}-consumer` });
-      compute.set({ source, destination });
-      compute.dispatch(1);
+      const consumer = compute(gpu, WGSL, { label: `ort-${mode}-consumer` });
+      consumer.set({ source, destination });
+      consumer.dispatch(1);
       lifecycle.push("consumer-submitted");
       await gpu.device.queue.flush();
       lifecycle.push("queue-flushed");
