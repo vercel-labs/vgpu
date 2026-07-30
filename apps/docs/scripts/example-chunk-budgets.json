@@ -1,24 +1,24 @@
 {
   "description": "Production Turbopack gzip baselines refreshed for the 0.2.0 GPU-first free-function migration. The check allows the larger of 2% or 5 KiB growth for an example and 5 KiB for the shared preview host. The three ML routes were re-measured under this same per-experience methodology; the mtime staleness gate in check-example-bundles.mjs refuses to grade a stale build at all. The ML routes' baselines cover the route-owned chunks only: onnxruntime-web is imported dynamically inside the example, so its runtime chunk and the ~24 MiB same-origin WASM are fetched on demand and are not attributed to a route chunk by this checker. depth-estimation ships two shaders, the model contract, preprocessing and the scheduler; its three models are same-origin public assets staged outside git, and its 230 KB thumbnail fixture is behind a Node-only entry so it never reaches the browser. air-painting ships four shaders plus the pose contract, camera, preprocess, scheduler and fixture modules; its 9 MB same-origin model is likewise a public asset. The checker also rejects a chunk shared by two preview routes. Its scan for `apps/docs/examples/<slug>/` markers is supplementary rather than a complete source-isolation proof: Turbopack retains those paths for inlined WGSL but strips them from ordinary TypeScript modules, so the current ML route chunks have no markers to inspect. A future manifest-backed module-to-chunk check is needed for a complete cross-contamination guarantee.",
   "sharedHost": {
-    "gzipBytes": 1873,
+    "gzipBytes": 1876,
     "maxGrowthBytes": 5120
   },
   "examples": {
-    "gradient": 49743,
-    "triangle-led-front": 89966,
-    "anti-aliasing": 53192,
-    "post-processing": 53693,
-    "black-hole": 55441,
-    "fluid": 57963,
-    "instanced-rendering": 60169,
-    "batch-rendering": 60029,
-    "fft-ocean": 58649,
-    "raymarched-fractal": 52940,
-    "radiance-cascades": 61970,
-    "depth-estimation": 58948,
-    "mnist-classifier": 56411,
-    "air-painting": 70965
+    "gradient": 49388,
+    "triangle-led-front": 89616,
+    "anti-aliasing": 52839,
+    "post-processing": 53340,
+    "black-hole": 55089,
+    "fluid": 57612,
+    "instanced-rendering": 59822,
+    "batch-rendering": 59682,
+    "fft-ocean": 58296,
+    "raymarched-fractal": 52589,
+    "radiance-cascades": 61618,
+    "depth-estimation": 58595,
+    "mnist-classifier": 56061,
+    "air-painting": 70613
   },
   "exampleGrowth": {
     "percent": 2,

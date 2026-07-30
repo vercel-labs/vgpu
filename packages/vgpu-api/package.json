@@ -100,10 +100,10 @@
     "vgpu": "./bin/vgpu.js"
   },
   "vgpuExperienceBundleBudgetsGzipBytes": {
-    "init-only": 1536,
-    "effect-only": 26112,
-    "triangle-low-level": 29184,
-    "draw-recipe-box": 30208,
+    "init-only": 1024,
+    "effect-only": 25600,
+    "triangle-low-level": 28672,
+    "draw-recipe-box": 29696,
     "full-root": 38912
   },
   "vgpuSceneBundleBudgetNote": "The scene barrel retains all recipe builders after the geometry redesign; direct primitive imports retain only their selected mesh, as the experience fixtures assert."
