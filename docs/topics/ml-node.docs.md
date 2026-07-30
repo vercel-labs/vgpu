@@ -2,7 +2,7 @@
 title: Quickstart: Node
 summary: Same route after the pinned Dawn and ORT setup.
 websitePath: /ml/node
-relatedSymbols: [init, Device, Buffer]
+relatedSymbols: [initFromDevice, Device, Buffer]
 ---
 
 # Quickstart: Node
@@ -20,7 +20,7 @@ Same route after the pinned Dawn and ORT setup:
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
 import { create, globals } from "webgpu";
-import { init } from "vgpu/node";
+import { initFromDevice } from "vgpu/node";
 
 declare const modelBytes: Uint8Array;
 declare const input: ort.Tensor;
@@ -31,7 +31,7 @@ const dawn = create([]);
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { gpu: dawn } });
 const session = await createOrtSession(dawn, modelBytes);
 const rawDevice = await ort.env.webgpu.device;
-const gpu = await init({ device: rawDevice });
+const gpu = await initFromDevice(rawDevice);
 const output = (await session.run({ input })).output;
 const destination = gpu.device.createBuffer({ size: output.gpuBuffer.size, usage: ["storage", "copy_dst"] });
 try {
@@ -53,7 +53,7 @@ Same zero-copy route on Node:
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
-import { init, type Buffer, type Compute } from "vgpu/node";
+import { initFromDevice, type Buffer, type Compute } from "vgpu/node";
 
 declare const session: ort.InferenceSession;
 declare const input: ort.Tensor;
@@ -62,7 +62,7 @@ declare const destination: Buffer;
 declare const workgroups: number;
 
 const rawDevice = await ort.env.webgpu.device;
-const gpu = await init({ device: rawDevice });
+const gpu = await initFromDevice(rawDevice);
 const output = (await session.run({ input })).output;
 const source = gpu.device.wrapBuffer(output.gpuBuffer);
 try {

@@ -2,7 +2,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { create, globals } from "webgpu";
-import { init } from "../../../packages/vgpu-api/dist/node.js";
+import { initFromDevice } from "../../../packages/vgpu-api/dist/node.js";
 import { DIMS, INPUT, MODEL_FILE, verifyModel } from "../shared/fixtures.ts";
 import { errorText, pass, type Evidence } from "../shared/evidence.ts";
 import { runPipeline, type Mode } from "../shared/pipeline.ts";
@@ -11,7 +11,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifact = resolve(process.env.ORT_EVIDENCE_DIR ?? resolve(root, "artifacts"), "node.json");
 const lifecycle: string[] = [];
 const errors: string[] = [];
-let session: any, gpu: Awaited<ReturnType<typeof init>> | undefined;
+let session: any, gpu: Awaited<ReturnType<typeof initFromDevice>> | undefined;
 let createCount = 0, deviceDestroyCalls = 0, rawBufferDestroyCalls = 0;
 let snapshot: unknown, reference: unknown;
 const restores: Array<() => void> = [];
@@ -45,9 +45,12 @@ try {
   const rawDevice = await ort.env.webgpu.device as GPUDevice;
   if (!rawDevice) throw new Error("ORT did not expose env.webgpu.device");
   restores.push(spyMethod(rawDevice, "destroy", () => deviceDestroyCalls++));
-  gpu = await init({ device: rawDevice });
+  gpu = await initFromDevice(rawDevice);
   assertions.deviceIdentity = gpu.gpu === rawDevice && gpu.device.gpu === rawDevice;
-  assertions.nodeAdapterNull = gpu.adapter === null;
+  // Stronger than before: adoption returns the plain `Gpu`, so there is no `adapter` field at
+  // all rather than a null one. `NodeGpu.adapter` now belongs solely to init(), which selects a
+  // Dawn adapter. Key name kept so the recorded artifact stays comparable.
+  assertions.nodeAdapterNull = !("adapter" in gpu);
 
   const runMode = async (mode: Mode) => {
     const input = new ort.Tensor("float32", INPUT, [...DIMS]);

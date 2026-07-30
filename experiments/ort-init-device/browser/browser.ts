@@ -1,12 +1,12 @@
 import * as ort from "onnxruntime-web/webgpu";
-import { init } from "vgpu";
+import { initFromDevice } from "vgpu";
 import { DIMS, INPUT, MODEL_FILE, verifyModel } from "../shared/fixtures.ts";
 import { errorText, pass, type Evidence } from "../shared/evidence.ts";
 import { runPipeline, type Mode } from "../shared/pipeline.ts";
 
 const assertions: Record<string, boolean> = {};
 const errors: string[] = [], lifecycle: string[] = [];
-let session: ort.InferenceSession | undefined, gpu: Awaited<ReturnType<typeof init>> | undefined;
+let session: ort.InferenceSession | undefined, gpu: Awaited<ReturnType<typeof initFromDevice>> | undefined;
 let snapshot: unknown, reference: unknown, deviceDestroyCalls = 0, rawDestroyCalls = 0;
 const restores: Array<() => void> = [];
 try {
@@ -24,7 +24,7 @@ try {
   const rawDevice = await ort.env.webgpu.device;
   if (!rawDevice) throw new Error("ORT WebGPU device absent");
   restores.push(spyMethod(rawDevice, "destroy", () => deviceDestroyCalls++));
-  gpu = await init({ device: rawDevice });
+  gpu = await initFromDevice(rawDevice);
   assertions.deviceIdentity = gpu.gpu === rawDevice && gpu.device.gpu === rawDevice;
 
   const runMode = async (mode: Mode) => {

@@ -3,7 +3,7 @@
  * WebGPU and let vgpu adopt ORT's `GPUDevice`.
  *
  * Rules this module encodes once for every ML example:
- * - ORT creates and owns the device; vgpu adopts it with `init({ device })`.
+ * - ORT creates and owns the device; vgpu adopts it with `initFromDevice(device)`.
  * - The WASM runtime is served same-origin from `/ort/` (staged by
  *   `scripts/prepare-ort-assets.mjs`); never from a CDN.
  * - `preferredOutputLocation: 'gpu-buffer'` is mandatory and failure to obtain a
@@ -210,9 +210,9 @@ export async function createSharedDeviceSession(
       );
     }
 
-    const { init } = await import('vgpu');
+    const { initFromDevice } = await import('vgpu');
     checkpoint();
-    gpu = await init({ device });
+    gpu = await initFromDevice(device);
     checkpoint();
     if (gpu.gpu !== device || gpu.device.gpu !== device) {
       throw new OrtEnvironmentError('vgpu adopted a different GPUDevice than ONNX Runtime Web created.');

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { create, globals } from "webgpu"; // supported public package path
-import { init } from "../../../packages/vgpu-api/dist/node.js";
+import { initFromDevice } from "../../../packages/vgpu-api/dist/node.js";
 Object.assign(globalThis, globals);
 const dawn = create([]); // exactly one singleton
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { gpu: dawn } });
@@ -16,7 +16,7 @@ ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = { mjs: resolve(dist, "ort-wasm-simd-threaded.asyncify.mjs"), wasm: resolve(dist, "ort-wasm-simd-threaded.asyncify.wasm") };
 ort.env.wasm.wasmBinary = new Uint8Array(await readFile(ort.env.wasm.wasmPaths.wasm));
 // Create and run an ORT WebGPU session first, then adopt its exact device:
-const gpu = await init({ device: await ort.env.webgpu.device });
+const gpu = await initFromDevice(await ort.env.webgpu.device);
 // ... stop producers, submit, await gpu.device.queue.flush(), dispose wrappers ...
 gpu.dispose();
 // await session.release();

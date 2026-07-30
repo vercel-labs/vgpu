@@ -4,7 +4,7 @@
 title: Quickstart: Browser
 summary: Copy the model output once into a vgpu-owned buffer, then release the tensor.
 websitePath: /ml/browser
-relatedSymbols: [init, Device, Buffer]
+relatedSymbols: [initFromDevice, Device, Buffer]
 ---
 
 # Quickstart: Browser
@@ -17,7 +17,7 @@ Prerequisites:
 - `onnxruntime-web` in your app — vgpu does not bundle or import ORT.
 - A model that runs on the WebGPU execution provider.
 
-Create the ORT session first so ORT owns the device, then pass `ort.env.webgpu.device` to `init`. Set `preferredOutputLocation: "gpu-buffer"` so outputs stay on the GPU.
+Create the ORT session first so ORT owns the device, then pass `ort.env.webgpu.device` to `initFromDevice`. Set `preferredOutputLocation: "gpu-buffer"` so outputs stay on the GPU.
 
 ## Browser snapshot
 
@@ -25,7 +25,7 @@ Copy the model output once into a vgpu-owned buffer, then release the tensor:
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
-import { init } from "vgpu";
+import { initFromDevice } from "vgpu";
 
 declare const modelBytes: Uint8Array;
 declare const input: ort.Tensor;
@@ -37,7 +37,7 @@ const session = await ort.InferenceSession.create(modelBytes, {
   executionProviders: ["webgpu"],
   preferredOutputLocation: "gpu-buffer",
 });
-const gpu = await init({ device: await ort.env.webgpu.device });
+const gpu = await initFromDevice(await ort.env.webgpu.device);
 const output = (await session.run({ input })).output;
 const destination = gpu.device.createBuffer({ size: output.gpuBuffer.size, usage: ["storage", "copy_dst"] });
 try {
@@ -59,7 +59,7 @@ Wrap the model output directly — zero copies, strict lifetime:
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
-import { init, type Buffer, type Compute } from "vgpu";
+import { initFromDevice, type Buffer, type Compute } from "vgpu";
 
 declare const modelBytes: Uint8Array;
 declare const input: ort.Tensor;
@@ -71,7 +71,7 @@ const session = await ort.InferenceSession.create(modelBytes, {
   executionProviders: ["webgpu"],
   preferredOutputLocation: "gpu-buffer",
 });
-const gpu = await init({ device: await ort.env.webgpu.device });
+const gpu = await initFromDevice(await ort.env.webgpu.device);
 const output = (await session.run({ input })).output;
 const source = gpu.device.wrapBuffer(output.gpuBuffer);
 try {

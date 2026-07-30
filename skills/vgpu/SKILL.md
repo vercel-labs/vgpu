@@ -50,7 +50,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
 - **Overview** — Share one GPUDevice between vgpu and a machine learning runtime so model outputs stay on the GPU.  `references/guides/ml.docs.md`
 - **Quickstart: Browser** — In this quickstart you run an ONNX model with ONNX Runtime Web's WebGPU execution provider and consume its output with vgpu shaders — on one shared…  `references/guides/ml-browser.docs.md`
-- **Buffers & ownership** — ts export type RequestedDeviceInitOptions = { readonly adapter?: VGPUAdapter; readonly device?: never; readonly powerPreference?: GPUPowerPreferenc…  `references/guides/ml-buffers.docs.md`
+- **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
 - **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
 - **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
 - **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`

@@ -2,7 +2,7 @@
 title: Buffers & ownership
 summary: The integration is deliberately narrow: vgpu adopts a device and wraps buffers — everything else stays in your hands.
 websitePath: /ml/buffers
-relatedSymbols: [init, Device, Buffer]
+relatedSymbols: [init, initFromDevice, Device, Buffer]
 ---
 
 # Buffers & ownership
@@ -10,25 +10,21 @@ relatedSymbols: [init, Device, Buffer]
 ## SDK signatures
 
 ```ts
-export type RequestedDeviceInitOptions = {
+export interface InitOptions {
   readonly adapter?: VGPUAdapter;
+  /** Never set: adoption lives in `initFromDevice(device)`. */
   readonly device?: never;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
   readonly requiredLimits?: RequiredDeviceLimits;
   readonly label?: string;
-};
-export type ExternalDeviceInitOptions = {
-  readonly device: GPUDevice;
-  readonly adapter?: never;
-  readonly powerPreference?: never;
-  readonly requiredFeatures?: never;
-  readonly requiredLimits?: never;
-  readonly label?: never;
-};
-export type InitOptions = RequestedDeviceInitOptions | ExternalDeviceInitOptions;
+}
 
+/** vgpu creates the device and destroys it on dispose. */
 export declare function init(options?: InitOptions): Promise<Gpu>;
+
+/** vgpu adopts a device it did not create and never destroys it. */
+export declare function initFromDevice(device: GPUDevice): Promise<Gpu>;
 ```
 
 ```ts
@@ -40,25 +36,24 @@ declare class Device {
 
 | Error code | Condition |
 | --- | --- |
-| `VGPU-INIT-OPTIONS-CONFLICT` | An external `device` is mixed with requested-device options. |
-| `VGPU-INIT-DEVICE-INVALID` | The external device or init options fail structural validation. |
+| `VGPU-INIT-DEVICE-INVALID` | The device passed to `initFromDevice` fails structural validation. |
 | `VGPU-EXTERNAL-BUFFER-INVALID` | `wrapBuffer` receives a value without finite `size` and `usage`. |
 
-Pass either requested-device options or an external device — never both. The two option families are mutually exclusive; mixing `device` with `adapter` or any other requested-device option throws `VGPU-INIT-OPTIONS-CONFLICT`.
+To adopt a device owned by another library, call `initFromDevice(device)` instead of `init()`. The two entry points are separate on purpose: `init()` stays byte-minimal for apps that let vgpu create its own device, and bundlers drop `initFromDevice` entirely when you do not import it.
 
 ```ts
 import * as ort from "onnxruntime-web/webgpu";
-import { init } from "vgpu";
+import { init, initFromDevice } from "vgpu";
 
 // Requested device — vgpu creates it and destroys it on dispose.
 const owned = await init({ powerPreference: "high-performance" });
 
-// External device — vgpu borrows it and never destroys it.
-const gpu = await init({ device: await ort.env.webgpu.device });
+// Adopted device — vgpu borrows it and never destroys it.
+const gpu = await initFromDevice(await ort.env.webgpu.device);
 
-// Never both.
-// @ts-expect-error External-device options cannot include a requested-device label.
-await init({ device: await ort.env.webgpu.device, label: "mixed" }); // throws VGPU-INIT-OPTIONS-CONFLICT
+// A device is not an init() option.
+// @ts-expect-error adoption is initFromDevice(device)
+await init({ device: await ort.env.webgpu.device });
 ```
 
 `Device.wrapBuffer` wraps a caller-owned `GPUBuffer` in a vgpu `Buffer` without taking ownership. `wrapper.gpu` is the exact object you passed in. Disposing the wrapper detaches it from vgpu but never destroys the underlying buffer, and dispose is idempotent — a double dispose is a no-op.
@@ -81,7 +76,7 @@ raw.size;            // still valid — its lifetime never left your hands
 
 | Platform | Mode | Public route | Required lifetime |
 | --- | --- | --- | --- |
-| Browser | Snapshot | `init({ device })`; one raw encoder copy into a vgpu-owned destination | retain Tensor through submit and `await gpu.device.queue.flush()` |
+| Browser | Snapshot | `initFromDevice(device)`; one raw encoder copy into a vgpu-owned destination | retain Tensor through submit and `await gpu.device.queue.flush()` |
 | Browser | Reference | `gpu.device.wrapBuffer(tensor.gpuBuffer)` | retain → wrap → submit → flush → wrapper dispose → Tensor dispose |
 | Node | Snapshot | same route after user-side pinned Dawn and ORT initialization | retain Tensor through submit and `await gpu.device.queue.flush()` |
 | Node | Reference | same route after user-side pinned Dawn and ORT initialization | retain → wrap → submit → flush → wrapper dispose → Tensor dispose |
