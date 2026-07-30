@@ -6,7 +6,12 @@ export default defineConfig({
   plugins: [wgslVitePlugin()],
   test: {
     include: ["packages/**/*.test.ts", "examples/**/*.test.ts", "apps/docs/**/*.test.ts", "scripts/**/*.test.ts"],
-    poolMatchGlobs: [["{packages/adapter-node/tests/**,packages/render/tests/**}", "forks"]],
+    // Replaces the deprecated `poolMatchGlobs` entry that forced `forks` for
+    // packages/adapter-node/tests and packages/render/tests. `forks` was
+    // already the resolved pool for the whole suite (it is Vitest's default),
+    // so pinning it globally preserves the previous behaviour exactly while
+    // no longer depending on that default.
+    pool: "forks",
     testTimeout: 30_000,
   },
   resolve: {
