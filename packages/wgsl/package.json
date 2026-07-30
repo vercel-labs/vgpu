@@ -69,8 +69,8 @@
     "build": "tsc -b && node -e \"require('fs').copyFileSync('src/wgsl-types.d.ts', 'dist/wgsl-types.d.ts')\""
   },
   "devDependencies": {
-    "vite": "^5.4.21",
-    "webpack": "^5.97.1"
+    "vite": "^6.4.3",
+    "webpack": "^5.109.2"
   },
   "vgpuExportBundleAudiences": {
     ".": "client",
