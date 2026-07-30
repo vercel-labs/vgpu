@@ -1,7 +1,6 @@
 import { createNodeAdapter, describeNodeAdapter, nodeAdapterEnvironmentOverride, type NodeAdapterInfo, type NodeAdapterMode } from "@vgpu/adapter-node";
 import type { VGPUAdapter } from "@vgpu/core";
-import { createGpu, type ExternalDeviceInitOptions, type Gpu, type RequestedDeviceInitOptions } from "./init.ts";
-import { normalizeInitOptions } from "./kernel.ts";
+import { createGpu, type Gpu, type InitOptions } from "./init.ts";
 
 export { createNodeAdapter } from "@vgpu/adapter-node";
 export type { Bundle, BundleOptions, BundleRecorder, Compute, ComputeOptions, DispatchOptions, ClearColor, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, SurfaceResizeEvent, Timer, TimerSpan, Visibility, VisibilityOptions, VisibilityQuery } from "./init.ts";
@@ -20,6 +19,8 @@ export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } fro
 // --- The public creation API: gpu-first free functions. There is no facade — the `Gpu` is a
 // device handle plus a lifetime, and everything else takes it as its first argument.
 export type { Gpu } from "./kernel.ts";
+// Parity with the browser entry: a Dawn device from another library is adopted the same way.
+export { initFromDevice } from "./init-from-device.ts";
 export { bundle } from "./bundle.ts";
 export { clock } from "./clock.ts";
 export type { Clock } from "./clock.ts";
@@ -40,18 +41,14 @@ export { visibility } from "./visibility.ts";
 export { geometry } from "./scene/geometry-descriptor.ts";
 export type { GeometryRecipe, GeometryRecipeOf } from "./scene/geometry-recipe.ts";
 
-type NodeRequestedDeviceInitOptions = Omit<RequestedDeviceInitOptions, "adapter"> & { readonly adapter?: NodeAdapterMode | VGPUAdapter };
-export type NodeInitOptions = NodeRequestedDeviceInitOptions | ExternalDeviceInitOptions;
-// Nullable: an external device arrives without an adapter, so there is no Dawn adapter to describe.
-export interface NodeGpu extends Gpu { readonly adapter: NodeAdapterInfo | null }
+export type NodeInitOptions = Omit<InitOptions, "adapter"> & { readonly adapter?: NodeAdapterMode | VGPUAdapter };
+// Non-nullable again: init() always selects a Dawn adapter. An adopted device has none to
+// describe, which is why initFromDevice() returns the plain `Gpu` instead of this.
+export interface NodeGpu extends Gpu { readonly adapter: NodeAdapterInfo }
 
 /** Node headless entrypoint (Dawn via @vgpu/adapter-node). */
 export async function init(options: NodeInitOptions = {}): Promise<NodeGpu> {
-  const normalized = normalizeInitOptions(options) as NodeInitOptions;
-  if ("device" in normalized) {
-    const gpu = await createGpu("node", normalized as ExternalDeviceInitOptions);
-    return Object.assign(gpu, { adapter: null });
-  }
+  const normalized = options;
   const override = nodeAdapterEnvironmentOverride();
   const requested = override ?? normalized.adapter ?? "auto";
   const custom = typeof requested === "object" ? requested : undefined;

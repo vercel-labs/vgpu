@@ -11,30 +11,27 @@
 import { Device, validateRequiredFeatures, type RequiredDeviceLimits, type VGPUAdapter } from "@vgpu/core";
 import type { GpuErrorListener } from "./api-types.ts";
 import { unsupportedError, VGPUError } from "./errors.ts";
-// Not a feature module: two structural casts over @vgpu/core's lifecycle guards, no runtime deps.
-import { assertDeviceUsable } from "./lifecycle.ts";
 
-/** vgpu requests its own device: it owns the native handle and destroys it on `dispose()`. */
-export type RequestedDeviceInitOptions = {
+/**
+ * Options for the device vgpu creates and owns; it destroys that device on `dispose()`.
+ *
+ * To adopt a device another library owns, call `initFromDevice(device)` instead. `device` is
+ * declared here only so that passing one lands on the compile-time signpost rather than being
+ * silently ignored.
+ */
+export interface InitOptions {
   readonly adapter?: VGPUAdapter;
+  /**
+   * Never set: adoption lives in `initFromDevice(device)`. Declared so passing a device here is a
+   * type error instead of a silently ignored option. There is deliberately no runtime check: one
+   * does not fit the `init-only` budget, which is the budget this split exists to protect.
+   */
   readonly device?: never;
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
   readonly requiredLimits?: RequiredDeviceLimits;
   readonly label?: string;
-};
-
-/** vgpu wraps a device it did not create: it never destroys it, and every entry point re-checks that the owner has not. */
-export type ExternalDeviceInitOptions = {
-  readonly device: GPUDevice;
-  readonly adapter?: never;
-  readonly powerPreference?: never;
-  readonly requiredFeatures?: never;
-  readonly requiredLimits?: never;
-  readonly label?: never;
-};
-
-export type InitOptions = RequestedDeviceInitOptions | ExternalDeviceInitOptions;
+}
 
 export type AdapterFactory = () => VGPUAdapter;
 export type EntryKind = "browser" | "node" | "mock";
@@ -228,74 +225,16 @@ export function attachKernel(device: Device): Gpu {
 
 /** Entry-agnostic core constructor: resolve a device, wrap it in the minimal `Gpu`. */
 export async function createCoreGpu(entry: EntryKind, opts: InitOptions = {}, adapterFactory?: AdapterFactory): Promise<Gpu> {
-  const validated = normalizeInitOptions(opts);
-  const device = await createDevice(entry, validated, adapterFactory);
-  try {
-    assertDeviceUsable(device, "init");
-    return attachKernel(device);
-  } catch (error) {
-    // An already-destroyed external device must not leave a half-built Gpu behind. Disposing a
-    // borrowed device only drops our wrapper: Device.dispose() never destroys what it does not own.
-    device.dispose();
-    throw error;
-  }
+  return attachKernel(await createDevice(entry, opts, adapterFactory));
 }
 
 export async function createDevice(entry: EntryKind, opts: InitOptions, adapterFactory?: AdapterFactory): Promise<Device> {
-  // An external device short-circuits adapter selection entirely: there is nothing to request.
-  if ("device" in opts && opts.device !== undefined) {
-    if (!isGPUDeviceShape(opts.device)) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid external GPUDevice shape.");
-    return new (Device as unknown as new (gpu: GPUDevice, adapterInfo: null, ownership: "external") => Device)(opts.device, null, "external");
-  }
   if (opts.adapter || adapterFactory) return (opts.adapter ?? adapterFactory!()).requestDevice(opts);
   if (entry === "browser") return requestBrowserDevice(opts);
   throw unsupportedError("init", `init(${entry}) requires adapterFactory.`);
 }
 
-/** Validates and narrows raw init options before any device is created. */
-export function normalizeInitOptions(value: unknown): InitOptions {
-  if (typeof value !== "object" || value === null) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid init options.");
-  const opts = value as Record<string, unknown>;
-  try {
-    if ("device" in opts) {
-      if ("adapter" in opts || "powerPreference" in opts || "requiredFeatures" in opts || "requiredLimits" in opts || "label" in opts) {
-        throw initError("VGPU-INIT-OPTIONS-CONFLICT", "External device options cannot be mixed.");
-      }
-      const device = opts.device;
-      if (!isGPUDeviceShape(device)) throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid external GPUDevice shape.");
-      return { device };
-    }
-    const adapter = opts.adapter;
-    const powerPreference = opts.powerPreference;
-    const requiredFeatures = opts.requiredFeatures;
-    const requiredLimits = opts.requiredLimits;
-    const label = opts.label;
-    return {
-      ...(adapter !== undefined ? { adapter: adapter as VGPUAdapter } : {}),
-      ...(powerPreference !== undefined ? { powerPreference: powerPreference as GPUPowerPreference } : {}),
-      ...(requiredFeatures !== undefined ? { requiredFeatures: requiredFeatures as readonly GPUFeatureName[] } : {}),
-      ...(requiredLimits !== undefined ? { requiredLimits: requiredLimits as RequiredDeviceLimits } : {}),
-      ...(label !== undefined ? { label: label as string } : {}),
-    };
-  } catch (error) {
-    if (error instanceof VGPUError) throw error;
-    throw initError("VGPU-INIT-DEVICE-INVALID", "Invalid init options.");
-  }
-}
-
-function isGPUDeviceShape(value: unknown): value is GPUDevice {
-  if ((typeof value !== "object" && typeof value !== "function") || value === null) return false;
-  try {
-    const d = value as Partial<GPUDevice>;
-    return (typeof d.queue === "object" || typeof d.queue === "function") && d.queue !== null
-      && typeof d.createBuffer === "function" && typeof d.createCommandEncoder === "function"
-      && !!d.lost && typeof (d.lost as PromiseLike<GPUDeviceLostInfo>).then === "function";
-  } catch { return false; }
-}
-
-function initError(code: string, message: string): VGPUError { return new VGPUError({ code, message, where: "init" }); }
-
-async function requestBrowserDevice(opts: RequestedDeviceInitOptions): Promise<Device> {
+async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   const nav = globalThis.navigator as Navigator & { gpu?: GPU };
   const adapter = await nav.gpu?.requestAdapter({ powerPreference: opts.powerPreference });
   if (!adapter) throw unsupportedError("init", "navigator.gpu.requestAdapter() returned null.");
