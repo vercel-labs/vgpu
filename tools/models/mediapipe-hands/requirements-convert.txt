@@ -25,7 +25,7 @@
 # artifacts that convert.sh downloads and verifies before use. That CVE needs an
 # attacker-supplied model path, which this recipe never has. Anything that reads
 # third-party or user-supplied ONNX uses requirements.txt (onnx 1.22.0).
-pip==24.3.1
+pip==26.2
 tf2onnx==1.16.1
 tensorflow==2.15.1
 onnx==1.17.0
