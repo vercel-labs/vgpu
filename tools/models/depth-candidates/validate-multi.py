@@ -120,7 +120,9 @@ def _canon(norm: np.ndarray) -> np.ndarray:
     raw values are meaningless across models of different sizes. Comparing on a
     fixed grid makes 'how much structure is actually there' comparable.
     """
-    im = Image.fromarray((np.clip(norm, 0, 1) * 65535).astype(np.uint16), mode='I;16')
+    # No explicit mode=: Pillow infers 'I;16' from a 2-D uint16 array. Passing
+    # mode= to reinterpret dtype is deprecated in Pillow 12 and removed in 13.
+    im = Image.fromarray((np.clip(norm, 0, 1) * 65535).astype(np.uint16))
     return np.asarray(im.resize((CANON_W, CANON_H), Image.BILINEAR), dtype=np.float32) / 65535.0
 
 
