@@ -9,6 +9,7 @@ export const exampleSlugs = [
   'instanced-rendering',
   'batch-rendering',
   'fft-ocean',
+  'fft-ocean-surface',
   'raymarched-fractal',
   'environment-map',
   'transmission',

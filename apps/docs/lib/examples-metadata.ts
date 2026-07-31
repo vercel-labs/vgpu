@@ -12,6 +12,7 @@ import { meta as fluidMeta } from '../examples/fluid/meta';
 import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
 import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
 import { meta as fftOceanMeta } from '../examples/fft-ocean/meta';
+import { meta as fftOceanSurfaceMeta } from '../examples/fft-ocean-surface/meta';
 import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/meta';
 import { meta as environmentMapMeta } from '../examples/environment-map/meta';
 import { meta as transmissionMeta } from '../examples/transmission/meta';
@@ -32,6 +33,7 @@ const rawMetadata = {
   'instanced-rendering': instancedRenderingMeta,
   'batch-rendering': batchRenderingMeta,
   'fft-ocean': fftOceanMeta,
+  'fft-ocean-surface': fftOceanSurfaceMeta,
   'raymarched-fractal': raymarchedFractalMeta,
   'environment-map': environmentMapMeta,
   transmission: transmissionMeta,
@@ -61,6 +63,7 @@ export const exampleMetadataBySlug = {
   'instanced-rendering': withThumbnails(rawMetadata['instanced-rendering']),
   'batch-rendering': withThumbnails(rawMetadata['batch-rendering']),
   'fft-ocean': withThumbnails(rawMetadata['fft-ocean']),
+  'fft-ocean-surface': withThumbnails(rawMetadata['fft-ocean-surface']),
   'raymarched-fractal': withThumbnails(rawMetadata['raymarched-fractal']),
   'environment-map': withThumbnails(rawMetadata['environment-map']),
   transmission: withThumbnails(rawMetadata.transmission),
