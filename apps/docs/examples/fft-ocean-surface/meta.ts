@@ -26,6 +26,7 @@ export const meta = {
     'fft-core.wgsl',
     'fft-row.wgsl',
     'fft-col.wgsl',
+    'bake.wgsl',
     'spectrum-init.wgsl',
     'spectrum-update.wgsl',
     'sky.wgsl',
