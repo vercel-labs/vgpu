@@ -1,5 +1,6 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { BindingInfo, EntryPointInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
+import { entryBindings, entrySamplingPairs } from "./entry-metadata.ts";
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
@@ -7,16 +8,24 @@ export type BindingVisibilityFn = ((binding: BindingInfo) => GPUShaderStageFlags
 
 const bindGroupLayoutCaches = new WeakMap<GPUDevice, Map<string, GPUBindGroupLayout>>();
 
-export function visibilityForEntries(bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[]): BindingVisibilityFn {
+/**
+ * Stage visibility mask (plus the filtering-texture set) for the selected entry points.
+ *
+ * Driven strictly by each entry's reflected `bindings`/`samplingPairs`: a missing field throws
+ * rather than falling back to `bindings` (which widened visibility to every declared resource) or
+ * to `[]` (which downgraded filterable textures to `unfilterable-float`). `bindings` stays in the
+ * signature as the module-wide binding list callers already hold; it is no longer a fallback.
+ */
+export function visibilityForEntries(_bindings: readonly BindingInfo[], entries: readonly EntryPointInfo[]): BindingVisibilityFn {
   const masks = new Map<string, number>();
   const filterable = new Set<string>();
   for (const entry of entries) {
     const stage = entry.stage === "vertex" ? 1 : entry.stage === "fragment" ? 2 : 4;
-    for (const binding of entry.bindings ?? bindings) {
+    for (const binding of entryBindings(entry, "visibilityForEntries")) {
       const key = `${binding.group}:${binding.binding}`;
       masks.set(key, (masks.get(key) ?? 0) | stage);
     }
-    for (const pair of entry.samplingPairs ?? []) if (pair.mode === "filtering") filterable.add(`${pair.texture.group}:${pair.texture.binding}`);
+    for (const pair of entrySamplingPairs(entry, "visibilityForEntries")) if (pair.mode === "filtering") filterable.add(`${pair.texture.group}:${pair.texture.binding}`);
   }
   const policy: BindingVisibilityFn = (binding) => masks.get(`${binding.group}:${binding.binding}`) ?? 0;
   Object.defineProperty(policy, "filterable", { value: filterable });
