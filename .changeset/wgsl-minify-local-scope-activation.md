@@ -1,0 +1,5 @@
+---
+"@vgpu/wgsl": patch
+---
+
+Fix `minify: true` (`identifiers: "safe"`) dropping or misattributing references to local `let`/`var`/`const` declarations whose initializer contains a comparison or shift operator (`<`, `>`, `<=`, `>=`, `<<`, `>>`) — e.g. `let flag = uv.x < 1.0;`. The scope walker's statement-end scanner mistracked these operators as template-argument brackets, delaying the declaration's scope activation past its own later references. Depending on shape this either left a dangling identifier in the minified output (fails at `createShaderModule`) or — when the local shadowed an outer same-named declaration — silently renamed the reference to the outer variable (valid WGSL, wrong result, no diagnostic). `minify`'s identifier renamer now also independently verifies every renamed local has no leftover unrenamed reference before emitting, downgrading any future recurrence to a missed optimization instead of corrupt output; the `ResolveOptions.validate` doc now says plainly that its GPU-backed check is a no-op outside the Docker test harness, and that this self-check runs regardless of `validate`.

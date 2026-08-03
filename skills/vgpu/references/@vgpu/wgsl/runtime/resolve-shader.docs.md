@@ -36,7 +36,7 @@ declare function resolveShader(opts: ResolveOptions): Promise<ResolvedShader>;
 | opts.rootDir | string | ✖ | `dirname(entry)` for cache-key grouping; no `@/` alias unless provided | Base directory for `@/foo.wgsl` imports. Also used as the default root passed to cache key generation when present. |
 | opts.packageMap | `Record<string, string>` | ✖ | `{}` | Prefix map for package-style WGSL imports. If a specifier starts with a key, the target prefix is joined with the remainder. |
 | opts.modules | `Record<string, string>` | ✖ | filesystem reads | In-memory WGSL filesystem. Keys are normalized with `/`; relative imports use virtual paths and package imports require `packageMap`. |
-| opts.validate | boolean | ✖ | `true` | When not `false`, validates emitted WGSL via `validateWGSL`. In normal processes validation is a no-op unless `VGPU_DOCKER_TEST=1`; in that mode Naga/WebGPU diagnostics can throw. |
+| opts.validate | boolean | ✖ | `true` | When not `false`, validates emitted WGSL via `validateWGSL`. In normal processes validation is a no-op unless `VGPU_DOCKER_TEST=1`; in that mode Naga/WebGPU diagnostics can throw. Independent of this flag, `minify` with `identifiers: "safe"` always self-checks that renaming left no dangling reference (`VGPU-WGSL-MINIFY-DANGLING-IDENT`), with no GPU involved. |
 | opts.minify | `boolean | MinifyOptions` | ✖ | `false` | `true` means `{ whitespace: true, identifiers: "safe" }`; object form defaults to `{ whitespace: true, identifiers: "none" }`; `false` or omitted preserves whitespace/comments after resolver emission and DCE. |
 
 **Returns:** `Promise<ResolvedShader>` — resolved WGSL plus dependency paths, cache keys, lightweight AST modules, source map, diagnostics, and reflection for entry points/resources.

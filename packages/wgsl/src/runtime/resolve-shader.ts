@@ -25,6 +25,17 @@ export interface ResolveOptions {
   readonly rootDir?: string;
   readonly packageMap?: Record<string, string>;
   readonly modules?: Record<string, string>;
+  /**
+   * Validate emitted WGSL against a real WebGPU adapter (`createShaderModule` plus a
+   * compilation-info round trip). Defaults to `true`, but **this device-backed check is a no-op
+   * outside the project's Docker test harness**: `validateWGSL` returns immediately unless
+   * `VGPU_DOCKER_TEST=1`, and it also needs an adapter it can create. Set it to `false` explicitly
+   * if you do not want the (currently no-op) attempt.
+   *
+   * Independent of this flag, `minify: true` / `minify: { identifiers: "safe" }` always self-checks
+   * that identifier renaming did not orphan a reference to a local it renamed. That check needs no
+   * GPU and cannot be disabled.
+   */
   readonly validate?: boolean;
   /**
    * WGSL minification. `true` uses the production preset
