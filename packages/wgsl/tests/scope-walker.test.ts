@@ -100,3 +100,59 @@ test("scope walker should not treat identifiers in later global declarations as 
   expect(analysis.preservedTokens.some((item) => item.tokenIndex === overrideNameToken && item.reason === "global")).toBe(true);
   expect(analysis.fallback.wholeModule).toBe(false);
 });
+
+// #251: findStatementEnd() must stop at the declaration's own `;`. Comparison and shift
+// operators in an initializer are not template brackets, so they must not extend the scan.
+function localAudit(source: string, name: string) {
+  const analysis = analyzeWgslScopes(source);
+  const occurrences = analysis.tokens.filter((token) => token.kind === "ident" && token.text === name).length;
+  const declarations = analysis.declarations.filter((decl) => decl.name === name).length;
+  const references = analysis.references.filter((ref) => ref.name === name).length;
+  const unknown = analysis.preservedTokens.filter((item) => item.reason === "unknown" && analysis.tokens[item.tokenIndex]?.text === name).length;
+  return { occurrences, accounted: declarations + references, unknown };
+}
+
+const statementEndRows: [string, string][] = [
+  ["single <", "let flag = uv.x < 1.0; if (flag) { return 0.0; } return 1.0;"],
+  [">= then <=", "let flag = uv.x >= 0.0 && uv.x <= 1.0; if (!flag) { return 0.0; } return 1.0;"],
+  ["< inside parens", "let flag = (uv.x < 1.0); if (!flag) { return 0.0; } return 1.0;"],
+  ["var with <", "var flag = uv.x < 1.0; if (!flag) { return 0.0; } return 1.0;"],
+  ["shift <<", "var flag = 1u << 2u; return f32(flag);"],
+  ["shift >>", "var flag = 4u >> 1u; return f32(flag);"],
+  ["single >", "let flag = uv.x > 1.0; if (flag) { return 0.0; } return 1.0;"],
+  ["<= then >=", "let flag = uv.x <= 1.0 && uv.x >= 0.0; if (!flag) { return 0.0; } return 1.0;"],
+  ["balanced < then >", "let flag = uv.x < 1.0 && uv.y > 0.0; if (!flag) { return 0.0; } return 1.0;"],
+  ["no comparison", "let flag = true; if (!flag) { return 0.0; } return 1.0;"],
+  ["typed with comparison", "let flag: bool = uv.x < 1.0; if (flag) { return 0.0; } return 1.0;"],
+];
+
+test.each(statementEndRows)("scope walker records every reference to a local whose initializer holds operators (%s)", (_label, body) => {
+  const audit = localAudit(`fn helper_fn(uv: vec2f) -> f32 {\n  ${body}\n}\n`, "flag");
+
+  expect(audit.occurrences).toBeGreaterThan(1);
+  expect(audit.accounted).toBe(audit.occurrences);
+  expect(audit.unknown).toBe(0);
+});
+
+test("scope walker ends a module-scope statement at its own semicolon when it contains a comparison", () => {
+  const analysis = analyzeWgslScopes("const_assert 1u < 2u;\n@group(0) @binding(0) var<storage, read_write> data: array<f32>;\nfn f() -> f32 { return data[0]; }\n");
+  const dataToken = analysis.tokens.findIndex((token) => token.text === "data");
+
+  expect(analysis.preservedTokens.some((item) => item.tokenIndex === dataToken && item.reason === "global")).toBe(true);
+  expect(analysis.declarations.some((decl) => decl.name === "data" && decl.kind === "global")).toBe(true);
+  expect(analysis.fallback.wholeModule).toBe(false);
+});
+
+test("scope walker still preserves template type arguments after the #251 statement-end fix", () => {
+  const source = "@group(0) @binding(0) var<storage, read_write> data: array<f32>; fn f() { var buf: array<f32, 4>; let first = buf[0]; }";
+  const analysis = analyzeWgslScopes(source);
+  const preserved = (text: string, reason: string) => analysis.preservedTokens.some((item) => analysis.tokens[item.tokenIndex]?.text === text && item.reason === reason);
+  const buf = analysis.declarations.find((decl) => decl.name === "buf");
+
+  expect(preserved("storage", "type")).toBe(true);
+  expect(preserved("read_write", "type")).toBe(true);
+  expect(preserved("array", "type")).toBe(true);
+  expect(preserved("f32", "type")).toBe(true);
+  expect(analysis.references.filter((ref) => ref.declarationId === buf?.id)).toHaveLength(1);
+  expect(analysis.fallback.wholeModule).toBe(false);
+});

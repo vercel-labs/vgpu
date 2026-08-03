@@ -430,16 +430,17 @@ class ScopeWalker {
     return undefined;
   }
 
+  // `<` / `>` are deliberately not tracked here: in a declaration's initializer they are
+  // comparison or shift operators, not template brackets, and a net-positive count made this scan
+  // overshoot the statement's own `;` (vgpu#251). A WGSL template argument list can never contain
+  // `;`, `{` or `}`, so angle depth is not load-bearing for finding a statement end.
   private findStatementEnd(index: number): number {
     let paren = 0;
-    let angle = 0;
     for (let i = index; i < this.tokens.length; i++) {
       const text = this.tokens[i]!.text;
       if (text === "(") paren++;
       else if (text === ")") paren = Math.max(0, paren - 1);
-      else if (text === "<") angle++;
-      else if (text === ">") angle = Math.max(0, angle - 1);
-      else if (paren === 0 && angle === 0 && (text === ";" || text === "{" || text === "}")) return i;
+      else if (paren === 0 && (text === ";" || text === "{" || text === "}")) return i;
     }
     return this.tokens.length - 1;
   }
