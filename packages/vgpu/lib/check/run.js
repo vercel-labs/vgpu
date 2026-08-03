@@ -5,21 +5,25 @@ import { dirname, resolve } from "node:path";
  * Runs WGSL reflection/validation for a single entry module and dumps JSON.
  */
 export async function runCheck(args) {
-  const [entry] = args;
+  const requireValidation = args.includes("--require-validation");
+  const [entry] = args.filter((arg) => arg !== "--require-validation");
   if (!entry || entry === "--help" || entry === "-h") {
-    return { code: 1, stderr: "Usage: vgpu check <file.wgsl>\n" };
+    return { code: 1, stderr: "Usage: vgpu check <file.wgsl> [--require-validation]\n" };
   }
 
   const absEntry = resolveEntry(entry);
   try {
     const { resolveShader } = await loadWgslRuntime();
-    const result = await resolveShader({ entry: absEntry, rootDir: dirname(absEntry) });
+    // Without the flag no `validate` option is passed at all, so the process-wide default
+    // ("auto", or VGPU_VALIDATE when set) applies untouched.
+    const result = await resolveShader({ entry: absEntry, rootDir: dirname(absEntry), ...(requireValidation ? { validate: "require" } : {}) });
     const diagnostics = (result.diagnostics ?? []).map(serializeDiagnostic);
     const payload = {
       schemaVersion: 1,
       entry: absEntry,
       deps: result.deps,
       diagnostics,
+      validation: result.validation,
       reflection: result.reflection,
       wgsl: result.wgsl,
     };
@@ -86,6 +90,8 @@ function serializeDiagnostic(diagnostic) {
   if (diagnostic.range) payload.range = diagnostic.range;
   if (diagnostic.metadata) payload.metadata = diagnostic.metadata;
   if (diagnostic.relatedDiagnostics) payload.relatedDiagnostics = diagnostic.relatedDiagnostics;
+  if (diagnostic.fix) payload.fix = diagnostic.fix;
+  if (diagnostic.where) payload.where = diagnostic.where;
   return payload;
 }
 
@@ -101,6 +107,8 @@ function formatError(error) {
       relatedDiagnostics: error.relatedDiagnostics,
     };
     if (error.range) payload.range = error.range;
+    if (error.fix) payload.fix = error.fix;
+    if (error.where) payload.where = error.where;
     if (error.stack && process.env.VGPU_CHECK_STACK === "1") {
       payload.stack = error.stack;
     }

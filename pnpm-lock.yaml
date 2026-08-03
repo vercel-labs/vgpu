@@ -403,6 +403,9 @@ importers:
         specifier: workspace:*
         version: link:../wgsl-std
     devDependencies:
+      '@vgpu/adapter-node':
+        specifier: workspace:*
+        version: link:../adapter-node
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@22.19.17)(jiti@1.21.7)(terser@5.47.1)

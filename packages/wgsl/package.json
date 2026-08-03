@@ -74,7 +74,16 @@
   "dependencies": {
     "@vgpu/wgsl-std": "workspace:*"
   },
+  "peerDependencies": {
+    "@vgpu/adapter-node": ">=0.1.6 <1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vgpu/adapter-node": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@vgpu/adapter-node": "workspace:*",
     "vite": "^6.4.3",
     "webpack": "^5.109.2"
   },

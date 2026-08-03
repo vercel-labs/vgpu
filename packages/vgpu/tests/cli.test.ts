@@ -29,6 +29,8 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Validate shader code
   npx vgpu check <file.wgsl>              Validate and reflect a WGSL file as JSON
+  npx vgpu check <file.wgsl> --require-validation
+                                          Fail instead of skipping when no WebGPU device is available
 
 ## Working examples
   npx vgpu examples search "<topic>"
