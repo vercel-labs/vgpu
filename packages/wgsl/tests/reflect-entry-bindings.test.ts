@@ -78,10 +78,10 @@ test("function-analysis fallback does not broaden entry visibility to unrelated 
   `)).toEqual({ main: [] });
 });
 
-test("bindings metadata is non-enumerable", () => {
+test("bindings metadata is an ordinary enumerable property", () => {
   const entry = reflectSource("@compute @workgroup_size(1) fn main() {}").entryPoints[0]!;
   expect(entry.bindings).toEqual([]);
-  expect(Object.keys(entry)).not.toContain("bindings");
+  expect(Object.keys(entry)).toContain("bindings");
 });
 
 const pairs = (source: string) => Object.fromEntries(reflectSource(source).entryPoints.map((entry) => [entry.name, entry.samplingPairs]));
@@ -113,10 +113,10 @@ test("sampling pairs compose helper parameters without cross-products", () => {
   ]);
 });
 
-test("sampling pair metadata is non-enumerable", () => {
+test("sampling pair metadata is an ordinary enumerable property", () => {
   const entry = reflectSource("@compute @workgroup_size(1) fn main() {}").entryPoints[0]!;
   expect(entry.samplingPairs).toEqual([]);
-  expect(Object.keys(entry)).not.toContain("samplingPairs");
+  expect(Object.keys(entry)).toContain("samplingPairs");
 });
 
 test("compute entries retain ordinary sampling pairs", () => {

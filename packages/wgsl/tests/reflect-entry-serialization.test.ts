@@ -78,21 +78,60 @@ struct Params { time: f32, }
   expect(roundTripped.samplingPairs).toEqual(live.samplingPairs);
 });
 
-test("toJSON is non-enumerable and does not widen Object.keys or spreads", () => {
-  const entry = reflectSource(`
-    @group(0) @binding(0) var<uniform> view: vec4f;
-    @vertex fn vs(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0) + view; }
-  `).entryPoints[0]!;
+// Structured-clone boundaries `toJSON` could never close (#252): these two only pass because the
+// reflection object is plain data — a non-enumerable field is invisible to structuredClone and to
+// worker postMessage, both of which clone structurally and ignore `toJSON`.
+test("entry-point metadata survives structuredClone", async () => {
+  const { reflection } = await resolveShader({
+    entry: "/main.wgsl",
+    minify: false,
+    validate: false,
+    modules: {
+      "/main.wgsl": `
+        @group(0) @binding(0) var<uniform> view: vec4f;
+        @group(0) @binding(1) var tex: texture_2d<f32>;
+        @group(0) @binding(2) var samp: sampler;
+        @vertex fn vs(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0) + view; }
+        @fragment fn fs(@location(0) uv: vec2f) -> @location(0) vec4f { return textureSample(tex, samp, uv); }
+      `,
+    },
+  });
 
-  expect(typeof entry.toJSON).toBe("function");
-  expect(Object.keys(entry)).toEqual(["name", "mangledName", "stage", "workgroupSize"]);
-  expect(Object.keys({ ...entry })).toEqual(["name", "mangledName", "stage", "workgroupSize"]);
-  expect(JSON.stringify({ nested: entry })).toContain("bindings");
+  const cloned = structuredClone(reflection.entryPoints);
+  expect(cloned).toHaveLength(reflection.entryPoints.length);
+  for (const [index, entry] of reflection.entryPoints.entries()) {
+    expect(cloned[index]?.bindings).toEqual(entry.bindings);
+    expect(cloned[index]?.samplingPairs).toEqual(entry.samplingPairs);
+    expect(cloned[index]?.inputs).toEqual(entry.inputs);
+  }
+  expect(cloned[0]?.inputs).toEqual([{ name: "position", location: 0, type: { kind: "vector", width: 2, element: { kind: "scalar", name: "f32" } } }]);
+  expect(cloned[1]?.samplingPairs).toEqual([{ texture: { group: 0, binding: 1 }, sampler: { group: 0, binding: 2 }, mode: "filtering" }]);
 });
 
-test("entry-point properties stay configurable so later reflection passes can re-define them", () => {
-  const entry = reflectSource("@compute @workgroup_size(1) fn main() {}").entryPoints[0]!;
-  for (const key of ["bindings", "samplingPairs", "toJSON"]) {
-    expect(Object.getOwnPropertyDescriptor(entry, key)).toMatchObject({ enumerable: false, configurable: true });
+test("entry-point metadata survives a worker postMessage round-trip", async () => {
+  const { reflection } = await resolveShader({
+    entry: "/main.wgsl",
+    minify: false,
+    validate: false,
+    modules: {
+      "/main.wgsl": `
+        @group(0) @binding(0) var<uniform> view: vec4f;
+        @fragment fn fs() -> @location(0) vec4f { return view; }
+      `,
+    },
+  });
+
+  const { port1, port2 } = new MessageChannel();
+  try {
+    const received = new Promise<unknown>((resolve) => {
+      port2.onmessage = (event: { data: unknown }) => resolve(event.data);
+    });
+    port1.postMessage(reflection.entryPoints);
+    const roundTripped = (await received) as typeof reflection.entryPoints;
+    expect(roundTripped[0]?.bindings).toEqual(reflection.entryPoints[0]?.bindings);
+    expect(roundTripped[0]?.samplingPairs).toEqual(reflection.entryPoints[0]?.samplingPairs);
+  } finally {
+    port1.close();
+    port2.close();
   }
 });
