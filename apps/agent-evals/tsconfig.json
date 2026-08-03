@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    // The pack script stays a plain .mjs runnable with bare `node` (it must work
+    // before anything is built), but is imported from typed code.
+    "allowJs": true,
+    "checkJs": false,
+    // eve authors import siblings with an explicit `.ts` extension.
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["agent/**/*.ts", "evals/**/*.ts", "scripts/**/*.mjs"]
+}

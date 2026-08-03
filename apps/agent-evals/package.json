@@ -1,0 +1,24 @@
+{
+  "name": "@vgpu/agent-evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "pack-vgpu": "node scripts/pack-vgpu.mjs",
+    "evals": "eve eval"
+  },
+  "dependencies": {
+    "ai": "^7.0.38",
+    "eve": "0.29.5",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.3"
+  }
+}
