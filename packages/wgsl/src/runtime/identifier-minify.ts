@@ -92,22 +92,41 @@ function renameFunctionLocals(analysis: ScopeAnalysis, fileScopeNames: ReadonlyS
       .sort((a, b) => a.tokenIndex - b.tokenIndex);
     if (declarations.length === 0) continue;
 
-    const replaceable = new Set<number>();
+    const ownTokens = new Map<number, Set<number>>();
     for (const decl of declarations) {
-      replaceable.add(decl.tokenIndex);
-      for (const ref of analysis.references) if (ref.declarationId === decl.id) replaceable.add(ref.tokenIndex);
+      const own = new Set<number>([decl.tokenIndex]);
+      for (const ref of analysis.references) if (ref.declarationId === decl.id) own.add(ref.tokenIndex);
+      ownTokens.set(decl.id, own);
     }
+
+    const renameable = declarations.filter((decl) => allLocalOccurrencesAccountedFor(analysis.tokens, fn, decl.name, ownTokens.get(decl.id)!));
+
+    const replaceable = new Set<number>();
+    for (const decl of renameable) for (const token of ownTokens.get(decl.id)!) replaceable.add(token);
 
     const reserved = new Set(fileScopeNames);
     for (const name of inFunctionUnrenamedIdentifierTexts(analysis.tokens, fn, replaceable)) reserved.add(name);
     const allocator = new RenameAllocator({ reserved });
 
-    for (const decl of declarations) {
+    for (const decl of renameable) {
       const name = allocator.allocate();
-      replacements.set(decl.tokenIndex, name);
-      for (const ref of analysis.references) if (ref.declarationId === decl.id) replacements.set(ref.tokenIndex, name);
+      for (const token of ownTokens.get(decl.id)!) replacements.set(token, name);
     }
   }
+}
+
+// Independent check that the scope analysis fully explains a local declaration before we shorten
+// it: every identifier token inside the declaration's own function that is spelled like the
+// declaration must be one of the occurrences the walker attributed to it. If anything else shares
+// the spelling — a reference the walker lost (vgpu#251), a same-named declaration in a sibling or
+// nested scope — the declaration is left alone, so a scope-analysis bug costs bytes instead of
+// producing dangling or misattributed identifiers.
+function allLocalOccurrencesAccountedFor(tokens: readonly Token[], fn: FunctionScopeInfo, name: string, own: ReadonlySet<number>): boolean {
+  for (let i = fn.nameTokenIndex; i <= fn.bodyEndToken; i++) {
+    const token = tokens[i];
+    if (token?.kind === "ident" && token.text === name && !own.has(i)) return false;
+  }
+  return true;
 }
 
 function collectFileScopeNames(analysis: ScopeAnalysis): Set<string> {
