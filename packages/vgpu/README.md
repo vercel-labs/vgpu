@@ -18,8 +18,8 @@ pnpm exec vgpu check ./shader.wgsl
 You can also run the binary directly through a package runner:
 
 ```sh
-pnpm dlx @vgpu/cli --help
-npx --package @vgpu/cli vgpu --help
+pnpm dlx vgpu --help
+npx -y vgpu --help
 ```
 
 ## Package and binary names

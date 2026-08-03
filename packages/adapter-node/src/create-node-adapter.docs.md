@@ -29,7 +29,7 @@ installation is available with:
 ```sh
 pnpm exec vgpu install-dawn
 # or
-npx @vgpu/cli install-dawn
+npx vgpu install-dawn
 ```
 
 `VGPU-NODE-PREBUILD-MISSING` includes the failed reason and those remediation

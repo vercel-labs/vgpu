@@ -5,11 +5,12 @@
 // change that wasn't followed by `pnpm -F vgpu generate:docs` fails the build with an actionable
 // message, instead of silently shipping a stale skill via `npx skills add vercel-labs/vgpu`.
 //
-// The generated SKILL.md carries a stamp (vgpuVersion/gitSha/generatedAt, see skill.js) that is
-// volatile BY DESIGN: gitSha and generatedAt change on every single run, even with zero content
-// changes. Diffing that stamp verbatim would make this check fail on every commit. So the stamp
-// lines are normalized to a fixed placeholder on both sides before comparing — a stamp-only
-// difference is never reported as drift; a real content difference always is.
+// The generated SKILL.md carries a stamp (vgpuVersion/gitSha/generatedAt, see skill.js). Only
+// gitSha and generatedAt are volatile by design (they change on every single run, even with zero
+// content changes), so only those two lines are normalized to a fixed placeholder before
+// comparing. vgpuVersion is NOT normalized: it's deterministic from packages/vgpu-api/package.json
+// and is the one field whose entire purpose is to catch "version bumped, skill not regenerated" —
+// normalizing it away would silently defeat the stamp it's supposed to make CI-detectable.
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -77,7 +78,7 @@ function diffSkillDir(committedDir, freshDir) {
 // Strip the volatile SKILL.md stamp lines before comparing — see the file-level comment.
 function normalizeStamp(relPath, content) {
   if (relPath !== "SKILL.md" || content === null) return content;
-  return content.replace(/^(vgpuVersion|gitSha|generatedAt): .*$/gmu, "$1: <stamp>");
+  return content.replace(/^(gitSha|generatedAt): .*$/gmu, "$1: <stamp>");
 }
 
 function listFiles(dir) {
