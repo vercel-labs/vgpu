@@ -64,11 +64,21 @@ export interface SamplingPair {
 }
 
 /**
- * Plain, fully enumerable projection of an {@link EntryPointInfo} — what `JSON.stringify` emits and
- * what `JSON.parse` gives back. Every field an entry point carries is present here, including the
- * three that live behind non-enumerable properties on the live object.
+ * One `@vertex`/`@fragment`/`@compute` entry point.
+ *
+ * ## Serialization contract
+ *
+ * `EntryPointInfo` is **plain data**: every field — including `bindings`, `samplingPairs` and
+ * `inputs` — is an ordinary enumerable, own, writable property. `JSON.stringify`, `{ ...entry }`,
+ * `Object.keys`/`Object.entries`/`Object.assign`, `structuredClone` and worker `postMessage` all see
+ * the complete shape, so nothing is silently dropped across a serialization or structured-clone
+ * boundary (issue #252). There is no `toJSON` hook and no hidden metadata.
+ *
+ * Tests that want a smaller or more stable projection of an entry point should say so explicitly
+ * (destructure the fields they care about, or register a custom snapshot serializer) rather than
+ * relying on the runtime object hiding fields from them.
  */
-export interface EntryPointInfoJSON {
+export interface EntryPointInfo {
   readonly name: string;
   readonly mangledName: string;
   readonly stage: "vertex" | "fragment" | "compute";
@@ -78,34 +88,6 @@ export interface EntryPointInfoJSON {
   readonly bindings?: readonly BindingRef[];
   /** Sampler/texture pairs statically sampled by this entry point and transitive callees. */
   readonly samplingPairs?: readonly SamplingPair[];
-}
-
-/**
- * One `@vertex`/`@fragment`/`@compute` entry point.
- *
- * ## Serialization contract
- *
- * `bindings`, `samplingPairs` and `inputs` are **non-enumerable** own properties: they are read
- * through dot access (`entry.bindings`) but stay out of `Object.keys`, `{ ...entry }`,
- * `Object.assign` and `toEqual`/snapshot comparisons, which keeps reflection snapshots small and
- * stable. That is deliberate and test-locked.
- *
- * Non-enumerability must not mean *lossy*, so every entry point also carries a non-enumerable
- * {@link EntryPointInfo.toJSON} that returns the complete {@link EntryPointInfoJSON}. Consequently
- * `JSON.stringify(entry)` / `JSON.parse(JSON.stringify(reflection))` round-trip all metadata, and
- * consumers behind a JSON boundary (the `vgpu check` CLI payload, RSC) see the same bindings the
- * in-process consumers see.
- *
- * `structuredClone` still drops the three properties — it ignores `toJSON` — and so does worker
- * `postMessage`, which clones structurally. Across those boundaries, send
- * `JSON.parse(JSON.stringify(reflection))` or copy the fields explicitly.
- */
-export interface EntryPointInfo extends EntryPointInfoJSON {
-  /**
-   * Lossless JSON projection, invoked automatically by `JSON.stringify`. Non-enumerable, so it
-   * never shows up in `Object.keys(entry)` or a spread of the entry point.
-   */
-  readonly toJSON?: () => EntryPointInfoJSON;
 }
 
 /** Pipeline-overridable constant (`override`) declaration. `id` is the `@id(N)` pipeline constant ID when the declaration has one; `defaultValue` is the raw initializer expression, present only when the declaration has a default. */

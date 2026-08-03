@@ -8,7 +8,7 @@ import { assertNoMangleCollisions, emitModule, type ExportMap, type ExportTarget
 import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./minify.ts";
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
 import { parseModule, type ImportDecl } from "./parser.ts";
-import { reflect, type Reflection } from "./reflect.ts";
+import { reflect, type EntryPointInfo, type Reflection } from "./reflect.ts";
 import { reservedIdentifierDiagnostics } from "./reserved-identifiers.ts";
 import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
@@ -17,7 +17,7 @@ import { scan } from "./scanner.ts";
 import { validateWGSL } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
-export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInfoJSON, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
+export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";
 export interface ResolveOptions {
@@ -58,8 +58,13 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const emittedReflection = reflectSource(emittedWgsl, entry);
   for (const reflectedEntry of reflection.entryPoints) {
     const emittedEntry = emittedReflection.entryPoints.find((item) => item.name === reflectedEntry.mangledName);
-    if (emittedEntry?.bindings) Object.defineProperty(reflectedEntry, "bindings", { value: emittedEntry.bindings, enumerable: false, configurable: true });
-    if (emittedEntry?.samplingPairs) Object.defineProperty(reflectedEntry, "samplingPairs", { value: emittedEntry.samplingPairs, enumerable: false, configurable: true });
+    // Whole-program re-attachment: per-module reflection cannot see bindings reached through
+    // imported helpers, so overwrite with the values reflected off the emitted program. The
+    // `readonly` markers on `EntryPointInfo` are a contract for consumers, not for this builder —
+    // narrow the mutation to these two fields instead of widening the public type.
+    const mutable = reflectedEntry as { -readonly [K in "bindings" | "samplingPairs"]: EntryPointInfo[K] };
+    if (emittedEntry?.bindings) mutable.bindings = emittedEntry.bindings;
+    if (emittedEntry?.samplingPairs) mutable.samplingPairs = emittedEntry.samplingPairs;
   }
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);

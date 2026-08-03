@@ -11,7 +11,6 @@ export type {
   BindingKind,
   BindingRef,
   EntryPointInfo,
-  EntryPointInfoJSON,
   EntryPointInputInfo,
   HostShareableLayout,
   LayoutMember,
