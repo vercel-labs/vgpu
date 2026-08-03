@@ -6,9 +6,10 @@ import { VGPUError } from "./errors.ts";
  *
  * `bindings`, `samplingPairs` and `inputs` are optional on the type (a compute entry has no
  * `inputs`) but reflection always attaches the two resource fields, and always attaches `inputs` to
- * a vertex entry. Absence therefore means the reflection was hand-built or lost its non-enumerable
- * metadata on the way here — the pre-#252 failure mode, where a `??` fallback silently widened
- * visibility, dropped texture filterability or produced zero vertex attributes. This throws instead.
+ * a vertex entry. Absence therefore means the reflection was hand-built, predates a full
+ * `resolveShader()`/`reflectSource()` pass, or was mutated after the fact — the pre-#252 failure
+ * mode, where a `??` fallback silently widened visibility, dropped texture filterability or
+ * produced zero vertex attributes. This throws instead.
  *
  * One generic accessor, throwing inline rather than through an errors.ts factory: this ships in
  * the client bundle, which is budgeted (`pnpm bundle-check`).
