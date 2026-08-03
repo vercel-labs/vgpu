@@ -29,16 +29,40 @@ export async function validateWGSL(wgsl: string, mode: "auto" | "require"): Prom
     return { attempted: true, ok: false, skipped: { code: failure.code, message: failure.message, ...(failure.fix ? { fix: failure.fix } : {}) } };
   }
   try {
-    device.pushErrorScope("validation");
-    const module = device.createShaderModule({ code: wgsl }) as ShaderModuleWithInfo;
-    const info = await module.getCompilationInfo?.();
-    const scoped = await device.popErrorScope();
-    const message = info?.messages.find((item) => item.type === "error") ?? (scoped ? { message: scoped.message } : undefined);
-    if (message) throw diagnostic(wgsl, message, scoped);
-    return { attempted: true, ok: true };
+    return await serializeOnDevice(async () => {
+      device.pushErrorScope("validation");
+      const module = device.createShaderModule({ code: wgsl }) as ShaderModuleWithInfo;
+      const info = await module.getCompilationInfo?.();
+      const scoped = await device.popErrorScope();
+      const message = info?.messages.find((item) => item.type === "error") ?? (scoped ? { message: scoped.message } : undefined);
+      if (message) throw diagnostic(wgsl, message, scoped);
+      return { attempted: true, ok: true };
+    });
   } finally {
     releaseValidationDevice();
   }
+}
+
+let deviceQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Runs the error-scope-bracketed part of validation one at a time.
+ *
+ * Error scopes are a stack *per device*, and every concurrent validation shares the one memoized
+ * device, so interleaved push/pop pairs pop each other's scopes: two `resolveShader` calls racing
+ * meant a valid shader could be rejected with its neighbour's diagnostic, or an invalid one pass
+ * because its error was popped by the neighbour. Only this section is serialized — the device lease
+ * is taken outside it, so a queued validation can never be waiting on a lease its predecessor holds.
+ */
+function serializeOnDevice<T>(run: () => Promise<T>): Promise<T> {
+  // `then(run, run)` because a failed predecessor must not stop the queue: a rejected validation is
+  // an ordinary outcome here (an invalid shader), not a reason to strand everyone behind it.
+  const next = deviceQueue.then(run, run);
+  deviceQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
 }
 
 /**
