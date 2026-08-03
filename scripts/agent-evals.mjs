@@ -77,10 +77,18 @@ process.env.VGPU_EVALS_REPO_ROOT ??= REPO_ROOT;
 // the agent working in the previous one.
 const seedDir = join(PACKAGE_DIR, "agent", "sandbox", "workspace");
 const seedHash = createHash("sha256");
-for (const name of readdirSync(seedDir).sort()) {
-  seedHash.update(name);
-  seedHash.update(readFileSync(join(seedDir, name)));
-}
+// Recursive: the seed is a directory tree, and a flat readdir throws EISDIR the
+// first time someone adds a subfolder to the starter project.
+const hashTree = (dir, prefix = "") => {
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const full = join(dir, entry.name);
+    const label = `${prefix}${entry.name}`;
+    seedHash.update(label);
+    if (entry.isDirectory()) hashTree(full, `${label}/`);
+    else seedHash.update(readFileSync(full));
+  }
+};
+hashTree(seedDir);
 process.env.VGPU_EVALS_WORKSPACE_KEY ??= seedHash.digest("hex").slice(0, 16);
 
 // Also precompute the staleness key here, in the real worktree. The runtime

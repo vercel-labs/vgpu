@@ -8,10 +8,16 @@ import { defineAgent } from "eve";
  * including a note explaining what not to write there, arrives in the prompt.
  *
  * So `instructions.md` must contain the agent's instructions and nothing else.
- * In particular it must not name vgpu, `doctor`, `docs`, `check`, shaders or
- * WebGPU: this tool exists to observe whether an agent finds those on its own,
- * and a list of them in the prompt answers the question before it is asked. The
- * same rule applies to the task prompt in `evals/s1-clear-color.eval.ts`.
+ * It must not name vgpu at all: it is sent on every run, including tasks that
+ * have nothing to do with this library.
+ *
+ * The task prompts in `evals/` follow a related but weaker rule. They may name
+ * vgpu ONLY as the entry point — `Use \`npx vgpu\`.` — because that CLI is how
+ * an agent is expected to meet the library in the field, so withholding it
+ * would model a situation that does not happen. Everything downstream of the
+ * entry point stays unsaid: no `docs`, no `doctor`, no `check`, no "shader",
+ * no WGSL, no WebGPU. That chain is what the run is measuring, and naming any
+ * link in it answers the question before it is asked.
  *
  * (This warning lives in a .ts file precisely because a .ts file is never sent
  * to the model.)

@@ -5,6 +5,7 @@ import { defineEval } from "eve/evals";
 import { equals } from "eve/evals/expect";
 import { PNG } from "pngjs";
 import { snapshotTarPath, snapshotWorkspaceDir } from "../agent/lib/paths.ts";
+import { MIX_MAX, MIX_MIN, TOL, gradeGradient } from "./lib/grade-gradient.mjs";
 
 /**
  * The one hint is `npx vgpu`, and it is deliberate.
@@ -29,20 +30,6 @@ const PROMPT = [
 
 const SIZE = 128;
 
-/**
- * Per-channel slack.
- *
- * A gradient is interpolated and then quantised to 8 bits, and rasterisers
- * disagree in the last bit or two: lavapipe, a hardware driver and a hand-rolled
- * loop will not agree exactly on the value at x=57. Demanding equality would
- * fail correct images for reasons that have nothing to do with the agent, so
- * every colour comparison here allows +/-2.
- */
-const TOL = 2;
-
-/** Sample stride along the middle row. Every pixel is unnecessary and noisy. */
-const STRIDE = 8;
-
 /** Journey signals: observed and logged, never gated. */
 const MILESTONES: { id: string; test: RegExp }[] = [
   { id: "ran the vgpu CLI at all", test: /(^|[^\w-])(npx\s+)?vgpu\b/ },
@@ -61,10 +48,21 @@ const MILESTONES: { id: string; test: RegExp }[] = [
  * stale call, reads the error and fixes it has done nothing wrong.
  */
 const STALE_API = [/\bgpu\.target\s*\(/, /\bgpu\.effect\s*\(/, /\bgpu\.draw\s*\(/, /\bgpu\.frame\s*\(\)/];
-/** The 0.2.0 shape: free functions taking `gpu` as their first argument. */
-const CURRENT_API = [/\btarget\s*\(\s*gpu\b/, /\beffect\s*\(\s*gpu\b/];
+/**
+ * The 0.2.0 shape: free functions taking the device as their first argument.
+ *
+ * The receiver is matched as any identifier rather than the literal `gpu`,
+ * because naming it `device` or `g` is not a stale API. The tradeoff is
+ * accepted knowingly: `target(anything)` can match an unrelated local function
+ * of the same name. Over-reporting "recovered" on a soft signal is much cheaper
+ * than under-reporting it because the agent picked a different variable name.
+ */
+const CURRENT_API = [/\btarget\s*\(\s*\w+/, /\beffect\s*\(\s*\w+/];
 
 const CODE_EXTENSIONS = new Set([".mjs", ".js", ".ts", ".wgsl"]);
+
+/** Judge material is truncated per section so one huge blob cannot crowd out the rest. */
+const JUDGE_SECTION_LIMIT = 2000;
 
 interface BashCall {
   command: string;
@@ -91,14 +89,6 @@ function bashCalls(toolCalls: readonly { name: string; input?: unknown; output?:
     });
 }
 
-/** Every text payload the agent wrote through `write_file`. */
-function writtenSources(toolCalls: readonly { name: string; input?: unknown }[]): string {
-  return toolCalls
-    .filter((call) => call.name === "write_file")
-    .map((call) => String((call.input as { content?: unknown } | undefined)?.content ?? ""))
-    .join("\n");
-}
-
 /** Source files as they ended up in the exported workspace. */
 function finalSources(dir: string): string {
   const chunks: string[] = [];
@@ -115,21 +105,6 @@ function finalSources(dir: string): string {
   };
   walk(dir);
   return chunks.join("\n");
-}
-
-function pixel(png: PNG, x: number, y: number): number[] {
-  const i = (png.width * y + x) * 4;
-  return [png.data[i], png.data[i + 1], png.data[i + 2], png.data[i + 3]];
-}
-
-/** Largest per-channel deviation of a whole column from an expected colour. */
-function columnDeviation(png: PNG, x: number, expected: readonly number[]): number {
-  let worst = 0;
-  for (let y = 0; y < png.height; y += 1) {
-    const px = pixel(png, x, y);
-    for (let c = 0; c < 4; c += 1) worst = Math.max(worst, Math.abs(px[c] - expected[c]));
-  }
-  return worst;
 }
 
 export default defineEval({
@@ -178,43 +153,35 @@ export default defineEval({
     // v0 trusts the agent's out.png: this reads the file it left behind, it
     // does NOT re-render from source. A hand-written PNG passes. Known and
     // accepted for this iteration — see "Trust model" in the README.
-    t.check(`${png.width}x${png.height}`, equals(`${SIZE}x${SIZE}`))
-      .gate()
-      .label("image is 128x128");
-
-    const leftOff = columnDeviation(png, 0, [255, 0, 0, 255]);
-    const rightOff = columnDeviation(png, png.width - 1, [0, 0, 255, 255]);
-    t.log(`endpoints: left column off by <=${leftOff}, right column off by <=${rightOff} (tolerance ${TOL})`);
-    t.check(leftOff <= TOL, equals(true)).gate().label("leftmost column is pure red");
-    t.check(rightOff <= TOL, equals(true)).gate().label("rightmost column is pure blue");
-
-    // Monotonic across the middle row: red must fall, blue must rise, green
-    // must stay out of it. This is what separates a gradient from two flat
-    // halves or a red-to-blue image that wanders through purple and back.
-    const y = Math.floor(png.height / 2);
-    const xs: number[] = [];
-    for (let x = 0; x < png.width; x += STRIDE) xs.push(x);
-    if (xs[xs.length - 1] !== png.width - 1) xs.push(png.width - 1);
-    const samples = xs.map((x) => pixel(png, x, y));
-
-    let redRises = 0;
-    let blueFalls = 0;
-    let greenOff = 0;
-    for (let i = 0; i < samples.length; i += 1) {
-      greenOff = Math.max(greenOff, Math.abs(samples[i][1]));
-      if (i === 0) continue;
-      if (samples[i][0] > samples[i - 1][0] + TOL) redRises += 1;
-      if (samples[i][2] < samples[i - 1][2] - TOL) blueFalls += 1;
+    //
+    // The grading itself lives in ./lib/grade-gradient.mjs so that offline
+    // probes can exercise the real logic instead of a copy of it.
+    const grade = gradeGradient(png, SIZE);
+    t.log(`endpoints: left column off by <=${grade.leftOff}, right off by <=${grade.rightOff} (tol ${TOL})`);
+    for (const row of grade.rows) {
+      t.log(`row y=${row.y} mid=[R${row.mid[0]} B${row.mid[1]}]`);
+      t.log(`  R: ${row.R.join(" ")}`);
+      t.log(`  B: ${row.B.join(" ")}`);
     }
-    t.log(
-      `middle row (${samples.length} samples every ${STRIDE}px): ` +
-        `red rises ${redRises}x, blue falls ${blueFalls}x, max green ${greenOff}`,
-    );
-    t.log(`  R: ${samples.map((s) => s[0]).join(" ")}`);
-    t.log(`  B: ${samples.map((s) => s[2]).join(" ")}`);
-    t.check(redRises === 0 && blueFalls === 0 && greenOff <= TOL, equals(true))
+
+    t.check(`${png.width}x${png.height}`, equals(`${SIZE}x${SIZE}`)).gate().label("image is 128x128");
+    t.check(grade.leftOff <= TOL, equals(true)).gate().label("leftmost column is pure red");
+    t.check(grade.rightOff <= TOL, equals(true)).gate().label("rightmost column is pure blue");
+
+    // Red never climbs, blue never drops, green stays out of it — sampled on
+    // three rows so a correct middle row cannot carry an image of noise.
+    // Note what this does NOT assert: monotonicity alone is satisfied by a hard
+    // step between two flat halves, which is why the midpoint gate exists.
+    t.log(`monotonic: red rises ${grade.redRises}x, blue falls ${grade.blueFalls}x, max green ${grade.greenOff}`);
+    t.check(grade.monotonic, equals(true)).gate().label("red falls and blue rises across the image");
+
+    // The midpoint must be a genuine blend. Two flat halves and a ramp through
+    // black both pass monotonicity while being the wrong picture; neither has a
+    // mixed middle column. The window is wide because the midpoint of a correct
+    // ramp is ~127 in sRGB space and ~186 in linear light.
+    t.check(grade.midpointMixed, equals(true))
       .gate()
-      .label("middle row is monotonic red-to-blue");
+      .label(`middle column blends both channels (${MIX_MIN}-${MIX_MAX})`);
 
     // ---- Journey (soft, never a gate) -------------------------------------
     // Gating any of this would reward ritual: an agent that solves the task
@@ -245,10 +212,19 @@ export default defineEval({
     t.log(`funnel: total_tool_calls=${turn.toolCalls.length}`);
 
     // ---- Stale API (soft) -------------------------------------------------
-    // Checked in two places, because they answer different questions: the
-    // transcript says what the model reached for first, the final workspace
-    // says what it shipped.
-    const written = writtenSources(turn.toolCalls);
+    // Checked in two places, because they answer different questions: what the
+    // model reached for while working, and what it actually shipped.
+    //
+    // "While working" includes the TEXT of its bash commands, not just
+    // `write_file` payloads: agents write files through heredocs
+    // (`cat > render.mjs <<'EOF'`), `sed -i`, and `node -e`, and a signal that
+    // only reads one tool silently under-reports every other route.
+    const written = [
+      ...turn.toolCalls
+        .filter((call) => call.name === "write_file")
+        .map((call) => String((call.input as { content?: unknown } | undefined)?.content ?? "")),
+      commands,
+    ].join("\n");
     const shipped = finalSources(extracted);
     const emitted = STALE_API.some((pattern) => pattern.test(written) || pattern.test(shipped));
     const stillStale = STALE_API.some((pattern) => pattern.test(shipped));
@@ -257,31 +233,42 @@ export default defineEval({
     t.log(`stale_api_emitted=${emitted}`);
     t.log(`stale_api_recovered=${recovered}`);
 
-    // ---- Docs usage quality (soft judge) ----------------------------------
-    // The only model-graded signal here, and it grades the agent's DISCOVERY
-    // behaviour, not whether the image is right — pixels already answered that.
+    // ---- Docs usage quality (soft judges) ---------------------------------
+    // The only model-graded signals here, and they grade DISCOVERY behaviour,
+    // not whether the image is right — pixels already answered that. Three
+    // separate questions rather than one compound verdict, because "used the
+    // CLI but read ten pages at random" and "read one page and ignored it" are
+    // different findings and a single yes/no hides which one happened.
     const docsExcerpt = docsCalls
       .map((call) => `$ ${call.command}\n${call.output.trim()}`)
       .join("\n\n")
-      .slice(0, 2000);
+      .slice(0, JUDGE_SECTION_LIMIT);
     const material = [
       "Commands the agent ran:",
-      commands || "(none)",
+      commands.slice(0, JUDGE_SECTION_LIMIT) || "(none)",
       "",
       "Output of its documentation commands (truncated):",
       docsExcerpt || "(the agent ran no documentation commands)",
     ].join("\n");
-    t.judge.autoevals
-      .closedQA(
-        [
-          "(1) Did the agent use the package's own CLI to discover the API it needed?",
-          "(2) Was the number of discovery commands proportionate — a few targeted queries",
-          "rather than blind wandering?",
-          "(3) Did it act on what it found, so the code it wrote reflects the documentation it read?",
-        ].join(" "),
-        { on: material },
-      )
-      .soft()
-      .label("docs usage quality");
+
+    const questions: { label: string; criteria: string }[] = [
+      {
+        label: "docs discovery via CLI",
+        criteria: "Did the agent use the package's own CLI to discover the API it needed?",
+      },
+      {
+        label: "discovery proportionate",
+        criteria:
+          "Was the number of discovery commands proportionate — a few targeted queries rather than blind wandering?",
+      },
+      {
+        label: "acted on docs read",
+        criteria:
+          "Did it act on what it found, so the code it wrote reflects the documentation it read?",
+      },
+    ];
+    for (const question of questions) {
+      t.judge.autoevals.closedQA(question.criteria, { on: material }).soft().label(question.label);
+    }
   },
 });

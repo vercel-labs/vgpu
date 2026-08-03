@@ -178,7 +178,20 @@ const REMEDIES: { label: string; command: string }[] = [
  * every workspace, which is exactly the staleness this is meant to prevent.
  */
 function workspaceSeedKey(): string {
-  return process.env.VGPU_EVALS_WORKSPACE_KEY || "seed-unknown";
+  const injected = process.env.VGPU_EVALS_WORKSPACE_KEY;
+  if (injected) return injected;
+  // Be loud. A constant fallback means every seed workspace hashes the same,
+  // which is precisely the stale-template bug this key exists to prevent: the
+  // agent silently gets the previous starter project and the run still looks
+  // healthy. Reachable by invoking `eve eval` directly instead of going through
+  // `pnpm agent-evals`, which is a legitimate thing to do while debugging.
+  console.warn(
+    "agent-evals: VGPU_EVALS_WORKSPACE_KEY is not set, so the sandbox template " +
+      "cannot be invalidated when the seed workspace changes. If you edited " +
+      "agent/sandbox/workspace/, run `pnpm agent-evals` (which sets it) or " +
+      "`rm -rf .eve` to force a rebuild.",
+  );
+  return "seed-unknown";
 }
 
 export default defineSandbox({
