@@ -1,7 +1,7 @@
 import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
-import { entryBindings } from "./entry-metadata.ts";
+import { entryMetadata } from "./entry-metadata.ts";
 import { createBindGroupCache, identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, pipelineLayoutFor, type SetBag, type SetCore } from "./set-core.ts";
 import { visibilityForEntries } from "./set-layouts.ts";
@@ -71,7 +71,7 @@ export class ComputePipeline implements Compute {
       compute: { module: this.shaderModule, entryPoint: this.entryPoint, ...(constants ? { constants } : {}) },
     });
     this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
-    const active = new Set(entryBindings(entry, `${this.label}.compute`).map((binding) => `${binding.group}:${binding.binding}`));
+    const active = new Set(entryMetadata(entry, "bindings", this.label).map((binding) => `${binding.group}:${binding.binding}`));
     this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage" && active.has(`${binding.group}:${binding.binding}`));
     if (opts.set) this.set(opts.set);
   }

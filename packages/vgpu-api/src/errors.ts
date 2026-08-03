@@ -18,22 +18,6 @@ export function storageStageLimitError(label: string, stage: "vertex" | "fragmen
   });
 }
 
-/**
- * An entry point reached a layout/binding consumer without the reflection metadata that describes
- * which resources its stage uses. Every fallback here used to be a silent `??`, which produced a
- * subtly wrong GPUBindGroupLayout (widened visibility, lost filterability, zero vertex attributes)
- * and failed much later inside WebGPU validation — or not at all. Failing here names the cause.
- */
-export function entryMetadataMissingError(where: string, entryPoint: string, field: "bindings" | "samplingPairs" | "inputs"): VGPUError {
-  return new VGPUError({
-    code: "VGPU-REFLECT-ENTRY-METADATA-MISSING",
-    message: `Entry point '${entryPoint}' carries no reflected ${field}; the bind group layout for '${where}' would be wrong.`,
-    fix: "Pass the reflection from reflectSource()/resolveShader() — JSON round-trips preserve it via EntryPointInfo.toJSON(). Hand-built or field-stripped entry points are not supported.",
-    where,
-    detail: { entryPoint },
-  });
-}
-
 export function textureFilterabilityError(label: string, binding: BindingInfo, format: string, resourceName: string, sampler?: BindingInfo): VGPUError {
   return new VGPUError({
     code: "VGPU-SET-TEXTURE-FILTERABILITY",

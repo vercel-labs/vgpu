@@ -1,6 +1,6 @@
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { BindingInfo, EntryPointInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
-import { entryBindings, entrySamplingPairs } from "./entry-metadata.ts";
+import { entryMetadata } from "./entry-metadata.ts";
 import { unsupportedError } from "./errors.ts";
 
 /** Builds explicit WebGPU BGL entries from the frozen ReflectionFacade bindingLayout metadata. */
@@ -21,11 +21,11 @@ export function visibilityForEntries(_bindings: readonly BindingInfo[], entries:
   const filterable = new Set<string>();
   for (const entry of entries) {
     const stage = entry.stage === "vertex" ? 1 : entry.stage === "fragment" ? 2 : 4;
-    for (const binding of entryBindings(entry, "visibilityForEntries")) {
+    for (const binding of entryMetadata(entry, "bindings", "visibility")) {
       const key = `${binding.group}:${binding.binding}`;
       masks.set(key, (masks.get(key) ?? 0) | stage);
     }
-    for (const pair of entrySamplingPairs(entry, "visibilityForEntries")) if (pair.mode === "filtering") filterable.add(`${pair.texture.group}:${pair.texture.binding}`);
+    for (const pair of entryMetadata(entry, "samplingPairs", "visibility")) if (pair.mode === "filtering") filterable.add(`${pair.texture.group}:${pair.texture.binding}`);
   }
   const policy: BindingVisibilityFn = (binding) => masks.get(`${binding.group}:${binding.binding}`) ?? 0;
   Object.defineProperty(policy, "filterable", { value: filterable });

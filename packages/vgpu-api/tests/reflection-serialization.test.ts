@@ -37,7 +37,7 @@ test("visibilityForEntries fails loudly when an entry point has no reflected bin
   const stripped = { name: entry!.name, mangledName: entry!.mangledName, stage: entry!.stage } as EntryPointInfo;
 
   expect(() => visibilityForEntries([], [stripped])).toThrowError(VGPUError);
-  expect(() => visibilityForEntries([], [stripped])).toThrowError(/carries no reflected bindings/);
+  expect(() => visibilityForEntries([], [stripped])).toThrowError(/has no reflected bindings/);
   try {
     visibilityForEntries([], [stripped]);
   } catch (error) {
@@ -49,5 +49,5 @@ test("visibilityForEntries fails loudly when an entry point has no reflected sam
   const [entry] = reflectSource(SHADER, "issue-252.wgsl").entryPoints;
   const stripped = { name: entry!.name, mangledName: entry!.mangledName, stage: entry!.stage, bindings: entry!.bindings } as EntryPointInfo;
 
-  expect(() => visibilityForEntries([], [stripped])).toThrowError(/carries no reflected samplingPairs/);
+  expect(() => visibilityForEntries([], [stripped])).toThrowError(/has no reflected samplingPairs/);
 });

@@ -1,7 +1,7 @@
 import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
-import { entrySamplingPairs } from "./entry-metadata.ts";
+import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
@@ -116,7 +116,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function resourceContext(binding: BindingInfo) {
     const entry = bindGroupLayoutMetadata(options.bindGroupLayouts.get(binding.group)!)?.entries.find((item) => item.binding === binding.binding);
-    const pair = options.reflection.entryPoints.flatMap((item) => entrySamplingPairs(item, `${options.label}.set`)).find((item) => item.mode === "filtering" && item.texture.group === binding.group && item.texture.binding === binding.binding);
+    const pair = options.reflection.entryPoints.flatMap((item) => entryMetadata(item, "samplingPairs", options.label)).find((item) => item.mode === "filtering" && item.texture.group === binding.group && item.texture.binding === binding.binding);
     const pairedSampler = pair && options.reflection.bindings.find((item) => item.group === pair.sampler.group && item.binding === pair.sampler.binding);
     return { sourceHint: options.label, filterableTexture: entry?.texture?.sampleType === "float", float32Filterable: options.device.features.has("float32-filterable"), pairedSampler };
   }
