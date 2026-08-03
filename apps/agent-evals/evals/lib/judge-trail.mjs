@@ -62,9 +62,9 @@ export async function judgeTrailEffect({ beforePng, afterPng, model }) {
         content: [
           { type: "text", text: RUBRIC },
           { type: "text", text: "BEFORE:" },
-          { type: "image", image: beforePng, mediaType: "image/png" },
+          { type: "file", data: beforePng, mediaType: "image/png" },
           { type: "text", text: "AFTER:" },
-          { type: "image", image: afterPng, mediaType: "image/png" },
+          { type: "file", data: afterPng, mediaType: "image/png" },
         ],
       },
     ],
