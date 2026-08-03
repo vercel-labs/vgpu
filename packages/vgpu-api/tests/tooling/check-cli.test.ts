@@ -38,6 +38,25 @@ test("vgpu check emits reflection JSON for WGSL files", async () => {
   );
 });
 
+test("vgpu check JSON carries per-entry bindings, sampling pairs and vertex inputs", async () => {
+  const output = await runCheckSuccess(resolve(fixtureRoot, "sample.wgsl"));
+
+  // schemaVersion 1 documents "the shader's reflection data as JSON"; before #252 the per-entry
+  // metadata was non-enumerable and vanished from this payload without a trace.
+  const entryPoints = output.reflection.entryPoints as { name: string; bindings?: unknown; samplingPairs?: unknown; inputs?: unknown }[];
+  for (const entry of entryPoints) {
+    expect(entry).toHaveProperty("bindings");
+    expect(entry).toHaveProperty("samplingPairs");
+    expect(Array.isArray(entry.bindings)).toBe(true);
+  }
+
+  const vertex = entryPoints.find((entry) => entry.name === "vs_main");
+  expect(vertex?.inputs).toBeDefined();
+  expect(entryPoints.find((entry) => entry.name === "fs_main")?.bindings).toEqual(
+    expect.arrayContaining([expect.objectContaining({ group: 0, binding: 0 })]),
+  );
+});
+
 test("vgpu check surfaces Phase-1 fix-it text verbatim", async () => {
   const result = await runCheck([resolve(fixtureRoot, "bool-uniform.wgsl")]);
   expect(result.code).toBe(1);
