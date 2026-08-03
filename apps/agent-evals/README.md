@@ -47,10 +47,22 @@ the entry point — from `npx vgpu`, can the agent reach a working gradient?
 Everything downstream stays unsaid: no "shader", no WGSL, no `docs`, no
 `doctor`, no `check`.
 
-Gates are the image: size, both endpoint columns within +/-2 per channel, and a
-monotonic middle row (red falling, blue rising, green at zero). The +/-2 is
-because a gradient is interpolated and quantised, and rasterisers disagree in
-the last bit or two.
+Gates are the image: size, both endpoint columns within +/-2 per channel, red
+falling and blue rising with green at zero across three probed rows, and a
+middle column that is a genuine red/blue blend (32..223 per channel).
+
+The +/-2 is because a gradient is interpolated and quantised, and rasterisers
+disagree in the last bit or two. The last two gates exist because monotonicity
+alone is weak: it accepts two flat halves joined by a hard step, a ramp that
+travels red -> black -> blue without ever being a blend, and an image that is
+correct only along the sampled line. The midpoint window is deliberately wide
+rather than "127 +/- a little", because the midpoint of a correct ramp is ~127
+in sRGB space and ~186 in linear light — pinning it near 127 would fail a
+gamma-correct renderer for being gamma-correct.
+
+The grading lives in `evals/lib/grade-gradient.mjs` so an offline probe can
+import the real logic; a probe that copies it stops describing the eval the
+moment either side changes.
 
 Everything else is observed and never gated — journey milestones, funnel
 counters (`docs_cmd_count`, `renders_count`,
