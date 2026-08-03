@@ -4,7 +4,7 @@ import { parseDeclarations } from "./reflect-declarations.ts";
 import { layoutOf } from "./reflect-layout.ts";
 import { entrySamplingPairs } from "./reflect-sampling.ts";
 import { buildModuleSymbols, buildRegistry, resolveType, unwrapAlias, type ImportPathResolver } from "./reflect-symbols.ts";
-import type { Attr, BindingInfo, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, ModuleSymbols, ParsedDecls, ParsedEntryPoint, ParsedStructMember, Reflection, Registry } from "./reflect-types.ts";
+import type { Attr, BindingInfo, BindingRef, EntryPointInfo, EntryPointInfoJSON, EntryPointInputInfo, HostShareableLayout, ModuleSymbols, ParsedDecls, ParsedEntryPoint, ParsedStructMember, Reflection, Registry } from "./reflect-types.ts";
 import { numericAttr } from "./reflect-utils.ts";
 import { analyzeWgslTokens } from "./scope-walker.ts";
 
@@ -18,6 +18,7 @@ export type {
   BindingKind,
   BindingRef,
   EntryPointInfo,
+  EntryPointInfoJSON,
   EntryPointInputInfo,
   HostShareableLayout,
   LayoutMember,
@@ -142,8 +143,22 @@ function publicEntryPoint(entry: ParsedEntryPoint, structs: readonly { readonly 
   const result: EntryPointInfo = { name: entry.name, mangledName: entry.mangledName, stage: entry.stage, workgroupSize: entry.workgroupSize };
   Object.defineProperty(result, "bindings", { value: bindings.map(({ group, binding }) => ({ group, binding })), enumerable: false, configurable: true });
   Object.defineProperty(result, "samplingPairs", { value: samplingPairs, enumerable: false, configurable: true });
-  if (entry.stage === "vertex") Object.defineProperty(result, "inputs", { value: vertexInputs(entry, structs, symbols, registry), enumerable: false });
+  if (entry.stage === "vertex") Object.defineProperty(result, "inputs", { value: vertexInputs(entry, structs, symbols, registry), enumerable: false, configurable: true });
+  Object.defineProperty(result, "toJSON", { value: entryPointToJSON, enumerable: false, configurable: true });
   return result;
+}
+
+/**
+ * `JSON.stringify` hook that keeps entry-point reflection lossless across serialization boundaries.
+ *
+ * `bindings`, `samplingPairs` and `inputs` are non-enumerable on purpose (snapshot ergonomics), which
+ * otherwise makes `JSON.stringify` — and therefore the `vgpu check` payload, workers and any other
+ * structural consumer — silently drop them. Reading through `this` rather than a closure keeps the
+ * projection correct after `resolveShader()` re-defines the properties with whole-program values.
+ */
+function entryPointToJSON(this: EntryPointInfo): EntryPointInfoJSON {
+  const enumerable = { ...this } as Omit<EntryPointInfo, "toJSON">;
+  return { ...enumerable, bindings: this.bindings, samplingPairs: this.samplingPairs, ...(this.inputs ? { inputs: this.inputs } : {}) };
 }
 
 function vertexInputs(entry: ParsedEntryPoint, structs: readonly { readonly path: string; readonly mangledName: string; readonly members: readonly ParsedStructMember[] }[], symbols: ReadonlyMap<string, ModuleSymbols>, registry: Registry): readonly EntryPointInputInfo[] {

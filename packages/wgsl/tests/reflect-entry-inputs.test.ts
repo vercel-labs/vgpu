@@ -79,7 +79,10 @@ test("vertex inputs remain snapshot-safe by staying non-enumerable", () => {
 
   expect(entry.inputs?.[0]?.name).toBe("position");
   expect(Object.keys(entry)).toEqual(["name", "mangledName", "stage", "workgroupSize"]);
-  expect(JSON.stringify(entry)).not.toContain("inputs");
+  expect(Object.keys({ ...entry })).not.toContain("inputs");
+  // Non-enumerable is about snapshot/spread ergonomics, not about losing data: `toJSON` keeps
+  // serialization lossless (#252).
+  expect(JSON.stringify(entry)).toContain("inputs");
 });
 
 test("non-vertex entry points do not expose inputs", () => {
