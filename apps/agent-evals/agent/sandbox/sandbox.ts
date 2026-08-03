@@ -25,7 +25,7 @@ function readManifest(): TarballManifest {
   const dir = tarballsDir();
   const manifestPath = join(dir, "tarballs.json");
   if (!existsSync(manifestPath)) {
-    throw new Error(
+    throw fatal(
       `bootstrap: no vgpu tarballs found at ${dir}.\n` +
         "  This tool installs the vgpu built from the CURRENT BRANCH, not the one on npm.\n" +
         "  Run `pnpm agent-evals` (which packs first) or `pnpm --filter @vgpu/agent-evals pack-vgpu`.",
@@ -37,9 +37,9 @@ function readManifest(): TarballManifest {
   // invoked directly (documented, and what you reach for when iterating on one
   // eval) does not — so without this, switching branches silently grades the
   // PREVIOUS branch's vgpu and every number you read is about the wrong code.
-  const current = sourceKey();
-  if (manifest.sourceKey !== current) {
-    throw new Error(
+  const current = currentSourceKey();
+  if (current !== null && manifest.sourceKey !== current) {
+    throw fatal(
       `bootstrap: the vgpu tarballs in ${dir} are stale.\n` +
         `  packed from: ${manifest.gitBranch} @ ${manifest.gitSha.slice(0, 8)} (key ${manifest.sourceKey})\n` +
         `  working tree now: key ${current}\n` +
@@ -48,6 +48,41 @@ function readManifest(): TarballManifest {
     );
   }
   return manifest;
+}
+
+/**
+ * The key for the tree as it is right now, or null when it cannot be known.
+ *
+ * `VGPU_EVALS_SOURCE_KEY` comes from the wrapper, which computed it in the real
+ * worktree. Recomputing it here is a fallback and often wrong: under eve's dev
+ * runtime this code executes from a snapshot, where `git` resolves against a cwd
+ * in which the `packages/` pathspec matches nothing — producing a different key
+ * and declaring freshly built tarballs stale. Returning null (skip the check)
+ * beats blocking a good run on a path artefact.
+ */
+function currentSourceKey(): string | null {
+  const fromEnv = process.env.VGPU_EVALS_SOURCE_KEY;
+  if (fromEnv) return fromEnv;
+  try {
+    return sourceKey();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * eve retries a failing bootstrap (four attempts were observed), so a
+ * multi-line diagnostic is printed four times and the real message scrolls away
+ * inside three duplicates. Print the explanation once; later attempts get a
+ * one-liner pointing back at it.
+ */
+let explained = false;
+function fatal(message: string): Error {
+  if (explained) {
+    return new Error(`${message.split("\n")[0]} (see the first occurrence above for the full message)`);
+  }
+  explained = true;
+  return new Error(message);
 }
 
 /**
@@ -84,9 +119,16 @@ interface DoctorReport {
 }
 
 async function runDoctor(sandbox: SandboxSession): Promise<DoctorReport> {
-  // No `--json`: vgpu's doctor writes JSON to stdout by default
-  // (`Usage: vgpu doctor [--no-render] [--pretty]`) and rejects `--json`.
-  const result = await sandbox.run({ command: "npx vgpu doctor", workingDirectory: WORKSPACE });
+  // Two things are load-bearing in this one line.
+  //
+  // `|| true`: eve THROWS when a `sandbox.run` command exits non-zero, and an
+  // unhealthy verdict is exactly how doctor reports itself (exit 1). Without
+  // this, bootstrap died on the diagnosis instead of acting on it — observed in
+  // the first real run, where none of the remediation below ever executed.
+  //
+  // No `--json`: doctor writes JSON to stdout by default
+  // (`Usage: vgpu doctor [--no-render] [--pretty]`) and rejects that flag.
+  const result = await sandbox.run({ command: "npx vgpu doctor || true", workingDirectory: WORKSPACE });
   const raw = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   try {
     // The Vulkan stack prints warnings onto the same stream, so a raw
@@ -102,32 +144,30 @@ async function runDoctor(sandbox: SandboxSession): Promise<DoctorReport> {
 }
 
 /**
- * What to run when doctor is unhealthy.
+ * Remedies, in the order doctor itself recommends them.
  *
- * SECURITY NOTE: these are executed as shell strings, with no allowlist. That
- * is acceptable today only because the sole producer is vgpu's own doctor,
- * running during bootstrap, before the agent has any way to touch the sandbox.
- * If a later change ever feeds this function JSON the agent can influence, it
- * becomes arbitrary command execution — allowlist the commands first.
+ * These are hardcoded rather than executed from doctor's `prescription` fields,
+ * because those fields are PROSE, not commands. A real one reads:
  *
- * Prefer what doctor itself prescribes — it knows which probe failed — and fall
- * back to the backend's known remedy. Kept backend-agnostic apart from that one
- * branch, so flipping VGPU_EVALS_SANDBOX stays a one-line change.
+ *   "run: npx vgpu install-software-renderer\n
+ *    Alternative (system packages): apt-get update && apt-get install -y ...\n
+ *    export VK_ICD_FILENAMES=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)"
+ *
+ * Shipping that to a shell runs `run:` as a command. Encoding the ladder here
+ * keeps it executable, reviewable and free of any string a future change could
+ * let the agent influence.
  */
-function prescriptionsFor(report: DoctorReport): string[] {
-  const fromDoctor = report.findings
-    .filter((finding) => finding.status !== "ok" && finding.status !== "skip")
-    .flatMap((finding) => (Array.isArray(finding.prescription) ? finding.prescription : [finding.prescription]))
-    .filter((value): value is string => typeof value === "string" && value.trim() !== "");
-
-  if (fromDoctor.length > 0) return fromDoctor;
-
-  // Both backends boot the same Debian-based eve image, so the remedy is the
-  // same: vgpu ships a portable, sha256-verified CPU renderer for exactly this.
-  // (The `sudo dnf install -y mesa-vulkan-drivers vulkan-loader` from the Vercel
-  // Sandbox spike applies to the AL2023 STOCK runtimes, which eve does not use.)
-  return ["npx vgpu install-software-renderer"];
-}
+const REMEDIES: { label: string; command: string }[] = [
+  {
+    label: "vgpu's portable CPU renderer (doctor's primary prescription)",
+    command: "npx vgpu install-software-renderer",
+  },
+  {
+    label: "distro Vulkan loader + Mesa ICD (doctor's 'Alternative (system packages)')",
+    command:
+      "apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers",
+  },
+];
 
 export default defineSandbox({
   backend: evalSandboxBackend(),
@@ -163,6 +203,8 @@ export default defineSandbox({
       command: `npm install --no-audit --no-fund --loglevel=error ${specs} pngjs`,
       workingDirectory: WORKSPACE,
     });
+    // Belt and braces: eve throws on a non-zero exit before this runs, and its
+    // wrapper error carries the command output. Kept in case that changes.
     if (install.exitCode !== 0) {
       throw new Error(
         `bootstrap: installing the branch's vgpu tarballs failed (exit ${install.exitCode}).\n${install.stderr ?? ""}`,
@@ -170,14 +212,20 @@ export default defineSandbox({
     }
 
     let doctor = await runDoctor(sandbox);
-    if (doctor.verdict !== "healthy") {
-      for (const command of prescriptionsFor(doctor)) {
-        await sandbox.run({ command, workingDirectory: WORKSPACE });
-      }
+    for (const remedy of REMEDIES) {
+      if (doctor.verdict === "healthy") break;
+      // `|| true` for the same reason as doctor: a remedy that cannot apply
+      // (no apt, no network) must let the ladder continue to the next rung
+      // rather than abort the whole template with eve's generic wrapper error.
+      await sandbox.run({ command: `${remedy.command} || true`, workingDirectory: WORKSPACE });
       doctor = await runDoctor(sandbox);
+      if (doctor.verdict === "healthy") {
+        // Worth reading: it says what the base image is missing out of the box.
+        process.stdout.write(`agent-evals: sandbox needed ${remedy.label}\n`);
+      }
     }
     if (doctor.verdict !== "healthy") {
-      throw new Error(
+      throw fatal(
         `bootstrap: vgpu doctor verdict is ${JSON.stringify(doctor.verdict)}, expected "healthy" ` +
           `after applying its prescriptions. This is an INFRA failure, not a model failure — ` +
           `do not read the transcript as an agent result.\n${doctor.raw}`,

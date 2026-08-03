@@ -124,8 +124,14 @@ export default defineEval({
     // there? Gating on it would reward ritual — an agent that solves the task
     // without reading the docs has still solved the task, and one that runs
     // `vgpu docs` five times and fails has not.
+    // Only bash commands. Serialising every tool call's input made the first
+    // real run report "ran the vgpu CLI" for an agent that never invoked it:
+    // the pattern matched the `vgpu/node` import inside a write_file payload.
+    // A journey signal that fires on the agent typing a package name measures
+    // nothing.
     const commands = turn.toolCalls
-      .map((call) => JSON.stringify(call.input ?? {}))
+      .filter((call) => call.name === "bash")
+      .map((call) => String((call.input as { command?: unknown } | undefined)?.command ?? ""))
       .join("\n");
     for (const milestone of MILESTONES) {
       const hit = milestone.test.test(commands);

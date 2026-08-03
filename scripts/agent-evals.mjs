@@ -13,6 +13,7 @@
 // vgpu in the working tree; running the evals against a stale (or absent)
 // tarball set would silently measure the previous build.
 import { spawn, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -53,6 +54,32 @@ const pack = spawnSync(process.execPath, [join(PACKAGE_DIR, "scripts", "pack-vgp
 if (pack.status !== 0) {
   process.stderr.write("pnpm agent-evals: packing failed; not running the evals.\n");
   process.exit(pack.status ?? 1);
+}
+
+// Hand the runtime ABSOLUTE paths.
+//
+// eve's dev runtime snapshots the app and runs the compiled modules from
+// `<package>/.eve/dev-runtime/snapshots/<id>/source/apps/agent-evals/.eve/...`,
+// so anything the bootstrap or the export hook derives from `import.meta.url`
+// or from cwd lands inside that snapshot — where `.work/` does not exist,
+// because it is gitignored and never copied. The first real run died exactly
+// there. These variables are the contract that keeps the packer (this process),
+// the runtime (snapshot) and the eval (CLI process) pointing at one directory.
+const workDir = join(PACKAGE_DIR, ".work");
+process.env.VGPU_EVALS_WORK_DIR ??= workDir;
+process.env.VGPU_EVALS_TARBALLS_DIR ??= join(workDir, "tarballs");
+process.env.VGPU_EVALS_REPO_ROOT ??= REPO_ROOT;
+
+// Also precompute the staleness key here, in the real worktree. The runtime
+// cannot recompute it: `git` resolves against the snapshot's cwd, where the
+// `packages/` pathspec matches nothing, so it would produce a different key and
+// report the freshly built tarballs as stale.
+const manifestPath = join(workDir, "tarballs", "tarballs.json");
+try {
+  process.env.VGPU_EVALS_SOURCE_KEY ??= JSON.parse(readFileSync(manifestPath, "utf8")).sourceKey;
+} catch (error) {
+  process.stderr.write(`pnpm agent-evals: could not read ${manifestPath}: ${error.message}\n`);
+  process.exit(1);
 }
 
 const child = spawn("pnpm", ["--filter", "@vgpu/agent-evals", "exec", "eve", "eval", ...process.argv.slice(2)], {
