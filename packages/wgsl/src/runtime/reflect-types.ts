@@ -93,11 +93,12 @@ export interface EntryPointInfoJSON {
  * Non-enumerability must not mean *lossy*, so every entry point also carries a non-enumerable
  * {@link EntryPointInfo.toJSON} that returns the complete {@link EntryPointInfoJSON}. Consequently
  * `JSON.stringify(entry)` / `JSON.parse(JSON.stringify(reflection))` round-trip all metadata, and
- * consumers behind a serialization boundary (the `vgpu check` CLI payload, workers, RSC) see the
- * same bindings the in-process consumers see.
+ * consumers behind a JSON boundary (the `vgpu check` CLI payload, RSC) see the same bindings the
+ * in-process consumers see.
  *
- * `structuredClone` still drops the three properties — it ignores `toJSON`. Use JSON, or copy the
- * fields explicitly.
+ * `structuredClone` still drops the three properties — it ignores `toJSON` — and so does worker
+ * `postMessage`, which clones structurally. Across those boundaries, send
+ * `JSON.parse(JSON.stringify(reflection))` or copy the fields explicitly.
  */
 export interface EntryPointInfo extends EntryPointInfoJSON {
   /**
