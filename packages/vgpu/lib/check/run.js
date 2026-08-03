@@ -14,24 +14,59 @@ export async function runCheck(args) {
   const absEntry = resolveEntry(entry);
   try {
     const { resolveShader } = await loadWgslRuntime();
-    // Without the flag no `validate` option is passed at all, so the process-wide default
-    // ("auto", or VGPU_VALIDATE when set) applies untouched.
-    const result = await resolveShader({ entry: absEntry, rootDir: dirname(absEntry), ...(requireValidation ? { validate: "require" } : {}) });
+    const options = { entry: absEntry, rootDir: dirname(absEntry) };
+    let result;
+    let validationError;
+    try {
+      // Without the flag no `validate` option is passed at all, so the process-wide default
+      // ("auto", or VGPU_VALIDATE when set) applies untouched.
+      result = await resolveShader({ ...options, ...(requireValidation ? { validate: "require" } : {}) });
+    } catch (error) {
+      if (!isValidationFailure(error)) throw error;
+      // A failing device check must not cost the caller the whole document: re-resolve with
+      // validation off so `check` still prints diagnostics + reflection + wgsl, and report the
+      // failure inside `validation` instead. Keeps the JSON contract identical whether or not the
+      // machine running `check` happens to have a WebGPU device. Exit code stays 1.
+      validationError = error;
+      try {
+        result = await resolveShader({ ...options, validate: "off" });
+      } catch {
+        // The retry failed for some unrelated reason; the validation failure is the useful one.
+        throw error;
+      }
+    }
     const diagnostics = (result.diagnostics ?? []).map(serializeDiagnostic);
     const payload = {
       schemaVersion: 1,
       entry: absEntry,
       deps: result.deps,
       diagnostics,
-      validation: result.validation,
+      validation: validationError ? failedValidation(requireValidation, validationError) : result.validation,
       reflection: result.reflection,
       wgsl: result.wgsl,
     };
-    const failed = diagnostics.some((diagnostic) => diagnostic.severity === "error");
+    const failed = Boolean(validationError) || diagnostics.some((diagnostic) => diagnostic.severity === "error");
     return { code: failed ? 1 : 0, stdout: `${JSON.stringify(payload, null, 2)}\n` };
   } catch (error) {
     return { code: 1, stderr: `${formatError(error)}\n` };
   }
+}
+
+/**
+ * Failures raised *by validation* — an invalid shader, or (in `"require"` mode) a device that could
+ * not be acquired. Everything else (resolution, reserved paths, an invalid `VGPU_VALIDATE`) is a
+ * hard error: re-resolving with validation off would hide it rather than describe it.
+ */
+const validationFailureCodes = new Set(["VGPU-WGSL-NAGA-UNKNOWN", "VGPU-WGSL-VALIDATE-NO-DEVICE", "VGPU-WGSL-VALIDATE-ADAPTER-MISSING"]);
+
+function isValidationFailure(error) {
+  return Boolean(error && typeof error === "object" && validationFailureCodes.has(error.code));
+}
+
+function failedValidation(requireValidation, error) {
+  // `--require-validation` always wins over VGPU_VALIDATE, matching resolveShader's precedence.
+  const mode = requireValidation ? "require" : process.env.VGPU_VALIDATE || "auto";
+  return { mode, attempted: true, ok: false, error: serializeDiagnostic(error) };
 }
 
 /**

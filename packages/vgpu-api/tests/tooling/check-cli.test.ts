@@ -66,19 +66,17 @@ test("vgpu check surfaces Phase-1 fix-it text verbatim", async () => {
 });
 
 test("vgpu check fails on WGSL reserved words used as identifiers", async () => {
-  // This asserts the *reflection diagnostic* payload, and the fixture is deliberately invalid WGSL:
-  // on a machine with a WebGPU device, `check`'s default "auto" validation now reaches naga first
-  // and throws `VGPU-WGSL-NAGA-UNKNOWN` ("'from' is a reserved keyword") instead of returning the
-  // diagnostic list. Pin validation off so the assertion is about serialization, not the device.
-  const previous = process.env.VGPU_VALIDATE;
-  process.env.VGPU_VALIDATE = "off";
-  const result = await runCheck([resolve(fixtureRoot, "reserved-word.wgsl")]).finally(() => {
-    if (previous === undefined) delete process.env.VGPU_VALIDATE;
-    else process.env.VGPU_VALIDATE = previous;
-  });
+  // The fixture is deliberately invalid WGSL, so with a WebGPU device present naga also rejects it.
+  // Deliberately *not* pinning VGPU_VALIDATE: the JSON contract must be identical either way — the
+  // reflection diagnostic is reported whether validation failed (device present) or was skipped
+  // (no device), and only `validation` differs. Without that guarantee this assertion would pass in
+  // CI and fail on a developer's GPU machine.
+  const result = await runCheck([resolve(fixtureRoot, "reserved-word.wgsl")]);
   expect(result.code).toBe(1);
   expect(result.stderr).toBeUndefined();
   const output = JSON.parse(result.stdout ?? "{}");
+  expect(output.validation).toMatchObject({ attempted: true, ok: false });
+  expect(output.reflection).toBeDefined();
   expect(output.diagnostics).toEqual([
     {
       code: "VGPU-WGSL-RESERVED-IDENT",
