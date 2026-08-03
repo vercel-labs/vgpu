@@ -35,7 +35,9 @@
     },
     "./runtime": {
       "types": "./dist/runtime/resolve-shader.d.ts",
-      "import": "./dist/runtime/resolve-shader.js"
+      "import": "./dist/runtime/resolve-shader.js",
+      "require": "./dist/runtime/resolve-shader.js",
+      "default": "./dist/runtime/resolve-shader.js"
     },
     "./loader-webpack": {
       "types": "./dist/loader-webpack/index.d.ts",

@@ -9,7 +9,19 @@ const state = vi.hoisted(() => ({
   cachedIcd: null as string | null,
   adapterInfo: null as GPUAdapterInfo | null,
   icdAtRequest: [] as (string | undefined)[],
+  vendorIcds: [] as string[],
 }));
+
+// The vendor-driver probe reads the host's real ICD directory; mock it so the notice wording
+// under test never depends on whether the machine running the suite has a Vulkan driver.
+vi.mock("node:fs", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...original,
+    readdirSync: ((path: Parameters<typeof original.readdirSync>[0], ...rest: unknown[]) =>
+      String(path) === "/usr/share/vulkan/icd.d" ? state.vendorIcds : (original.readdirSync as (...args: unknown[]) => unknown)(path, ...rest)) as typeof original.readdirSync,
+  };
+});
 
 vi.mock("../src/software-renderer-cache.ts", () => ({
   getCachedSoftwareRenderer: () => state.cachedIcd,
@@ -66,6 +78,9 @@ beforeEach(() => {
   state.cachedIcd = null;
   state.adapterInfo = null;
   state.icdAtRequest = [];
+  state.vendorIcds = [];
+  delete process.env.VK_ICD_FILENAMES;
+  delete process.env.VK_DRIVER_FILES;
 });
 
 test.runIf(process.platform === "linux")("node adapter marks default Linux Dawn devices as compatibility mode", async () => {
@@ -162,7 +177,53 @@ test("auto retries with the cached software renderer only after hardware discove
   const { createNodeAdapter } = await import("../src/index.ts");
   const device = await createNodeAdapter({ adapter: "auto" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
   expect(state.icdAtRequest).toEqual([undefined, undefined, undefined, "/cache/lvp_icd.json"]);
+  // No vendor ICD is configured (env cleared, icd.d stubbed empty), so the notice blames the absent adapter.
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("no GPU adapter was found"));
   expect(error).toHaveBeenCalledWith(expect.stringContaining("using CPU software renderer (lavapipe)"));
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("XDG_RUNTIME_DIR"));
+  device.destroy();
+  error.mockRestore();
+});
+
+test("the software renderer notice blames the vendor driver when a Vulkan ICD is configured", async () => {
+  state.nullRequestsRemaining = 3;
+  state.cachedIcd = "/cache/lvp_icd.json";
+  // VK_ICD_FILENAMES is the first branch of the vendor probe, so this holds on any host.
+  process.env.VK_ICD_FILENAMES = "/usr/share/vulkan/icd.d/radeon_icd.json";
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const { createNodeAdapter } = await import("../src/index.ts");
+    const device = await createNodeAdapter({ adapter: "auto" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+    expect(state.icdAtRequest.at(-1)).toBe("/cache/lvp_icd.json");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("a vendor Vulkan driver is present but failed to initialize"));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("using CPU software renderer (lavapipe)"));
+    device.destroy();
+  } finally {
+    delete process.env.VK_ICD_FILENAMES;
+    error.mockRestore();
+  }
+});
+
+test("auto explains a directly discovered CPU adapter once per process", async () => {
+  state.adapterInfo = { description: "llvmpipe (LLVM 19.1.7, 128 bits)" } as unknown as GPUAdapterInfo;
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const { createNodeDevice } = await import("../src/index.ts");
+  const first = await createNodeDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+  const second = await createNodeDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+  expect(error).toHaveBeenCalledTimes(1);
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("using CPU software renderer (llvmpipe (LLVM 19.1.7, 128 bits))"));
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("no hardware GPU adapter is available"));
+  first.destroy();
+  second.destroy();
+  error.mockRestore();
+});
+
+test("auto stays quiet when a hardware adapter is discovered", async () => {
+  state.adapterInfo = { description: "NVIDIA GeForce RTX 4090", vendor: "nvidia" } as unknown as GPUAdapterInfo;
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const { createNodeDevice } = await import("../src/index.ts");
+  const device = await createNodeDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
+  expect(error).not.toHaveBeenCalled();
   device.destroy();
   error.mockRestore();
 });

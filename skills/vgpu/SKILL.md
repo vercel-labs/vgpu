@@ -54,6 +54,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
 - **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
 - **Using vgpu with Next.js and other bundlers** — effect(gpu, source) takes WGSL as a string, so nothing forces you to use a bundler loader.  `references/guides/nextjs.docs.md`
+- **Using vgpu without a bundler** — effect(gpu, source) and draw(gpu, { shader }) take WGSL as a plain string, so nothing forces you to use a bundler.  `references/guides/no-bundler.docs.md`
 - **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
 - **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
 - **Performance patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
@@ -63,6 +64,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Shader diagnostics and fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
 - **The default workflow for developing shaders with vgpu** — Follow these eight steps in order every time you write or change a shader.  `references/guides/shader-workflow.docs.md`
 - **Practical texture-format matrix** — Choose a target format from the operations it must support, not just its channel precision.  `references/guides/texture-formats.docs.md`
+- **Two-pass rendering: offscreen depth target composited to the canvas** — Surfaces and canvases have no depth buffer, and Draws need one for any real 3D scene.  `references/guides/two-pass-rendering.docs.md`
 
 ## API reference
 

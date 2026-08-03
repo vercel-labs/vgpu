@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Device, validateRequiredFeatures, VGPUError, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
 import { resolveWebGPU, type WebGPUModule } from "./dawn-loader.ts";
+import { formatSoftwareFallbackNotice, isSoftwareAdapter, softwareAdapterName, type SoftwareFallbackReason } from "./software-fallback-notice.ts";
 import { createPrivateSoftwareRendererCopy, getCachedSoftwareRenderer } from "./software-renderer-cache.ts";
 type NodeAdapterFlags = { readonly backendFlags?: readonly string[] };
 type NodeAdapterRetryOptions = { readonly adapterRequestRetryCount?: number; readonly adapterRequestRetryBaseDelayMs?: number };
@@ -28,8 +29,7 @@ export function nodeAdapterEnvironmentOverride(): NodeAdapterMode | undefined {
 }
 export function describeNodeAdapter(info: GPUAdapterInfo | null): NodeAdapterInfo {
   const details = info as (GPUAdapterInfo & { adapterType?: string; type?: string }) | null;
-  const name = String(details?.description || details?.device || details?.vendor || "unknown adapter");
-  return { name, type: details?.adapterType === "cpu" || details?.type === "cpu" || /llvmpipe|lavapipe|swiftshader|software|cpu/iu.test(name) ? "cpu" : "gpu" };
+  return { name: String(details?.description || details?.device || details?.vendor || "unknown adapter"), type: isSoftwareAdapter(details) ? "cpu" : "gpu" };
 }
 
 const defaultAdapterRequestRetryCount = 3;
@@ -38,6 +38,7 @@ let dawnGPU: GPU | null = null;
 let dawnFlagsUsed: readonly string[] | null = null;
 let loadedWebGPU: WebGPUModule | null = null;
 let softwareOperation = Promise.resolve();
+let announcedSoftwareFallback = false;
 const announcedAdapterOverrides = new Set<string>();
 
 export function createNodeAdapter(options: CreateNodeAdapterOptions = {}): VGPUAdapter {
@@ -55,6 +56,7 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
   const vendorIcdPresent = hasVendorVulkanIcd();
   let adapter: GPUAdapter;
   let software = false;
+  let fallbackReason: SoftwareFallbackReason = "cpu-adapter-selected";
 
   if (mode === "software") {
     const icd = requireCachedSoftwareRenderer();
@@ -75,9 +77,9 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
       if (mode === "hardware" || !isNoAdapterError(error)) throw error;
       const icd = getCachedSoftwareRenderer();
       if (!icd) throw noAdapterError(error, "Install the portable CPU renderer with `npx vgpu install-software-renderer`, then retry. Check the Mesa/driver version, Vulkan ICD (VK_ICD_FILENAMES), and display variables. To diagnose the environment, run: npx vgpu doctor");
-      console.error(vendorIcdPresent
-        ? "vgpu: a vendor Vulkan driver is present but failed to initialize — using CPU software renderer (lavapipe). Run `npx vgpu doctor` for details."
-        : "vgpu: no GPU adapter found — using CPU software renderer (lavapipe)");
+      // The notice is emitted once the retry succeeds, so it lands *after* the native Dawn/Vulkan
+      // startup lines it explains instead of being buried above them.
+      fallbackReason = vendorIcdPresent ? "vendor-driver-failed" : "no-adapter";
       adapter = await withSoftwareIcd(icd, () => {
         // Vulkan ICD discovery is fixed when Dawn creates its native instance.
         // The hardware instance found nothing, so replace it for the consented retry.
@@ -95,6 +97,7 @@ async function requestDevice(opts: RequestDeviceOptions = {}, mode: NodeAdapterM
   const info = software
     ? Object.assign({}, adapter.info, { description: adapter.info?.description || "lavapipe", adapterType: "cpu" }) as unknown as GPUAdapterInfo
     : adapter.info ?? null;
+  if (mode === "auto") announceSoftwareFallback(info, fallbackReason);
   return new Device(device, info, { isCompatibilityMode: options.featureLevel === "compatibility" });
 }
 
@@ -126,11 +129,10 @@ function noAdapterError(cause: unknown, fix = "Check the Mesa/driver version, Vu
   });
 }
 function isNoAdapterError(error: unknown): boolean { return error instanceof VGPUError && error.code === "VGPU-NODE-NO-ADAPTER"; }
-function isSoftwareAdapter(info: GPUAdapterInfo | null | undefined): boolean {
-  if (!info) return false;
-  const details = info as GPUAdapterInfo & { adapterType?: string; type?: string };
-  const name = `${details.description ?? ""} ${details.device ?? ""} ${details.vendor ?? ""}`;
-  return details.adapterType === "cpu" || details.type === "cpu" || /llvmpipe|lavapipe|swiftshader|software|cpu/iu.test(name);
+function announceSoftwareFallback(info: GPUAdapterInfo | null, reason: SoftwareFallbackReason): void {
+  if (announcedSoftwareFallback || !isSoftwareAdapter(info)) return;
+  announcedSoftwareFallback = true;
+  console.error(formatSoftwareFallbackNotice({ adapter: softwareAdapterName(info), reason }));
 }
 function requireCachedSoftwareRenderer(): string {
   const icd = getCachedSoftwareRenderer();

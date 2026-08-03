@@ -255,10 +255,35 @@ npx vgpu install-software-renderer
 
 This downloads vgpu's portable lavapipe build (Mesa 25, ~20 MB, sha256-verified,
 cached next to the Dawn binary) — no root, no system packages. Once cached,
-`init()` uses it automatically whenever no other adapter exists, and prints a
-one-line notice on stderr when it does. The system needs a handful of tiny
-libraries (Vulkan loader, libdrm, zlib, zstd, and libudev) — doctor checks and
-prescribes them in one command.
+`init()` uses it automatically whenever no other adapter exists. The system
+needs a handful of tiny libraries (Vulkan loader, libdrm, zlib, zstd, and
+libudev) — doctor checks and prescribes them in one command.
+
+### Reading the startup noise on a machine without a GPU
+
+Dawn, the Vulkan loader and Mesa write their own startup diagnostics straight to
+stderr from native code before any JavaScript runs, and they look alarming even
+when nothing is wrong:
+
+```text
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+Warning: Vulkan shaderUniform*ArrayDynamicIndexing required.
+```
+
+Those lines come from the driver stack, not from vgpu; the prebuilt Dawn binding
+exposes no logging hook, so vgpu cannot capture or relabel them. Instead, when a
+run ends up on the CPU renderer, vgpu prints one labelled notice on stderr —
+once per process, after the adapter is known, so it lands *below* the native
+lines it explains:
+
+```text
+vgpu: notice — no hardware GPU adapter is available; using CPU software renderer (llvmpipe (LLVM 19.1.7, 128 bits)). This is expected on a machine without a usable GPU, and rendering continues normally.
+vgpu: notice — Vulkan/XDG_RUNTIME_DIR "error" and "Warning" lines printed above come from the GPU driver stack, not from vgpu, and are harmless. Run `npx vgpu doctor` for details.
+```
+
+Explicit `init({ adapter: "software" })` stays silent: choosing the CPU renderer
+on purpose needs no explanation.
 
 Prefer your distribution's driver when it is recent (Mesa >= 23 with
 `mesa-vulkan-drivers`); the portable build exists for hosts where that is not

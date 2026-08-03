@@ -76,6 +76,10 @@ know the expected value, and open `frame.png` when you need to judge
 composition. PNG encoding is project-owned: `pngjs` is one option, any encoder
 works.
 
+If the shader lives in its own `.wgsl` file instead of a template string — even
+without a bundler — resolve it first with `resolveShader()`:
+[Using vgpu without a bundler](no-bundler.docs.md).
+
 The full step-by-step playbook — from `vgpu docs` to browser validation — is
 [The default workflow for developing shaders with vgpu](shader-workflow.docs.md).
 When a shader is multi-pass or a user reports a visual bug, do not iterate by
@@ -112,6 +116,20 @@ client component:
 
 ```sh
 vgpu docs cat nextjs.md   # Next.js (Turbopack or webpack), Vite, .wgsl types, canvas component
+```
+
+Not using a bundler at all — plain Node, a script, or a test runner? Resolve
+`.wgsl` files and their imports yourself:
+
+```sh
+vgpu docs cat no-bundler.md   # resolveShader(), headless Node rendering, the ESM-only gotcha
+```
+
+Rendering an actual 3D scene rather than a fullscreen effect? Depth lives on an
+offscreen target, so the scene needs two passes — the unified recipe:
+
+```sh
+vgpu docs cat two-pass-rendering.md   # offscreen depth target -> composite to canvas
 ```
 
 For performance work and testing:

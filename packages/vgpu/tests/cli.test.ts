@@ -163,6 +163,29 @@ test("routes the dogfood queries to the page that answers them", () => {
     ["simplex", "/@vgpu/wgsl-std/noise/simplex/index.docs.md"],
     // The router advertises `docs find "<VGPU-error-code>"`, so codes must resolve too.
     ["VGPU-WGSL-PKG-NOTFOUND", "/@vgpu/wgsl/runtime/resolve-shader.docs.md"],
+    // Shaders in their own `.wgsl` file with no bundler: the agent searched "node" and ".wgsl file"
+    // and never reached resolveShader(), so the no-bundler guide claims those words.
+    ["no bundler", "/guides/no-bundler.docs.md"],
+    ["without a bundler", "/guides/no-bundler.docs.md"],
+    ["node", "/guides/no-bundler.docs.md"],
+    [".wgsl file", "/guides/no-bundler.docs.md"],
+    // Issue #243 words it as "shaders in their own file", so that phrasing must land too.
+    ["shader in separate file", "/guides/no-bundler.docs.md"],
+    ["shader in its own file", "/guides/no-bundler.docs.md"],
+    ["headless node script", "/guides/no-bundler.docs.md"],
+    // The ESM-only friction: the fix was renaming the script to .mts, found only by guessing.
+    ["esm only", "/guides/no-bundler.docs.md"],
+    ["ERR_PACKAGE_PATH_NOT_EXPORTED", "/guides/no-bundler.docs.md"],
+    // resolveShader keeps resolving to its own reference page, not the new guide.
+    ["resolveShader", "/@vgpu/wgsl/runtime/resolve-shader.docs.md"],
+    // A 3D scene needs an offscreen depth target composited to the canvas; that recipe used to be
+    // split across concepts-draws, concepts-passes and concepts-frames, and "two-pass" found nothing.
+    ["two-pass", "/guides/two-pass-rendering.docs.md"],
+    ["two pass", "/guides/two-pass-rendering.docs.md"],
+    ["offscreen depth", "/guides/two-pass-rendering.docs.md"],
+    ["depth buffer canvas", "/guides/two-pass-rendering.docs.md"],
+    ["composite scene to canvas", "/guides/two-pass-rendering.docs.md"],
+    ["render to texture", "/guides/two-pass-rendering.docs.md"],
   ];
 
   for (const [query, expected] of cases) {
@@ -184,6 +207,43 @@ test("the nextjs guide is reachable by cat and from getting-started", () => {
     expect(success(["docs", "cat", form])).toContain("# Using vgpu with Next.js and other bundlers");
   }
   expect(success(["docs", "cat", "getting-started.md"])).toContain("vgpu docs cat nextjs.md");
+});
+
+test("the no-bundler and two-pass guides are reachable by cat and from getting-started", () => {
+  for (const form of ["no-bundler", "no-bundler.md", "/guides/no-bundler.docs.md"]) {
+    expect(success(["docs", "cat", form]), `docs cat ${form}`).toContain("# Using vgpu without a bundler");
+  }
+  for (const form of ["two-pass-rendering", "two-pass-rendering.md", "/guides/two-pass-rendering.docs.md"]) {
+    expect(success(["docs", "cat", form]), `docs cat ${form}`).toContain("# Two-pass rendering");
+  }
+
+  // Getting started is where an agent's route begins, so both guides must be linked from it.
+  const gettingStarted = success(["docs", "cat", "getting-started.md"]);
+  expect(gettingStarted).toContain("vgpu docs cat no-bundler.md");
+  expect(gettingStarted).toContain("vgpu docs cat two-pass-rendering.md");
+  expect(gettingStarted).toContain("[Using vgpu without a bundler](no-bundler.docs.md)");
+
+  // The ESM-only gotcha cost the dogfood run ~10 minutes; it belongs on the symbol page too.
+  expect(success(["docs", "cat", "resolveShader"])).toContain("ERR_PACKAGE_PATH_NOT_EXPORTED");
+});
+
+// `docs find` stops at the first non-empty step (symbol -> keyword/title -> body), so a guide that
+// claims a broad word can hide the API page that used to answer it. These pin the API routes that
+// must survive the new guides' keywords.
+//
+// Note the limit of what is pinnable here: a bare `docs find "depth"` now returns only the two-pass
+// guide. That is not keyword greed we can tune away -- the guide's *title* contains "depth", and the
+// title is part of the route text, so the only way to hand `depth` back to the body-fallback step
+// would be to rename a guide about depth targets to not say "depth". The symbol route below is the
+// meaningful guarantee: identifier queries still reach their reference page.
+test("the new guides do not steal the symbol routes of the API pages they describe", () => {
+  expect(success(["docs", "find", "Target"])).toContain("/vgpu/target.docs.md");
+  expect(success(["docs", "find", "TargetOptions"])).toContain("/vgpu/target.docs.md");
+  expect(success(["docs", "find", "Effect"])).toContain("/vgpu/effect.docs.md");
+  // The body-fallback step still runs for queries no route text claims.
+  expect(success(["docs", "find", "VGPU-WGSL-PKG-NOTFOUND"])).toContain(
+    "/@vgpu/wgsl/runtime/resolve-shader.docs.md",
+  );
 });
 
 test("keeps existing guide and API docs forms working", () => {

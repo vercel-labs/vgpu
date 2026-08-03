@@ -41,7 +41,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts
+      - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts packages/wgsl/tests/runtime-cjs-require.test.ts
 
   docker-gpu:
     runs-on: ubuntu-latest
