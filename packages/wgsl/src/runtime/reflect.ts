@@ -146,10 +146,12 @@ function publicEntryPoint(entry: ParsedEntryPoint, structs: readonly { readonly 
     name: entry.name,
     mangledName: entry.mangledName,
     stage: entry.stage,
-    workgroupSize: entry.workgroupSize,
+    // `workgroupSize` and `inputs` stay absent rather than `undefined`-valued when they do not
+    // apply: an own key valued `undefined` survives structuredClone but is dropped by
+    // JSON.stringify, which would make the key set differ across serialization boundaries.
+    ...(entry.workgroupSize ? { workgroupSize: entry.workgroupSize } : {}),
     bindings: bindings.map(({ group, binding }) => ({ group, binding })),
     samplingPairs,
-    // `inputs` stays absent (not `undefined`-valued) for non-vertex stages.
     ...(entry.stage === "vertex" ? { inputs: vertexInputs(entry, structs, symbols, registry) } : {}),
   };
 }
