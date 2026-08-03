@@ -224,9 +224,12 @@ jobs:
         run: pnpm --filter docs check:examples-api-tracing
 
   docs-generated:
-    # Guards that the committed docs manifest + generated skill are in sync with their sources
-    # (co-located *.docs.md, docs/topics, docs/allowlist.txt). The generator is dependency-free
-    # (pure Node), so no install/build is needed.
+    # Guards that the committed docs manifest + generated skill (skills/vgpu, the payload
+    # `npx skills add vercel-labs/vgpu` ships) are in sync with their sources (co-located
+    # *.docs.md, docs/topics, docs/allowlist.txt, and the generator itself). The generator is
+    # dependency-free (pure Node), so no install/build is needed. check-drift.js regenerates into a
+    # scratch temp dir (it never mutates the working tree) and normalizes the SKILL.md stamp
+    # (vgpuVersion/gitSha/generatedAt) before diffing, since that stamp is volatile by design.
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -234,18 +237,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Regenerate docs manifest + skill
-        run: node packages/vgpu/lib/docs/generate/cli.js
-      - name: Fail if the generated manifest/skill are out of date
-        run: |
-          changed=$(git status --porcelain -- skills/vgpu packages/vgpu/lib/generated/docs-manifest.generated.js)
-          if [ -n "$changed" ]; then
-            echo "::error::Generated docs are out of date. Run 'pnpm -F vgpu generate:docs' and commit skills/vgpu and packages/vgpu/lib/generated/docs-manifest.generated.js."
-            echo "$changed"
-            git diff -- skills/vgpu packages/vgpu/lib/generated/docs-manifest.generated.js
-            exit 1
-          fi
-          echo "Generated docs manifest + skill are up to date."
+      - name: Check skills/vgpu + docs manifest for drift
+        run: node packages/vgpu/lib/docs/generate/check-drift.js
 
   examples-api-generated:
     # Frozen schemas, controlled vocabulary, and deterministic revision artifacts.

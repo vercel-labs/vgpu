@@ -3,14 +3,21 @@
 // The router stays small on purpose: it lists the guides + an API index and tells the agent to load
 // one doc at a time (via references/ or the CLI), instead of reading everything.
 
-/** @returns {Map<string, string>} relative skill path → file content */
-export function buildSkill(manifest) {
+/**
+ * @param {object} manifest
+ * @param {{ vgpuVersion: string, gitSha: string, generatedAt: string }} [stamp] - Frontmatter stamp
+ *   for SKILL.md (vgpu package version + generation commit + date). Optional so callers that only
+ *   care about the reference files (e.g. unit tests) can omit it; the CLI and drift-check always
+ *   pass one.
+ * @returns {Map<string, string>} relative skill path → file content
+ */
+export function buildSkill(manifest, stamp) {
   const docs = uniqueDocs(manifest.records);
   const files = new Map();
   for (const doc of docs) {
     files.set(`references${doc.virtualPath}`, referenceFile(doc));
   }
-  files.set("SKILL.md", router(docs));
+  files.set("SKILL.md", router(docs, stamp));
   return files;
 }
 
@@ -34,7 +41,7 @@ function referenceFile(doc) {
   return provenance + doc.content.trimEnd() + "\n";
 }
 
-function router(docs) {
+function router(docs, stamp) {
   const guides = docs.filter((d) => d.kind === "guide");
   const concepts = guides.filter((d) => d.symbol.startsWith("concepts-")).sort(byOrderThenSymbol);
   const cliGuides = guides.filter((d) => d.symbol === "cli");
@@ -51,6 +58,12 @@ function router(docs) {
     "  vgpu/mock, vgpu/scene, and vgpu/client. Use @vgpu/render/inspect, /utils, /edit,",
     "  and /perf only as slim tooling subpaths. Bundles performance guides and the API",
     "  reference; load one doc at a time.",
+    // Stamp: lets a human or agent tell a stale installed skill in one glance. gitSha/generatedAt
+    // are volatile by design (change on every regeneration) — check-drift.js normalizes them away
+    // before diffing, so they never cause a false drift failure on their own.
+    ...(stamp
+      ? [`vgpuVersion: ${stamp.vgpuVersion}`, `gitSha: ${stamp.gitSha}`, `generatedAt: ${stamp.generatedAt}`]
+      : []),
     "---",
     "",
     "# vgpu",
@@ -63,12 +76,10 @@ function router(docs) {
     "Glossary: **Surface** means a canvas-backed render target (swapchain) created with `surface(gpu, canvas)`; do not confuse it with the general phrase ‘API surface’.",
     "",
     "```sh",
-    "npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols",
-    "npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT",
-    "npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
+    "npx -y vgpu docs find <query>    # search doc paths + symbols",
+    "npx -y vgpu docs grep -i <term>  # search doc CONTENT",
+    "npx -y vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`",
     "```",
-    "",
-    "Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bake example thumbnails with `pnpm thumbs:docker` / `pnpm --filter docs thumbs:check` (pass `-- --only <slug>` for a single example).",
     "",
     "## Core concepts",
     "",
@@ -93,7 +104,7 @@ function router(docs) {
   out.push("");
   out.push("## API reference");
   out.push("");
-  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx --package @vgpu/cli vgpu docs cat <symbol>\`:`);
+  out.push(`${symbolCount} symbols across ${packages.length} packages — open \`references/<package>/<file>\` or \`npx -y vgpu docs cat <symbol>\`:`);
   out.push("");
   for (const pkg of packages) {
     const symbols = api

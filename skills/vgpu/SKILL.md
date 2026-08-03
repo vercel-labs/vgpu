@@ -5,6 +5,9 @@ description: >-
   vgpu/mock, vgpu/scene, and vgpu/client. Use @vgpu/render/inspect, /utils, /edit,
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
+vgpuVersion: 0.2.0
+gitSha: 24e7054eb1646718a2ee5d29d26b5cf12c72b9cc
+generatedAt: 2026-08-03T19:01:25.059Z
 ---
 
 # vgpu
@@ -17,12 +20,10 @@ vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL r
 Glossary: **Surface** means a canvas-backed render target (swapchain) created with `surface(gpu, canvas)`; do not confuse it with the general phrase ‘API surface’.
 
 ```sh
-npx --package @vgpu/cli vgpu docs find <query>    # search doc paths + symbols
-npx --package @vgpu/cli vgpu docs grep -i <term>  # search doc CONTENT
-npx --package @vgpu/cli vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
+npx -y vgpu docs find <query>    # search doc paths + symbols
+npx -y vgpu docs grep -i <term>  # search doc CONTENT
+npx -y vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
 ```
-
-Docs app workflows live in `apps/docs/README.md`. Use it when you need to re-bake example thumbnails with `pnpm thumbs:docker` / `pnpm --filter docs thumbs:check` (pass `-- --only <slug>` for a single example).
 
 ## Core concepts
 
@@ -65,7 +66,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 
 ## API reference
 
-255 symbols across 19 packages — open `references/<package>/<file>` or `npx --package @vgpu/cli vgpu docs cat <symbol>`:
+255 symbols across 19 packages — open `references/<package>/<file>` or `npx -y vgpu docs cat <symbol>`:
 
 - `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
 - `@vgpu/render/edit` — bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, EdgeView, EditableMesh, EditableMeshValue, ElementDomain, ElementSelection, ElementSet, extrude, FaceView, fillHole, gridFill, healManifold, inset, KernelHandle, loopCut, mergeByDistance, MeshEditError, MeshEditWarning, recomputeNormals, ScoredSelection, subdivideEdges, subdivideFaces, toEditable, toEditableWithDiagnostics, VertexView
