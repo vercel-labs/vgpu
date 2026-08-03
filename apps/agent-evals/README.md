@@ -30,6 +30,35 @@ a package list, and also builds the private `@vgpu/cli` package, because `vgpu`'
 own build copies the CLI out of it and its `prepack` generates the docs that
 `vgpu docs` serves inside the sandbox.
 
+## The task
+
+`evals/s2-gradient.eval.ts` asks for a 128x128 horizontal gradient, pure red at
+the left edge to pure blue at the right, produced by `node render.mjs`.
+
+The workspace it starts from is deliberately poor: `package.json` and the
+installed dependencies, **no `render.mjs`**. The agent writes the program from
+nothing, so the run grades discovery rather than the editing of an example we
+wrote for it.
+
+The prompt's only hint is **`Use \`npx vgpu\`.`** That is on purpose: the CLI is
+the official entry point for agents, so naming it is the realistic starting
+condition, not a leak. What the run measures is the chain of guidance *after*
+the entry point — from `npx vgpu`, can the agent reach a working gradient?
+Everything downstream stays unsaid: no "shader", no WGSL, no `docs`, no
+`doctor`, no `check`.
+
+Gates are the image: size, both endpoint columns within +/-2 per channel, and a
+monotonic middle row (red falling, blue rising, green at zero). The +/-2 is
+because a gradient is interpolated and quantised, and rasterisers disagree in
+the last bit or two.
+
+Everything else is observed and never gated — journey milestones, funnel
+counters (`docs_cmd_count`, `renders_count`,
+`tool_calls_to_first_successful_render`), whether the agent reached for the
+0.1.x `gpu.target(...)` facade and recovered, and one soft judged score for
+docs-usage quality. Gating any of that would reward ritual: an agent that
+solves the task without reading the docs has still solved it.
+
 ## Running it
 
 ```bash
@@ -66,12 +95,23 @@ that needs `VERCEL_TOKEN` + `VERCEL_TEAM_ID` + `VERCEL_PROJECT_ID` for the
 sandbox and a separate `AI_GATEWAY_API_KEY` for the gateway — a Vercel access
 token does **not** work as a Gateway bearer token.
 
+### A green run can still print template errors
+
+eve keeps one dev-runtime snapshot per code revision under `.eve/dev-runtime/`
+and initialises a sandbox template for each. Older snapshots hold older
+`bootstrap` code, so after a few iterations a passing run can log
+`failed to initialize sandbox template` for revisions nothing is using. Check
+which template the session actually used (the seed-file count and the bootstrap
+commands are logged) before chasing it; `rm -rf .eve` clears the noise at the
+cost of a cold rebuild.
+
 ## Trust model (v0)
 
 **This version trusts the agent's `out.png`.** The eval reads the PNG the agent
-left in the workspace and checks its dimensions and dominant colour. It does not
-re-render from source, so an agent that writes a red PNG by hand instead of
-fixing the code passes.
+left in the workspace and checks its size, endpoints and monotonicity. It does
+not re-render from source, so an agent that writes the gradient pixel by pixel
+in plain JavaScript — never touching vgpu — passes the gates. The journey
+signals are what would expose that, and they are soft by design.
 
 That is deliberate for a first iteration: the immediate value is watching the
 agent's journey through the library, and a v0 that ships today beats a verifier

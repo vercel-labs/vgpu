@@ -169,9 +169,27 @@ const REMEDIES: { label: string; command: string }[] = [
   },
 ];
 
+/**
+ * Content key for the seed workspace (`agent/sandbox/workspace/`).
+ *
+ * Injected by the wrapper, which can see the real directory. The fallback is a
+ * constant rather than a guess: under eve's dev runtime this module executes
+ * from a snapshot, and a wrong path here would silently return the same key for
+ * every workspace, which is exactly the staleness this is meant to prevent.
+ */
+function workspaceSeedKey(): string {
+  return process.env.VGPU_EVALS_WORKSPACE_KEY || "seed-unknown";
+}
+
 export default defineSandbox({
   backend: evalSandboxBackend(),
-  revalidationKey: () => tarballsFingerprint(),
+  // Both halves matter. The tarballs key covers the vgpu under test; the
+  // workspace key covers the seed files eve copies into /workspace. Without the
+  // second, changing the starter project (adding a file, or removing one, as
+  // the move to a bare package.json did) reuses a cached template still holding
+  // the OLD workspace — the agent would then be graded on a task it was not
+  // given, and nothing about the run would look wrong.
+  revalidationKey: () => `${tarballsFingerprint()}-${workspaceSeedKey()}`,
 
   /**
    * Runs once per sandbox TEMPLATE. It installs the branch's vgpu and proves

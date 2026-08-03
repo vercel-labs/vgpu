@@ -13,7 +13,8 @@
 // vgpu in the working tree; running the evals against a stale (or absent)
 // tarball set would silently measure the previous build.
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -69,6 +70,18 @@ const workDir = join(PACKAGE_DIR, ".work");
 process.env.VGPU_EVALS_WORK_DIR ??= workDir;
 process.env.VGPU_EVALS_TARBALLS_DIR ??= join(workDir, "tarballs");
 process.env.VGPU_EVALS_REPO_ROOT ??= REPO_ROOT;
+
+// Hash of the seed workspace, so the sandbox template is rebuilt when the
+// starter project changes. eve copies these files into /workspace once per
+// template; without this in the revalidation key, editing the fixture leaves
+// the agent working in the previous one.
+const seedDir = join(PACKAGE_DIR, "agent", "sandbox", "workspace");
+const seedHash = createHash("sha256");
+for (const name of readdirSync(seedDir).sort()) {
+  seedHash.update(name);
+  seedHash.update(readFileSync(join(seedDir, name)));
+}
+process.env.VGPU_EVALS_WORKSPACE_KEY ??= seedHash.digest("hex").slice(0, 16);
 
 // Also precompute the staleness key here, in the real worktree. The runtime
 // cannot recompute it: `git` resolves against the snapshot's cwd, where the
