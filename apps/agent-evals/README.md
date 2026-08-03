@@ -96,11 +96,17 @@ Two things are already load-bearing and should not be softened:
 `just-bash`, which has no real binaries, and an infra problem then reads as an
 agent failure.
 
-`VGPU_EVALS_SANDBOX=vercel` selects the Vercel Sandbox. Its golden path is
-verified: **x86_64 only**, runtime `node22`/`node24`, and one
-`sudo dnf install -y mesa-vulkan-drivers vulkan-loader` before `vgpu doctor`
-reports healthy (~22–30 s). That command is applied by `bootstrap` as a
-prescription, so the backend selector stays a one-line env change.
+`VGPU_EVALS_SANDBOX=vercel` selects the Vercel Sandbox. Note what that does
+**not** mean: eve always boots its sandboxes from its own published image, and
+`runtime` is excluded from the options type for that reason, so a Vercel run does
+not land on the AL2023 stock runtime. The `sudo dnf install -y
+mesa-vulkan-drivers vulkan-loader` from the vgpu sandbox spike is the remedy for
+*that* runtime and does not apply here; both backends run the same Debian-based
+image and take vgpu's portable software renderer instead
+(`npx vgpu install-software-renderer`), applied by `bootstrap` only when doctor
+asks for it.
+
+Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64.
 
 ## Roadmap (iterate on this PR)
 

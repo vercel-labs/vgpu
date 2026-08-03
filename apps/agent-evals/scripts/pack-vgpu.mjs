@@ -22,6 +22,7 @@
 //     `vgpu docs` inside the sandbox only works if packing runs the lifecycle
 //     script (i.e. do not pass --ignore-scripts here).
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,6 +94,42 @@ function run(command, args, cwd) {
   return result.stdout ?? "";
 }
 
+/**
+ * Content key for the SOURCE the tarballs are built from.
+ *
+ * This is the sandbox template's cache key, so it has one hard requirement:
+ * packing an unchanged tree twice must produce the same value. Hashing the
+ * tarball bytes does not satisfy that — `vgpu`'s tarball is not byte-reproducible
+ * across packs (its `prepack` regenerates docs), so a bytes-based key rebuilt the
+ * template on every single run: six installs, a doctor probe and a renderer
+ * download, every time.
+ *
+ * Hashing the inputs instead is both stable and stricter: it moves when the
+ * commit moves AND when the working tree moves, so an uncommitted edit to
+ * `packages/` is still a different key. Untracked file contents are included
+ * explicitly, since `git diff` says nothing about them.
+ */
+export function sourceKey() {
+  const root = repoRoot();
+  const hash = createHash("sha256");
+  hash.update(run("git", ["rev-parse", "HEAD"], root));
+  hash.update(run("git", ["status", "--porcelain", "--", "packages"], root));
+  hash.update(run("git", ["diff", "HEAD", "--", "packages"], root));
+  const untracked = run("git", ["ls-files", "--others", "--exclude-standard", "--", "packages"], root)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const file of untracked) {
+    hash.update(file);
+    try {
+      hash.update(readFileSync(join(root, file)));
+    } catch {
+      // Vanished between listing and reading; the path alone still moves the key.
+    }
+  }
+  return hash.digest("hex").slice(0, 16);
+}
+
 export function packVgpu({ outDir, build = true, log = () => {} } = {}) {
   const root = repoRoot();
   const byName = readWorkspacePackages(root);
@@ -130,6 +167,9 @@ export function packVgpu({ outDir, build = true, log = () => {} } = {}) {
 
   const manifest = {
     packedAt: new Date().toISOString(),
+    // Cache key and staleness guard. Deliberately NOT derived from packedAt or
+    // from the tarball bytes — see sourceKey().
+    sourceKey: sourceKey(),
     gitSha: run("git", ["rev-parse", "HEAD"], root).trim(),
     gitBranch: run("git", ["rev-parse", "--abbrev-ref", "HEAD"], root).trim(),
     rootPackage: ROOT_PACKAGE,

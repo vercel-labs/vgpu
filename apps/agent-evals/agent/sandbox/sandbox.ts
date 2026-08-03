@@ -1,8 +1,11 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineSandbox } from "eve/sandbox";
 import type { SandboxSession } from "eve/sandbox";
+// Plain .mjs on purpose: the pack script must run with bare `node` before
+// anything in this workspace is built. Importing it here (rather than copying
+// the key derivation) keeps packer and consumer from ever disagreeing.
+import { sourceKey } from "../../scripts/pack-vgpu.mjs";
 import { extractJson } from "../lib/extract-json.ts";
 import { tarballsDir } from "../lib/paths.ts";
 import { evalSandboxBackend } from "./backend.ts";
@@ -12,6 +15,7 @@ const TARBALL_DIR_IN_SANDBOX = `${WORKSPACE}/.vgpu-tarballs`;
 
 interface TarballManifest {
   packedAt: string;
+  sourceKey: string;
   gitSha: string;
   gitBranch: string;
   tarballs: { name: string; version: string; file: string }[];
@@ -27,27 +31,50 @@ function readManifest(): TarballManifest {
         "  Run `pnpm agent-evals` (which packs first) or `pnpm --filter @vgpu/agent-evals pack-vgpu`.",
     );
   }
-  return JSON.parse(readFileSync(manifestPath, "utf8")) as TarballManifest;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as TarballManifest;
+
+  // Staleness guard. `pnpm agent-evals` packs before it runs, but `eve eval`
+  // invoked directly (documented, and what you reach for when iterating on one
+  // eval) does not — so without this, switching branches silently grades the
+  // PREVIOUS branch's vgpu and every number you read is about the wrong code.
+  const current = sourceKey();
+  if (manifest.sourceKey !== current) {
+    throw new Error(
+      `bootstrap: the vgpu tarballs in ${dir} are stale.\n` +
+        `  packed from: ${manifest.gitBranch} @ ${manifest.gitSha.slice(0, 8)} (key ${manifest.sourceKey})\n` +
+        `  working tree now: key ${current}\n` +
+        "  Re-pack before running: `pnpm agent-evals` (packs automatically) or " +
+        "`pnpm --filter @vgpu/agent-evals pack-vgpu`.",
+    );
+  }
+  return manifest;
 }
 
 /**
- * Template cache key. It must change whenever the packed bytes change,
- * otherwise a rebuilt branch is graded against a cached sandbox holding the
- * PREVIOUS build — the single most expensive way to be wrong here, because
- * everything still looks like it worked.
+ * Template cache key.
  *
- * Content-addressed rather than timestamp-based, so re-packing an unchanged
- * tree keeps the cache warm.
+ * It must change whenever the packed code changes, or a rebuilt branch is
+ * graded against a cached sandbox holding the PREVIOUS build — the most
+ * expensive way to be wrong here, because everything still looks like it
+ * worked. It must ALSO stay stable when nothing changed, or every run pays for
+ * a full template rebuild.
+ *
+ * Hashing the tarball bytes satisfied only the first: `vgpu`'s tarball is not
+ * byte-reproducible across packs (its `prepack` regenerates docs), so the key
+ * moved on every pack. The manifest's `sourceKey` hashes the source inputs
+ * instead — see sourceKey() in scripts/pack-vgpu.mjs.
  */
 function tarballsFingerprint(): string {
-  const dir = tarballsDir();
-  if (!existsSync(dir)) return "no-tarballs";
-  const hash = createHash("sha256");
-  for (const file of readdirSync(dir).sort()) {
-    hash.update(file);
-    hash.update(readFileSync(join(dir, file)));
+  const manifestPath = join(tarballsDir(), "tarballs.json");
+  if (!existsSync(manifestPath)) return "no-tarballs";
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as TarballManifest;
+    return `vgpu-${manifest.sourceKey}`;
+  } catch {
+    // A revalidation key must never be the thing that fails a run; a distinct
+    // constant just forces one rebuild.
+    return "unreadable-manifest";
   }
-  return `vgpu-tarballs-${hash.digest("hex").slice(0, 16)}`;
 }
 
 interface DoctorReport {
@@ -76,6 +103,12 @@ async function runDoctor(sandbox: SandboxSession): Promise<DoctorReport> {
 
 /**
  * What to run when doctor is unhealthy.
+ *
+ * SECURITY NOTE: these are executed as shell strings, with no allowlist. That
+ * is acceptable today only because the sole producer is vgpu's own doctor,
+ * running during bootstrap, before the agent has any way to touch the sandbox.
+ * If a later change ever feeds this function JSON the agent can influence, it
+ * becomes arbitrary command execution — allowlist the commands first.
  *
  * Prefer what doctor itself prescribes — it knows which probe failed — and fall
  * back to the backend's known remedy. Kept backend-agnostic apart from that one

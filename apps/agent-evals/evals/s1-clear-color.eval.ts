@@ -113,6 +113,11 @@ export default defineEval({
     t.check(color.join(","), equals(EXPECTED.color.join(",")))
       .gate()
       .label("dominant pixel is solid red");
+    // The prompt says "every pixel exactly", so grade that and not the mode:
+    // a half-red image has a red dominant pixel and is not the asked-for image.
+    t.check(fraction, equals(1))
+      .gate()
+      .label("every pixel is that colour");
 
     // ---- Journey (soft, never a gate) -------------------------------------
     // This is the part a docs/DX person actually reads: HOW did the agent get
