@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { __resetValidationDeviceForTests, acquireValidationDevice, releaseValidationDevice } from "../src/runtime/validation-device.ts";
+import { __resetValidationDeviceForTests, acquireValidationDevice, releaseValidationDevice, retainValidationDevice } from "../src/runtime/validation-device.ts";
 
 /**
  * Exercises the real `validation-device.ts` (no mock of the module under test) with a stubbed
@@ -99,6 +99,27 @@ test("keeps the device alive while another validation still holds a lease", asyn
   await vi.advanceTimersByTimeAsync(1_000);
   expect(device.destroy).not.toHaveBeenCalled();
   await expect(acquireValidationDevice()).resolves.toBe(device);
+});
+
+test("a retained lease keeps one device across a multi-step validation", async () => {
+  // resolveShader validates twice under `identifiers: "safe"`. Without the outer retain, the idle
+  // release fires in the gap between them and the second validation re-acquires a whole new device.
+  vi.useFakeTimers();
+  const device = { label: "retained", destroy: vi.fn() };
+  adapter.device = device;
+  retainValidationDevice();
+
+  await acquireValidationDevice(); // first validateWGSL
+  releaseValidationDevice();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(device.destroy).not.toHaveBeenCalled();
+
+  await expect(acquireValidationDevice()).resolves.toBe(device); // second validateWGSL, same device
+  releaseValidationDevice();
+  releaseValidationDevice(); // resolveShader's own lease
+
+  await vi.advanceTimersByTimeAsync(250);
+  expect(device.destroy).toHaveBeenCalledTimes(1);
 });
 
 test("keeps a failed acquisition memoized instead of retrying it after idle", async () => {

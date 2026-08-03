@@ -4,7 +4,7 @@ import { wgslErrorWithFix } from "../src/runtime/errors.ts";
 import { acquireValidationDevice } from "../src/runtime/validation-device.ts";
 import { __resetValidationWarnOnceForTests } from "../src/runtime/validation.ts";
 
-vi.mock("../src/runtime/validation-device.ts", () => ({ acquireValidationDevice: vi.fn(), releaseValidationDevice: vi.fn(), __resetValidationDeviceForTests: vi.fn() }));
+vi.mock("../src/runtime/validation-device.ts", () => ({ acquireValidationDevice: vi.fn(), retainValidationDevice: vi.fn(), releaseValidationDevice: vi.fn(), __resetValidationDeviceForTests: vi.fn() }));
 
 const modules = { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" };
 const adapterMissing = () =>

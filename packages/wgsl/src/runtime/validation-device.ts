@@ -28,13 +28,22 @@ type AdapterNodeError = { code?: string; fix?: string; message?: string; detail?
  * `releaseValidationDevice()` — including when this rejects.
  */
 export function acquireValidationDevice(): Promise<GPUDevice> {
+  retainValidationDevice();
+  devicePromise ??= acquire();
+  return devicePromise;
+}
+
+/**
+ * Takes a lease *without* acquiring, so a caller that validates more than once (`resolveShader`
+ * validates before and after safe identifier minification) keeps one device across the whole call
+ * instead of letting the idle release destroy it in between. Pair with `releaseValidationDevice()`.
+ */
+export function retainValidationDevice(): void {
   leases++;
   if (idleTimer !== undefined) {
     clearTimeout(idleTimer);
     idleTimer = undefined;
   }
-  devicePromise ??= acquire();
-  return devicePromise;
 }
 
 /** Drops a lease, scheduling the idle destroy once nothing holds the device. */

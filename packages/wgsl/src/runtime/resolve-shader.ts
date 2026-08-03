@@ -14,6 +14,7 @@ import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
 import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
+import { releaseValidationDevice, retainValidationDevice } from "./validation-device.ts";
 import { resolveDefaultValidateMode, validateWGSL, type ValidateMode, type ValidationOutcome } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
@@ -96,13 +97,23 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);
   const validateMode = normalizeValidateMode(opts.validate);
-  let validationOutcome: ValidationOutcome = validateMode === "off" ? { attempted: false, ok: true } : await validateWGSL(emittedWgsl, validateMode);
-  const wgsl = applyMinifyWgsl(emittedWgsl, minify);
-  if (validateMode !== "off" && minify.identifiers === "safe") {
-    // Both calls share the memoized device from validation-device.ts, so they agree in practice;
-    // merging keeps the reported outcome correct if that ever stops being true.
-    const second = await validateWGSL(wgsl, validateMode);
-    validationOutcome = { attempted: validationOutcome.attempted || second.attempted, ok: validationOutcome.ok && second.ok, ...((validationOutcome.skipped ?? second.skipped) ? { skipped: validationOutcome.skipped ?? second.skipped } : {}) };
+  // One lease for the whole call: this function validates twice under `identifiers: "safe"`, and
+  // without an outer lease the idle release could destroy the device between the two, paying full
+  // adapter discovery again mid-call. Released in `finally` so a thrown diagnostic still frees it.
+  if (validateMode !== "off") retainValidationDevice();
+  let validationOutcome: ValidationOutcome;
+  let wgsl: string;
+  try {
+    validationOutcome = validateMode === "off" ? { attempted: false, ok: true } : await validateWGSL(emittedWgsl, validateMode);
+    wgsl = applyMinifyWgsl(emittedWgsl, minify);
+    if (validateMode !== "off" && minify.identifiers === "safe") {
+      // Both calls share the memoized device from validation-device.ts, so they agree in practice;
+      // merging keeps the reported outcome correct if that ever stops being true.
+      const second = await validateWGSL(wgsl, validateMode);
+      validationOutcome = { attempted: validationOutcome.attempted || second.attempted, ok: validationOutcome.ok && second.ok, ...((validationOutcome.skipped ?? second.skipped) ? { skipped: validationOutcome.skipped ?? second.skipped } : {}) };
+    }
+  } finally {
+    if (validateMode !== "off") releaseValidationDevice();
   }
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };

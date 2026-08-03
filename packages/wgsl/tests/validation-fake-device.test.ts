@@ -2,7 +2,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { acquireValidationDevice } from "../src/runtime/validation-device.ts";
 
-vi.mock("../src/runtime/validation-device.ts", () => ({ acquireValidationDevice: vi.fn(), releaseValidationDevice: vi.fn(), __resetValidationDeviceForTests: vi.fn() }));
+vi.mock("../src/runtime/validation-device.ts", () => ({ acquireValidationDevice: vi.fn(), retainValidationDevice: vi.fn(), releaseValidationDevice: vi.fn(), __resetValidationDeviceForTests: vi.fn() }));
 
 type FakeMessage = { readonly type?: string; readonly message?: string; readonly lineNum?: number; readonly linePos?: number };
 
