@@ -51,10 +51,32 @@ async function sh(sandbox, command, env) {
   };
 }
 
-/** Exit code, captured explicitly because `sh` swallows it with `|| true`. */
+/**
+ * Exit code, captured explicitly because `sh` swallows it with `|| true`.
+ *
+ * The command runs in a SUBSHELL, `( … )`, not a group, `{ …; }`. With a group,
+ * an `exit 0` inside the command (which the serve poll below uses to break out
+ * of its retry loop) terminates the whole shell, so `echo __OK__` never runs and
+ * a successful command is reported as a failure. That cost one real 30-minute
+ * n1 run: `next start` was serving fine and this reported `serverUp: false`.
+ */
 async function shStatus(sandbox, command, env) {
-  const result = await sh(sandbox, `{ ${command}; } && echo __OK__`, env);
+  const result = await sh(sandbox, `( ${command} ) && echo __OK__`, env);
   return { ok: /__OK__/.test(result.stdout), ...result };
+}
+
+/**
+ * Start something in the background and return immediately.
+ *
+ * Also a subshell, for a different reason: `sh` appends `|| true`, and
+ * `cmd & || true` is a bash SYNTAX ERROR — the line never parses, so the command
+ * never runs at all while `sh` reports nothing (it ignores exit codes by
+ * design). That is the other half of the same lost run. `setsid` and
+ * `< /dev/null` fully detach the child so tearing down this exec cannot take the
+ * server or the X server with it.
+ */
+async function shBackground(sandbox, command, env) {
+  return sh(sandbox, `( setsid nohup ${command} < /dev/null & )`, env);
 }
 
 export async function verifyN1HeroShader(sandbox) {
@@ -81,9 +103,9 @@ export async function verifyN1HeroShader(sandbox) {
   }
 
   // ---- 2. Serve ---------------------------------------------------------
-  await sh(
+  await shBackground(
     sandbox,
-    `nohup npx --no-install next start -p ${PORT} > ${ARTIFACT_DIR}/next-start.log 2>&1 &`,
+    `npx --no-install next start -p ${PORT} > ${ARTIFACT_DIR}/next-start.log 2>&1`,
   );
   const serve = await shStatus(
     sandbox,
@@ -117,7 +139,16 @@ export async function verifyN1HeroShader(sandbox) {
   }
   // One X server for the whole pass. `xvfb-run` per command would tear the
   // display down between calls and kill the browser the session holds open.
-  await sh(sandbox, `pgrep Xvfb >/dev/null || (nohup Xvfb ${DISPLAY} -screen 0 1280x800x24 > ${ARTIFACT_DIR}/xvfb.log 2>&1 &)`);
+  const xvfbRunning = await shStatus(sandbox, "pgrep Xvfb >/dev/null");
+  if (!xvfbRunning.ok) {
+    await shBackground(
+      sandbox,
+      `Xvfb ${DISPLAY} -screen 0 1280x800x24 > ${ARTIFACT_DIR}/xvfb.log 2>&1`,
+    );
+    // Give the X server a moment to create its socket: agent-browser's first
+    // headed launch fails outright against a display that is not listening yet.
+    await sh(sandbox, "sleep 2");
+  }
   const env = { DISPLAY };
 
   // Every flag on every call, deliberately. Dropping any of them mid-session

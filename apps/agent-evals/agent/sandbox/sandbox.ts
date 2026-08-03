@@ -253,8 +253,14 @@ const TASK_EXTRAS: Record<string, { label: string; command: string }[]> = {
       command: "apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth",
     },
     {
-      label: "playwright's chromium (Chrome for Testing publishes no arm64 build)",
-      command: "npm install -g playwright && npx playwright install chromium",
+      label: "playwright's chromium + its system libraries (Chrome for Testing publishes no arm64 build)",
+      // `--with-deps` is load-bearing, not belt-and-braces: the bare
+      // `playwright install chromium` downloads a browser that cannot start on
+      // this image at all — `libglib-2.0.so.0: cannot open shared object file`,
+      // exit 127 before Chrome ever writes a DevTools port. The apt line above
+      // covers the Vulkan/X side, not Chromium's own GTK/ATK/NSS closure, and
+      // `--with-deps` is playwright's own maintained list of exactly those.
+      command: "npm install -g playwright && npx playwright install --with-deps chromium",
     },
   ],
   // A fresh random image per run, so the smoke test cannot be passed by guessing
