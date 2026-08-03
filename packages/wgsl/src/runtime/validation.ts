@@ -1,5 +1,5 @@
 import { wgslError, wgslErrorWithFix, type WGSLError } from "./errors.ts";
-import { acquireValidationDevice } from "./validation-device.ts";
+import { acquireValidationDevice, releaseValidationDevice } from "./validation-device.ts";
 
 type CompilationMessage = { readonly type?: string; readonly message?: string; readonly lineNum?: number; readonly linePos?: number };
 type ShaderModuleWithInfo = GPUShaderModule & { getCompilationInfo?: () => Promise<{ readonly messages: readonly CompilationMessage[] }> };
@@ -21,19 +21,24 @@ export async function validateWGSL(wgsl: string, mode: "auto" | "require"): Prom
   try {
     device = await acquireValidationDevice();
   } catch (error) {
+    releaseValidationDevice();
     const failure = error as WGSLError | undefined;
     if (!failure || !deviceErrorCodes.has(failure.code)) throw error;
     if (mode === "require") throw error;
     warnValidationSkippedOnce(failure);
     return { attempted: true, ok: false, skipped: { code: failure.code, message: failure.message, ...(failure.fix ? { fix: failure.fix } : {}) } };
   }
-  device.pushErrorScope("validation");
-  const module = device.createShaderModule({ code: wgsl }) as ShaderModuleWithInfo;
-  const info = await module.getCompilationInfo?.();
-  const scoped = await device.popErrorScope();
-  const message = info?.messages.find((item) => item.type === "error") ?? (scoped ? { message: scoped.message } : undefined);
-  if (message) throw diagnostic(wgsl, message, scoped);
-  return { attempted: true, ok: true };
+  try {
+    device.pushErrorScope("validation");
+    const module = device.createShaderModule({ code: wgsl }) as ShaderModuleWithInfo;
+    const info = await module.getCompilationInfo?.();
+    const scoped = await device.popErrorScope();
+    const message = info?.messages.find((item) => item.type === "error") ?? (scoped ? { message: scoped.message } : undefined);
+    if (message) throw diagnostic(wgsl, message, scoped);
+    return { attempted: true, ok: true };
+  } finally {
+    releaseValidationDevice();
+  }
 }
 
 /**

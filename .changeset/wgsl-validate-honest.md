@@ -11,4 +11,6 @@ What this means in practice: code that already passed `validate: false` (includi
 
 `@vgpu/adapter-node` is now an *optional* peer dependency of `@vgpu/wgsl`, imported lazily (and only when validation actually runs) so there is no static dependency, no bundle cost, and no build cycle. Consumers without it installed hit `VGPU-WGSL-VALIDATE-ADAPTER-MISSING`: a warning in `"auto"`, an error in `"require"`.
 
+Validation shares one WebGPU device per process and destroys it shortly after the last validation, so scripts that call `resolveShader` still exit on their own (a live Dawn device otherwise keeps the Node event loop alive indefinitely).
+
 `vgpu check` gains `--require-validation` (fail instead of degrading when no device is available), includes the new `validation` object in its JSON payload, and now forwards `fix`/`where` on error payloads and diagnostics — both were silently dropped before, so remediation text never reached anyone reading the CLI's JSON.

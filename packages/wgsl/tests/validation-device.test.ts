@@ -1,5 +1,5 @@
-import { beforeEach, expect, test, vi } from "vitest";
-import { __resetValidationDeviceForTests, acquireValidationDevice } from "../src/runtime/validation-device.ts";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { __resetValidationDeviceForTests, acquireValidationDevice, releaseValidationDevice } from "../src/runtime/validation-device.ts";
 
 /**
  * Exercises the real `validation-device.ts` (no mock of the module under test) with a stubbed
@@ -21,6 +21,10 @@ beforeEach(() => {
   __resetValidationDeviceForTests();
   adapter.thrown = undefined;
   adapter.device = undefined;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test("forwards the adapter-node code, fix and cause on a device failure", async () => {
@@ -58,9 +62,53 @@ test("labels native stderr provenance when the failure exposes it", async () => 
 });
 
 test("memoizes the device so repeated validation shares one acquisition", async () => {
-  const device = { label: "fake" };
+  const device = { label: "fake", destroy: vi.fn() };
   adapter.device = device;
   await expect(acquireValidationDevice()).resolves.toBe(device);
-  adapter.device = { label: "second" };
+  adapter.device = { label: "second", destroy: vi.fn() };
   await expect(acquireValidationDevice()).resolves.toBe(device);
+  expect(device.destroy).not.toHaveBeenCalled();
+});
+
+test("destroys the device once validation goes idle, so a script can exit on its own", async () => {
+  vi.useFakeTimers();
+  const first = { label: "first", destroy: vi.fn() };
+  adapter.device = first;
+  await acquireValidationDevice();
+  releaseValidationDevice();
+  expect(first.destroy).not.toHaveBeenCalled();
+
+  await vi.advanceTimersByTimeAsync(250);
+  expect(first.destroy).toHaveBeenCalledTimes(1);
+
+  // The next validation transparently acquires a fresh device.
+  const second = { label: "second", destroy: vi.fn() };
+  adapter.device = second;
+  await expect(acquireValidationDevice()).resolves.toBe(second);
+  releaseValidationDevice();
+});
+
+test("keeps the device alive while another validation still holds a lease", async () => {
+  vi.useFakeTimers();
+  const device = { label: "shared", destroy: vi.fn() };
+  adapter.device = device;
+  await acquireValidationDevice();
+  await acquireValidationDevice();
+  releaseValidationDevice();
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(device.destroy).not.toHaveBeenCalled();
+  await expect(acquireValidationDevice()).resolves.toBe(device);
+});
+
+test("keeps a failed acquisition memoized instead of retrying it after idle", async () => {
+  vi.useFakeTimers();
+  adapter.thrown = new Error("boom");
+  await expect(acquireValidationDevice()).rejects.toMatchObject({ code: "VGPU-WGSL-VALIDATE-NO-DEVICE" });
+  releaseValidationDevice();
+  await vi.advanceTimersByTimeAsync(1_000);
+
+  adapter.device = { label: "would-succeed-now", destroy: vi.fn() };
+  adapter.thrown = undefined;
+  await expect(acquireValidationDevice()).rejects.toMatchObject({ code: "VGPU-WGSL-VALIDATE-NO-DEVICE" });
 });

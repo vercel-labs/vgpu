@@ -1,12 +1,21 @@
 import { wgslErrorWithFix } from "./errors.ts";
 
 /**
- * Memoized for the process lifetime: `resolveShader` calls this up to twice per invocation (once
- * before minification, once after safe identifier renaming) and relies on a single shared outcome
- * so a device-less environment warns/throws exactly once. Never destroyed — this mirrors
- * `@vgpu/adapter-node`'s own process-lifetime Dawn singleton, whose re-initialization SIGSEGVs.
+ * Memoized across validations: `resolveShader` calls this up to twice per invocation (once before
+ * minification, once after safe identifier renaming), and consecutive `resolveShader` calls in a
+ * build script share one device instead of paying adapter discovery each time. A device-less
+ * environment therefore warns/throws exactly once.
+ *
+ * The device is destroyed once no validation has needed it for `idleReleaseDelayMs`, because a live
+ * Dawn device keeps ref'd handles on the Node event loop: without this, any script that resolved a
+ * shader with validation on would never exit on its own. Re-acquiring afterwards is safe (Dawn's
+ * *instance* is adapter-node's process-lifetime singleton and is not re-created; only the device
+ * is), and a failed acquisition is kept memoized so the failure is attempted and reported once.
  */
 let devicePromise: Promise<GPUDevice> | undefined;
+let leases = 0;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+const idleReleaseDelayMs = 250;
 
 /** The slice of `@vgpu/adapter-node` this module uses. */
 type AdapterNodeModule = {
@@ -14,9 +23,44 @@ type AdapterNodeModule = {
 };
 type AdapterNodeError = { code?: string; fix?: string; message?: string; detail?: { nativeStderr?: string } };
 
+/**
+ * Takes a lease on the shared validation device. Every call must be paired with
+ * `releaseValidationDevice()` — including when this rejects.
+ */
 export function acquireValidationDevice(): Promise<GPUDevice> {
+  leases++;
+  if (idleTimer !== undefined) {
+    clearTimeout(idleTimer);
+    idleTimer = undefined;
+  }
   devicePromise ??= acquire();
   return devicePromise;
+}
+
+/** Drops a lease, scheduling the idle destroy once nothing holds the device. */
+export function releaseValidationDevice(): void {
+  leases = Math.max(0, leases - 1);
+  if (leases > 0 || idleTimer !== undefined || devicePromise === undefined) return;
+  // Unref'd: this timer must never be the reason a process stays alive. It still fires while the
+  // live Dawn device keeps the loop busy, which is precisely when it has work to do.
+  idleTimer = setTimeout(destroyIdleDevice, idleReleaseDelayMs);
+  idleTimer.unref?.();
+}
+
+function destroyIdleDevice(): void {
+  idleTimer = undefined;
+  const pending = devicePromise;
+  if (leases > 0 || pending === undefined) return;
+  void pending.then(
+    (device) => {
+      // Re-check: a validation may have taken a lease while the promise settled.
+      if (leases > 0 || devicePromise !== pending) return;
+      devicePromise = undefined;
+      device.destroy();
+    },
+    // A failed acquisition stays memoized: one attempt and one warning per process.
+    () => undefined,
+  );
 }
 
 async function acquire(): Promise<GPUDevice> {
@@ -68,5 +112,8 @@ async function acquire(): Promise<GPUDevice> {
  * Not reachable from any published entry point (`./runtime` only exports `resolve-shader.js`).
  */
 export function __resetValidationDeviceForTests(): void {
+  if (idleTimer !== undefined) clearTimeout(idleTimer);
+  idleTimer = undefined;
+  leases = 0;
   devicePromise = undefined;
 }
