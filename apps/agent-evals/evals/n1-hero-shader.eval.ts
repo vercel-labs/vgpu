@@ -9,6 +9,7 @@ import {
   N1_VERIFY_JSON,
   WAYPOINTS,
 } from "../agent/lib/verify/n1-hero-shader.mjs";
+import { N1_CODE_QUESTIONS, judgeCode } from "./lib/judge-code.mjs";
 import { judgeTrailEffect } from "./lib/judge-trail.mjs";
 import { turnFailure } from "./lib/turn-failure.mjs";
 
@@ -89,7 +90,11 @@ interface MilestoneContext {
    * has to test them per unit: against the joined blob, an app component that
    * mentions the pointer and a throwaway script that steps frames would satisfy
    * a "stepped frames with a synthetic pointer" test between them, and report a
-   * headless test nobody wrote. Same reasoning as milestones 7 and 8 below.
+   * headless test nobody wrote. Same reasoning as the "set up agent-browser"
+   * and "closed its own loop with a browser screenshot" milestones below.
+   *
+   * Chronological, by tool-call index — see where it is built for why the
+   * ordering matters to the capped judge material.
    */
   writtenUnits: string[];
   /** What it actually shipped: source files in the exported workspace. */
@@ -115,7 +120,8 @@ const RAN_NODE_SCRIPT = /\bnode\s+(?:-e\b|--eval\b|[^\s|&;]*\.(?:mjs|js|ts)\b)/;
  * without ever running `vgpu check` has still shipped a working trail; one that
  * runs every command in the CLI and ships nothing has not.
  *
- * Milestones 7 and 8 are tested PER COMMAND rather than against the joined
+ * The "set up agent-browser" and "closed its own loop with a browser
+ * screenshot" milestones are tested PER COMMAND rather than against the joined
  * blob, because `.*` over a newline-joined transcript would happily match an
  * `agent-browser` call on one line and the word `screenshot` twenty commands
  * later, and report a loop the agent never closed.
@@ -355,16 +361,27 @@ export default defineEval({
     // valuable thing in a red run — it must already be logged by then.
     const calls = bashCalls(turn.toolCalls);
     const commands = calls.map((call) => call.command).join("\n");
-    const writtenUnits = [
-      ...turn.toolCalls
-        .filter((call) => call.name === "write_file")
-        .map((call) => String((call.input as { content?: unknown } | undefined)?.content ?? "")),
-      // Command text too: agents write files through heredocs, `sed -i` and
-      // `node -e`, and a signal that only reads write_file under-reports every
-      // other route. Both n1 runs so far wrote their headless test as a
-      // heredoc, so this is the branch that carries it.
-      ...calls.map((call) => call.command),
-    ];
+    // Command text as well as write_file payloads: agents write files through
+    // heredocs, `sed -i` and `node -e`, and a signal that only reads write_file
+    // under-reports every other route. Both n1 runs so far wrote their headless
+    // test as a heredoc, so the bash branch is the one that carries it.
+    //
+    // CHRONOLOGICAL, by tool-call index, and that ordering is load-bearing: the
+    // judge material below is capped, and a build that emitted every write_file
+    // payload first and every command afterwards would let a `.tsx`-heavy run
+    // spend the whole cap before reaching the bash half — dropping exactly the
+    // evidence that only lives there (in both archived runs the headless test
+    // was a bash heredoc, deleted before the export). Interleaved, truncation
+    // drops the END of the turn rather than one whole category of evidence.
+    const writtenUnits = turn.toolCalls.flatMap((call) => {
+      if (call.name === "write_file") {
+        return [String((call.input as { content?: unknown } | undefined)?.content ?? "")];
+      }
+      if (call.name === "bash") {
+        return [String((call.input as { command?: unknown } | undefined)?.command ?? "")];
+      }
+      return [];
+    });
     const written = writtenUnits.join("\n");
     const shipped = finalSources(extracted);
     const viewImageCalls = turn.toolCalls.filter((call) => call.name === TOOL_NAME).length;
@@ -398,62 +415,67 @@ export default defineEval({
     // truncate a `//` inside a string literal and silently drop a true match.
     // A judge that reads the code cannot be fooled by a word's appearance in
     // a comment, so these three questions — all about what the code actually
-    // DOES, not about a literal command having run — move to eve's native
-    // `t.judge.autoevals.closedQA`, per https://eve.dev/docs/evals/judge:
-    // `on` grades an arbitrary value, so the agent's own code is passed
-    // there instead of `t.reply`.
+    // DOES, not about a literal command having run — are model-graded.
+    //
+    // Graded through `./lib/judge-code.mjs` rather than eve's native
+    // `t.judge.autoevals.closedQA`, for one reason: a judge call that FAILS
+    // must cost this run a SIGNAL, not the RUN. eve's collector rewrites any
+    // rejected async score function into a `gate`-severity failure regardless
+    // of the `.soft()` asked for at the call site, and one failed gate fails
+    // the eval — so a transient 500 on a cheap grading call would throw away
+    // 20-30 minutes and real money. The rejection also surfaces at
+    // finalization, not here, so a `try`/`catch` around the native call would
+    // catch nothing. The helper's prompt is a port of autoevals' own ClosedQA
+    // template so the criteria keep being asked the question they were
+    // validated 9/9 against; see the module header for the full argument.
     //
     // Deliberately exactly three calls, one per question, because each one is
-    // a real model call billed per assertion — see buildCodeJudgeMaterial's
-    // comment for the same reason its material is capped.
+    // a real, billed model call — see buildCodeJudgeMaterial's comment for the
+    // same reason its material is capped.
     //
     // PROMPT-INJECTION NOTE: `codeMaterial` is written by the agent under
     // test, i.e. it is untrusted, potentially adversarial input. It is passed
-    // ONLY as `on` (autoevals' graded "output"), kept strictly apart from the
-    // criteria strings below, so nothing in it can rewrite the question being
-    // asked. Its only effect on this eval is the resulting score/label —
-    // never control flow.
+    // ONLY as the graded submission, in its own message, kept strictly apart
+    // from the criteria strings, so nothing in it can rewrite the question
+    // being asked. Its only effect on this eval is the resulting
+    // verdict/label — never control flow.
     const codeMaterial = buildCodeJudgeMaterial([...writtenUnits, ...shippedSourceFiles(extracted)]);
-    const codeQuestions: { label: string; criteria: string }[] = [
-      {
-        label: "journey: tested headlessly with a synthetic pointer, rendered offscreen",
-        criteria:
-          "The material is code the agent wrote and commands it ran while working on a task " +
-          "to add a hover-trail effect that follows the pointer (it may include a throwaway " +
-          "test script it wrote and ran, even if it deleted the script afterwards), followed " +
-          "by the source files it ultimately shipped. Does the material show the agent " +
-          "writing and running a headless test that simulates the POINTER hovering and moving " +
-          "over the page — feeding the shader a sequence of pointer/cursor coordinates that " +
-          "the script itself invented (not a real mouse/browser event) to drive the hover " +
-          "trail — while stepping animation frames by hand and rendering each frame somewhere " +
-          "the script reads pixels back from (for example writing an image file, or reading " +
-          "back pixel/framebuffer data) rather than only ever drawing to an on-screen browser " +
-          "canvas? A shader that only ever computes a static per-pixel coordinate (such as a " +
-          "fragment shader's own built-in UV/position) does NOT count as a synthetic pointer " +
-          "position — the script must invent and feed in a pointer/cursor position that moves " +
-          "across separate frames.",
-      },
-      {
-        label: "journey: used clock().advance() for headless time-stepping",
-        criteria:
-          "Does the code call `.advance(` on a clock object obtained from the graphics " +
-          "library's `clock()` function, in order to step simulated time forward by hand? " +
-          "Answer based only on function/method calls that are actually present in the code, " +
-          "never on comments or prose that merely describe what the code does or intends to " +
-          "do.",
-      },
-      {
-        label: "journey: feedback via built-in ping-pong helper (vs hand-rolled double buffer)",
-        criteria:
-          "Look at how the code keeps the previous rendered frame around to build a " +
-          "fading-trail feedback effect. Does it call the graphics library's own built-in " +
-          "ping-pong / double-buffer helper function to manage the two buffers, rather than " +
-          "the agent allocating two render targets itself and swapping between them by hand?",
-      },
-    ];
-    for (const question of codeQuestions) {
-      t.judge.autoevals.closedQA(question.criteria, { on: codeMaterial }).soft().label(question.label);
+    const codeJudgeModel = process.env.VGPU_EVALS_JUDGE_MODEL || "openai/gpt-4.1-mini";
+    t.log(`judge: code-semantics model ${codeJudgeModel}`);
+    // Concurrently, and safely: `judgeCode` resolves rather than throws, so
+    // there is no unhandled rejection to leak and no ordering to lose — every
+    // verdict is logged below in question order whatever order they land in.
+    const codeVerdicts = await Promise.all(
+      N1_CODE_QUESTIONS.map((question) =>
+        judgeCode({
+          criteria: question.criteria,
+          material: codeMaterial,
+          task: PROMPT,
+          model: codeJudgeModel,
+        }),
+      ),
+    );
+    let codeJudgesUnavailable = 0;
+    for (const [index, question] of N1_CODE_QUESTIONS.entries()) {
+      const judged = codeVerdicts[index];
+      if (judged.verdict === "unavailable") {
+        // Deliberately NO assertion recorded. A judge that could not be
+        // reached says nothing about the agent, and recording it as a "no"
+        // would put a false finding — "the agent did not do this" — into a
+        // tracked signal. A missing signal is not evidence of failure, so it
+        // is reported as missing and the run carries on to its gates.
+        codeJudgesUnavailable += 1;
+        t.log(`judge: unavailable — ${question.label} (${judged.error ?? "unknown error"})`);
+        continue;
+      }
+      t.log(`judge: ${judged.verdict === "yes" ? "yes" : "no "} — ${question.label}`);
+      t.log(`judge rationale: ${judged.rationale}`);
+      t.check(judged.verdict, equals("yes")).soft().label(question.label);
     }
+    // Machine-readable on the summary line: three signals silently absent
+    // should be visible as an unavailable judge, not read as three questions
+    // nobody asked.
+    t.log(`funnel: code_judges_unavailable=${codeJudgesUnavailable}/${N1_CODE_QUESTIONS.length}`);
 
     // ---- Funnel counters --------------------------------------------------
     const [importsVgpu, hasUseClient, hasCanvas] = integrationParts(shipped);
@@ -682,6 +704,19 @@ export default defineEval({
         criteria: "Did it act on what it found, so the code it wrote reflects the documentation it read?",
       },
     ];
+    // KNOWN EXPOSURE, deliberate (see the README's "When a judge call fails"):
+    // these three stay on eve's native judge, so a transient failure in any of
+    // them still fails the whole eval — eve's collector rewrites a rejected
+    // score function into a `gate` failure regardless of this `.soft()`, and
+    // there is no error hook to opt out of that. They are NOT ported to
+    // `lib/judge-code.mjs` with the code-semantics questions because these
+    // three have run history under autoevals' ClosedQA grading and are asked
+    // verbatim in both evals so the finding stays comparable across tasks;
+    // swapping the grading path would redefine a tracked metric, and the
+    // archived material contains no negative examples to validate the new
+    // decision boundary against ("discovery proportionate" is threshold
+    // sensitive). Converting them needs a comparability run of its own —
+    // follow-up, not this change.
     for (const question of questions) {
       t.judge.autoevals.closedQA(question.criteria, { on: material }).soft().label(question.label);
     }

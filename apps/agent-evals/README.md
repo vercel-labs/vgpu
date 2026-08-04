@@ -157,18 +157,21 @@ different sources on purpose (PR #272 review):
   `view-image` → integrated into the app → agent-browser set up → its own
   screenshot, plus the `agent_browser_calls_total` vs.
   `agent_browser_calls_with_executable_path` counters.
-- **Judged, via eve's native `t.judge.autoevals.closedQA`, for semantic
-  questions about the code** — "did it write a headless frame-stepping test
-  with a synthetic pointer, rendering offscreen?", "does it call
-  `clock().advance()`?", "did it use the library's built-in ping-pong helper,
-  or hand-roll a double buffer?" These used to be code-content regexes, and
-  regex failed at this twice in opposite directions: once a predicate matched
-  only an English comment narrating what the code was about to do, and the
-  comment-stripper added to fix that could truncate a `//` inside a string
-  literal and silently drop a true match. A model reading the code cannot be
-  fooled either way. Each of these three calls is soft — tracked like the
-  regex signals they replaced, never a gate — and each is a real, billed
-  model call, which is why there are exactly three and not more.
+- **Judged, via `evals/lib/judge-code.mjs`, for semantic questions about the
+  code** — "did it write a headless frame-stepping test with a synthetic
+  pointer, rendering offscreen?", "does it call `clock().advance()`?", "did it
+  use the library's built-in ping-pong helper, or hand-roll a double buffer?"
+  These used to be code-content regexes, and regex failed at this twice in
+  opposite directions: once a predicate matched only an English comment
+  narrating what the code was about to do, and the comment-stripper added to
+  fix that could truncate a `//` inside a string literal and silently drop a
+  true match. A model reading the code cannot be fooled either way. Each of
+  these three calls is soft — tracked like the regex signals they replaced,
+  never a gate — and each is a real, billed model call, which is why there are
+  exactly three and not more. The material they read is capped per unit and
+  overall, and is assembled in tool-call order so a truncation drops the end of
+  the turn rather than every bash-carried heredoc at once (in both archived
+  runs the headless test only exists in the bash half).
 
 One more **multimodal** judge (`evals/lib/judge-trail.mjs`) is shown the first
 and last screenshots and scores 0-100 whether the second reads as a fading
@@ -184,8 +187,37 @@ Budget: `timeoutMs` is overridden to **30 minutes** for this eval only, and the
 first run against a cold template also pays a one-time ~110 MB
 `npx playwright install chromium`. `agent-browser` itself is deliberately **not**
 pre-installed — it is the first command in vgpu's own browser guide, so
-installing it for the agent would erase the discovery step milestone 7 exists to
-measure.
+installing it for the agent would erase the discovery step the "set up
+agent-browser" milestone exists to measure. (Milestones are referenced by name,
+never by number, here and in the evals: a "milestone 7" cross-reference went
+off-by-one the moment the milestone list shrank from nine entries to eight.)
+
+### When a judge call fails
+
+A judge is a cheap side observation of a 20-30 minute run. It must never be
+able to *end* that run, and by default it can:
+
+- eve's collector rewrites any **rejected** async score function into a
+  `gate`-severity failed assertion — `score=0, severity="gate", failed=true` —
+  regardless of the `.soft()` requested at the call site, and one failed gate
+  fails the whole eval. The rejection also surfaces at finalization rather than
+  at the call site, so wrapping `t.judge...` in `try`/`catch` catches nothing,
+  and `closedQA(criteria, opts)` exposes no error hook (`{ on, model,
+  modelOptions }` is the whole surface).
+- So the three code-semantics questions and the multimodal trail judge drive
+  their own `generateObject` call (`evals/lib/judge-code.mjs`,
+  `evals/lib/judge-trail.mjs`) inside our own error handling. A model, network,
+  credential or schema failure is logged as `judge: unavailable — <label>` plus
+  a `code_judges_unavailable=N/3` counter, records **no** assertion, and the run
+  continues to its gates. A missing signal is not evidence that the agent
+  failed, so it is never recorded as a "no".
+- **Still exposed, deliberately, as a follow-up:** the three docs-usage judges
+  in `n1-hero-shader.eval.ts` and `s2-gradient.eval.ts` are still native
+  `t.judge.autoevals.closedQA` calls, so a transient failure in one of them
+  still fails the eval. They have run history under autoevals' ClosedQA
+  grading, and porting them would silently redefine a tracked metric on
+  archived material that contains no negative examples to validate the new
+  boundary against. Converting them needs a comparability run of its own.
 
 ### view-image-smoke
 

@@ -312,6 +312,19 @@ export default defineEval({
           "Did it act on what it found, so the code it wrote reflects the documentation it read?",
       },
     ];
+    // KNOWN EXPOSURE, deliberate (see the README's "When a judge call fails"):
+    // these three stay on eve's native judge, so a transient failure in any of
+    // them still fails the whole eval — eve's collector rewrites a rejected
+    // score function into a `gate` failure regardless of this `.soft()`, and
+    // there is no error hook to opt out of that. They are NOT ported to
+    // `lib/judge-code.mjs` with the code-semantics questions because these
+    // three have run history under autoevals' ClosedQA grading and are asked
+    // verbatim in both evals so the finding stays comparable across tasks;
+    // swapping the grading path would redefine a tracked metric, and the
+    // archived material contains no negative examples to validate the new
+    // decision boundary against ("discovery proportionate" is threshold
+    // sensitive). Converting them needs a comparability run of its own —
+    // follow-up, not this change.
     for (const question of questions) {
       t.judge.autoevals.closedQA(question.criteria, { on: material }).soft().label(question.label);
     }
