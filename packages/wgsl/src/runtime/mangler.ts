@@ -89,12 +89,16 @@ function shadowedTokens(tokens: readonly Token[]): ReadonlySet<number> {
   return shadowed;
 }
 
-/** Parameters shadow the whole function; a local shadows from its own `;` to the end of its block. */
+/** Parameters shadow the body only; a local shadows from its own `;` to the end of its block. */
 function hideFunctionLocals(tokens: readonly Token[], fnIndex: number, hide: (name: string, start: number, end: number) => void): number {
   const open = seek(tokens, fnIndex, "("), close = open === undefined ? undefined : matchPair(tokens, open, "(", ")");
   const bodyOpen = close === undefined ? undefined : seek(tokens, close, "{"), bodyClose = bodyOpen === undefined ? undefined : matchPair(tokens, bodyOpen, "{", "}");
   if (open === undefined || close === undefined || bodyOpen === undefined || bodyClose === undefined) return fnIndex;
-  for (let i = open + 1; i < close; i++) if (tokens[i]!.kind === "ident" && tokens[i + 1]?.text === ":") hide(tokens[i]!.text, i, bodyClose);
+  // A parameter is in scope in the body compound statement only, so sibling parameter types, their
+  // template args and the `-> ReturnType` still name module scope and must stay substitutable. The
+  // parameter's own token needs no hiding: `blocked()` already refuses any ident followed by `:`
+  // that is not a var/let/const declaration.
+  for (let i = open + 1; i < close; i++) if (tokens[i]!.kind === "ident" && tokens[i + 1]?.text === ":") hide(tokens[i]!.text, bodyOpen, bodyClose);
   const scopeEnds = [bodyClose];
   for (let i = bodyOpen + 1; i < bodyClose; i++) {
     while (scopeEnds.length > 1 && i > scopeEnds[scopeEnds.length - 1]!) scopeEnds.pop();

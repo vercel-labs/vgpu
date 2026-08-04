@@ -194,3 +194,82 @@ fn helper(x: f32) -> f32 { return x * 2.0; }
   expect(wgsl).toMatch(/let first = _vgsl_[0-9a-f]{8}__helper\(1\.0\);/);
   expect(wgsl).toContain("let helper = first * 3.0;");
 });
+
+/**
+ * A parameter's scope is the function *body* compound statement, so the rest of the signature —
+ * sibling parameter types, their template arguments and the `-> ReturnType` — still resolves to
+ * module scope. The first version of this fix hid the name from the parameter's own token through
+ * the end of the body, which swallowed those type positions and reproduced F3 in a new corner:
+ * `struct helper` was emitted as `_vgsl_<hash>__helper` while `other: helper` kept the bare name,
+ * so the device rejected the shader with `unresolved type 'helper'`. Reported by review on #287.
+ */
+test("a parameter does not shadow module types in sibling parameters or the return type", async () => {
+  for (const minify of [false, true]) {
+    const wgsl = await resolve(
+      `${OUT_BUF}
+struct helper { v: f32 }
+fn takes(helper: f32, other: helper) -> helper { return other; }
+@compute @workgroup_size(1) fn main() { out_buf[0] = takes(1.0, helper(2.0)).v; }
+`,
+      minify,
+    );
+
+    expect(wgsl).toMatch(mangled("struct", "helper"));
+    // Both type positions after the parameter are still mangled. Asserted structurally because
+    // `minify: true` also renames the parameter itself (`helper` -> `b`), which is fine.
+    expect(wgsl).toMatch(/,\s*\w+\s*:\s*_vgsl_[0-9a-f]{8}__helper\s*\)/);
+    expect(wgsl).toMatch(/->\s*_vgsl_[0-9a-f]{8}__helper/);
+    // The bug left these positions naming a struct that no longer existed under that name.
+    expect(wgsl).not.toMatch(/->\s*helper\b/);
+  }
+});
+
+test("a parameter does not shadow a module type inside a sibling parameter's template arguments", async () => {
+  const wgsl = await resolve(
+    `${OUT_BUF}
+struct helper { v: f32 }
+fn takes(helper: f32, p: ptr<function, helper>) -> f32 { return (*p).v + helper; }
+@compute @workgroup_size(1) fn main() {
+  var s = helper(3.0);
+  out_buf[0] = takes(1.0, &s);
+}
+`,
+    false,
+  );
+
+  expect(wgsl).toMatch(mangled("struct", "helper"));
+  expect(wgsl).toMatch(/ptr<function, _vgsl_[0-9a-f]{8}__helper>/);
+});
+
+test("an imported type survives being named by a parameter of the function that uses it", async () => {
+  const wgsl = await resolve(
+    `import { helper } from "./lib.wgsl";
+${OUT_BUF}
+fn takes(helper: f32, other: helper) -> helper { return other; }
+@compute @workgroup_size(1) fn main() { out_buf[0] = takes(1.0, helper(2.0)).v; }
+`,
+    false,
+    { "/lib.wgsl": `export struct helper { v: f32 }` },
+  );
+
+  expect(wgsl).toMatch(mangled("struct", "helper"));
+  expect(wgsl).toMatch(/\(helper: f32, other: _vgsl_[0-9a-f]{8}__helper\) -> _vgsl_[0-9a-f]{8}__helper/);
+});
+
+test("a parameter still shadows a same-named module symbol inside the body", async () => {
+  const wgsl = await resolve(
+    `${OUT_BUF}
+struct helper { v: f32 }
+fn takes(helper: f32) -> f32 { return helper * 2.0; }
+@compute @workgroup_size(1) fn main() {
+  var s = helper(5.0);
+  out_buf[0] = takes(4.0) + s.v;
+}
+`,
+    false,
+  );
+
+  // In the body `helper` is the parameter, so it must not be rewritten to the struct's mangled name.
+  expect(wgsl).toContain("(helper: f32) -> f32 { return helper * 2.0; }");
+  expect(wgsl).toMatch(/var s = _vgsl_[0-9a-f]{8}__helper\(5\.0\);/);
+});
