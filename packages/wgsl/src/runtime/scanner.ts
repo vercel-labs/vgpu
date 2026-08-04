@@ -1,5 +1,9 @@
-import { wgslError } from "./errors.ts";
+import type { Diagnostic } from "./diagnostic-types.ts";
+import { wgslError, wgslErrorWithFix, type WGSLError } from "./errors.ts";
 import { WGSL_KEYWORDS } from "./wgsl-identifiers.ts";
+
+export const NON_ASCII_IDENTIFIER_CODE = "VGPU-WGSL-IDENT-NONASCII";
+const XID_ISSUE_URL = "https://github.com/vercel-labs/vgpu/issues/294";
 
 export type TokenKind = "ident" | "keyword" | "string" | "lineComment" | "blockComment" | "punct" | "number";
 
@@ -12,7 +16,11 @@ export interface Token {
   readonly column: number;
 }
 
-export function scan(source: string): Token[] {
+/**
+ * Tokenizes WGSL. `path` is only used to attribute diagnostics to a file; pass it whenever the
+ * caller knows which module the source came from.
+ */
+export function scan(source: string, path?: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   let line = 1;
@@ -77,9 +85,45 @@ export function scan(source: string): Token[] {
       }
       push("number", start, i, atLine, atColumn); continue;
     }
+    // Anything non-ASCII that survives to here is in code position: comments, strings and
+    // blankspace were consumed above, and WGSL has no non-ASCII operators. WGSL identifiers are
+    // Unicode (XID_Start/XID_Continue) but every stage below this one — the printer's separator
+    // predicates, the scope walker, the mangler, reflection — is ASCII-only, so such an identifier
+    // was either fused into the preceding keyword (`let Ω` -> `letΩ`), misdiagnosed as a missing
+    // identifier, or silently reflected under a truncated name. Reject it here instead: the
+    // scanner is the one choke point every path shares, minify/validate settings included.
+    if (ch.charCodeAt(0) > 0x7f) throw nonAsciiIdentifierError(source, i, line, column, path);
     step(); push("punct", start, i, atLine, atColumn);
   }
   return tokens;
+}
+
+/**
+ * Names the whole offending identifier, not just the character that tripped the scan: `café` is
+ * reached at `é` (after `ident:caf`) and `Ω` at its first character, and both read better reported
+ * as one name anchored at the identifier's own line/column.
+ */
+function nonAsciiIdentifierError(source: string, index: number, line: number, column: number, path: string | undefined): WGSLError {
+  let start = index;
+  while (start > 0 && isIdentByte(source[start - 1]!)) start--;
+  let end = index + 1;
+  while (end < source.length && isIdentByte(source[end]!)) end++;
+  const text = source.slice(start, end);
+  // Identifiers cannot span a newline, so only the column moves when walking back to `start`.
+  const atColumn = column - (index - start);
+  const where = path === undefined ? "" : ` in ${path}`;
+  const error = wgslErrorWithFix(
+    NON_ASCII_IDENTIFIER_CODE,
+    `Non-ASCII identifier '${text}'${where} at line ${line} column ${atColumn}; vgpu's WGSL pipeline supports ASCII identifiers only`,
+    { fix: `Rename '${text}' using ASCII letters, digits and '_'. Unicode (XID) identifiers are tracked in ${XID_ISSUE_URL}`, line, column: atColumn },
+  ) as Diagnostic;
+  error.range = { file: path, start: { line, column: atColumn } };
+  return error as WGSLError;
+}
+
+/** Identifier bytes for error reporting: ASCII word characters plus anything non-ASCII. */
+function isIdentByte(char: string): boolean {
+  return char.charCodeAt(0) > 0x7f || /[A-Za-z0-9_]/.test(char);
 }
 
 export function hasTopLevelImport(source: string): boolean {

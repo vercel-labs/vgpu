@@ -28,6 +28,9 @@ export interface VGPUErrorFixData {
   readonly cause?: unknown;
   readonly metadata?: Record<string, unknown>;
   readonly severity?: "error" | "warning";
+  /** Source position, for the diagnostics that have one (`line`/`column` are 1-based). */
+  readonly line?: number;
+  readonly column?: number;
 }
 
 /**
@@ -35,7 +38,7 @@ export interface VGPUErrorFixData {
  * `wgslError` so the ~15 existing positional call sites stay untouched.
  */
 export function wgslErrorWithFix(code: string, message: string, data: VGPUErrorFixData = {}): WGSLError {
-  const error = new VGPUError(code, message, 1, 1, data.severity ?? "error");
+  const error = new VGPUError(code, message, data.line ?? 1, data.column ?? 1, data.severity ?? "error");
   if (data.fix !== undefined) error.fix = data.fix;
   if (data.where !== undefined) error.where = data.where;
   if (data.cause !== undefined) error.cause = data.cause;

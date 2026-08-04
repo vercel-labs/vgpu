@@ -97,10 +97,10 @@
   },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 1024,
-    "./runtime": 24064,
+    "./runtime": 24576,
     "./loader-webpack": 24576,
     "./loader-vite": 24576,
-    "./reflect-source": 13824
+    "./reflect-source": 14336
   },
   "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded."
 }

@@ -71,7 +71,7 @@ export function reservedIdentifierDiagnostics(module: ReservedIdentifierModule):
  */
 export function reservedIdentifierDiagnosticsForSource(path: string, source: string): Diagnostic[] {
   try {
-    return reservedIdentifierDiagnostics({ path, tokens: scan(source) });
+    return reservedIdentifierDiagnostics({ path, tokens: scan(source, path) });
   } catch {
     return [];
   }

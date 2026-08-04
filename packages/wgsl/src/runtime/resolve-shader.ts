@@ -132,7 +132,7 @@ async function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string,
   const source = await readModule(path, opts);
   const cacheKey = `${path}:${source}`;
   let module = scanCache.get(cacheKey);
-  if (!module) { const tokens = scan(source); module = { path, source, tokens, parsed: parseModule(tokens) }; remember(scanCache, cacheKey, module); }
+  if (!module) { const tokens = scan(source, path); module = { path, source, tokens, parsed: parseModule(tokens) }; remember(scanCache, cacheKey, module); }
   loaded.set(path, module);
   stack.push(path);
   for (const imp of module.parsed.imports) await loadGraph(resolvePath(imp.from, path, opts, diagnostics), opts, loaded, stack, diagnostics);
