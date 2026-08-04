@@ -125,10 +125,19 @@ The four gates are exactly those observations: build ok, server up, 5/5
 screenshots captured, and every screenshot decodes as a PNG with no two of them
 byte-identical. Nothing the agent *says* it ran counts.
 
-Everything else is observed and never gated: an eight-milestone journey
-(`vgpu doctor` → WGSL written → `vgpu check` → headless clock-driven test →
-`view-image` → integrated into the app → agent-browser set up → its own
-screenshot), the `agent_browser_calls_total` vs.
+Read that last gate literally: it proves *something changed between captures*,
+not that the *pointer* changed it. The task asks for an animated shader, so the
+background moves on its own and satisfies non-identity by itself — measured on
+the first green run, consecutive captures differ by 3.14-3.38/255 even in
+regions far from every hover point. A shader that ignores the pointer entirely
+passes all four gates today. What the trail claim actually rests on is the
+multimodal judge below, softly.
+
+Everything else is observed and never gated: a nine-milestone journey
+(`vgpu doctor` → WGSL written → `vgpu check` → headless frame-stepping test with
+a synthetic pointer → the `clock().advance()` API specifically → `view-image` →
+integrated into the app → agent-browser set up → its own screenshot), the
+`agent_browser_calls_total` vs.
 `agent_browser_calls_with_executable_path` counters, a
 `feedback_technique=pingPong|hand-rolled|unclear` classifier, and one
 **multimodal** judge (`evals/lib/judge-trail.mjs`) that is shown the first and

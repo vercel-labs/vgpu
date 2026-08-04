@@ -83,11 +83,33 @@ interface MilestoneContext {
   calls: BashCall[];
   /** What the agent wrote while working: write_file payloads plus command text. */
   written: string;
+  /**
+   * The same material, but each write_file payload and each command kept as its
+   * own unit. A signal that needs several facts to be true OF THE SAME script
+   * has to test them per unit: against the joined blob, an app component that
+   * mentions the pointer and a throwaway script that steps frames would satisfy
+   * a "stepped frames with a synthetic pointer" test between them, and report a
+   * headless test nobody wrote. Same reasoning as milestones 7 and 8 below.
+   */
+  writtenUnits: string[];
   /** What it actually shipped: source files in the exported workspace. */
   shipped: string;
   /** How many times it looked at an image with the view-image tool. */
   viewImageCalls: number;
 }
+
+/**
+ * Parts of "tested it headlessly", kept as named constants because the split
+ * between them is the whole point: any one of them alone is a weak signal.
+ */
+/** Ran a script, not just `node -e "require('vgpu')"`-style poking. */
+const RAN_NODE_SCRIPT = /\bnode\s+(?:-e\b|--eval\b|[^\s|&;]*\.(?:mjs|js|ts)\b)/;
+/** Stepped frames by hand: vgpu's `frame()`, a clock `.advance()`, a pingPong `.swap()`. */
+const DRIVES_FRAMES = /\bframe\s*\(|\.advance\s*\(|\.swap\s*\(/;
+/** Fed a pointer position the script made up, rather than a real cursor. */
+const SYNTHETIC_POINTER = /pointer|mouse/i;
+/** Rendered somewhere readable instead of onto a screen. */
+const RENDERS_OFFSCREEN = /writeFileSync|readPixels|\.png\b|toPng/i;
 
 /**
  * Journey signals: observed and logged, never gated.
@@ -109,10 +131,35 @@ const MILESTONES: { id: string; detect: (m: MilestoneContext) => boolean }[] = [
   },
   { id: "validated WGSL (vgpu check)", detect: (m) => /vgpu\s+check\b/.test(m.commands) },
   {
-    // A throwaway script that steps the frame clock by hand with a synthetic
-    // pointer uniform: the cheapest way to test a feedback shader without a
-    // browser, and the one vgpu's own clock API exists for.
-    id: "tested the shader headlessly by driving the clock",
+    // A throwaway script that renders frames outside a browser with a made-up
+    // pointer: the cheapest way to test a feedback shader, and the behaviour
+    // that actually matters here.
+    //
+    // Read from `written`, not `shipped`, because this script is throwaway by
+    // nature — in the run this signal was written against the agent left it in
+    // /tmp and the copy it made into /workspace was gone before the export.
+    //
+    // Three facts about ONE unit: it drives frames by hand, it feeds a pointer
+    // the agent invented, and it renders somewhere it can read back. Running
+    // `node` at all is necessary but nowhere near sufficient — an agent that
+    // only ever ran `node -e "require('vgpu')"` must not score this.
+    id: "tested headlessly by rendering frames with synthetic input",
+    detect: (m) =>
+      RAN_NODE_SCRIPT.test(m.commands) &&
+      m.writtenUnits.some(
+        (unit) =>
+          DRIVES_FRAMES.test(unit) && SYNTHETIC_POINTER.test(unit) && RENDERS_OFFSCREEN.test(unit),
+      ),
+  },
+  {
+    // Kept as its own signal, deliberately narrow: `clock()` + `.advance()` is
+    // the specific API the docs teach for stepping time by hand
+    // (packages/vgpu-api/src/clock.ts), so this is a docs-discovery question,
+    // not a testing-behaviour one. It used to be the ONLY headless signal, and
+    // that conflation scored a real, thorough headless test as a miss twice:
+    // both n1 runs to date drove frames with `frame(gpu, …)` + `trail.swap()`
+    // instead, which is just as headless and never touches `clock()`.
+    id: "found the clock().advance() API for headless stepping",
     detect: (m) =>
       (/\bclock\s*\(/.test(m.written) && /\.advance\s*\(/.test(m.written)) ||
       (/\bclock\s*\(/.test(m.shipped) && /\.advance\s*\(/.test(m.shipped)),
@@ -293,24 +340,33 @@ export default defineEval({
     // valuable thing in a red run — it must already be logged by then.
     const calls = bashCalls(turn.toolCalls);
     const commands = calls.map((call) => call.command).join("\n");
-    const written = [
+    const writtenUnits = [
       ...turn.toolCalls
         .filter((call) => call.name === "write_file")
         .map((call) => String((call.input as { content?: unknown } | undefined)?.content ?? "")),
       // Command text too: agents write files through heredocs, `sed -i` and
       // `node -e`, and a signal that only reads write_file under-reports every
-      // other route.
-      commands,
-    ].join("\n");
+      // other route. Both n1 runs so far wrote their headless test as a
+      // heredoc, so this is the branch that carries it.
+      ...calls.map((call) => call.command),
+    ];
+    const written = writtenUnits.join("\n");
     const shipped = finalSources(extracted);
     const viewImageCalls = turn.toolCalls.filter((call) => call.name === TOOL_NAME).length;
-    const milestoneContext: MilestoneContext = { commands, calls, written, shipped, viewImageCalls };
+    const milestoneContext: MilestoneContext = {
+      commands,
+      calls,
+      written,
+      writtenUnits,
+      shipped,
+      viewImageCalls,
+    };
 
     for (const milestone of MILESTONES) {
       const hit = milestone.detect(milestoneContext);
       t.log(`journey: ${hit ? "yes" : "no "} — ${milestone.id}`);
       if (milestone.id === VIEW_IMAGE_MILESTONE) {
-        // The one structural signal of the eight, and so the most reliable:
+        // The one structural signal of the set, and so the most reliable:
         // eve recorded the tool call itself, no regex involved. `calledTool`
         // defaults to "at least one".
         t.calledTool(TOOL_NAME).soft().label(`journey: ${milestone.id}`);
@@ -325,10 +381,18 @@ export default defineEval({
     t.log(`funnel: integration_use_client=${hasUseClient}`);
     t.log(`funnel: integration_canvas=${hasCanvas}`);
 
-    // The gap between these two counts IS the measurement of whether the agent
-    // navigated the arm64/Chrome-for-Testing friction or only attempted it:
-    // dropping `--executable-path` from a later call in a session makes
-    // agent-browser fall back to about:blank while still printing success.
+    // Counts how many agent-browser calls passed `--executable-path`, which is
+    // ONE way through the arm64/Chrome-for-Testing friction: dropping the flag
+    // from a later call in a session can make agent-browser fall back to
+    // about:blank while still printing success.
+    //
+    // A low count is not evidence of that fallback, and the first green run is
+    // the counterexample: 27 calls, zero with the flag, and a real browser
+    // throughout. That agent took a third route — it allowed agent-browser's
+    // postinstall (`npm config set allow-scripts=agent-browser`, then
+    // `npm i -g agent-browser --allow-scripts`), which provisions a browser of
+    // its own. Its `eval` calls came back with the hero's real text, a real
+    // canvas and webgpu true. Read the pair as "how", never as "whether".
     const browserCalls = calls.filter((call) => /agent-browser\b/.test(call.command));
     const browserCallsWithPath = browserCalls.filter((call) =>
       call.command.includes("--executable-path"),
@@ -377,10 +441,23 @@ export default defineEval({
     t.check(verify.screenshots.length, equals(WAYPOINTS.length))
       .gate()
       .label("harness captured a screenshot at every hover waypoint");
-    // v0 simplification, disclosed in the README: this proves the pointer
-    // changes what is rendered and that no capture is a broken PNG. It does not
-    // yet prove the change follows the pointer or fades over time — that is
-    // what the multimodal judge below reads, softly.
+    // v0 simplification, disclosed in the README. Read the label literally:
+    // this proves the five captures are decodable PNGs and that SOMETHING
+    // changed between them. It does not prove the POINTER changed anything —
+    // the task asks for an animated shader, so the background moves on its own
+    // between captures and satisfies non-identity by itself. Measured on the
+    // first green run: consecutive captures differ by 3.14–3.38/255 in regions
+    // far from every hover point, so a shader that ignores the pointer entirely
+    // would pass this gate. The multimodal judge below is what currently speaks
+    // to the trail, softly.
+    //
+    // The hook's own artifact already carries what a deterministic replacement
+    // needs: on that same run the pair where the pointer had just arrived
+    // differed by 18.94/255 near the waypoint against 3.14 far from it, a 6x
+    // separation. Comparing luma delta in a window around the hovered waypoint
+    // against the frame's own baseline is the next iteration (see the README
+    // roadmap); deliberately not implemented here, since one run is not enough
+    // to pick a threshold.
     t.check(verify.screenshotsOk, equals(true))
       .gate()
       .label("hover changes what is rendered (screenshots decode and are not all identical)");

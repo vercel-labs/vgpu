@@ -95,7 +95,11 @@ export async function verifyN1HeroShader(sandbox) {
   // ---- 1. Build ---------------------------------------------------------
   const build = await shStatus(sandbox, "npx --no-install next build");
   verdict.buildOk = build.ok;
-  verdict.buildLog.stderrTail = `${build.stdout}\n${build.stderr}`.trim().slice(-2000);
+  verdict.buildLog.stderrTail = `${build.stdout}\n${build.stderr}`
+    // `__OK__` is shStatus's own marker, not something next printed.
+    .replace(/__OK__\s*$/, "")
+    .trim()
+    .slice(-2000);
   if (!verdict.buildOk) {
     verdict.notes.push("next build failed; nothing to serve, so no hover pass was attempted");
     await writeVerdict(sandbox, verdict);
@@ -169,7 +173,11 @@ export async function verifyN1HeroShader(sandbox) {
 
   for (const waypoint of WAYPOINTS) {
     const selector = `'[data-testid="n1-wp-${waypoint}"]'`;
-    await sh(sandbox, browser(`hover ${selector}`), env);
+    // Recorded per waypoint: a hover that silently missed its target looks
+    // exactly like a shader that ignores the pointer once the captures are all
+    // that is left. agent-browser prints "✓ Done" on success.
+    const hover = await sh(sandbox, browser(`hover ${selector}`), env);
+    const hoverOk = /✓/.test(hover.stdout);
     // A beat between hover and capture: a trail that fades over time needs the
     // frame after the pointer moved, not the one during the move.
     await sh(sandbox, browser("wait 400"), env);
@@ -177,7 +185,7 @@ export async function verifyN1HeroShader(sandbox) {
     await sh(sandbox, browser(`screenshot ${path}`), env);
 
     const bytes = await sandbox.readBinaryFile({ path }).catch(() => null);
-    const entry = { waypoint, path: `${N1_SCREENSHOT_DIR}/wp-${waypoint}.png` };
+    const entry = { waypoint, path: `${N1_SCREENSHOT_DIR}/wp-${waypoint}.png`, hoverOk };
     if (!bytes) {
       entry.decoded = false;
       verdict.screenshots.push(entry);
