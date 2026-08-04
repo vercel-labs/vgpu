@@ -35,10 +35,3 @@ body {
   font-size: clamp(1rem, 2vw, 1.375rem);
   color: #a1a1aa;
 }
-
-.wp {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}

@@ -5,6 +5,7 @@ import { defineEval } from "eve/evals";
 import { equals, satisfies } from "eve/evals/expect";
 import { snapshotTarPath, snapshotWorkspaceDir } from "../agent/lib/paths.ts";
 import {
+  N1_BASELINE_SCREENSHOT,
   N1_SCREENSHOT_DIR,
   N1_VERIFY_JSON,
   WAYPOINTS,
@@ -31,12 +32,15 @@ import { turnFailure } from "./lib/turn-failure.mjs";
  * verdict. See the README's "Trust model (v0)" for what that still does not
  * prove.
  *
- * FIXTURE NOTE — do not "clean up" the five `data-testid="n1-wp-N"` divs in
- * `agent/sandbox/tasks/n1-hero-shader/app/page.tsx`. They look like dead markup
- * and they are not: they are the fixed hover targets the harness aims
- * `agent-browser hover` at, which is what makes the screenshot pass reproducible
- * whatever layout the agent's canvas ends up with. The agent is never asked to
- * add or keep them.
+ * FIXTURE NOTE — the seed used to carry five invisible `data-testid="n1-wp-N"`
+ * anchor divs for the harness to hover. They are GONE, and must not come back:
+ * they were styled `pointer-events: none`, and Playwright's (hence
+ * agent-browser's) actionability check refuses to hover an element that cannot
+ * receive pointer events, so every hover failed and no pointer event ever
+ * reached the canvas. The harness now moves the pointer by COORDINATE along a
+ * path derived at runtime from the canvas's own bounding box, so it depends on
+ * no markup at all — which is also why the anchors could be deleted rather than
+ * restyled.
  */
 const PROMPT =
   "Add an animated background shader to the hero: a hover effect that leaves a " +
@@ -269,28 +273,65 @@ interface N1Verdict {
   buildLog: { stderrTail: string };
   serverUp: boolean;
   browserReady: boolean;
-  screenshots: {
-    waypoint: number;
-    path: string;
-    hoverOk?: boolean;
-    decoded?: boolean;
-    sha256?: string;
-    width?: number;
-    height?: number;
-    lumaStdDev?: number;
-    error?: string;
-  }[];
+  screenshots: N1ScreenshotEntry[];
+  /** The pointer-free capture, taken before the pointer moved at all. */
+  baseline?: N1ScreenshotEntry | null;
   screenshotsOk: boolean;
   /**
-   * Aggregate: true only if every waypoint's hover was reported ok (PR #272
-   * review, P1-6 — added by lane 1, alongside the per-entry
-   * `screenshots[].hoverOk` that already existed but was dropped before it
-   * reached this eval). Logged and soft-checked below, deliberately NOT a
-   * hard gate: it postdates every archived green run, so no real run has
-   * ever exercised the code that computes it yet.
+   * Aggregate: true only if every `agent-browser mouse move` on every leg of
+   * the pointer path reported success (PR #272 review, P1-6 — same shape and
+   * role as the `hoverOk` aggregate it replaces). Logged and soft-checked
+   * below, deliberately NOT a hard gate: no live run has produced it yet.
    */
-  hoverOk: boolean;
+  pointerMoveOk: boolean;
+  /** The canvas box the pointer path was derived from, measured at runtime. */
+  canvasBox?: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    vw: number;
+    vh: number;
+    dpr: number;
+    canvases: number;
+    source: string;
+  } | null;
+  pixelScale?: number | null;
   notes: string[];
+}
+
+/** One capture out of the harness's pointer pass. */
+interface N1ScreenshotEntry {
+  waypoint: number;
+  path: string;
+  /** Every pointer move on the leg ending at this waypoint reported success. */
+  pointerMoveOk?: boolean;
+  moveSteps?: number;
+  moveStepsOk?: number;
+  /** The final commanded pointer position for this leg, in CSS px. */
+  pointer?: number[];
+  decoded?: boolean;
+  sha256?: string;
+  width?: number;
+  height?: number;
+  lumaStdDev?: number;
+  /**
+   * Recorded, not gated (see the README roadmap): mean |Δluma| near the pointer
+   * versus far from every waypoint, i.e. the pointer's own contribution against
+   * the animated background's noise floor.
+   */
+  spatial?: {
+    near?: number | null;
+    far?: number | null;
+    ratio?: number | null;
+    maxDelta?: number;
+    maxDeltaAt?: number[];
+    maxDeltaOffset?: number;
+    nearRadius?: number;
+    farRadius?: number;
+    error?: string;
+  };
+  error?: string;
 }
 
 export default defineEval({
@@ -561,23 +602,40 @@ export default defineEval({
 
     for (const note of verify.notes) t.log(`verify: ${note}`);
     for (const shot of verify.screenshots) {
+      const spatial = shot.spatial
+        ? ` near=${shot.spatial.near ?? "?"} far=${shot.spatial.far ?? "?"} ` +
+          `ratio=${shot.spatial.ratio ?? "?"} max_delta_offset=${shot.spatial.maxDeltaOffset ?? "?"}`
+        : "";
       t.log(
-        `verify: wp-${shot.waypoint} decoded=${shot.decoded ?? false} hover_ok=${shot.hoverOk ?? "?"} ` +
+        `verify: wp-${shot.waypoint} decoded=${shot.decoded ?? false} ` +
+          `pointer_move_ok=${shot.pointerMoveOk ?? "?"} ` +
+          `moves=${shot.moveStepsOk ?? "?"}/${shot.moveSteps ?? "?"} ` +
+          `at=${shot.pointer ? shot.pointer.join(",") : "?"} ` +
           `${shot.width ?? "?"}x${shot.height ?? "?"} luma_stddev=${shot.lumaStdDev ?? "?"} ` +
-          `sha=${shot.sha256 ?? "?"}${shot.error ? ` error=${shot.error}` : ""}`,
+          `sha=${shot.sha256 ?? "?"}${spatial}${shot.error ? ` error=${shot.error}` : ""}`,
       );
     }
     if (!verify.buildOk) t.log(`verify: build log tail\n${verify.buildLog.stderrTail}`);
     t.log(`verify: browser_ready=${verify.browserReady}`);
-    // Logged and soft-checked, deliberately not gated (PR #272 review, P1-6):
-    // `hoverOk` is a lane-1 addition that postdates every archived n1 run, so
-    // no real run has ever exercised the code that computes it. Gating on an
-    // aggregate that has never once been produced by a live run would be
-    // gating on untested code, not on a validated signal.
-    t.log(`verify: hover_ok=${verify.hoverOk}`);
-    t.check(verify.hoverOk, equals(true))
+    if (verify.canvasBox) {
+      t.log(
+        `verify: pointer path derived from ${verify.canvasBox.source} box ` +
+          `${verify.canvasBox.w}x${verify.canvasBox.h} at ${verify.canvasBox.x},${verify.canvasBox.y} ` +
+          `(viewport ${verify.canvasBox.vw}x${verify.canvasBox.vh}, dpr=${verify.canvasBox.dpr}, ` +
+          `canvases=${verify.canvasBox.canvases}, capture scale=${verify.pixelScale ?? "?"})`,
+      );
+    }
+    // Logged and soft-checked, deliberately not gated: the coordinate-driven
+    // pointer pass that produces this aggregate is new (it replaced hovering
+    // the seed's `pointer-events: none` anchors, which Playwright refuses to
+    // hover — so the old `hoverOk` was false on every waypoint of the archived
+    // green run). It has been rehearsed against the golden workspace in a
+    // container, but no live eval run has produced it yet, and gating on a
+    // signal no live run has produced is gating on untested code.
+    t.log(`verify: pointer_move_ok=${verify.pointerMoveOk}`);
+    t.check(verify.pointerMoveOk, equals(true))
       .soft()
-      .label("agent-browser reported a successful hover at every waypoint");
+      .label("agent-browser reported a successful pointer move at every path step");
 
     // ---- Gates (hard) -----------------------------------------------------
     // All four are the harness's own observations, not the agent's claims: this
@@ -588,34 +646,44 @@ export default defineEval({
     t.check(verify.serverUp, equals(true)).gate().label("next start serves the hero");
     t.check(verify.screenshots.length, equals(WAYPOINTS.length))
       .gate()
-      .label("harness captured a screenshot at every hover waypoint");
+      .label("harness captured a screenshot at every pointer waypoint");
     // v0 simplification, disclosed in the README. Read the label literally:
     // this proves the five captures are decodable PNGs and that SOMETHING
     // changed between them. It does not prove the POINTER changed anything —
     // the task asks for an animated shader, so the background moves on its own
     // between captures and satisfies non-identity by itself. Measured on the
     // first green run: consecutive captures differ by 3.14–3.38/255 in regions
-    // far from every hover point, so a shader that ignores the pointer entirely
-    // would pass this gate. The multimodal judge below is what currently speaks
-    // to the trail, softly.
+    // far from every pointer position, so a shader that ignores the pointer
+    // entirely would pass this gate. Still true after the pointer pass was
+    // fixed to move by coordinate: this gate is about non-identity, nothing
+    // more. The multimodal judge below, and `screenshots[].spatial`, are what
+    // speak to the trail.
     //
-    // The hook's own artifact already carries what a deterministic replacement
-    // needs: on that same run the pair where the pointer had just arrived
-    // differed by 18.94/255 near the waypoint against 3.14 far from it, a 6x
-    // separation. Comparing luma delta in a window around the hovered waypoint
-    // against the frame's own baseline is the next iteration (see the README
-    // roadmap); deliberately not implemented here, since one run is not enough
-    // to pick a threshold.
+    // The hook's artifact now records the numbers a deterministic replacement
+    // needs, per waypoint, in `spatial` — mean |Δluma| near the pointer versus
+    // far from every waypoint. Two measured populations exist so far, both with
+    // this same code: pointer driven along the path over the archived green
+    // run's own app gives ratio 25.49-40.32, and that same app with the pointer
+    // provably frozen gives 0.89-1.20. `ratio >= 4` sits between them with
+    // ~6x/~3x margin. Deliberately NOT gated here until a live run has produced
+    // the field (see the README roadmap).
     t.check(verify.screenshotsOk, equals(true))
       .gate()
-      .label("hover changes what is rendered (screenshots decode and are not all identical)");
+      .label("the pointer pass changes what is rendered (screenshots decode and are not all identical)");
 
     // ---- Multimodal judge (soft, never a gate) ----------------------------
-    // First waypoint (pointer at the top-left) versus last (pointer just
-    // arrived bottom-right). A separate env var from the text judge so the two
-    // concerns — cheap text judging of docs usage, image-capable judging of the
-    // trail — can be pinned independently.
-    const beforePng = join(extracted, N1_SCREENSHOT_DIR, `wp-${WAYPOINTS[0]}.png`);
+    // The pointer-free baseline (captured before the pointer moved at all)
+    // versus the last waypoint (pointer just arrived bottom-right, trail
+    // fresh). BEFORE used to be `wp-0.png` — a frame the pointer had already
+    // painted — which handed the judge a weaker contrast than the run actually
+    // produced; the fallback keeps archived runs, which have no baseline,
+    // judgeable with the same code. A separate env var from the text judge so
+    // the two concerns — cheap text judging of docs usage, image-capable
+    // judging of the trail — can be pinned independently.
+    const baselinePng = join(extracted, N1_BASELINE_SCREENSHOT);
+    const beforePng = existsSync(baselinePng)
+      ? baselinePng
+      : join(extracted, N1_SCREENSHOT_DIR, `wp-${WAYPOINTS[0]}.png`);
     const afterPng = join(extracted, N1_SCREENSHOT_DIR, `wp-${WAYPOINTS[WAYPOINTS.length - 1]}.png`);
     if (existsSync(beforePng) && existsSync(afterPng)) {
       const visionModel =

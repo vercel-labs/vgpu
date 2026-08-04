@@ -117,9 +117,30 @@ workspace is tarred):
 1. `next build` — must exit 0.
 2. `next start -p 4173` — must answer HTTP 200 within 30 s.
 3. installs `agent-browser`, resolves the pre-warmed playwright Chromium, starts
-   one long-lived `Xvfb`, then hovers five seeded waypoints
-   (`data-testid="n1-wp-0"`…`4`) in order and screenshots after each.
-4. writes `.agent-evals/n1-verify.json` plus the five PNGs into the workspace.
+   one long-lived `Xvfb`, opens the page and **confirms the session is actually
+   on it** (`get url` — a session that lost its browser lands on `about:blank`
+   and still prints `✓ Done`).
+4. measures the largest `<canvas>`'s bounding box **in the page, at runtime**,
+   and drives the pointer by COORDINATE along a path through five waypoints at
+   fixed fractions of that box (10%/20% … 90%/80%) — six `agent-browser mouse
+   move` steps per leg, ~50 ms apart — capturing a screenshot 250 ms after
+   arriving at each. A pointer-free `baseline.png` is captured first.
+5. writes `.agent-evals/n1-verify.json` plus the six PNGs into the workspace.
+
+**Why coordinates and not `hover`.** The seed used to carry five invisible
+`data-testid="n1-wp-N"` anchor divs and the harness hovered them. They were
+styled `pointer-events: none`, and Playwright's (so agent-browser's)
+actionability check *refuses to hover an element that cannot receive pointer
+events*. Every hover failed, no pointer event ever reached the canvas, and the
+first green run's app kept its `pointerUv` uniform at the default `[0.5, 0.5]`
+for all five captures — its chroma centroid sat at exactly (629, 302) every
+time. The captures still all differed (the background is time-animated), so the
+pass looked healthy while proving nothing about the pointer. `mouse move <x>
+<y>` dispatches at a coordinate whatever is or is not in the DOM there, which is
+also how the evaluated agent drove its own session. **The anchors and their
+`.wp` CSS are now deleted from the seed**: the harness derives its coordinates
+from the canvas box, so it no longer depends on the agent's markup at all, and
+there is one less piece of scaffolding for an agent to trip over or delete.
 
 The four gates are exactly those observations: build ok, server up, 5/5
 screenshots captured, and every screenshot decodes as a PNG with no two of them
@@ -129,24 +150,34 @@ Read that last gate literally: it proves *something changed between captures*,
 not that the *pointer* changed it. The task asks for an animated shader, so the
 background moves on its own and satisfies non-identity by itself — measured on
 the first green run, consecutive captures differ by 3.14-3.38/255 even in
-regions far from every hover point. A shader that ignores the pointer entirely
-passes all four gates today. What the trail claim actually rests on is the
-multimodal judge below, softly.
+regions far from every pointer position. A shader that ignores the pointer
+entirely passes all four gates today, and that is not hypothetical: rehearsing
+the fixed harness against the reference app *with its pointer listeners removed*
+scored 4/4 gates with 5/5 distinct captures and no trail anywhere. What the
+trail claim rests on is the multimodal judge below (softly) and, once a live run
+has produced it, the per-waypoint `spatial` measurement (Roadmap).
 
-Two more limits on that gate, found during review:
+Two things the harness now records per waypoint so that gap can be closed with
+data rather than a guess:
 
-- The 6x near/far spatial separation cited as evidence for the next
-  iteration's deterministic check (Roadmap) holds for only 2 of the 4
-  waypoint-to-waypoint transitions — wp1→wp2 and wp3→wp4. The other two
-  destinations sit under the hero's opaque heading text, which occludes the
-  canvas there, and separate by only 1.4–2.7x. A deterministic spatial
-  check needs to account for occlusion, not assume an open canvas
-  everywhere.
-- `hoverOk` is computed per waypoint but is not surfaced in the verdict,
-  logged, or gated today — and the field was added to the verify module 32
-  minutes after the archived green run's artifact was written, so no real
-  run has ever produced it. Treat it as unvalidated until a fresh run
-  actually exercises the code that computes it.
+- `pointerMoveOk` — whether every `mouse move` on that leg reported success, in
+  agent-browser's own `--json` envelope (`success: true` **and** `moved: true`),
+  alongside the exit code. It replaces the old `hoverOk`, which asked a question
+  that could never be answered `true`. Aggregated into one verdict-level
+  `pointerMoveOk`, logged, and soft-checked — not gated: no live eval run has
+  produced it yet, and gating on a signal no live run has produced is gating on
+  untested code.
+- `spatial` — mean |Δluma| against the previous capture inside a disc around the
+  pointer (`near`), versus over pixels far from *every* waypoint (`far`), their
+  `ratio`, and how far the single most-changed pixel landed from the pointer
+  (`maxDeltaOffset`). Recorded, never gated yet.
+
+An earlier review note said the near/far separation held for only 2 of the 4
+waypoint transitions, the other two being occluded by the hero's opaque heading
+text. Moving along a path fixed that too: the trail's tail lies outside the text
+even when its head is behind it, so all five waypoints now separate cleanly
+(ratio 14.5-18.2 against 0.85-1.26 pointer-blind — see the Roadmap for the
+numbers and the proposed threshold).
 
 Everything else is observed and never gated, and it now comes from two
 different sources on purpose (PR #272 review):
@@ -409,10 +440,28 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
 1. **Verification harness for `s2`** — re-render the agent's source in a clean
    workspace and grade the PNG that produces, so a forged output cannot pass.
    `n1` already works this way; `s2` does not yet.
-2. **Spatial screenshot check for `n1`** — measure the luma delta in a window
-   around the hovered waypoint against the frame's own baseline, so "the trail
-   follows the pointer and fades" becomes deterministic instead of resting on the
-   soft multimodal judge (see "Trust model").
+2. **Spatial screenshot check for `n1`** — turn the `spatial` numbers the
+   harness already records per waypoint into a hard gate, so "the trail follows
+   the pointer" becomes deterministic instead of resting on the soft multimodal
+   judge (see "Trust model"). The measurement is in; only the gate is pending,
+   and deliberately so: it lands once a live eval run has produced the field.
+   Three populations measured in a container against the archived green run's
+   own shipped app, all with the shipped code path:
+
+   | population | `near` | `far` | `ratio` | max-delta offset |
+   | --- | --- | --- | --- | --- |
+   | pointer hand-driven along the path (solved by hand) | 67.45-102.53 | 2.54-2.66 | 25.49-40.32 | 5-23 px |
+   | the harness's own rehearsal, same app | 51.07-85.06 | 3.01-5.86 | 14.52-18.22 | 7-14 px |
+   | same app, pointer listeners removed | 2.87-4.17 | 3.31-3.46 | 0.85-1.26 | 121-783 px |
+   | the archived green run itself (pointer frozen by the refused hovers) | 2.59-4.26 | 2.90-3.54 | 0.89-1.20 | 118-524 px |
+
+   Proposed: **`ratio >= 4` at every waypoint** — 3.6x below the weakest
+   positive and 3.2x above the strongest negative, and a ratio rather than an
+   absolute delta, so flickering the whole background harder cannot buy it
+   (that lifts `far` too). Optional companion if a stricter spatial claim is
+   wanted: `maxDeltaOffset <= 0.1 * min(canvas.w, canvas.h)` (69 px at the
+   observed 1050x693). `far` alone is not a candidate: it is the background's
+   own noise floor and it is ~3/255 whether the pointer works or not.
 3. **Journey funnel** — the milestones the evals log today become a reported
    funnel across runs (still never a gate: gating ritual rewards ritual).
 4. **Out-of-container verification.** Run the verify pass outside the
