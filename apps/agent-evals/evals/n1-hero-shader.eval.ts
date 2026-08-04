@@ -106,10 +106,42 @@ interface MilestoneContext {
 const RAN_NODE_SCRIPT = /\bnode\s+(?:-e\b|--eval\b|[^\s|&;]*\.(?:mjs|js|ts)\b)/;
 /** Stepped frames by hand: vgpu's `frame()`, a clock `.advance()`, a pingPong `.swap()`. */
 const DRIVES_FRAMES = /\bframe\s*\(|\.advance\s*\(|\.swap\s*\(/;
-/** Fed a pointer position the script made up, rather than a real cursor. */
-const SYNTHETIC_POINTER = /pointer|mouse/i;
-/** Rendered somewhere readable instead of onto a screen. */
-const RENDERS_OFFSCREEN = /writeFileSync|readPixels|\.png\b|toPng/i;
+/**
+ * Fed a pointer position the script made up, rather than a real cursor.
+ *
+ * Widened past `pointer|mouse` (PR #272 review, "4a predicate provenance"):
+ * in both archived n1 runs, `pointer|mouse` matched ONLY an English
+ * line-comment narrating what the script does ("// Simulate a pointer
+ * sweeping across the canvas…") — zero matches in the code itself, which
+ * names its variables `points`/`prevPoint`/`currPoint`. That is exactly the
+ * "certified by prose, not by mechanics" bug class this milestone's own
+ * comment says it was split off to fix. `cursor|point\b|Point\b` catches the
+ * identifier shape real synthetic-pointer code actually uses; combined with
+ * comment-stripping below, a match can now only come from code.
+ */
+const SYNTHETIC_POINTER = /pointer|mouse|cursor|point\b|Point\b/i;
+/**
+ * Rendered somewhere readable instead of onto a screen.
+ *
+ * `\.png\b` was dropped (PR #272 review, same finding): it let a REAL
+ * `<canvas onPointerMove>` DOM handler that merely references a
+ * `/noise.png` background image satisfy this predicate, even though nothing
+ * was ever rendered offscreen. `writeFileSync`/`readPixels`/`toPng` are
+ * genuine offscreen-read operations; a bare `.png` string reference is not.
+ */
+const RENDERS_OFFSCREEN = /writeFileSync|readPixels|toPng/i;
+
+/**
+ * Best-effort JS comment stripper, used only to keep milestone 4a keyed on
+ * code rather than prose (PR #272 review). Not a full lexer: a `//` inside a
+ * string literal (e.g. a URL) can be mis-stripped, which is an acceptable
+ * trade for a `.soft()` journey signal that never gates. Block comments
+ * first, then line comments, and line comments are skipped when the `//`
+ * is preceded by `:` so `https://…` in a written unit survives.
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
 
 /**
  * Journey signals: observed and logged, never gated.
@@ -143,13 +175,19 @@ const MILESTONES: { id: string; detect: (m: MilestoneContext) => boolean }[] = [
     // the agent invented, and it renders somewhere it can read back. Running
     // `node` at all is necessary but nowhere near sufficient — an agent that
     // only ever ran `node -e "require('vgpu')"` must not score this.
+    //
+    // All three sub-predicates are tested against the unit with comments
+    // stripped (PR #272 review, "4a predicate provenance"): otherwise an
+    // agent's own prose narrating what it's about to do ("// pointer sweeping
+    // across the canvas") can satisfy SYNTHETIC_POINTER on its own, and the
+    // milestone ends up certifying commenting style, not code.
     id: "tested headlessly by rendering frames with synthetic input",
     detect: (m) =>
       RAN_NODE_SCRIPT.test(m.commands) &&
-      m.writtenUnits.some(
-        (unit) =>
-          DRIVES_FRAMES.test(unit) && SYNTHETIC_POINTER.test(unit) && RENDERS_OFFSCREEN.test(unit),
-      ),
+      m.writtenUnits.some((unit) => {
+        const code = stripComments(unit);
+        return DRIVES_FRAMES.test(code) && SYNTHETIC_POINTER.test(code) && RENDERS_OFFSCREEN.test(code);
+      }),
   },
   {
     // Kept as its own signal, deliberately narrow: `clock()` + `.advance()` is
@@ -158,8 +196,16 @@ const MILESTONES: { id: string; detect: (m: MilestoneContext) => boolean }[] = [
     // not a testing-behaviour one. It used to be the ONLY headless signal, and
     // that conflation scored a real, thorough headless test as a miss twice:
     // both n1 runs to date drove frames with `frame(gpu, …)` + `trail.swap()`
-    // instead, which is just as headless and never touches `clock()`.
-    id: "found the clock().advance() API for headless stepping",
+    // instead, which is just as headless and never touches `.advance()`.
+    //
+    // PR #272 review, "the 4b label overstates the miss": both n1 runs DID
+    // call `clock()` — it's what the agent's own `hero-shader.ts` uses to
+    // drive its `requestAnimationFrame` loop (`clock(gpuInstance)` at
+    // `hero-shader.ts:92`). What's actually missing is only `.advance(`: the
+    // agent integrated time via the browser's own animation loop instead of
+    // the headless step-time-by-hand API. The label below is worded to say
+    // exactly that miss, not "never found `clock()`".
+    id: "found .advance() for headless clock-stepping (it did call clock() — see hero-shader.ts:92)",
     detect: (m) =>
       (/\bclock\s*\(/.test(m.written) && /\.advance\s*\(/.test(m.written)) ||
       (/\bclock\s*\(/.test(m.shipped) && /\.advance\s*\(/.test(m.shipped)),
@@ -261,6 +307,7 @@ interface N1Verdict {
   screenshots: {
     waypoint: number;
     path: string;
+    hoverOk?: boolean;
     decoded?: boolean;
     sha256?: string;
     width?: number;
@@ -269,6 +316,15 @@ interface N1Verdict {
     error?: string;
   }[];
   screenshotsOk: boolean;
+  /**
+   * Aggregate: true only if every waypoint's hover was reported ok (PR #272
+   * review, P1-6 — added by lane 1, alongside the per-entry
+   * `screenshots[].hoverOk` that already existed but was dropped before it
+   * reached this eval). Logged and soft-checked below, deliberately NOT a
+   * hard gate: it postdates every archived green run, so no real run has
+   * ever exercised the code that computes it yet.
+   */
+  hoverOk: boolean;
   notes: string[];
 }
 
@@ -381,27 +437,62 @@ export default defineEval({
     t.log(`funnel: integration_use_client=${hasUseClient}`);
     t.log(`funnel: integration_canvas=${hasCanvas}`);
 
-    // Counts how many agent-browser calls passed `--executable-path`, which is
-    // ONE way through the arm64/Chrome-for-Testing friction: dropping the flag
-    // from a later call in a session can make agent-browser fall back to
-    // about:blank while still printing success.
-    //
-    // A low count is not evidence of that fallback, and the first green run is
-    // the counterexample: 27 calls, zero with the flag, and a real browser
-    // throughout. That agent took a third route — it allowed agent-browser's
-    // postinstall (`npm config set allow-scripts=agent-browser`, then
-    // `npm i -g agent-browser --allow-scripts`), which provisions a browser of
-    // its own. Its `eval` calls came back with the hero's real text, a real
-    // canvas and webgpu true. Read the pair as "how", never as "whether".
-    const browserCalls = calls.filter((call) => /agent-browser\b/.test(call.command));
+    // A call is docs usage if it actually asks `vgpu docs` to do something.
+    // Checked FIRST and made mutually exclusive with agent_browser_calls_total
+    // below (PR #272 review, "agent_browser_calls_total overcounts browser
+    // usage"): `vgpu docs find "agent-browser"` and
+    // `vgpu docs cat agent-browser-webgpu.md` both contain the substring
+    // "agent-browser" as an argument, not as a browser invocation, and were
+    // previously counted into BOTH funnel numbers at once.
+    const docsCalls = calls.filter((call) => /vgpu\s+docs\b/.test(call.command));
+    // `docs_cmd_count` used to count bash CALLS, not `vgpu docs` INVOCATIONS —
+    // a single call can chain several (e.g. `docs find X; docs find Y`), and
+    // the archived green run ran 25 invocations across only 20 calls. The
+    // smaller, call-level number is the one that was being handed to the
+    // "discovery proportionate" judge below, which happens to make the run
+    // look less wandering than it actually was. Log both, feed the judge the
+    // real count.
+    const docsInvocationsTotal = docsCalls.reduce(
+      (total, call) => total + (call.command.match(/vgpu\s+docs\s+\S+/g)?.length ?? 0),
+      0,
+    );
+    t.log(`funnel: docs_cmd_count=${docsCalls.length}`);
+    t.log(`funnel: docs_invocations_total=${docsInvocationsTotal}`);
+
+    // Counts calls that actually DRIVE agent-browser against a live page —
+    // open/hover-equivalent mouse moves/screenshot/eval/wait/reload/console/
+    // close, plus `doctor` (which launches a real browser for its own
+    // self-check) — not merely calls whose command STRING contains the
+    // substring "agent-browser" (PR #272 review, same finding). Excluded,
+    // with the real green run's counts: the 2 docs calls above (already
+    // counted as docs, not browser), `npm i -g agent-browser@latest` (the
+    // package name is an argument to npm, agent-browser is never invoked),
+    // and bare CLI probing that touches no page (`which agent-browser`,
+    // `agent-browser --help`). That took the green run's 27-by-substring down
+    // to 22 calls that actually drove a browser.
+    const BROWSER_DRIVING_VERB =
+      /agent-browser\b[^\n;&|]*\b(?:open|hover|mouse|screenshot|eval|wait|reload|console|close|doctor)\b/;
+    const browserCalls = calls.filter(
+      (call) => !docsCalls.includes(call) && BROWSER_DRIVING_VERB.test(call.command),
+    );
     const browserCallsWithPath = browserCalls.filter((call) =>
       call.command.includes("--executable-path"),
     );
+    // Counts how many of those DRIVING calls passed `--executable-path`,
+    // which is ONE way through the arm64/Chrome-for-Testing friction:
+    // dropping the flag from a later call in a session can make agent-browser
+    // fall back to about:blank while still printing success.
+    //
+    // A low count is not evidence of that fallback, and the first green run is
+    // the counterexample: 22 driving calls, zero with the flag, and a real
+    // browser throughout. That agent took a third route — it allowed
+    // agent-browser's postinstall (`npm config set allow-scripts=agent-browser`,
+    // then `npm i -g agent-browser --allow-scripts`), which provisions a
+    // browser of its own. Its `eval` calls came back with the hero's real
+    // text, a real canvas and webgpu true. Read the pair as "how", never as
+    // "whether".
     t.log(`funnel: agent_browser_calls_total=${browserCalls.length}`);
     t.log(`funnel: agent_browser_calls_with_executable_path=${browserCallsWithPath.length}`);
-
-    const docsCalls = calls.filter((call) => /vgpu\s+docs\b/.test(call.command));
-    t.log(`funnel: docs_cmd_count=${docsCalls.length}`);
     t.log(`funnel: total_tool_calls=${turn.toolCalls.length}`);
     t.log(`funnel: view_image_calls=${viewImageCalls}`);
     t.log(`funnel: feedback_technique=${feedbackTechnique(shipped)}`);
@@ -423,13 +514,22 @@ export default defineEval({
     for (const note of verify.notes) t.log(`verify: ${note}`);
     for (const shot of verify.screenshots) {
       t.log(
-        `verify: wp-${shot.waypoint} decoded=${shot.decoded ?? false} ` +
+        `verify: wp-${shot.waypoint} decoded=${shot.decoded ?? false} hover_ok=${shot.hoverOk ?? "?"} ` +
           `${shot.width ?? "?"}x${shot.height ?? "?"} luma_stddev=${shot.lumaStdDev ?? "?"} ` +
           `sha=${shot.sha256 ?? "?"}${shot.error ? ` error=${shot.error}` : ""}`,
       );
     }
     if (!verify.buildOk) t.log(`verify: build log tail\n${verify.buildLog.stderrTail}`);
     t.log(`verify: browser_ready=${verify.browserReady}`);
+    // Logged and soft-checked, deliberately not gated (PR #272 review, P1-6):
+    // `hoverOk` is a lane-1 addition that postdates every archived n1 run, so
+    // no real run has ever exercised the code that computes it. Gating on an
+    // aggregate that has never once been produced by a live run would be
+    // gating on untested code, not on a validated signal.
+    t.log(`verify: hover_ok=${verify.hoverOk}`);
+    t.check(verify.hoverOk, equals(true))
+      .soft()
+      .label("agent-browser reported a successful hover at every waypoint");
 
     // ---- Gates (hard) -----------------------------------------------------
     // All four are the harness's own observations, not the agent's claims: this
@@ -518,7 +618,10 @@ export default defineEval({
       // "proportionate" while also making it count commands out of a transcript
       // scored a 7-call run and a 24-call run identically.
       "Counters for this run:",
-      `- documentation commands: ${docsCalls.length}`,
+      // The real invocation count, not the (smaller, call-level) docs_cmd_count
+      // — see the funnel-counter comment above. Feeding the judge the same
+      // number the summary logs is the whole point of this fix.
+      `- documentation commands: ${docsInvocationsTotal}`,
       `- agent-browser commands: ${browserCalls.length} (${browserCallsWithPath.length} with --executable-path)`,
       `- images viewed with the view-image tool: ${viewImageCalls}`,
       `- total tool calls: ${turn.toolCalls.length}`,

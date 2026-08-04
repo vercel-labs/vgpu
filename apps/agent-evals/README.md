@@ -133,6 +133,21 @@ regions far from every hover point. A shader that ignores the pointer entirely
 passes all four gates today. What the trail claim actually rests on is the
 multimodal judge below, softly.
 
+Two more limits on that gate, found during review:
+
+- The 6x near/far spatial separation cited as evidence for the next
+  iteration's deterministic check (Roadmap) holds for only 2 of the 4
+  waypoint-to-waypoint transitions — wp1→wp2 and wp3→wp4. The other two
+  destinations sit under the hero's opaque heading text, which occludes the
+  canvas there, and separate by only 1.4–2.7x. A deterministic spatial
+  check needs to account for occlusion, not assume an open canvas
+  everywhere.
+- `hoverOk` is computed per waypoint but is not surfaced in the verdict,
+  logged, or gated today — and the field was added to the verify module 32
+  minutes after the archived green run's artifact was written, so no real
+  run has ever produced it. Treat it as unvalidated until a fresh run
+  actually exercises the code that computes it.
+
 Everything else is observed and never gated: a nine-milestone journey
 (`vgpu doctor` → WGSL written → `vgpu check` → headless frame-stepping test with
 a synthetic pointer → the `clock().advance()` API specifically → `view-image` →
@@ -269,27 +284,43 @@ result as "worth reading the transcript", not as proof.
 
 ### n1-hero-shader: it re-runs the app, but only diffs the screenshots
 
-n1 closes the s2 hole — the harness builds, serves and hovers the app itself, so
-a forged artifact cannot pass and a claim in the transcript counts for nothing.
-Its own v0 gap is one level up: **the screenshot check is presence and
-non-identity only.** All it proves is that every capture is a real PNG and that
-no two of the five are byte-identical — that the pointer changes *something*. It
-does not check that the change is spatially correlated with the waypoint being
-hovered, and it does not check that anything fades over time. A shader that
-recolors the whole hero on any pointer movement passes those four gates.
+n1's four hard gates prove three things and no more: something built,
+something served, and five harness-captured screenshots decode and are not
+byte-identical. They do not prove the *pointer* caused what changed, and —
+as shipped — they did not prove the thing serving the app was the thing the
+agent built.
 
-What covers that gap today is the multimodal judge, and it is soft on purpose: a
-vision model's read of "does this look like a fading trail" is exactly the kind
-of signal that should inform a human, not block a run. The next iteration for
-this task is to make the spatial claim deterministic — compare the luma delta
-inside a window around the hovered waypoint against the frame's own baseline,
-across consecutive captures — at which point the judge becomes corroboration
-instead of the only evidence.
+Two independent mechanisms defeated all four gates with zero graphics code
+in the workspace, found during review:
 
-Two smaller things this task also does not prove: that the effect is *animated*
-(nothing samples two frames at the same pointer position), and that vgpu is what
-draws it (the integration milestone greps for the import; it is soft, like every
-journey signal).
+- **A foreign server on the fixed port (now mitigated).** An agent could
+  leave any process bound to `:4173` — demonstrated with a plain Node HTTP
+  server serving hand-written HTML with a time-animated 2D canvas and zero
+  pointer listeners — and every gate went green on genuine, harness-captured
+  screenshots of that foreign page, while the real `next start` died to a
+  log nothing read. Fixed by binding to an unguessable port and checking a
+  per-run nonce embedded in the served page, so "the thing on the port is
+  the thing built this run" is checked, not assumed.
+- **A `~/.profile` the agent writes (not fixable while grading shares the
+  agent's container).** The verify pass runs after the agent's turn, in the
+  same container, through the same login shell (`bash -lc`) the agent had
+  root in for its whole turn. A `~/.profile` written during that turn is
+  sourced by the verify pass's shell and can shim `curl`, `agent-browser`,
+  or anything else it calls, forcing every gate green without touching the
+  app. Hardening the shell narrows this but does not remove it: as long as
+  verification executes inside the agent's own container, an agent with
+  root can influence it. Closing this requires running verification
+  outside that container — tracked in Roadmap.
+
+Practically: v0's trust model assumes a non-adversarial agent. Against a
+model that is optimizing to pass rather than to build the feature, these
+gates are evidence, not proof. That's the same posture as `s2` above — n1
+removes the "read a file the agent left behind" failure mode, not yet the
+"runs inside the agent's own environment" one.
+
+Two smaller things the gates still don't prove, unchanged from before: that
+the effect is animated, and that vgpu is what draws it (the integration
+milestone greps for the import; it's soft, like every journey signal).
 
 Two things are already load-bearing and should not be softened:
 
@@ -331,5 +362,10 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
    soft multimodal judge (see "Trust model").
 3. **Journey funnel** — the milestones the evals log today become a reported
    funnel across runs (still never a gate: gating ritual rewards ritual).
-4. **More tasks** — beyond the gradient and the hero: a real shader bug, a
+4. **Out-of-container verification.** Run the verify pass outside the
+   container the agent had root in for its turn, so a `~/.profile` (or any
+   other environment artifact) the agent leaves behind cannot influence
+   grading. This is the remaining structural hole in n1's trust model; the
+   port/nonce fix closes the other one.
+5. **More tasks** — beyond the gradient and the hero: a real shader bug, a
    texture task, an error-code lookup.

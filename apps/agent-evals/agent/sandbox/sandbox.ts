@@ -253,6 +253,22 @@ const TASK_EXTRAS: Record<string, { label: string; command: string }[]> = {
       command: "apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth",
     },
     {
+      // PR #272 review (P1-9): `curl`, `pgrep` and `setsid` are behind hard
+      // gates in `agent/lib/verify/n1-hero-shader.mjs` — `curl` polls the
+      // served port and now also checks the per-run nonce, `pgrep` waits for
+      // Xvfb, `setsid` detaches `next start`/`Xvfb` — but were declared
+      // nowhere. They happen to ship in today's `ghcr.io/vercel/eve:latest`
+      // (measured with `command -v`), which is a floating tag: a future
+      // revision that drops one of them would silently turn `serverUp`/
+      // `browserReady` into infra regressions reported as agent failures,
+      // after a full 30-minute turn, with nothing here that would have
+      // caught it first. Unlike `xvfb`/`xauth` above, these ARE present on
+      // the base image today, so this line is a declaration of a real
+      // dependency, not a workaround for a real gap.
+      label: "verify-pass dependencies (curl for the port/nonce poll, pgrep/setsid for process control)",
+      command: "apt-get update && apt-get install -y curl procps util-linux",
+    },
+    {
       label: "playwright's chromium + its system libraries (Chrome for Testing publishes no arm64 build)",
       // `--with-deps` is load-bearing, not belt-and-braces: the bare
       // `playwright install chromium` downloads a browser that cannot start on

@@ -53,8 +53,13 @@ export default defineHook({
 });
 
 async function exportWorkspaceTar(sandbox: SandboxSession, sessionId: string): Promise<void> {
+      // `--exclude=./.next` (PR #272 review, P1-7): verify now runs `next
+      // build` before this tar is taken, so every n1 turn would otherwise
+      // carry a full Next build (typically 100-300 MB with cache) through an
+      // in-memory Buffer on every export, for no reader — the eval's own
+      // `SKIP_DIRS` already skips `.next` on the READ side and says so.
       const tar = await sandbox.run({
-        command: `tar -cf ${TAR_IN_SANDBOX} --exclude=./node_modules --exclude=./.git --exclude=./.vgpu-tarballs -C ${WORKSPACE} .`,
+        command: `tar -cf ${TAR_IN_SANDBOX} --exclude=./node_modules --exclude=./.git --exclude=./.vgpu-tarballs --exclude=./.next -C ${WORKSPACE} .`,
       });
       if (tar.exitCode !== 0) {
         throw new Error(`export-workspace: tar failed (exit ${tar.exitCode}): ${tar.stderr ?? ""}`);
