@@ -263,6 +263,17 @@ jobs:
       # than grade a stale tree).
       - name: Check example bundle isolation and budgets (docs-next)
         run: pnpm --filter docs-next check:example-bundles
+      # ANCHOR TGEIST-ML-ASSETS. Closes the gate hole TGEIST-14 found: `next build` (the step above)
+      # passes even when a same-origin ML asset 404s under the i18n proxy, because nothing it
+      # rendered is missing — the asset is fetched at runtime, not rendered as a page — and
+      # `thumbs:check` (gate G6) can't catch it either, since it renders in Node with no proxy in
+      # the loop. This starts `next start` on THIS build and asserts every committed ONNX model,
+      # `/ort/manifest.json` and the staged depth models come back 200, byte-identical and with no
+      # `x-middleware-rewrite` header (the literal signature of the proxy rewriting the asset to
+      # `/en/...` before it reaches the static file). Must stay in this job, right after the build,
+      # for the same reason as the two checks above: it grades this exact `.next`.
+      - name: Check ML asset smoke (no i18n-proxied 404s) (docs-next)
+        run: pnpm --filter docs-next check:ml-asset-smoke
       # TGEIST-05 anchor — remark plugins M1-M9 + gate (c) of Decision 4.
       # `test:remark` unit-tests the mappings (including the adversarial case the
       # design names: a `*.docs.md` path inside a code-span that must NOT be
@@ -277,8 +288,78 @@ jobs:
       # against `content/docs/**` once TGEIST-04 lands the real corpus.
       - name: Unit-test the docs-next remark plugins (M1-M9)
         run: pnpm --filter docs-next test:remark
-      - name: Check mdast render parity (Decision 4c)
+      # TGEIST-12 moved `check:mdast-parity` out of this job: it is gate (c) of Decision 4 and now
+      # runs inside `docs-parity` below, next to gates (a), (b) and (d), so the four of them report
+      # as one suite (that suite is the evidence F5 is approved on, per risk #9 — "PR de cutover
+      # irrevisable a ojo"). It is deliberately NOT duplicated here: two copies of a gate mean the
+      # next person to touch it fixes one of them.
+
+  # ANCHOR TGEIST-12 — Decision 4 ("Validación de paridad"), the four gates as a single suite plus
+  # the two checks that make their oracles trustworthy. Order is cheapest-first so a broken corpus
+  # costs seconds instead of a full Next build; each step is named after the gate it implements, and
+  # each prints its own verdict (never one opaque "all ok"):
+  #
+  #   schemas → the corpus satisfies the real @vercel/geistdocs Zod schemas (deferred here from
+  #             TGEIST-04, which had no install available in its job). A frontmatter failure this
+  #             finds in a second would otherwise surface as a fumadocs-mdx error minutes into (a).
+  #   (b)     → emission parity: every manifest record's page body is exactly its source minus
+  #             frontmatter, H1 and first paragraph (built by TGEIST-04).
+  #   (c)     → render parity: mdast text before the M1-M9 chain === after it, over the full
+  #             96-page corpus rather than the fixtures (built by TGEIST-05).
+  #   (a)     → compile gate: `next build` renders the whole tree. The first real compile gate this
+  #             documentation has ever had (risk #3 of the dossier).
+  #   (d)     → URL + anchor parity against `docs/url-inventory.json`, frozen from vgpu.sh in F1,
+  #             served by a real `next start` so redirects and the i18n proxy are in the loop, plus
+  #             the corpus link checker. This is the only gate that can see a live URL 404 after the
+  #             cutover; `next build` cannot, because nothing it was asked to render is missing.
+  #
+  # This job builds the app a second time (`docs-next-app-build` above already did): gate (d) needs
+  # a production server, and passing a multi-hundred-MB `.next` between jobs as an artifact is
+  # slower than rebuilding it. That is the CI cost risk #7 already accepts for the dual-run window;
+  # at cutover (TGEIST-15) `docs-next-app-build` disappears and this job keeps the build.
+  #
+  # The drift half of Decision 4 ("content/docs/** commiteado no puede driftear") lives in
+  # `check-drift.js`, run by the `docs-generated` job below — it needs no install and no build, so
+  # it belongs in the fast job, and putting it in both would just decay.
+  docs-parity:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Corpus schemas — geistdocs frontmatter + meta.json (Zod, real package schemas)
+        run: node apps/docs-next/scripts/check-content-schemas.mjs
+      - name: Gate (b) — content emission parity against the docs manifest
+        run: node packages/vgpu/lib/docs/generate/check-docs-content.mjs
+      - name: Gate (c) — mdast render parity over the full corpus (M1-M9)
         run: pnpm --filter docs-next check:mdast-parity
+      - name: Gate (a) — compile gate, next build of the whole content/docs tree
+        run: pnpm --filter docs-next build
+      # Both halves of gate (d) run against the build produced by the step above, in this job, on a
+      # server this script starts and stops itself. `--json` keeps the machine-readable report: it
+      # carries the ids every page really renders, which is what lets the link checker verify
+      # `#fragment` targets against observed HTML instead of a second implementation of
+      # github-slugger.
+      - name: Gate (d) — URL + anchor parity vs the frozen docs/url-inventory.json
+        run: node apps/docs-next/scripts/check-url-anchor-parity.mjs --json=url-anchor-report.json
+      - name: Gate (d) — corpus link checker (M7/M8/M9 resolve, M10 reported)
+        run: node apps/docs-next/scripts/check-doc-links.mjs --anchors-from=url-anchor-report.json
+      # Uploaded even on failure: this report is the artifact the cutover PR is reviewed against.
+      - name: Upload the URL + anchor parity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-url-anchor-parity
+          path: url-anchor-report.json
+          if-no-files-found: warn
 
   # ANCHOR TGEIST-06: G2 of Decision 1'. The examples API is transplanted into apps/docs-next
   # byte-for-byte, never rewritten, and this is what turns that promise into a machine invariant for
@@ -311,22 +392,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check skills/vgpu + docs manifest for drift
+      # TGEIST-12 extended this script to the geistdocs target as well, so this one step now covers
+      # both committed generator outputs: skills/vgpu + the docs manifest, AND
+      # apps/docs-next/content/docs (Decision 4's closing line). It regenerates both into a temp dir
+      # and diffs — it never writes to the working tree, which is what replaced TGEIST-04's
+      # "regenerate then `git diff --exit-code`" pair here (that pair mutated the checkout, so it
+      # could not run locally on a dirty tree and its failure message was a raw diff).
+      - name: Check skills/vgpu + docs manifest + content/docs for drift
         run: node packages/vgpu/lib/docs/generate/check-drift.js
       - name: Check docs/nav.json coverage against the docs manifest
         run: node scripts/check-nav-coverage.mjs
-      # TGEIST-04 anchor — geistdocs content target. Kept in this job (not a new one) because it has
-      # the same inputs and the same zero-dependency pure-Node requirement as check-drift.js above.
-      # Gate (b) of Decision 4: every page is its source minus frontmatter/H1/first paragraph, and
-      # nothing else. The regenerate + `git diff --exit-code` pair is the drift half: the committed
-      # apps/docs-next/content/docs tree cannot go stale. TGEIST-12 folds these steps into the
-      # `docs-parity` job together with gates (a), (c) and (d).
-      - name: Regenerate the geistdocs content tree
-        run: node packages/vgpu/lib/docs/generate/generate-geistdocs.js
-      - name: Check geistdocs content emission parity
-        run: node packages/vgpu/lib/docs/generate/check-docs-content.mjs
-      - name: Check the committed geistdocs content tree for drift
-        run: git diff --exit-code -- apps/docs-next/content/docs
+      # TGEIST-12: the coverage check above cannot see a *deletion*. Every curated level of
+      # docs/nav.json ends in an explicit "..." catch-all, so removing (or reordering) an entry keeps
+      # coverage green while silently demoting the page to the alphabetical fallback at the bottom of
+      # the sidebar. The snapshot makes that a reviewed change instead of an invisible one.
+      - name: Check docs/nav.json curation against its snapshot
+        run: node scripts/check-nav-curation.mjs
+      # Gate (b) of Decision 4 (content emission parity) moved to the `docs-parity` job above, where
+      # it reports next to gates (a), (c) and (d) as one suite. It is not duplicated here.
 
   examples-api-generated:
     # Frozen schemas, controlled vocabulary, and deterministic revision artifacts.

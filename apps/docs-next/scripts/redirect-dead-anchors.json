@@ -1,0 +1,397 @@
+{
+  "$comment": "TGEIST-12, gate (d). Redirect destinations whose `#anchor` production did not serve either: the manifest's `record.anchor` never matched a heading on the destination page, so these deep links were already landing at the top of the page before the migration. Frozen because the bucket used to be report-only, and a report-only bucket absorbs regressions: repointing all 255 symbol destinations at nonexistent anchors kept the gate green while this number went 117 → 275. Now any addition fails (a destination stopped resolving) and any entry that no longer applies fails as stale (it got fixed — shrink the list in the same PR). Fixing one for real means fixing `record.anchor` in the generator, or the heading it should point at. Regenerate with `node scripts/check-url-anchor-parity.mjs --write-allowlist` and review the diff.",
+  "entries": [
+    {
+      "source": "/packages/vgpu-core/bind",
+      "destination": "/docs/reference/vgpu-core/bind#bind"
+    },
+    {
+      "source": "/packages/vgpu-core/BufferOptions",
+      "destination": "/docs/reference/vgpu-core/buffer#bufferoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/createBindGroup",
+      "destination": "/docs/reference/vgpu-core/bind#createbindgroup"
+    },
+    {
+      "source": "/packages/vgpu-core/createBindGroupLayout",
+      "destination": "/docs/reference/vgpu-core/bind#createbindgrouplayout"
+    },
+    {
+      "source": "/packages/vgpu-core/CreateDeviceOptions",
+      "destination": "/docs/reference/vgpu-core/device#createdeviceoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/createPipelineLayout",
+      "destination": "/docs/reference/vgpu-core/bind#createpipelinelayout"
+    },
+    {
+      "source": "/packages/vgpu-core/createSampler",
+      "destination": "/docs/reference/vgpu-core/bind#createsampler"
+    },
+    {
+      "source": "/packages/vgpu-core/DeviceOptions",
+      "destination": "/docs/reference/vgpu-core/device#deviceoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/RenderBundleOptions",
+      "destination": "/docs/reference/vgpu-core/render-bundle#renderbundleoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/RenderBundleRecorder",
+      "destination": "/docs/reference/vgpu-core/render-bundle#renderbundlerecorder"
+    },
+    {
+      "source": "/packages/vgpu-core/ScalarUniformType",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#scalaruniformtype"
+    },
+    {
+      "source": "/packages/vgpu-core/StorageBufferOptions",
+      "destination": "/docs/reference/vgpu-core/storage-buffer#storagebufferoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/StructuredUniformOptions",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#structureduniformoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/TextureOptions",
+      "destination": "/docs/reference/vgpu-core/texture#textureoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformField",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#uniformfield"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformLayout",
+      "destination": "/docs/reference/vgpu-core/uniform-pool#uniformlayout"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformLayoutInfo",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#uniformlayoutinfo"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformOptions",
+      "destination": "/docs/reference/vgpu-core/uniform#uniformoptions"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformPoolOptions",
+      "destination": "/docs/reference/vgpu-core/uniform-pool#uniformpooloptions"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformSlot",
+      "destination": "/docs/reference/vgpu-core/uniform-pool#uniformslot"
+    },
+    {
+      "source": "/packages/vgpu-core/UniformValues",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#uniformvalues"
+    },
+    {
+      "source": "/packages/vgpu-core/ValidationError",
+      "destination": "/docs/reference/vgpu-core/vgpu-error#validationerror"
+    },
+    {
+      "source": "/packages/vgpu-core/VectorUniformInput",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#vectoruniforminput"
+    },
+    {
+      "source": "/packages/vgpu-core/WgslUniformType",
+      "destination": "/docs/reference/vgpu-core/structured-uniform#wgsluniformtype"
+    },
+    {
+      "source": "/packages/vgpu-render-inspect/NormalDebugMaterialSpec",
+      "destination": "/docs/reference/render/normal-debug-material#normaldebugmaterialspec"
+    },
+    {
+      "source": "/packages/vgpu-render-inspect/WireframeMaterialSpec",
+      "destination": "/docs/reference/render/wireframe-material#wireframematerialspec"
+    },
+    {
+      "source": "/packages/vgpu-render-inspect/WireframeMesh",
+      "destination": "/docs/reference/render/mesh-to-wireframe#wireframemesh"
+    },
+    {
+      "source": "/packages/vgpu-render-utils/CanvasResolution",
+      "destination": "/docs/reference/render/canvas-resolution#canvasresolution-2"
+    },
+    {
+      "source": "/packages/vgpu-render-utils/FrameClock",
+      "destination": "/docs/reference/render/frame-clock#frameclock-2"
+    },
+    {
+      "source": "/packages/vgpu-scene/OrbitOptions",
+      "destination": "/docs/reference/vgpu-scene/orbit#orbitoptions"
+    },
+    {
+      "source": "/packages/vgpu-scene/OrthographicCameraOptions",
+      "destination": "/docs/reference/vgpu-scene/orthographic-camera#orthographiccameraoptions"
+    },
+    {
+      "source": "/packages/vgpu-scene/PerspectiveCamera",
+      "destination": "/docs/reference/vgpu-scene/perspective-camera#perspectivecamera-2"
+    },
+    {
+      "source": "/packages/vgpu-scene/PerspectiveCameraOptions",
+      "destination": "/docs/reference/vgpu-scene/perspective-camera#perspectivecameraoptions"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-loader-vite/transformWgsl",
+      "destination": "/docs/reference/wgsl/loader-vite#transformwgsl"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-loader-vite/ViteLoadResult",
+      "destination": "/docs/reference/wgsl/loader-vite#viteloadresult"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-loader-vite/wgslVitePlugin",
+      "destination": "/docs/reference/wgsl/loader-vite#wgslviteplugin"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-runtime/ResolvedShader",
+      "destination": "/docs/reference/wgsl/resolve-shader#resolvedshader"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-runtime/ResolveOptions",
+      "destination": "/docs/reference/wgsl/resolve-shader#resolveoptions"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-runtime/SourceMap",
+      "destination": "/docs/reference/wgsl/resolve-shader#sourcemap"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-runtime/WGSLAst",
+      "destination": "/docs/reference/wgsl/resolve-shader#wgslast"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-runtime/WGSLModule",
+      "destination": "/docs/reference/wgsl/resolve-shader#wgslmodule"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-color/applyExposure",
+      "destination": "/docs/reference/wgsl-std/color#applyexposure"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-color/luminance",
+      "destination": "/docs/reference/wgsl-std/color#luminance"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-color/luminanceThreshold",
+      "destination": "/docs/reference/wgsl-std/color#luminancethreshold"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-color/tonemapAces",
+      "destination": "/docs/reference/wgsl-std/color#tonemapaces"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-color/tonemapReinhard",
+      "destination": "/docs/reference/wgsl-std/color#tonemapreinhard"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-fullscreen/fullscreenTriangleClip",
+      "destination": "/docs/reference/wgsl-std/fullscreen#fullscreentriangleclip"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-fullscreen/fullscreenTriangleUv",
+      "destination": "/docs/reference/wgsl-std/fullscreen#fullscreentriangleuv"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/hash1",
+      "destination": "/docs/reference/wgsl-std/hash#hash1"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/hash2",
+      "destination": "/docs/reference/wgsl-std/hash#hash2"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/hash3",
+      "destination": "/docs/reference/wgsl-std/hash#hash3"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/hashU32",
+      "destination": "/docs/reference/wgsl-std/hash#hashu32"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/pcg2d",
+      "destination": "/docs/reference/wgsl-std/hash#pcg2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/pcg3d",
+      "destination": "/docs/reference/wgsl-std/hash#pcg3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-hash/unitFloat",
+      "destination": "/docs/reference/wgsl-std/hash#unitfloat"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-perlin/fbmPerlin2d",
+      "destination": "/docs/reference/wgsl-std/perlin#fbmperlin2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-perlin/fbmPerlin3d",
+      "destination": "/docs/reference/wgsl-std/perlin#fbmperlin3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-perlin/perlin2d",
+      "destination": "/docs/reference/wgsl-std/perlin#perlin2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-perlin/perlin3d",
+      "destination": "/docs/reference/wgsl-std/perlin#perlin3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-simplex/fbmSimplex2d",
+      "destination": "/docs/reference/wgsl-std/simplex#fbmsimplex2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-simplex/fbmSimplex3d",
+      "destination": "/docs/reference/wgsl-std/simplex#fbmsimplex3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-simplex/simplex2d",
+      "destination": "/docs/reference/wgsl-std/simplex#simplex2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise-simplex/simplex3d",
+      "destination": "/docs/reference/wgsl-std/simplex#simplex3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise/voronoi2d",
+      "destination": "/docs/reference/wgsl-std/noise#voronoi2d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise/voronoi3d",
+      "destination": "/docs/reference/wgsl-std/noise#voronoi3d"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise/VoronoiSample2",
+      "destination": "/docs/reference/wgsl-std/noise#voronoisample2"
+    },
+    {
+      "source": "/packages/vgpu-wgsl-std-noise/VoronoiSample3",
+      "destination": "/docs/reference/wgsl-std/noise#voronoisample3"
+    },
+    {
+      "source": "/packages/vgpu-wgsl/ResolvedShader",
+      "destination": "/docs/reference/wgsl/resolved-shader#resolvedshader"
+    },
+    {
+      "source": "/packages/vgpu-wgsl/SourceMap",
+      "destination": "/docs/reference/wgsl/resolved-shader#sourcemap"
+    },
+    {
+      "source": "/packages/vgpu-wgsl/WGSLAst",
+      "destination": "/docs/reference/wgsl/resolved-shader#wgslast"
+    },
+    {
+      "source": "/packages/vgpu-wgsl/WGSLSource",
+      "destination": "/docs/reference/wgsl/resolved-shader#wgslsource"
+    },
+    {
+      "source": "/packages/vgpu/BundleOptions",
+      "destination": "/docs/reference/vgpu/bundle#bundleoptions"
+    },
+    {
+      "source": "/packages/vgpu/BundleRecorder",
+      "destination": "/docs/reference/vgpu/bundle#bundlerecorder"
+    },
+    {
+      "source": "/packages/vgpu/Clock",
+      "destination": "/docs/reference/vgpu/clock#clock-2"
+    },
+    {
+      "source": "/packages/vgpu/ComputeOptions",
+      "destination": "/docs/reference/vgpu/compute#computeoptions"
+    },
+    {
+      "source": "/packages/vgpu/DrawCallOptions",
+      "destination": "/docs/reference/vgpu/draw#drawcalloptions"
+    },
+    {
+      "source": "/packages/vgpu/DrawLayoutOptions",
+      "destination": "/docs/reference/vgpu/draw#drawlayoutoptions"
+    },
+    {
+      "source": "/packages/vgpu/DrawOptions",
+      "destination": "/docs/reference/vgpu/draw#drawoptions"
+    },
+    {
+      "source": "/packages/vgpu/EffectOptions",
+      "destination": "/docs/reference/vgpu/effect#effectoptions"
+    },
+    {
+      "source": "/packages/vgpu/FrameLoopHandle",
+      "destination": "/docs/reference/vgpu/frame#frameloophandle"
+    },
+    {
+      "source": "/packages/vgpu/FramePass",
+      "destination": "/docs/reference/vgpu/frame#framepass"
+    },
+    {
+      "source": "/packages/vgpu/FramePassOptions",
+      "destination": "/docs/reference/vgpu/frame#framepassoptions"
+    },
+    {
+      "source": "/packages/vgpu/FrameRunner",
+      "destination": "/docs/reference/vgpu/frame#framerunner"
+    },
+    {
+      "source": "/packages/vgpu/GeometryLike",
+      "destination": "/docs/reference/vgpu/draw#geometrylike"
+    },
+    {
+      "source": "/packages/vgpu/InitOptions",
+      "destination": "/docs/reference/vgpu/init#initoptions"
+    },
+    {
+      "source": "/packages/vgpu/PassOptions",
+      "destination": "/docs/reference/vgpu/effect#effectoptions"
+    },
+    {
+      "source": "/packages/vgpu/PingPongStorage",
+      "destination": "/docs/reference/vgpu/target#pingpongstorage"
+    },
+    {
+      "source": "/packages/vgpu/PingPongTargets",
+      "destination": "/docs/reference/vgpu/target#pingpongtargets"
+    },
+    {
+      "source": "/packages/vgpu/StorageAccess",
+      "destination": "/docs/reference/vgpu/compute#storageaccess"
+    },
+    {
+      "source": "/packages/vgpu/StorageBuffer",
+      "destination": "/docs/reference/vgpu/compute#storagebuffer"
+    },
+    {
+      "source": "/packages/vgpu/SurfaceOptions",
+      "destination": "/docs/reference/vgpu/surface#surfaceoptions"
+    },
+    {
+      "source": "/packages/vgpu/SurfaceResizeEvent",
+      "destination": "/docs/reference/vgpu/surface#surfaceresizeevent"
+    },
+    {
+      "source": "/packages/vgpu/TargetOptions",
+      "destination": "/docs/reference/vgpu/target#targetoptions"
+    },
+    {
+      "source": "/packages/vgpu/TargetTextureOptions",
+      "destination": "/docs/reference/vgpu/target#targettextureoptions"
+    },
+    {
+      "source": "/packages/vgpu/TimerSpan",
+      "destination": "/docs/reference/vgpu/timer#timerspan"
+    },
+    {
+      "source": "/packages/vgpu/UniformOptions",
+      "destination": "/docs/reference/vgpu/uniform#uniformoptions"
+    },
+    {
+      "source": "/packages/vgpu/VisibilityOptions",
+      "destination": "/docs/reference/vgpu/visibility#visibilityoptions"
+    },
+    {
+      "source": "/packages/vgpu/VisibilityQuery",
+      "destination": "/docs/reference/vgpu/visibility#visibilityquery"
+    }
+  ]
+}

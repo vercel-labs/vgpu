@@ -1,0 +1,73 @@
+---
+title: API Reference
+description: API reference for vgpu packages, generated from the documentation manifest.
+---
+
+Browse generated API docs by topic. Every symbol comes from the docs manifest and deep-links to an anchor on its topic page.
+
+## Start with vgpu
+
+<Card
+  title="vgpu"
+  description="Public API: init, Gpu, effect, draw, compute, frame, bundle, target, ping-pong, and uniforms."
+  href="/docs/reference/vgpu"
+/>
+
+## Packages
+
+{/* Prod (https://vgpu.sh/docs/reference) serves each of these 8 packages as a heading with an
+    id="<packageSlug>" anchor (apps/docs/app/docs/reference/page.tsx: `<section id={group.packageSlug}>`),
+    and the 19 ported `/packages/<pkg>` redirects in lib/docs-redirects.mjs land on exactly those
+    fragments (e.g. /packages/vgpu-adapter-node -> /docs/reference#vgpu-adapter-node). The `id` prop
+    below is required so those deep links keep landing on a fragment instead of the bare page. */}
+
+<Cards>
+  <Card
+    id="vgpu"
+    title="vgpu"
+    description="Public API: init, Gpu, effect, draw, compute, frame, bundle, target, ping-pong, and uniforms."
+    href="/docs/reference/vgpu"
+  />
+  <Card
+    id="vgpu-scene"
+    title="vgpu/scene"
+    description="Tree-shakeable geometry, camera, color, and orbit helpers without a retained scene graph."
+    href="/docs/reference/vgpu-scene"
+  />
+  <Card
+    id="wgsl"
+    title="@vgpu/wgsl"
+    description="WGSL compile-time entry points, runtime resolution, reflection metadata, and bundler loaders."
+    href="/docs/reference/wgsl"
+  />
+  <Card
+    id="wgsl-std"
+    title="@vgpu/wgsl-std"
+    description="Standard WGSL modules for color, fullscreen triangles, hashes, and procedural noise."
+    href="/docs/reference/wgsl-std"
+  />
+  <Card
+    id="vgpu-core"
+    title="vgpu/core"
+    description="Advanced escape hatches for native WebGPU handles, buffers, textures, bind groups, and structured uniforms."
+    href="/docs/reference/vgpu-core"
+  />
+  <Card
+    id="render"
+    title="@vgpu/render"
+    description="Advanced render tooling for inspection, performance measurement, utilities, and mesh editing."
+    href="/docs/reference/render"
+  />
+  <Card
+    id="vgpu-adapter-node"
+    title="@vgpu/adapter-node"
+    description="The Node.js WebGPU adapter — createNodeAdapter() and the Dawn binary resolution it wraps."
+    href="/docs/reference/vgpu-adapter-node"
+  />
+  <Card
+    id="vgpu-mock"
+    title="vgpu/mock"
+    description="A software Gpu implementation for tests and CI that has no GPU at all."
+    href="/docs/reference/vgpu-mock"
+  />
+</Cards>

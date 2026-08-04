@@ -33,9 +33,25 @@ const proxy = createProxy({
 // slash keeps the bare path on the proxy, where geistdocs answers its normal localized 404, and
 // still cannot over-match a sibling like `/previewfoo`. Verified on this build: `/preview` 404,
 // `/preview/gradient` 200, `/previewfoo` proxied.
+// TGEIST-ML-ASSETS: `/models/**` and `/ort/**` are excluded from the proxy, for the same reason and
+// with the same evidence as the TGEIST-06 and TGEIST-08 entries above. Both are same-origin static
+// binaries the examples fetch by absolute path -- the committed `public/models/mnist/**` and
+// `public/models/mediapipe-hands/**` ONNX graphs, and `public/models/depth/**` /
+// `public/ort/**`, which `prepare-depth-models.mjs` / `prepare-ort-assets.mjs` stage from a pinned
+// source and are gitignored on purpose (never committed). Neither directory has a route under
+// `app/[lang]/`, so while the proxy is active on them the i18n rewrite sends e.g.
+// `/models/mnist/mnist-12.onnx` to `/en/models/mnist/mnist-12.onnx`, which no route matches.
+// Verified empirically against `next start` on this build: 404 with
+// `x-middleware-rewrite: /en/models/mnist/mnist-12.onnx` before this entry, 200 with the old app's
+// exact bytes after it -- and the same for `/ort/manifest.json`. Without this, `mnist-classifier` and
+// `depth-estimation` fail to load their model (`OrtEnvironmentError`) and `air-painting` would fail
+// the same way the moment it starts fetching its own models. The pattern is `models/` and `ort/`
+// (not anchored to specific sub-paths) because every sub-path under either directory is a static
+// asset with no localized counterpart, so there is nothing under those prefixes for the proxy to
+// legitimately handle.
 export const config = {
   matcher: [
-    "/((?!api(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],
 };
 

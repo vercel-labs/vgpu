@@ -1,6 +1,10 @@
 import { createRequire } from "node:module";
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
+// Plain .mjs helper, shared with scripts/check-url-anchor-parity.mjs (which must
+// run on bare node, with no TS toolchain), so the gate and the app can never
+// disagree about what the redirect table is.
+import { loadDocsRedirects } from "./lib/docs-redirects.mjs";
 
 const withMDX = createMDX();
 const require = createRequire(import.meta.url);
@@ -47,6 +51,18 @@ const config: NextConfig = {
     "/.well-known/vgpu-examples.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/latest.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/revisions/**": ["./generated/examples-api/**/*"],
+  },
+
+  // ANCHOR TGEIST-12 (gate (d) of Decision 4). The table lives in
+  // `lib/docs-redirects.mjs` — see the file header for why each family exists.
+  // Short version: 7 live `/docs/guides/concepts-*` URLs that the new tree
+  // consolidates under `/docs/concepts/*`, 4 section roots that prod serves and
+  // the generated tree has no `index.md` for, and the whole pre-`/docs` URL
+  // space (including the manifest-derived `/packages/<pkg>/<Symbol>` deep
+  // links) ported from the app this one replaces. `next build` would happily
+  // ship without any of them; `scripts/check-url-anchor-parity.mjs` will not.
+  async redirects() {
+    return loadDocsRedirects();
   },
 
   images: {

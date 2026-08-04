@@ -3,6 +3,7 @@ import { createDocsPage } from "@vercel/geistdocs/pages/docs";
 import { getMDXComponents } from "@/components/geistdocs/mdx-components";
 import { config } from "@/lib/geistdocs/config";
 import { geistdocsSource } from "@/lib/geistdocs/source";
+import { titleAnchorId } from "@/lib/title-anchor.mjs";
 
 const docsPage = createDocsPage({
   config,
@@ -19,7 +20,42 @@ const docsPage = createDocsPage({
   tableOfContentPopover: {
     enabled: false,
   },
-  renderTop: ({ data }) => <MobileDocsBar toc={data.toc} />,
+  // ANCHOR TGEIST-12 / Decision 2.3 — the page-title anchor.
+  //
+  // The old site's `<h1>` came from the markdown body, so `/docs/cli#cli` had a
+  // real target: 97 anchors frozen from prod are exactly that, and so are most of
+  // the `#anchor` destinations of the API reference redirects (a single-symbol
+  // topic's heading *is* the page title). `createDocsPage` renders the title
+  // itself and takes no props for it, so the id goes on a zero-height element
+  // here — `renderTop`'s output is the page's first child and the title div the
+  // second, so this is the same scroll target the `<h1>` would have been.
+  // `titleAnchorId` returns null when a body heading already owns that id (the
+  // reference pages open every symbol with an `<h1>`), because two identical ids
+  // in one document would shadow the real heading.
+  //
+  // Two things the classes are load-bearing for, both found by measuring the
+  // rendered page rather than by reading it:
+  //   - `absolute` keeps the element out of flow. `article#nd-page` is a flex
+  //     column with `gap-4`, and a `block h-0` span is still a **flex item**, so
+  //     the gap above the title was applied to it and every page's title moved
+  //     down 16px (measured: `h1` top 136 instead of 120). An out-of-flow element
+  //     contributes no flex item and no gap, and its static position — which is
+  //     what `top: auto` resolves to — is still the top of the content box, so it
+  //     is the same scroll target. `-mb-4` would also cancel it, by hardcoding
+  //     the exact gap the package happens to use today.
+  //   - `scroll-m-28` matches what the layout puts on every body heading
+  //     (`h2.scroll-m-28`), so `/docs/cli#cli` lands the title in the same place
+  //     under the sticky header that `#installation-and-usage` lands its heading.
+  //     Without it the fragment scrolled the title *behind* the header.
+  renderTop: ({ data }) => {
+    const anchor = titleAnchorId({ title: data.title, toc: data.toc });
+    return (
+      <>
+        {anchor ? <span aria-hidden="true" className="absolute h-0 scroll-m-28" id={anchor} /> : null}
+        <MobileDocsBar toc={data.toc} />
+      </>
+    );
+  },
 });
 
 export default docsPage.Page;

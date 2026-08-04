@@ -16,6 +16,8 @@
     "depth:models": "node scripts/prepare-depth-models.mjs",
     "depth:models:check": "node scripts/prepare-depth-models.mjs --check",
     "check:example-imports": "node scripts/check-example-imports.mjs",
+    "$comment:tgeist-ml-assets": "TGEIST-ML-ASSETS: `check:ml-asset-smoke` starts `next start` on the production build and GETs every committed ONNX model + /ort/manifest.json + the staged depth models, asserting 200, no x-middleware-rewrite (the i18n proxy rewriting the asset to /en/... before it reaches the static file) and byte-identical content. Closes the gate hole TGEIST-14 found: `next build` and `thumbs:check` both pass with these assets 404ing under the proxy.",
+    "check:ml-asset-smoke": "node scripts/check-ml-asset-smoke.mjs",
     "build:workspace": "pnpm --dir ../.. run build",
     "translate": "npx @vercel/geistdocs translate",
     "$comment:tgeist-05": "TGEIST-05: `test:remark` unit-tests the M1-M9 remark plugins (node:test, no runner dependency: the root vitest config only picks up *.test.ts under apps/docs-next, added by TGEIST-06 for the transplanted examples API suite, so this .mjs suite still needs its own runner). `check:mdast-parity` is gate (c) of Decision 4 \u2014 it also asserts every surviving fence language is one Shiki can load (M4) and that no *.docs.md / bare logical link survives (M7/M8).",
@@ -25,7 +27,11 @@
     "check:examples-api-tracing": "node scripts/check-examples-api-tracing.mjs",
     "check:examples-api-transplant": "node scripts/check-examples-api-transplant.mjs",
     "$comment:tgeist-08": "TGEIST-08: `check:example-bundles` measures the production chunks of the /preview/[slug] routes and grades them against scripts/example-chunk-budgets.json, whose numbers were re-measured against THIS app (Grupo D re-baseline; the script's algorithm is the old app's, unchanged apart from accepting the apps/docs-next directory name in its WGSL source markers). It reads .next/static/chunks and never builds, so it must run right after `build` in the same job -- it refuses to grade chunks older than the sources anyway.",
-    "check:example-bundles": "node scripts/check-example-bundles.mjs"
+    "check:example-bundles": "node scripts/check-example-bundles.mjs",
+    "$comment:tgeist-12": "TGEIST-12: gate (d) of Decision 4 plus the schema check its siblings rely on. `check:url-anchor-parity` starts `next start` on the production build itself (so next.config redirects and the geistdocs i18n proxy are in the loop) and asserts every URL + anchor frozen from prod in docs/url-inventory.json still resolves; pass `--json=<file>` to keep the report and `--write-allowlist` to re-record known slugger renames. `check:doc-links` resolves every link of the corpus on the post-M1-M9 mdast and reports M10; give it the `--json` report to verify `#fragment` targets against ids observed in HTML. `check:content-schemas` validates the corpus against the real @vercel/geistdocs Zod schemas in about a second, so a bad frontmatter does not cost a whole build. All three run in the `docs-parity` CI job.",
+    "check:url-anchor-parity": "node scripts/check-url-anchor-parity.mjs",
+    "check:doc-links": "node scripts/check-doc-links.mjs",
+    "check:content-schemas": "node scripts/check-content-schemas.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.134",

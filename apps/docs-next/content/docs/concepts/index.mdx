@@ -1,0 +1,44 @@
+---
+title: Concepts
+description: The core ideas behind every vgpu program, in reading order.
+---
+
+These ideas cover every vgpu program. Read them in order — each page builds on the previous one.
+
+<Cards>
+  <Card
+    title="Context"
+    description="init() creates the Gpu context; every surface, target, effect, and frame is created from it."
+    href="/docs/concepts/context"
+  />
+  <Card
+    title="Draws"
+    description="draw(gpu, opts) renders geometry with custom vertex buffers — you write the vertex stage, geometry(gpu, ...) supplies the buffers."
+    href="/docs/concepts/draws"
+  />
+  <Card
+    title="Compilation"
+    description="Pipelines compile lazily on first use; pre-warm them during load so the first frame doesn't hitch."
+    href="/docs/concepts/compilation"
+  />
+  <Card
+    title="Effects"
+    description="An effect is a full-screen fragment shader; chain effects by binding a target as another effect's input."
+    href="/docs/concepts/effects"
+  />
+  <Card
+    title="Passes"
+    description="A pass composites any number of draws into one target; a single shader can draw directly."
+    href="/docs/concepts/passes"
+  />
+  <Card
+    title="Frames"
+    description="frame(gpu, cb) encodes your passes and submits once; frameLoop(gpu, cb) drives animation."
+    href="/docs/concepts/frames"
+  />
+  <Card
+    title="Render bundles"
+    description="bundle(gpu, opts, record) records draws once; replaying them each frame skips re-encoding."
+    href="/docs/concepts/render-bundles"
+  />
+</Cards>
