@@ -39,11 +39,21 @@ The `examples` commands never execute fetched code.
 The `vgpu check` command validates a WGSL file without running it. On success it prints the shader's reflection data as JSON; on failure it reports the validation errors and exits non-zero. Use it to catch shader problems early, in your editor, pre-commit hooks, or CI.
 
 ```text
-Usage: vgpu check <file.wgsl>
+Usage: vgpu check <file.wgsl> [--require-validation]
 ```
+
+| Flag | Argument |
+| --- | --- |
+| `--require-validation` | none |
+
+Device-backed WGSL validation runs in `resolveShader`'s default `"auto"` mode: when this machine has a WebGPU device, invalid WGSL fails the command; when it does not, `check` warns once on stderr and still reports reflection. Pass `--require-validation` (or set `VGPU_VALIDATE=require`) to fail instead of degrading — useful in CI, where a missing device would otherwise silently reduce `check` to a parse-and-reflect pass. The JSON payload includes a `validation` object (`{ mode, attempted, ok, skipped? }`) describing exactly what ran, and error payloads carry `fix`/`where` when the underlying error provides them.
+
+A failing device check never costs you the rest of the document: when validation rejects the shader (or, under `--require-validation`, when no device could be acquired), `check` still prints the full payload — `diagnostics`, `reflection` and `wgsl` — and reports the failure as `validation.error` (`{ code, message, fix?, where?, ... }`) with `ok: false`, exiting 1. So the JSON contract is the same whether or not the machine running `check` has a WebGPU device; only `validation` differs. Resolution failures (a missing import, a module that declares bindings, an invalid `VGPU_VALIDATE`) remain hard errors: they print a single error object on stderr with no payload.
 
 ```terminal
 npx vgpu check ./shaders/main.wgsl
+npx vgpu check ./shaders/main.wgsl --require-validation
+VGPU_VALIDATE=require npx vgpu check ./shaders/main.wgsl
 ```
 
 ## docs

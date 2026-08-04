@@ -21,7 +21,7 @@ interface ResolveOptions {
   readonly rootDir?: string;
   readonly packageMap?: Record<string, string>;
   readonly modules?: Record<string, string>;
-  readonly validate?: boolean;
+  readonly validate?: "off" | "auto" | "require" | boolean;
   readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" };
 }
 
@@ -36,10 +36,12 @@ declare function resolveShader(opts: ResolveOptions): Promise<ResolvedShader>;
 | opts.rootDir | string | ✖ | `dirname(entry)` for cache-key grouping; no `@/` alias unless provided | Base directory for `@/foo.wgsl` imports. Also used as the default root passed to cache key generation when present. |
 | opts.packageMap | `Record<string, string>` | ✖ | `{}` | Prefix map for package-style WGSL imports. If a specifier starts with a key, the target prefix is joined with the remainder. |
 | opts.modules | `Record<string, string>` | ✖ | filesystem reads | In-memory WGSL filesystem. Keys are normalized with `/`; relative imports use virtual paths and package imports require `packageMap`. |
-| opts.validate | boolean | ✖ | `true` | When not `false`, validates emitted WGSL via `validateWGSL`. In normal processes validation is a no-op unless `VGPU_DOCKER_TEST=1`; in that mode Naga/WebGPU diagnostics can throw. Independent of this flag, `minify` with `identifiers: "safe"` always self-checks that renaming left no dangling reference (`VGPU-WGSL-MINIFY-DANGLING-IDENT`), with no GPU involved. |
+| opts.validate | `"off" | "auto" | "require" | boolean` | ✖ | `"auto"`, or `VGPU_VALIDATE` when set | Device-backed validation of emitted WGSL (`createShaderModule` plus a compilation-info round trip) through a lazily imported `@vgpu/adapter-node`. `"auto"` attempts validation and throws `VGPU-WGSL-NAGA-UNKNOWN` for invalid WGSL, but when no device/adapter is available it warns once to stderr and continues, recording the skip on `ResolvedShader.validation`. `"require"` (or `true`) throws `VGPU-WGSL-VALIDATE-NO-DEVICE`/`VGPU-WGSL-VALIDATE-ADAPTER-MISSING` instead of skipping. `"off"` (or `false`) never attempts validation and never imports device code. An explicit value here always wins over `VGPU_VALIDATE` (`"off"|"auto"|"require"`; anything else throws `VGPU-WGSL-VALIDATE-ENV-INVALID`). Independent of this option, `minify` with `identifiers: "safe"` always self-checks that renaming left no dangling reference (`VGPU-WGSL-MINIFY-DANGLING-IDENT`), with no GPU involved. |
 | opts.minify | `boolean | MinifyOptions` | ✖ | `false` | `true` means `{ whitespace: true, identifiers: "safe" }`; object form defaults to `{ whitespace: true, identifiers: "none" }`; `false` or omitted preserves whitespace/comments after resolver emission and DCE. |
 
-**Returns:** `Promise<ResolvedShader>` — resolved WGSL plus dependency paths, cache keys, lightweight AST modules, source map, diagnostics, and reflection for entry points/resources.
+Validation acquires one WebGPU device per process through `@vgpu/adapter-node` and reuses it across calls, then destroys it shortly after the last validation finishes — a live device holds handles on the Node event loop, so without that release a script that validated a shader would never exit on its own. A later `resolveShader` transparently acquires a new device; a *failed* acquisition is remembered and **not retried for the lifetime of the process**, so after installing a device (for example `npx vgpu install-software-renderer`) restart the process rather than expecting the next call to pick it up.
+
+**Returns:** `Promise<ResolvedShader>` — resolved WGSL plus dependency paths, cache keys, lightweight AST modules, source map, diagnostics, reflection for entry points/resources, and `validation: { mode, attempted, ok, skipped? }` reporting what the device-backed check actually did (`skipped` carries the `code`, `message`, and `fix` when `"auto"` could not get a device).
 
 **Throws:** `VGPU-RESOLVE-MODULE-BINDING` when a non-entry imported module declares any `@group(...)` or `@binding(...)` resource — move the resource declaration into the entry module and export only structs/functions from the module. The error message is exactly:
 
@@ -74,7 +76,10 @@ Package specifiers resolve in two steps: first by walking `node_modules` up from
 **Throws:** `VGPU-WGSL-NS-NOTVALUE` or `VGPU-WGSL-NS-NOMEMBER` for invalid namespace use — access exported namespace members directly.
 **Throws:** `VGPU-WGSL-MINIFY-IDENTIFIERS` when `minify.identifiers` is not `"none"` or `"safe"` — pass a valid mode.
 **Throws:** `VGPU-WGSL-MINIFY-BLOCK`, `VGPU-WGSL-LEX-UNTERM-COMMENT`, or `VGPU-WGSL-LEX-UNTERM-STRING` for unterminated WGSL comments/strings during scanning/minification — close the token.
-**Throws:** `VGPU-WGSL-NAGA-UNKNOWN` when validation is active and WebGPU/Naga rejects emitted WGSL or no validation adapter is available — fix the WGSL reported by the diagnostic.
+**Throws:** `VGPU-WGSL-NAGA-UNKNOWN` when validation is active (`"auto"` or `"require"`) and WebGPU/Naga rejects emitted WGSL — fix the WGSL reported by the diagnostic.
+**Throws:** `VGPU-WGSL-VALIDATE-NO-DEVICE` in `"require"` mode when `@vgpu/adapter-node` cannot acquire a device — the error forwards adapter-node's own `fix` (and `metadata.causeCode`); run `npx vgpu doctor`, or use `"auto"`/`"off"` on machines without a GPU.
+**Throws:** `VGPU-WGSL-VALIDATE-ADAPTER-MISSING` in `"require"` mode when `@vgpu/adapter-node` (an optional peer dependency) cannot be imported — install it (`pnpm add -D @vgpu/adapter-node`), or pass `validate: "off"`.
+**Throws:** `VGPU-WGSL-VALIDATE-ENV-INVALID` when `VGPU_VALIDATE` is set to anything other than `off`, `auto`, or `require` — unset it or use one of those values.
 
 **Diagnostic:** `VGPU-WGSL-RESERVED-IDENT` (severity `error`, never thrown) for every declared identifier that WGSL reserves — struct names, struct members, type aliases, module-scope variables, overrides, functions, parameters, and local variables. Each diagnostic carries the offending name, `line`/`column`, and a `range` pointing at the source module. Rename the declaration; Dawn/Tint would otherwise reject the shader only at pipeline creation.
 

@@ -14,7 +14,8 @@ import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
 import { wgslError } from "./errors.ts";
 import { scan } from "./scanner.ts";
-import { validateWGSL } from "./validation.ts";
+import { releaseValidationDevice, retainValidationDevice } from "./validation-device.ts";
+import { resolveDefaultValidateMode, validateWGSL, type ValidateMode, type ValidationOutcome } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
 export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
@@ -27,16 +28,24 @@ export interface ResolveOptions {
   readonly modules?: Record<string, string>;
   /**
    * Validate emitted WGSL against a real WebGPU adapter (`createShaderModule` plus a
-   * compilation-info round trip). Defaults to `true`, but **this device-backed check is a no-op
-   * outside the project's Docker test harness**: `validateWGSL` returns immediately unless
-   * `VGPU_DOCKER_TEST=1`, and it also needs an adapter it can create. Set it to `false` explicitly
-   * if you do not want the (currently no-op) attempt.
+   * compilation-info round trip).
    *
-   * Independent of this flag, `minify: true` / `minify: { identifiers: "safe" }` always self-checks
-   * that identifier renaming did not orphan a reference to a local it renamed. That check needs no
-   * GPU and cannot be disabled.
+   * - `"off"` / `false` — never attempt validation; device code is never imported.
+   * - `"auto"` (default) — attempt validation. If a device is available, invalid WGSL still throws
+   *   `VGPU-WGSL-NAGA-UNKNOWN`. If no device/adapter is available, warns once to stderr with the
+   *   error code and fix, continues, and records the skip on `ResolvedShader.validation`.
+   * - `"require"` / `true` — attempt validation; throws `VGPU-WGSL-VALIDATE-NO-DEVICE` (or
+   *   `VGPU-WGSL-VALIDATE-ADAPTER-MISSING`) instead of silently skipping when no device is
+   *   available.
+   *
+   * Defaults to `"auto"`, or to `VGPU_VALIDATE` (`"off"|"auto"|"require"`) when set — an explicit
+   * `validate` option here always wins over `VGPU_VALIDATE`.
+   *
+   * Independent of this option, `minify: true` / `minify: { identifiers: "safe" }` always
+   * self-checks that identifier renaming did not orphan a reference to a local it renamed. That
+   * check needs no GPU and cannot be disabled.
    */
-  readonly validate?: boolean;
+  readonly validate?: ValidateMode | boolean;
   /**
    * WGSL minification. `true` uses the production preset
    * `{ whitespace: true, identifiers: "safe" }`; object form defaults to
@@ -47,9 +56,17 @@ export interface ResolveOptions {
 export interface WGSLModule { readonly path: string; readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[]; readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[]; readonly bytes: number; readonly hash8: string }
 export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
-export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection }
+export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection; readonly validation: { readonly mode: ValidateMode; readonly attempted: boolean; readonly ok: boolean; readonly skipped?: { readonly code: string; readonly message: string; readonly fix?: string } } }
 
 const scanCache = new Map<string, MangleModule>();
+
+/** `true` -> `"require"`, `false` -> `"off"`, unset -> `VGPU_VALIDATE` (default `"auto"`). */
+function normalizeValidateMode(value: ResolveOptions["validate"]): ValidateMode {
+  if (value === undefined) return resolveDefaultValidateMode();
+  if (value === true) return "require";
+  if (value === false) return "off";
+  return value;
+}
 
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
   const loaded = new Map<string, MangleModule>();
@@ -79,12 +96,28 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   }
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);
-  if (opts.validate !== false) await validateWGSL(emittedWgsl);
-  const wgsl = applyMinifyWgsl(emittedWgsl, minify);
-  if (opts.validate !== false && minify.identifiers === "safe") await validateWGSL(wgsl);
+  const validateMode = normalizeValidateMode(opts.validate);
+  // One lease for the whole call: this function validates twice under `identifiers: "safe"`, and
+  // without an outer lease the idle release could destroy the device between the two, paying full
+  // adapter discovery again mid-call. Released in `finally` so a thrown diagnostic still frees it.
+  if (validateMode !== "off") retainValidationDevice();
+  let validationOutcome: ValidationOutcome;
+  let wgsl: string;
+  try {
+    validationOutcome = validateMode === "off" ? { attempted: false, ok: true } : await validateWGSL(emittedWgsl, validateMode);
+    wgsl = applyMinifyWgsl(emittedWgsl, minify);
+    if (validateMode !== "off" && minify.identifiers === "safe") {
+      // Both calls share the memoized device from validation-device.ts, so they agree in practice;
+      // merging keeps the reported outcome correct if that ever stops being true.
+      const second = await validateWGSL(wgsl, validateMode);
+      validationOutcome = { attempted: validationOutcome.attempted || second.attempted, ok: validationOutcome.ok && second.ok, ...((validationOutcome.skipped ?? second.skipped) ? { skipped: validationOutcome.skipped ?? second.skipped } : {}) };
+    }
+  } finally {
+    if (validateMode !== "off") releaseValidationDevice();
+  }
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
-  return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection };
+  return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection, validation: { mode: validateMode, ...validationOutcome } };
 }
 
 async function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string, MangleModule>, stack: string[], diagnostics: DiagnosticList[number][]): Promise<void> {
