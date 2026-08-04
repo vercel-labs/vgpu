@@ -1,0 +1,12 @@
+{
+  "title": "vgpu/scene",
+  "pages": [
+    "camera",
+    "orthographic-camera",
+    "perspective-camera",
+    "deg-to-rad",
+    "srgb",
+    "orbit",
+    "..."
+  ]
+}

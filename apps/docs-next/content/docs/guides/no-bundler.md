@@ -1,0 +1,111 @@
+---
+title: "Using vgpu without a bundler"
+description: "Resolve a `.wgsl` entry file's import graph with `resolveShader()` and render it from Node, a script, or a test — no webpack, Vite, or Turbopack loader required."
+---
+
+`effect(gpu, source)` and `draw(gpu, { shader })` take WGSL as a plain string, so nothing forces you to use a bundler. This guide is the no-bundler half of [Getting started](getting-started.docs.md): resolve a `.wgsl` entry file — and everything it imports — yourself with `resolveShader()`, then render it headless from Node.
+
+## When you need this
+
+- Your shader lives in its own `.wgsl` file(s) rather than a template string, and you are not running webpack, Vite, or Turbopack.
+- Your shader imports WGSL packages (`@vgpu/wgsl-std/noise`, your own workspace package) from a plain script, a Node test, or a CI job.
+- You want to render and read pixels back without a browser, the way [Getting started](getting-started.docs.md) validates a shader with a static render.
+
+If you *are* shipping this inside a bundler-based app, use the loader instead: [Using vgpu with Next.js and other bundlers](nextjs.docs.md). Reaching for `readFileSync` and passing the text straight to `effect()` also works — but only while the shader has no `import` of its own; the moment it does, you need the resolver below.
+
+## Resolve a `.wgsl` entry file
+
+`resolveShader()` reads an entry module from disk, follows its imports (relative, `@/`, and package imports like `@vgpu/wgsl-std/noise`), and emits one finished WGSL string.
+
+Here is the entry file the rest of this page uses — a fullscreen effect with one `params` uniform. `effect()` injects the vertex stage and exposes the interpolated `uv`, so the file only declares a fragment entry point:
+
+```wgsl
+// shader.wgsl
+struct Params { time: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, abs(sin(params.time)), 1.0);
+}
+```
+
+Resolve it:
+
+```ts
+import { fileURLToPath } from "node:url";
+import { resolveShader } from "@vgpu/wgsl/runtime";
+
+const resolved = await resolveShader({
+  entry: fileURLToPath(new URL("./shader.wgsl", import.meta.url)),
+});
+
+// `resolved.wgsl` is a plain string — pass it straight to effect() or draw({ shader }).
+console.log(resolved.wgsl.length, resolved.deps.length);
+```
+
+The entry path is resolved on disk and may omit `.wgsl` when a matching file or `index.wgsl` exists. Pass `rootDir` when your modules use `@/foo.wgsl` aliases. Full parameters, the return shape, and every `VGPU-WGSL-*` error code live in the [`resolveShader` reference](/@vgpu/wgsl/runtime/resolve-shader.docs.md) (`npx vgpu docs cat /@vgpu/wgsl/runtime/resolve-shader.docs.md`).
+
+Validate the same file from the command line before you render it — `vgpu check` runs the same resolver and prints the reflection:
+
+```sh
+npx vgpu check shader.wgsl
+```
+
+## Render it headless with `vgpu/node`
+
+Combine the resolved shader with `vgpu/node`'s `init` / `target` / `effect` and read the pixels back. This is the static-render recipe from [Getting started](getting-started.docs.md), with the shader loaded from disk instead of inlined:
+
+```ts
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { PNG } from "pngjs";
+import { resolveShader } from "@vgpu/wgsl/runtime";
+import { effect, init, target } from "vgpu/node";
+
+const resolved = await resolveShader({
+  entry: fileURLToPath(new URL("./shader.wgsl", import.meta.url)),
+});
+
+const width = 160;
+const height = 90;
+const gpu = await init();
+const colorTarget = target(gpu, { size: [width, height] });
+const shader = effect(gpu, resolved.wgsl, { set: { params: { time: 0 } } });
+shader.draw(colorTarget);
+
+const pixels = await colorTarget.read();   // RGBA bytes — assert on them
+const png = new PNG({ width, height });
+png.data.set(pixels);
+writeFileSync("frame.png", PNG.sync.write(png));
+gpu.dispose();                              // stops Dawn's polling so the process exits
+```
+
+Nothing about this changes when the shader grows: `resolveShader()` inlines the whole import graph, so `effect()` still sees one string. Animating? Call `shader.set({ params: { time } })` and draw again in a loop, reading the target after each draw.
+
+Rendering an actual 3D scene rather than a fullscreen effect? See [Two-pass rendering](two-pass-rendering.docs.md) for the offscreen-depth-target recipe — it composes with this same no-bundler setup.
+
+## Gotcha: `@vgpu/wgsl/runtime` is ESM-only
+
+The `./runtime` subpath declares only an `import` condition — there is no CommonJS build, unlike `loader-webpack` and `loader-vite`. Call `resolveShader()` from an ES module:
+
+- Name the script `.mjs` or `.mts` — this works even when the rest of the project is CommonJS, and it is the smallest fix, or
+- Set `"type": "module"` in the nearest `package.json`.
+
+Running it from a CommonJS entry point — `npx tsx scripts/render.ts` in a project without `"type": "module"`, for example — fails with Node's `ERR_PACKAGE_PATH_NOT_EXPORTED`, not a `VGPU-*` error code. Renaming the script to `scripts/render.mts` is the fix; nothing is wrong with your shader.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ERR_PACKAGE_PATH_NOT_EXPORTED` for `@vgpu/wgsl/runtime` | The script is being loaded as CommonJS | Rename it `.mjs`/`.mts`, or set `"type": "module"` |
+| `VGPU-WGSL-RES-NOTFOUND` | The entry path or an imported module does not exist | Fix the path; `entry` is resolved relative to the process, so build it from `import.meta.url` |
+| `VGPU-WGSL-PKG-NOTFOUND` | A WGSL package import is not installed | `npm install <pkg>`, or fix the specifier |
+| `VGPU-RESOLVE-MODULE-BINDING` | An imported `.wgsl` module declares `@group`/`@binding` | Keep resources in the entry shader; modules export only structs and functions |
+
+## See also
+
+- [`resolveShader` reference](/@vgpu/wgsl/runtime/resolve-shader.docs.md) — full signature, options, and every error code.
+- [Getting started](getting-started.docs.md) — the browser-first walkthrough and the static-render recipe this guide extends.
+- [Two-pass rendering](two-pass-rendering.docs.md) — offscreen depth target plus composite, for 3D scenes rendered this same headless way.
+- [Using vgpu with Next.js and other bundlers](nextjs.docs.md) — the bundler-loader alternative.
+- [Publishing WGSL module packages](publishing-wgsl-packages.docs.md) — how package imports inside your `.wgsl` files resolve.

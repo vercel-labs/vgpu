@@ -1,0 +1,141 @@
+{
+  "$comment": "Curation snapshot of docs/nav.json (ordered literals only), enforced by scripts/check-nav-curation.mjs. It exists because every curated level ends in a \"...\" catch-all, so removing or reordering an entry keeps check-nav-coverage.mjs green while silently demoting the page to the alphabetical fallback. Regenerate with `node scripts/check-nav-curation.mjs --write` and review the diff — that review is the point.",
+  "curation": {
+    "packageOrder": [
+      "vgpu",
+      "vgpu/scene",
+      "@vgpu/wgsl",
+      "@vgpu/wgsl-std",
+      "vgpu/core",
+      "@vgpu/render",
+      "..."
+    ],
+    "topicOrder": {
+      "@vgpu/render": [
+        "wireframe-material",
+        "normal-debug-material",
+        "mesh-to-readable",
+        "mesh-to-wireframe",
+        "inspect-material",
+        "canvas-mouse-tracker",
+        "frame-clock",
+        "canvas-resolution",
+        "perf",
+        "edit",
+        "..."
+      ],
+      "@vgpu/wgsl": [
+        "compile",
+        "resolved-shader",
+        "loader-webpack",
+        "loader-vite",
+        "..."
+      ],
+      "@vgpu/wgsl-std": [
+        "color",
+        "fullscreen",
+        "hash",
+        "noise",
+        "..."
+      ],
+      "vgpu": [
+        "init",
+        "gpu",
+        "surface",
+        "target",
+        "frame",
+        "effect",
+        "draw",
+        "compute",
+        "uniforms",
+        "bundle",
+        "..."
+      ],
+      "vgpu/core": [
+        "device",
+        "buffer",
+        "texture",
+        "queue",
+        "vgpu-error",
+        "vgpu-adapter",
+        "bind",
+        "render-bundle",
+        "storage-buffer",
+        "uniform",
+        "structured-uniform",
+        "uniform-pool",
+        "..."
+      ],
+      "vgpu/scene": [
+        "camera",
+        "orthographic-camera",
+        "perspective-camera",
+        "deg-to-rad",
+        "srgb",
+        "orbit",
+        "..."
+      ]
+    },
+    "guideGroups": [
+      {
+        "title": "General",
+        "slugs": [
+          "getting-started"
+        ]
+      },
+      {
+        "title": "Performance",
+        "slugs": [
+          "performance-model",
+          "performance-patterns",
+          "authoring-for-perf",
+          "measuring",
+          "optimize-pass",
+          "shader-fix-its",
+          "performance-playbook"
+        ]
+      },
+      {
+        "title": "Testing",
+        "slugs": [
+          "browser-testing"
+        ]
+      },
+      "..."
+    ],
+    "sections": [
+      "Get started @ /get-started",
+      "  ",
+      "    Agents @ /get-started/agents",
+      "    Web @ /get-started/web",
+      "    Node.js @ /get-started/node",
+      "Concepts @ /concepts",
+      "  ",
+      "    Context @ /concepts/context",
+      "    Draws @ /concepts/draws",
+      "    Compilation @ /concepts/compilation",
+      "    Effects @ /concepts/effects",
+      "    Passes @ /concepts/passes",
+      "    Frames @ /concepts/frames",
+      "    Render bundles @ /concepts/render-bundles",
+      "Guides @ /guides",
+      "  ",
+      "    Overview @ /guides",
+      "  General",
+      "  Performance",
+      "  Testing",
+      "  ...",
+      "Examples @ /examples",
+      "  ...",
+      "CLI @ /cli",
+      "ML @ /ml",
+      "  ",
+      "    Overview @ /ml",
+      "    Quickstart: Browser @ /ml/browser",
+      "    Quickstart: Node @ /ml/node",
+      "    Buffers & ownership @ /ml/buffers",
+      "API Reference @ /reference",
+      "  ..."
+    ]
+  }
+}

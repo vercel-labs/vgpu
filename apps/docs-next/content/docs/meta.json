@@ -1,0 +1,14 @@
+{
+  "root": true,
+  "title": "Documentation",
+  "description": "Documentation for vgpu, the WebGPU library designed for agents.",
+  "pages": [
+    "get-started",
+    "concepts",
+    "guides",
+    "[Examples](/examples)",
+    "cli",
+    "ml",
+    "reference"
+  ]
+}

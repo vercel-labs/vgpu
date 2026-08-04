@@ -1,0 +1,133 @@
+/*
+ * Legacy vgpu docs color tokens (Tailwind v4 `@theme` port).
+ *
+ * Provenance: ported verbatim (same HEX values, same numeric scale) from the
+ * OLD app's Tailwind v3 config, `apps/docs/tailwind.config.js`
+ * (`theme.extend.colors`) on `origin/main` at the time this scaffold was
+ * created (TGEIST-01). That app is untouched by this migration and keeps
+ * running until cutover (TGEIST-15) -- these values are a snapshot, not a
+ * live reference.
+ *
+ * Why this file exists: the migration design doc's Risk #2
+ * (/home/user/.agents/dbb1b7bf-49b0-4207-b067-935992684872/geistdocs-migration-decisions.md)
+ * flags that components transplanted later from apps/docs (hero, examples
+ * gallery, landing chrome -- TGEIST-06/07/09/10) reference this old
+ * `gray-1`..`gray-12` / `blue-9` / etc. Radix-style numeric scale directly in
+ * their className strings. Geistdocs ships its own, differently-numbered
+ * gray scale (`gray-100`..`gray-1000` via `@vercel/geistdocs/theme.css`), so
+ * without these tokens the old numeric utilities (`bg-gray-3`, `text-gray-11`,
+ * `text-blue-9`, ...) would not exist in Tailwind v4's generated CSS and the
+ * transplanted components would silently render unstyled.
+ *
+ * `@theme` here only *adds* `--color-*` tokens in the 1-10/1-12 numeric
+ * range; it does not touch or override any `@vercel/geistdocs/theme.css`
+ * token (those use the 100-1000 range), so there is no collision with the
+ * package's own design system.
+ *
+ * Uses `@theme static` (not the default dynamic `@theme`) on purpose:
+ * Tailwind v4 only emits CSS for theme variables it sees used by a scanned
+ * utility class. Right now nothing in this scaffold uses `bg-gray-3` etc.,
+ * so with a plain `@theme` block these variables would be silently dropped
+ * from the build output until TGEIST-06/07/09/10 land and use them -- the
+ * exact "renders unstyled, silently" failure Risk #2 warns about. `static`
+ * forces the variables (and their utilities) to always exist.
+ */
+@theme static {
+  /* Geist Design System - Gray Scale (10-step, extended to 12 in the old app) */
+  --color-gray-1: #0a0a0a; /* Component bg default */
+  --color-gray-2: #111111; /* Component bg hover */
+  --color-gray-3: #191919; /* Component bg active */
+  --color-gray-4: #222222; /* Border default */
+  --color-gray-5: #2a2a2a; /* Border hover */
+  --color-gray-6: #313131; /* Border active */
+  --color-gray-7: #3a3a3a; /* High contrast bg */
+  --color-gray-8: #484848; /* High contrast bg hover */
+  --color-gray-9: #606060; /* Secondary text/icons */
+  --color-gray-10: #6e6e6e; /* Secondary text lighter */
+  --color-gray-11: #b4b4b4; /* Primary muted text */
+  --color-gray-12: #eeeeee; /* Primary text */
+
+  /* Geist Blue Scale */
+  --color-blue-1: #0d1520;
+  --color-blue-2: #111d2e;
+  --color-blue-3: #112a46;
+  --color-blue-4: #0f3460;
+  --color-blue-5: #0f4280;
+  --color-blue-6: #1058a7;
+  --color-blue-7: #1a74d0;
+  --color-blue-8: #3291ff;
+  --color-blue-9: #0070f3; /* Primary blue (Vercel brand) */
+  --color-blue-10: #3b9eff;
+
+  /* Geist Green Scale */
+  --color-green-1: #0e1512;
+  --color-green-2: #121b17;
+  --color-green-3: #132d21;
+  --color-green-4: #113b29;
+  --color-green-5: #174933;
+  --color-green-6: #20573e;
+  --color-green-7: #28684a;
+  --color-green-8: #2f7c57;
+  --color-green-9: #46a758;
+  --color-green-10: #55b467;
+
+  /* Geist Amber/Yellow Scale */
+  --color-amber-1: #16120c;
+  --color-amber-2: #1d180f;
+  --color-amber-3: #302008;
+  --color-amber-4: #3f2700;
+  --color-amber-5: #4d3000;
+  --color-amber-6: #5c3d05;
+  --color-amber-7: #714f19;
+  --color-amber-8: #8f6424;
+  --color-amber-9: #ffc53d;
+  --color-amber-10: #ffd60a;
+
+  /* Geist Red Scale */
+  --color-red-1: #191111;
+  --color-red-2: #201314;
+  --color-red-3: #3b1219;
+  --color-red-4: #500f1c;
+  --color-red-5: #611a21;
+  --color-red-6: #72232d;
+  --color-red-7: #8c333a;
+  --color-red-8: #b54548;
+  --color-red-9: #e5484d;
+  --color-red-10: #f2555a;
+
+  /* Geist Purple Scale */
+  --color-purple-1: #14121f;
+  --color-purple-2: #18162d;
+  --color-purple-3: #221c47;
+  --color-purple-4: #2a2159;
+  --color-purple-5: #32286b;
+  --color-purple-6: #3b307e;
+  --color-purple-7: #483d92;
+  --color-purple-8: #5b4fb1;
+  --color-purple-9: #6e56cf;
+  --color-purple-10: #7c66dc;
+
+  /* Geist Pink Scale */
+  --color-pink-1: #191117;
+  --color-pink-2: #21121d;
+  --color-pink-3: #37172f;
+  --color-pink-4: #4b143d;
+  --color-pink-5: #591a49;
+  --color-pink-6: #692056;
+  --color-pink-7: #7e2968;
+  --color-pink-8: #a23882;
+  --color-pink-9: #d6409f;
+  --color-pink-10: #e34ba9;
+
+  /* Geist Teal Scale */
+  --color-teal-1: #0d1514;
+  --color-teal-2: #111c1b;
+  --color-teal-3: #0d2d2a;
+  --color-teal-4: #023b37;
+  --color-teal-5: #084843;
+  --color-teal-6: #145750;
+  --color-teal-7: #1c6961;
+  --color-teal-8: #207e73;
+  --color-teal-9: #12a594;
+  --color-teal-10: #0eb39e;
+}

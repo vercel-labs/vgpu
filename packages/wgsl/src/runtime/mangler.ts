@@ -39,20 +39,17 @@ function addImports(module: MangleModule, imp: ImportDecl, table: Map<string, st
 }
 
 function substitute(module: MangleModule, table: ReadonlyMap<string, string>, exportsByPath: ReadonlyMap<string, ExportMap>, pathOf: (from: string, imp: ImportDecl) => string): string {
-  let out = "", cursor = 0, braceDepth = 0;
+  let out = "", cursor = 0;
   const skip = new Set(module.parsed.imports.flatMap((imp) => range(imp.start, imp.end)));
-  const shadowed = new Set<string>();
+  const shadowed = shadowedTokens(module.tokens);
   for (let i = 0; i < module.tokens.length; i++) {
     const token = module.tokens[i]!;
-    if (token.text === "{") braceDepth++;
-    if (token.text === "}") braceDepth = Math.max(0, braceDepth - 1);
-    if (token.kind === "ident" && isLocalDecl(module.tokens, i, braceDepth)) shadowed.add(token.text);
     if (skip.has(token.start)) { out += module.source.slice(cursor, token.start); cursor = Math.max(cursor, token.end); continue; }
     out += module.source.slice(cursor, token.start);
     const namespace = namespaceReplacement(module, i, exportsByPath, pathOf);
     if (namespace) { out += namespace.name; cursor = namespace.end; i += 2; continue; }
     if (bareNamespace(module, i)) throw wgslError("VGPU-WGSL-NS-NOTVALUE", `Namespace ${token.text} is not a WGSL value`, token.line, token.column);
-    out += token.kind === "ident" && !shadowed.has(token.text) && !blocked(module.tokens, i) ? table.get(token.text) ?? token.text : token.text;
+    out += token.kind === "ident" && !shadowed.has(i) && !blocked(module.tokens, i) ? table.get(token.text) ?? token.text : token.text;
     cursor = token.end;
   }
   return out + module.source.slice(cursor);
@@ -70,7 +67,72 @@ function namespaceReplacement(module: MangleModule, i: number, exportsByPath: Re
 }
 
 function bareNamespace(module: MangleModule, i: number): boolean { const token = module.tokens[i]; return token?.kind === "ident" && module.parsed.imports.some((item) => item.bindings.some((b) => b.namespace && b.local === token.text)) && module.tokens[i + 1]?.text !== "."; }
-function isLocalDecl(tokens: readonly Token[], i: number, braceDepth: number): boolean { const prev = tokens[i - 1]?.text, next = tokens[i + 1]?.text; if (braceDepth > 0 && (prev === "let" || prev === "var")) return true; if (next === ":") for (let j = i; j >= 0 && tokens[j]?.text !== "{" && tokens[j]?.text !== "}"; j--) if (tokens[j]?.text === "fn") return true; return false; }
+/**
+ * Token indices at which a function-scope local hides a module-scope name.
+ *
+ * This used to be a flat `Set<string>` of every local name seen so far, and it never closed: one
+ * `let helper` in a nested block — or a parameter named `helper` on an unrelated function — stopped
+ * every *later* `helper` token in the module from being mangled, while the declaration itself,
+ * emitted before the shadow, still was. Declaration DCE then correctly dropped the mangled
+ * declaration nothing referenced any more and the shader failed to compile with
+ * `unresolved call target 'helper'`. Scoping each shadow to the block that introduced it fixes it.
+ */
+function shadowedTokens(tokens: readonly Token[]): ReadonlySet<number> {
+  const shadowed = new Set<number>();
+  const hide = (name: string, start: number, end: number): void => { for (let i = start; i <= end; i++) if (tokens[i]?.text === name) shadowed.add(i); };
+  for (let i = 0, depth = 0; i < tokens.length; i++) {
+    const text = tokens[i]!.text;
+    if (text === "{") depth++;
+    else if (text === "}") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && text === "fn") i = hideFunctionLocals(tokens, i, hide);
+  }
+  return shadowed;
+}
+
+/** Parameters shadow the body only; a local shadows from its own `;` to the end of its block. */
+function hideFunctionLocals(tokens: readonly Token[], fnIndex: number, hide: (name: string, start: number, end: number) => void): number {
+  const open = seek(tokens, fnIndex, "("), close = open === undefined ? undefined : matchPair(tokens, open, "(", ")");
+  const bodyOpen = close === undefined ? undefined : seek(tokens, close, "{"), bodyClose = bodyOpen === undefined ? undefined : matchPair(tokens, bodyOpen, "{", "}");
+  if (open === undefined || close === undefined || bodyOpen === undefined || bodyClose === undefined) return fnIndex;
+  // A parameter is in scope in the body compound statement only, so sibling parameter types, their
+  // template args and the `-> ReturnType` still name module scope and must stay substitutable. The
+  // parameter's own token needs no hiding: `blocked()` already refuses any ident followed by `:`
+  // that is not a var/let/const declaration.
+  for (let i = open + 1; i < close; i++) if (tokens[i]!.kind === "ident" && tokens[i + 1]?.text === ":") hide(tokens[i]!.text, bodyOpen, bodyClose);
+  const scopeEnds = [bodyClose];
+  for (let i = bodyOpen + 1; i < bodyClose; i++) {
+    while (scopeEnds.length > 1 && i > scopeEnds[scopeEnds.length - 1]!) scopeEnds.pop();
+    const text = tokens[i]!.text;
+    // A `for` frame spans header plus body so a loop variable does not leak past the loop.
+    if (text === "for" || text === "{") { scopeEnds.push(blockEnd(tokens, i, scopeEnds[scopeEnds.length - 1]!)); continue; }
+    if (text !== "let" && text !== "var" && text !== "const") continue;
+    const name = localNameIndex(tokens, i);
+    if (name === undefined || name >= bodyClose) continue;
+    // WGSL brings a local into scope only at the end of its declaration statement, so the
+    // initializer in `let helper = helper(1.0);` still names the module-scope `helper`. Hide the
+    // declared token itself (it must never be rewritten) plus everything after the `;`.
+    hide(tokens[name]!.text, name, name);
+    hide(tokens[name]!.text, (seek(tokens, name, ";") ?? name) + 1, scopeEnds[scopeEnds.length - 1]!);
+    i = name;
+  }
+  return bodyClose;
+}
+
+function blockEnd(tokens: readonly Token[], index: number, fallback: number): number {
+  if (tokens[index]!.text === "{") return matchPair(tokens, index, "{", "}") ?? fallback;
+  const header = seek(tokens, index, "("), close = header === undefined ? undefined : matchPair(tokens, header, "(", ")");
+  const body = close === undefined ? undefined : seek(tokens, close, "{");
+  return (body === undefined ? undefined : matchPair(tokens, body, "{", "}")) ?? fallback;
+}
+
+function localNameIndex(tokens: readonly Token[], kindIndex: number): number | undefined {
+  let i = kindIndex + 1;
+  if (tokens[i]?.text === "<") { const end = matchPair(tokens, i, "<", ">"); if (end === undefined) return undefined; i = end + 1; }
+  return tokens[i]?.kind === "ident" ? i : undefined;
+}
+
+function seek(tokens: readonly Token[], start: number, text: string): number | undefined { for (let i = start + 1; i < tokens.length; i++) if (tokens[i]!.text === text) return i; return undefined; }
+function matchPair(tokens: readonly Token[], openIndex: number, open: string, close: string): number | undefined { let depth = 0; for (let i = openIndex; i < tokens.length; i++) { if (tokens[i]!.text === open) depth++; else if (tokens[i]!.text === close && --depth === 0) return i; } return undefined; }
 function blocked(tokens: readonly Token[], i: number): boolean { const prev = tokens[i - 1]?.text, next = tokens[i + 1]?.text; return prev === "@" || prev === "." || (next === ":" && !declared(tokens, i)) || prev === "enable" || prev === "requires" || prev === "override"; }
 function declared(tokens: readonly Token[], i: number): boolean { for (let j = i - 1; j >= 0 && tokens[j]?.text !== ";" && tokens[j]?.text !== "{" && tokens[j]?.text !== "}"; j--) if (["var", "let", "const", "override"].includes(tokens[j]!.text)) return true; return false; }
 function stripExports(source: string): string { return source.replace(/\bexport\s+(?=@|fn|struct|const|alias|var|override)/g, "").replace(/(@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*)export\s+(?=fn|struct|const|alias|var|override)/g, "$1"); }

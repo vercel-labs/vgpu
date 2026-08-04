@@ -1,0 +1,157 @@
+---
+title: Node.js
+description: Render headless in Node.js through Dawn — save a PNG or assert on pixels in a test.
+---
+
+# Node.js
+
+In Node.js, vgpu renders headless through Dawn — the same API, no canvas, no browser. Import `init` from `vgpu/node`, render into an offscreen [`Target`](/docs/reference/vgpu/target#target), and read the pixels back.
+
+## Install
+
+```sh
+npm install vgpu
+```
+
+On Linux, vgpu resolves a working Dawn binary automatically. When the stock
+prebuild matches your system it is used directly; on older-GLIBC hosts vgpu
+downloads its own portable Dawn build from GitHub Releases, verified against a
+pinned SHA-256, and caches it locally. If your install runs with scripts
+disabled (`--ignore-scripts`, pnpm v10 allow-lists), the download happens
+lazily on first `init()` instead — or run it yourself:
+
+```sh
+npx vgpu install-dawn
+```
+
+Before your first render, `npx vgpu doctor` checks the machine end to end — it
+acquires an adapter and renders a real frame, and when something is missing it
+prints the exact fix as JSON. Run it once before debugging anything else.
+
+> Good to know: no GPU and no driver? `npx vgpu install-software-renderer` sets
+> up a portable CPU renderer once; `init()` uses it automatically after that.
+
+Air-gapped or custom environments can point `VGPU_DAWN_BINARY` at a local
+binary. When no binary can be resolved, `init()` throws a structured
+`VGPU-NODE-PREBUILD-MISSING` error that names the exact reason and fix. See
+[`createNodeAdapter`](/docs/reference/vgpu-adapter-node/create-node-adapter) for the
+full resolution order.
+
+## Choose an environment
+
+Start every new machine with `npx vgpu doctor`. After that, choose the mode
+that matches what the environment is supposed to guarantee:
+
+| Environment | Setup | Runtime choice |
+| --- | --- | --- |
+| Local workstation | Install the normal GPU driver | `init()` — use normal system discovery |
+| Server or sandbox without a GPU | Run `npx vgpu install-software-renderer` once | `init()` — use the cached CPU renderer only when normal discovery finds nothing |
+| Deterministic screenshots and pixel tests | Cache the software renderer in the CI image | `init({ adapter: "software" })` — force the same Mesa renderer everywhere |
+| GPU-required CI | Install the vendor driver | `init({ adapter: "hardware" })` — fail instead of silently running on CPU |
+| Air-gapped runner | Pre-populate the Dawn and software-renderer caches while the image has network access | Select `auto`, `hardware`, or `software` normally at runtime |
+
+### Configure it from TypeScript
+
+```ts
+import { init } from "vgpu/node";
+
+const gpu = await init();                        // auto: normal adapter first, cached CPU fallback last
+const hardware = await init({ adapter: "hardware" }); // require a real GPU
+const software = await init({ adapter: "software" }); // force deterministic CPU rendering
+
+console.log(software.adapter);
+// { name: "llvmpipe: Mesa 25.0.7 ...", type: "cpu" }
+```
+
+`auto` never downloads the software renderer. It uses lavapipe only after you
+have explicitly installed it and normal adapter discovery returned nothing.
+A working system adapter always wins.
+
+### Override it from CI
+
+Environment overrides win over the TypeScript option and announce themselves
+once on stderr, so CI can force a policy without changing application code:
+
+```sh
+VGPU_ADAPTER=software node render.mjs  # deterministic CPU pixels
+VGPU_ADAPTER=hardware pnpm test        # require a GPU and fail loudly without one
+```
+
+Use the SDK option for the project's declared behavior and the environment
+variable for temporary CI or debugging intervention. The browser API does not
+need this configuration — `import { init } from "vgpu"` continues to let the
+browser choose its adapter.
+
+Whichever mode you use, release the device when the process is done:
+
+```ts
+try {
+  // render, read pixels, write artifacts
+  await gpu.settled();
+} finally {
+  gpu.dispose();
+}
+```
+
+For loader resolution, distro-specific dependencies, Docker, and lifecycle
+details, see [`createNodeDevice`](/docs/reference/vgpu-adapter-node/create-node-device).
+
+## Save a PNG
+
+`target.read()` resolves to the rendered RGBA bytes. Hand them to any PNG encoder — here, `pngjs`:
+
+```ts
+import { writeFileSync } from "node:fs";
+import { PNG } from "pngjs";
+import { init, effect, target } from "vgpu/node";
+
+const gradientSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`;
+
+const gpu = await init();
+const colorTarget = target(gpu, { size: [256, 256] });
+
+effect(gpu, gradientSource).draw(colorTarget);
+const pixels = await colorTarget.read(); // RGBA bytes
+
+const png = new PNG({ width: colorTarget.size[0], height: colorTarget.size[1] });
+png.data.set(pixels);
+writeFileSync("gradient.png", PNG.sync.write(png));
+```
+
+## Write a test
+
+The same render runs inside a test. Read the pixels and assert on them:
+
+```ts
+import { expect, test } from "vitest";
+import { init, effect, target } from "vgpu/node";
+
+const gradientSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.4, 1.0);
+  }
+`;
+
+test("gradient renders", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [64, 64] });
+
+  effect(gpu, gradientSource).draw(colorTarget);
+  const pixels = await colorTarget.read();
+
+  // center pixel: blue is the constant 0.4 (~102 of 255), alpha is 1.0
+  const center = (32 * 64 + 32) * 4;
+  expect(pixels[center + 2]).toBeGreaterThan(95);
+  expect(pixels[center + 2]).toBeLessThan(110);
+  expect(pixels[center + 3]).toBe(255);
+});
+```
+
+> Good to know: use `vgpu/mock` for deterministic unit tests that need no GPU; reach for `vgpu/node` when real Dawn/WebGPU behavior is under test.
+
+> Good to know: call `gpu.dispose()` when you are done — it stops Dawn's event
+> polling so the process exits on its own instead of hanging.

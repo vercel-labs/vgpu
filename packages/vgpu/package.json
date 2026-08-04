@@ -32,11 +32,15 @@
   "files": [
     "bin",
     "lib",
+    "!lib/docs/generate/generate-geistdocs.js",
+    "!lib/docs/generate/check-docs-content.mjs",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "generate:docs": "node lib/docs/generate/cli.js && node ../vgpu-api/scripts/copy-cli.mjs",
+    "generate:docs:geistdocs": "node lib/docs/generate/generate-geistdocs.js",
+    "check:docs-content": "node lib/docs/generate/check-docs-content.mjs",
     "prepack": "node lib/docs/generate/cli.js",
     "test": "cd ../.. && vitest run packages/vgpu"
   },

@@ -1,0 +1,10 @@
+{
+  "title": "@vgpu/wgsl",
+  "pages": [
+    "compile",
+    "resolved-shader",
+    "loader-webpack",
+    "loader-vite",
+    "..."
+  ]
+}

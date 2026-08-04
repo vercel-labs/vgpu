@@ -5,7 +5,19 @@ import { wgslVitePlugin } from "./packages/wgsl/src/loader-vite/index.ts";
 export default defineConfig({
   plugins: [wgslVitePlugin()],
   test: {
-    include: ["packages/**/*.test.ts", "examples/**/*.test.ts", "apps/docs/**/*.test.ts", "scripts/**/*.test.ts"],
+    // `apps/docs-next/**` is temporary: it exists only for the dual-run window of the geistdocs
+    // migration (Decision 1', TGEIST-06) so the byte-identical copy of the examples API is tested
+    // in BOTH trees. TGEIST-15 (cutover) renames apps/docs-next -> apps/docs and removes this
+    // entry. The `server-only` alias below deliberately keeps pointing at the old app's stub: both
+    // stubs are byte-identical by definition (group A, enforced by check:examples-api-transplant),
+    // and vitest allows only one alias per module name.
+    include: [
+      "packages/**/*.test.ts",
+      "examples/**/*.test.ts",
+      "apps/docs/**/*.test.ts",
+      "apps/docs-next/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
     // Replaces the deprecated `poolMatchGlobs` entry that forced `forks` for
     // packages/adapter-node/tests and packages/render/tests. `forks` was
     // already the resolved pool for the whole suite (it is Vitest's default),

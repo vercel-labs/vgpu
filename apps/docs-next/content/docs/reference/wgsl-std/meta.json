@@ -1,0 +1,10 @@
+{
+  "title": "@vgpu/wgsl-std",
+  "pages": [
+    "color",
+    "fullscreen",
+    "hash",
+    "noise",
+    "..."
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "vgpu",
+    "vgpu-scene",
+    "wgsl",
+    "wgsl-std",
+    "vgpu-core",
+    "render",
+    "..."
+  ]
+}

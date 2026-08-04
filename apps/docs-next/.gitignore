@@ -1,0 +1,35 @@
+# dependencies
+node_modules
+
+# generated content
+.source
+
+# test and build output
+coverage
+.next
+out
+build
+dist
+*.tsbuildinfo
+
+# TGEIST-07: staged by scripts/prepare-ort-assets.mjs and
+# scripts/prepare-depth-models.mjs (pinned binaries, never committed —
+# mirrors apps/docs/.gitignore).
+public/ort
+public/models/depth
+
+# local environment
+.env*.local
+.vercel
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# system files
+.DS_Store
+
+# Turborepo
+.turbo

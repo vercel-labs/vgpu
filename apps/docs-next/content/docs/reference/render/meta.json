@@ -1,0 +1,16 @@
+{
+  "title": "@vgpu/render",
+  "pages": [
+    "wireframe-material",
+    "normal-debug-material",
+    "mesh-to-readable",
+    "mesh-to-wireframe",
+    "inspect-material",
+    "canvas-mouse-tracker",
+    "frame-clock",
+    "canvas-resolution",
+    "perf",
+    "edit",
+    "..."
+  ]
+}

@@ -1,0 +1,1842 @@
+{
+  "frozenAt": "2026-08-04T02:13:27.595Z",
+  "sourceUrl": "https://vgpu.sh",
+  "gitSha": "9812605057f6e235ce66c0289c1b329d5613bcc8",
+  "pages": [
+    {
+      "path": "/docs",
+      "status": 200,
+      "anchors": []
+    },
+    {
+      "path": "/docs/cli",
+      "status": 200,
+      "anchors": [
+        "cli",
+        "installation-and-usage",
+        "command-inventory",
+        "check",
+        "docs",
+        "docs-cat",
+        "docs-find",
+        "docs-grep",
+        "docs-help",
+        "docs-ls",
+        "docs-path",
+        "docs-symbols",
+        "doctor",
+        "examples",
+        "examples-search",
+        "examples-show",
+        "examples-cat",
+        "examples-pull",
+        "examples-cache",
+        "revision-and-offline-fields",
+        "exit-codes",
+        "install-dawn",
+        "install-software-renderer",
+        "snapshot",
+        "global-options"
+      ]
+    },
+    {
+      "path": "/docs/concepts",
+      "status": 200,
+      "anchors": []
+    },
+    {
+      "path": "/docs/concepts/compilation",
+      "status": 200,
+      "anchors": [
+        "compilation",
+        "pre-warming-with-a-target",
+        "compiling-without-a-target",
+        "errors",
+        "render-bundles"
+      ]
+    },
+    {
+      "path": "/docs/concepts/context",
+      "status": 200,
+      "anchors": [
+        "context",
+        "create-resources-once-draw-every-frame"
+      ]
+    },
+    {
+      "path": "/docs/concepts/draws",
+      "status": 200,
+      "anchors": [
+        "draws",
+        "draw-a-geometry",
+        "no-geometry-you-spawn-triangles"
+      ]
+    },
+    {
+      "path": "/docs/concepts/effects",
+      "status": 200,
+      "anchors": [
+        "effects",
+        "updating-bindings"
+      ]
+    },
+    {
+      "path": "/docs/concepts/frames",
+      "status": 200,
+      "anchors": [
+        "frames",
+        "render-a-single-frame",
+        "render-loops"
+      ]
+    },
+    {
+      "path": "/docs/concepts/passes",
+      "status": 200,
+      "anchors": [
+        "passes",
+        "one-shader-draw-it-directly"
+      ]
+    },
+    {
+      "path": "/docs/concepts/render-bundles",
+      "status": 200,
+      "anchors": [
+        "render-bundles",
+        "record-once-replay-every-frame",
+        "compilation-at-record-time",
+        "mix-recorded-and-dynamic-draws",
+        "resizes-and-sampled-targets",
+        "when-not-to-bother"
+      ]
+    },
+    {
+      "path": "/docs/get-started",
+      "status": 200,
+      "anchors": []
+    },
+    {
+      "path": "/docs/get-started/agents",
+      "status": 200,
+      "anchors": [
+        "agents",
+        "point-your-agent-at-the-docs",
+        "install-the-skill"
+      ]
+    },
+    {
+      "path": "/docs/get-started/node",
+      "status": 200,
+      "anchors": [
+        "nodejs",
+        "install",
+        "choose-an-environment",
+        "configure-it-from-typescript",
+        "override-it-from-ci",
+        "save-a-png",
+        "write-a-test"
+      ]
+    },
+    {
+      "path": "/docs/get-started/web",
+      "status": 200,
+      "anchors": [
+        "web",
+        "install",
+        "render-a-gradient",
+        "load-wgsl-files-in-nextjs",
+        "load-wgsl-files-in-vite",
+        "type-wgsl-imports"
+      ]
+    },
+    {
+      "path": "/docs/guides",
+      "status": 200,
+      "anchors": []
+    },
+    {
+      "path": "/docs/guides/agent-browser-webgpu",
+      "status": 200,
+      "anchors": [
+        "webgpu-screenshots-with-agent-browser",
+        "install-and-validate-the-environment",
+        "choose-the-webgpu-mode",
+        "capture-and-validate-one-preview",
+        "capture-every-vgpu-preview"
+      ]
+    },
+    {
+      "path": "/docs/guides/authoring-for-perf",
+      "status": 200,
+      "anchors": [
+        "authoring-shaders-for-performance",
+        "wgsl-defaults",
+        "javascript-defaults"
+      ]
+    },
+    {
+      "path": "/docs/guides/browser-testing",
+      "status": 200,
+      "anchors": [
+        "browser-testing-with-playwright-webgpu",
+        "test-checklist"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-compilation",
+      "status": 200,
+      "anchors": [
+        "compilation",
+        "pre-warming-with-a-target",
+        "compiling-without-a-target",
+        "errors",
+        "render-bundles"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-context",
+      "status": 200,
+      "anchors": [
+        "context",
+        "create-resources-once-draw-every-frame"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-draws",
+      "status": 200,
+      "anchors": [
+        "draws",
+        "draw-a-geometry",
+        "no-geometry-you-spawn-triangles"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-effects",
+      "status": 200,
+      "anchors": [
+        "effects",
+        "updating-bindings"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-frames",
+      "status": 200,
+      "anchors": [
+        "frames",
+        "render-a-single-frame",
+        "render-loops"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-passes",
+      "status": 200,
+      "anchors": [
+        "passes",
+        "one-shader-draw-it-directly"
+      ]
+    },
+    {
+      "path": "/docs/guides/concepts-render-bundles",
+      "status": 200,
+      "anchors": [
+        "render-bundles",
+        "record-once-replay-every-frame",
+        "compilation-at-record-time",
+        "mix-recorded-and-dynamic-draws",
+        "resizes-and-sampled-targets",
+        "when-not-to-bother"
+      ]
+    },
+    {
+      "path": "/docs/guides/external-ticker",
+      "status": 200,
+      "anchors": [
+        "driving-vgpu-with-an-external-ticker-gsapmotionxr",
+        "motion-xr-and-anything-else-with-a-delta",
+        "timescale-slow-motion-is-a-multiplication",
+        "fixed-timestep-and-determinism",
+        "rules-of-the-technique",
+        "see-also"
+      ]
+    },
+    {
+      "path": "/docs/guides/getting-started",
+      "status": 200,
+      "anchors": [
+        "getting-started",
+        "validate-with-static-renders",
+        "default-choices",
+        "where-to-go-next"
+      ]
+    },
+    {
+      "path": "/docs/guides/measuring",
+      "status": 200,
+      "anchors": [
+        "measuring",
+        "cpu-encoding-vs-replay",
+        "first-frame-hitches",
+        "binding-churn",
+        "gpu-pass-cost",
+        "correctness-before-speed"
+      ]
+    },
+    {
+      "path": "/docs/guides/nextjs",
+      "status": 200,
+      "anchors": [
+        "using-vgpu-with-nextjs-and-other-bundlers",
+        "install",
+        "nextjs-with-turbopack",
+        "nextjs-with-webpack",
+        "vite",
+        "type-imports-in-typescript",
+        "render-it-from-a-client-component",
+        "validate-before-you-run-the-app",
+        "troubleshooting",
+        "see-also"
+      ]
+    },
+    {
+      "path": "/docs/guides/no-bundler",
+      "status": 200,
+      "anchors": [
+        "using-vgpu-without-a-bundler",
+        "when-you-need-this",
+        "resolve-a-entry-file",
+        "render-it-headless-with",
+        "gotcha-is-esm-only",
+        "troubleshooting",
+        "see-also"
+      ]
+    },
+    {
+      "path": "/docs/guides/optimize-pass",
+      "status": 200,
+      "anchors": [
+        "optimize-a-pass",
+        "0-measure-first",
+        "1-static-commands",
+        "2-animated-scalarvector-values",
+        "3-resources-that-swap",
+        "4-many-objects"
+      ]
+    },
+    {
+      "path": "/docs/guides/performance-model",
+      "status": 200,
+      "anchors": [
+        "performance-model",
+        "binding-ownership",
+        "identity-cache",
+        "bundle-staleness",
+        "claimed-groups",
+        "cost-model-defaults"
+      ]
+    },
+    {
+      "path": "/docs/guides/performance-patterns",
+      "status": 200,
+      "anchors": [
+        "performance-patterns",
+        "static-scene",
+        "first-frame-stability",
+        "animated-uniforms",
+        "many-objects",
+        "shared-globals",
+        "iterative-effects",
+        "3d-targets"
+      ]
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "status": 200,
+      "anchors": [
+        "performance-playbook-write-fast-vgpu-by-default",
+        "1-bundles-replay-",
+        "2-pipeline-pre-warm-",
+        "3-manual-group-claim-dynamic-offsets-",
+        "4-in-place",
+        "5-bake-static-inputs-once",
+        "6-instancing-",
+        "7-shared-values",
+        "8-ping-pong-without-churn-two-bundles",
+        "9-msaadepth-in-the-target",
+        "10-back-face-culling-",
+        "11-occlusion-culling-",
+        "12-indirect-draws-and-dispatches-",
+        "13-time-passes-before-optimizing-"
+      ]
+    },
+    {
+      "path": "/docs/guides/publishing-wgsl-packages",
+      "status": 200,
+      "anchors": [
+        "publishing-wgsl-module-packages",
+        "the-package",
+        "consuming-it",
+        "monorepos-workspace-packages",
+        "verify-resolution",
+        "how-resolution-works",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/guides/shader-debugging",
+      "status": 200,
+      "anchors": [
+        "debugging-shaders-by-extracting-internal-values",
+        "1-split-the-wgsl-into-pure-sub-modules",
+        "2-encode-internals-as-pixels",
+        "3-compare-against-a-cpu-reference",
+        "4-dump-the-intermediate-render-targets",
+        "encode-hdr-targets-before-reading",
+        "5-keep-renders-deterministic",
+        "6-when-the-host-has-no-adapter-the-docker-fallback",
+        "see-also"
+      ]
+    },
+    {
+      "path": "/docs/guides/shader-fix-its",
+      "status": 200,
+      "anchors": [
+        "shader-diagnostics-and-fix-its",
+        "-2",
+        "stage-storage-limits-",
+        "missing-binding",
+        "ownership-flip",
+        "bool-host-shareable-layouts",
+        "bundle-stale",
+        "manual-bind-group-claims",
+        "compute-aliasing"
+      ]
+    },
+    {
+      "path": "/docs/guides/shader-workflow",
+      "status": 200,
+      "anchors": [
+        "the-default-workflow-for-developing-shaders-with-vgpu",
+        "1-discover-the-docs",
+        "2-read-getting-started",
+        "3-read-the-concepts-you-actually-need",
+        "4-validate-every-wgsl-file",
+        "5-verify-this-machine-can-render",
+        "6-render-a-static-frame-in-node-and-look-at-it",
+        "7-connect-it-to-the-browser-when-the-shader-ships-to-a-browser",
+        "8-validate-visually-with-agent-browser",
+        "escalate-to-extraction-never-to-another-guess"
+      ]
+    },
+    {
+      "path": "/docs/guides/texture-formats",
+      "status": 200,
+      "anchors": [
+        "practical-texture-format-matrix",
+        "common-color-and-scalar-formats",
+        "reading-hdr-and-scalar-targets",
+        "filtering-32-bit-float-textures"
+      ]
+    },
+    {
+      "path": "/docs/guides/two-pass-rendering",
+      "status": 200,
+      "anchors": [
+        "two-pass-rendering-offscreen-depth-target-composited-to-the-canvas",
+        "the-recipe",
+        "headless-no-bundler-variant",
+        "do-you-actually-need-two-passes",
+        "see-also"
+      ]
+    },
+    {
+      "path": "/docs/ml",
+      "status": 200,
+      "anchors": [
+        "overview"
+      ]
+    },
+    {
+      "path": "/docs/ml/browser",
+      "status": 200,
+      "anchors": [
+        "quickstart-browser",
+        "browser-snapshot",
+        "browser-reference"
+      ]
+    },
+    {
+      "path": "/docs/ml/buffers",
+      "status": 200,
+      "anchors": [
+        "buffers-ownership",
+        "sdk-signatures",
+        "platform-and-ownership-matrix",
+        "reference-mode",
+        "snapshot-mode",
+        "scope"
+      ]
+    },
+    {
+      "path": "/docs/ml/node",
+      "status": 200,
+      "anchors": [
+        "quickstart-node",
+        "node-snapshot",
+        "node-reference"
+      ]
+    },
+    {
+      "path": "/docs/reference",
+      "status": 200,
+      "anchors": []
+    },
+    {
+      "path": "/docs/reference/render/canvas-mouse-tracker",
+      "status": 200,
+      "anchors": [
+        "canvasmousetracker",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "canvasmousetrackerspec",
+        "fields",
+        "canvasmousetracker-2",
+        "fields-2"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/canvas-resolution",
+      "status": 200,
+      "anchors": [
+        "canvasresolution",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "status": 200,
+      "anchors": [
+        "vgpurenderedit-mesh-editing",
+        "index",
+        "editablemesh",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "toeditable",
+        "import-2",
+        "signature-2",
+        "parameters-2",
+        "examples-2",
+        "notes-2",
+        "toeditablewithdiagnostics",
+        "import-3",
+        "signature-3",
+        "parameters-3",
+        "examples-3",
+        "notes-3",
+        "editablemeshvalue",
+        "import-4",
+        "signature-4",
+        "parameters-4",
+        "examples-4",
+        "notes-4",
+        "elementdomain",
+        "import-5",
+        "signature-5",
+        "parameters-5",
+        "examples-5",
+        "notes-5",
+        "elementselection",
+        "import-6",
+        "signature-6",
+        "parameters-6",
+        "examples-6",
+        "notes-6",
+        "elementset",
+        "import-7",
+        "signature-7",
+        "parameters-7",
+        "examples-7",
+        "notes-7",
+        "scoredselection",
+        "import-8",
+        "signature-8",
+        "parameters-8",
+        "examples-8",
+        "notes-8",
+        "vertexview",
+        "import-9",
+        "signature-9",
+        "parameters-9",
+        "examples-9",
+        "notes-9",
+        "edgeview",
+        "import-10",
+        "signature-10",
+        "parameters-10",
+        "examples-10",
+        "notes-10",
+        "faceview",
+        "import-11",
+        "signature-11",
+        "parameters-11",
+        "examples-11",
+        "notes-11",
+        "kernelhandle",
+        "import-12",
+        "signature-12",
+        "parameters-12",
+        "examples-12",
+        "notes-12",
+        "extrude",
+        "import-13",
+        "signature-13",
+        "parameters-13",
+        "examples-13",
+        "notes-13",
+        "bevel",
+        "import-14",
+        "signature-14",
+        "parameters-14",
+        "examples-14",
+        "notes-14",
+        "inset",
+        "import-15",
+        "signature-15",
+        "parameters-15",
+        "examples-15",
+        "notes-15",
+        "subdivideedges",
+        "import-16",
+        "signature-16",
+        "parameters-16",
+        "examples-16",
+        "notes-16",
+        "subdividefaces",
+        "import-17",
+        "signature-17",
+        "parameters-17",
+        "examples-17",
+        "notes-17",
+        "loopcut",
+        "import-18",
+        "signature-18",
+        "parameters-18",
+        "examples-18",
+        "notes-18",
+        "bridge",
+        "import-19",
+        "signature-19",
+        "parameters-19",
+        "examples-19",
+        "notes-19",
+        "fillhole",
+        "import-20",
+        "signature-20",
+        "parameters-20",
+        "examples-20",
+        "notes-20",
+        "gridfill",
+        "import-21",
+        "signature-21",
+        "parameters-21",
+        "examples-21",
+        "notes-21",
+        "dissolvevertices",
+        "import-22",
+        "signature-22",
+        "parameters-22",
+        "examples-22",
+        "notes-22",
+        "dissolveedges",
+        "import-23",
+        "signature-23",
+        "parameters-23",
+        "examples-23",
+        "notes-23",
+        "dissolvefaces",
+        "import-24",
+        "signature-24",
+        "parameters-24",
+        "examples-24",
+        "notes-24",
+        "mergebydistance",
+        "import-25",
+        "signature-25",
+        "parameters-25",
+        "examples-25",
+        "notes-25",
+        "healmanifold",
+        "import-26",
+        "signature-26",
+        "parameters-26",
+        "examples-26",
+        "notes-26",
+        "recomputenormals",
+        "import-27",
+        "signature-27",
+        "parameters-27",
+        "examples-27",
+        "notes-27",
+        "meshediterror",
+        "import-28",
+        "signature-28",
+        "parameters-28",
+        "examples-28",
+        "notes-28",
+        "mesheditwarning",
+        "import-29",
+        "signature-29",
+        "parameters-29",
+        "examples-29",
+        "notes-29"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/frame-clock",
+      "status": 200,
+      "anchors": [
+        "frameclock",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "status": 200,
+      "anchors": [
+        "inspectmaterial",
+        "import",
+        "signature",
+        "fields",
+        "examples",
+        "notes",
+        "inspectmaterialuniformparams",
+        "import-2",
+        "signature-2",
+        "fields-2",
+        "examples-2",
+        "notes-2"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/mesh-to-readable",
+      "status": 200,
+      "anchors": [
+        "meshtoreadable",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/mesh-to-wireframe",
+      "status": 200,
+      "anchors": [
+        "meshtowireframe",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/normal-debug-material",
+      "status": 200,
+      "anchors": [
+        "normaldebugmaterial",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "status": 200,
+      "anchors": [
+        "vgpurenderperf",
+        "gpuframetime",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "gpuframetimeoptions",
+        "fields",
+        "gpuframetimeresult",
+        "fields-2",
+        "pixeldiff",
+        "import-2",
+        "signature-2",
+        "parameters-2",
+        "examples-2",
+        "notes-2",
+        "pixeldiffresult",
+        "fields-3"
+      ]
+    },
+    {
+      "path": "/docs/reference/render/wireframe-material",
+      "status": 200,
+      "anchors": [
+        "wireframematerial",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-adapter-node/create-node-adapter",
+      "status": 200,
+      "anchors": [
+        "createnodeadapter"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-adapter-node/create-node-device",
+      "status": 200,
+      "anchors": [
+        "createnodedevice",
+        "agentic-headless-snapshot-workflow",
+        "native-webgpu-readback-boilerplate",
+        "with-vgpu-in-node",
+        "test-harness-sketch",
+        "ci-docker-and-glibc-notes",
+        "shutting-down-cleanly",
+        "headless-rendering-without-a-gpu",
+        "reading-the-startup-noise-on-a-machine-without-a-gpu",
+        "choosing-an-adapter",
+        "lifecycle-guidance",
+        "troubleshooting-snapshot-tests",
+        "related-work"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/bind",
+      "status": 200,
+      "anchors": [
+        "bind-and-explicit-binding-helpers",
+        "import",
+        "signature",
+        "parameters",
+        "shared-parameters",
+        "-2",
+        "-3",
+        "-4",
+        "layout-entry-helpers",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/buffer",
+      "status": 200,
+      "anchors": [
+        "buffer",
+        "import",
+        "signature",
+        "parameters",
+        "constructor",
+        "-2",
+        "-3",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/device",
+      "status": 200,
+      "anchors": [
+        "device",
+        "import",
+        "signature",
+        "parameters",
+        "constructor",
+        "-2",
+        "-3",
+        "error-scopes-and-teardown",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/queue",
+      "status": 200,
+      "anchors": [
+        "queue",
+        "import",
+        "signature",
+        "parameters",
+        "constructor",
+        "-2",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/render-bundle",
+      "status": 200,
+      "anchors": [
+        "createrenderbundle",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/storage-buffer",
+      "status": 200,
+      "anchors": [
+        "storagebuffer",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/structured-uniform",
+      "status": 200,
+      "anchors": [
+        "structureduniform",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/texture",
+      "status": 200,
+      "anchors": [
+        "texture",
+        "import",
+        "signature",
+        "parameters",
+        "constructor",
+        "views-resize-readback",
+        "examples",
+        "readback-formats",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/uniform",
+      "status": 200,
+      "anchors": [
+        "uniform",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/uniform-pool",
+      "status": 200,
+      "anchors": [
+        "uniformpool",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/vgpu-adapter",
+      "status": 200,
+      "anchors": [
+        "vgpuadapter",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-core/vgpu-error",
+      "status": 200,
+      "anchors": [
+        "vgpuerror",
+        "import",
+        "signature",
+        "parameters",
+        "-2",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-mock/create-mock-adapter",
+      "status": 200,
+      "anchors": [
+        "createmockadapter"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "status": 200,
+      "anchors": [
+        "camera",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "scenecamera",
+        "import-2",
+        "signature-2",
+        "parameters-2",
+        "examples-2",
+        "notes-2",
+        "cameravec3",
+        "import-3",
+        "signature-3",
+        "parameters-3",
+        "examples-3",
+        "notes-3",
+        "vec3",
+        "import-4",
+        "signature-4",
+        "parameters-4",
+        "examples-4",
+        "notes-4",
+        "mat4",
+        "import-5",
+        "signature-5",
+        "parameters-5",
+        "examples-5",
+        "notes-5"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/deg-to-rad",
+      "status": 200,
+      "anchors": [
+        "degtorad",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "status": 200,
+      "anchors": [
+        "box",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "boxoptions",
+        "import-2",
+        "signature-2",
+        "parameters-2",
+        "examples-2",
+        "notes-2",
+        "sphere",
+        "import-3",
+        "signature-3",
+        "parameters-3",
+        "examples-3",
+        "notes-3",
+        "sphereoptions",
+        "import-4",
+        "signature-4",
+        "parameters-4",
+        "examples-4",
+        "notes-4",
+        "plane",
+        "import-5",
+        "signature-5",
+        "parameters-5",
+        "examples-5",
+        "notes-5",
+        "planeoptions",
+        "import-6",
+        "signature-6",
+        "parameters-6",
+        "examples-6",
+        "notes-6",
+        "torus",
+        "import-7",
+        "signature-7",
+        "parameters-7",
+        "examples-7",
+        "notes-7",
+        "torusoptions",
+        "import-8",
+        "signature-8",
+        "parameters-8",
+        "examples-8",
+        "notes-8",
+        "fullscreenquad",
+        "import-9",
+        "signature-9",
+        "parameters-9",
+        "examples-9",
+        "notes-9",
+        "fullscreenquadoptions",
+        "import-10",
+        "signature-10",
+        "parameters-10",
+        "examples-10",
+        "notes-10",
+        "capsule",
+        "import-11",
+        "signature-11",
+        "parameters-11",
+        "examples-11",
+        "notes-11",
+        "capsuleoptions",
+        "import-12",
+        "signature-12",
+        "parameters-12",
+        "examples-12",
+        "notes-12",
+        "cone",
+        "import-13",
+        "signature-13",
+        "parameters-13",
+        "examples-13",
+        "notes-13",
+        "coneoptions",
+        "import-14",
+        "signature-14",
+        "parameters-14",
+        "examples-14",
+        "notes-14",
+        "cylinder",
+        "import-15",
+        "signature-15",
+        "parameters-15",
+        "examples-15",
+        "notes-15",
+        "cylinderoptions",
+        "import-16",
+        "signature-16",
+        "parameters-16",
+        "examples-16",
+        "notes-16",
+        "disk",
+        "import-17",
+        "signature-17",
+        "parameters-17",
+        "examples-17",
+        "notes-17",
+        "diskoptions",
+        "import-18",
+        "signature-18",
+        "parameters-18",
+        "examples-18",
+        "notes-18",
+        "dodecahedron",
+        "import-19",
+        "signature-19",
+        "parameters-19",
+        "examples-19",
+        "notes-19",
+        "polyhedronoptions",
+        "import-20",
+        "signature-20",
+        "parameters-20",
+        "examples-20",
+        "notes-20",
+        "icosahedron",
+        "import-21",
+        "signature-21",
+        "parameters-21",
+        "examples-21",
+        "notes-21",
+        "icosphere",
+        "import-22",
+        "signature-22",
+        "parameters-22",
+        "examples-22",
+        "notes-22",
+        "icosphereoptions",
+        "import-23",
+        "signature-23",
+        "parameters-23",
+        "examples-23",
+        "notes-23",
+        "octahedron",
+        "import-24",
+        "signature-24",
+        "parameters-24",
+        "examples-24",
+        "notes-24",
+        "ring",
+        "import-25",
+        "signature-25",
+        "parameters-25",
+        "examples-25",
+        "notes-25",
+        "ringoptions",
+        "import-26",
+        "signature-26",
+        "parameters-26",
+        "examples-26",
+        "notes-26",
+        "tetrahedron",
+        "import-27",
+        "signature-27",
+        "parameters-27",
+        "examples-27",
+        "notes-27",
+        "geometries",
+        "import-28",
+        "signature-28",
+        "parameters-28",
+        "examples-28",
+        "notes-28",
+        "geometrykind",
+        "import-29",
+        "signature-29",
+        "parameters-29",
+        "examples-29",
+        "notes-29",
+        "scenegeometry",
+        "import-30",
+        "signature-30",
+        "parameters-30",
+        "examples-30",
+        "notes-30",
+        "scenegeometryofkind",
+        "import-31",
+        "signature-31",
+        "parameters-31",
+        "examples-31",
+        "notes-31"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "status": 200,
+      "anchors": [
+        "directionallight",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "directionallight-2",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "directionallightoptions",
+        "import-3",
+        "signature-3",
+        "examples-3",
+        "notes-3",
+        "directionallightvalues",
+        "import-4",
+        "signature-4",
+        "examples-4",
+        "notes-4",
+        "ambientlight",
+        "import-5",
+        "signature-5",
+        "examples-5",
+        "notes-5",
+        "ambientlight-2",
+        "import-6",
+        "signature-6",
+        "examples-6",
+        "notes-6",
+        "ambientlightoptions",
+        "import-7",
+        "signature-7",
+        "examples-7",
+        "notes-7",
+        "ambientlightvalues",
+        "import-8",
+        "signature-8",
+        "examples-8",
+        "notes-8"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "status": 200,
+      "anchors": [
+        "unlitmaterial",
+        "import",
+        "signature",
+        "examples",
+        "notes",
+        "lambertmaterial",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "normalmaterial",
+        "import-3",
+        "signature-3",
+        "examples-3",
+        "notes-3",
+        "shadermaterial",
+        "import-4",
+        "signature-4",
+        "parameters",
+        "examples-4",
+        "notes-4",
+        "scenematerial",
+        "import-5",
+        "signature-5",
+        "examples-5",
+        "notes-5",
+        "unlitmaterial-2",
+        "import-6",
+        "signature-6",
+        "examples-6",
+        "notes-6",
+        "lambertmaterial-2",
+        "import-7",
+        "signature-7",
+        "examples-7",
+        "notes-7",
+        "normalmaterial-2",
+        "import-8",
+        "signature-8",
+        "examples-8",
+        "notes-8",
+        "shadermaterial-2",
+        "import-9",
+        "signature-9",
+        "examples-9",
+        "notes-9",
+        "colormaterialoptions",
+        "import-10",
+        "signature-10",
+        "parameters-2",
+        "examples-10",
+        "notes-10",
+        "colormaterialvalues",
+        "import-11",
+        "signature-11",
+        "examples-11",
+        "notes-11",
+        "materialblend",
+        "import-12",
+        "signature-12",
+        "examples-12",
+        "notes-12",
+        "scenematerialkind",
+        "import-13",
+        "signature-13",
+        "examples-13",
+        "notes-13",
+        "shadermaterialoptions",
+        "import-14",
+        "signature-14",
+        "examples-14",
+        "notes-14"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit",
+      "status": 200,
+      "anchors": [
+        "orbit",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "status": 200,
+      "anchors": [
+        "orbitcontrols",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "orbitcontrols-2",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "orbitcontrolselement",
+        "import-3",
+        "signature-3",
+        "examples-3",
+        "notes-3",
+        "orbitcontrolsoptions",
+        "import-4",
+        "signature-4",
+        "examples-4",
+        "notes-4",
+        "orbitcontrolsvalues",
+        "import-5",
+        "signature-5",
+        "examples-5",
+        "notes-5"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "status": 200,
+      "anchors": [
+        "orthographiccamera",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "orthographiccamera-2",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "orthographiccameravalues",
+        "import-3",
+        "signature-3",
+        "examples-3",
+        "notes-3"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "status": 200,
+      "anchors": [
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes",
+        "perspectivecamera",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "perspectivecameravalues",
+        "import-3",
+        "signature-3",
+        "examples-3",
+        "notes-3"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "status": 200,
+      "anchors": [
+        "scene",
+        "import",
+        "signature",
+        "examples",
+        "notes",
+        "group",
+        "import-2",
+        "signature-2",
+        "examples-2",
+        "notes-2",
+        "mesh",
+        "import-3",
+        "signature-3",
+        "parameters",
+        "examples-3",
+        "notes-3",
+        "meshnode",
+        "import-4",
+        "signature-4",
+        "examples-4",
+        "notes-4",
+        "scenenode",
+        "import-5",
+        "signature-5",
+        "examples-5",
+        "notes-5",
+        "nodeoptions",
+        "import-6",
+        "signature-6",
+        "examples-6",
+        "notes-6",
+        "nodetransformvalues",
+        "import-7",
+        "signature-7",
+        "parameters-2",
+        "examples-7",
+        "notes-7",
+        "vec3like",
+        "import-8",
+        "signature-8",
+        "examples-8",
+        "notes-8",
+        "quatlike",
+        "import-9",
+        "signature-9",
+        "examples-9",
+        "notes-9",
+        "scenenodekind",
+        "import-10",
+        "signature-10",
+        "examples-10",
+        "notes-10"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/srgb",
+      "status": 200,
+      "anchors": [
+        "srgb",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/bundle",
+      "status": 200,
+      "anchors": [
+        "bundle",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "signature-arm-recording",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/clock",
+      "status": 200,
+      "anchors": [
+        "clock",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/compute",
+      "status": 200,
+      "anchors": [
+        "compute",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/draw",
+      "status": 200,
+      "anchors": [
+        "draw",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "pipeline-pre-warm",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/effect",
+      "status": 200,
+      "anchors": [
+        "effect",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "pipeline-pre-warm",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/frame",
+      "status": 200,
+      "anchors": [
+        "frame",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/geometry",
+      "status": 200,
+      "anchors": [
+        "geometry",
+        "import",
+        "signature",
+        "parameters",
+        "error-codes",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/gpu",
+      "status": 200,
+      "anchors": [
+        "gpu",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "error-delivery",
+        "notes",
+        "sampled-float-texture-layouts"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/init",
+      "status": 200,
+      "anchors": [
+        "init",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/surface",
+      "status": 200,
+      "anchors": [
+        "surface",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/target",
+      "status": 200,
+      "anchors": [
+        "target",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/timer",
+      "status": 200,
+      "anchors": [
+        "timer",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/uniform",
+      "status": 200,
+      "anchors": [
+        "uniform",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/uniforms",
+      "status": 200,
+      "anchors": [
+        "shareduniforms",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/vgpu/visibility",
+      "status": 200,
+      "anchors": [
+        "visibility",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/color",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdcolor",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/fullscreen",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdfullscreen",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/hash",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdhash",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/noise",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdnoise",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/perlin",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdnoiseperlin",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl-std/simplex",
+      "status": 200,
+      "anchors": [
+        "vgpuwgsl-stdnoisesimplex",
+        "import",
+        "signature",
+        "parameters",
+        "measured-field-properties",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl/compile",
+      "status": 200,
+      "anchors": [
+        "compile",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl/loader-vite",
+      "status": 200,
+      "anchors": [
+        "wgslviteplugin-and-transformwgsl",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl/loader-webpack",
+      "status": 200,
+      "anchors": [
+        "wgslwebpackloader",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl/resolve-shader",
+      "status": 200,
+      "anchors": [
+        "resolveshader",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    },
+    {
+      "path": "/docs/reference/wgsl/resolved-shader",
+      "status": 200,
+      "anchors": [
+        "resolvedshader-and-shadersource",
+        "import",
+        "signature",
+        "parameters",
+        "examples",
+        "notes"
+      ]
+    }
+  ]
+}

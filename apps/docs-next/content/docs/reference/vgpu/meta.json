@@ -1,0 +1,16 @@
+{
+  "title": "vgpu",
+  "pages": [
+    "init",
+    "gpu",
+    "surface",
+    "target",
+    "frame",
+    "effect",
+    "draw",
+    "compute",
+    "uniforms",
+    "bundle",
+    "..."
+  ]
+}

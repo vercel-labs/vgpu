@@ -1,0 +1,13 @@
+{
+  "protocol": "vgpu-examples",
+  "discoveryVersion": 1,
+  "contracts": [
+    {
+      "id": "vgpu-examples/v2",
+      "schemaSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "status": "active",
+      "minimumCliVersion": "2.0.0",
+      "indexUrl": "https://vgpu.sh/api/examples/v2/latest.json"
+    }
+  ]
+}

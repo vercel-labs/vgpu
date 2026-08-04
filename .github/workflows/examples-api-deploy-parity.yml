@@ -1,0 +1,117 @@
+# TGEIST-13 — G4/G5 of the geistdocs migration (Decision 1'): byte-for-byte deployment parity of
+# the examples API.
+#
+# Why a workflow of its own instead of a job in ci.yml: this gate is not a per-PR check. It needs a
+# LIVE deployment URL (the old production site, a preview of apps/docs-next, or both), which no
+# pull_request event can supply, so it is `workflow_dispatch` only — the same shape and the same
+# reason as publish-examples-api.yml. Keeping it out of ci.yml also keeps ci.yml free of a
+# workflow_dispatch trigger with inputs that would be meaningless for its 11 other jobs (and out of
+# the way of the other migration tickets that all edit that file).
+#
+# It is a de-facto prerequisite of the cutover PR (TGEIST-15), not a blocking status check:
+#   G4 — before the cutover: run it against the old production deployment AND against the
+#        apps/docs-next preview, and require both to pass with an empty A/B diff.
+#   G5 — minutes after the cutover deploy: run it once against production again.
+#
+# The script is dependency-free (pure Node, no imports outside node:*), so this workflow needs no
+# pnpm install and no build: checkout + node.
+#
+# OPERATIONAL RULE (Risk #5 of the design): this only READS a deployment over HTTP. Never "simplify"
+# verifying a preview by pointing the production domain at it — the only path to the production
+# domain is the cutover PR itself.
+name: Examples API deployment parity
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployment A (e.g. https://vgpu.sh, or a docs-next preview URL)"
+        required: true
+        type: string
+      compare_url:
+        description: "Deployment B — optional; when set, A and B must serve the same tree byte for byte"
+        required: false
+        type: string
+      local_tree:
+        description: "Also cross-check the served bytes against a generated tree in this checkout"
+        required: false
+        default: "apps/docs/generated/examples-api"
+        type: choice
+        options:
+          - "apps/docs/generated/examples-api"
+          - "apps/docs-next/generated/examples-api"
+          - "none"
+      require_local:
+        description: "Fail (not just warn) if the checkout's tree revision differs from the deployment's"
+        required: false
+        default: false
+        type: boolean
+      verbose:
+        description: "Print one line per artifact (248 today) instead of failures only"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # Read-only, but serialised so two runs never interleave their reports in the same artifact name.
+  group: examples-api-deploy-parity-${{ inputs.base_url }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      # Set this secret to reach a preview that has Vercel Deployment Protection enabled
+      # (Project Settings -> Deployment Protection -> Protection Bypass for Automation). Without it
+      # a protected preview answers 401 and the script exits 75 = BLOCKED, which is explicitly NOT
+      # a parity failure.
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify the examples API artifact tree against the deployment(s)
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          COMPARE_URL: ${{ inputs.compare_url }}
+          LOCAL_TREE: ${{ inputs.local_tree }}
+          REQUIRE_LOCAL: ${{ inputs.require_local }}
+          VERBOSE: ${{ inputs.verbose }}
+        run: |
+          set -o pipefail
+          arguments=("$BASE_URL")
+          if [ -n "$COMPARE_URL" ]; then arguments+=("$COMPARE_URL"); fi
+          if [ "$LOCAL_TREE" != "none" ]; then arguments+=("--local=$LOCAL_TREE"); fi
+          if [ "$REQUIRE_LOCAL" = "true" ]; then arguments+=("--require-local"); fi
+          if [ "$VERBOSE" = "true" ]; then arguments+=("--verbose"); fi
+          arguments+=("--json" "examples-api-deployment-parity.json")
+          set +e
+          node scripts/verify-examples-api-deployment.mjs "${arguments[@]}" | tee report.txt
+          status=$?
+          set -e
+          {
+            echo "### Examples API deployment parity"
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 75 = the deployment could not be interrogated at all (Vercel bot mitigation, Deployment
+          # Protection, network). Surfaced as a distinct annotation so it is never mistaken for a
+          # byte-parity failure — and still fails the run, because an unverified gate is not a green
+          # gate.
+          if [ "$status" = "75" ]; then
+            echo "::error title=BLOCKED::The deployment could not be interrogated (bot mitigation / deployment protection / network). This is NOT a parity failure — re-run."
+          fi
+          exit "$status"
+      - name: Upload the machine-readable parity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: examples-api-deployment-parity
+          path: examples-api-deployment-parity.json
+          if-no-files-found: warn

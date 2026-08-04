@@ -1,0 +1,569 @@
+{
+  "$comment": "TGEIST-12, gate (d). Anchors that production serves and the new tree renames because fumadocs slugs headings with github-slugger where the old app used slugifyHeading (inline code counted, `-+` no longer collapsed, per-page duplicate counters). Every entry is machine-verified by scripts/check-url-anchor-parity.mjs: the heading must still exist on the page and must still produce `newAnchor`, so an entry can never hide a heading that disappeared. A drift that is not listed here fails the gate; an entry that no longer applies fails as stale. Regenerate with `node scripts/check-url-anchor-parity.mjs --write-allowlist` and review the diff.",
+  "entries": [
+    {
+      "path": "/docs/guides/external-ticker",
+      "prodAnchor": "driving-vgpu-with-an-external-ticker-gsapmotionxr",
+      "newAnchor": "driving-vgpu-with-an-external-ticker--gsapmotionxr",
+      "heading": "Driving vgpu with an external ticker — GSAP/Motion/XR"
+    },
+    {
+      "path": "/docs/guides/nextjs",
+      "prodAnchor": "type-imports-in-typescript",
+      "newAnchor": "type-wgsl-imports-in-typescript",
+      "heading": "Type .wgsl imports in TypeScript"
+    },
+    {
+      "path": "/docs/guides/no-bundler",
+      "prodAnchor": "gotcha-is-esm-only",
+      "newAnchor": "gotcha-vgpuwgslruntime-is-esm-only",
+      "heading": "Gotcha: @vgpu/wgsl/runtime is ESM-only"
+    },
+    {
+      "path": "/docs/guides/no-bundler",
+      "prodAnchor": "render-it-headless-with",
+      "newAnchor": "render-it-headless-with-vgpunode",
+      "heading": "Render it headless with vgpu/node"
+    },
+    {
+      "path": "/docs/guides/no-bundler",
+      "prodAnchor": "resolve-a-entry-file",
+      "newAnchor": "resolve-a-wgsl-entry-file",
+      "heading": "Resolve a .wgsl entry file"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "1-bundles-replay-",
+      "newAnchor": "1-bundles--replay-bundle--pbundles",
+      "heading": "1. Bundles / replay ( bundle() + p.bundles )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "10-back-face-culling-",
+      "newAnchor": "10-back-face-culling-cull-back",
+      "heading": "10. Back-face culling ( cull: \"back\" )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "11-occlusion-culling-",
+      "newAnchor": "11-occlusion-culling-visibility",
+      "heading": "11. Occlusion culling ( visibility() )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "12-indirect-draws-and-dispatches-",
+      "newAnchor": "12-indirect-draws-and-dispatches-indirect",
+      "heading": "12. Indirect draws and dispatches ( indirect )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "13-time-passes-before-optimizing-",
+      "newAnchor": "13-time-passes-before-optimizing-timer",
+      "heading": "13. Time passes before optimizing ( timer() )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "2-pipeline-pre-warm-",
+      "newAnchor": "2-pipeline-pre-warm-compile",
+      "heading": "2. Pipeline pre-warm ( compile )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "3-manual-group-claim-dynamic-offsets-",
+      "newAnchor": "3-manual-group-claim--dynamic-offsets-drawgroup",
+      "heading": "3. Manual group claim + dynamic offsets ( draw.group )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "4-in-place",
+      "newAnchor": "4-set-in-place",
+      "heading": "4. set() in-place"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "6-instancing-",
+      "newAnchor": "6-instancing-instances-vertices",
+      "heading": "6. Instancing ( instances , vertices )"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "7-shared-values",
+      "newAnchor": "7-uniformsgpu-shared-values",
+      "heading": "7. uniforms(gpu) shared values"
+    },
+    {
+      "path": "/docs/guides/performance-playbook",
+      "prodAnchor": "8-ping-pong-without-churn-two-bundles",
+      "newAnchor": "8-ping-pong-pingpong-without-churn--two-bundles",
+      "heading": "8. Ping-pong ( pingPong ) without churn + two bundles"
+    },
+    {
+      "path": "/docs/guides/shader-fix-its",
+      "prodAnchor": "-2",
+      "newAnchor": "vgpu-resolve-module-binding",
+      "heading": "VGPU-RESOLVE-MODULE-BINDING"
+    },
+    {
+      "path": "/docs/guides/shader-fix-its",
+      "prodAnchor": "missing-binding",
+      "newAnchor": "missing-binding-vgpu-r1-binding-never-set",
+      "heading": "Missing binding: VGPU-R1-BINDING-NEVER-SET"
+    },
+    {
+      "path": "/docs/guides/shader-fix-its",
+      "prodAnchor": "ownership-flip",
+      "newAnchor": "ownership-flip-vgpu-r1-ownership-flip",
+      "heading": "Ownership flip: VGPU-R1-OWNERSHIP-FLIP"
+    },
+    {
+      "path": "/docs/guides/shader-fix-its",
+      "prodAnchor": "stage-storage-limits-",
+      "newAnchor": "stage-storage-limits-vgpu-limit-storage-vertex--vgpu-limit-storage-fragment",
+      "heading": "Stage storage limits: VGPU-LIMIT-STORAGE-VERTEX / VGPU-LIMIT-STORAGE-FRAGMENT"
+    },
+    {
+      "path": "/docs/guides/two-pass-rendering",
+      "prodAnchor": "headless-no-bundler-variant",
+      "newAnchor": "headless--no-bundler-variant",
+      "heading": "Headless / no-bundler variant"
+    },
+    {
+      "path": "/docs/reference/render/canvas-mouse-tracker",
+      "prodAnchor": "canvasmousetracker-2",
+      "newAnchor": "canvasmousetracker",
+      "heading": "CanvasMouseTracker"
+    },
+    {
+      "path": "/docs/reference/render/canvas-mouse-tracker",
+      "prodAnchor": "fields-2",
+      "newAnchor": "fields",
+      "heading": "Fields"
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "prodAnchor": "examples-29",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "prodAnchor": "import-29",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "prodAnchor": "notes-29",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "prodAnchor": "parameters-29",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/render/edit",
+      "prodAnchor": "signature-29",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "prodAnchor": "fields-2",
+      "newAnchor": "fields",
+      "heading": "Fields"
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/render/inspect-material",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "fields-3",
+      "newAnchor": "fields",
+      "heading": "Fields"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "parameters-2",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/render/perf",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-adapter-node/create-node-device",
+      "prodAnchor": "lifecycle-guidance",
+      "newAnchor": "gpu-lifecycle-guidance",
+      "heading": ".gpu lifecycle guidance"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/bind",
+      "prodAnchor": "-2",
+      "newAnchor": "createbindgrouplayoutdevice-opts",
+      "heading": "createBindGroupLayout(device, opts)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/bind",
+      "prodAnchor": "-3",
+      "newAnchor": "createbindgrouplayoutdevice-opts",
+      "heading": "createBindGroupLayout(device, opts)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/bind",
+      "prodAnchor": "-4",
+      "newAnchor": "createbindgrouplayoutdevice-opts",
+      "heading": "createBindGroupLayout(device, opts)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/bind",
+      "prodAnchor": "layout-entry-helpers",
+      "newAnchor": "bind-layout-entry-helpers",
+      "heading": "bind.* layout entry helpers"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/buffer",
+      "prodAnchor": "-2",
+      "newAnchor": "devicecreatebufferopts--bufferoptions",
+      "heading": "Device.createBuffer(opts) / BufferOptions"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/buffer",
+      "prodAnchor": "-3",
+      "newAnchor": "devicecreatebufferopts--bufferoptions",
+      "heading": "Device.createBuffer(opts) / BufferOptions"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/device",
+      "prodAnchor": "-2",
+      "newAnchor": "createshaderinput",
+      "heading": "createShader(input)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/device",
+      "prodAnchor": "-3",
+      "newAnchor": "createshaderinput",
+      "heading": "createShader(input)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/queue",
+      "prodAnchor": "-2",
+      "newAnchor": "writebufferbuffer-offset-data",
+      "heading": "writeBuffer(buffer, offset, data)"
+    },
+    {
+      "path": "/docs/reference/vgpu-core/vgpu-error",
+      "prodAnchor": "-2",
+      "newAnchor": "new-vgpuerrordata",
+      "heading": "new VGPUError(data)"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "examples-5",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "import-5",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "notes-5",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "parameters-5",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "signature-5",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "prodAnchor": "examples-31",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "prodAnchor": "import-31",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "prodAnchor": "notes-31",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "prodAnchor": "parameters-31",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/geometry",
+      "prodAnchor": "signature-31",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "ambientlight-2",
+      "newAnchor": "ambientlight",
+      "heading": "ambientLight"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "directionallight-2",
+      "newAnchor": "directionallight",
+      "heading": "DirectionalLight"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-8",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-8",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-8",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-8",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-14",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-14",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "lambertmaterial-2",
+      "newAnchor": "lambertmaterial",
+      "heading": "lambertMaterial"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "normalmaterial-2",
+      "newAnchor": "normalmaterial",
+      "heading": "normalMaterial"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-14",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "parameters-2",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "shadermaterial-2",
+      "newAnchor": "shadermaterial",
+      "heading": "shaderMaterial"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-14",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "unlitmaterial-2",
+      "newAnchor": "unlitmaterial",
+      "heading": "UnlitMaterial"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "examples-5",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "import-5",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "notes-5",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "orbitcontrols-2",
+      "newAnchor": "orbitcontrols",
+      "heading": "OrbitControls"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "signature-5",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "orthographiccamera-2",
+      "newAnchor": "orthographiccamera",
+      "heading": "OrthographicCamera"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-10",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-10",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-10",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "parameters-2",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-10",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    }
+  ]
+}

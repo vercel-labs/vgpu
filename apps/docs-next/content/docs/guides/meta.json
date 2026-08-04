@@ -1,0 +1,18 @@
+{
+  "title": "Guides",
+  "pages": [
+    "---General---",
+    "getting-started",
+    "---Performance---",
+    "performance-model",
+    "performance-patterns",
+    "authoring-for-perf",
+    "measuring",
+    "optimize-pass",
+    "shader-fix-its",
+    "performance-playbook",
+    "---Testing---",
+    "browser-testing",
+    "..."
+  ]
+}

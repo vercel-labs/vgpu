@@ -1,0 +1,166 @@
+import type { Gpu, Surface, Target } from 'vgpu';
+
+import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '../../lib/example-renderer';
+import { fixedStepCount } from './math';
+import { installStirInput } from './pointer-input';
+import { createFluid, destroyFluid, prepareFluid, renderFluid, stepFluid, type Fluid } from './simulation';
+import { renderThumb, type FluidValidationStats } from './validation';
+import { surface } from "vgpu";
+
+export interface FluidThumbnailOptions extends ThumbnailOptions {
+  scriptedDrag?: boolean;
+  soak?: boolean;
+  onStateValidated?: (stats: FluidValidationStats) => void;
+}
+
+export function createRenderer(options: BrowserRendererOptions): ExampleRenderer {
+  let disposed = false;
+  let reportedError = false;
+  let gpu: Gpu | undefined;
+  let canvasSurface: Surface | undefined;
+  let fluid: Fluid | undefined;
+  let input: ReturnType<typeof installStirInput> | undefined;
+  let observer: ResizeObserver | undefined;
+  let unsubscribeResize: (() => void) | undefined;
+  let animationFrame = 0;
+  let resizeFrame = 0;
+  let prepareRunning = false;
+  let prepareQueued = false;
+  let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
+  let accumulator = 0;
+  let previous = typeof performance === 'undefined' ? 0 : performance.now();
+
+  const reportFailure = (error: unknown) => {
+    if (disposed) return;
+    try {
+      if (!reportedError) {
+        reportedError = true;
+        try {
+          options.onError?.(error);
+        } catch {
+          // Error reporting must never replace the renderer failure or block teardown.
+        }
+      }
+    } finally {
+      dispose();
+    }
+  };
+
+  const prepareCurrentOutput = async () => {
+    if (prepareRunning) { prepareQueued = true; return; }
+    prepareRunning = true;
+    try {
+      do {
+        prepareQueued = false;
+        if (disposed || !fluid || !canvasSurface) return;
+        await prepareFluid(fluid, canvasSurface);
+      } while (prepareQueued && !disposed);
+    } catch (error) {
+      reportFailure(error);
+    } finally {
+      prepareRunning = false;
+    }
+  };
+
+  const flushResize = () => {
+    resizeFrame = 0;
+    void prepareCurrentOutput();
+  };
+
+  const requestResize = () => {
+    if (disposed) return;
+    prepareQueued = true;
+    if (!prepareRunning && !resizeFrame) resizeFrame = requestAnimationFrame(flushResize);
+  };
+
+  const resize = (size: RenderSize) => {
+    if (disposed || size.width <= 0 || size.height <= 0) return;
+    requestResize();
+  };
+
+  const measure = () => {
+    const rect = options.canvas.getBoundingClientRect();
+    resize({
+      width: rect.width,
+      height: rect.height,
+      dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
+    });
+  };
+
+  const onWindowResize = () => {
+    if (window.devicePixelRatio === lastDpr) return;
+    lastDpr = window.devicePixelRatio;
+    measure();
+  };
+
+  const tick = (now: number) => {
+    if (disposed) return;
+    if (!document.hidden && fluid && input && canvasSurface) {
+      const fixed = fixedStepCount(accumulator, (now - previous) / 1000);
+      accumulator = fixed.accumulator;
+      for (let i = 0; i < fixed.steps; i++) stepFluid(fluid, input);
+      renderFluid(fluid, canvasSurface);
+    }
+    // Always reset the clock while hidden so visibility changes never catch up.
+    previous = now;
+    animationFrame = requestAnimationFrame(tick);
+  };
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    prepareQueued = false;
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    resizeFrame = 0;
+    observer?.disconnect();
+    observer = undefined;
+    if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize);
+    unsubscribeResize?.();
+    unsubscribeResize = undefined;
+    input?.dispose();
+    input = undefined;
+    if (fluid) destroyFluid(fluid);
+    canvasSurface?.dispose();
+    canvasSurface = undefined;
+    gpu?.dispose();
+    gpu = undefined;
+    fluid = undefined;
+  }
+
+  const initialize = async () => {
+    const { init } = await import('vgpu');
+    if (disposed) return;
+    const nextGpu = await init();
+    if (disposed) { nextGpu.dispose(); return; }
+    gpu = nextGpu;
+    canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] });
+    fluid = createFluid(gpu);
+    input = installStirInput(options.canvas);
+    await prepareFluid(fluid, canvasSurface);
+    if (disposed) return;
+    unsubscribeResize = canvasSurface.onResize(requestResize);
+    observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(options.canvas);
+    window.addEventListener('resize', onWindowResize);
+    previous = performance.now();
+    animationFrame = requestAnimationFrame(tick);
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (disposed) return;
+    reportFailure(error);
+    throw error;
+  });
+
+  return { ready, invalidate() {}, resize, dispose };
+}
+
+export async function renderThumbnail(
+  gpu: Gpu,
+  target: Target,
+  options: FluidThumbnailOptions = {},
+): Promise<void> {
+  await renderThumb(gpu, target, options);
+}

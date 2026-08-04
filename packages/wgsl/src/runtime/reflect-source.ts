@@ -34,7 +34,7 @@ export type {
  * This intentionally rejects WGSL import graphs; use resolveShader() when imports must be loaded/mangled.
  */
 export function reflectSource(wgsl: string, path = "<runtime>"): Reflection {
-  const tokens = scan(wgsl);
+  const tokens = scan(wgsl, path);
   const parsed = parseModule(tokens);
   if (parsed.imports.length > 0) {
     throw wgslError("VGPU-WGSL-REFLECT-SOURCE-IMPORT", "reflectSource() accepts a single raw WGSL string; use resolveShader() for WGSL import graphs.");

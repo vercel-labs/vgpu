@@ -1,14 +1,25 @@
 name: ORT init device Node E2E
 
+# `on.pull_request.paths` used to gate whether this workflow triggered at all. But
+# `ort-init-device-node` is also a *required* status check on `main` (classic branch
+# protection, 11 required contexts). GitHub only clears a required context when a
+# `pull_request`-event run actually reports a conclusion for the PR's head SHA — a
+# workflow-level path filter that skips the run entirely leaves that context stuck at
+# "Expected" forever for any PR that never touches these paths (e.g. docs-only changes).
+# Those PRs became permanently unmergeable: neither `--admin` merge nor a manual
+# workflow_dispatch on the head SHA satisfies the required pull_request check.
+# (Discovered 2025-04, blocking every PR that doesn't touch experiments/ort-init-device,
+# packages/vgpu, packages/vgpu-api or packages/adapter-node.)
+#
+# Fix: trigger on every pull_request (no path filter on the trigger) and move the
+# filtering inside the job. The first step below decides whether relevant paths changed
+# and every expensive step is gated behind that decision via `if:`. Irrelevant PRs finish
+# this job as a no-op success in a few seconds, so the required context always reports;
+# relevant PRs still run the full E2E. The job id/name stays `ort-init-device-node` since
+# that string is the required context configured in branch protection.
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - experiments/ort-init-device/**
-      - packages/vgpu/**
-      - packages/vgpu-api/**
-      - packages/adapter-node/**
-      - .github/workflows/ort-init-device-node.yml
 
 jobs:
   ort-init-device-node:
@@ -19,25 +30,71 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the merge-base diff below can always resolve the PR's base
+          # and head commits, however far main has moved since the branch was created.
+          fetch-depth: 0
+
+      - name: Detect relevant path changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Non-pull_request event ($EVENT_NAME); running the full E2E."
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "Changed files:"
+          echo "$changed"
+
+          if echo "$changed" | grep -Eq '^(experiments/ort-init-device/|packages/vgpu/|packages/vgpu-api/|packages/adapter-node/|\.github/workflows/ort-init-device-node\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Relevant paths changed; running the full E2E."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No relevant paths changed; reporting success as a no-op."
+          fi
+
       - name: Install pnpm
+        if: steps.filter.outputs.run == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
+
       - name: Setup Node.js
+        if: steps.filter.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+
+      - name: Install workspace dependencies
+        if: steps.filter.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
       - name: Build workspace packages
+        if: steps.filter.outputs.run == 'true'
         run: pnpm build
+
       - name: Install pinned experiment dependencies
+        if: steps.filter.outputs.run == 'true'
         run: npm ci --prefix experiments/ort-init-device
+
       # The E2E runs these files through `node --experimental-strip-types`, which erases types
       # without checking them, so an API drift like `gpu.compute` -> `compute(gpu, ...)` only
       # surfaced as a runtime TypeError. The experiment is outside the root tsconfig's project
       # references, so `tsc -b` never covered it either. Check it explicitly, before the E2E.
       - name: Typecheck the experiment
+        if: steps.filter.outputs.run == 'true'
         run: npm run --prefix experiments/ort-init-device typecheck
+
       - name: Run generic-WASM negative and asyncify Node recipe
+        if: steps.filter.outputs.run == 'true'
         run: npm run --prefix experiments/ort-init-device e2e:node

@@ -1,0 +1,1178 @@
+import type { Effect, Frame, Gpu, Surface, Target, Timer, TimerSpan } from 'vgpu';
+
+/**
+ * vgpu 0.2.0 is a set of free functions over a minimal `Gpu` kernel — there is
+ * no `gpu.effect()` facade any more. The module namespace is captured from the
+ * SAME dynamic `import('vgpu')` that `init()` comes from, so the library still
+ * stays out of the initial bundle: nothing here imports vgpu at module scope.
+ */
+type VgpuApi = typeof import('vgpu');
+
+import bakeWgsl from './bake.wgsl';
+import { createNoiseVolume, NOISE_VOLUME_SIZE, noiseVolumeSampler } from './noise-volume.mjs';
+import refineWgsl from './refine.wgsl';
+import shadeWgsl from './shade.wgsl';
+
+/**
+ * Disk look, uploaded verbatim as the `disk` uniform (see disk.wgsl `DiskLook`).
+ * Field names must match the WGSL struct one to one.
+ */
+export interface DiskLook {
+  /** Overall emission gain of the disk. */
+  brightness: number;
+  /** Keplerian rotation speed multiplier. */
+  speed: number;
+  /** Angular noise scale: lower = smoke stretched over a wider arc. */
+  stretch: number;
+  /** Radial noise frequency: higher = thinner, more numerous filaments. */
+  detail: number;
+  /** Chaos gain; grows toward the outer rim. */
+  turbulence: number;
+  /** Opacity of the smoke (how much of the background it hides). */
+  density: number;
+  /** Relativistic beaming strength. */
+  doppler: number;
+  /** Free knobs for prototyping without touching the renderer (default 0). */
+  spare0: number;
+  spare1: number;
+  spare2: number;
+  spare3: number;
+}
+
+/**
+ * Star look, uploaded verbatim as the `stars` uniform (see stars.wgsl `StarLook`).
+ * Field names must match the WGSL struct one to one.
+ */
+export interface StarLook {
+  /** Global exposure of the whole field; 1.0 is the tuned look. */
+  brightness: number;
+  /** Population multiplier on every species' per-cell probability. */
+  density: number;
+  /**
+   * Brightest-to-faintest flux ratio inside one species — the dynamic range of
+   * the power law the field's magnitudes are drawn from. Higher = a starker sky
+   * (rarer bright stars, more of the population below the visual threshold).
+   */
+  contrast: number;
+  /** Amount of per-star colour temperature; 0 = every star neutral white. */
+  warmth: number;
+  twinkle: number;
+}
+
+export interface HeroSettings {
+  // --- Geometry / camera. Changing any of these needs a re-bake. ---
+  /** Camera pitch, in radians. Positive = camera above the disk plane. */
+  cameraY: number;
+  /** Camera orbit distance. Smaller = the black hole fills more of the screen. */
+  distance: number;
+  /** Outer radius of the accretion disk, from the hole's center. */
+  diskRadius: number;
+  /** Focal length; higher = narrower field of view (zooms in). */
+  fov: number;
+  /** Vertical image shift in NDC units; positive moves the hole UP on screen. */
+  centerY: number;
+
+  // --- Frame-only settings. No re-bake. ---
+  /** 0 = final image, 1..9 = G-buffer debug views. */
+  debugView: number;
+  /**
+   * Photon-ring antialiasing: 1 consumes the one-shot refine pass's
+   * coverage/span target, 0 ignores it. A/B knob, not a look setting — 1 is the
+   * intended result.
+   *
+   * Frame-only despite depending on baked data: the refine pass runs with the
+   * bake either way (it is one-shot and throttled with it), so flipping this
+   * costs one uniform and no re-bake.
+   */
+  aa: number;
+  /**
+   * How many baked disk crossings to composite: 1 = front band only,
+   * 2 = also the second, lensed image hidden behind it. A/B knob, not a look
+   * setting — 2 is the intended result.
+   */
+  diskLayers: number;
+  /**
+   * Maximum scene rotation the mouse can reach, in radians (0 disables it).
+   *
+   * The pointer turns the SCENE around the Y axis, not the camera: the baked
+   * G-buffer stays valid because the geometry is axisymmetric, so this is a
+   * per-frame uniform and never triggers a bake. See `Shade.sceneYaw` in
+   * shade.wgsl for the sign convention and the symmetry precondition.
+   */
+  mouseYaw: number;
+  /** Owned by disk.wgsl. */
+  disk: DiskLook;
+  /** Owned by stars.wgsl. */
+  stars: StarLook;
+}
+
+/**
+ * Defaults picked by the user in the panel (via "copy JSON"). Keep them in sync
+ * with DEFAULT_SETTINGS in debug-render.mjs, which mirrors this block so the
+ * headless harness renders the same image the page does.
+ */
+export function defaultHeroSettings(): HeroSettings {
+  return {
+    cameraY: 0.085,
+    distance: 13.5,
+    diskRadius: 6.9,
+    fov: 2.67,
+    // Canvas covers the whole hero now, so the hole sits dead center.
+    centerY: 0,
+    debugView: 0,
+    diskLayers: 2,
+    aa: 1,
+    // ~8.6 degrees each way: enough to read as a living, turnable scene without
+    // ever swinging the disk far enough to look like a camera cut.
+    mouseYaw: 0.15,
+    disk: {
+      brightness: 0.098,
+      speed: 0.75,
+      stretch: 5.75,
+      detail: 3.44,
+      turbulence: 4.46,
+      density: 1.38,
+      doppler: 1.21,
+      spare0: 0.43,
+      spare1: -0.25,
+      spare2: -0.67,
+      spare3: 0.69,
+    },
+    stars: {
+      // The field is calibrated so that `brightness: 1` IS the intended look:
+      // stars.wgsl folds in its own `STAR_INTENSITY` and every species' peak, so
+      // this knob is a pure exposure and 1.0 puts the brightest anchors right at
+      // the top of the ACES curve. `density` is a true population multiplier now
+      // (it scales each species' per-cell probability, not a value that gets
+      // clamped away), and `contrast` is the brightest:faintest ratio of the
+      // power law the magnitudes come from.
+      brightness: 1,
+      density: 1,
+      contrast: 13,
+      // Chroma-only star temperature. NOTE the shipped tone map runs
+      // `SATURATION = 0` (shade.wgsl), so this is currently invisible by
+      // construction; it costs ~4 ALU per star and turns on the moment that
+      // constant is lifted.
+      warmth: 0.5,
+      twinkle: 0,
+    },
+  };
+}
+
+/** Settings that invalidate the baked G-buffer. */
+export const BAKE_KEYS = ['cameraY', 'distance', 'diskRadius', 'fov', 'centerY'] as const;
+
+/**
+ * Minimum spacing between throttled re-bakes, in milliseconds.
+ *
+ * Dragging a geometry slider fires onChange on every pointer tick; baking on
+ * each one would stall the loop. The renderer instead polls BAKE_KEYS every
+ * frame and re-bakes at most this often, with a guaranteed trailing bake once
+ * the drag settles (see `resolveBake`).
+ */
+const BAKE_THROTTLE_MS = 200;
+
+/**
+ * Smoothing time constant for the mouse-driven scene rotation, in seconds.
+ *
+ * Applied as `k = 1 - exp(-dt / tau)` so the response is frame-rate independent
+ * (a plain `lerp(current, target, 0.05)` would rotate twice as fast on a 120 Hz
+ * display). 0.325 s reproduces exactly that historical 0.05-per-frame feel at
+ * 60 fps.
+ */
+const SCENE_YAW_TAU_S = 0.325;
+
+/** Upper bound on the smoothing timestep, so a backgrounded tab cannot snap. */
+const MAX_FRAME_DT_S = 0.1;
+
+// --- Frame pacing -------------------------------------------------------------
+/**
+ * Cadence the hero renders at, in frames per second.
+ *
+ * Heat is work-per-frame x frames-per-second, and a vsync-paced loop hands the
+ * second factor to the display: the same shader costs twice the power on a
+ * 120 Hz ProMotion panel as on a 60 Hz one, for an animation (slow Keplerian
+ * shear plus a smoothed mouse yaw) that carries no detail at 120 fps. So the
+ * loop caps itself instead of taking whatever the panel offers.
+ *
+ * Nothing about the animation depends on this number: the disk clock is
+ * seconds-based and the yaw smoothing is `1 - exp(-dt/tau)`, both of which are
+ * frame-rate independent by construction.
+ */
+const TARGET_FPS = 60;
+
+/**
+ * Jitter allowance on the pacing threshold, in milliseconds.
+ *
+ * A naive `now - last >= 1000 / TARGET_FPS` halves the frame rate on a display
+ * that already runs AT the target: 60 Hz vsync intervals land on either side of
+ * 16.667 ms, so roughly every other frame misses the threshold by microseconds
+ * and the hero drops to ~30 fps. Subtracting an epsilon makes "close enough to
+ * one target interval" pass.
+ *
+ * It must stay well BELOW one refresh interval of the displays being capped, or
+ * the cap stops capping: at 120 Hz the ticks arrive 8.33 ms apart, so anything
+ * from 8.34 ms up would let two consecutive ticks through. 2 ms absorbs vsync
+ * jitter with a wide margin on both sides.
+ */
+const FRAME_PACING_EPSILON_MS = 2;
+
+/**
+ * Minimum spacing between two rendered frames, in milliseconds.
+ *
+ * Because rAF only fires on a refresh boundary, the achievable cadence is
+ * `refreshHz / n`: 60 and 120 Hz both land exactly on 60 fps, while 90/144 Hz
+ * fall to 45/48 fps (the next step up, 90 and 72, would break the cap).
+ */
+const MIN_FRAME_INTERVAL_MS = 1000 / TARGET_FPS - FRAME_PACING_EPSILON_MS;
+
+// --- measure() tuning ---------------------------------------------------------
+/** Frame intervals collected per measurement, unless `maxMs` cuts it short. */
+const MEASURE_FRAMES = 180;
+/**
+ * Frames rendered and thrown away before sampling starts.
+ *
+ * Covers any pending re-bake and the first-frame cost of a freshly bound
+ * pipeline. It is also why `measure()` can be pressed immediately after moving a
+ * geometry slider without the bake landing in the samples.
+ */
+const MEASURE_WARMUP = 30;
+/** Hard cap on one measurement, so a slow machine still answers promptly. */
+const MEASURE_MAX_MS = 4000;
+/** Grace period for in-flight timestamp resolves (they land 1-2 frames late). */
+const MEASURE_DRAIN_MS = 120;
+/**
+ * How long to wait for ANY frame before giving up.
+ *
+ * `measure()` forces the render loop on, but it cannot force `requestAnimationFrame`
+ * to tick: a browser stops rAF entirely in a hidden tab. Without this the promise
+ * would simply never settle if the reader switched tabs mid-measurement.
+ */
+const MEASURE_STALL_MS = 6000;
+/** Name of the timed span; one per frame, so a constant is enough. */
+const MEASURE_SPAN = 'shade';
+/**
+ * Plausible display refresh intervals, used to flag a vsync-capped result.
+ *
+ * A present-limited frame time says nothing about how expensive the shader is,
+ * which is exactly the trap this whole tool exists to avoid.
+ */
+const REFRESH_INTERVALS_MS = [1000 / 240, 1000 / 165, 1000 / 144, 1000 / 120, 1000 / 90, 1000 / 75, 1000 / 60, 1000 / 30];
+
+export interface HeroRendererOptions {
+  canvas: HTMLCanvasElement;
+  /** Mutable object read every frame; tweak its fields to adjust the scene live. */
+  settings?: HeroSettings;
+  onError?: (error: unknown) => void;
+  /**
+   * Opt in to GPU profiling: requests the `timestamp-query` device feature so
+   * `measure()` can report the shade pass's GPU time on top of wall-clock.
+   *
+   * Off by default and set only by the `?debug` panel, so the shipped hero
+   * requests exactly the same device it always did. Requesting a feature the
+   * adapter lacks makes `init` throw, so this is best-effort: the renderer
+   * checks adapter support first and silently falls back to wall-clock.
+   */
+  profiling?: boolean;
+}
+
+/** Knobs for `HeroRenderer.measure`. Defaults are the MEASURE_* constants. */
+export interface MeasureOptions {
+  /** Frame intervals to collect after warmup. */
+  frames?: number;
+  /** Frames to render and discard first. */
+  warmupFrames?: number;
+  /** Hard time cap; the measurement resolves with whatever it has. */
+  maxMs?: number;
+}
+
+/** One `measure()` result. Times are milliseconds. */
+export interface MeasureResult {
+  /** Frame intervals behind the stats. */
+  samples: number;
+  /** Median wall-clock interval between presented frames. The headline number. */
+  medianMs: number;
+  meanMs: number;
+  /** `1000 / medianMs`. */
+  fps: number;
+  /**
+   * GPU time of the shade pass alone, when `timestamp-query` was available.
+   *
+   * This is the number that survives a vsync cap, and it excludes the bake, the
+   * present and all CPU-side submit cost — so it is the one that isolates what
+   * a change to the shade shader actually did.
+   */
+  gpuMedianMs?: number;
+  gpuMeanMs?: number;
+  method: 'wall-clock' | 'wall-clock + timestamp-query';
+  /**
+   * Wall-clock median sits on a display refresh interval while the GPU number is
+   * comfortably below it: the frame is waiting for the display, so wall-clock
+   * cannot see a change in the shader at all. Trust `gpuMedianMs` instead.
+   *
+   * Effectively always true now that the loop paces itself to `targetFps`: it is
+   * the pacer, not the display, that holds the frame — same conclusion for the
+   * reader either way (the wall-clock number is a cadence, not a cost).
+   */
+  vsyncCapped: boolean;
+  /**
+   * Cadence the render loop paces itself to (TARGET_FPS), for the record.
+   *
+   * `medianMs` is a measurement OF THAT PACING whenever the machine can keep up:
+   * a healthy result is ~1000/targetFps, and a median comfortably above it is
+   * the interesting case — the frame no longer fits in its slot. Reported so a
+   * pasted measurement stays interpretable if the cap ever changes.
+   */
+  targetFps: number;
+  /** Physical pixels actually shaded, for the record. */
+  resolution: readonly [number, number];
+}
+
+export interface HeroRenderer {
+  ready: Promise<void>;
+  /** Re-runs the one-shot geodesic bake with the current settings. */
+  rebake(): void;
+  /**
+   * Times the REAL frame loop for a few hundred frames and resolves with the
+   * stats. Used by the `?debug` panel to time a change to the shade shader.
+   *
+   * Measures whatever is currently selected — it never changes settings itself,
+   * so the caller stays in control of what is being compared. Rejects if a
+   * measurement is already running, or if no frame arrives at all (a hidden tab
+   * stops `requestAnimationFrame`, which no flag here can override).
+   *
+   * It measures the SHIPPED loop, pacing included: the wall-clock median is
+   * therefore ~1000/TARGET_FPS on any machine that keeps up, and `gpuMedianMs`
+   * (`profiling: true` + `timestamp-query`) is the only number that reacts to a
+   * change in the shade shader. The pacer is left on rather than bypassed for
+   * the measurement, because a frame time collected at an fps the hero never
+   * runs at would be measuring a different renderer.
+   */
+  measure(options?: MeasureOptions): Promise<MeasureResult>;
+  dispose(): void;
+}
+
+/**
+ * Live measurement state. Exists only between `measure()` and its resolution,
+ * and its mere existence forces the render loop to run (see `reconcileLoop`).
+ */
+interface Measurement {
+  readonly targetFrames: number;
+  readonly warmupFrames: number;
+  readonly maxMs: number;
+  readonly startedAt: number;
+  readonly frameSamples: number[];
+  readonly gpuSamples: number[];
+  /** Frames seen since the measurement began, warmup included. */
+  seen: number;
+  /** Timestamp of the previous SAMPLED frame, for the interval. */
+  lastAt?: number;
+  /** Sampling is over; we are only draining in-flight timestamp results. */
+  done: boolean;
+  resolve(result: MeasureResult): void;
+  reject(error: Error): void;
+}
+
+type RenderSize = { width: number; height: number; dpr: number };
+
+type Output = Surface | Target;
+
+interface Effects {
+  bake: Effect;
+  /**
+   * One-shot sub-pixel coverage/span of the photon ring; runs right after the
+   * bake, in the same throttled block, and never per frame. See refine.wgsl.
+   */
+  refine: Effect;
+  /** Compiled and warmed at init, so the first measured frame never pays for it. */
+  shade: Effect;
+  /**
+   * Tiled 3D value-noise lattice for disk.wgsl, plus its sampler.
+   *
+   * Immutable and resolution-independent, so unlike the G-buffer it is created
+   * ONCE and survives every resize — `setBindings` re-binds the same handle.
+   * Lives on `Effects` rather than `Targets` for exactly that reason: `Targets`
+   * is the set of things a resize throws away.
+   */
+  noiseVolume: NoiseVolume;
+  noiseSampler: GPUSampler;
+}
+
+/** What `createNoiseVolume` hands back: a core `Texture` we have to destroy. */
+type NoiseVolume = ReturnType<typeof createNoiseVolume>;
+
+interface Targets {
+  /** G-buffer written once by the bake pass (MRT: hit1 / hit2 / sky / view). */
+  gbuffer: Target;
+  /**
+   * Photon-ring AA data, written once by the refine pass: 10 B/px in two
+   * attachments — (coverage, span) for the front disk crossing, plus the
+   * synthesized crossing of the sub-pixel arcs whose centre ray missed the disk
+   * entirely (see AA_FORMATS).
+   *
+   * A separate target and a separate pass rather than a 5th bake attachment,
+   * because `maxColorAttachmentBytesPerSample` is only guaranteed to be 32 and
+   * the G-buffer already spends exactly 32. Created, resized and destroyed with
+   * the G-buffer — it is indexed 1:1 by the same texel.
+   */
+  aa: Target;
+}
+
+/**
+ * Device pixel ratio the whole chain renders at — pinned, not clamped.
+ *
+ * Every buffer in the chain is allocated at CSS size x this, so it is the single
+ * biggest lever on fill cost: the bake is a geodesic raymarch per pixel and the
+ * G-buffer is 32 bytes per sample. 1 (CSS resolution) costs ~56% fewer fragments
+ * than the 1.5 cap it replaced and ~75% fewer than an uncapped 2 on Retina —
+ * paid for by a softer edge on the photon ring, which is the cheapest possible
+ * place to spend it in a scene that is mostly smooth gradients and glow.
+ *
+ * A fixed number rather than a `[min, max]` range on purpose: with the ratio out
+ * of the picture, physical size IS CSS size, so a monitor change or a browser
+ * zoom cannot resize the render targets behind the layout's back.
+ *
+ * Used in BOTH places that can size the swap chain — `surface({ dpr })` and the
+ * `resize()` path — which must agree or the shade pass would sample the G-buffer
+ * at the wrong scale.
+ */
+const RENDER_DPR = 1;
+
+/**
+ * G-buffer attachments, in @location order (hit1, hit2, sky, view).
+ *
+ * Byte cost per sample: 8 + 8 + 8 + 8 = 32, which is exactly the WebGPU
+ * guaranteed minimum for maxColorAttachmentBytesPerSample — and exactly what the
+ * previous single-hit layout already cost. That budget is why bake.wgsl packs
+ * the second hit instead of adding attachments; see the layout comment there.
+ *
+ * Hit positions stay f32: half floats quantize to ~0.6 px at r ~ 15 and visibly
+ * contour the disk noise. Directions and the sky ride in f16, where they are
+ * stored as (y, azimuth) pairs and lose nothing.
+ */
+const GBUFFER_FORMATS: readonly GPUTextureFormat[] = ['rg32float', 'rg32float', 'rgba16float', 'rgba16float'];
+/**
+ * Photon-ring AA attachments, in @location order: 10 bytes per pixel total.
+ *
+ * 0 — `rg8unorm` (coverage, span). Not a float format: coverage is 16 sub-rays
+ *     (5 bits would do) and span is a filter width, where 1/255 of the annulus is
+ *     far below what the disk look can resolve. It is also the smallest format
+ *     that keeps 1.0 EXACT, which is what makes every non-band pixel
+ *     bit-for-bit unchanged.
+ * 1 — `rgba16float` (synthesized crossing: plane xz + encoded direction). This
+ *     one cannot be 8-bit: it carries the crossing GEOMETRY of the sub-pixel arcs
+ *     that live inside the shadow silhouette, and an 8-bit azimuth quantizes to
+ *     0.0246 rad — ~5 px of stair-stepping along a 1 px arc whose azimuth only
+ *     moves 0.005 rad per pixel. Stored as an f16 plane position it keeps
+ *     ~0.13 px, and it is the same encoding `gHit1` / `gView.xy` use, so
+ *     `decodeGBuffer` substitutes it with no new decode path. See refine.wgsl.
+ *
+ * The refine pass therefore spends 10 of its own fresh 32 B/sample budget
+ * (`maxColorAttachmentBytesPerSample` is per PASS), which is the whole reason this
+ * data is not a 5th bake attachment.
+ */
+const AA_FORMATS: readonly GPUTextureFormat[] = ['rg8unorm', 'rgba16float'];
+const CLEAR: readonly [number, number, number, number] = [0, 0, 0, 1];
+
+export function createRenderer(options: HeroRendererOptions): HeroRenderer {
+  const settings = options.settings ?? defaultHeroSettings();
+  let disposed = false;
+  /** Set once `initialize()` has loaded vgpu; every free function is called through it. */
+  let api: VgpuApi | undefined;
+  let gpu: Gpu | undefined;
+  let surface: Surface | undefined;
+  let effects: Effects | undefined;
+  let targets: Targets | undefined;
+  let loop: { stop(): void } | undefined;
+  let observer: ResizeObserver | undefined;
+  let intersection: IntersectionObserver | undefined;
+  // --- measure() --------------------------------------------------------------
+  // `timestampsAvailable` is decided at init from the adapter's feature list;
+  // `timer` is created lazily on the first measurement and owned until dispose.
+  let timestampsAvailable = false;
+  let timer: Timer | undefined;
+  let unsubscribeTimer: (() => void) | undefined;
+  let measurement: Measurement | undefined;
+  let measureStall: ReturnType<typeof setTimeout> | undefined;
+  // --- Visibility state machine (see `reconcileLoop`) -------------------------
+  // Two independent reasons to be off screen, one derived answer. Both default
+  // to "visible" so a browser without IntersectionObserver, or an SSR-ish
+  // environment, still renders.
+  let documentVisible = typeof document === 'undefined' ? true : !document.hidden;
+  let canvasIntersecting = true;
+  /** Set once the GPU objects exist: before that there is nothing to run. */
+  let started = false;
+  // --- Animation clock --------------------------------------------------------
+  // NOT `gpu.time`: that one accumulates the whole wall-clock interval since the
+  // last frame (gpu.ts `#advanceTime`), so resuming after a minute in a hidden
+  // tab would teleport the disk a minute forward — a visible jump in the
+  // Keplerian shear and the sawtooth crossfades in disk.wgsl. This clock only
+  // ever advances while the loop is actually running.
+  let animationTime = 0;
+  let lastFrameAt: number | undefined;
+  let resizeFrame = 0;
+  let pendingSize: RenderSize | undefined;
+  let reportedError = false;
+  // The bake is one-shot: it only re-runs on init, resize, geometry edits, or an
+  // explicit rebake(). `forceBake` bypasses the throttle (init / resize / button),
+  // while geometry edits are detected by polling BAKE_KEYS and are throttled.
+  let forceBake = true;
+  let bakedGeometry: number[] | undefined;
+  let lastBakeAt = Number.NEGATIVE_INFINITY;
+  // Mouse-driven scene rotation. Pure per-frame state: the listener only writes
+  // a number, the render loop turns it into one uniform, and NOTHING here can
+  // ever schedule a bake (the G-buffer is rotation-invariant by construction).
+  let pointerXNormalized = 0;
+  let currentSceneYaw = 0;
+  let lastYawAt: number | undefined;
+
+  const rebake = () => { forceBake = true; };
+
+  /** Geometry settings can be mutated from anywhere (panel, console, pasted JSON). */
+  const geometryDirty = () =>
+    bakedGeometry === undefined || BAKE_KEYS.some((key, index) => settings[key] !== bakedGeometry![index]);
+
+  /**
+   * Decides whether this frame runs the bake, and rearms the throttle.
+   *
+   * Throttle with a guaranteed trailing edge: while a slider is being dragged we
+   * bake at most every BAKE_THROTTLE_MS, and because `bakedGeometry` keeps
+   * differing from `settings` until a bake actually runs, the render loop is
+   * certain to catch the final value one frame after the window elapses.
+   */
+  const resolveBake = (now: number): boolean => {
+    const dirty = geometryDirty();
+    if (!forceBake && !dirty) return false;
+    if (!forceBake && now - lastBakeAt < BAKE_THROTTLE_MS) return false;
+    forceBake = false;
+    lastBakeAt = now;
+    bakedGeometry = BAKE_KEYS.map((key) => settings[key]);
+    return true;
+  };
+
+  /**
+   * Pointer -> scene rotation target. The canvas is `pointer-events-none`, so
+   * this listens on `window`: events over the hero copy bubble up all the same.
+   *
+   * Touch and pen are ignored on purpose — a tap would slam the scene to a
+   * corner value and leave it there.
+   */
+  const onPointerMove = (event: PointerEvent) => {
+    if (event.pointerType !== 'mouse') return;
+    const width = Math.max(window.innerWidth, 1);
+    pointerXNormalized = Math.min(1, Math.max(-1, (event.clientX / width) * 2 - 1));
+  };
+  /** Pointer gone (left the window, tab hidden, window blurred): drift back to center. */
+  const recenterPointer = () => { pointerXNormalized = 0; };
+  const onPointerOut = (event: PointerEvent) => {
+    // relatedTarget === null means the pointer left the window, not just one element.
+    if (event.relatedTarget === null) recenterPointer();
+  };
+  const onVisibilityChange = () => {
+    if (document.hidden) recenterPointer();
+    documentVisible = !document.hidden;
+    reconcileLoop();
+  };
+
+  /**
+   * The one place a render loop is started or stopped.
+   *
+   * Everything else (visibilitychange, IntersectionObserver, init, dispose)
+   * only writes a boolean and calls this. The `loop` handle IS the "am I
+   * running" flag, so the function is idempotent: calling it twice for the same
+   * state cannot start a second loop, which would double the frame rate and the
+   * GPU cost permanently.
+   *
+   * Resuming resets both timestamp bases. `lastFrameAt` keeps the animation
+   * clock from swallowing the paused interval in one frame, and `lastYawAt`
+   * keeps the exponential pointer smoothing from snapping the scene to its
+   * target (`1 - exp(-dt/tau)` is ~1 for a large dt).
+   */
+  function reconcileLoop(): void {
+    if (!started || !gpu || !api) return;
+    // A running measurement overrides both visibility reasons: the hero is
+    // routinely scrolled out of view while the panel is being used, and pausing
+    // mid-measurement would either hang the promise or, worse, silently report
+    // the frame time of a loop that had stopped.
+    const shouldRun = !disposed && (measurement !== undefined || (documentVisible && canvasIntersecting));
+    if (shouldRun === Boolean(loop)) return;
+    if (shouldRun) {
+      lastFrameAt = undefined;
+      lastYawAt = undefined;
+      loop = startPacedLoop(api, gpu);
+    } else {
+      loop?.stop();
+      loop = undefined;
+    }
+  }
+
+  /**
+   * The render loop: one `requestAnimationFrame` chain, throttled to TARGET_FPS.
+   *
+   * Hand-rolled rather than `api.frameLoop(gpu, cb, { fps })` for two reasons,
+   * both about the skipped ticks:
+   *
+   * - vgpu's `fps` knob compares `timestamp - last >= 1000 / fps` exactly, with
+   *   no jitter allowance, so asking it for 60 on a 60 Hz display drops every
+   *   other frame (see FRAME_PACING_EPSILON_MS).
+   * - a skipped tick here opens no frame at all. Gating inside the frame
+   *   callback instead would still create a command encoder and submit an empty
+   *   command buffer 60 times a second, plus its per-frame promises — exactly
+   *   the CPU-side work the cap exists to avoid.
+   *
+   * Paced on the rAF timestamp, not `performance.now()`: the timestamp is the
+   * frame's vsync time, so consecutive intervals are clean multiples of the
+   * refresh period, while the callback's own dispatch latency jitters by whole
+   * milliseconds and would randomly trip the threshold.
+   *
+   * Stopping is the caller's job (`reconcileLoop` / `dispose`), and `dispose`
+   * stops the loop before `gpu.dispose()` — the one ordering guarantee vgpu's
+   * own scheduler registration would have provided.
+   */
+  function startPacedLoop(vgpu: VgpuApi, activeGpu: Gpu): { stop(): void } {
+    let stopped = false;
+    /** rAF timestamp of the last RENDERED frame; skipped ticks do not move it. */
+    let lastPresentedAt: number | undefined;
+    const tick = (timestamp: number): void => {
+      if (stopped) return;
+      if (lastPresentedAt === undefined || timestamp - lastPresentedAt >= MIN_FRAME_INTERVAL_MS) {
+        lastPresentedAt = timestamp;
+        vgpu.frame(activeGpu, renderFrame);
+      }
+      // The frame callback can dispose the renderer (a failed resize calls
+      // handleFailure), which stops this loop mid-tick: re-arming after that
+      // would resurrect it against a disposed gpu.
+      if (!stopped) frameHandle = requestAnimationFrame(tick);
+    };
+    let frameHandle = requestAnimationFrame(tick);
+    return {
+      stop(): void {
+        stopped = true;
+        cancelAnimationFrame(frameHandle);
+      },
+    };
+  }
+
+  /**
+   * Advances the animation clock by this frame's ACTIVE delta and returns it.
+   *
+   * Unclamped on purpose: while the loop runs this reproduces `gpu.time`
+   * exactly (both are wall-clock sums), so nothing about the animation changes
+   * on a page that is never hidden. The only intervals it drops are the ones
+   * spent paused, because `reconcileLoop` clears `lastFrameAt` on resume and
+   * the first frame back therefore contributes dt = 0.
+   */
+  const advanceAnimationTime = (now: number): number => {
+    animationTime += lastFrameAt === undefined ? 0 : Math.max(0, (now - lastFrameAt) / 1000);
+    lastFrameAt = now;
+    return animationTime;
+  };
+
+  const renderFrame = (frame: Frame): void => {
+    if (disposed || !effects || !targets || !surface) return;
+    // Polling the geometry here (instead of trusting the panel to call
+    // rebake()) means NO geometry setting can ever be applied without a bake:
+    // fov, cameraY & friends are pure bake inputs and the shade pass ignores
+    // them, so a missed invalidation would silently do nothing. A rebake
+    // requested while paused just leaves `forceBake` set and runs on resume.
+    const now = clockMs();
+    // While a measurement is SAMPLING the bake is suppressed: re-baking mid
+    // measurement would bill the geodesic integrator to the frame we are
+    // attributing to the shade pass. Warmup frames still bake, so a geometry
+    // edit made just before pressing the button is flushed rather than deferred
+    // into the samples.
+    const sampling = measurement !== undefined && !measurement.done && measurement.seen >= measurement.warmupFrames;
+    const runBake = sampling ? false : resolveBake(now);
+    if (runBake) setBakeUniforms(effects, targets, settings);
+    // The mouse rotation is a uniform, never a bake: the scene is axisymmetric
+    // so the baked G-buffer is still exact in the rotated frame.
+    setShadeUniforms(effects, targets, settings, advanceAnimationTime(now), advanceSceneYaw(now));
+    renderChain(frame, effects, targets, surface, settings, runBake, sampling ? timer?.span(MEASURE_SPAN) : undefined);
+    if (measurement) recordMeasurementFrame(measurement, now, sampling);
+  };
+
+  /**
+   * Folds one rendered frame into the running measurement.
+   *
+   * Intervals, not timestamps: the first sampled frame only arms `lastAt`, so N
+   * sampled frames yield N-1 intervals and none of them straddles the boundary
+   * with the warmup phase.
+   */
+  function recordMeasurementFrame(m: Measurement, now: number, sampling: boolean): void {
+    m.seen += 1;
+    if (m.done) return;
+    if (sampling) {
+      if (m.lastAt !== undefined) m.frameSamples.push(now - m.lastAt);
+      m.lastAt = now;
+    }
+    armMeasureStall();
+    if (m.frameSamples.length >= m.targetFrames || now - m.startedAt >= m.maxMs) finishMeasurement(m);
+  }
+
+  /**
+   * Restarts the "no frames are arriving" watchdog.
+   *
+   * Rearmed per frame rather than set once for the whole run, so it fires only
+   * on an actual stall (tab hidden, GPU hung) and never just because the machine
+   * is slow enough to need the full `maxMs`.
+   */
+  function armMeasureStall(): void {
+    if (measureStall !== undefined) clearTimeout(measureStall);
+    measureStall = setTimeout(() => {
+      measureStall = undefined;
+      const m = measurement;
+      if (!m || m.done) return;
+      // Partial data still answers the question; nothing at all does not.
+      if (m.frameSamples.length >= 2) finishMeasurement(m);
+      else failMeasurement(m, new Error('[hero] measure() saw no frames — is the tab in the background? requestAnimationFrame does not run there.'));
+    }, MEASURE_STALL_MS);
+  }
+
+  /** Stops sampling and resolves once in-flight timestamp results have landed. */
+  function finishMeasurement(m: Measurement): void {
+    if (m.done) return;
+    m.done = true;
+    setTimeout(() => {
+      if (measurement !== m) return;
+      const result = summarizeMeasurement(m, targets?.gbuffer.size ?? [0, 0]);
+      teardownMeasurement();
+      m.resolve(result);
+    }, MEASURE_DRAIN_MS);
+  }
+
+  function failMeasurement(m: Measurement, error: Error): void {
+    m.done = true;
+    if (measurement === m) teardownMeasurement();
+    m.reject(error);
+  }
+
+  /** Drops the measurement and lets the loop go back to obeying visibility. */
+  function teardownMeasurement(): void {
+    measurement = undefined;
+    unsubscribeTimer?.();
+    unsubscribeTimer = undefined;
+    if (measureStall !== undefined) { clearTimeout(measureStall); measureStall = undefined; }
+    reconcileLoop();
+  }
+
+  const measureFrameTime = (measureOptions?: MeasureOptions): Promise<MeasureResult> => {
+    if (disposed) return Promise.reject(new Error('[hero] measure() on a disposed renderer'));
+    if (!started || !gpu || !effects || !targets || !surface) {
+      return Promise.reject(new Error('[hero] measure() before the renderer was ready — await renderer.ready first'));
+    }
+    if (measurement) return Promise.reject(new Error('[hero] a measurement is already running'));
+    // Created on first use, not at init: a timer holds a query set plus staging
+    // buffers, and the shipped hero never measures anything.
+    if (timestampsAvailable && !timer && api) {
+      try { timer = api.timer(gpu); } catch { timer = undefined; }
+    }
+    return new Promise<MeasureResult>((resolve, reject) => {
+      const m: Measurement = {
+        targetFrames: Math.max(8, Math.round(measureOptions?.frames ?? MEASURE_FRAMES)),
+        warmupFrames: Math.max(0, Math.round(measureOptions?.warmupFrames ?? MEASURE_WARMUP)),
+        maxMs: Math.max(200, measureOptions?.maxMs ?? MEASURE_MAX_MS),
+        startedAt: clockMs(),
+        frameSamples: [],
+        gpuSamples: [],
+        seen: 0,
+        done: false,
+        resolve,
+        reject,
+      };
+      measurement = m;
+      // Kept subscribed through the drain window on purpose: the last few
+      // results arrive after sampling has already stopped.
+      unsubscribeTimer = timer?.onResults((spans) => {
+        const ms = spans[MEASURE_SPAN];
+        if (ms !== undefined && measurement === m) m.gpuSamples.push(ms);
+      });
+      armMeasureStall();
+      reconcileLoop();
+    });
+  };
+
+  /**
+   * Advances the smoothed scene rotation and returns the value for this frame.
+   *
+   * Frame-rate independent: `k = 1 - exp(-dt / tau)`. The first frame has no
+   * previous timestamp, so `dt = 0` and the scene starts at exactly 0 — it can
+   * never pop into place on load.
+   */
+  const advanceSceneYaw = (now: number): number => {
+    const dt = lastYawAt === undefined ? 0 : Math.min(Math.max((now - lastYawAt) / 1000, 0), MAX_FRAME_DT_S);
+    lastYawAt = now;
+    const target = pointerXNormalized * Math.max(0, settings.mouseYaw);
+    currentSceneYaw += (target - currentSceneYaw) * (1 - Math.exp(-dt / SCENE_YAW_TAU_S));
+    return currentSceneYaw;
+  };
+
+  const applyResize = () => {
+    resizeFrame = 0;
+    const size = pendingSize;
+    pendingSize = undefined;
+    if (disposed || !size || !gpu || !api || !effects || !targets || !surface) return;
+    try {
+      const previousTargets = targets;
+      const nextTargets = createTargets(api, gpu, [
+        Math.max(1, Math.round(size.width * size.dpr)),
+        Math.max(1, Math.round(size.height * size.dpr)),
+      ], 'black-hole-live');
+      try {
+        setBindings(effects, nextTargets);
+      } catch (error) {
+        destroyTargets(nextTargets);
+        throw error;
+      }
+      targets = nextTargets;
+      destroyTargets(previousTargets);
+      rebake();
+    } catch (error) {
+      handleFailure(error);
+    }
+  };
+  const resize = (size: RenderSize) => {
+    if (disposed || size.width <= 0 || size.height <= 0) return;
+    pendingSize = size;
+    if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize);
+  };
+  /**
+   * Re-reads the canvas box and queues a resize of the G-buffer.
+   *
+   * `clientWidth/clientHeight`, not `getBoundingClientRect()`: vgpu's surface
+   * sizes the swap chain from exactly those two (surface.ts `layoutCanvasSize`),
+   * and a fractional CSS width would round the two chains to different integers
+   * — a one-pixel disagreement the shade pass would resolve as a slight scale,
+   * since it reads the G-buffer 1:1 by texel index.
+   */
+  const measure = () => {
+    resize({ width: options.canvas.clientWidth, height: options.canvas.clientHeight, dpr: RENDER_DPR });
+  };
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    // Settle a measurement in flight before the GPU goes away, or its promise
+    // would never resolve and the panel would wait forever.
+    if (measurement) failMeasurement(measurement, new Error('[hero] renderer disposed while measuring'));
+    timer?.dispose();
+    timer = undefined;
+    loop?.stop();
+    loop = undefined;
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    resizeFrame = 0;
+    pendingSize = undefined;
+    observer?.disconnect();
+    observer = undefined;
+    // Disconnect before anything is torn down: a queued IntersectionObserver
+    // callback firing after dispose would call reconcileLoop() on a disposed
+    // gpu. `started`/`disposed` already guard it, but not leaking the observer
+    // (and its reference to the canvas) is the actual fix.
+    intersection?.disconnect();
+    intersection = undefined;
+    started = false;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerout', onPointerOut);
+      window.removeEventListener('blur', recenterPointer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (targets) destroyTargets(targets);
+    targets = undefined;
+    // Not a Target, so `destroyTargets` never sees it; 256 KiB of device memory
+    // that would otherwise outlive a remount.
+    effects?.noiseVolume.destroy();
+    surface?.dispose();
+    surface = undefined;
+    gpu?.dispose();
+    gpu = undefined;
+    effects = undefined;
+  };
+
+  const initialize = async () => {
+    const vgpu = await import('vgpu');
+    const { init } = vgpu;
+    if (disposed) return;
+    // Device features have to be requested at device creation, and requesting one
+    // the adapter lacks makes init() throw — so ask the adapter first. Only the
+    // ?debug panel sets `profiling`, which keeps the shipped hero on exactly the
+    // device it has always created: no timestamps.
+    //
+    // Probed rather than try/catch-and-retry: an init() that throws would already
+    // have logged a device-creation failure.
+    if (options.profiling) {
+      try {
+        const probe = await navigator.gpu?.requestAdapter();
+        timestampsAvailable = probe?.features.has('timestamp-query') ?? false;
+      } catch { timestampsAvailable = false; }
+    }
+    if (disposed) return;
+    const nextGpu = await init(timestampsAvailable ? { requiredFeatures: ['timestamp-query'] } : {});
+    if (disposed) { nextGpu.dispose(); return; }
+    gpu = nextGpu;
+    api = vgpu;
+    surface = vgpu.surface(gpu, options.canvas, { dpr: RENDER_DPR });
+    effects = createEffects(vgpu, gpu, 'black-hole-live');
+    targets = createTargets(vgpu, gpu, surface.size, 'black-hole-live');
+    setBindings(effects, targets);
+    await prewarm(effects, targets, surface);
+    if (disposed) return;
+    // The ONLY resize input: with the dpr pinned to RENDER_DPR, physical size is
+    // CSS size, so the canvas box is the whole story — there is no
+    // devicePixelRatio change left to listen for (moving the window to a Retina
+    // screen no longer resizes anything).
+    observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(options.canvas);
+    // Passive: the handler only stores a number, it never reads layout, touches
+    // the GPU or cancels the event.
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerout', onPointerOut, { passive: true });
+    window.addEventListener('blur', recenterPointer);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    // A hero scrolled past is 100% wasted GPU: this is a per-pixel geodesic
+    // shade running behind whatever the reader is actually looking at.
+    // threshold 0 = "any part of the canvas is on screen".
+    if (typeof IntersectionObserver !== 'undefined') {
+      intersection = new IntersectionObserver((entries) => {
+        // Last entry wins: a batch is ordered oldest-first, so it is the
+        // current state.
+        canvasIntersecting = entries[entries.length - 1]?.isIntersecting ?? canvasIntersecting;
+        reconcileLoop();
+      }, { threshold: 0 });
+      intersection.observe(options.canvas);
+    }
+    measure();
+    // From here on the loop is owned by the state machine, never started
+    // directly — see `reconcileLoop`.
+    started = true;
+    documentVisible = !document.hidden;
+    reconcileLoop();
+  };
+
+  function handleFailure(error: unknown): void {
+    if (disposed) return;
+    if (!reportedError) {
+      reportedError = true;
+      try { options.onError?.(error); } catch { /* error reporting must not block teardown */ }
+    }
+    dispose();
+  }
+
+  const ready = initialize().catch((error: unknown) => {
+    if (disposed) return;
+    handleFailure(error);
+    throw error;
+  });
+
+  return { ready, rebake, measure: measureFrameTime, dispose };
+}
+
+function createEffects(vgpu: VgpuApi, gpu: Gpu, label: string): Effects {
+  return {
+    bake: vgpu.effect(gpu, bakeWgsl, { label: `${label}-bake` }),
+    refine: vgpu.effect(gpu, refineWgsl, { label: `${label}-refine` }),
+    shade: vgpu.effect(gpu, shadeWgsl, { label: `${label}-shade` }),
+    // Built and uploaded here, synchronously, before the first bind: the
+    // lattice is a pure function of its size, so there is nothing to await and
+    // nothing that can change later.
+    noiseVolume: createNoiseVolume(gpu, NOISE_VOLUME_SIZE, `${label}-noise-volume`),
+    noiseSampler: noiseVolumeSampler(vgpu, gpu),
+  };
+}
+
+function createTargets(vgpu: VgpuApi, gpu: Gpu, size: readonly [number, number], label: string): Targets {
+  const full = normalizeSize(size);
+  return {
+    gbuffer: vgpu.target(gpu, {
+      size: full,
+      colors: GBUFFER_FORMATS.map((format) => ({ format })),
+      label: `${label}-gbuffer`,
+    }),
+    aa: vgpu.target(gpu, {
+      size: full,
+      colors: AA_FORMATS.map((format) => ({ format })),
+      label: `${label}-aa`,
+    }),
+  };
+}
+
+function destroyTargets(targets: Targets): void {
+  destroyTarget(targets.gbuffer);
+  destroyTarget(targets.aa);
+}
+
+function destroyTarget(target: Target | undefined): void {
+  (target as { destroy?: () => void } | undefined)?.destroy?.();
+}
+
+function setBindings(effects: Effects, targets: Targets): void {
+  const [hit1, hit2, sky, view] = targets.gbuffer.colors;
+  const [aa, aaGeom] = targets.aa.colors;
+  effects.bake.set({ bake: { resolution: targets.gbuffer.size } });
+  // The refine pass reads the two G-buffer channels it needs (first crossing +
+  // flags) and writes the AA target. Same geometry uniform as the bake, uploaded
+  // by `setBakeUniforms`, so the sub-rays can never come from a different camera
+  // than the centre rays.
+  effects.refine.set({
+    gHit1: hit1,
+    gSky: sky,
+    refine: { resolution: targets.gbuffer.size },
+  });
+  {
+    effects.shade.set({
+      gHit1: hit1,
+      gHit2: hit2,
+      gSky: sky,
+      gView: view,
+      gAa: aa,
+      // Second AA attachment: the synthesized crossing for pixels whose centre
+      // ray missed the sub-pixel arcs inside the shadow silhouette. Ignored
+      // entirely when `Shade.aa` is 0.
+      gAaGeom: aaGeom,
+      // Resize-invariant, but re-bound with the rest: `setBindings` rebuilds the
+      // whole shade bind group when the G-buffer is recreated, and a bind group
+      // is all-or-nothing.
+      noiseVolume: effects.noiseVolume,
+      noiseSampler: effects.noiseSampler,
+      // The shade pass draws at G-buffer resolution: it is a 1:1 textureLoad, and
+      // the swap chain is created from the same clamped physical size.
+      shade: { resolution: targets.gbuffer.size },
+    });
+  }
+}
+
+function setBakeUniforms(effects: Effects, targets: Targets, settings: HeroSettings): void {
+  const geometry = {
+    resolution: targets.gbuffer.size,
+    yaw: 0,
+    pitch: settings.cameraY,
+    orbitRadius: settings.distance,
+    diskOuter: settings.diskRadius,
+    fov: settings.fov,
+    centerY: settings.centerY,
+  };
+  effects.bake.set({ bake: geometry });
+  // ONE geometry description, uploaded to both one-shot passes: `Refine` mirrors
+  // `Bake` field for field precisely so this cannot drift. The AA target is
+  // therefore always regenerated by the same bake that invalidated it — a rebake
+  // with a different yaw or diskRadius can never leave stale coverage behind.
+  effects.refine.set({ refine: geometry });
+}
+
+function setShadeUniforms(
+  effects: Effects,
+  targets: Targets,
+  settings: HeroSettings,
+  time: number,
+  sceneYaw: number,
+): void {
+  effects.shade.set({
+    shade: {
+      resolution: targets.gbuffer.size,
+      time,
+      diskOuter: settings.diskRadius,
+      debugView: settings.debugView,
+      diskLayers: settings.diskLayers,
+      aa: settings.aa,
+      // Active rotation of the SCENE (camera yaw would be -sceneYaw). Smoothed
+      // from the pointer by the render loop; the bake never sees it.
+      sceneYaw,
+    },
+    // Look uniforms are passed straight through: the WGSL structs in disk.wgsl /
+    // stars.wgsl are the source of truth for their fields.
+    disk: settings.disk,
+    stars: settings.stars,
+  });
+  // No composite uniform to update: shade.wgsl tone maps in place and returns
+  // early (raw) for every debug view, so the bypass is a branch in the shader.
+}
+
+/** Median of an unsorted sample set; `NaN` for an empty one. */
+function median(samples: readonly number[]): number {
+  if (samples.length === 0) return Number.NaN;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+function mean(samples: readonly number[]): number {
+  if (samples.length === 0) return Number.NaN;
+  return samples.reduce((total, value) => total + value, 0) / samples.length;
+}
+
+/**
+ * Turns the collected samples into the reported result.
+ *
+ * Median leads rather than mean because a frame loop's outliers are one-sided:
+ * a GC pause or a compositor hiccup can only ever make a frame longer, so the
+ * mean drifts up with the length of the run while the median does not. Both are
+ * reported so a large gap between them is visible as the warning it is.
+ */
+function summarizeMeasurement(m: Measurement, resolution: readonly [number, number]): MeasureResult {
+  const medianMs = median(m.frameSamples);
+  const hasGpu = m.gpuSamples.length > 0;
+  const gpuMedianMs = hasGpu ? median(m.gpuSamples) : undefined;
+  return {
+    samples: m.frameSamples.length,
+    medianMs,
+    meanMs: mean(m.frameSamples),
+    fps: 1000 / medianMs,
+    gpuMedianMs,
+    gpuMeanMs: hasGpu ? mean(m.gpuSamples) : undefined,
+    method: hasGpu ? 'wall-clock + timestamp-query' : 'wall-clock',
+    // Two conditions, because either alone gives a false positive: a shader that
+    // genuinely costs 16.7 ms sits on a refresh interval by coincidence, and a
+    // cheap GPU pass is normal when the frame is not present-limited at all.
+    //
+    // The renderer's own 60 fps pacer lands on 1000/60, which is already in the
+    // list of plausible refresh intervals — so on a healthy machine this reads
+    // true everywhere now, and the advice it carries ("use the gpu number") is
+    // exactly right: the pacer hides shader cost the same way vsync does.
+    vsyncCapped:
+      REFRESH_INTERVALS_MS.some((interval) => Math.abs(medianMs - interval) < 1) &&
+      gpuMedianMs !== undefined && gpuMedianMs < medianMs - 2,
+    targetFps: TARGET_FPS,
+    resolution,
+  };
+}
+
+async function prewarm(effects: Effects, targets: Targets, output: Output): Promise<void> {
+  await Promise.all([
+    effects.bake.compile(targets.gbuffer),
+    effects.refine.compile(targets.aa),
+    // Compiled against the OUTPUT format (the swap chain), not an HDR target:
+    // shade is the last pass and writes display-referred unorm.
+    effects.shade.compile({ colors: [output.format] }),
+  ]);
+}
+
+function renderChain(
+  frame: Frame,
+  effects: Effects,
+  targets: Targets,
+  output: Output,
+  settings: HeroSettings,
+  bake: boolean,
+  /** Set only while `measure()` is sampling; otherwise the pass is untimed. */
+  timer?: TimerSpan,
+): void {
+  if (bake) {
+    frame.pass({ target: targets.gbuffer, clear: CLEAR }, (pass) => pass.draw(effects.bake));
+    // The refine pass reads what the bake just wrote, so it MUST stay in this
+    // block and after it: same throttle, same invalidation, and — because
+    // `renderFrame` suppresses the bake while `measure()` is sampling — the same
+    // guarantee that none of its cost is attributed to the shade pass.
+    frame.pass({ target: targets.aa, clear: CLEAR }, (pass) => pass.draw(effects.refine));
+  }
+  // Two passes per frame, still: shade reads the G-buffer plus 10 B/px of AA data
+  // and writes the swap chain. The two above are one-shot.
+  frame.pass({ target: output, clear: CLEAR, timer }, (pass) => pass.draw(effects.shade));
+}
+
+/** Wall clock for the bake throttle; independent of the animation clock. */
+function clockMs(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function normalizeSize(size: readonly [number, number]): [number, number] {
+  return [Math.max(1, Math.floor(size[0])), Math.max(1, Math.floor(size[1]))];
+}

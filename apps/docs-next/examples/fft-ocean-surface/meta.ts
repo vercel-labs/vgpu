@@ -1,0 +1,37 @@
+import type { ExampleMetaDefinition } from '../../lib/example-meta';
+
+export const meta = {
+  slug: 'fft-ocean-surface',
+  title: 'FFT ocean surface',
+  description: 'A displaced ocean surface driven by a real inverse FFT. A Phillips spectrum evolves in frequency space, two compute passes run a shared-memory radix-2 IFFT into a displacement field, and a procedural grid rides it with per-pixel normals, foam and a Fresnel sky reflection under a tunable sunset. Orbit with the mouse; tweak the sea from the panel.',
+  tags: ['ocean', 'fft', 'compute', 'lighting', 'hdr'],
+  capabilities: [
+    'webgpu',
+    'compute-shader',
+    'storage-buffers',
+    'multi-pass',
+    'hdr',
+    'pointer-orbit',
+    'controls',
+    'continuous-rendering',
+    'responsive-canvas',
+  ],
+  thumb: { warmupFrames: 2, time: 9 },
+  files: [
+    'index.tsx',
+    'renderer.ts',
+    'scene.ts',
+    'params.wgsl',
+    'complex.wgsl',
+    'fft-core.wgsl',
+    'fft-row.wgsl',
+    'fft-col.wgsl',
+    'bake.wgsl',
+    'spectrum-init.wgsl',
+    'spectrum-update.wgsl',
+    'sky.wgsl',
+    'skydome.wgsl',
+    'ocean-surface.wgsl',
+    'composite.wgsl',
+  ],
+} as const satisfies ExampleMetaDefinition;
