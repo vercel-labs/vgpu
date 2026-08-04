@@ -99,49 +99,14 @@ interface MilestoneContext {
 }
 
 /**
- * Parts of "tested it headlessly", kept as named constants because the split
- * between them is the whole point: any one of them alone is a weak signal.
+ * The one code-content fact that stays a regex: did the agent run a script
+ * with `node`, as opposed to only ever poking with `node -e`. This reads a
+ * bash COMMAND, not code semantics — a literal, verifiable fact about what
+ * ran — so it stays deterministic (PR #272 review: everything downstream of
+ * "did a script run" is a judged question now, see the code-semantics judge
+ * block below).
  */
-/** Ran a script, not just `node -e "require('vgpu')"`-style poking. */
 const RAN_NODE_SCRIPT = /\bnode\s+(?:-e\b|--eval\b|[^\s|&;]*\.(?:mjs|js|ts)\b)/;
-/** Stepped frames by hand: vgpu's `frame()`, a clock `.advance()`, a pingPong `.swap()`. */
-const DRIVES_FRAMES = /\bframe\s*\(|\.advance\s*\(|\.swap\s*\(/;
-/**
- * Fed a pointer position the script made up, rather than a real cursor.
- *
- * Widened past `pointer|mouse` (PR #272 review, "4a predicate provenance"):
- * in both archived n1 runs, `pointer|mouse` matched ONLY an English
- * line-comment narrating what the script does ("// Simulate a pointer
- * sweeping across the canvas…") — zero matches in the code itself, which
- * names its variables `points`/`prevPoint`/`currPoint`. That is exactly the
- * "certified by prose, not by mechanics" bug class this milestone's own
- * comment says it was split off to fix. `cursor|point\b|Point\b` catches the
- * identifier shape real synthetic-pointer code actually uses; combined with
- * comment-stripping below, a match can now only come from code.
- */
-const SYNTHETIC_POINTER = /pointer|mouse|cursor|point\b|Point\b/i;
-/**
- * Rendered somewhere readable instead of onto a screen.
- *
- * `\.png\b` was dropped (PR #272 review, same finding): it let a REAL
- * `<canvas onPointerMove>` DOM handler that merely references a
- * `/noise.png` background image satisfy this predicate, even though nothing
- * was ever rendered offscreen. `writeFileSync`/`readPixels`/`toPng` are
- * genuine offscreen-read operations; a bare `.png` string reference is not.
- */
-const RENDERS_OFFSCREEN = /writeFileSync|readPixels|toPng/i;
-
-/**
- * Best-effort JS comment stripper, used only to keep milestone 4a keyed on
- * code rather than prose (PR #272 review). Not a full lexer: a `//` inside a
- * string literal (e.g. a URL) can be mis-stripped, which is an acceptable
- * trade for a `.soft()` journey signal that never gates. Block comments
- * first, then line comments, and line comments are skipped when the `//`
- * is preceded by `:` so `https://…` in a written unit survives.
- */
-function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-}
 
 /**
  * Journey signals: observed and logged, never gated.
@@ -162,54 +127,14 @@ const MILESTONES: { id: string; detect: (m: MilestoneContext) => boolean }[] = [
     detect: (m) => /@fragment\b|@vertex\b/.test(m.written) || /@fragment\b|@vertex\b/.test(m.shipped),
   },
   { id: "validated WGSL (vgpu check)", detect: (m) => /vgpu\s+check\b/.test(m.commands) },
-  {
-    // A throwaway script that renders frames outside a browser with a made-up
-    // pointer: the cheapest way to test a feedback shader, and the behaviour
-    // that actually matters here.
-    //
-    // Read from `written`, not `shipped`, because this script is throwaway by
-    // nature — in the run this signal was written against the agent left it in
-    // /tmp and the copy it made into /workspace was gone before the export.
-    //
-    // Three facts about ONE unit: it drives frames by hand, it feeds a pointer
-    // the agent invented, and it renders somewhere it can read back. Running
-    // `node` at all is necessary but nowhere near sufficient — an agent that
-    // only ever ran `node -e "require('vgpu')"` must not score this.
-    //
-    // All three sub-predicates are tested against the unit with comments
-    // stripped (PR #272 review, "4a predicate provenance"): otherwise an
-    // agent's own prose narrating what it's about to do ("// pointer sweeping
-    // across the canvas") can satisfy SYNTHETIC_POINTER on its own, and the
-    // milestone ends up certifying commenting style, not code.
-    id: "tested headlessly by rendering frames with synthetic input",
-    detect: (m) =>
-      RAN_NODE_SCRIPT.test(m.commands) &&
-      m.writtenUnits.some((unit) => {
-        const code = stripComments(unit);
-        return DRIVES_FRAMES.test(code) && SYNTHETIC_POINTER.test(code) && RENDERS_OFFSCREEN.test(code);
-      }),
-  },
-  {
-    // Kept as its own signal, deliberately narrow: `clock()` + `.advance()` is
-    // the specific API the docs teach for stepping time by hand
-    // (packages/vgpu-api/src/clock.ts), so this is a docs-discovery question,
-    // not a testing-behaviour one. It used to be the ONLY headless signal, and
-    // that conflation scored a real, thorough headless test as a miss twice:
-    // both n1 runs to date drove frames with `frame(gpu, …)` + `trail.swap()`
-    // instead, which is just as headless and never touches `.advance()`.
-    //
-    // PR #272 review, "the 4b label overstates the miss": both n1 runs DID
-    // call `clock()` — it's what the agent's own `hero-shader.ts` uses to
-    // drive its `requestAnimationFrame` loop (`clock(gpuInstance)` at
-    // `hero-shader.ts:92`). What's actually missing is only `.advance(`: the
-    // agent integrated time via the browser's own animation loop instead of
-    // the headless step-time-by-hand API. The label below is worded to say
-    // exactly that miss, not "never found `clock()`".
-    id: "found .advance() for headless clock-stepping (it did call clock() — see hero-shader.ts:92)",
-    detect: (m) =>
-      (/\bclock\s*\(/.test(m.written) && /\.advance\s*\(/.test(m.written)) ||
-      (/\bclock\s*\(/.test(m.shipped) && /\.advance\s*\(/.test(m.shipped)),
-  },
+  // A literal, verifiable fact about what ran — a script, not just
+  // `node -e "require('vgpu')"`-style poking. What that script actually DID
+  // (stepped frames, fed a synthetic pointer, rendered offscreen) is a
+  // semantic question about code, not a bash command, and moved to the
+  // code-semantics judge below (PR #272 review, "4a predicate provenance" —
+  // this exact question was previously a code-content regex conjunction that
+  // matched an English comment instead of code in both archived runs).
+  { id: "ran a node script", detect: (m) => RAN_NODE_SCRIPT.test(m.commands) },
   { id: VIEW_IMAGE_MILESTONE, detect: (m) => m.viewImageCalls > 0 },
   {
     // Logged as three booleans too (below), because "wrote a client component
@@ -239,23 +164,6 @@ function integrationParts(shipped: string): [boolean, boolean, boolean] {
 }
 
 /**
- * How the agent kept the previous frame around, which is the one genuinely hard
- * part of a fading trail.
- *
- * Never gated: a correct hand-rolled double buffer is a correct solution, and
- * gating on API choice is precisely the "reward ritual" mistake this suite
- * forbids. It is reported because "nobody finds `pingPong`" and "everybody
- * finds it" are different docs problems.
- */
-function feedbackTechnique(shipped: string): "pingPong" | "hand-rolled" | "unclear" {
-  if (/\bpingPong(Storage)?\s*\(/.test(shipped)) return "pingPong";
-  const allocations = shipped.match(/\btarget\s*\(\s*\w+/g)?.length ?? 0;
-  const manualSwap = /\bswap\b|\btmp\b|\btemp\b|\bprev(ious)?\b|%\s*2\b/i.test(shipped);
-  if (allocations >= 2 && manualSwap) return "hand-rolled";
-  return "unclear";
-}
-
-/**
  * Bash calls with their real exit codes.
  *
  * Deliberately a near-copy of `s2-gradient.eval.ts`'s helper of the same name
@@ -280,8 +188,13 @@ function bashCalls(toolCalls: readonly { name: string; input?: unknown; output?:
     });
 }
 
-/** Source files as they ended up in the exported workspace. */
-function finalSources(dir: string): string {
+/**
+ * Source files as they ended up in the exported workspace, one chunk per
+ * file. Kept separate from `finalSources` below (which just joins these)
+ * because the code-semantics judge material needs per-file chunks to
+ * truncate individually — see `buildCodeJudgeMaterial`.
+ */
+function shippedSourceFiles(dir: string): string[] {
   const chunks: string[] = [];
   const walk = (current: string): void => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
@@ -295,7 +208,53 @@ function finalSources(dir: string): string {
     }
   };
   walk(dir);
-  return chunks.join("\n");
+  return chunks;
+}
+
+/** Source files as they ended up in the exported workspace, joined into one blob. */
+function finalSources(dir: string): string {
+  return shippedSourceFiles(dir).join("\n");
+}
+
+/**
+ * Per-unit/per-file truncation and overall cap for the code-semantics judge
+ * material below (PR #272 review). Three `t.judge.autoevals.closedQA` calls
+ * read this same material, and each one is a real, billed model call — a run
+ * that wrote a lot of throwaway script must not blow either cap up.
+ */
+const JUDGE_CODE_UNIT_LIMIT = 4000;
+const JUDGE_CODE_MATERIAL_LIMIT = 20000;
+
+/**
+ * Material for the code-semantics judges below: what the agent WROTE DURING
+ * THE TURN (`writtenUnits` — write_file payloads and bash command text) plus
+ * what it actually SHIPPED (`shippedSourceFiles`, read back per file from the
+ * exported workspace).
+ *
+ * The written half is not optional. In both archived n1 runs the agent's
+ * headless test script was written to /tmp via a bash heredoc and was gone
+ * from /workspace before the export ran, so a judge given only `shipped`
+ * would truthfully answer "no" to "did it write a headless test" about a run
+ * that did. `writtenUnits` already carries that script, because it reads bash
+ * command TEXT, not just write_file payloads.
+ *
+ * Each unit/file is truncated to JUDGE_CODE_UNIT_LIMIT chars before joining,
+ * and the join stops once JUDGE_CODE_MATERIAL_LIMIT total chars are used, so
+ * neither one huge file nor a long transcript can crowd out everything else.
+ */
+function buildCodeJudgeMaterial(units: readonly string[]): string {
+  const sections: string[] = [];
+  let used = 0;
+  for (const unit of units) {
+    if (!unit || used >= JUDGE_CODE_MATERIAL_LIMIT) continue;
+    const room = JUDGE_CODE_MATERIAL_LIMIT - used;
+    const piece = unit.length > Math.min(JUDGE_CODE_UNIT_LIMIT, room)
+      ? `${unit.slice(0, Math.min(JUDGE_CODE_UNIT_LIMIT, room))}\n…[truncated]`
+      : unit;
+    sections.push(piece);
+    used += piece.length;
+  }
+  return sections.join("\n\n---\n\n");
 }
 
 /** The verdict `agent/lib/verify/n1-hero-shader.mjs` writes into the workspace. */
@@ -431,6 +390,71 @@ export default defineEval({
       }
     }
 
+    // ---- Code-semantics judges (soft, never gated) -------------------------
+    // PR #272 review: these three replace code-content regexes that failed in
+    // both directions — one matched only an English comment narrating the
+    // predicate it existed to check ("// simulate a pointer sweeping across
+    // the canvas…"), and the comment-stripper added to fix that could
+    // truncate a `//` inside a string literal and silently drop a true match.
+    // A judge that reads the code cannot be fooled by a word's appearance in
+    // a comment, so these three questions — all about what the code actually
+    // DOES, not about a literal command having run — move to eve's native
+    // `t.judge.autoevals.closedQA`, per https://eve.dev/docs/evals/judge:
+    // `on` grades an arbitrary value, so the agent's own code is passed
+    // there instead of `t.reply`.
+    //
+    // Deliberately exactly three calls, one per question, because each one is
+    // a real model call billed per assertion — see buildCodeJudgeMaterial's
+    // comment for the same reason its material is capped.
+    //
+    // PROMPT-INJECTION NOTE: `codeMaterial` is written by the agent under
+    // test, i.e. it is untrusted, potentially adversarial input. It is passed
+    // ONLY as `on` (autoevals' graded "output"), kept strictly apart from the
+    // criteria strings below, so nothing in it can rewrite the question being
+    // asked. Its only effect on this eval is the resulting score/label —
+    // never control flow.
+    const codeMaterial = buildCodeJudgeMaterial([...writtenUnits, ...shippedSourceFiles(extracted)]);
+    const codeQuestions: { label: string; criteria: string }[] = [
+      {
+        label: "journey: tested headlessly with a synthetic pointer, rendered offscreen",
+        criteria:
+          "The material is code the agent wrote and commands it ran while working on a task " +
+          "to add a hover-trail effect that follows the pointer (it may include a throwaway " +
+          "test script it wrote and ran, even if it deleted the script afterwards), followed " +
+          "by the source files it ultimately shipped. Does the material show the agent " +
+          "writing and running a headless test that simulates the POINTER hovering and moving " +
+          "over the page — feeding the shader a sequence of pointer/cursor coordinates that " +
+          "the script itself invented (not a real mouse/browser event) to drive the hover " +
+          "trail — while stepping animation frames by hand and rendering each frame somewhere " +
+          "the script reads pixels back from (for example writing an image file, or reading " +
+          "back pixel/framebuffer data) rather than only ever drawing to an on-screen browser " +
+          "canvas? A shader that only ever computes a static per-pixel coordinate (such as a " +
+          "fragment shader's own built-in UV/position) does NOT count as a synthetic pointer " +
+          "position — the script must invent and feed in a pointer/cursor position that moves " +
+          "across separate frames.",
+      },
+      {
+        label: "journey: used clock().advance() for headless time-stepping",
+        criteria:
+          "Does the code call `.advance(` on a clock object obtained from the graphics " +
+          "library's `clock()` function, in order to step simulated time forward by hand? " +
+          "Answer based only on function/method calls that are actually present in the code, " +
+          "never on comments or prose that merely describe what the code does or intends to " +
+          "do.",
+      },
+      {
+        label: "journey: feedback via built-in ping-pong helper (vs hand-rolled double buffer)",
+        criteria:
+          "Look at how the code keeps the previous rendered frame around to build a " +
+          "fading-trail feedback effect. Does it call the graphics library's own built-in " +
+          "ping-pong / double-buffer helper function to manage the two buffers, rather than " +
+          "the agent allocating two render targets itself and swapping between them by hand?",
+      },
+    ];
+    for (const question of codeQuestions) {
+      t.judge.autoevals.closedQA(question.criteria, { on: codeMaterial }).soft().label(question.label);
+    }
+
     // ---- Funnel counters --------------------------------------------------
     const [importsVgpu, hasUseClient, hasCanvas] = integrationParts(shipped);
     t.log(`funnel: integration_imports_vgpu=${importsVgpu}`);
@@ -495,7 +519,9 @@ export default defineEval({
     t.log(`funnel: agent_browser_calls_with_executable_path=${browserCallsWithPath.length}`);
     t.log(`funnel: total_tool_calls=${turn.toolCalls.length}`);
     t.log(`funnel: view_image_calls=${viewImageCalls}`);
-    t.log(`funnel: feedback_technique=${feedbackTechnique(shipped)}`);
+    // The old `feedback_technique` funnel line (pingPong vs hand-rolled, by
+    // regex) moved to the code-semantics judge above — see the "feedback via
+    // built-in ping-pong helper" question.
 
     // ---- Harness verdict --------------------------------------------------
     // Written by agent/lib/verify/n1-hero-shader.mjs inside the live sandbox

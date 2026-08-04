@@ -148,17 +148,32 @@ Two more limits on that gate, found during review:
   run has ever produced it. Treat it as unvalidated until a fresh run
   actually exercises the code that computes it.
 
-Everything else is observed and never gated: a nine-milestone journey
-(`vgpu doctor` → WGSL written → `vgpu check` → headless frame-stepping test with
-a synthetic pointer → the `clock().advance()` API specifically → `view-image` →
-integrated into the app → agent-browser set up → its own screenshot), the
-`agent_browser_calls_total` vs.
-`agent_browser_calls_with_executable_path` counters, a
-`feedback_technique=pingPong|hand-rolled|unclear` classifier, and one
-**multimodal** judge (`evals/lib/judge-trail.mjs`) that is shown the first and
-last screenshots and scores 0-100 whether the second reads as a fading trail
-behind the pointer. Its score is soft and its rationale is always logged — the
-rationale is the part a human reads.
+Everything else is observed and never gated, and it now comes from two
+different sources on purpose (PR #272 review):
+
+- **Deterministic, regex, for literally verifiable facts about what ran** —
+  a bash command either ran or it didn't. The journey milestones built this
+  way: `vgpu doctor` → WGSL written → `vgpu check` → ran a node script →
+  `view-image` → integrated into the app → agent-browser set up → its own
+  screenshot, plus the `agent_browser_calls_total` vs.
+  `agent_browser_calls_with_executable_path` counters.
+- **Judged, via eve's native `t.judge.autoevals.closedQA`, for semantic
+  questions about the code** — "did it write a headless frame-stepping test
+  with a synthetic pointer, rendering offscreen?", "does it call
+  `clock().advance()`?", "did it use the library's built-in ping-pong helper,
+  or hand-roll a double buffer?" These used to be code-content regexes, and
+  regex failed at this twice in opposite directions: once a predicate matched
+  only an English comment narrating what the code was about to do, and the
+  comment-stripper added to fix that could truncate a `//` inside a string
+  literal and silently drop a true match. A model reading the code cannot be
+  fooled either way. Each of these three calls is soft — tracked like the
+  regex signals they replaced, never a gate — and each is a real, billed
+  model call, which is why there are exactly three and not more.
+
+One more **multimodal** judge (`evals/lib/judge-trail.mjs`) is shown the first
+and last screenshots and scores 0-100 whether the second reads as a fading
+trail behind the pointer. Its score is soft and its rationale is always
+logged — the rationale is the part a human reads.
 
 The waypoint `div`s in the seeded `page.tsx` look like dead markup and are not:
 they are the fixed hover targets that make the screenshot pass reproducible
@@ -301,16 +316,22 @@ in the workspace, found during review:
   log nothing read. Fixed by binding to an unguessable port and checking a
   per-run nonce embedded in the served page, so "the thing on the port is
   the thing built this run" is checked, not assumed.
-- **A `~/.profile` the agent writes (not fixable while grading shares the
-  agent's container).** The verify pass runs after the agent's turn, in the
-  same container, through the same login shell (`bash -lc`) the agent had
-  root in for its whole turn. A `~/.profile` written during that turn is
-  sourced by the verify pass's shell and can shim `curl`, `agent-browser`,
-  or anything else it calls, forcing every gate green without touching the
-  app. Hardening the shell narrows this but does not remove it: as long as
-  verification executes inside the agent's own container, an agent with
-  root can influence it. Closing this requires running verification
-  outside that container — tracked in Roadmap.
+- **Any in-container gate is defeatable by a deliberately adversarial agent
+  (not fixable while grading shares the agent's container).** The verify
+  pass runs after the agent's turn, in the same container, through the same
+  login shell (`bash -lc`) the agent had root in for its whole turn. This is
+  not specific to `~/.profile` — that was one demonstrated example, not the
+  only one. An agent with root for its whole turn can also kill and replace
+  a process, `LD_PRELOAD` a shared library, or firewall traffic with
+  `iptables`, among other routes, and reach the same result: forcing every
+  gate green without the app actually working. Hardening any one of those
+  routes narrows the attack surface but does not close it, because the
+  premise — verification executes with the privileges the agent just had —
+  is what makes all of them possible. The per-run random port + served
+  nonce (above) closes the realistic *accidental* case, a leftover dev
+  server from an earlier task or a stale process; it does not, and cannot,
+  close the *adversarial* case. Closing that requires running verification
+  outside the container the agent had root in — tracked in Roadmap.
 
 Practically: v0's trust model assumes a non-adversarial agent. Against a
 model that is optimizing to pass rather than to build the feature, these
@@ -363,9 +384,11 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
 3. **Journey funnel** — the milestones the evals log today become a reported
    funnel across runs (still never a gate: gating ritual rewards ritual).
 4. **Out-of-container verification.** Run the verify pass outside the
-   container the agent had root in for its turn, so a `~/.profile` (or any
-   other environment artifact) the agent leaves behind cannot influence
-   grading. This is the remaining structural hole in n1's trust model; the
-   port/nonce fix closes the other one.
+   container the agent had root in for its turn, so nothing a deliberately
+   adversarial agent could do with that root — a `~/.profile`, a replaced
+   process, `LD_PRELOAD`, `iptables`, or anything else — can influence
+   grading. This is the remaining structural hole in n1's trust model, and
+   it is general, not specific to any one mechanism; the port/nonce fix only
+   closes the realistic *accidental* case (a leftover dev server).
 5. **More tasks** — beyond the gradient and the hero: a real shader bug, a
    texture task, an error-code lookup.
