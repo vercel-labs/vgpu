@@ -91,3 +91,47 @@ test("validates once more after safe identifier minification", async () => {
   expect(result.validation).toEqual({ mode: "auto", attempted: true, ok: true });
   expect(vi.mocked(acquireValidationDevice)).toHaveBeenCalledTimes(2);
 });
+
+/** Records every WGSL string the device was asked to compile, in order. */
+function recordingDevice(seen: string[], pick: (code: string) => FakeMessage | undefined = () => undefined): GPUDevice {
+  return fakeDevice((code) => {
+    seen.push(code);
+    return pick(code);
+  });
+}
+
+test("whitespace-only minification validates the final returned wgsl, not only the emitted text", async () => {
+  const seen: string[] = [];
+  vi.mocked(acquireValidationDevice).mockResolvedValue(recordingDevice(seen));
+  const result = await resolveShader({ entry: "/m.wgsl", validate: "auto", minify: { whitespace: true }, modules: twoModules });
+
+  // The contract this pins: whatever the minify mode, the last string handed to the device is the
+  // string the caller receives. Whitespace-only used to skip this pass entirely, so a
+  // whitespace-stage corruption shipped with `validation.ok === true`.
+  expect(seen).toHaveLength(2);
+  expect(seen.at(-1)).toBe(result.wgsl);
+  // The pre-minify pass still runs first: it is the one with usable line/column mapping.
+  expect(seen[0]).not.toBe(result.wgsl);
+  expect(seen[0]).toContain("\n");
+  expect(result.validation).toEqual({ mode: "auto", attempted: true, ok: true });
+});
+
+test("whitespace-only minification fails loudly when only the minified text is invalid", async () => {
+  // The fake device accepts the multi-line emitted text and rejects the single-line minified text,
+  // standing in for any whitespace-stage corruption (e.g. a split `.5` literal) without depending on
+  // a particular minifier bug.
+  const seen: string[] = [];
+  vi.mocked(acquireValidationDevice).mockResolvedValue(recordingDevice(seen, (code) => (code.includes("\n") ? undefined : { message: "unable to parse right side of assignment", lineNum: 1, linePos: 1 })));
+
+  await expect(resolveShader({ entry: "/m.wgsl", validate: "require", minify: { whitespace: true }, modules: twoModules })).rejects.toMatchObject({ code: "VGPU-WGSL-NAGA-UNKNOWN" });
+  expect(seen).toHaveLength(2);
+});
+
+test("validates once when minification is a no-op, since the returned text is the validated text", async () => {
+  const seen: string[] = [];
+  vi.mocked(acquireValidationDevice).mockResolvedValue(recordingDevice(seen));
+  const result = await resolveShader({ entry: "/m.wgsl", validate: "auto", minify: { whitespace: false, identifiers: "none" }, modules: twoModules });
+
+  expect(seen).toEqual([result.wgsl]);
+  expect(result.validation).toEqual({ mode: "auto", attempted: true, ok: true });
+});

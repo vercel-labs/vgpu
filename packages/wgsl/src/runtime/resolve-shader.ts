@@ -97,16 +97,22 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const map = sourceMap(modules);
   const minify = normalizeMinifyOption(opts.minify);
   const validateMode = normalizeValidateMode(opts.validate);
-  // One lease for the whole call: this function validates twice under `identifiers: "safe"`, and
-  // without an outer lease the idle release could destroy the device between the two, paying full
-  // adapter discovery again mid-call. Released in `finally` so a thrown diagnostic still frees it.
+  // One lease for the whole call: this function validates twice whenever minification rewrote the
+  // emitted text, and without an outer lease the idle release could destroy the device between the
+  // two, paying full adapter discovery again mid-call. Released in `finally` so a thrown diagnostic
+  // still frees it.
   if (validateMode !== "off") retainValidationDevice();
   let validationOutcome: ValidationOutcome;
   let wgsl: string;
   try {
     validationOutcome = validateMode === "off" ? { attempted: false, ok: true } : await validateWGSL(emittedWgsl, validateMode);
     wgsl = applyMinifyWgsl(emittedWgsl, minify);
-    if (validateMode !== "off" && minify.identifiers === "safe") {
+    if (validateMode !== "off" && wgsl !== emittedWgsl) {
+      // The artifact the caller receives is the artifact that gets validated. The first pass above
+      // stays because it runs on the pre-minify text and so yields accurate line/column diagnostics;
+      // this pass is what makes `validation.ok === true` a statement about the returned `wgsl`,
+      // whatever the minify mode (whitespace-only included — a whitespace-stage bug used to escape
+      // here). Skipped when minification was a no-op: the same string was already validated.
       // Both calls share the memoized device from validation-device.ts, so they agree in practice;
       // merging keeps the reported outcome correct if that ever stops being true.
       const second = await validateWGSL(wgsl, validateMode);
