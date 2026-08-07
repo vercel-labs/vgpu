@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-examples/v1",
-  "revision": "baa4b04cb5916ffcd8785ddf06d1b5456653979d95e780901dcfa6e446fbce20",
-  "indexUrl": "https://vgpu.sh/api/examples/v1/revisions/baa4b04cb5916ffcd8785ddf06d1b5456653979d95e780901dcfa6e446fbce20/index.json",
-  "indexSha256": "98db0d9d72863cf0f998dddd9e13ce70f82637967f9db2b612abe7b125c465d9"
+  "revision": "745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c",
+  "indexUrl": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/index.json",
+  "indexSha256": "c88d653cc22b960498c1a5dae6b6cf012ce39096f5d77e6365f28ea2168ebf75"
 }

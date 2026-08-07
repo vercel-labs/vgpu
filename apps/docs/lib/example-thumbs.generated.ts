@@ -6,6 +6,10 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
+  "agent-radiance-cascades": {
+    "card": "/examples/agent-radiance-cascades.card.png",
+    "hero": "/examples/agent-radiance-cascades.hero.png"
+  },
   "air-painting": {
     "card": "/examples/air-painting.card.png",
     "hero": "/examples/air-painting.hero.png"

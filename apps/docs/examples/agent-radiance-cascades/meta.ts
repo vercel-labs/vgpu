@@ -4,7 +4,7 @@ export const meta = {
   slug: 'agent-radiance-cascades',
   title: 'Agent Radiance Cascades',
   description:
-    'The static ten-dot Agent mark becomes a selectable loading field with capture-quality controls: every grey-to-white dot is both an HDR emitter and an occluder, feeding a jump-flooded distance field and six top-down radiance cascades.',
+    'The static ten-dot Agent mark becomes a selectable loading field with capture-quality controls: every gray-to-white dot is both an HDR emitter and an occluder, feeding a jump-flooded distance field and six top-down radiance cascades.',
   tags: ['lighting', 'hdr', 'raymarching', 'rendering', 'shader'],
   capabilities: [
     'webgpu', 'multi-pass', 'render-targets', 'textures', 'hdr',

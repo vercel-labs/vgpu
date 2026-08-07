@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c",
+  "id": "raymarched-fractal",
+  "title": "Raymarched fractal",
+  "description": "A raymarched Sierpiński tetrahedron emerges from pure black under directional light and restrained HDR bloom, with drag-only orbit controls.",
+  "tags": [
+    "raymarching",
+    "raymarch",
+    "fractal",
+    "sierpinski",
+    "hdr",
+    "bloom"
+  ],
+  "capabilities": [
+    "webgpu",
+    "demand-rendering",
+    "pointer-orbit",
+    "multi-pass",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "c9705a3dbe42814df536c381aaaeddcc7d4e2d4e4db7e014e2ea320a9952ab63",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 791,
+      "sha256": "aeb069b6053ef8ba841208d2afac9e54520d560bbd24fbf5336c13cd1284ee81",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 10146,
+      "sha256": "fd85b2908be8301336206f9c15f79cbf75327f70614e54ec661d114e80c46c2a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/renderer.ts.raw"
+    },
+    {
+      "path": "pointer-input.ts",
+      "contentType": "text/typescript",
+      "size": 2326,
+      "sha256": "8a886c6123ab84b44ea2c679012d88dc2bcb6334fde375487e1557064a2eff89",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/pointer-input.ts.raw"
+    },
+    {
+      "path": "fractal-math.ts",
+      "contentType": "text/typescript",
+      "size": 1408,
+      "sha256": "5ed83ba97b1ef72a3e55957371fc71490f038666257238b9ba75831ff0db8774",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/fractal-math.ts.raw"
+    },
+    {
+      "path": "fractal.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3936,
+      "sha256": "6478ca1f050ca30210096d3290ae0089a80637d54ee7543cca7546a5ca788294",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/fractal.wgsl.raw"
+    },
+    {
+      "path": "bright-pass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 800,
+      "sha256": "3bbfddccbaf4d5ae5851a47bef59d1018503141ded370b599f52ef4fec99241d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/bright-pass.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 781,
+      "sha256": "646df3afc74960f0769afbaca1ff8963c24b626eb2782ed77d0fd73f05d99924",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/blur.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 858,
+      "sha256": "4e8b9cbda8e2b85989b33f90866f6bcae66ae533e55650462262734dac3e748a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/745c66c63c58dd67a0eebffc2077aa4a2c3682fbb124b26d6fd4d51278dc3c4c/examples/raymarched-fractal/files/composite.wgsl.raw"
+    }
+  ]
+}

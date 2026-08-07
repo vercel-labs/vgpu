@@ -1,0 +1,211 @@
+import type { Gpu, Surface, Target } from 'vgpu';
+import { surface } from 'vgpu';
+
+import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '../../lib/example-renderer';
+import { createScene, destroyScene, prepareScene, presentScene, renderLighting, type AgentRadianceScene } from './simulation';
+import {
+  AGENT_RADIANCE_QUALITY_SETTINGS,
+  DEFAULT_AGENT_RADIANCE_CONTROLS,
+  type AgentRadianceControls,
+  type AgentRadianceView,
+} from './types';
+
+export interface AgentRadianceRenderer extends ExampleRenderer<AgentRadianceControls> {}
+
+export interface AgentRadianceRendererOptions extends BrowserRendererOptions<AgentRadianceControls> {
+  readonly onCascadeCount?: (count: number) => void;
+}
+
+export interface AgentRadianceThumbnailOptions extends ThumbnailOptions {
+  readonly view?: AgentRadianceView;
+}
+
+function scaledSize(
+  width: number,
+  height: number,
+  requestedScale: number,
+  maxEdge: number,
+): readonly [number, number] {
+  const scale = Math.min(requestedScale, maxEdge / Math.max(width, height, 1));
+  return [Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale))];
+}
+
+export function createRenderer(options: AgentRadianceRendererOptions): AgentRadianceRenderer {
+  let disposed = false;
+  let reportedError = false;
+  let controls: AgentRadianceControls = options.initialControls ?? DEFAULT_AGENT_RADIANCE_CONTROLS;
+  let gpu: Gpu | undefined;
+  let canvasSurface: Surface | undefined;
+  let scene: AgentRadianceScene | undefined;
+  let scenePrepared = false;
+  let sceneGeneration = 0;
+  let observer: ResizeObserver | undefined;
+  let unsubscribeResize: (() => void) | undefined;
+  let animationFrame = 0;
+  let resizeFrame = 0;
+  let pendingSize: RenderSize | undefined;
+  let animationTime = 0;
+  let lastTimestamp = 0;
+  let lastChainTimestamp = -Infinity;
+  let dirty = true;
+
+  const handleFailure = (error: unknown) => {
+    if (disposed) return;
+    if (!reportedError) {
+      reportedError = true;
+      try { options.onError?.(error); } catch { /* reporting must not block teardown */ }
+    }
+    dispose();
+  };
+
+  const rebuildScene = () => {
+    if (disposed || !gpu || !canvasSurface) return;
+    const quality = AGENT_RADIANCE_QUALITY_SETTINGS[controls.quality];
+    const size = scaledSize(canvasSurface.size[0], canvasSurface.size[1], 1, quality.maxSceneEdge);
+    if (
+      scene?.size[0] === size[0]
+      && scene.size[1] === size[1]
+      && scene.directionBase === quality.directionBase
+    ) return;
+    const previous = scene;
+    const next = createScene(gpu, size, 'agent-radiance-live', quality.directionBase);
+    scene = next;
+    scenePrepared = false;
+    dirty = true;
+    options.onCascadeCount?.(next.cascadeCount);
+    const generation = ++sceneGeneration;
+    if (previous) destroyScene(previous);
+    void prepareScene(next, canvasSurface.format).then(() => {
+      if (disposed || scene !== next || generation !== sceneGeneration) return;
+      scenePrepared = true;
+      dirty = true;
+    }).catch(handleFailure);
+  };
+
+  const applyResize = () => {
+    resizeFrame = 0;
+    const size = pendingSize;
+    pendingSize = undefined;
+    if (!size || disposed || !canvasSurface) return;
+    const quality = AGENT_RADIANCE_QUALITY_SETTINGS[controls.quality];
+    canvasSurface.resize(scaledSize(
+      size.width,
+      size.height,
+      quality.outputScale,
+      quality.maxOutputEdge,
+    ));
+  };
+
+  const resize = (size: RenderSize) => {
+    if (disposed || size.width <= 0 || size.height <= 0) return;
+    pendingSize = size;
+    if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize);
+  };
+
+  const measure = () => {
+    const rect = options.canvas.getBoundingClientRect();
+    resize({ width: rect.width, height: rect.height, dpr: 1 });
+  };
+
+  const tick = (timestamp: number) => {
+    animationFrame = 0;
+    if (disposed) return;
+    if (!document.hidden && scenePrepared && scene && canvasSurface) {
+      const delta = lastTimestamp > 0 ? Math.min((timestamp - lastTimestamp) / 1000, 0.1) : 0;
+      if (!controls.paused) animationTime += delta;
+      const frameInterval = 1000 / AGENT_RADIANCE_QUALITY_SETTINGS[controls.quality].framesPerSecond;
+      if (dirty || (!controls.paused && timestamp - lastChainTimestamp >= frameInterval)) {
+        try {
+          renderLighting(scene, animationTime, controls.view, controls.animation);
+          dirty = false;
+          lastChainTimestamp = timestamp;
+        } catch (error) {
+          handleFailure(error);
+          return;
+        }
+      }
+      try { presentScene(scene, canvasSurface, controls.view); } catch (error) { handleFailure(error); return; }
+    }
+    lastTimestamp = timestamp;
+    animationFrame = requestAnimationFrame(tick);
+  };
+
+  const setControls = (next: Readonly<AgentRadianceControls>) => {
+    if (disposed) return;
+    const qualityChanged = next.quality !== controls.quality;
+    if (next.animation !== controls.animation) animationTime = 0;
+    if (
+      next.view !== controls.view
+      || next.animation !== controls.animation
+      || qualityChanged
+      || next.paused !== controls.paused
+    ) {
+      dirty = true;
+    }
+    controls = { ...next };
+    if (qualityChanged) {
+      lastChainTimestamp = -Infinity;
+      measure();
+    }
+  };
+
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    observer?.disconnect();
+    unsubscribeResize?.();
+    if (scene) destroyScene(scene);
+    canvasSurface?.dispose();
+    gpu?.dispose();
+    scene = undefined;
+    canvasSurface = undefined;
+    gpu = undefined;
+  }
+
+  const initialize = async () => {
+    const { init } = await import('vgpu');
+    if (disposed) return;
+    const nextGpu = await init();
+    if (disposed) { nextGpu.dispose(); return; }
+    gpu = nextGpu;
+    canvasSurface = surface(gpu, options.canvas, {
+      autoResize: false,
+      dpr: 1,
+    });
+    unsubscribeResize = canvasSurface.onResize(rebuildScene);
+    observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(options.canvas);
+    measure();
+    rebuildScene();
+    animationFrame = requestAnimationFrame(tick);
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (!disposed) handleFailure(error);
+    throw error;
+  });
+
+  return { ready, setControls, invalidate() { dirty = true; }, resize, dispose };
+}
+
+export async function renderThumbnail(
+  gpu: Gpu,
+  output: Target,
+  options: AgentRadianceThumbnailOptions = {},
+): Promise<void> {
+  const quality = AGENT_RADIANCE_QUALITY_SETTINGS.web;
+  const size = scaledSize(output.size[0], output.size[1], 1, quality.maxSceneEdge);
+  const scene = createScene(gpu, size, 'agent-radiance-thumb', quality.directionBase);
+  try {
+    await prepareScene(scene, output.format);
+    const view = options.view ?? 'final';
+    renderLighting(scene, options.time ?? 1.5, view);
+    presentScene(scene, output, view);
+    await gpu.gpu.queue.onSubmittedWorkDone();
+    await gpu.settled();
+  } finally {
+    destroyScene(scene);
+  }
+}
