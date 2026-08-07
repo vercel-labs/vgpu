@@ -23,6 +23,7 @@ export const exampleComponentLoaders = {
   'environment-map': () => import('../examples/environment-map/index'),
   transmission: () => import('../examples/transmission/index'),
   'radiance-cascades': () => import('../examples/radiance-cascades/index'),
+  'agent-radiance-cascades': () => import('../examples/agent-radiance-cascades/index'),
   'nextjs-flare': () => import('../examples/nextjs-flare/index'),
   'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),

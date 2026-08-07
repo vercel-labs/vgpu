@@ -17,6 +17,7 @@
     "fft-ocean": 58540,
     "raymarched-fractal": 52811,
     "radiance-cascades": 61842,
+    "agent-radiance-cascades": 60742,
     "depth-estimation": 58868,
     "mnist-classifier": 56298,
     "air-painting": 70900

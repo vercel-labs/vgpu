@@ -14,6 +14,7 @@ export const exampleSlugs = [
   'environment-map',
   'transmission',
   'radiance-cascades',
+  'agent-radiance-cascades',
   'nextjs-flare',
   'depth-estimation',
   'mnist-classifier',

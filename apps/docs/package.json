@@ -37,7 +37,8 @@
     "$comment:tgeist-14": "TGEIST-14 (gate G6): same three commands as the old app, same script (scripts/render-example-thumbs.mjs is byte-identical to apps/docs'), pointed at THIS app's public/examples baselines -- which are the byte-identical PNGs transplanted from apps/docs, i.e. the pixel contract is shared, not re-baselined. They only produce meaningful pixels on a GPU-capable runtime (the docker-gpu job / infra/test-docker), never on a plain CI runner. `thumbs` rewrites the baselines (--update, never run in CI), `thumbs:check` compares against them, `render:proof` dumps 160x90 proofs to artifacts/example-renders for the CI artifact upload.",
     "thumbs": "node scripts/render-example-thumbs.mjs --update",
     "thumbs:check": "node scripts/render-example-thumbs.mjs --check",
-    "render:proof": "node scripts/render-example-thumbs.mjs --proof-dir ../../artifacts/example-renders"
+    "render:proof": "node scripts/render-example-thumbs.mjs --proof-dir ../../artifacts/example-renders",
+    "debug:agent-radiance": "node scripts/render-agent-radiance-debug.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.134",

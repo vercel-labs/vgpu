@@ -17,6 +17,7 @@ import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/me
 import { meta as environmentMapMeta } from '../examples/environment-map/meta';
 import { meta as transmissionMeta } from '../examples/transmission/meta';
 import { meta as radianceCascadesMeta } from '../examples/radiance-cascades/meta';
+import { meta as agentRadianceCascadesMeta } from '../examples/agent-radiance-cascades/meta';
 import { meta as nextjsFlareMeta } from '../examples/nextjs-flare/meta';
 import { meta as depthEstimationMeta } from '../examples/depth-estimation/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
@@ -38,6 +39,7 @@ const rawMetadata = {
   'environment-map': environmentMapMeta,
   transmission: transmissionMeta,
   'radiance-cascades': radianceCascadesMeta,
+  'agent-radiance-cascades': agentRadianceCascadesMeta,
   'nextjs-flare': nextjsFlareMeta,
   'depth-estimation': depthEstimationMeta,
   'mnist-classifier': mnistClassifierMeta,
@@ -68,6 +70,7 @@ export const exampleMetadataBySlug = {
   'environment-map': withThumbnails(rawMetadata['environment-map']),
   transmission: withThumbnails(rawMetadata.transmission),
   'radiance-cascades': withThumbnails(rawMetadata['radiance-cascades']),
+  'agent-radiance-cascades': withThumbnails(rawMetadata['agent-radiance-cascades']),
   'nextjs-flare': withThumbnails(rawMetadata['nextjs-flare']),
   'depth-estimation': withThumbnails(rawMetadata['depth-estimation']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
