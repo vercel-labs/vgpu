@@ -30,8 +30,8 @@ export const nav = [
     href: "/docs",
   },
   {
-    label: "Source",
-    href: `https://github.com/${github.owner}/${github.repo}/`,
+    label: "Examples",
+    href: "/examples",
   },
 ];
 
