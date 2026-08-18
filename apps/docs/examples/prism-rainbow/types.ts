@@ -72,12 +72,16 @@ export const PRISM_DISPERSION_PRESETS = {
 
 export type PrismDispersion = keyof typeof PRISM_DISPERSION_PRESETS;
 
-export const PRISM_DISPERSION_ORDER: readonly PrismDispersion[] = ['stylized', 'crown', 'flint'];
+export const PRISM_DISPERSION_ORDER: readonly PrismDispersion[] = [
+  "stylized",
+  "crown",
+  "flint",
+];
 
 export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
-  stylized: 'Stylized',
-  crown: 'Crown glass',
-  flint: 'Dense flint',
+  stylized: "Stylized",
+  crown: "Crown glass",
+  flint: "Dense flint",
 };
 
 /**
@@ -88,24 +92,31 @@ export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
  * of. `caustic` goes further and shows the traced estimate alone, with the wall's
  * own shade and the direct beam removed.
  */
-export type PrismView = 'glass' | 'wall' | 'caustic';
+export type PrismView = "glass" | "wall" | "caustic";
 
-export const PRISM_VIEW_ORDER: readonly PrismView[] = ['glass', 'wall', 'caustic'];
+export const PRISM_VIEW_ORDER: readonly PrismView[] = [
+  "glass",
+  "wall",
+  "caustic",
+];
 
 export const PRISM_VIEW_LABELS: Record<PrismView, string> = {
-  glass: 'Prism',
-  wall: 'Wall only',
-  caustic: 'Traced light',
+  glass: "Prism",
+  wall: "Wall only",
+  caustic: "Traced light",
 };
 
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
   readonly view: PrismView;
+  /** CSS hex color, interpreted as sRGB before the additive light is applied. */
+  readonly wallColor: string;
 }
 
 export const DEFAULT_PRISM_CONTROLS: PrismControls = {
-  dispersion: 'stylized',
-  view: 'glass',
+  dispersion: "stylized",
+  view: "glass",
+  wallColor: "#24262b",
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -113,13 +124,16 @@ const radians = (degrees: number): number => (degrees * Math.PI) / 180;
 function rotate(point: Vec2, angle: number): Vec2 {
   const cosine = Math.cos(angle);
   const sine = Math.sin(angle);
-  return [point[0] * cosine - point[1] * sine, point[0] * sine + point[1] * cosine];
+  return [
+    point[0] * cosine - point[1] * sine,
+    point[0] * sine + point[1] * cosine,
+  ];
 }
 
 /** Side length of the equilateral prism, in scene units. */
 export const PRISM_SIDE = 0.57;
-/** Tilt of the whole prism, which tilts the fan it throws by as much. */
-export const PRISM_TILT_DEGREES = 10;
+/** Upright from the resting front camera, so the solid reads as a triangle. */
+export const PRISM_TILT_DEGREES = 0;
 /**
  * The prism stands at the middle of the wall, so the camera can look straight at
  * it and the fan has the whole lower right quadrant to open into.
@@ -136,7 +150,10 @@ export const PRISM_CENTROID: Vec2 = [0, 0];
 export const PRISM_TRIANGLE: Triangle = (() => {
   const circumradius = PRISM_SIDE / Math.sqrt(3);
   const vertex = (degrees: number): Vec2 => {
-    const spun = rotate([circumradius, 0], radians(degrees + PRISM_TILT_DEGREES));
+    const spun = rotate(
+      [circumradius, 0],
+      radians(degrees + PRISM_TILT_DEGREES)
+    );
     return [PRISM_CENTROID[0] + spun[0], PRISM_CENTROID[1] + spun[1]];
   };
   return { a: vertex(90), b: vertex(210), c: vertex(330) };
@@ -228,8 +245,9 @@ export function lampForIncidence(incidenceDegrees: number): SpotLight {
 export const PRISM_LIGHT: SpotLight = lampForIncidence(PRISM_INCIDENCE_DEGREES);
 
 /** Where `PRISM_INCIDENCE_DEGREES` sits on `PRISM_INCIDENCE_ARC`, in [0, 1]. */
-export const PRISM_DEFAULT_ARC = (PRISM_INCIDENCE_DEGREES - PRISM_INCIDENCE_ARC.min)
-  / (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min);
+export const PRISM_DEFAULT_ARC =
+  (PRISM_INCIDENCE_DEGREES - PRISM_INCIDENCE_ARC.min) /
+  (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min);
 
 /** Visible wavelength range the tracer samples, in nanometres. */
 export const PRISM_WAVELENGTHS = { min: 400, max: 700 } as const;
@@ -274,16 +292,11 @@ export const PRISM_FRONT_Z = PRISM_WALL_GAP + PRISM_DEPTH;
 /**
  * Transmissive glass, as `vgpu.sh/examples/glass-fractal` shades it.
  *
- * Same parameters and the same responses; two of the values are turned up, and
- * the reason is the room rather than taste. That example suspends its glass in a
- * bright studio with a lit fractal inside it, so most of what you see through the
- * shell is transmitted light. Here the glass stands against a wall that is nearly
- * black by design — anything brighter and the rainbow stops reading — so
- * transmission contributes almost nothing and the solid has to be carried by what
- * it reflects. `reflectionStrength` and `environmentExposure` are the knobs
- * `glass-fractal` exposes for exactly that, and past about 1.4 the exposure also
- * brings its studio-panel term in over the room and not just the panels, which is
- * what puts a readable sheen on a face pointed at nothing.
+ * Same parameters and the same responses. Against the near-white wall most of
+ * the shell is transmitted light, so the solid is defined by its absorption,
+ * Fresnel edges and studio reflections. `reflectionStrength` and
+ * `environmentExposure` keep those reflections legible without tinting the wall
+ * the prism refracts behind itself.
  */
 export interface GlassMaterial {
   /** Index of refraction, for both the Fresnel term and the refracted lookup. */
@@ -335,18 +348,12 @@ export const CAMERA_FOV_DEGREES = 38;
 export const CAMERA_DISTANCE = 2.55;
 
 /**
- * The resting view: off to the left of the prism and a little above it.
- *
- * Not a stylistic choice. The solid is the cross-section extruded straight at the
- * camera, so a head-on view would collapse it back into the flat triangle this
- * example started as — the depth is only legible from off-axis, where a side face
- * turns towards the viewer and the wall keystones behind it. Left is the side the
- * beam arrives from, so the face that turns towards you is the one it enters
- * through; the small rise adds the vertical keystone that makes the wall read as a
- * surface in a room rather than a backdrop behind one.
+ * The resting camera is centered on the prism and square to the wall. Hovering
+ * may still reveal its depth with a small orbit, but the composed shot is a
+ * straight-on elevation with no keystone or perspective bias.
  */
-export const CAMERA_YAW_DEGREES = -13;
-export const CAMERA_PITCH_DEGREES = 8;
+export const CAMERA_YAW_DEGREES = 0;
+export const CAMERA_PITCH_DEGREES = 0;
 
 /** Widest angle the pointer can swing the camera off its resting view, in degrees. */
 export const CAMERA_ORBIT_DEGREES = 3.5;

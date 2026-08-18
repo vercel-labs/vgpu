@@ -7,13 +7,13 @@
 // the texture lands on the wall at 1:1 and the fan reaches the floor of the frame
 // exactly where the optics put it.
 //
-// The plane also carries the two terms that are not worth tracing. The wall's own
-// shade is a flat colour with a falloff and a little grain, and the beam on its
-// way *in* is analytic: a direct connection to the lamp, blocked by the triangle.
+// The wall uses the sRGB color selected in lil-gui wherever no light reaches it.
+// The two light terms sit additively above that base: the accumulated caustic, and the analytic beam
+// on its way *in* — a direct connection to the lamp, blocked by the triangle.
 // That blocker test is what plants the rainbow inside the prism's shadow, since
 // the traced paths all pass through the glass the shadow belongs to.
 
-import { linearToSrgb3, tonemapAces } from "@vgpu/wgsl-std/color";
+import { linearToSrgb3, srgbToLinear3, tonemapAces } from "@vgpu/wgsl-std/color";
 import { pcg2d, unitFloat } from "@vgpu/wgsl-std/hash";
 import { vogelDisk } from "@vgpu/wgsl-std/sampling";
 import { Scene, scenePoint, scenePrism, sceneLamp } from "./scene.wgsl";
@@ -73,20 +73,6 @@ fn beamHaze(point: vec2f) -> f32 {
 }
 
 /**
- * A dim, slightly uneven wall so the room reads as a room and not as a void.
- *
- * The vignette is measured in fractions of the wall rather than in scene units.
- * It has to be: the wall grows with the canvas, and an absolute falloff that
- * looked right on a 16:9 frame reached zero — a pure black corner, brighter than
- * nothing only by its grain — on a wide one.
- */
-fn wall(point: vec2f, uv: vec2f) -> vec3f {
-  let falloff = 1.0 - 0.55 * length((point / scene.wallHalfExtent) * vec2f(0.8, 0.5));
-  let grain = unitFloat(pcg2d(vec2u(uv * 2048.0)).x) - 0.5;
-  return vec3f(0.0198, 0.0209, 0.0246) * max(falloff, 0.0) + vec3f(grain * 0.0022);
-}
-
-/**
  * The accumulated caustic, smoothed over a disc whose radius shrinks as the
  * estimate converges.
  *
@@ -111,9 +97,12 @@ fn causticAt(uv: vec2f) -> vec3f {
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let point = scenePoint(scene, in.uv);
-  var color = causticAt(in.uv);
-  if (scene.causticOnly == 0u) {
-    color = color + wall(point, in.uv) + vec3f(scene.haze * beamHaze(point));
+  let causticLight = causticAt(in.uv);
+  if (scene.causticOnly != 0u) {
+    return vec4f(linearToSrgb3(tonemapAces(causticLight)), 1.0);
   }
-  return vec4f(linearToSrgb3(tonemapAces(color)), 1.0);
+  let wallBase = srgbToLinear3(scene.wallColor);
+  let directLight = vec3f(scene.haze * beamHaze(point));
+  let color = clamp(wallBase + causticLight + directLight, vec3f(0.0), vec3f(1.0));
+  return vec4f(linearToSrgb3(color), 1.0);
 }

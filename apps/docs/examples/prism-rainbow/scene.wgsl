@@ -43,6 +43,8 @@ export struct Scene {
    * what makes the texture land on the plane at 1:1.
    */
   wallHalfExtent: vec2f,
+  /** User-selected sRGB wall color; the wall pass linearizes it before lighting. */
+  wallColor: vec3f,
   /** Scales the traced estimator into display range. */
   exposure: f32,
   wavelengthMin: f32,

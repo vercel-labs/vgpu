@@ -1,4 +1,4 @@
-import type { Gpu, Surface, Target } from 'vgpu';
+import type { Frame, Gpu, Surface, Target } from 'vgpu';
 import { frameLoop, surface } from 'vgpu';
 
 import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '../../lib/example-renderer';
@@ -153,15 +153,15 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     return true;
   };
 
-  const tick = () => {
+  const tick = (currentFrame: Frame) => {
     if (disposed || !scene || !canvasSurface || !prepared) return;
     const tracing = scene.accumulated < CONVERGED_FRAMES;
     const moved = stepOrbit();
     if (!tracing && !moved && !pendingPresent) return;
     try {
       if (moved) setOrbit(scene, orbitCurrent[0], orbitCurrent[1]);
-      if (tracing) traceFrame(scene);
-      presentScene(scene, canvasSurface);
+      if (tracing) traceFrame(scene, currentFrame);
+      presentScene(scene, canvasSurface, currentFrame);
       pendingPresent = false;
     } catch (error) {
       handleFailure(error);

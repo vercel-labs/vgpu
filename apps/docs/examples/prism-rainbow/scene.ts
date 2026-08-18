@@ -19,15 +19,29 @@
  * frame time without changing the picture's framing.
  */
 
-import type { Draw, Effect, Geometry, Gpu, PingPongTargets, Surface, Target } from 'vgpu';
-import { draw, effect, frame, pingPong, sampler, target } from 'vgpu';
+import type {
+  Draw,
+  Effect,
+  Frame,
+  Geometry,
+  Gpu,
+  PingPongTargets,
+  Surface,
+  Target,
+} from "vgpu";
+import { draw, effect, frame, pingPong, sampler, target } from "vgpu";
 
-import { cameraView, rotationMatrix, wallHalfHeight, type CameraView } from './camera';
-import glassWgsl from './glass.wgsl';
-import presentWgsl from './present.wgsl';
-import { prismGeometry } from './prism-mesh';
-import traceWgsl from './trace.wgsl';
-import wallWgsl from './wall.wgsl';
+import {
+  cameraView,
+  rotationMatrix,
+  wallHalfHeight,
+  type CameraView,
+} from "./camera";
+import glassWgsl from "./glass.wgsl";
+import presentWgsl from "./present.wgsl";
+import { prismGeometry } from "./prism-mesh";
+import traceWgsl from "./trace.wgsl";
+import wallWgsl from "./wall.wgsl";
 import {
   DEFAULT_PRISM_CONTROLS,
   PRISM_BACK_Z,
@@ -45,7 +59,7 @@ import {
   lampForIncidence,
   type PrismControls,
   type SpotLight,
-} from './types';
+} from "./types";
 
 type Output = Surface | Target;
 
@@ -92,32 +106,59 @@ export interface PrismScene {
   readonly label: string;
 }
 
-export function traceSize(output: readonly [number, number]): readonly [number, number] {
-  const scale = Math.min(TRACE_SCALE, TRACE_MAX_EDGE / Math.max(output[0], output[1], 1));
-  return [Math.max(1, Math.round(output[0] * scale)), Math.max(1, Math.round(output[1] * scale))];
+export function traceSize(
+  output: readonly [number, number]
+): readonly [number, number] {
+  const scale = Math.min(
+    TRACE_SCALE,
+    TRACE_MAX_EDGE / Math.max(output[0], output[1], 1)
+  );
+  return [
+    Math.max(1, Math.round(output[0] * scale)),
+    Math.max(1, Math.round(output[1] * scale)),
+  ];
 }
 
-export function createScene(gpu: Gpu, output: readonly [number, number], label: string): PrismScene {
+export function createScene(
+  gpu: Gpu,
+  output: readonly [number, number],
+  label: string
+): PrismScene {
   const size = traceSize(output);
   const prism = prismGeometry(gpu, `${label}.prism`);
   return {
     gpu,
     size,
     outputSize: output,
-    accumulation: pingPong(gpu, size[0], size[1], { format: 'rgba16float', label: `${label}.accumulation` }),
+    accumulation: pingPong(gpu, size[0], size[1], {
+      format: "rgba16float",
+      label: `${label}.accumulation`,
+    }),
     trace: effect(gpu, traceWgsl, { label: `${label}.trace` }),
     // No vertex buffer: `wall.wgsl` derives its four corners from the same
     // uniform block the tracer integrated against.
-    wall: draw(gpu, { shader: wallWgsl, vertices: 6, cull: 'back', depth: false, label: `${label}.wall` }),
+    wall: draw(gpu, {
+      shader: wallWgsl,
+      vertices: 6,
+      cull: "back",
+      depth: false,
+      label: `${label}.wall`,
+    }),
     present: effect(gpu, presentWgsl, { label: `${label}.present` }),
-    glass: draw(gpu, { shader: glassWgsl, geometry: prism, cull: 'back', depth: false, label: `${label}.glass` }),
+    glass: draw(gpu, {
+      shader: glassWgsl,
+      geometry: prism,
+      cull: "back",
+      depth: false,
+      label: `${label}.glass`,
+    }),
     prism,
-    causticSampler: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
+    causticSampler: sampler(gpu, { minFilter: "linear", magFilter: "linear" }),
     sceneSampler: sampler(gpu, {
-      minFilter: 'linear',
-      magFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
+      minFilter: "linear",
+      magFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
     }),
     controls: DEFAULT_PRISM_CONTROLS,
     lampArc: PRISM_DEFAULT_ARC,
@@ -166,7 +207,10 @@ export function setOrbit(scene: PrismScene, x: number, y: number): void {
   refreshCamera(scene);
 }
 
-export function resizeScene(scene: PrismScene, output: readonly [number, number]): void {
+export function resizeScene(
+  scene: PrismScene,
+  output: readonly [number, number]
+): void {
   const size = traceSize(output);
   scene.outputSize = output;
   scene.aspect = output[0] / Math.max(1, output[1]);
@@ -180,7 +224,7 @@ export function resizeScene(scene: PrismScene, output: readonly [number, number]
   }
   const previous = scene.accumulation;
   scene.accumulation = pingPong(scene.gpu, size[0], size[1], {
-    format: 'rgba16float',
+    format: "rgba16float",
     label: `${scene.label}.accumulation`,
   });
   scene.size = size;
@@ -191,7 +235,10 @@ export function resizeScene(scene: PrismScene, output: readonly [number, number]
 /** Angle of incidence for a position along `PRISM_INCIDENCE_ARC`. */
 export function incidenceAt(position: number): number {
   const clamped = Math.min(1, Math.max(0, position));
-  return PRISM_INCIDENCE_ARC.min + (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min) * clamped;
+  return (
+    PRISM_INCIDENCE_ARC.min +
+    (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min) * clamped
+  );
 }
 
 /** The lamp for a position along the arc; `PRISM_DEFAULT_ARC` gives `PRISM_LIGHT`. */
@@ -209,6 +256,9 @@ export function wallExtent(aspect: number): readonly [number, number] {
 export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
   const dispersion = PRISM_DISPERSION_PRESETS[scene.controls.dispersion];
   const lamp = lampAt(scene.lampArc);
+  const wallColor = scene.controls.wallColor.match(
+    /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i
+  );
   return {
     viewProjection: scene.view.camera.viewProjection,
     prismA: PRISM_TRIANGLE.a,
@@ -222,6 +272,9 @@ export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
     iorBase: dispersion.base,
     iorStrength: dispersion.strength,
     wallHalfExtent: wallExtent(scene.aspect),
+    wallColor: wallColor
+      ? wallColor.slice(1).map((channel) => Number.parseInt(channel, 16) / 255)
+      : [0, 0, 0],
     exposure: PRISM_EXPOSURE,
     wavelengthMin: PRISM_WAVELENGTHS.min,
     wavelengthMax: PRISM_WAVELENGTHS.max,
@@ -230,11 +283,14 @@ export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
     // weight; after that this is 1/n, the running mean.
     blend: 1 / (scene.accumulated + 1),
     // Wide while the estimate is still mostly noise, tightening as it converges.
-    causticBlur: Math.min(5, Math.max(1.2, 5 / Math.sqrt(scene.accumulated + 1))),
+    causticBlur: Math.min(
+      5,
+      Math.max(1.2, 5 / Math.sqrt(scene.accumulated + 1))
+    ),
     raysPerFragment: PRISM_RAYS_PER_FRAGMENT,
     maxBounces: PRISM_MAX_INTERNAL_BOUNCES,
     frameIndex: scene.accumulated,
-    causticOnly: scene.controls.view === 'caustic' ? 1 : 0,
+    causticOnly: scene.controls.view === "caustic" ? 1 : 0,
   };
 }
 
@@ -262,50 +318,76 @@ export function glassUniforms(scene: PrismScene): Record<string, unknown> {
 }
 
 /** Compiles every pipeline against the target it will draw into. */
-export async function prepareScene(scene: PrismScene, output: Output): Promise<void> {
+export async function prepareScene(
+  scene: PrismScene,
+  output: Output
+): Promise<void> {
   scene.outputSize = output.size;
   scene.aspect = output.size[0] / Math.max(1, output.size[1]);
   refreshCamera(scene);
-  const wallTarget = scene.wallTarget ?? target(scene.gpu, {
-    size: output.size,
-    format: output.format,
-    label: `${scene.label}.wall`,
-  });
+  const wallTarget =
+    scene.wallTarget ??
+    target(scene.gpu, {
+      size: output.size,
+      format: output.format,
+      label: `${scene.label}.wall`,
+    });
   scene.wallTarget = wallTarget;
-  if (wallTarget.size[0] !== output.size[0] || wallTarget.size[1] !== output.size[1]) {
+  if (
+    wallTarget.size[0] !== output.size[0] ||
+    wallTarget.size[1] !== output.size[1]
+  ) {
     wallTarget.resize(output.size);
   }
   bind(scene, wallTarget);
+  // A canvas surface only has a current texture while `frame(gpu)` is active.
+  // Pre-warm the two output pipelines from its stable format instead of asking
+  // `compile()` to resolve the surface outside a frame.
+  const outputSignature = { colors: [output.format] } as const;
   await Promise.all([
     scene.trace.compile(scene.accumulation.write),
     scene.wall.compile(wallTarget),
-    scene.present.compile(output),
-    scene.glass.compile(output),
+    scene.present.compile(outputSignature),
+    scene.glass.compile(outputSignature),
   ]);
 }
 
 /** Folds one more frame of 16-rays-per-fragment into the running average. */
-export function traceFrame(scene: PrismScene): void {
-  scene.trace.set({ scene: sceneUniforms(scene), history: scene.accumulation.read });
-  frame(scene.gpu, (current) => {
-    current.pass({ target: scene.accumulation.write }, (pass) => pass.draw(scene.trace));
+export function traceFrame(scene: PrismScene, currentFrame?: Frame): void {
+  scene.trace.set({
+    scene: sceneUniforms(scene),
+    history: scene.accumulation.read,
   });
+  const encode = (current: Frame) => {
+    current.pass({ target: scene.accumulation.write }, (pass) =>
+      pass.draw(scene.trace)
+    );
+  };
+  if (currentFrame) encode(currentFrame);
+  else frame(scene.gpu, encode);
   scene.accumulation.swap();
   scene.accumulated += 1;
 }
 
 /** Draws the wall, copies it to `output`, and stands the glass in front of it. */
-export function presentScene(scene: PrismScene, output: Output): void {
+export function presentScene(
+  scene: PrismScene,
+  output: Output,
+  currentFrame?: Frame
+): void {
   const wallTarget = scene.wallTarget;
-  if (!wallTarget) throw new Error('prepareScene must run before presentScene.');
+  if (!wallTarget)
+    throw new Error("prepareScene must run before presentScene.");
   bind(scene, wallTarget);
-  frame(scene.gpu, (current) => {
+  const encode = (current: Frame) => {
     current.pass({ target: wallTarget }, (pass) => pass.draw(scene.wall));
     current.pass({ target: output }, (pass) => {
       pass.draw(scene.present);
-      if (scene.controls.view === 'glass') pass.draw(scene.glass);
+      if (scene.controls.view === "glass") pass.draw(scene.glass);
     });
-  });
+  };
+  if (currentFrame) encode(currentFrame);
+  else frame(scene.gpu, encode);
 }
 
 function bind(scene: PrismScene, wallTarget: Target): void {
@@ -332,7 +414,9 @@ function destroyTargets(targets: PingPongTargets): void {
 
 export function destroyScene(scene: PrismScene): void {
   destroyTargets(scene.accumulation);
-  (scene.wallTarget as (Target & { destroy?: () => void }) | undefined)?.destroy?.();
+  (
+    scene.wallTarget as (Target & { destroy?: () => void }) | undefined
+  )?.destroy?.();
   scene.wallTarget = undefined;
   scene.prism.destroy();
 }

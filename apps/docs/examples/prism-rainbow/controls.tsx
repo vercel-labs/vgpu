@@ -1,4 +1,8 @@
+import { useEffect, useRef } from "react";
+import GUI, { type Controller } from "lil-gui";
+
 import {
+  DEFAULT_PRISM_CONTROLS,
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
   PRISM_VIEW_LABELS,
@@ -6,51 +10,102 @@ import {
   type PrismControls,
   type PrismDispersion,
   type PrismView,
-} from './types';
+} from "./types";
 
 export interface ControlsProps {
-  value: Readonly<PrismControls>;
+  initialValue?: Readonly<PrismControls>;
   onChange(value: PrismControls): void;
-  /** Frames folded into the running average, shown so convergence is visible. */
-  accumulated: number;
+  /** Read lazily so the render loop's progress never causes a React render. */
+  accumulated(): number;
   disabled?: boolean;
 }
 
-export function Controls({ value, onChange, accumulated, disabled = false }: ControlsProps) {
+interface GuiValues {
+  dispersion: PrismDispersion;
+  view: PrismView;
+  wallColor: string;
+  frames: number;
+}
+
+function options<T extends string>(
+  order: readonly T[],
+  labels: Readonly<Record<T, string>>
+): Record<string, T> {
+  return Object.fromEntries(order.map((value) => [labels[value], value]));
+}
+
+/** lil-gui owns its small mutable model; React only owns the mount point. */
+export function Controls({
+  initialValue = DEFAULT_PRISM_CONTROLS,
+  onChange,
+  accumulated,
+  disabled = false,
+}: ControlsProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const onChangeRef = useRef(onChange);
+  const accumulatedRef = useRef(accumulated);
+  onChangeRef.current = onChange;
+  accumulatedRef.current = accumulated;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Fall back per-field as well as per-object so Fast Refresh can safely
+    // cross the schema change that introduced `wallColor`.
+    const values: GuiValues = {
+      dispersion: initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion,
+      view: initialValue.view ?? DEFAULT_PRISM_CONTROLS.view,
+      wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
+      frames: 0,
+    };
+    const gui = new GUI({ title: "Prism", container });
+    Object.assign(gui.domElement.style, {
+      position: "absolute",
+      top: "8px",
+      right: "8px",
+      pointerEvents: "auto",
+    });
+
+    const publish = () =>
+      onChangeRef.current({
+        dispersion: values.dispersion,
+        view: values.view,
+        wallColor: values.wallColor,
+      });
+    const controllers: Controller[] = [
+      gui
+        .add(
+          values,
+          "dispersion",
+          options(PRISM_DISPERSION_ORDER, PRISM_DISPERSION_LABELS)
+        )
+        .name("glass")
+        .onChange(publish),
+      gui
+        .add(values, "view", options(PRISM_VIEW_ORDER, PRISM_VIEW_LABELS))
+        .name("show")
+        .onChange(publish),
+      gui.addColor(values, "wallColor").name("wall color").onChange(publish),
+    ];
+    const frames = gui.add(values, "frames").name("frames averaged").disable();
+    if (disabled) controllers.forEach((controller) => controller.disable());
+
+    const readout = window.setInterval(() => {
+      values.frames = accumulatedRef.current();
+      frames.updateDisplay();
+    }, 250);
+
+    return () => {
+      window.clearInterval(readout);
+      gui.destroy();
+    };
+  }, [disabled, initialValue]);
+
   return (
-    <fieldset className="absolute right-4 top-4 z-[2] grid gap-2 rounded-2xl border border-white/20 bg-black/60 p-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur">
-      <legend className="sr-only">Prism rainbow</legend>
-      <label className="flex items-center gap-2 whitespace-nowrap">
-        Glass
-        <select
-          aria-label="Dispersion preset"
-          className="rounded bg-black/60 px-1 py-0.5"
-          value={value.dispersion}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, dispersion: event.currentTarget.value as PrismDispersion })}
-        >
-          {PRISM_DISPERSION_ORDER.map((dispersion) => (
-            <option key={dispersion} value={dispersion}>{PRISM_DISPERSION_LABELS[dispersion]}</option>
-          ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-2 whitespace-nowrap">
-        Show
-        <select
-          aria-label="Layer"
-          className="rounded bg-black/60 px-1 py-0.5"
-          value={value.view}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, view: event.currentTarget.value as PrismView })}
-        >
-          {PRISM_VIEW_ORDER.map((view) => (
-            <option key={view} value={view}>{PRISM_VIEW_LABELS[view]}</option>
-          ))}
-        </select>
-      </label>
-      <span className="tabular-nums font-normal text-white/70">
-        {accumulated} {accumulated === 1 ? 'frame' : 'frames'} averaged
-      </span>
-    </fieldset>
+    <div
+      ref={containerRef}
+      className="pointer-events-none absolute inset-0 z-[2]"
+    />
   );
 }
