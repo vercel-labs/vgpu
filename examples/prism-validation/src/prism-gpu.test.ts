@@ -2,7 +2,7 @@
  * GPU validation for the `prism-rainbow` docs example, run with the Node
  * renderer (`vgpu/node`, Dawn-backed).
  *
- * Two kinds of evidence here, and the split is deliberate:
+ * Three kinds of evidence here, and the split is deliberate:
  *
  *  - **Parity.** `probe.wgsl` writes the tracer's internals into an
  *    `rgba32float` target — the sampled point on the glass, the wavelength, the
@@ -14,10 +14,14 @@
  *    rainbow has to be: brighter than the wall, colorful, inside the prism's
  *    shadow, ordered violet-to-red across the fan, and converging as frames
  *    accumulate.
+ *  - **Room.** The parts that only exist because the scene is three-dimensional:
+ *    the wall covers the frame at every canvas shape, the glass occupies exactly
+ *    its own projected area and nothing outside it, and moving the camera slides
+ *    the solid against the wall without disturbing the estimate painted on it.
  *
  * Gated on `VGPU_DOCKER_TEST` like every other GPU suite in the repo; the CI
- * `docker-gpu` job runs it, and `optics.test.ts` covers the same physics on any
- * machine without a GPU.
+ * `docker-gpu` job runs it, and `optics.test.ts` and `geometry.test.ts` cover the
+ * physics and the framing on any machine without a GPU.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -47,6 +51,7 @@ import {
 } from '../../../apps/docs/examples/prism-rainbow/types';
 import {
   accumulate,
+  prismSilhouette,
   readProbe,
   regionStats,
   renderComposite,
@@ -92,18 +97,25 @@ function closeToWeight(actual: number, expected: number): boolean {
   return Math.abs(actual - expected) <= Math.max(1e-4, Math.abs(expected) * 0.01);
 }
 
+const SIZE: readonly [number, number] = [320, 180];
+
 /**
  * Regions of the frame, in normalized coordinates, that the physics pins down.
  * Chosen by measuring a render, not by eye: `fan` is where the beam leaves the
  * glass heading right and down, `wall` is a corner the lamp's cone never reaches.
  */
 const REGIONS = {
-  fan: { x0: 0.6, y0: 0.3, x1: 0.98, y1: 0.55 },
+  fan: { x0: 0.66, y0: 0.44, x1: 0.98, y1: 0.72 },
   wall: { x0: 0.04, y0: 0.04, x1: 0.3, y1: 0.2 },
   /** Violet is deviated furthest, so it lands below the red end of the fan. */
-  fanRed: { x0: 0.72, y0: 0.3, x1: 0.94, y1: 0.4 },
-  fanViolet: { x0: 0.82, y0: 0.5, x1: 1.0, y1: 0.62 },
+  fanRed: { x0: 0.72, y0: 0.44, x1: 0.94, y1: 0.53 },
+  fanViolet: { x0: 0.8, y0: 0.62, x1: 1.0, y1: 0.74 },
 } as const;
+
+const WALL_ONLY: PrismControls = { dispersion: 'stylized', view: 'wall' };
+const CAUSTIC_ONLY: PrismControls = { dispersion: 'stylized', view: 'caustic' };
+
+const blueness = (mean: readonly [number, number, number]): number => mean[2] / Math.max(1e-6, mean[0]);
 
 describe.skipIf(gpuOnly)('prism-rainbow shader parity with the CPU reference', () => {
   test('every probe slot agrees: sampling, dispersion, refraction, connection', async () => {
@@ -190,7 +202,7 @@ describe.skipIf(gpuOnly)('prism-rainbow shader parity with the CPU reference', (
       const flint = await readProbe(gpu, {
         lampArc: 1,
         frameIndex: 3,
-        controls: { dispersion: 'flint', causticOnly: false },
+        controls: { dispersion: 'flint', view: 'glass' },
       });
       expect(flint.map((slot) => slot.ior)).not.toEqual(swung.map((slot) => slot.ior));
       for (const slot of flint) {
@@ -212,7 +224,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
   test('the rainbow lands in the prism’s shadow, and the wall stays dark', async () => {
     const gpu = await init();
     try {
-      const output = target(gpu, { size: [320, 180], format: 'rgba8unorm', label: 'prism-picture' });
+      const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-picture' });
       await renderComposite(gpu, output, 160);
       const fan = await regionStats(output, REGIONS.fan);
       const wall = await regionStats(output, REGIONS.wall);
@@ -230,28 +242,28 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
   test('the fan is ordered: violet below, red above', async () => {
     const gpu = await init();
     try {
-      const output = target(gpu, { size: [320, 180], format: 'rgba8unorm', label: 'prism-order' });
+      const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-order' });
       await renderComposite(gpu, output, 160);
       const violet = await regionStats(output, REGIONS.fanViolet);
       const red = await regionStats(output, REGIONS.fanRed);
       // Violet is refracted furthest, so it leaves on the steepest heading and
-      // lands below red. Compare hue, not brightness.
-      const blueness = (mean: readonly [number, number, number]) => mean[2] / Math.max(1e-6, mean[0]);
-      expect(blueness(violet.mean)).toBeGreaterThan(2);
+      // lands below red. Compare hue, not brightness — and compare the two ends
+      // against each other rather than against an absolute, because how much wall
+      // each band shares its region with depends on the framing.
+      expect(blueness(violet.mean)).toBeGreaterThan(3 * blueness(red.mean));
       expect(blueness(red.mean)).toBeLessThan(0.6);
     } finally {
       gpu.dispose();
     }
   });
 
-  test('caustic-only strips the wall, the glass and the beam', async () => {
+  test('peeling the layers back strips the glass, then the wall and the beam', async () => {
     const gpu = await init();
     try {
-      const controls: PrismControls = { dispersion: 'stylized', causticOnly: true };
-      const output = target(gpu, { size: [320, 180], format: 'rgba8unorm', label: 'prism-caustic-only' });
-      await renderComposite(gpu, output, 96, { controls });
-      const wall = await regionStats(output, REGIONS.wall);
-      const fan = await regionStats(output, REGIONS.fan);
+      const caustic = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-caustic-only' });
+      await renderComposite(gpu, caustic, 96, { controls: CAUSTIC_ONLY });
+      const wall = await regionStats(caustic, REGIONS.wall);
+      const fan = await regionStats(caustic, REGIONS.fan);
       expect(wall.meanLuma).toBeLessThan(0.002);
       expect(fan.meanLuma).toBeGreaterThan(0.1);
     } finally {
@@ -263,8 +275,8 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
     const gpu = await init();
     try {
       const colorfulness = async (dispersion: PrismDispersion): Promise<number> => {
-        const output = target(gpu, { size: [320, 180], format: 'rgba8unorm', label: `prism-${dispersion}` });
-        await renderComposite(gpu, output, 128, { controls: { dispersion, causticOnly: false } });
+        const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label: `prism-${dispersion}` });
+        await renderComposite(gpu, output, 128, { controls: { dispersion, view: 'glass' } });
         return (await regionStats(output, REGIONS.fan)).colorfulShare;
       };
       // The claim `types.ts` makes about the presets, measured on the GPU: crown
@@ -285,11 +297,121 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
       };
       const low = await render(0);
       const high = await render(1);
-      let changed = 0;
-      for (let index = 0; index < low.length; index += 4) {
-        if (Math.abs(low[index]! - high[index]!) > 12) changed++;
+      expect(changedShare(low, high)).toBeGreaterThan(0.05);
+    } finally {
+      gpu.dispose();
+    }
+  });
+});
+
+describe.skipIf(gpuOnly)('prism-rainbow room', () => {
+  test('the wall covers the frame, so no corner shows the empty room behind it', async () => {
+    const gpu = await init();
+    try {
+      // Every shape the canvas can plausibly take, including the extremes the
+      // derived wall size exists for. A shortfall reads as a black wedge in a
+      // corner, which is exactly the kind of thing a single 16:9 render misses.
+      for (const size of [[320, 180], [180, 320], [320, 320], [480, 120]] as const) {
+        const output = target(gpu, { size, format: 'rgba8unorm', label: `prism-cover-${size[0]}x${size[1]}` });
+        await renderComposite(gpu, output, 24);
+        const pixels = await output.read();
+        let darkest = 1;
+        for (let index = 0; index < pixels.length; index += 4) {
+          const luma = (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
+          darkest = Math.min(darkest, luma);
+        }
+        // The wall's own shade never falls this low; a cleared pixel is zero.
+        expect(darkest, `${size[0]}x${size[1]} darkest pixel`).toBeGreaterThan(0.01);
       }
-      expect(changed / (low.length / 4)).toBeGreaterThan(0.05);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test('the glass covers its own projected area, and only that', async () => {
+    const gpu = await init();
+    try {
+      const glass = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-glass' });
+      await renderComposite(gpu, glass, 128);
+      const wall = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-wall-only' });
+      await renderComposite(gpu, wall, 128, { controls: WALL_ONLY });
+
+      const box = prismSilhouette(SIZE[0] / Math.max(1, SIZE[1]));
+      const [withGlass, withoutGlass] = [await glass.read(), await wall.read()];
+      let inside = 0;
+      let insideChanged = 0;
+      let outsideChanged = 0;
+      for (let y = 0; y < SIZE[1]; y++) {
+        for (let x = 0; x < SIZE[0]; x++) {
+          const base = (y * SIZE[0] + x) * 4;
+          let delta = 0;
+          for (let channel = 0; channel < 3; channel++) {
+            delta = Math.max(delta, Math.abs(withGlass[base + channel]! - withoutGlass[base + channel]!));
+          }
+          const u = (x + 0.5) / SIZE[0];
+          const v = (y + 0.5) / SIZE[1];
+          if (u >= box.x0 && u <= box.x1 && v >= box.y0 && v <= box.y1) {
+            inside++;
+            if (delta > 6) insideChanged++;
+          } else if (delta > 0) {
+            outsideChanged++;
+          }
+        }
+      }
+      // Half of the bounding box, because a triangle fills about half of one: the
+      // mesh's projection agrees with the projection `prismSilhouette` predicts
+      // from the same vertices and the same camera.
+      expect(insideChanged / inside).toBeGreaterThan(0.35);
+      // Nothing outside it moved by a single code value. A draw that leaked past
+      // its silhouette — a wrong cull, a wrong matrix, a fullscreen pass by
+      // mistake — would show up here and nowhere else.
+      expect(outsideChanged).toBe(0);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test('the solid reads against the wall it stands on', async () => {
+    const gpu = await init();
+    try {
+      const glass = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-lit' });
+      await renderComposite(gpu, glass, 128);
+      const wall = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-unlit' });
+      await renderComposite(gpu, wall, 128, { controls: WALL_ONLY });
+      // A patch at the middle of the cross-section, well inside the silhouette.
+      const box = prismSilhouette(SIZE[0] / Math.max(1, SIZE[1]));
+      const centre = {
+        x0: (box.x0 + box.x1) / 2 - 0.03,
+        y0: (box.y0 + box.y1) / 2 - 0.03,
+        x1: (box.x0 + box.x1) / 2 + 0.03,
+        y1: (box.y0 + box.y1) / 2 + 0.03,
+      };
+      const lit = await regionStats(glass, centre);
+      const bare = await regionStats(wall, centre);
+      // The room is nearly black, so the glass is carried by what it reflects.
+      // If the environment stopped reaching it the object would vanish into the
+      // wall, which is a silent failure the diff test above cannot see.
+      expect(lit.meanLuma).toBeGreaterThan(bare.meanLuma * 1.5);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test('moving the camera slides the glass against the wall', async () => {
+    const gpu = await init();
+    try {
+      const render = async (orbit: readonly [number, number], label: string): Promise<Uint8Array> => {
+        const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label });
+        await renderComposite(gpu, output, 96, { orbit });
+        return output.read();
+      };
+      const rest = await render([0, 0], 'prism-orbit-rest');
+      const swung = await render([1, -1], 'prism-orbit-swung');
+      // Parallax: the caustic is painted on a plane at z = 0 and the glass stands
+      // in front of it, so a camera move changes their alignment. A composite that
+      // had merely pasted the prism onto the wall would move as one piece and
+      // change far less.
+      expect(changedShare(rest, swung)).toBeGreaterThan(0.02);
     } finally {
       gpu.dispose();
     }
@@ -343,3 +465,12 @@ describe.skipIf(gpuOnly)('prism-rainbow accumulation', () => {
     }
   });
 });
+
+/** Fraction of pixels whose red channel moved by more than a visible step. */
+function changedShare(before: Uint8Array, after: Uint8Array): number {
+  let changed = 0;
+  for (let index = 0; index < before.length; index += 4) {
+    if (Math.abs(before[index]! - after[index]!) > 12) changed++;
+  }
+  return changed / (before.length / 4);
+}

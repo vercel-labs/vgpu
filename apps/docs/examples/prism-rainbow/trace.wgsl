@@ -1,4 +1,4 @@
-// The estimator. Every fragment is a point in the room; it fires 16 rays at
+// The estimator. Every fragment is a point on the wall; it fires 16 rays at
 // random points across the prism's face, refracts each one through the glass,
 // and keeps whatever comes out the far side if it reaches the lamp.
 //
@@ -7,6 +7,9 @@
 // wavelengths onto a lamp less than a degree wide. So the pass blends into the
 // previous frame's estimate instead of replacing it, and the seed moves with
 // `frameIndex` — the image converges rather than flickering.
+//
+// Nothing here knows where the camera is, which is what makes the average worth
+// keeping while the view moves: it estimates a property of the wall, not of a frame.
 
 import { Scene, estimateRadiance, scenePoint } from "./scene.wgsl";
 

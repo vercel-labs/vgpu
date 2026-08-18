@@ -1,8 +1,8 @@
 // The uniform block every pass shares, plus the coordinate mapping.
 //
-// One struct for the trace, present and probe entry points means the estimator
-// and the picture can never disagree about where the glass is: `scene.ts`
-// uploads this once and each pass binds the same layout.
+// One struct for the trace, wall and probe entry points means the estimator and
+// the picture can never disagree about where the glass is or where on the wall a
+// texel lands: `scene.ts` uploads this once and each pass binds the same layout.
 
 import { pcg3d, unitFloat } from "@vgpu/wgsl-std/hash";
 import {
@@ -16,6 +16,15 @@ import {
 } from "./optics.wgsl";
 
 export struct Scene {
+  /**
+   * Camera matrix for the wall plane.
+   *
+   * The trace and probe passes never read it — they work in the wall's own
+   * coordinates, which is why moving the camera does not invalidate the estimate
+   * — but it rides in the same block so the wall cannot be drawn against a
+   * different scene than the one that was traced.
+   */
+  viewProjection: mat4x4f,
   prismA: vec2f,
   prismB: vec2f,
   prismC: vec2f,
@@ -26,8 +35,14 @@ export struct Scene {
   lampOuterAngle: f32,
   iorBase: f32,
   iorStrength: f32,
-  /** Half-width of the visible region in scene units; the half-height is always 1. */
-  aspect: f32,
+  /**
+   * Half-extents of the traced rectangle — the wall — in scene units.
+   *
+   * `camera.ts` derives it from the frame so the wall always covers the view; the
+   * trace pass and the wall's four corners read the same two numbers, which is
+   * what makes the texture land on the plane at 1:1.
+   */
+  wallHalfExtent: vec2f,
   /** Scales the traced estimator into display range. */
   exposure: f32,
   wavelengthMin: f32,
@@ -36,7 +51,7 @@ export struct Scene {
   haze: f32,
   /** Weight given to this frame's estimate: 1 / frames accumulated so far. */
   blend: f32,
-  /** Radius of the present pass's smoothing kernel, in caustic texels. */
+  /** Radius of the wall pass's smoothing kernel, in caustic texels. */
   causticBlur: f32,
   raysPerFragment: u32,
   maxBounces: u32,
@@ -61,13 +76,13 @@ export fn sceneLamp(scene: Scene) -> Lamp {
 }
 
 /**
- * Scene coordinates for a fragment.
+ * Where on the wall a point of the traced texture lands, in world coordinates.
  *
  * `uv` is top-origin, the way `effect()` hands it over and the way
  * `target.read()` gives pixels back; the room's y axis points up, so v flips.
  */
 export fn scenePoint(scene: Scene, uv: vec2f) -> vec2f {
-  return vec2f((uv.x - 0.5) * 2.0 * scene.aspect, (0.5 - uv.y) * 2.0);
+  return (uv - vec2f(0.5)) * vec2f(2.0, -2.0) * scene.wallHalfExtent;
 }
 
 export struct Ray {
@@ -102,7 +117,7 @@ export fn sceneRay(scene: Scene, pixel: vec2u, index: u32) -> Ray {
 }
 
 /**
- * Radiance arriving at one point of the room, from this frame's rays alone.
+ * Radiance arriving at one point of the wall, from this frame's rays alone.
  *
  * Shared by the trace pass and the probe entry point so the picture and the test
  * can never measure two different estimators.

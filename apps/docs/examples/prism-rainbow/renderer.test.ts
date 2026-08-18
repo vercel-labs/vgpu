@@ -67,6 +67,13 @@ function gpu() {
   };
   const pairs: { read: { destroy: ReturnType<typeof vi.fn> }; write: { destroy: ReturnType<typeof vi.fn> }; swap: ReturnType<typeof vi.fn> }[] = [];
   const effects: { set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }[] = [];
+  const draws: { set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }[] = [];
+  const targets: { size: number[]; resize: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[] = [];
+  const pipeline = (into: { set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }[]) => {
+    const created = { set: vi.fn(), compile: vi.fn(async () => {}) };
+    into.push(created);
+    return created;
+  };
   const instance = {
     gpu: { queue: { onSubmittedWorkDone: vi.fn(async () => {}) } },
     settled: vi.fn(async () => {}),
@@ -74,6 +81,7 @@ function gpu() {
     fns: {
       surface: vi.fn(() => surface),
       sampler: vi.fn(() => ({})),
+      geometry: vi.fn(() => ({ destroy: vi.fn() })),
       pingPong: vi.fn(() => {
         const pair = {
           read: { size: [120, 60], texelSize: [1 / 120, 1 / 60], destroy: vi.fn(), readFloats: vi.fn() },
@@ -83,11 +91,18 @@ function gpu() {
         pairs.push(pair);
         return pair;
       }),
-      effect: vi.fn(() => {
-        const created = { set: vi.fn(), compile: vi.fn(async () => {}) };
-        effects.push(created);
+      target: vi.fn((options: { size: number[] }) => {
+        const created = {
+          size: [...options.size],
+          format: 'bgra8unorm',
+          resize: vi.fn((size: number[]) => { created.size = [...size]; }),
+          destroy: vi.fn(),
+        };
+        targets.push(created);
         return created;
       }),
+      effect: vi.fn(() => pipeline(effects)),
+      draw: vi.fn(() => pipeline(draws)),
       // The free functions are routed with `gpu` stripped, so these fakes see
       // only the arguments after it.
       frame: vi.fn((callback: (frame: unknown) => void) => callback({
@@ -96,7 +111,7 @@ function gpu() {
       frameLoop: vi.fn((_tick: () => void) => ({ stop })),
     },
   };
-  return { instance, surface, pairs, effects, stop };
+  return { instance, surface, pairs, effects, draws, targets, stop };
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -110,9 +125,15 @@ test('traces and presents once per frame until the estimate has converged', asyn
 
   expect(live.instance.fns.frameLoop).toHaveBeenCalledOnce();
   expect(live.instance.fns.pingPong).toHaveBeenCalledOnce();
-  // Both pipelines are pre-warmed before the loop starts, against the target
-  // each of them actually draws into.
-  for (const created of live.effects) expect(created.compile).toHaveBeenCalledOnce();
+  // Every pipeline is pre-warmed before the loop starts, against the target each
+  // of them actually draws into: trace and present as effects, wall and glass as
+  // draws.
+  expect(live.effects).toHaveLength(2);
+  expect(live.draws).toHaveLength(2);
+  for (const created of [...live.effects, ...live.draws]) expect(created.compile).toHaveBeenCalledOnce();
+  // The wall is rasterized offscreen so the glass can sample it while drawing
+  // over the copy.
+  expect(live.targets).toHaveLength(1);
 
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   tick();
@@ -154,7 +175,7 @@ test('a pointer drag swings the lamp and restarts the average', async () => {
   renderer.dispose();
 });
 
-test('changing the glass restarts the average, changing the view does not', async () => {
+test('changing the glass restarts the average, changing the layer does not', async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
@@ -164,12 +185,31 @@ test('changing the glass restarts the average, changing the view does not', asyn
   tick();
   tick();
 
-  // `causticOnly` only changes how the same accumulation is composited.
-  renderer.setControls?.({ dispersion: 'stylized', causticOnly: true });
+  // Peeling a layer off only changes how the same accumulation is composited.
+  renderer.setControls?.({ dispersion: 'stylized', view: 'caustic' });
   expect(renderer.accumulated()).toBe(2);
   // A different index of refraction makes every averaged ray wrong.
-  renderer.setControls?.({ dispersion: 'flint', causticOnly: true });
+  renderer.setControls?.({ dispersion: 'flint', view: 'caustic' });
   expect(renderer.accumulated()).toBe(0);
+  renderer.dispose();
+});
+
+test('the camera follows the pointer without invalidating the estimate', async () => {
+  const env = browser();
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+  tick();
+  tick();
+
+  // Hovering — no capture, no drag — aims the camera somewhere new. The caustic
+  // lives on the wall in world space, so none of it goes stale.
+  env.canvasListeners.get('pointermove')?.({ pointerId: 7, clientX: 180, clientY: 20 } as unknown as Event);
+  expect(renderer.accumulated()).toBe(2);
+  tick();
+  expect(renderer.accumulated()).toBe(3);
   renderer.dispose();
 });
 

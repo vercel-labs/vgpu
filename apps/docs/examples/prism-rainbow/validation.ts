@@ -12,6 +12,8 @@
 import type { Gpu, Target } from 'vgpu';
 import { effect, frame, target } from 'vgpu';
 
+import { cameraView } from './camera';
+import { prismMeshData } from './prism-mesh';
 import probeWgsl from './probe.wgsl';
 import {
   createScene,
@@ -21,6 +23,7 @@ import {
   sceneUniforms,
   setControls,
   setLampArc,
+  setOrbit,
   traceFrame,
 } from './scene';
 import type { PrismControls } from './types';
@@ -222,17 +225,25 @@ export async function regionStats(
   };
 }
 
+export interface CompositeOptions {
+  readonly controls?: PrismControls;
+  readonly lampArc?: number;
+  /** Camera offset from centre, both components in [-1, 1]. */
+  readonly orbit?: readonly [number, number];
+}
+
 /** Renders the composited picture into `output` after `frames` traced frames. */
 export async function renderComposite(
   gpu: Gpu,
   output: Target,
   frames: number,
-  options: { readonly controls?: PrismControls; readonly lampArc?: number } = {},
+  options: CompositeOptions = {},
 ): Promise<void> {
   const scene = createScene(gpu, output.size, 'prism-rainbow-composite');
   try {
     if (options.controls) setControls(scene, options.controls);
     if (options.lampArc !== undefined) setLampArc(scene, options.lampArc);
+    if (options.orbit) setOrbit(scene, options.orbit[0], options.orbit[1]);
     await prepareScene(scene, output);
     for (let index = 0; index < frames; index++) traceFrame(scene);
     presentScene(scene, output);
@@ -241,4 +252,39 @@ export async function renderComposite(
   } finally {
     destroyScene(scene);
   }
+}
+
+/**
+ * Where the prism's silhouette lands on the frame, in normalized coordinates.
+ *
+ * The GPU tests need to look inside and outside the glass, and the whole point of
+ * the restructure is that those are different places: the object is a solid in
+ * front of the wall, so its outline on screen is its own projection and not the
+ * triangle the tracer drew. Projecting the mesh with the same camera the frame
+ * was rendered with is the only honest way to find it.
+ */
+export function prismSilhouette(
+  aspect: number,
+  orbit: readonly [number, number] = [0, 0],
+): { readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number } {
+  const { camera } = cameraView(aspect, orbit[0], orbit[1]);
+  const matrix = camera.viewProjection;
+  const { vertices } = prismMeshData();
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let index = 0; index < vertices.length; index += 6) {
+    const [x, y, z] = [vertices[index]!, vertices[index + 1]!, vertices[index + 2]!];
+    const clip = [0, 1, 3].map((row) =>
+      matrix[row]! * x + matrix[4 + row]! * y + matrix[8 + row]! * z + matrix[12 + row]!);
+    const w = Math.max(1e-6, clip[2]!);
+    const u = (clip[0]! / w) * 0.5 + 0.5;
+    const v = 0.5 - (clip[1]! / w) * 0.5;
+    x0 = Math.min(x0, u);
+    x1 = Math.max(x1, u);
+    y0 = Math.min(y0, v);
+    y1 = Math.max(y1, v);
+  }
+  return { x0, y0, x1, y1 };
 }

@@ -23,13 +23,16 @@ import { lightConnection, tracePrism } from "./optics.wgsl";
 @group(0) @binding(0) var<uniform> scene: Scene;
 
 /**
- * The room point probe `slot` measures: a grid over the frame.
+ * The wall point probe `slot` measures: a grid across the traced plane, spanning
+ * the prism and most of the fan it throws.
  *
  * Deliberately covers more than the fan — points inside the glass and points the
- * beam never reaches have to come back empty, and that is worth asserting too.
+ * beam never reaches have to come back empty, and that is worth asserting too. The
+ * rows are placed relative to `PRISM_CENTROID`, so they moved with the prism when
+ * it moved to the middle of the wall.
  */
 fn probePoint(slot: u32) -> vec2f {
-  var rows = array<f32, 4>(0.62, 0.3, -0.02, -0.44);
+  var rows = array<f32, 4>(0.28, -0.04, -0.36, -0.78);
   let column = f32(slot % 8u);
   return vec2f(-1.4 + 0.4 * column, rows[min(slot / 8u, 3u)]);
 }

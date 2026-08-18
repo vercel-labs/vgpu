@@ -42,7 +42,7 @@ export function Example() {
       <canvas ref={canvasRef} className="block h-full w-full cursor-ns-resize touch-none" />
       <Controls value={controls} onChange={setControls} accumulated={accumulated} />
       <div className="pointer-events-none absolute bottom-[18px] left-1/2 z-[2] -translate-x-1/2 text-xs font-medium uppercase tracking-[.08em] text-white/80">
-        drag up or down to swing the lamp
+        drag up or down to swing the lamp · move to tilt the camera
       </div>
     </div>
   );

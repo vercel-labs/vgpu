@@ -1,11 +1,20 @@
 /**
  * Scene definition for the prism rainbow example.
  *
- * The whole scene is two-dimensional: the frame is a slice through a room seen
- * from the front. `x` grows right, `y` grows up, and the visible region is `y` in
- * [-1, 1] with `x` in [-aspect, aspect]. The prism is the triangle a viewer sees
- * when looking straight at it, so a ray that stays in the frame's plane refracts
- * entirely within it — enter one face, cross the glass, leave through another.
+ * The room is three-dimensional and the light transport is not, which is the
+ * whole trick. `z = 0` is the wall: a flat plane facing the camera, `x` growing
+ * right and `y` growing up, centred on the origin and sized by `camera.ts` to
+ * cover whatever the frame can see of it. The spectral path tracer solves the
+ * slice that lies *in* that plane — enter one face of the triangle, cross the
+ * glass, leave through another — and writes what it finds into a texture the wall
+ * is painted with. The glass the camera sees is that same triangle extruded off
+ * the wall towards the viewer by `PRISM_DEPTH`, shaded as a transmissive solid.
+ *
+ * So the triangle below is read twice: as the two-dimensional obstacle the tracer
+ * refracts through, and as the cross-section of the three-dimensional prism. One
+ * set of vertices, which is what keeps the rainbow registered with the object
+ * that made it — the fan always leaves the glass exactly where the model's silhouette
+ * meets the wall.
  *
  * Every constant here is derived from four decisions (how big the prism is, how
  * it is tilted, how steeply the beam arrives, and how far away the lamp sits)
@@ -14,8 +23,9 @@
  * derivation is supposed to guarantee.
  *
  * These constants are also the single source of truth across languages:
- * `optics.ts` (the CPU reference) reads them directly and `scene.ts` uploads
- * them as uniforms, so `optics.wgsl` traces exactly the same geometry.
+ * `optics.ts` (the CPU reference) reads them directly, `scene.ts` uploads them as
+ * uniforms for `optics.wgsl` to trace, and `geometry.ts` extrudes them into the
+ * mesh `glass.wgsl` shades.
  */
 
 export type Vec2 = readonly [number, number];
@@ -70,15 +80,32 @@ export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
   flint: 'Dense flint',
 };
 
+/**
+ * What the frame shows, peeling the picture back one layer at a time.
+ *
+ * `glass` is the scene. `wall` takes the prism out of the room, which is how you
+ * see the whole shadow and the fan the glass would otherwise be standing in front
+ * of. `caustic` goes further and shows the traced estimate alone, with the wall's
+ * own shade and the direct beam removed.
+ */
+export type PrismView = 'glass' | 'wall' | 'caustic';
+
+export const PRISM_VIEW_ORDER: readonly PrismView[] = ['glass', 'wall', 'caustic'];
+
+export const PRISM_VIEW_LABELS: Record<PrismView, string> = {
+  glass: 'Prism',
+  wall: 'Wall only',
+  caustic: 'Traced light',
+};
+
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
-  /** Show the traced caustic alone, without the wall, the glass or the beam. */
-  readonly causticOnly: boolean;
+  readonly view: PrismView;
 }
 
 export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   dispersion: 'stylized',
-  causticOnly: false,
+  view: 'glass',
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -93,7 +120,11 @@ function rotate(point: Vec2, angle: number): Vec2 {
 export const PRISM_SIDE = 0.57;
 /** Tilt of the whole prism, which tilts the fan it throws by as much. */
 export const PRISM_TILT_DEGREES = 10;
-export const PRISM_CENTROID: Vec2 = [0, 0.34];
+/**
+ * The prism stands at the middle of the wall, so the camera can look straight at
+ * it and the fan has the whole lower right quadrant to open into.
+ */
+export const PRISM_CENTROID: Vec2 = [0, 0];
 
 /**
  * Equilateral prism, apex up, tilted, wound counter-clockwise.
@@ -214,3 +245,111 @@ export const PRISM_EXPOSURE = 52;
 
 /** Brightness of the direct term that makes the incoming beam visible. */
 export const PRISM_HAZE = 0.05;
+
+/**
+ * How far the triangle is extruded off the wall, towards the camera.
+ *
+ * The tracer's solution lives in the wall plane, so the shadow and the fan it
+ * paints belong to the cross-section, not to the solid. Depth is therefore a
+ * framing decision rather than an optical one: enough for the side faces to catch
+ * the studio environment at their own angles and read as a block of glass, little
+ * enough that the parallax between the solid's silhouette and the shadow it casts
+ * still reads as the object standing in front of the wall.
+ */
+export const PRISM_DEPTH = 0.3;
+
+/**
+ * Gap between the prism's back face and the wall.
+ *
+ * Only large enough to keep the two surfaces from meeting: coplanar geometry
+ * would z-fight, and the refracted lookup at the very edge of the glass would
+ * sample the wall it is standing on.
+ */
+export const PRISM_WALL_GAP = 0.015;
+
+/** The prism occupies `z` in [`PRISM_BACK_Z`, `PRISM_FRONT_Z`]; the wall is `z = 0`. */
+export const PRISM_BACK_Z = PRISM_WALL_GAP;
+export const PRISM_FRONT_Z = PRISM_WALL_GAP + PRISM_DEPTH;
+
+/**
+ * Transmissive glass, as `vgpu.sh/examples/glass-fractal` shades it.
+ *
+ * Same parameters and the same responses; two of the values are turned up, and
+ * the reason is the room rather than taste. That example suspends its glass in a
+ * bright studio with a lit fractal inside it, so most of what you see through the
+ * shell is transmitted light. Here the glass stands against a wall that is nearly
+ * black by design — anything brighter and the rainbow stops reading — so
+ * transmission contributes almost nothing and the solid has to be carried by what
+ * it reflects. `reflectionStrength` and `environmentExposure` are the knobs
+ * `glass-fractal` exposes for exactly that, and past about 1.4 the exposure also
+ * brings its studio-panel term in over the room and not just the panels, which is
+ * what puts a readable sheen on a face pointed at nothing.
+ */
+export interface GlassMaterial {
+  /** Index of refraction, for both the Fresnel term and the refracted lookup. */
+  readonly ior: number;
+  /** Multiplier on the studio environment before it is reflected. */
+  readonly reflectionStrength: number;
+  /** Beer-Lambert absorption per scene unit, in linear RGB. */
+  readonly absorption: readonly [number, number, number];
+  /** Screen-space blur radius of the transmitted image, in pixels. */
+  readonly frostRadius: number;
+  /** Red/blue separation of the refracted lookup. */
+  readonly dispersion: number;
+  /** Strength of the angle-dependent spectral tint on reflections. */
+  readonly iridescenceStrength: number;
+  /** Spectral tint cycles across the Fresnel range. */
+  readonly iridescenceFrequency: number;
+  /** XYZ rotation of the studio environment, in degrees. */
+  readonly environmentRotation: readonly [number, number, number];
+  /** Exposure applied to the studio environment before material response. */
+  readonly environmentExposure: number;
+}
+
+export const PRISM_GLASS: GlassMaterial = {
+  ior: 1.5,
+  reflectionStrength: 1.2,
+  absorption: [0.1, 0.085, 0.075],
+  frostRadius: 1.4,
+  dispersion: 0.02,
+  iridescenceStrength: 0.08,
+  iridescenceFrequency: 2,
+  environmentRotation: [0, -36, 0],
+  environmentExposure: 1.6,
+};
+
+/** Vertical field of view of the camera looking at the wall, in degrees. */
+export const CAMERA_FOV_DEGREES = 38;
+
+/**
+ * How far the camera sits from the wall.
+ *
+ * The one real trade-off in the framing, because both sides of it follow from
+ * this number alone: closer and the prism grows in the frame — it takes about a
+ * fifth of the width here, which leaves the fan the room it needs to open — while
+ * further back it shrinks and less of the wall has to be traced for the frame to
+ * stay covered, at the same caustic resolution. `camera.ts` derives the wall's
+ * size from whatever this is, so moving it cannot break the picture; it only
+ * changes how many texels the fan gets.
+ */
+export const CAMERA_DISTANCE = 2.55;
+
+/**
+ * The resting view: off to the left of the prism and a little above it.
+ *
+ * Not a stylistic choice. The solid is the cross-section extruded straight at the
+ * camera, so a head-on view would collapse it back into the flat triangle this
+ * example started as — the depth is only legible from off-axis, where a side face
+ * turns towards the viewer and the wall keystones behind it. Left is the side the
+ * beam arrives from, so the face that turns towards you is the one it enters
+ * through; the small rise adds the vertical keystone that makes the wall read as a
+ * surface in a room rather than a backdrop behind one.
+ */
+export const CAMERA_YAW_DEGREES = -13;
+export const CAMERA_PITCH_DEGREES = 8;
+
+/** Widest angle the pointer can swing the camera off its resting view, in degrees. */
+export const CAMERA_ORBIT_DEGREES = 3.5;
+
+/** Per-frame interpolation towards the pointer's camera angle. */
+export const CAMERA_ORBIT_LERP = 0.08;

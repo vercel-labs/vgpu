@@ -11,15 +11,17 @@ import {
   resizeScene,
   setControls,
   setLampArc,
+  setOrbit,
   traceFrame,
   type PrismScene,
 } from './scene';
-import { DEFAULT_PRISM_CONTROLS, type PrismControls } from './types';
+import { CAMERA_ORBIT_LERP, DEFAULT_PRISM_CONTROLS, type PrismControls } from './types';
 
 /**
  * Frames after which the running average has converged enough that more rays
  * change nothing visible. The loop then stops submitting work entirely — the
- * canvas keeps its last frame — until something invalidates the estimate.
+ * canvas keeps its last frame — until something invalidates the estimate or the
+ * camera moves.
  */
 export const CONVERGED_FRAMES = 900;
 
@@ -31,6 +33,7 @@ export interface PrismRenderer extends ExampleRenderer<PrismControls> {
 export interface PrismThumbnailOptions extends ThumbnailOptions {
   readonly controls?: PrismControls;
   readonly lampArc?: number;
+  readonly orbit?: readonly [number, number];
 }
 
 export function createRenderer(options: BrowserRendererOptions<PrismControls>): PrismRenderer {
@@ -46,6 +49,11 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
   let resizeFrame = 0;
   let pendingSize: RenderSize | undefined;
   let pointerId: number | undefined;
+  /** Where the camera is being asked to look, and where it currently looks. */
+  let orbitTarget: readonly [number, number] = [0, 0];
+  let orbitCurrent: readonly [number, number] = [0, 0];
+  /** Set whenever the picture would differ from the frame already on screen. */
+  let pendingPresent = true;
 
   const handleFailure = (error: unknown) => {
     if (disposed) return;
@@ -67,6 +75,7 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
         Math.max(1, Math.round(size.height * size.dpr)),
       ]);
       resizeScene(scene, canvasSurface.size);
+      pendingPresent = true;
     } catch (error) {
       handleFailure(error);
     }
@@ -93,6 +102,21 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     const rect = options.canvas.getBoundingClientRect();
     if (rect.height <= 0) return;
     setLampArc(scene, 1 - (event.clientY - rect.top) / rect.height);
+    pendingPresent = true;
+  };
+
+  /**
+   * Hovering tilts the camera a couple of degrees. It never touches the
+   * accumulation: the caustic is painted on the wall in world space, so the view
+   * can move over a still-converging estimate.
+   */
+  const orbitFromPointer = (event: PointerEvent) => {
+    const rect = options.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    orbitTarget = [
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      ((event.clientY - rect.top) / rect.height) * 2 - 1,
+    ];
   };
 
   const onPointerDown = (event: PointerEvent) => {
@@ -102,6 +126,7 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     aimFromPointer(event);
   };
   const onPointerMove = (event: PointerEvent) => {
+    orbitFromPointer(event);
     if (pointerId !== event.pointerId) return;
     aimFromPointer(event);
   };
@@ -110,13 +135,34 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     if (options.canvas.hasPointerCapture(event.pointerId)) options.canvas.releasePointerCapture(event.pointerId);
     pointerId = undefined;
   };
+  const onPointerLeave = () => { orbitTarget = [0, 0]; };
+
+  /**
+   * Eases the camera towards where the pointer left it. Returns whether it moved
+   * far enough to be worth redrawing.
+   */
+  const stepOrbit = (): boolean => {
+    const dx = orbitTarget[0] - orbitCurrent[0];
+    const dy = orbitTarget[1] - orbitCurrent[1];
+    if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) {
+      if (orbitCurrent[0] === orbitTarget[0] && orbitCurrent[1] === orbitTarget[1]) return false;
+      orbitCurrent = orbitTarget;
+      return true;
+    }
+    orbitCurrent = [orbitCurrent[0] + dx * CAMERA_ORBIT_LERP, orbitCurrent[1] + dy * CAMERA_ORBIT_LERP];
+    return true;
+  };
 
   const tick = () => {
     if (disposed || !scene || !canvasSurface || !prepared) return;
-    if (scene.accumulated >= CONVERGED_FRAMES) return;
+    const tracing = scene.accumulated < CONVERGED_FRAMES;
+    const moved = stepOrbit();
+    if (!tracing && !moved && !pendingPresent) return;
     try {
-      traceFrame(scene);
+      if (moved) setOrbit(scene, orbitCurrent[0], orbitCurrent[1]);
+      if (tracing) traceFrame(scene);
       presentScene(scene, canvasSurface);
+      pendingPresent = false;
     } catch (error) {
       handleFailure(error);
     }
@@ -153,6 +199,7 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     ['pointermove', onPointerMove],
     ['pointerup', onPointerUp],
     ['pointercancel', onPointerUp],
+    ['pointerleave', onPointerLeave],
   ];
 
   const initialize = async () => {
@@ -191,9 +238,11 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     setControls(next) {
       if (disposed) return;
       controls = { ...next };
+      pendingPresent = true;
       if (scene) setControls(scene, controls);
     },
     invalidate() {
+      pendingPresent = true;
       if (scene) resetAccumulation(scene);
     },
     resize,
@@ -216,6 +265,7 @@ export async function renderThumbnail(
   try {
     if (options.controls) setControls(scene, options.controls);
     if (options.lampArc !== undefined) setLampArc(scene, options.lampArc);
+    if (options.orbit) setOrbit(scene, options.orbit[0], options.orbit[1]);
     await prepareScene(scene, output);
     for (let index = 0; index < (options.warmupFrames ?? 600); index++) traceFrame(scene);
     presentScene(scene, output);

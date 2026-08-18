@@ -383,9 +383,9 @@ export function estimateRadiance(
   return [r * gain, g * gain, b * gain];
 }
 
-/** Room points the probe measures, mirroring `probePoint` in `probe.wgsl`. */
+/** Wall points the probe measures, mirroring `probePoint` in `probe.wgsl`. */
 export const PROBE_COLUMNS = 8;
-export const PROBE_ROWS: readonly number[] = [0.62, 0.3, -0.02, -0.44];
+export const PROBE_ROWS: readonly number[] = [0.28, -0.04, -0.36, -0.78];
 
 export function probePoint(slot: number): Vec2 {
   return [-1.4 + 0.4 * (slot % PROBE_COLUMNS), PROBE_ROWS[Math.floor(slot / PROBE_COLUMNS)] ?? 0];

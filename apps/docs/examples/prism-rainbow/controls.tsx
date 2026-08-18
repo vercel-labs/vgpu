@@ -1,8 +1,11 @@
 import {
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
+  PRISM_VIEW_LABELS,
+  PRISM_VIEW_ORDER,
   type PrismControls,
   type PrismDispersion,
+  type PrismView,
 } from './types';
 
 export interface ControlsProps {
@@ -32,13 +35,18 @@ export function Controls({ value, onChange, accumulated, disabled = false }: Con
         </select>
       </label>
       <label className="flex items-center gap-2 whitespace-nowrap">
-        <input
-          type="checkbox"
-          checked={value.causticOnly}
+        Show
+        <select
+          aria-label="Layer"
+          className="rounded bg-black/60 px-1 py-0.5"
+          value={value.view}
           disabled={disabled}
-          onChange={(event) => onChange({ ...value, causticOnly: event.currentTarget.checked })}
-        />
-        Traced light only
+          onChange={(event) => onChange({ ...value, view: event.currentTarget.value as PrismView })}
+        >
+          {PRISM_VIEW_ORDER.map((view) => (
+            <option key={view} value={view}>{PRISM_VIEW_LABELS[view]}</option>
+          ))}
+        </select>
       </label>
       <span className="tabular-nums font-normal text-white/70">
         {accumulated} {accumulated === 1 ? 'frame' : 'frames'} averaged
