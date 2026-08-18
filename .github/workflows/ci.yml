@@ -69,7 +69,7 @@ jobs:
             -e VGPU_VALIDATE=require \
             vgpu-test-dev:ci \
             sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts; \
+              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts examples/prism-validation/src/prism-gpu.test.ts; \
               s=$?; kill $xp; exit $s'
       - name: Run pixel snapshot CLI in Docker
         run: |

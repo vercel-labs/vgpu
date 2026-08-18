@@ -34,6 +34,7 @@ const rendererEntries = [
   { slug: 'transmission', module: '../examples/transmission/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'radiance-cascades', module: '../examples/radiance-cascades/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'agent-radiance-cascades', module: '../examples/agent-radiance-cascades/renderer.ts', exportName: 'renderThumbnail' },
+  { slug: 'prism-rainbow', module: '../examples/prism-rainbow/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'nextjs-flare', module: '../examples/nextjs-flare/renderer.ts', exportName: 'renderThumbnail' },
   { slug: 'depth-estimation', module: '../examples/depth-estimation/thumbnail.ts', exportName: 'renderThumbnail' },
   { slug: 'mnist-classifier', module: '../examples/mnist-classifier/renderer.ts', exportName: 'renderThumbnail' },

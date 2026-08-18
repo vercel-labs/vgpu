@@ -22,7 +22,8 @@
     "agent-radiance-cascades": 60742,
     "depth-estimation": 58868,
     "mnist-classifier": 56298,
-    "air-painting": 70900
+    "air-painting": 70900,
+    "prism-rainbow": 61096
   },
   "exampleGrowth": {
     "percent": 2,
