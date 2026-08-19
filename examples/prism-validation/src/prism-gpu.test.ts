@@ -217,6 +217,23 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
     }
   });
 
+  test('wireframe overlays the generated topology without retracing the light', async () => {
+    const gpu = await init();
+    try {
+      const solid = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-solid' });
+      await renderComposite(gpu, solid);
+      const wireframe = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-wireframe' });
+      await renderComposite(gpu, wireframe, {
+        controls: { ...DEFAULT_PRISM_CONTROLS, wireframe: true },
+      });
+      const [withoutLines, withLines] = [await solid.read(), await wireframe.read()];
+      expect(changedShare(withoutLines, withLines)).toBeGreaterThan(0.004);
+      expect(changedShare(withoutLines, withLines)).toBeLessThan(0.12);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
   test('moving the camera slides the glass against the wall', async () => {
     const gpu = await init();
     try {

@@ -107,6 +107,8 @@ export interface PrismControls {
   readonly beamWidth: number;
   /** CSS hex color, interpreted as sRGB before the additive light is applied. */
   readonly wallColor: string;
+  /** Draw the generated triangle edges over the glass for topology inspection. */
+  readonly wireframe: boolean;
 }
 
 export const PRISM_DEFAULT_BEAM_WIDTH = 0.08;
@@ -122,6 +124,7 @@ export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   view: "glass",
   beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
   wallColor: "#141414",
+  wireframe: false,
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;

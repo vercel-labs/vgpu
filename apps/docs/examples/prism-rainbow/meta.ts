@@ -38,6 +38,7 @@ export const meta = {
     'light.wgsl',
     'wall.wgsl',
     'glass.wgsl',
+    'wireframe.wgsl',
     'environment.wgsl',
     'present.wgsl',
   ],

@@ -197,7 +197,7 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.instance.device.createBuffer).toHaveBeenCalledOnce();
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(2);
   expect(live.effects).toHaveLength(1);
-  expect(live.draws).toHaveLength(3);
+  expect(live.draws).toHaveLength(4);
   for (const created of [...live.effects, ...live.draws])
     expect(created.compile).toHaveBeenCalledOnce();
   // Canvas surfaces do not expose a current texture until a frame begins, so
@@ -273,6 +273,13 @@ test("only optical controls rebuild the light mesh", async () => {
     ...DEFAULT_PRISM_CONTROLS,
     view: "caustic",
     wallColor: "#101216",
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  // Wireframe only adds an overlay draw over the already-generated prism.
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    view: "glass",
+    wireframe: true,
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
   // A different index of refraction bends every ribbon differently.

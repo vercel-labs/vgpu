@@ -18,7 +18,15 @@
 import { describe, expect, test } from "vitest";
 
 import { cameraView, wallCoverage, wallHalfHeight } from "./camera";
-import { PRISM_VERTEX_STRIDE, prismMeshData, prismPlanes } from "./prism-mesh";
+import {
+  PRISM_BEVEL_RADIUS,
+  PRISM_BEVEL_SEGMENTS,
+  PRISM_CORNER_SEGMENTS,
+  PRISM_VERTEX_STRIDE,
+  prismMeshData,
+  prismPlanes,
+  prismWireframeIndices,
+} from "./prism-mesh";
 import { lampAt } from "./scene";
 import { prismSilhouette } from "./validation";
 import {
@@ -75,32 +83,49 @@ describe("the extruded prism", () => {
     expect(PRISM_TRIANGLE.c[0]).toBeGreaterThan(0);
   });
 
-  test("is exactly the traced triangle, lifted off the wall", () => {
-    // Eight triangles: a quad per side plus the two caps, with their own vertices
-    // so the normals stay flat.
-    expect(vertexCount).toBe(18);
-    expect(indices).toHaveLength(24);
+  test("rounds the visible solid inward without changing its optical envelope", () => {
+    const contourPoints = 3 * (PRISM_CORNER_SEGMENTS + 1);
+    const ringCount = 2 * (PRISM_BEVEL_SEGMENTS + 1);
+    // Every bevel ring shares one fixed contour; each cap duplicates that ring
+    // for a flat normal and adds a centre vertex for its triangle fan.
+    expect(vertexCount).toBe(ringCount * contourPoints + 2 * (contourPoints + 1));
+    expect(indices).toHaveLength(
+      ((ringCount - 1) * contourPoints * 2 + contourPoints * 2) * 3
+    );
     expect(PRISM_VERTEX_STRIDE).toBe(24);
 
     const corners = [PRISM_TRIANGLE.a, PRISM_TRIANGLE.b, PRISM_TRIANGLE.c];
+    let intermediateDepths = 0;
+    let blendedNormals = 0;
     for (let index = 0; index < vertexCount; index++) {
-      const { position } = vertexAt(index);
-      // Every vertex is one of the cross-section's corners at one of its two
-      // depths, to f32's last bit: the mesh reads the same constants the tracer
-      // does rather than a copy of them.
-      expect(
-        corners.some(([x, y]) => near(x, position[0]) && near(y, position[1]))
-      ).toBe(true);
-      expect(
-        [PRISM_BACK_Z, PRISM_FRONT_Z].some((z) => near(z, position[2]))
-      ).toBe(true);
+      const { position, normal } = vertexAt(index);
+      expect(position[2]).toBeGreaterThanOrEqual(PRISM_BACK_Z - 1e-6);
+      expect(position[2]).toBeLessThanOrEqual(PRISM_FRONT_Z + 1e-6);
+      if (!near(position[2], PRISM_BACK_Z) && !near(position[2], PRISM_FRONT_Z)) {
+        intermediateDepths++;
+      }
+      if (Math.abs(normal[2]) > 0.05 && Math.abs(normal[2]) < 0.95) blendedNormals++;
+
+      // Rounding cuts material away: it never adds a point beyond one of the
+      // ideal planes through which the analytic tracer refracts.
+      for (const [nx, ny, nz, offset] of planes) {
+        expect(dot([nx, ny, nz], position) - offset).toBeLessThan(1e-6);
+      }
     }
+    expect(intermediateDepths).toBeGreaterThan(contourPoints * 2);
+    expect(blendedNormals).toBeGreaterThan(contourPoints * 2);
+    // The sharp mathematical corners are gone from the visual mesh.
+    expect(corners.every(([x, y]) =>
+      Array.from({ length: vertexCount }, (_, index) => vertexAt(index).position)
+        .every((position) => !near(x, position[0]) || !near(y, position[1]))
+    )).toBe(true);
+    expect(PRISM_BEVEL_RADIUS).toBeLessThan(0.03);
     // The back face is against the wall and the front face is towards the camera.
     expect(PRISM_BACK_Z).toBeGreaterThan(0);
     expect(PRISM_FRONT_Z).toBeGreaterThan(PRISM_BACK_Z);
   });
 
-  test("has unit normals that point out, on faces wound counter-clockwise from outside", () => {
+  test("has smooth unit normals and faces wound counter-clockwise from outside", () => {
     for (let index = 0; index < vertexCount; index++) {
       const { position, normal } = vertexAt(index);
       expect(Math.hypot(...normal)).toBeCloseTo(1, 6);
@@ -116,14 +141,50 @@ describe("the extruded prism", () => {
       );
       const area = Math.hypot(...geometric);
       expect(area).toBeGreaterThan(1e-6);
-      // The winding's own normal agrees with the authored one, which is what
-      // `cull: 'back'` and the refraction both rely on.
-      expect(
-        dot(
-          [geometric[0] / area, geometric[1] / area, geometric[2] / area],
-          a!.normal
-        )
-      ).toBeCloseTo(1, 6);
+      const geometricNormal: Vec3 = [
+        geometric[0] / area,
+        geometric[1] / area,
+        geometric[2] / area,
+      ];
+      // A faceted triangle approximates a curved fillet, so its plane need not
+      // equal any one vertex normal. It must agree with every interpolated
+      // endpoint and point away from the solid.
+      expect(dot(geometricNormal, a!.normal)).toBeGreaterThan(0.9);
+      expect(dot(geometricNormal, b!.normal)).toBeGreaterThan(0.9);
+      expect(dot(geometricNormal, c!.normal)).toBeGreaterThan(0.9);
+      const triangleCenter: Vec3 = [
+        (a!.position[0] + b!.position[0] + c!.position[0]) / 3,
+        (a!.position[1] + b!.position[1] + c!.position[1]) / 3,
+        (a!.position[2] + b!.position[2] + c!.position[2]) / 3,
+      ];
+      expect(dot(geometricNormal, subtract(triangleCenter, centroid))).toBeGreaterThan(0);
+    }
+  });
+
+  test("turns every triangle edge into one unique line-list edge", () => {
+    const wireframe = prismWireframeIndices(indices);
+    expect(wireframe.length % 2).toBe(0);
+    const edges = new Set<string>();
+    for (let index = 0; index < wireframe.length; index += 2) {
+      const start = wireframe[index]!;
+      const end = wireframe[index + 1]!;
+      expect(start).toBeLessThan(vertexCount);
+      expect(end).toBeLessThan(vertexCount);
+      expect(start).toBeLessThan(end);
+      edges.add(`${start}:${end}`);
+    }
+    expect(edges.size * 2).toBe(wireframe.length);
+    for (let triangle = 0; triangle < indices.length; triangle += 3) {
+      const corners = [
+        indices[triangle]!,
+        indices[triangle + 1]!,
+        indices[triangle + 2]!,
+      ];
+      for (let edge = 0; edge < 3; edge++) {
+        const a = corners[edge]!;
+        const b = corners[(edge + 1) % 3]!;
+        expect(edges.has(`${Math.min(a, b)}:${Math.max(a, b)}`)).toBe(true);
+      }
     }
   });
 

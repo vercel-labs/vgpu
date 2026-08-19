@@ -21,8 +21,9 @@ import {
 } from "./light-mesh";
 import lightWgsl from "./light.wgsl";
 import presentWgsl from "./present.wgsl";
-import { prismGeometry } from "./prism-mesh";
+import { prismGeometry, prismWireframeGeometry } from "./prism-mesh";
 import wallWgsl from "./wall.wgsl";
+import wireframeWgsl from "./wireframe.wgsl";
 import {
   DEFAULT_PRISM_CONTROLS,
   PRISM_BACK_Z,
@@ -52,7 +53,9 @@ export interface PrismScene {
   readonly wall: Draw;
   readonly present: Effect;
   readonly glass: Draw;
+  readonly wireframe: Draw;
   readonly prism: Geometry;
+  readonly prismWireframe: Geometry;
   readonly sceneSampler: ReturnType<typeof sampler>;
   controls: PrismControls;
   lampArc: number;
@@ -80,6 +83,7 @@ export function createScene(
   });
   lightBuffer.write(initialMesh.vertices);
   const prism = prismGeometry(gpu, `${label}.prism`);
+  const prismWireframe = prismWireframeGeometry(gpu, `${label}.prism-wireframe`);
   return {
     gpu,
     outputSize: output,
@@ -120,7 +124,16 @@ export function createScene(
       depth: false,
       label: `${label}.glass`,
     }),
+    wireframe: draw(gpu, {
+      shader: wireframeWgsl,
+      geometry: prismWireframe,
+      cull: "none",
+      depth: false,
+      blend: "premultiplied",
+      label: `${label}.wireframe`,
+    }),
     prism,
+    prismWireframe,
     sceneSampler: sampler(gpu, {
       minFilter: "linear",
       magFilter: "linear",
@@ -155,6 +168,7 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
     ...controls,
     // Runtime fallback keeps Fast Refresh safe across the control schema change.
     beamWidth: clampBeamWidth(controls.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth),
+    wireframe: controls.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
   };
   const opticsChanged = next.dispersion !== scene.controls.dispersion
     || next.beamWidth !== scene.controls.beamWidth;
@@ -266,6 +280,7 @@ export async function prepareScene(scene: PrismScene, output: Output): Promise<v
     scene.wall.compile(wallTarget),
     scene.present.compile(outputSignature),
     scene.glass.compile(outputSignature),
+    scene.wireframe.compile(outputSignature),
   ]);
 }
 
@@ -279,7 +294,10 @@ export function presentScene(scene: PrismScene, output: Output, currentFrame?: F
     current.pass({ target: wallTarget }, (pass) => pass.draw(scene.wall));
     current.pass({ target: output }, (pass) => {
       pass.draw(scene.present);
-      if (scene.controls.view === "glass") pass.draw(scene.glass);
+      if (scene.controls.view === "glass") {
+        pass.draw(scene.glass);
+        if (scene.controls.wireframe) pass.draw(scene.wireframe);
+      }
     });
   };
   if (currentFrame) encode(currentFrame);
@@ -296,6 +314,7 @@ function bind(scene: PrismScene, wallTarget: Target, lightTarget: Target): void 
     sceneTexture: wallTarget,
     sceneSampler: scene.sceneSampler,
   });
+  scene.wireframe.set({ params: { viewProjection: scene.view.camera.viewProjection } });
 }
 
 function destroyTarget(value: Target | undefined): void {
@@ -309,4 +328,5 @@ export function destroyScene(scene: PrismScene): void {
   scene.wallTarget = undefined;
   scene.lightBuffer.destroy();
   scene.prism.destroy();
+  scene.prismWireframe.destroy();
 }
