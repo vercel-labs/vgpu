@@ -4,19 +4,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useExampleErrorReporter } from "../../lib/example-error-reporter";
 import { Controls } from "./controls";
 import { createRenderer, type PrismRenderer } from "./renderer";
+import type { EnvironmentDebugRenderer } from "./environment-debug";
 import { DEFAULT_PRISM_CONTROLS, type PrismControls } from "./types";
 
 export function Example() {
   const reportError = useExampleErrorReporter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<PrismRenderer | null>(null);
-  const [showEnvironmentDebug, setShowEnvironmentDebug] = useState(
-    DEFAULT_PRISM_CONTROLS.environmentDebug,
-  );
+  const [environmentDebug, setEnvironmentDebug] = useState(() => ({
+    visible: DEFAULT_PRISM_CONTROLS.environmentDebug,
+    exposure: DEFAULT_PRISM_CONTROLS.glass.environmentExposure,
+  }));
 
   const setControls = useCallback((controls: PrismControls) => {
-    setShowEnvironmentDebug(
-      controls.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
+    const nextDebug = {
+      visible: controls.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
+      exposure:
+        controls.glass?.environmentExposure
+        ?? DEFAULT_PRISM_CONTROLS.glass.environmentExposure,
+    };
+    setEnvironmentDebug((current) =>
+      current.visible === nextDebug.visible && current.exposure === nextDebug.exposure
+        ? current
+        : nextDebug
     );
     rendererRef.current?.setControls?.(controls);
   }, []);
@@ -45,23 +55,43 @@ export function Example() {
         className="block h-full w-full cursor-ns-resize touch-none"
       />
       <Controls onChange={setControls} />
-      {showEnvironmentDebug
-        ? <EnvironmentDebugCanvas onError={reportError} />
+      {environmentDebug.visible
+        ? (
+          <EnvironmentDebugCanvas
+            environmentExposure={environmentDebug.exposure}
+            onError={reportError}
+          />
+        )
         : null}
     </div>
   );
 }
 
-function EnvironmentDebugCanvas({ onError }: { onError(error: unknown): void }) {
+interface EnvironmentDebugCanvasProps {
+  readonly environmentExposure: number;
+  onError(error: unknown): void;
+}
+
+function EnvironmentDebugCanvas({
+  environmentExposure,
+  onError,
+}: EnvironmentDebugCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<EnvironmentDebugRenderer | undefined>(undefined);
   const onErrorRef = useRef(onError);
+  const exposureRef = useRef(environmentExposure);
   onErrorRef.current = onError;
+  exposureRef.current = environmentExposure;
+
+  useEffect(() => {
+    rendererRef.current?.setEnvironmentExposure(environmentExposure);
+  }, [environmentExposure]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let disposed = false;
-    let renderer: { readonly ready: Promise<void>; dispose(): void } | undefined;
+    let renderer: EnvironmentDebugRenderer | undefined;
 
     void import("./environment-debug").then(
       ({ createEnvironmentDebugRenderer }) => {
@@ -69,8 +99,10 @@ function EnvironmentDebugCanvas({ onError }: { onError(error: unknown): void }) 
         try {
           renderer = createEnvironmentDebugRenderer({
             canvas,
+            initialEnvironmentExposure: exposureRef.current,
             onError: (error) => onErrorRef.current(error),
           });
+          rendererRef.current = renderer;
         } catch (error) {
           onErrorRef.current(error);
           return;
@@ -87,6 +119,7 @@ function EnvironmentDebugCanvas({ onError }: { onError(error: unknown): void }) 
     return () => {
       disposed = true;
       renderer?.dispose();
+      if (rendererRef.current === renderer) rendererRef.current = undefined;
     };
   }, []);
 

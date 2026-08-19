@@ -82,23 +82,45 @@ export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
 /**
  * What the frame shows, peeling the picture back one layer at a time.
  *
- * `glass` is the scene. `wall` takes the prism out of the room, which is how you
- * see the whole shadow and the fan the glass would otherwise be standing in front
- * of. `caustic` goes further and shows the light mesh alone over black.
+ * `glass` is the final scene after the front-face pass. `back` presents the
+ * second HDR target immediately after the back-face glass pass. `wall` stops
+ * before either glass interface, and `caustic` goes further by showing the
+ * light mesh alone over black.
  */
-export type PrismView = "glass" | "wall" | "caustic";
+export type PrismView = "glass" | "back" | "wall" | "caustic";
 
 export const PRISM_VIEW_ORDER: readonly PrismView[] = [
   "glass",
+  "back",
   "wall",
   "caustic",
 ];
 
 export const PRISM_VIEW_LABELS: Record<PrismView, string> = {
-  glass: "Prism",
-  wall: "Wall only",
+  glass: "Final (front face)",
+  back: "Back-face pass",
+  wall: "Wall pass",
   caustic: "Light only",
 };
+
+export interface GlassControls {
+  /** Index of refraction used by both rasterized glass interfaces. */
+  readonly ior: number;
+  /** Multiplier on the studio environment before it is reflected. */
+  readonly reflectionStrength: number;
+  /** Beer-Lambert absorption per scene unit, in linear RGB. */
+  readonly absorption: readonly [number, number, number];
+  /** Screen-space blur radius of the transmitted image, in pixels. */
+  readonly frostRadius: number;
+  /** Red/blue separation of the refracted lookup. */
+  readonly dispersion: number;
+  /** Strength of the angle-dependent spectral tint on reflections. */
+  readonly iridescenceStrength: number;
+  /** Spectral tint cycles across the Fresnel range. */
+  readonly iridescenceFrequency: number;
+  /** Exposure applied to the studio environment before material response. */
+  readonly environmentExposure: number;
+}
 
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
@@ -111,10 +133,33 @@ export interface PrismControls {
   readonly wireframe: boolean;
   /** Show an orbitable mirror sphere for inspecting the analytic studio environment. */
   readonly environmentDebug: boolean;
+  /** Runtime material parameters shared by the front and back glass passes. */
+  readonly glass: GlassControls;
 }
 
 export const PRISM_DEFAULT_BEAM_WIDTH = 0.08;
 export const PRISM_BEAM_WIDTH_RANGE = { min: 0.01, max: 0.2, step: 0.005 } as const;
+export const PRISM_GLASS_RANGES = {
+  ior: { min: 1, max: 2.5, step: 0.001 },
+  reflectionStrength: { min: 0, max: 3, step: 0.01 },
+  absorption: { min: 0, max: 1, step: 0.005 },
+  frostRadius: { min: 0, max: 6, step: 0.1 },
+  dispersion: { min: 0, max: 0.08, step: 0.001 },
+  iridescenceStrength: { min: 0, max: 1, step: 0.01 },
+  iridescenceFrequency: { min: 0, max: 8, step: 0.1 },
+  environmentExposure: { min: 0, max: 4, step: 0.05 },
+} as const;
+
+export const DEFAULT_GLASS_CONTROLS: GlassControls = {
+  ior: 1.5,
+  reflectionStrength: 1.2,
+  absorption: [0.1, 0.085, 0.075],
+  frostRadius: 1.4,
+  dispersion: 0.02,
+  iridescenceStrength: 0.08,
+  iridescenceFrequency: 2,
+  environmentExposure: 1.6,
+};
 
 export function clampBeamWidth(width: number): number {
   if (!Number.isFinite(width)) return PRISM_DEFAULT_BEAM_WIDTH;
@@ -128,6 +173,7 @@ export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   wallColor: "#141414",
   wireframe: false,
   environmentDebug: false,
+  glass: DEFAULT_GLASS_CONTROLS,
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -307,37 +353,14 @@ export const PRISM_FRONT_Z = PRISM_WALL_GAP + PRISM_DEPTH;
  * `environmentExposure` keep those reflections legible without tinting the wall
  * the prism refracts behind itself.
  */
-export interface GlassMaterial {
-  /** Index of refraction, for both the Fresnel term and the refracted lookup. */
-  readonly ior: number;
-  /** Multiplier on the studio environment before it is reflected. */
-  readonly reflectionStrength: number;
-  /** Beer-Lambert absorption per scene unit, in linear RGB. */
-  readonly absorption: readonly [number, number, number];
-  /** Screen-space blur radius of the transmitted image, in pixels. */
-  readonly frostRadius: number;
-  /** Red/blue separation of the refracted lookup. */
-  readonly dispersion: number;
-  /** Strength of the angle-dependent spectral tint on reflections. */
-  readonly iridescenceStrength: number;
-  /** Spectral tint cycles across the Fresnel range. */
-  readonly iridescenceFrequency: number;
+export interface GlassMaterial extends GlassControls {
   /** XYZ rotation of the studio environment, in degrees. */
   readonly environmentRotation: readonly [number, number, number];
-  /** Exposure applied to the studio environment before material response. */
-  readonly environmentExposure: number;
 }
 
 export const PRISM_GLASS: GlassMaterial = {
-  ior: 1.5,
-  reflectionStrength: 1.2,
-  absorption: [0.1, 0.085, 0.075],
-  frostRadius: 1.4,
-  dispersion: 0.02,
-  iridescenceStrength: 0.08,
-  iridescenceFrequency: 2,
+  ...DEFAULT_GLASS_CONTROLS,
   environmentRotation: [0, 0, 0],
-  environmentExposure: 1.6,
 };
 
 /** Vertical field of view of the camera looking at the wall, in degrees. */

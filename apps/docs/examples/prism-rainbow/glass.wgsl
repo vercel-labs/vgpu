@@ -5,8 +5,8 @@
 // split between a refracted lookup and a studio reflection, four stable taps for
 // frost, two more for chromatic separation, Beer-Lambert absorption over the
 // distance travelled inside the solid, a thin-film tint that grows towards
-// grazing angles, and a screened highlight so a bright studio panel keeps its
-// shape on a low-IOR frontal face.
+// grazing angles, and an additive HDR highlight so a bright studio panel keeps
+// its shape on a low-IOR frontal face.
 //
 // Two things had to change, and both are simplifications. That example's glass is
 // a shell around a fractal, so it approximates the interior with a nested
@@ -20,7 +20,6 @@
 // Following the air -> glass ray to its exit point and sampling that pixel joins
 // both independently-rasterized interfaces into one complete optical path.
 
-import { linearToSrgb3, tonemapAces } from "@vgpu/wgsl-std/color";
 import {
   Glass,
   dielectricFresnel,
@@ -182,15 +181,13 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let physicalGlass = transmitted * (1.0 - fresnelRgb) + reflected * fresnelRgb;
 
   // An energy-conserving mix alone can make a white panel disappear when the
-  // transmitted scene is also bright. Screen just the isolated panel over the
-  // physical result: this preserves its shape and contrast without another
-  // environment sample or making the whole shell opaque.
+  // transmitted scene is also bright. Add the isolated panel in linear HDR so
+  // its radiance survives until the final ACES pass, without another environment
+  // sample or making the whole shell opaque.
   let studioPanelStrength = studioPanelMask
     * clamp(params.reflectionStrength * 0.4, 0.0, 0.7)
     * (0.65 + 0.35 * grazingWeight);
-  let studioPanelHighlight = clamp(reflected * studioPanelStrength, vec3f(0.0), vec3f(1.0));
-  let finalGlass = 1.0 - (
-    (1.0 - clamp(physicalGlass, vec3f(0.0), vec3f(1.0))) * (1.0 - studioPanelHighlight)
-  );
-  return vec4f(linearToSrgb3(tonemapAces(finalGlass)), 1.0);
+  let studioPanelHighlight = max(reflected * studioPanelStrength, vec3f(0.0));
+  let finalGlass = max(physicalGlass, vec3f(0.0)) + studioPanelHighlight;
+  return vec4f(finalGlass, 1.0);
 }

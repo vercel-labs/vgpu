@@ -209,23 +209,25 @@ test("renders the deterministic light once and idles until something changes", a
   // output aspect is known. No history textures are allocated.
   expect(live.instance.device.createBuffer).toHaveBeenCalledOnce();
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(2);
-  expect(live.effects).toHaveLength(2);
+  expect(live.effects).toHaveLength(3);
   expect(live.draws).toHaveLength(5);
   for (const created of [...live.effects, ...live.draws])
     expect(created.compile).toHaveBeenCalledOnce();
   // Canvas surfaces do not expose a current texture until a frame begins, so
   // output pipelines must pre-warm from the surface's stable format signature.
-  expect(live.effects[1]!.compile).toHaveBeenCalledWith({
+  expect(live.effects[2]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  expect(live.draws[3]!.compile).toHaveBeenCalledWith({
-    colors: ["bgra8unorm"],
-  });
-  // Both targets stay linear HDR: wall + light are composed in A, then the
-  // backside interface reads A while writing B.
+  // Both targets stay linear HDR: wall + light are composed in A, the backside
+  // interface reads A while writing B, and the frontside reads B while writing A.
   expect(live.targets).toHaveLength(2);
   expect(live.targets[0]!.format).toBe("rgba16float");
   expect(live.targets[1]!.format).toBe("rgba16float");
+  expect(live.effects[0]!.compile).toHaveBeenCalledWith(live.targets[1]);
+  expect(live.effects[1]!.compile).toHaveBeenCalledWith(live.targets[0]);
+  expect(live.draws[2]!.compile).toHaveBeenCalledWith(live.targets[1]);
+  expect(live.draws[3]!.compile).toHaveBeenCalledWith(live.targets[0]);
+  expect(live.draws[4]!.compile).toHaveBeenCalledWith(live.targets[0]);
   expect(live.effects[0]!.set).toHaveBeenLastCalledWith({
     sceneTexture: live.targets[0],
   });
@@ -238,20 +240,44 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.draws[3]!.set).toHaveBeenLastCalledWith(
     expect.objectContaining({ sceneTexture: live.targets[1] }),
   );
+  expect(live.effects[2]!.set).toHaveBeenLastCalledWith({
+    sceneTexture: live.targets[0],
+  });
 
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   tick(live.loopFrame);
-  // frameLoop already owns the frame: all three passes encode into the supplied
+  // frameLoop already owns the frame: all four passes encode into the supplied
   // frame instead of opening nested frames.
   expect(live.instance.fns.frame).not.toHaveBeenCalled();
-  expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
+  expect(live.loopFrame.pass).toHaveBeenCalledTimes(4);
   expect(live.encodedPasses).toEqual([
     [live.draws[1], live.draws[0]],
     [live.effects[0], live.draws[2]],
     [live.effects[1], live.draws[3]],
+    [live.effects[2]],
   ]);
   tick(live.loopFrame);
-  expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
+  expect(live.loopFrame.pass).toHaveBeenCalledTimes(4);
+  renderer.dispose();
+});
+
+test("the back-face view presents the second target before the front interface", async () => {
+  const env = browser();
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+
+  renderer.setControls?.({ ...DEFAULT_PRISM_CONTROLS, view: "back" });
+  tick(live.loopFrame);
+
+  expect(live.encodedPasses).toEqual([
+    [live.draws[1], live.draws[0]],
+    [live.effects[0], live.draws[2]],
+    [live.effects[1]],
+    [live.effects[2]],
+  ]);
   renderer.dispose();
 });
 
@@ -294,6 +320,7 @@ test("only optical controls rebuild the light mesh", async () => {
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   const writes = live.lightBuffer.write.mock.calls.length;
 
   // Peeling a layer off only changes how the same mesh is composited.
@@ -319,6 +346,25 @@ test("only optical controls rebuild the light mesh", async () => {
     environmentDebug: true,
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  // Glass material sliders update uniforms without retracing the spectral mesh.
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    glass: {
+      ...DEFAULT_PRISM_CONTROLS.glass,
+      ior: 1.72,
+      absorption: [0.2, 0.15, 0.1],
+    },
+  });
+  tick(live.loopFrame);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  expect(live.draws[2]!.set).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      params: expect.objectContaining({
+        ior: 1.72,
+        absorption: [0.2, 0.15, 0.1],
+      }),
+    }),
+  );
   // A different index of refraction bends every ribbon differently.
   renderer.setControls?.({
     ...DEFAULT_PRISM_CONTROLS,
@@ -354,7 +400,7 @@ test("the camera follows the pointer without rebuilding world-space light", asyn
   } as unknown as Event);
   tick(live.loopFrame);
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
-  expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
+  expect(live.loopFrame.pass).toHaveBeenCalledTimes(4);
   renderer.dispose();
 });
 

@@ -2,10 +2,10 @@
  * Deterministic scene graph.
  *
  * The CPU traces wavelength-connected sheets across the finite beam and writes
- * them into one fixed vertex buffer. Every frame has exactly three passes over
- * two ping-pong HDR targets: wall plus additive light, the inner glass interface,
- * then the outer glass interface and presentation. There is no temporal history,
- * stochastic sampling or convergence state.
+ * them into one fixed vertex buffer. Every frame has four passes over two
+ * ping-pong HDR targets: wall plus additive light, the inner glass interface,
+ * the outer glass interface, then the sole tone-mapped presentation pass. There
+ * is no temporal history, stochastic sampling or convergence state.
  */
 
 import type { Buffer, Draw, Effect, Frame, Geometry, Gpu, Surface, Target } from "vgpu";
@@ -52,7 +52,8 @@ export interface PrismScene {
   readonly lightBuffer: Buffer;
   lightStats: LightMeshStats;
   readonly wall: Draw;
-  readonly copyLinear: Effect;
+  readonly copyToBack: Effect;
+  readonly copyToFront: Effect;
   readonly present: Effect;
   readonly glassBack: Draw;
   readonly glassFront: Draw;
@@ -119,7 +120,8 @@ export function createScene(
       depth: false,
       label: `${label}.wall`,
     }),
-    copyLinear: effect(gpu, copyLinearWgsl, { label: `${label}.copy-linear` }),
+    copyToBack: effect(gpu, copyLinearWgsl, { label: `${label}.copy-to-back` }),
+    copyToFront: effect(gpu, copyLinearWgsl, { label: `${label}.copy-to-front` }),
     present: effect(gpu, presentWgsl, { label: `${label}.present` }),
     glassBack: draw(gpu, {
       shader: glassBackWgsl,
@@ -175,6 +177,11 @@ function refreshLightMesh(scene: PrismScene): void {
 }
 
 export function setControls(scene: PrismScene, controls: PrismControls): void {
+  const defaultGlass = DEFAULT_PRISM_CONTROLS.glass;
+  const inputGlass = controls.glass ?? defaultGlass;
+  const inputAbsorption = inputGlass.absorption ?? defaultGlass.absorption;
+  const finite = (value: number | undefined, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
   const next = {
     ...controls,
     // Runtime fallback keeps Fast Refresh safe across the control schema change.
@@ -182,6 +189,32 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
     wireframe: controls.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
     environmentDebug:
       controls.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
+    glass: {
+      ior: finite(inputGlass.ior, defaultGlass.ior),
+      reflectionStrength: finite(
+        inputGlass.reflectionStrength,
+        defaultGlass.reflectionStrength,
+      ),
+      absorption: [
+        finite(inputAbsorption[0], defaultGlass.absorption[0]),
+        finite(inputAbsorption[1], defaultGlass.absorption[1]),
+        finite(inputAbsorption[2], defaultGlass.absorption[2]),
+      ] as const,
+      frostRadius: finite(inputGlass.frostRadius, defaultGlass.frostRadius),
+      dispersion: finite(inputGlass.dispersion, defaultGlass.dispersion),
+      iridescenceStrength: finite(
+        inputGlass.iridescenceStrength,
+        defaultGlass.iridescenceStrength,
+      ),
+      iridescenceFrequency: finite(
+        inputGlass.iridescenceFrequency,
+        defaultGlass.iridescenceFrequency,
+      ),
+      environmentExposure: finite(
+        inputGlass.environmentExposure,
+        defaultGlass.environmentExposure,
+      ),
+    },
   };
   const opticsChanged = next.dispersion !== scene.controls.dispersion
     || next.beamWidth !== scene.controls.beamWidth;
@@ -242,11 +275,12 @@ export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
 }
 
 export function glassUniforms(scene: PrismScene): Record<string, unknown> {
+  const glass = scene.controls.glass;
   return {
     viewProjection: scene.view.camera.viewProjection,
     environmentRotation: ENVIRONMENT_ROTATION,
     cameraPosition: scene.view.position,
-    absorption: PRISM_GLASS.absorption,
+    absorption: glass.absorption,
     prismA: PRISM_TRIANGLE.a,
     prismB: PRISM_TRIANGLE.b,
     prismC: PRISM_TRIANGLE.c,
@@ -254,13 +288,13 @@ export function glassUniforms(scene: PrismScene): Record<string, unknown> {
     frontZ: PRISM_FRONT_Z,
     backZ: PRISM_BACK_Z,
     wallZ: 0,
-    ior: PRISM_GLASS.ior,
-    reflectionStrength: PRISM_GLASS.reflectionStrength,
-    frostRadius: PRISM_GLASS.frostRadius,
-    dispersion: PRISM_GLASS.dispersion,
-    iridescenceStrength: PRISM_GLASS.iridescenceStrength,
-    iridescenceFrequency: PRISM_GLASS.iridescenceFrequency,
-    environmentExposure: PRISM_GLASS.environmentExposure,
+    ior: glass.ior,
+    reflectionStrength: glass.reflectionStrength,
+    frostRadius: glass.frostRadius,
+    dispersion: glass.dispersion,
+    iridescenceStrength: glass.iridescenceStrength,
+    iridescenceFrequency: glass.iridescenceFrequency,
+    environmentExposure: glass.environmentExposure,
   };
 }
 
@@ -291,11 +325,12 @@ export async function prepareScene(scene: PrismScene, output: Output): Promise<v
   await Promise.all([
     scene.light.compile(readTarget),
     scene.wall.compile(readTarget),
-    scene.copyLinear.compile(writeTarget),
+    scene.copyToBack.compile(writeTarget),
     scene.glassBack.compile(writeTarget),
+    scene.copyToFront.compile(readTarget),
+    scene.glassFront.compile(readTarget),
+    scene.wireframe.compile(readTarget),
     scene.present.compile(outputSignature),
-    scene.glassFront.compile(outputSignature),
-    scene.wireframe.compile(outputSignature),
   ]);
 }
 
@@ -305,20 +340,24 @@ export function presentScene(scene: PrismScene, output: Output, currentFrame?: F
   if (!readTarget || !writeTarget) throw new Error("prepareScene must run before presentScene.");
   bind(scene, readTarget, writeTarget);
   const encode = (current: Frame) => {
+    const showBackFace = scene.controls.view === "glass" || scene.controls.view === "back";
     current.pass({ target: readTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(scene.wall);
       pass.draw(scene.light);
     });
     current.pass({ target: writeTarget, clear: [0, 0, 0, 1] }, (pass) => {
-      pass.draw(scene.copyLinear);
-      if (scene.controls.view === "glass") pass.draw(scene.glassBack);
+      pass.draw(scene.copyToBack);
+      if (showBackFace) pass.draw(scene.glassBack);
     });
-    current.pass({ target: output }, (pass) => {
-      pass.draw(scene.present);
+    current.pass({ target: readTarget, clear: [0, 0, 0, 1] }, (pass) => {
+      pass.draw(scene.copyToFront);
       if (scene.controls.view === "glass") {
         pass.draw(scene.glassFront);
         if (scene.controls.wireframe) pass.draw(scene.wireframe);
       }
+    });
+    current.pass({ target: output }, (pass) => {
+      pass.draw(scene.present);
     });
   };
   if (currentFrame) encode(currentFrame);
@@ -329,19 +368,20 @@ function bind(scene: PrismScene, readTarget: Target, writeTarget: Target): void 
   const values = sceneUniforms(scene);
   scene.light.set({ scene: values });
   scene.wall.set({ scene: values });
-  scene.copyLinear.set({ sceneTexture: readTarget });
+  scene.copyToBack.set({ sceneTexture: readTarget });
   scene.glassBack.set({
     params: glassUniforms(scene),
     sceneTexture: readTarget,
     sceneSampler: scene.sceneSampler,
   });
-  scene.present.set({ sceneTexture: writeTarget });
+  scene.copyToFront.set({ sceneTexture: writeTarget });
   scene.glassFront.set({
     params: glassUniforms(scene),
     sceneTexture: writeTarget,
     sceneSampler: scene.sceneSampler,
   });
   scene.wireframe.set({ params: { viewProjection: scene.view.camera.viewProjection } });
+  scene.present.set({ sceneTexture: readTarget });
 }
 
 function destroyTarget(value: Target | undefined): void {

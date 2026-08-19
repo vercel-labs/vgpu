@@ -22,12 +22,14 @@ const GLOBAL_AXES_MODEL = rotationMatrix([0, 0, 0]);
 
 export interface EnvironmentDebugRenderer {
   readonly ready: Promise<void>;
+  setEnvironmentExposure(value: number): void;
   dispose(): void;
 }
 
 export interface EnvironmentDebugRendererOptions {
   readonly canvas: HTMLCanvasElement;
   readonly onError?: (error: unknown) => void;
+  readonly initialEnvironmentExposure?: number;
 }
 
 /** Optional mirror-ball inspector; constructed only while its lil-gui toggle is on. */
@@ -49,6 +51,10 @@ export function createEnvironmentDebugRenderer(
   let yaw = INITIAL_ORBIT.yaw;
   let pitch = INITIAL_ORBIT.pitch;
   let distance = INITIAL_ORBIT.distance;
+  let environmentExposure = finiteExposure(
+    options.initialEnvironmentExposure,
+    PRISM_GLASS.environmentExposure,
+  );
   let pendingPresent = true;
 
   const invalidate = () => {
@@ -139,7 +145,7 @@ export function createEnvironmentDebugRenderer(
           viewProjection: camera.viewProjection,
           environmentRotation: ENVIRONMENT_ROTATION,
           cameraPosition,
-          environmentExposure: PRISM_GLASS.environmentExposure,
+          environmentExposure,
         },
       });
       axes.set({
@@ -234,7 +240,20 @@ export function createEnvironmentDebugRenderer(
     throw error;
   });
 
-  return { ready, dispose };
+  return {
+    ready,
+    setEnvironmentExposure(value) {
+      environmentExposure = finiteExposure(value, PRISM_GLASS.environmentExposure);
+      invalidate();
+    },
+    dispose,
+  };
+}
+
+function finiteExposure(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : fallback;
 }
 
 function createAxesGeometry(gpu: Gpu): Geometry {
