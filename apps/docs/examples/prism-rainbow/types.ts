@@ -336,7 +336,7 @@ export const PRISM_GLASS: GlassMaterial = {
   dispersion: 0.02,
   iridescenceStrength: 0.08,
   iridescenceFrequency: 2,
-  environmentRotation: [0, -36, 0],
+  environmentRotation: [0, 0, 0],
   environmentExposure: 1.6,
 };
 

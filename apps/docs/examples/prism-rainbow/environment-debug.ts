@@ -16,9 +16,9 @@ const MAX_PITCH = Math.PI * 0.47;
 // keeps both initial view directions identical even if its defaults move later.
 const INITIAL_ORBIT = orbitFromPosition(cameraView(1).position);
 const ENVIRONMENT_ROTATION = rotationMatrix(PRISM_GLASS.environmentRotation);
-// `environment.wgsl` rotates world rays into environment space. The transpose
-// places the environment's local XYZ basis back into world space for inspection.
-const ENVIRONMENT_AXES_MODEL = transposeRotation(ENVIRONMENT_ROTATION);
+// The gizmo is deliberately world-aligned. It remains a stable global reference
+// even if the environment itself gets a non-zero rotation again later.
+const GLOBAL_AXES_MODEL = rotationMatrix([0, 0, 0]);
 
 export interface EnvironmentDebugRenderer {
   readonly ready: Promise<void>;
@@ -145,7 +145,7 @@ export function createEnvironmentDebugRenderer(
       axes.set({
         params: {
           viewProjection: camera.viewProjection,
-          model: ENVIRONMENT_AXES_MODEL,
+          model: GLOBAL_AXES_MODEL,
           resolution: canvasSurface.size,
           lineWidth: 2,
           opacity: 0.95,
@@ -292,15 +292,6 @@ function orbitFromPosition(position: readonly [number, number, number]): {
     pitch: Math.asin(clamp(position[1] / distance, -1, 1)),
     distance,
   };
-}
-
-function transposeRotation(matrix: Float32Array): Float32Array {
-  return new Float32Array([
-    matrix[0]!, matrix[4]!, matrix[8]!, 0,
-    matrix[1]!, matrix[5]!, matrix[9]!, 0,
-    matrix[2]!, matrix[6]!, matrix[10]!, 0,
-    0, 0, 0, 1,
-  ]);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
