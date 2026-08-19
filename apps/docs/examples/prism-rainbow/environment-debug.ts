@@ -2,17 +2,19 @@ import type { Draw, Frame, Geometry, Gpu, Surface } from "vgpu";
 import { draw, frameLoop, geometry, surface } from "vgpu";
 import { perspectiveCamera, sphere } from "vgpu/scene";
 
-import { rotationMatrix } from "./camera";
+import { cameraView, rotationMatrix } from "./camera";
 import environmentDebugAxesWgsl from "./environment-debug-axes.wgsl";
 import environmentDebugWgsl from "./environment-debug.wgsl";
 import { PRISM_GLASS } from "./types";
 
 const SPHERE_RADIUS = 0.68;
 const AXIS_LENGTH = 1.02;
-const INITIAL_DISTANCE = 2.65;
 const MIN_DISTANCE = 1.75;
 const MAX_DISTANCE = 4.5;
 const MAX_PITCH = Math.PI * 0.47;
+// Derive the spherical orbit from the main renderer's resting camera. This
+// keeps both initial view directions identical even if its defaults move later.
+const INITIAL_ORBIT = orbitFromPosition(cameraView(1).position);
 const ENVIRONMENT_ROTATION = rotationMatrix(PRISM_GLASS.environmentRotation);
 // `environment.wgsl` rotates world rays into environment space. The transpose
 // places the environment's local XYZ basis back into world space for inspection.
@@ -44,9 +46,9 @@ export function createEnvironmentDebugRenderer(
   let observer: ResizeObserver | undefined;
   let pointerId: number | undefined;
   let lastPointer: readonly [number, number] = [0, 0];
-  let yaw = 0;
-  let pitch = 0;
-  let distance = INITIAL_DISTANCE;
+  let yaw = INITIAL_ORBIT.yaw;
+  let pitch = INITIAL_ORBIT.pitch;
+  let distance = INITIAL_ORBIT.distance;
   let pendingPresent = true;
 
   const invalidate = () => {
@@ -277,6 +279,19 @@ function orbitPosition(
     Math.sin(pitch) * distance,
     Math.cos(yaw) * cosPitch * distance,
   ];
+}
+
+function orbitFromPosition(position: readonly [number, number, number]): {
+  readonly yaw: number;
+  readonly pitch: number;
+  readonly distance: number;
+} {
+  const distance = Math.hypot(position[0], position[1], position[2]) || 1;
+  return {
+    yaw: Math.atan2(position[0], position[2]),
+    pitch: Math.asin(clamp(position[1] / distance, -1, 1)),
+    distance,
+  };
 }
 
 function transposeRotation(matrix: Float32Array): Float32Array {
