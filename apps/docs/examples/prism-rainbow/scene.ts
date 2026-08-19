@@ -1,9 +1,9 @@
 /**
  * Deterministic scene graph.
  *
- * The CPU traces two parallel boundaries per wavelength and writes their quads
- * into one fixed vertex buffer. Every rendered frame then has three cheap
- * stages: rasterize those ribbons additively into a linear-light target, combine
+ * The CPU traces wavelength-connected sheets across the finite beam and writes
+ * them into one fixed vertex buffer. Every rendered frame then has three cheap
+ * stages: rasterize that mesh additively into a linear-light target, combine
  * that target with the wall, and finally draw the transmissive prism over it.
  * There is no temporal history, stochastic sampling or convergence state.
  */

@@ -1,9 +1,8 @@
 // Additive rasterization of the deterministic CPU ray bundle.
 //
-// Each quad carries one wavelength color and a signed transverse coordinate.
-// The fragment stage only supplies the smooth beam profile; all bending,
-// topology, Fresnel loss and energy-density compensation were solved when the
-// vertices were built.
+// Neighbouring wavelength rails form continuous spectral cells. Color is
+// evaluated at their vertices, then interpolated by rasterization; the fragment
+// stage only applies intensity and the white input beam's edge profile.
 
 import { Scene } from "./scene.wgsl";
 
@@ -44,7 +43,7 @@ fn wavelengthToLinearRgb(wavelength: f32) -> vec3f {
 
 struct VertexOut {
   @builtin(position) position: vec4f,
-  @location(0) wavelength: f32,
+  @location(0) color: vec3f,
   @location(1) profile: f32,
   @location(2) intensity: f32,
 };
@@ -58,7 +57,8 @@ fn vs_main(
 ) -> VertexOut {
   var out: VertexOut;
   out.position = scene.viewProjection * vec4f(position, 0.0, 1.0);
-  out.wavelength = wavelength;
+  let spectral = wavelengthToLinearRgb(max(wavelength, 400.0));
+  out.color = select(spectral, vec3f(1.0), wavelength < 0.0);
   out.profile = profile;
   out.intensity = intensity;
   return out;
@@ -67,7 +67,5 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let edge = 1.0 - smoothstep(0.72, 1.0, abs(in.profile));
-  let spectral = wavelengthToLinearRgb(max(in.wavelength, 400.0));
-  let color = select(spectral, vec3f(1.0), in.wavelength < 0.0);
-  return vec4f(color * in.intensity * edge, 0.0);
+  return vec4f(in.color * in.intensity * edge, 0.0);
 }

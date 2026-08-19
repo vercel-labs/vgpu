@@ -6,8 +6,9 @@
  * right and `y` growing up, centred on the origin and sized by `camera.ts` to
  * cover whatever the frame can see of it. The CPU solves the spectral ray bundle
  * in that plane — enter one face, cross the glass, leave through another — and
- * turns its finite boundaries into additive ribbons. The glass the camera sees
- * is that same triangle extruded towards the viewer by `PRISM_DEPTH`.
+ * turns its finite width into additive, wavelength-connected mesh sheets. The
+ * glass the camera sees is that same triangle extruded towards the viewer by
+ * `PRISM_DEPTH`.
  *
  * So the triangle below is read twice: as the two-dimensional obstacle the ray
  * bundle refracts through, and as the cross-section of the three-dimensional prism. One
@@ -22,7 +23,7 @@
  * derivation is supposed to guarantee.
  *
  * These constants are also the single source of truth across languages:
- * `optics.ts` traces them directly, `light-mesh.ts` makes the ribbons, and
+ * `optics.ts` traces them directly, `light-mesh.ts` makes the spectral mesh, and
  * `prism-mesh.ts` extrudes them into the solid `glass.wgsl` shades.
  */
 
@@ -109,7 +110,7 @@ export interface PrismControls {
 export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   dispersion: "stylized",
   view: "glass",
-  wallColor: "#24262b",
+  wallColor: "#141414",
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -237,13 +238,16 @@ export const PRISM_DEFAULT_ARC =
   (PRISM_INCIDENCE_DEGREES - PRISM_INCIDENCE_ARC.min) /
   (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min);
 
-/** Visible wavelength range the ribbon mesh subdivides, in nanometres. */
+/** Visible wavelength range the continuous spectral mesh subdivides, in nanometres. */
 export const PRISM_WAVELENGTHS = { min: 400, max: 700 } as const;
 
-/** Deterministic wavelength bands used to build the spectral light ribbons. */
+/** Wavelength vertices connected into the smooth spectral mesh. */
 export const PRISM_SPECTRAL_SAMPLES = 64;
 
-/** Display exposure for the finite spectral integral represented by the ribbons. */
+/** Additive sheets that integrate the finite width of the collimated beam. */
+export const PRISM_BEAM_SLICES = 24;
+
+/** Display exposure for the finite spectral integral represented by the mesh. */
 export const PRISM_LIGHT_EXPOSURE = 5.5;
 
 /** Internal reflections a ray may take before the analytic solver gives up. */
