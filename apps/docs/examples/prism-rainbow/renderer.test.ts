@@ -102,10 +102,13 @@ function browser() {
 
 function gpu() {
   const stop = vi.fn();
+  const encodedPasses: unknown[][] = [];
   const loopFrame = {
-    pass: vi.fn((_options: unknown, body: (pass: unknown) => void) =>
-      body({ draw: vi.fn() })
-    ),
+    pass: vi.fn((_options: unknown, body: (pass: unknown) => void) => {
+      const encoded: unknown[] = [];
+      body({ draw: (pipeline: unknown) => encoded.push(pipeline) });
+      encodedPasses.push(encoded);
+    }),
   };
   const surface = {
     size: [200, 100] as number[],
@@ -176,7 +179,17 @@ function gpu() {
       frameLoop: vi.fn((_tick: (_frame: unknown) => void) => ({ stop })),
     },
   };
-  return { instance, surface, lightBuffer, effects, draws, targets, loopFrame, stop };
+  return {
+    instance,
+    surface,
+    lightBuffer,
+    effects,
+    draws,
+    targets,
+    loopFrame,
+    encodedPasses,
+    stop,
+  };
 }
 
 afterEach(() => {
@@ -196,29 +209,47 @@ test("renders the deterministic light once and idles until something changes", a
   // output aspect is known. No history textures are allocated.
   expect(live.instance.device.createBuffer).toHaveBeenCalledOnce();
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(2);
-  expect(live.effects).toHaveLength(1);
-  expect(live.draws).toHaveLength(4);
+  expect(live.effects).toHaveLength(2);
+  expect(live.draws).toHaveLength(5);
   for (const created of [...live.effects, ...live.draws])
     expect(created.compile).toHaveBeenCalledOnce();
   // Canvas surfaces do not expose a current texture until a frame begins, so
   // output pipelines must pre-warm from the surface's stable format signature.
-  expect(live.effects[0]!.compile).toHaveBeenCalledWith({
+  expect(live.effects[1]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  expect(live.draws[2]!.compile).toHaveBeenCalledWith({
+  expect(live.draws[3]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  // One linear target receives additive ribbons; the other holds the wall the
-  // glass samples while it is drawn over the copy.
+  // Both targets stay linear HDR: wall + light are composed in A, then the
+  // backside interface reads A while writing B.
   expect(live.targets).toHaveLength(2);
+  expect(live.targets[0]!.format).toBe("rgba16float");
   expect(live.targets[1]!.format).toBe("rgba16float");
+  expect(live.effects[0]!.set).toHaveBeenLastCalledWith({
+    sceneTexture: live.targets[0],
+  });
+  expect(live.draws[2]!.set).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sceneTexture: live.targets[0] }),
+  );
+  expect(live.effects[1]!.set).toHaveBeenLastCalledWith({
+    sceneTexture: live.targets[1],
+  });
+  expect(live.draws[3]!.set).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sceneTexture: live.targets[1] }),
+  );
 
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   tick(live.loopFrame);
-  // frameLoop already owns the frame: light, wall and surface all encode into
-  // the supplied frame instead of opening nested frames.
+  // frameLoop already owns the frame: all three passes encode into the supplied
+  // frame instead of opening nested frames.
   expect(live.instance.fns.frame).not.toHaveBeenCalled();
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
+  expect(live.encodedPasses).toEqual([
+    [live.draws[1], live.draws[0]],
+    [live.effects[0], live.draws[2]],
+    [live.effects[1], live.draws[3]],
+  ]);
   tick(live.loopFrame);
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
   renderer.dispose();

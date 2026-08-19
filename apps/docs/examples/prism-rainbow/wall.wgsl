@@ -1,19 +1,17 @@
-// The wall: a plane at z = 0, facing the camera, painted with the light the
-// deterministic light ribbons rasterized onto it.
+// The wall: a plane at z = 0, facing the camera, written in linear HDR.
 //
-// This is where the linear-light ribbon target is combined with the user-selected
-// wall color. Its corners use the same world rectangle that clipped the CPU rays,
-// so the rasterized fan and the wall plane stay registered at every aspect ratio.
+// The additive light mesh is drawn immediately after this shader in the same
+// pass. Its corners use the same world rectangle that clipped the CPU rays, so
+// the rasterized fan and wall stay registered at every aspect ratio.
 //
 // The wall uses the sRGB color selected in lil-gui wherever no light reaches it.
-// The light target already contains all three parts of the same physical bundle:
+// The following draw contains all three parts of the same physical bundle:
 // incoming white beam, refracted interior and dispersed outgoing fan.
 
-import { linearToSrgb3, srgbToLinear3, tonemapAces } from "@vgpu/wgsl-std/color";
+import { srgbToLinear3 } from "@vgpu/wgsl-std/color";
 import { Scene, scenePoint } from "./scene.wgsl";
 
 @group(0) @binding(0) var<uniform> scene: Scene;
-@group(0) @binding(1) var lightTexture: texture_2d<f32>;
 
 struct VertexOut {
   @builtin(position) position: vec4f,
@@ -43,7 +41,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
-  let light = textureLoad(lightTexture, vec2i(in.position.xy), 0).rgb;
   let wallBase = select(srgbToLinear3(scene.wallColor), vec3f(0.0), scene.causticOnly != 0u);
-  return vec4f(linearToSrgb3(tonemapAces(wallBase + light)), 1.0);
+  return vec4f(wallBase, 1.0);
 }

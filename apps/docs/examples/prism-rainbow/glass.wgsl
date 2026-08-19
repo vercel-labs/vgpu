@@ -1,4 +1,4 @@
-// Screen-space transmission for the prism, copied from `glass-fractal`'s
+// Outer/front interface of the prism, based on `glass-fractal`'s
 // `hero-glass-transmission.wgsl`.
 //
 // The material is that shader's, response for response: a dielectric Fresnel
@@ -16,11 +16,18 @@
 // the environment is evaluated rather than sampled from a cubemap, for the reason
 // `environment.wgsl` gives.
 //
-// What the glass refracts is the wall: the pass before it drew the deterministic
-// rainbow into `sceneTexture`, so bending the lookup bends the light behind the
-// prism, which is the one thing a flat 2D composite could never show.
+// `sceneTexture` already contains the wall seen through the inner interface.
+// Following the air -> glass ray to its exit point and sampling that pixel joins
+// both independently-rasterized interfaces into one complete optical path.
 
-import { presentReflection, rotateEnvironmentDirection, sampleStudioEnvironment } from "./environment.wgsl";
+import { linearToSrgb3, tonemapAces } from "@vgpu/wgsl-std/color";
+import {
+  Glass,
+  dielectricFresnel,
+  glassEnvironment,
+  projectToUv,
+  sampleScene,
+} from "./glass-common.wgsl";
 
 /**
  * Returned instead of a distance when a plane cannot be the one a ray leaves
@@ -29,29 +36,6 @@ import { presentReflection, rotateEnvironmentDirection, sampleStudioEnvironment 
  * reads it as a miss.
  */
 const NO_EXIT: f32 = 100000.0;
-
-struct Glass {
-  viewProjection: mat4x4f,
-  environmentRotation: mat4x4f,
-  cameraPosition: vec3f,
-  /** Beer-Lambert absorption per scene unit, in linear RGB. */
-  absorption: vec3f,
-  /** The cross-section, wound counter-clockwise, as `types.ts` derives it. */
-  prismA: vec2f,
-  prismB: vec2f,
-  prismC: vec2f,
-  /** Size of the target being drawn into, for the screen-space lookup. */
-  resolution: vec2f,
-  frontZ: f32,
-  backZ: f32,
-  ior: f32,
-  reflectionStrength: f32,
-  frostRadius: f32,
-  dispersion: f32,
-  iridescenceStrength: f32,
-  iridescenceFrequency: f32,
-  environmentExposure: f32,
-}
 
 @group(0) @binding(0) var<uniform> params: Glass;
 @group(0) @binding(1) var sceneTexture: texture_2d<f32>;
@@ -71,18 +55,6 @@ fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOu
   out.worldPosition = position;
   out.worldNormal = normal;
   return out;
-}
-
-fn environment(direction: vec3f) -> vec3f {
-  return sampleStudioEnvironment(
-    rotateEnvironmentDirection(direction, params.environmentRotation),
-  ) * params.environmentExposure;
-}
-
-fn dielectricFresnel(ior: f32, facing: f32) -> f32 {
-  let ratio = (ior - 1.0) / (ior + 1.0);
-  let f0 = ratio * ratio;
-  return f0 + (1.0 - f0) * pow(1.0 - clamp(facing, 0.0, 1.0), 5.0);
 }
 
 /** Distance to one outward plane `dot(outward, p) = offset`, or `NO_EXIT`. */
@@ -118,15 +90,8 @@ fn prismExitDistance(origin: vec3f, direction: vec3f) -> f32 {
   return nearest;
 }
 
-fn projectToUv(point: vec3f) -> vec2f {
-  let clip = params.viewProjection * vec4f(point, 1.0);
-  let ndc = clip.xy / max(clip.w, 0.00001);
-  return vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-}
-
 fn sampleInterior(uv: vec2f, halfTexel: vec2f) -> vec3f {
-  let safeUv = clamp(uv, halfTexel, vec2f(1.0) - halfTexel);
-  return textureSampleLevel(sceneTexture, sceneSampler, safeUv, 0.0).rgb;
+  return sampleScene(sceneTexture, sceneSampler, uv, halfTexel);
 }
 
 @fragment
@@ -135,7 +100,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let view = normalize(params.cameraPosition - in.worldPosition);
   let incident = -view;
   let facing = clamp(dot(view, normal), 0.0, 1.0);
-  let reflectedEnvironment = environment(reflect(incident, normal));
+  let reflectedEnvironment = glassEnvironment(reflect(incident, normal), params);
   let fresnel = dielectricFresnel(params.ior, facing);
   let refracted = normalize(refract(incident, normal, 1.0 / params.ior));
   // Nudged off the surface so the face this ray just entered through is not the
@@ -144,12 +109,16 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 
   let originalUv = in.position.xy / max(params.resolution, vec2f(1.0));
   let validExit = exitDistance < 10.0;
-  // The pass before this one rasterized the wall; there is no volume to trace, so
-  // the refracted ray is resolved by projecting where it leaves the glass back
-  // onto the screen and reading the wall there.
+  // The previous pass rasterized the inner interface. Projecting the true exit
+  // point tells us which back-face pixel already contains the glass -> air bend
+  // and the wall radiance behind it.
   let sampleDistance = select(0.0, exitDistance, validExit);
   let samplePoint = in.worldPosition + refracted * sampleDistance;
-  let refractedUv = select(originalUv, projectToUv(samplePoint), validExit);
+  let refractedUv = select(
+    originalUv,
+    projectToUv(samplePoint, params.viewProjection),
+    validExit,
+  );
   let safeResolution = max(params.resolution, vec2f(1.0));
   let halfTexel = 0.5 / safeResolution;
 
@@ -185,7 +154,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 
   let transmittance = exp(-params.absorption * sampleDistance);
   let transmitted = sceneColor * transmittance;
-  let reflected = presentReflection(reflectedEnvironment * params.reflectionStrength);
+  let reflected = reflectedEnvironment * params.reflectionStrength;
 
   // A thin film changes the Fresnel reflectance per wavelength. Modeling that
   // split directly makes the color visible even when the base dielectric F0 is
@@ -223,5 +192,5 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let finalGlass = 1.0 - (
     (1.0 - clamp(physicalGlass, vec3f(0.0), vec3f(1.0))) * (1.0 - studioPanelHighlight)
   );
-  return vec4f(finalGlass, 1.0);
+  return vec4f(linearToSrgb3(tonemapAces(finalGlass)), 1.0);
 }

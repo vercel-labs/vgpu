@@ -97,27 +97,3 @@ export fn sampleStudioEnvironment(directionInput: vec3f) -> vec3f {
   let mapped = color / (vec3f(1.0) + color);
   return srgbToLinear3(pow(max(mapped, vec3f(0.0)), vec3f(1.0 / 2.2)));
 }
-
-fn ceramicAces(color: vec3f) -> vec3f {
-  let a = 2.51;
-  let b = 0.03;
-  let c = 2.43;
-  let d = 0.59;
-  let e = 0.14;
-  return clamp(
-    (color * (a * color + vec3f(b))) / (color * (c * color + vec3f(d)) + vec3f(e)),
-    vec3f(0.0),
-    vec3f(1.0),
-  );
-}
-
-/**
- * Tonemap and encode a reflection for display, copied from `glass-fractal`'s
- * `presentCeramic`.
- *
- * The glass composites against an already-presented wall, so its reflections have
- * to arrive in the same display space the wall was written in.
- */
-export fn presentReflection(color: vec3f) -> vec3f {
-  return pow(ceramicAces(color * 1.08), vec3f(1.0 / 2.2));
-}

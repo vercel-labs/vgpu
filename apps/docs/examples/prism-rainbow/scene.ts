@@ -2,16 +2,18 @@
  * Deterministic scene graph.
  *
  * The CPU traces wavelength-connected sheets across the finite beam and writes
- * them into one fixed vertex buffer. Every rendered frame then has three cheap
- * stages: rasterize that mesh additively into a linear-light target, combine
- * that target with the wall, and finally draw the transmissive prism over it.
- * There is no temporal history, stochastic sampling or convergence state.
+ * them into one fixed vertex buffer. Every frame has exactly three passes over
+ * two ping-pong HDR targets: wall plus additive light, the inner glass interface,
+ * then the outer glass interface and presentation. There is no temporal history,
+ * stochastic sampling or convergence state.
  */
 
 import type { Buffer, Draw, Effect, Frame, Geometry, Gpu, Surface, Target } from "vgpu";
 import { draw, effect, frame, sampler, target } from "vgpu";
 
 import { cameraView, rotationMatrix, wallHalfHeight, type CameraView } from "./camera";
+import copyLinearWgsl from "./copy-linear.wgsl";
+import glassBackWgsl from "./glass-back.wgsl";
 import glassWgsl from "./glass.wgsl";
 import {
   buildLightMesh,
@@ -45,14 +47,15 @@ const ENVIRONMENT_ROTATION = rotationMatrix(PRISM_GLASS.environmentRotation);
 export interface PrismScene {
   readonly gpu: Gpu;
   outputSize: readonly [number, number];
-  wallTarget?: Target;
-  lightTarget?: Target;
+  sceneTargets?: readonly [Target, Target];
   readonly light: Draw;
   readonly lightBuffer: Buffer;
   lightStats: LightMeshStats;
   readonly wall: Draw;
+  readonly copyLinear: Effect;
   readonly present: Effect;
-  readonly glass: Draw;
+  readonly glassBack: Draw;
+  readonly glassFront: Draw;
   readonly wireframe: Draw;
   readonly prism: Geometry;
   readonly prismWireframe: Geometry;
@@ -116,13 +119,21 @@ export function createScene(
       depth: false,
       label: `${label}.wall`,
     }),
+    copyLinear: effect(gpu, copyLinearWgsl, { label: `${label}.copy-linear` }),
     present: effect(gpu, presentWgsl, { label: `${label}.present` }),
-    glass: draw(gpu, {
+    glassBack: draw(gpu, {
+      shader: glassBackWgsl,
+      geometry: prism,
+      cull: "front",
+      depth: false,
+      label: `${label}.glass-back`,
+    }),
+    glassFront: draw(gpu, {
       shader: glassWgsl,
       geometry: prism,
       cull: "back",
       depth: false,
-      label: `${label}.glass`,
+      label: `${label}.glass-front`,
     }),
     wireframe: draw(gpu, {
       shader: wireframeWgsl,
@@ -191,8 +202,8 @@ export function setOrbit(scene: PrismScene, x: number, y: number): void {
 export function resizeScene(scene: PrismScene, output: readonly [number, number]): void {
   scene.outputSize = output;
   scene.aspect = output[0] / Math.max(1, output[1]);
-  scene.wallTarget?.resize(output);
-  scene.lightTarget?.resize(output);
+  scene.sceneTargets?.[0].resize(output);
+  scene.sceneTargets?.[1].resize(output);
   refreshCamera(scene);
   refreshLightMesh(scene);
 }
@@ -240,6 +251,7 @@ export function glassUniforms(scene: PrismScene): Record<string, unknown> {
     resolution: scene.outputSize,
     frontZ: PRISM_FRONT_Z,
     backZ: PRISM_BACK_Z,
+    wallZ: 0,
     ior: PRISM_GLASS.ior,
     reflectionStrength: PRISM_GLASS.reflectionStrength,
     frostRadius: PRISM_GLASS.frostRadius,
@@ -255,47 +267,54 @@ export async function prepareScene(scene: PrismScene, output: Output): Promise<v
   scene.aspect = output.size[0] / Math.max(1, output.size[1]);
   refreshCamera(scene);
   refreshLightMesh(scene);
-  const wallTarget = scene.wallTarget ?? target(scene.gpu, {
-    size: output.size,
-    format: output.format,
-    label: `${scene.label}.wall`,
-  });
-  const lightTarget = scene.lightTarget ?? target(scene.gpu, {
+  const readTarget = scene.sceneTargets?.[0] ?? target(scene.gpu, {
     size: output.size,
     format: "rgba16float",
-    label: `${scene.label}.light`,
+    label: `${scene.label}.scene-a`,
   });
-  scene.wallTarget = wallTarget;
-  scene.lightTarget = lightTarget;
-  if (wallTarget.size[0] !== output.size[0] || wallTarget.size[1] !== output.size[1]) {
-    wallTarget.resize(output.size);
+  const writeTarget = scene.sceneTargets?.[1] ?? target(scene.gpu, {
+    size: output.size,
+    format: "rgba16float",
+    label: `${scene.label}.scene-b`,
+  });
+  scene.sceneTargets = [readTarget, writeTarget];
+  if (readTarget.size[0] !== output.size[0] || readTarget.size[1] !== output.size[1]) {
+    readTarget.resize(output.size);
   }
-  if (lightTarget.size[0] !== output.size[0] || lightTarget.size[1] !== output.size[1]) {
-    lightTarget.resize(output.size);
+  if (writeTarget.size[0] !== output.size[0] || writeTarget.size[1] !== output.size[1]) {
+    writeTarget.resize(output.size);
   }
-  bind(scene, wallTarget, lightTarget);
+  bind(scene, readTarget, writeTarget);
   const outputSignature = { colors: [output.format] } as const;
   await Promise.all([
-    scene.light.compile(lightTarget),
-    scene.wall.compile(wallTarget),
+    scene.light.compile(readTarget),
+    scene.wall.compile(readTarget),
+    scene.copyLinear.compile(writeTarget),
+    scene.glassBack.compile(writeTarget),
     scene.present.compile(outputSignature),
-    scene.glass.compile(outputSignature),
+    scene.glassFront.compile(outputSignature),
     scene.wireframe.compile(outputSignature),
   ]);
 }
 
 export function presentScene(scene: PrismScene, output: Output, currentFrame?: Frame): void {
-  const wallTarget = scene.wallTarget;
-  const lightTarget = scene.lightTarget;
-  if (!wallTarget || !lightTarget) throw new Error("prepareScene must run before presentScene.");
-  bind(scene, wallTarget, lightTarget);
+  const readTarget = scene.sceneTargets?.[0];
+  const writeTarget = scene.sceneTargets?.[1];
+  if (!readTarget || !writeTarget) throw new Error("prepareScene must run before presentScene.");
+  bind(scene, readTarget, writeTarget);
   const encode = (current: Frame) => {
-    current.pass({ target: lightTarget, clear: [0, 0, 0, 0] }, (pass) => pass.draw(scene.light));
-    current.pass({ target: wallTarget }, (pass) => pass.draw(scene.wall));
+    current.pass({ target: readTarget, clear: [0, 0, 0, 1] }, (pass) => {
+      pass.draw(scene.wall);
+      pass.draw(scene.light);
+    });
+    current.pass({ target: writeTarget, clear: [0, 0, 0, 1] }, (pass) => {
+      pass.draw(scene.copyLinear);
+      if (scene.controls.view === "glass") pass.draw(scene.glassBack);
+    });
     current.pass({ target: output }, (pass) => {
       pass.draw(scene.present);
       if (scene.controls.view === "glass") {
-        pass.draw(scene.glass);
+        pass.draw(scene.glassFront);
         if (scene.controls.wireframe) pass.draw(scene.wireframe);
       }
     });
@@ -304,14 +323,20 @@ export function presentScene(scene: PrismScene, output: Output, currentFrame?: F
   else frame(scene.gpu, encode);
 }
 
-function bind(scene: PrismScene, wallTarget: Target, lightTarget: Target): void {
+function bind(scene: PrismScene, readTarget: Target, writeTarget: Target): void {
   const values = sceneUniforms(scene);
   scene.light.set({ scene: values });
-  scene.wall.set({ scene: values, lightTexture: lightTarget });
-  scene.present.set({ sceneTexture: wallTarget });
-  scene.glass.set({
+  scene.wall.set({ scene: values });
+  scene.copyLinear.set({ sceneTexture: readTarget });
+  scene.glassBack.set({
     params: glassUniforms(scene),
-    sceneTexture: wallTarget,
+    sceneTexture: readTarget,
+    sceneSampler: scene.sceneSampler,
+  });
+  scene.present.set({ sceneTexture: writeTarget });
+  scene.glassFront.set({
+    params: glassUniforms(scene),
+    sceneTexture: writeTarget,
     sceneSampler: scene.sceneSampler,
   });
   scene.wireframe.set({ params: { viewProjection: scene.view.camera.viewProjection } });
@@ -322,10 +347,9 @@ function destroyTarget(value: Target | undefined): void {
 }
 
 export function destroyScene(scene: PrismScene): void {
-  destroyTarget(scene.lightTarget);
-  destroyTarget(scene.wallTarget);
-  scene.lightTarget = undefined;
-  scene.wallTarget = undefined;
+  destroyTarget(scene.sceneTargets?.[0]);
+  destroyTarget(scene.sceneTargets?.[1]);
+  scene.sceneTargets = undefined;
   scene.lightBuffer.destroy();
   scene.prism.destroy();
   scene.prismWireframe.destroy();

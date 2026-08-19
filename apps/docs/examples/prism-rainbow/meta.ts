@@ -4,7 +4,7 @@ export const meta = {
   slug: 'prism-rainbow',
   title: 'Prism Rainbow',
   description:
-    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, with spectral color computed per vertex and smoothly interpolated by the fragment stage. The result is deterministic in one frame and the refracted beam keeps its physical width.',
+    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, while a three-pass HDR ping-pong pipeline resolves the inner and outer glass interfaces independently. The result is deterministic in one frame and the refracted beam keeps its physical width.',
   tags: ['lighting', 'raycasting', 'rendering', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
@@ -21,7 +21,7 @@ export const meta = {
   ],
   thumb: {
     warmupFrames: 1,
-    note: 'One deterministic render of the analytic ray bundle, continuous spectral mesh, wall and glass passes.',
+    note: 'One deterministic render of the analytic ray bundle, continuous spectral mesh, wall and two-interface glass passes.',
   },
   files: [
     'index.tsx',
@@ -37,6 +37,9 @@ export const meta = {
     'scene.wgsl',
     'light.wgsl',
     'wall.wgsl',
+    'copy-linear.wgsl',
+    'glass-common.wgsl',
+    'glass-back.wgsl',
     'glass.wgsl',
     'wireframe.wgsl',
     'environment.wgsl',
