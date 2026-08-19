@@ -24,15 +24,33 @@ struct StudioPanel {
   intensity: f32,
 }
 
-/** Three long panels positioned to catch the prism's three beveled edges. */
+/** Three panels with a dim left fill, soft center fill and dominant right key. */
 fn studioPanels() -> array<StudioPanel, 3> {
   return array<StudioPanel, 3>(
-    // Warm vertical key for the left sloping edge.
-    StudioPanel(vec3f(-0.612, 0.354, 0.707), vec2f(0.55, 0.18), 0.025, vec3f(1.0, 0.86, 0.74), 11.0),
-    // Slightly cooler vertical key separates the right sloping edge.
-    StudioPanel(vec3f(0.612, 0.354, 0.707), vec2f(0.55, 0.18), 0.025, vec3f(0.76, 0.88, 1.0), 10.0),
-    // A low horizontal strip gives the bottom bevel a clean continuous line.
-    StudioPanel(vec3f(0.0, -0.707, 0.707), vec2f(0.28, 0.55), 0.025, vec3f(1.0, 0.97, 0.91), 12.0),
+    // A warm fill pushed left so it only grazes the left bevel.
+    StudioPanel(
+      vec3f(-0.78, 0.315, 0.54), // direction
+      vec2f(0.44, 0.16), // size
+      0.06, // feather
+      vec3f(1.0, 0.86, 0.74), // color
+      0.65 // intensity
+    ),
+    // A broad, heavily feathered center fill that barely lifts the bottom edge.
+    StudioPanel(
+      vec3f(0.0, -0.707, 0.707), // direction
+      vec2f(0.38, 0.62), // size
+      0.18, // feather
+      vec3f(1.0, 0.97, 0.91), // color
+      0.22 // intensity
+    ),
+    // The cool right panel is the dominant key and keeps a more defined edge.
+    StudioPanel(
+      vec3f(0.612, 0.354, 0.707), // direction
+      vec2f(0.5, 0.16), // size
+      0.035, // feather
+      vec3f(0.76, 0.88, 1.0), // color
+      20.0 // intensity
+    ),
   );
 }
 
