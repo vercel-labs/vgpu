@@ -140,7 +140,9 @@ describe("the extruded prism", () => {
         subtract(c!.position, a!.position)
       );
       const area = Math.hypot(...geometric);
-      expect(area).toBeGreaterThan(1e-6);
+      // The smallest bevel facets scale with radius squared; this rejects truly
+      // collapsed triangles without baking the previous bevel size into the test.
+      expect(area).toBeGreaterThan(PRISM_BEVEL_RADIUS ** 2 * 0.001);
       const geometricNormal: Vec3 = [
         geometric[0] / area,
         geometric[1] / area,
