@@ -3,6 +3,7 @@ import GUI, { type Controller } from "lil-gui";
 
 import {
   DEFAULT_PRISM_CONTROLS,
+  PRISM_BEAM_WIDTH_RANGE,
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
   PRISM_VIEW_LABELS,
@@ -21,6 +22,7 @@ export interface ControlsProps {
 interface GuiValues {
   dispersion: PrismDispersion;
   view: PrismView;
+  beamWidth: number;
   wallColor: string;
 }
 
@@ -46,10 +48,11 @@ export function Controls({
     if (!container) return;
 
     // Fall back per-field as well as per-object so Fast Refresh can safely
-    // cross the schema change that introduced `wallColor`.
+    // cross schema changes that introduced `wallColor` and `beamWidth`.
     const values: GuiValues = {
       dispersion: initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion,
       view: initialValue.view ?? DEFAULT_PRISM_CONTROLS.view,
+      beamWidth: initialValue.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth,
       wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
     };
     const gui = new GUI({ title: "Prism", container });
@@ -64,6 +67,7 @@ export function Controls({
       onChangeRef.current({
         dispersion: values.dispersion,
         view: values.view,
+        beamWidth: values.beamWidth,
         wallColor: values.wallColor,
       });
     const controllers: Controller[] = [
@@ -74,6 +78,16 @@ export function Controls({
           options(PRISM_DISPERSION_ORDER, PRISM_DISPERSION_LABELS)
         )
         .name("glass")
+        .onChange(publish),
+      gui
+        .add(
+          values,
+          "beamWidth",
+          PRISM_BEAM_WIDTH_RANGE.min,
+          PRISM_BEAM_WIDTH_RANGE.max,
+          PRISM_BEAM_WIDTH_RANGE.step,
+        )
+        .name("beam width")
         .onChange(publish),
       gui
         .add(values, "view", options(PRISM_VIEW_ORDER, PRISM_VIEW_LABELS))

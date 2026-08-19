@@ -103,13 +103,24 @@ export const PRISM_VIEW_LABELS: Record<PrismView, string> = {
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
   readonly view: PrismView;
+  /** Full beam width in scene units, measured perpendicular to its axis. */
+  readonly beamWidth: number;
   /** CSS hex color, interpreted as sRGB before the additive light is applied. */
   readonly wallColor: string;
+}
+
+export const PRISM_DEFAULT_BEAM_WIDTH = 0.08;
+export const PRISM_BEAM_WIDTH_RANGE = { min: 0.01, max: 0.2, step: 0.005 } as const;
+
+export function clampBeamWidth(width: number): number {
+  if (!Number.isFinite(width)) return PRISM_DEFAULT_BEAM_WIDTH;
+  return Math.min(PRISM_BEAM_WIDTH_RANGE.max, Math.max(PRISM_BEAM_WIDTH_RANGE.min, width));
 }
 
 export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   dispersion: "stylized",
   view: "glass",
+  beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
   wallColor: "#141414",
 };
 
@@ -207,7 +218,10 @@ export const PRISM_INCIDENCE_ARC = { min: 44, max: 58 } as const;
  * aimed at the middle of the entry face, so incidence is the only thing the
  * pointer changes.
  */
-export function lampForIncidence(incidenceDegrees: number): CollimatedLight {
+export function lampForIncidence(
+  incidenceDegrees: number,
+  beamWidth = PRISM_DEFAULT_BEAM_WIDTH,
+): CollimatedLight {
   const face: Vec2 = [
     PRISM_TRIANGLE.b[0] - PRISM_TRIANGLE.a[0],
     PRISM_TRIANGLE.b[1] - PRISM_TRIANGLE.a[1],
@@ -226,7 +240,7 @@ export function lampForIncidence(incidenceDegrees: number): CollimatedLight {
     // A narrow slit-like beam. Its boundaries are parallel, so refraction bends
     // the bundle without focusing it to the infinitesimal point produced by the
     // old point-light estimator.
-    beamHalfWidth: 0.04,
+    beamHalfWidth: clampBeamWidth(beamWidth) * 0.5,
   };
 }
 

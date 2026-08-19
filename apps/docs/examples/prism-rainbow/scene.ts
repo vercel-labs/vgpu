@@ -32,6 +32,7 @@ import {
   PRISM_GLASS,
   PRISM_INCIDENCE_ARC,
   PRISM_TRIANGLE,
+  clampBeamWidth,
   lampForIncidence,
   type PrismControls,
   type CollimatedLight,
@@ -68,7 +69,7 @@ export function createScene(
 ): PrismScene {
   const aspect = output[0] / Math.max(1, output[1]);
   const initialMesh = buildLightMesh({
-    light: lampAt(PRISM_DEFAULT_ARC),
+    light: lampAt(PRISM_DEFAULT_ARC, DEFAULT_PRISM_CONTROLS.beamWidth),
     dispersion: PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion],
     wallHalfExtent: wallExtent(aspect),
   });
@@ -141,7 +142,7 @@ function refreshCamera(scene: PrismScene): void {
 
 function refreshLightMesh(scene: PrismScene): void {
   const mesh = buildLightMesh({
-    light: lampAt(scene.lampArc),
+    light: lampAt(scene.lampArc, scene.controls.beamWidth),
     dispersion: PRISM_DISPERSION_PRESETS[scene.controls.dispersion],
     wallHalfExtent: wallExtent(scene.aspect),
   });
@@ -150,9 +151,15 @@ function refreshLightMesh(scene: PrismScene): void {
 }
 
 export function setControls(scene: PrismScene, controls: PrismControls): void {
-  const dispersionChanged = controls.dispersion !== scene.controls.dispersion;
-  scene.controls = controls;
-  if (dispersionChanged) refreshLightMesh(scene);
+  const next = {
+    ...controls,
+    // Runtime fallback keeps Fast Refresh safe across the control schema change.
+    beamWidth: clampBeamWidth(controls.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth),
+  };
+  const opticsChanged = next.dispersion !== scene.controls.dispersion
+    || next.beamWidth !== scene.controls.beamWidth;
+  scene.controls = next;
+  if (opticsChanged) refreshLightMesh(scene);
 }
 
 export function setLampArc(scene: PrismScene, position: number): void {
@@ -182,8 +189,11 @@ export function incidenceAt(position: number): number {
     + (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min) * clamped;
 }
 
-export function lampAt(position: number): CollimatedLight {
-  return lampForIncidence(incidenceAt(position));
+export function lampAt(
+  position: number,
+  beamWidth = DEFAULT_PRISM_CONTROLS.beamWidth,
+): CollimatedLight {
+  return lampForIncidence(incidenceAt(position), beamWidth);
 }
 
 export function wallExtent(aspect: number): readonly [number, number] {

@@ -3,10 +3,12 @@ import { describe, expect, test } from "vitest";
 import { buildLightMesh, LIGHT_VERTEX_FLOATS, lightVertexCount, traceSpectralBand } from "./light-mesh";
 import {
   PRISM_DISPERSION_PRESETS,
+  PRISM_INCIDENCE_DEGREES,
   PRISM_LIGHT,
   PRISM_SPECTRAL_SAMPLES,
   PRISM_TRIANGLE,
   PRISM_WAVELENGTHS,
+  lampForIncidence,
   type Vec2,
 } from "./types";
 
@@ -23,6 +25,22 @@ describe("finite spectral beam", () => {
     expect(band).toBeDefined();
     expect(band!.outputWidth).toBeGreaterThan(PRISM_LIGHT.beamHalfWidth);
     expect(band!.lower.origin).not.toEqual(band!.upper.origin);
+  });
+
+  test("widens the refracted footprint when the configured beam gets wider", () => {
+    const narrow = traceSpectralBand(
+      PRISM_TRIANGLE,
+      lampForIncidence(PRISM_INCIDENCE_DEGREES, 0.04),
+      PRISM_DISPERSION_PRESETS.stylized,
+      550,
+    )!;
+    const wide = traceSpectralBand(
+      PRISM_TRIANGLE,
+      lampForIncidence(PRISM_INCIDENCE_DEGREES, 0.14),
+      PRISM_DISPERSION_PRESETS.stylized,
+      550,
+    )!;
+    expect(wide.outputWidth).toBeGreaterThan(narrow.outputWidth * 3);
   });
 
   test("preserves the expected violet-to-red angular ordering", () => {

@@ -282,6 +282,14 @@ test("only optical controls rebuild the light mesh", async () => {
     view: "caustic",
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 1);
+  // Changing the physical beam width retraces its boundary and profile rays.
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    dispersion: "flint",
+    view: "caustic",
+    beamWidth: 0.14,
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 2);
   renderer.dispose();
 });
 
