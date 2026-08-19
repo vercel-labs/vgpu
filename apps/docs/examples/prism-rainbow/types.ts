@@ -4,14 +4,13 @@
  * The room is three-dimensional and the light transport is not, which is the
  * whole trick. `z = 0` is the wall: a flat plane facing the camera, `x` growing
  * right and `y` growing up, centred on the origin and sized by `camera.ts` to
- * cover whatever the frame can see of it. The spectral path tracer solves the
- * slice that lies *in* that plane — enter one face of the triangle, cross the
- * glass, leave through another — and writes what it finds into a texture the wall
- * is painted with. The glass the camera sees is that same triangle extruded off
- * the wall towards the viewer by `PRISM_DEPTH`, shaded as a transmissive solid.
+ * cover whatever the frame can see of it. The CPU solves the spectral ray bundle
+ * in that plane — enter one face, cross the glass, leave through another — and
+ * turns its finite boundaries into additive ribbons. The glass the camera sees
+ * is that same triangle extruded towards the viewer by `PRISM_DEPTH`.
  *
- * So the triangle below is read twice: as the two-dimensional obstacle the tracer
- * refracts through, and as the cross-section of the three-dimensional prism. One
+ * So the triangle below is read twice: as the two-dimensional obstacle the ray
+ * bundle refracts through, and as the cross-section of the three-dimensional prism. One
  * set of vertices, which is what keeps the rainbow registered with the object
  * that made it — the fan always leaves the glass exactly where the model's silhouette
  * meets the wall.
@@ -23,9 +22,8 @@
  * derivation is supposed to guarantee.
  *
  * These constants are also the single source of truth across languages:
- * `optics.ts` (the CPU reference) reads them directly, `scene.ts` uploads them as
- * uniforms for `optics.wgsl` to trace, and `geometry.ts` extrudes them into the
- * mesh `glass.wgsl` shades.
+ * `optics.ts` traces them directly, `light-mesh.ts` makes the ribbons, and
+ * `prism-mesh.ts` extrudes them into the solid `glass.wgsl` shades.
  */
 
 export type Vec2 = readonly [number, number];
@@ -36,17 +34,13 @@ export interface Triangle {
   readonly c: Vec2;
 }
 
-export interface SpotLight {
+export interface CollimatedLight {
   /** Emitter center, in scene units. */
   readonly center: Vec2;
-  /** Emitter radius. A ray reaches the lamp when it passes this close to the center. */
-  readonly radius: number;
   /** Unit direction the beam is aimed in. */
   readonly direction: Vec2;
-  /** Half-angle of the fully lit cone, in radians. */
-  readonly innerAngle: number;
-  /** Half-angle at which the cone has fallen off to zero, in radians. */
-  readonly outerAngle: number;
+  /** Half the physical width of the collimated beam, perpendicular to its axis. */
+  readonly beamHalfWidth: number;
 }
 
 /**
@@ -89,8 +83,7 @@ export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
  *
  * `glass` is the scene. `wall` takes the prism out of the room, which is how you
  * see the whole shadow and the fan the glass would otherwise be standing in front
- * of. `caustic` goes further and shows the traced estimate alone, with the wall's
- * own shade and the direct beam removed.
+ * of. `caustic` goes further and shows the light mesh alone over black.
  */
 export type PrismView = "glass" | "wall" | "caustic";
 
@@ -103,7 +96,7 @@ export const PRISM_VIEW_ORDER: readonly PrismView[] = [
 export const PRISM_VIEW_LABELS: Record<PrismView, string> = {
   glass: "Prism",
   wall: "Wall only",
-  caustic: "Traced light",
+  caustic: "Light only",
 };
 
 export interface PrismControls {
@@ -143,7 +136,7 @@ export const PRISM_CENTROID: Vec2 = [0, 0];
 /**
  * Equilateral prism, apex up, tilted, wound counter-clockwise.
  *
- * The winding matters: `optics.ts` and `optics.wgsl` both take each edge's
+ * The winding matters: `optics.ts` takes each edge's
  * outward normal to be `(edge.y, -edge.x)`, which only points out of the
  * triangle for counter-clockwise vertices.
  */
@@ -213,7 +206,7 @@ export const PRISM_INCIDENCE_ARC = { min: 44, max: 58 } as const;
  * aimed at the middle of the entry face, so incidence is the only thing the
  * pointer changes.
  */
-export function lampForIncidence(incidenceDegrees: number): SpotLight {
+export function lampForIncidence(incidenceDegrees: number): CollimatedLight {
   const face: Vec2 = [
     PRISM_TRIANGLE.b[0] - PRISM_TRIANGLE.a[0],
     PRISM_TRIANGLE.b[1] - PRISM_TRIANGLE.a[1],
@@ -229,45 +222,37 @@ export function lampForIncidence(incidenceDegrees: number): SpotLight {
       PRISM_ENTRY_FACE_MIDPOINT[1] - direction[1] * PRISM_LAMP_DISTANCE,
     ],
     direction,
-    // A disc this small subtends 0.9 degrees from the glass, against the 16
-    // degrees dispersion opens. That ratio is what decides whether neighbouring
-    // wavelengths land on distinguishable bands or on top of each other.
-    radius: 0.05,
-    // Narrow enough that the beam lands entirely on the entry face. A wider cone
-    // spills onto the base face and past the apex, and both spills show up as
-    // extra bands in the picture.
-    innerAngle: 0.008,
-    outerAngle: 0.018,
+    // A narrow slit-like beam. Its boundaries are parallel, so refraction bends
+    // the bundle without focusing it to the infinitesimal point produced by the
+    // old point-light estimator.
+    beamHalfWidth: 0.04,
   };
 }
 
 /** The default lamp, at `PRISM_INCIDENCE_DEGREES`. */
-export const PRISM_LIGHT: SpotLight = lampForIncidence(PRISM_INCIDENCE_DEGREES);
+export const PRISM_LIGHT: CollimatedLight = lampForIncidence(PRISM_INCIDENCE_DEGREES);
 
 /** Where `PRISM_INCIDENCE_DEGREES` sits on `PRISM_INCIDENCE_ARC`, in [0, 1]. */
 export const PRISM_DEFAULT_ARC =
   (PRISM_INCIDENCE_DEGREES - PRISM_INCIDENCE_ARC.min) /
   (PRISM_INCIDENCE_ARC.max - PRISM_INCIDENCE_ARC.min);
 
-/** Visible wavelength range the tracer samples, in nanometres. */
+/** Visible wavelength range the ribbon mesh subdivides, in nanometres. */
 export const PRISM_WAVELENGTHS = { min: 400, max: 700 } as const;
 
-/** Rays cast per fragment per frame. */
-export const PRISM_RAYS_PER_FRAGMENT = 16;
+/** Deterministic wavelength bands used to build the spectral light ribbons. */
+export const PRISM_SPECTRAL_SAMPLES = 64;
 
-/** Internal reflections a ray may take before the tracer gives up on it. */
+/** Display exposure for the finite spectral integral represented by the ribbons. */
+export const PRISM_LIGHT_EXPOSURE = 5.5;
+
+/** Internal reflections a ray may take before the analytic solver gives up. */
 export const PRISM_MAX_INTERNAL_BOUNCES = 3;
-
-/** Scales the traced estimator into display range. */
-export const PRISM_EXPOSURE = 52;
-
-/** Brightness of the direct term that makes the incoming beam visible. */
-export const PRISM_HAZE = 0.05;
 
 /**
  * How far the triangle is extruded off the wall, towards the camera.
  *
- * The tracer's solution lives in the wall plane, so the shadow and the fan it
+ * The light mesh lives in the wall plane, so the beam and the fan it
  * paints belong to the cross-section, not to the solid. Depth is therefore a
  * framing decision rather than an optical one: enough for the side faces to catch
  * the studio environment at their own angles and read as a block of glass, little
@@ -340,8 +325,7 @@ export const CAMERA_FOV_DEGREES = 38;
  * The one real trade-off in the framing, because both sides of it follow from
  * this number alone: closer and the prism grows in the frame — it takes about a
  * fifth of the width here, which leaves the fan the room it needs to open — while
- * further back it shrinks and less of the wall has to be traced for the frame to
- * stay covered, at the same caustic resolution. `camera.ts` derives the wall's
+ * further back it shrinks and more wall fits in frame. `camera.ts` derives the wall's
  * size from whatever this is, so moving it cannot break the picture; it only
  * changes how many texels the fan gets.
  */

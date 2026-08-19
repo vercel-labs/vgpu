@@ -4,7 +4,7 @@ export const meta = {
   slug: 'prism-rainbow',
   title: 'Prism Rainbow',
   description:
-    'A spectral path tracer solves one plane of a three-dimensional room: every fragment of the wall fires 16 rays at random points across the glass, refracts each one, and keeps the ones that come out aimed at the lamp. The accumulated rainbow becomes the wall’s texture, and the triangle it was traced through stands in front of it as a transmissive glass prism.',
+    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Two parallel boundary rays per wavelength become additive mesh ribbons, while the fragment shader turns wavelength into spectral color. The result is deterministic in one frame and the refracted beam keeps its physical width.',
   tags: ['lighting', 'raycasting', 'rendering', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
@@ -19,12 +19,9 @@ export const meta = {
     'select-control',
     'responsive-canvas',
   ],
-  // The picture is a function of how many frames were averaged and nothing else
-  // — no clock is read anywhere, and the camera rests centered — so a fixed frame
-  // count is reproducible.
   thumb: {
-    warmupFrames: 600,
-    note: 'Six hundred accumulated frames of the real trace, wall and glass passes; the estimate is a function of the frame count alone, so this render is deterministic.',
+    warmupFrames: 1,
+    note: 'One deterministic render of the analytic ray bundle, additive light ribbons, wall and glass passes.',
   },
   files: [
     'index.tsx',
@@ -35,14 +32,13 @@ export const meta = {
     'prism-mesh.ts',
     'types.ts',
     'optics.ts',
+    'light-mesh.ts',
     'validation.ts',
-    'optics.wgsl',
     'scene.wgsl',
-    'trace.wgsl',
+    'light.wgsl',
     'wall.wgsl',
     'glass.wgsl',
     'environment.wgsl',
     'present.wgsl',
-    'probe.wgsl',
   ],
 } as const satisfies ExampleMetaDefinition;

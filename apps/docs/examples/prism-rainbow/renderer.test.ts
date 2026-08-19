@@ -1,7 +1,7 @@
 /**
  * Renderer lifecycle, against a mocked `vgpu`. This is the half of the example
- * that has nothing to do with optics: one frame loop, one accumulation buffer
- * pair, coalesced resizes, and a teardown that releases everything even when
+ * that has nothing to do with optics: one frame loop, one mutable light buffer,
+ * coalesced resizes, and a teardown that releases everything even when
  * initialization loses a race with `dispose()`.
  *
  * The physics is covered by `optics.test.ts` and, on a real device, by
@@ -26,8 +26,6 @@ const vgpuFns = vi.hoisted(() =>
       "uniforms",
       "timer",
       "visibility",
-      "pingPong",
-      "pingPongStorage",
       "frame",
       "frameLoop",
     ]
@@ -118,11 +116,11 @@ function gpu() {
     }),
     dispose: vi.fn(),
   };
-  const pairs: {
-    read: { destroy: ReturnType<typeof vi.fn> };
-    write: { destroy: ReturnType<typeof vi.fn> };
-    swap: ReturnType<typeof vi.fn>;
-  }[] = [];
+  const lightBuffer = {
+    gpu: { destroy: vi.fn() },
+    write: vi.fn(),
+    destroy: vi.fn(),
+  };
   const effects: {
     set: ReturnType<typeof vi.fn>;
     compile: ReturnType<typeof vi.fn>;
@@ -133,6 +131,7 @@ function gpu() {
   }[] = [];
   const targets: {
     size: number[];
+    format: string;
     resize: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
   }[] = [];
@@ -145,35 +144,17 @@ function gpu() {
   };
   const instance = {
     gpu: { queue: { onSubmittedWorkDone: vi.fn(async () => {}) } },
+    device: { createBuffer: vi.fn(() => lightBuffer) },
     settled: vi.fn(async () => {}),
     dispose: vi.fn(),
     fns: {
       surface: vi.fn(() => surface),
       sampler: vi.fn(() => ({})),
       geometry: vi.fn(() => ({ destroy: vi.fn() })),
-      pingPong: vi.fn(() => {
-        const pair = {
-          read: {
-            size: [120, 60],
-            texelSize: [1 / 120, 1 / 60],
-            destroy: vi.fn(),
-            readFloats: vi.fn(),
-          },
-          write: {
-            size: [120, 60],
-            texelSize: [1 / 120, 1 / 60],
-            destroy: vi.fn(),
-            readFloats: vi.fn(),
-          },
-          swap: vi.fn(),
-        };
-        pairs.push(pair);
-        return pair;
-      }),
-      target: vi.fn((options: { size: number[] }) => {
+      target: vi.fn((options: { size: number[]; format?: string }) => {
         const created = {
           size: [...options.size],
-          format: "bgra8unorm",
+          format: options.format ?? "bgra8unorm",
           resize: vi.fn((size: number[]) => {
             created.size = [...size];
           }),
@@ -195,7 +176,7 @@ function gpu() {
       frameLoop: vi.fn((_tick: (_frame: unknown) => void) => ({ stop })),
     },
   };
-  return { instance, surface, pairs, effects, draws, targets, loopFrame, stop };
+  return { instance, surface, lightBuffer, effects, draws, targets, loopFrame, stop };
 }
 
 afterEach(() => {
@@ -203,7 +184,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test("traces and presents once per frame until the estimate has converged", async () => {
+test("renders the deterministic light once and idles until something changes", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
@@ -211,50 +192,45 @@ test("traces and presents once per frame until the estimate has converged", asyn
   await renderer.ready;
 
   expect(live.instance.fns.frameLoop).toHaveBeenCalledOnce();
-  expect(live.instance.fns.pingPong).toHaveBeenCalledOnce();
-  // Every pipeline is pre-warmed before the loop starts, against the target each
-  // of them actually draws into: trace and present as effects, wall and glass as
-  // draws.
-  expect(live.effects).toHaveLength(2);
-  expect(live.draws).toHaveLength(2);
+  // The light mesh is written once at construction and once after the final
+  // output aspect is known. No history textures are allocated.
+  expect(live.instance.device.createBuffer).toHaveBeenCalledOnce();
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(2);
+  expect(live.effects).toHaveLength(1);
+  expect(live.draws).toHaveLength(3);
   for (const created of [...live.effects, ...live.draws])
     expect(created.compile).toHaveBeenCalledOnce();
   // Canvas surfaces do not expose a current texture until a frame begins, so
   // output pipelines must pre-warm from the surface's stable format signature.
-  expect(live.effects[1]!.compile).toHaveBeenCalledWith({
+  expect(live.effects[0]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  expect(live.draws[1]!.compile).toHaveBeenCalledWith({
+  expect(live.draws[2]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  // The wall is rasterized offscreen so the glass can sample it while drawing
-  // over the copy.
-  expect(live.targets).toHaveLength(1);
+  // One linear target receives additive ribbons; the other holds the wall the
+  // glass samples while it is drawn over the copy.
+  expect(live.targets).toHaveLength(2);
+  expect(live.targets[1]!.format).toBe("rgba16float");
 
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   tick(live.loopFrame);
-  expect(renderer.accumulated()).toBe(1);
-  // frameLoop already owns the frame: trace, wall and surface all encode into
+  // frameLoop already owns the frame: light, wall and surface all encode into
   // the supplied frame instead of opening nested frames.
   expect(live.instance.fns.frame).not.toHaveBeenCalled();
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
-  expect(live.pairs[0]!.swap).toHaveBeenCalledOnce();
-
   tick(live.loopFrame);
-  expect(renderer.accumulated()).toBe(2);
+  expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
   renderer.dispose();
 });
 
-test("a pointer drag swings the lamp and restarts the average", async () => {
+test("a pointer drag swings the lamp and rewrites the deterministic mesh", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
-  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
-  tick(live.loopFrame);
-  tick(live.loopFrame);
-  expect(renderer.accumulated()).toBe(2);
+  const writesBeforeDrag = live.lightBuffer.write.mock.calls.length;
 
   env.canvasListeners.get("pointerdown")?.({
     isPrimary: true,
@@ -262,81 +238,75 @@ test("a pointer drag swings the lamp and restarts the average", async () => {
     clientY: 10,
   } as unknown as Event);
   expect(env.canvas.setPointerCapture).toHaveBeenCalledWith(4);
-  // Aiming somewhere new invalidates every ray already averaged.
-  expect(renderer.accumulated()).toBe(0);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 1);
 
   env.canvasListeners.get("pointermove")?.({
     pointerId: 4,
     clientY: 90,
   } as unknown as Event);
-  tick(live.loopFrame);
-  expect(renderer.accumulated()).toBe(1);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 2);
   // A move from a pointer we never captured is ignored.
   env.canvasListeners.get("pointermove")?.({
     pointerId: 9,
     clientY: 20,
   } as unknown as Event);
-  expect(renderer.accumulated()).toBe(1);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 2);
 
   env.canvasListeners.get("pointerup")?.({ pointerId: 4 } as unknown as Event);
   expect(env.canvas.releasePointerCapture).toHaveBeenCalledWith(4);
   renderer.dispose();
 });
 
-test("changing the glass restarts the average, changing presentation controls does not", async () => {
+test("only optical controls rebuild the light mesh", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
-  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
-  tick(live.loopFrame);
-  tick(live.loopFrame);
+  const writes = live.lightBuffer.write.mock.calls.length;
 
-  // Peeling a layer off only changes how the same accumulation is composited.
+  // Peeling a layer off only changes how the same mesh is composited.
   renderer.setControls?.({ ...DEFAULT_PRISM_CONTROLS, view: "caustic" });
-  expect(renderer.accumulated()).toBe(2);
-  // Wall paint changes the composite, not the traced transport.
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  // Wall paint changes the composite, not the optical path.
   renderer.setControls?.({
     ...DEFAULT_PRISM_CONTROLS,
     view: "caustic",
     wallColor: "#101216",
   });
-  expect(renderer.accumulated()).toBe(2);
-  // A different index of refraction makes every averaged ray wrong.
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  // A different index of refraction bends every ribbon differently.
   renderer.setControls?.({
     ...DEFAULT_PRISM_CONTROLS,
     dispersion: "flint",
     view: "caustic",
   });
-  expect(renderer.accumulated()).toBe(0);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 1);
   renderer.dispose();
 });
 
-test("the camera follows the pointer without invalidating the estimate", async () => {
+test("the camera follows the pointer without rebuilding world-space light", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
-  tick(live.loopFrame);
-  tick(live.loopFrame);
+  const writes = live.lightBuffer.write.mock.calls.length;
 
-  // Hovering — no capture, no drag — aims the camera somewhere new. The caustic
-  // lives on the wall in world space, so none of it goes stale.
+  // Hovering — no capture, no drag — moves only the camera matrix.
   env.canvasListeners.get("pointermove")?.({
     pointerId: 7,
     clientX: 180,
     clientY: 20,
   } as unknown as Event);
-  expect(renderer.accumulated()).toBe(2);
   tick(live.loopFrame);
-  expect(renderer.accumulated()).toBe(3);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  expect(live.loopFrame.pass).toHaveBeenCalledTimes(3);
   renderer.dispose();
 });
 
-test("coalesces resizes, rebuilds the buffer pair, and destroys the old one", async () => {
+test("coalesces resizes and updates both targets plus the light mesh", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
@@ -351,11 +321,11 @@ test("coalesces resizes, rebuilds the buffer pair, and destroys the old one", as
   expect(live.surface.resize).toHaveBeenCalledOnce();
   expect(live.surface.resize).toHaveBeenCalledWith([1800, 1000]);
 
-  expect(live.instance.fns.pingPong).toHaveBeenCalledTimes(2);
-  for (const half of [live.pairs[0]!.read, live.pairs[0]!.write])
-    expect(half.destroy).toHaveBeenCalledOnce();
-  for (const half of [live.pairs[1]!.read, live.pairs[1]!.write])
-    expect(half.destroy).not.toHaveBeenCalled();
+  for (const colorTarget of live.targets) {
+    expect(colorTarget.resize).toHaveBeenCalledWith([1800, 1000]);
+    expect(colorTarget.destroy).not.toHaveBeenCalled();
+  }
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(3);
 
   renderer.dispose();
   renderer.dispose();
@@ -365,8 +335,8 @@ test("coalesces resizes, rebuilds the buffer pair, and destroys the old one", as
   expect(live.instance.dispose).toHaveBeenCalledOnce();
   expect(env.canvasListeners.size).toBe(0);
   expect(env.windowListeners.size).toBe(0);
-  for (const half of [live.pairs[1]!.read, live.pairs[1]!.write])
-    expect(half.destroy).toHaveBeenCalledOnce();
+  expect(live.lightBuffer.destroy).toHaveBeenCalledOnce();
+  for (const colorTarget of live.targets) expect(colorTarget.destroy).toHaveBeenCalledOnce();
 });
 
 test("dispose during init cleans up a late GPU without starting a loop", async () => {

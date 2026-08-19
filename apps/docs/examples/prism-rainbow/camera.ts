@@ -1,7 +1,7 @@
 /**
  * The one camera in the scene, and the wall it decides the size of.
  *
- * The wall is the picture: outside the rectangle the tracer painted there is
+ * The wall is the picture: outside the rectangle the light mesh covers there is
  * nothing, so a frame that saw past a corner of it would end in a hard edge
  * against an empty room. Rather than pick a wall size and hope, this module runs
  * the relationship the other way — `wallCoverage` walks the frustum's corners to
@@ -10,9 +10,9 @@
  * `geometry.test.ts` holds that at every aspect a canvas can take.
  *
  * The pointer only ever moves the view a few degrees off its resting angle. That
- * is deliberate: the traced caustic lives in world space on the wall, so moving
- * the camera cannot invalidate it — the estimate keeps converging while the view
- * moves — and a small swing is enough to show the glass standing off the wall.
+ * is deliberate: the deterministic ribbons live in world space on the wall, so
+ * moving the camera only changes their projection — and a small swing is enough
+ * to show the glass standing off the wall.
  */
 
 import { perspectiveCamera, type SceneCamera } from 'vgpu/scene';
@@ -88,14 +88,13 @@ export function cameraView(aspect: number, orbitX = 0, orbitY = 0): CameraView {
  * Derived rather than chosen. An off-axis camera keystones the wall and a wide
  * canvas widens the frustum, so how much wall the frame needs depends on the
  * canvas: this returns the worst case over the pointer's whole swing, which is
- * exactly the size that guarantees the frame never sees past what was traced.
+ * exactly the size that guarantees the frame never sees past the lit wall.
  * `WALL_SAFETY` covers the difference between the frustum corners this samples
  * and the continuous edge between them.
  *
  * Nothing optical scales with it. The prism, the lamp and their distances are
- * fixed in scene units, so a taller wall means a larger traced rectangle around
- * an unchanged scene — the same picture with more room in the corners, paid for
- * with caustic texels.
+ * fixed in scene units, so a taller wall means a larger visible rectangle around
+ * an unchanged scene — the same picture with more room in the corners.
  */
 export function wallHalfHeight(aspect: number): number {
   if (aspect === memoizedAspect) return memoizedHalfHeight;

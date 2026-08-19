@@ -7,28 +7,15 @@ import {
   destroyScene,
   prepareScene,
   presentScene,
-  resetAccumulation,
   resizeScene,
   setControls,
   setLampArc,
   setOrbit,
-  traceFrame,
   type PrismScene,
 } from './scene';
 import { CAMERA_ORBIT_LERP, DEFAULT_PRISM_CONTROLS, type PrismControls } from './types';
 
-/**
- * Frames after which the running average has converged enough that more rays
- * change nothing visible. The loop then stops submitting work entirely — the
- * canvas keeps its last frame — until something invalidates the estimate or the
- * camera moves.
- */
-export const CONVERGED_FRAMES = 900;
-
-export interface PrismRenderer extends ExampleRenderer<PrismControls> {
-  /** Frames folded into the current estimate, for the progress readout. */
-  accumulated(): number;
-}
+export type PrismRenderer = ExampleRenderer<PrismControls>;
 
 export interface PrismThumbnailOptions extends ThumbnailOptions {
   readonly controls?: PrismControls;
@@ -107,8 +94,8 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
 
   /**
    * Hovering tilts the camera a couple of degrees. It never touches the
-   * accumulation: the caustic is painted on the wall in world space, so the view
-   * can move over a still-converging estimate.
+   * light mesh: it already lives on the wall in world space, so only its camera
+   * projection changes.
    */
   const orbitFromPointer = (event: PointerEvent) => {
     const rect = options.canvas.getBoundingClientRect();
@@ -155,12 +142,10 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
 
   const tick = (currentFrame: Frame) => {
     if (disposed || !scene || !canvasSurface || !prepared) return;
-    const tracing = scene.accumulated < CONVERGED_FRAMES;
     const moved = stepOrbit();
-    if (!tracing && !moved && !pendingPresent) return;
+    if (!moved && !pendingPresent) return;
     try {
       if (moved) setOrbit(scene, orbitCurrent[0], orbitCurrent[1]);
-      if (tracing) traceFrame(scene, currentFrame);
       presentScene(scene, canvasSurface, currentFrame);
       pendingPresent = false;
     } catch (error) {
@@ -234,7 +219,6 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
 
   return {
     ready,
-    accumulated: () => scene?.accumulated ?? 0,
     setControls(next) {
       if (disposed) return;
       controls = { ...next };
@@ -243,7 +227,6 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     },
     invalidate() {
       pendingPresent = true;
-      if (scene) resetAccumulation(scene);
     },
     resize,
     dispose,
@@ -253,8 +236,7 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
 /**
  * Headless render used for the gallery thumbnail and by the Node GPU tests.
  *
- * Nothing here reads the clock: the picture is a function of how many frames
- * were accumulated, so the same `warmupFrames` always produces the same pixels.
+ * Nothing here reads the clock or a random seed, so one frame is the final image.
  */
 export async function renderThumbnail(
   gpu: Gpu,
@@ -267,7 +249,6 @@ export async function renderThumbnail(
     if (options.lampArc !== undefined) setLampArc(scene, options.lampArc);
     if (options.orbit) setOrbit(scene, options.orbit[0], options.orbit[1]);
     await prepareScene(scene, output);
-    for (let index = 0; index < (options.warmupFrames ?? 600); index++) traceFrame(scene);
     presentScene(scene, output);
     await gpu.gpu.queue.onSubmittedWorkDone();
     await gpu.settled();

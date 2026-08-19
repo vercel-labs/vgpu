@@ -15,7 +15,7 @@
  *
  * The same three edges also become the side planes `glass.wgsl` intersects to
  * find where a refracted ray leaves the solid; `planes()` builds them from the
- * same winding rule `optics.wgsl` uses for its outward normals.
+ * same winding rule `optics.ts` uses for its outward normals.
  */
 
 import type { Geometry, Gpu } from 'vgpu';
@@ -115,7 +115,7 @@ export function prismGeometry(gpu: Gpu, label: string): Geometry {
 /**
  * Outward normal of one edge of a counter-clockwise triangle.
  *
- * The same rotation `optics.wgsl` applies when it decides which side of an edge
+ * The same rotation `optics.ts` applies when it decides which side of an edge
  * a ray came from — the two have to agree, or the tracer would refract through a
  * face the mesh renders as its back.
  */

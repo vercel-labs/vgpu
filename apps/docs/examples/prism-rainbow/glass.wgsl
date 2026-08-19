@@ -12,12 +12,12 @@
 // a shell around a fractal, so it approximates the interior with a nested
 // tetrahedron and samples at the shell gap; this one is solid, so the refracted
 // ray is followed to the face it actually leaves through — the intersection of
-// the same three edges the tracer refracts through, capped front and back. And
+// the same three edges the CPU ray bundle refracts through, capped front and back. And
 // the environment is evaluated rather than sampled from a cubemap, for the reason
 // `environment.wgsl` gives.
 //
-// What the glass refracts is the wall: the pass before it drew the accumulated
-// rainbow into `sceneTexture`, so bending the lookup bends the caustic behind the
+// What the glass refracts is the wall: the pass before it drew the deterministic
+// rainbow into `sceneTexture`, so bending the lookup bends the light behind the
 // prism, which is the one thing a flat 2D composite could never show.
 
 import { presentReflection, rotateEnvironmentDirection, sampleStudioEnvironment } from "./environment.wgsl";
@@ -97,7 +97,7 @@ fn planeExitDistance(origin: vec3f, direction: vec3f, outward: vec3f, offset: f3
  * How far a ray inside the glass travels before it leaves.
  *
  * The prism is convex, so this is the nearest of its five bounding planes: three
- * from the cross-section's edges, rotated outward by the same rule `optics.wgsl`
+ * from the cross-section's edges, rotated outward by the same rule `optics.ts`
  * uses, and the two caps the extrusion added.
  */
 fn prismExitDistance(origin: vec3f, direction: vec3f) -> f32 {

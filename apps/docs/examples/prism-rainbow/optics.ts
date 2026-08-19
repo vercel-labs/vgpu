@@ -1,23 +1,13 @@
 /**
- * CPU reference for everything `optics.wgsl` does.
+ * CPU optics used directly by the browser example.
  *
- * This file is not used by the browser example — the GPU traces the scene. It
- * exists so the shader has an oracle: `optics.test.ts` asserts the physics here
- * (Snell, total internal reflection, dispersion, uniform triangle sampling),
- * and the Node GPU test renders `probe.wgsl` into an `rgba32float` target and
- * diffs the shader's numbers against these, following
- * `vgpu docs cat shader-debugging.md`.
- *
- * Keep the two implementations line-comparable. Every function below has a
- * same-named counterpart in `optics.wgsl`.
+ * Snell refraction, Fresnel transmission and total internal reflection are
+ * solved here for the two boundaries of every wavelength band. `light-mesh.ts`
+ * turns those deterministic paths into the vertices the GPU rasterizes.
  */
 
 import {
   PRISM_MAX_INTERNAL_BOUNCES,
-  PRISM_RAYS_PER_FRAGMENT,
-  PRISM_WAVELENGTHS,
-  type DispersionPreset,
-  type SpotLight,
   type Triangle,
   type Vec2,
 } from './types';
@@ -36,35 +26,10 @@ const normalize = (a: Vec2): Vec2 => scale(a, 1 / length(a));
 /** z of the 3D cross product of two planar vectors: positive when b is left of a. */
 const cross = (a: Vec2, b: Vec2): number => a[0] * b[1] - a[1] * b[0];
 
-const saturate = (value: number): number => Math.min(1, Math.max(0, value));
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const t = saturate((value - edge0) / (edge1 - edge0));
-  return t * t * (3 - 2 * t);
-}
 
 /** Signed area doubled; positive for counter-clockwise winding. */
 export function triangleWinding(triangle: Triangle): number {
   return cross(sub(triangle.b, triangle.a), sub(triangle.c, triangle.a));
-}
-
-/**
- * A uniformly distributed point inside the triangle from two unit randoms.
- *
- * Barycentric coordinates taken straight from two uniforms cover the wrong half
- * of the parallelogram; folding `u + v > 1` back across the diagonal fixes the
- * density without rejecting samples.
- */
-export function sampleTriangle(triangle: Triangle, u: number, v: number): Vec2 {
-  let bu = u;
-  let bv = v;
-  if (bu + bv > 1) {
-    bu = 1 - bu;
-    bv = 1 - bv;
-  }
-  const edge1 = sub(triangle.b, triangle.a);
-  const edge2 = sub(triangle.c, triangle.a);
-  return add(triangle.a, add(scale(edge1, bu), scale(edge2, bv)));
 }
 
 /** True when the point is on the inner side of all three edges. */
@@ -82,29 +47,13 @@ export function iorAt(wavelengthNm: number, base: number, strength: number): num
   return base + strength / (micrometres * micrometres);
 }
 
-/**
- * The wavelength ray `index` traces, stratified over the visible range.
- *
- * One wavelength per ray, one stratum per ray: 16 rays cover the spectrum
- * evenly every frame, and `jitter` moves each sample inside its stratum so
- * accumulation converges to the continuous spectrum instead of 16 lines.
- */
-export function stratifiedWavelength(
-  index: number,
-  count: number,
-  jitter: number,
-  minNm: number = PRISM_WAVELENGTHS.min,
-  maxNm: number = PRISM_WAVELENGTHS.max,
-): number {
-  const t = (index + jitter) / count;
-  return minNm + (maxNm - minNm) * t;
-}
-
 export interface EdgeHit {
   /** Distance along the ray. */
   readonly t: number;
   /** Unit normal pointing out of the triangle. */
   readonly normal: Vec2;
+  /** Triangle edge index: a-b, b-c or c-a. */
+  readonly edge: number;
 }
 
 /**
@@ -134,7 +83,7 @@ export function intersectTriangle(
     if (best && best.t <= t) continue;
     // Counter-clockwise winding puts the interior left of every edge, so
     // rotating the edge clockwise points out of the triangle.
-    best = { t, normal: normalize([edge[1], -edge[0]]) };
+    best = { t, normal: normalize([edge[1], -edge[0]]), edge: index };
   }
   return best;
 }
@@ -157,6 +106,42 @@ export function refract(incident: Vec2, normal: Vec2, eta: number): Vec2 | undef
 
 export function reflect(incident: Vec2, normal: Vec2): Vec2 {
   return sub(incident, scale(normal, 2 * dot(incident, normal)));
+}
+
+/**
+ * Fraction of unpolarized light transmitted by one ideal dielectric boundary.
+ *
+ * `normal` faces the incident medium. The two polarizations are averaged with
+ * the exact Fresnel equations; total internal reflection therefore returns 0.
+ */
+export function fresnelTransmittance(
+  incident: Vec2,
+  normal: Vec2,
+  incidentIor: number,
+  transmittedIor: number,
+): number {
+  const cosIncident = Math.min(1, Math.max(0, -dot(incident, normal)));
+  const eta = incidentIor / transmittedIor;
+  const sinTransmittedSquared = eta * eta * (1 - cosIncident * cosIncident);
+  if (sinTransmittedSquared >= 1) return 0;
+  const cosTransmitted = Math.sqrt(1 - sinTransmittedSquared);
+  const sNumerator = incidentIor * cosIncident - transmittedIor * cosTransmitted;
+  const sDenominator = incidentIor * cosIncident + transmittedIor * cosTransmitted;
+  const pNumerator = incidentIor * cosTransmitted - transmittedIor * cosIncident;
+  const pDenominator = incidentIor * cosTransmitted + transmittedIor * cosIncident;
+  const reflectance = 0.5 * (
+    (sNumerator / sDenominator) ** 2 + (pNumerator / pDenominator) ** 2
+  );
+  return 1 - reflectance;
+}
+
+export interface DetailedPrismPath extends PrismPath {
+  /** Entry, reflection points and final exit, in traversal order. */
+  readonly points: readonly Vec2[];
+  /** Edge index for every point in `points`. */
+  readonly edges: readonly number[];
+  /** Fresnel transmission accumulated at entry and final exit. */
+  readonly transmission: number;
 }
 
 export interface PrismPath {
@@ -183,6 +168,23 @@ export function tracePrism(
   ior: number,
   maxBounces = PRISM_MAX_INTERNAL_BOUNCES,
 ): PrismPath | undefined {
+  const path = tracePrismDetailed(triangle, origin, direction, ior, maxBounces);
+  if (!path) return undefined;
+  return {
+    origin: path.origin,
+    direction: path.direction,
+    bounces: path.bounces,
+  };
+}
+
+/** Detailed forward path used to turn a finite beam into renderable ribbons. */
+export function tracePrismDetailed(
+  triangle: Triangle,
+  origin: Vec2,
+  direction: Vec2,
+  ior: number,
+  maxBounces = PRISM_MAX_INTERNAL_BOUNCES,
+): DetailedPrismPath | undefined {
   const entry = intersectTriangle(triangle, origin, direction, SURFACE_EPSILON);
   // A ray that first meets the boundary from behind started inside the glass.
   if (!entry || dot(direction, entry.normal) >= 0) return undefined;
@@ -190,41 +192,31 @@ export function tracePrism(
   let position = add(origin, scale(direction, entry.t));
   let inside = refract(direction, entry.normal, 1 / ior);
   if (!inside) return undefined;
+  const points: Vec2[] = [position];
+  const edges: number[] = [entry.edge];
+  let transmission = fresnelTransmittance(direction, entry.normal, 1, ior);
 
   for (let bounces = 0; bounces <= maxBounces; bounces++) {
     const exit = intersectTriangle(triangle, position, inside, SURFACE_EPSILON);
     if (!exit) return undefined;
     position = add(position, scale(inside, exit.t));
+    points.push(position);
+    edges.push(exit.edge);
     const transmitted = refract(inside, scale(exit.normal, -1), ior);
-    if (transmitted) return { origin: position, direction: normalize(transmitted), bounces };
+    if (transmitted) {
+      transmission *= fresnelTransmittance(inside, scale(exit.normal, -1), ior, 1);
+      return {
+        origin: position,
+        direction: normalize(transmitted),
+        bounces,
+        points,
+        edges,
+        transmission,
+      };
+    }
     inside = reflect(inside, exit.normal);
   }
   return undefined;
-}
-
-/** Smooth angular falloff for a ray arriving at the lamp from `towardsScene`. */
-export function spotProfile(light: SpotLight, towardsScene: Vec2): number {
-  const angle = Math.acos(saturate(dot(light.direction, towardsScene)));
-  return 1 - smoothstep(light.innerAngle, light.outerAngle, angle);
-}
-
-/**
- * How strongly a ray leaving the prism lands on the lamp.
- *
- * The emitter is a disc, so instead of a binary hit test this measures how
- * close the ray passes to its center and falls off smoothly across the radius.
- * That is the same estimator a hard hit test converges to, minus most of the
- * variance — a soft kernel turns a rare binary event into a value almost every
- * sample can contribute to.
- */
-export function lightConnection(light: SpotLight, origin: Vec2, direction: Vec2): number {
-  const towardsLight = sub(light.center, origin);
-  const along = dot(towardsLight, direction);
-  if (along <= 0) return 0;
-  const closest = length(sub(towardsLight, scale(direction, along)));
-  const kernel = 1 - smoothstep(0, light.radius, closest);
-  if (kernel <= 0) return 0;
-  return kernel * spotProfile(light, scale(direction, -1));
 }
 
 /**
@@ -266,127 +258,4 @@ export function wavelengthToLinearRgb(wavelengthNm: number): Vec3 {
     Math.max(0, -0.9689 * x + 1.8758 * y + 0.0415 * z),
     Math.max(0, 0.0557 * x - 0.2040 * y + 1.0570 * z),
   ];
-}
-
-/** Deterministic integer hash, mirroring `pcg3d` from `@vgpu/wgsl-std/hash`. */
-export function pcg3d(x: number, y: number, z: number): readonly [number, number, number] {
-  let hx = (Math.imul(x, 1664525) + 1013904223) >>> 0;
-  let hy = (Math.imul(y, 1664525) + 1013904223) >>> 0;
-  let hz = (Math.imul(z, 1664525) + 1013904223) >>> 0;
-  hx = (hx + Math.imul(hy, hz)) >>> 0;
-  hy = (hy + Math.imul(hz, hx)) >>> 0;
-  hz = (hz + Math.imul(hx, hy)) >>> 0;
-  hx ^= hx >>> 16;
-  hy ^= hy >>> 16;
-  hz ^= hz >>> 16;
-  hx = (hx + Math.imul(hy, hz)) >>> 0;
-  hy = (hy + Math.imul(hz, hx)) >>> 0;
-  hz = (hz + Math.imul(hx, hy)) >>> 0;
-  return [hx >>> 0, hy >>> 0, hz >>> 0];
-}
-
-/** Mirrors `unitFloat` from `@vgpu/wgsl-std/hash`: 24 bits of mantissa, in [0, 1). */
-export function unitFloat(hash: number): number {
-  return (hash >>> 8) * (1 / 16777216);
-}
-
-export interface TraceParams {
-  readonly triangle: Triangle;
-  readonly light: SpotLight;
-  readonly ior: DispersionPreset;
-  readonly exposure: number;
-  readonly raysPerFragment?: number;
-  readonly maxBounces?: number;
-  readonly wavelengths?: { readonly min: number; readonly max: number };
-}
-
-/**
- * One ray of the estimator: aim at `aim` on the prism's face, refract through,
- * and weigh whatever comes out the other side by how well it lands on the lamp.
- *
- * The 1/r term keeps a two-dimensional beam's energy constant as it spreads, so
- * the fan dims with distance from the glass the way the real one does.
- */
-export function traceRayWeight(
-  triangle: Triangle,
-  light: SpotLight,
-  point: Vec2,
-  aim: Vec2,
-  ior: number,
-  maxBounces = PRISM_MAX_INTERNAL_BOUNCES,
-): number {
-  const toAim = sub(aim, point);
-  const distance = length(toAim);
-  if (distance <= SURFACE_EPSILON) return 0;
-  const path = tracePrism(triangle, point, scale(toAim, 1 / distance), ior, maxBounces);
-  if (!path) return 0;
-  return lightConnection(light, path.origin, path.direction) / (0.35 + distance);
-}
-
-export interface PrismRay {
-  /** Point sampled on the prism's face. */
-  readonly aim: Vec2;
-  readonly wavelength: number;
-  readonly ior: number;
-}
-
-/**
- * The `index`-th of a pixel's rays for a frame, mirroring `sceneRay`.
- *
- * Seeding on the pixel *and* the frame is what makes the noise temporal: the
- * same fragment aims somewhere new every frame, which is the whole reason
- * accumulating frames converges.
- */
-export function sceneRay(params: TraceParams, pixel: Vec2, frameIndex: number, index: number): PrismRay {
-  const count = params.raysPerFragment ?? PRISM_RAYS_PER_FRAGMENT;
-  const range = params.wavelengths ?? PRISM_WAVELENGTHS;
-  const seed = pcg3d(pixel[0], pixel[1], frameIndex * count + index);
-  const wavelength = stratifiedWavelength(index, count, unitFloat(seed[2]), range.min, range.max);
-  return {
-    aim: sampleTriangle(params.triangle, unitFloat(seed[0]), unitFloat(seed[1])),
-    wavelength,
-    ior: iorAt(wavelength, params.ior.base, params.ior.strength),
-  };
-}
-
-/**
- * Radiance arriving at one point of the room from one frame's rays, mirroring
- * `estimateRadiance`.
- */
-export function estimateRadiance(
-  params: TraceParams,
-  point: Vec2,
-  pixel: Vec2,
-  frameIndex: number,
-): Vec3 {
-  const count = params.raysPerFragment ?? PRISM_RAYS_PER_FRAGMENT;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  for (let index = 0; index < count; index++) {
-    const ray = sceneRay(params, pixel, frameIndex, index);
-    const weight = traceRayWeight(
-      params.triangle,
-      params.light,
-      point,
-      ray.aim,
-      ray.ior,
-      params.maxBounces ?? PRISM_MAX_INTERNAL_BOUNCES,
-    );
-    if (weight <= 0) continue;
-    const color = wavelengthToLinearRgb(ray.wavelength);
-    r += color[0] * weight;
-    g += color[1] * weight;
-    b += color[2] * weight;
-  }
-  const gain = params.exposure / count;
-  return [r * gain, g * gain, b * gain];
-}
-
-/** Wall points the probe measures, mirroring `probePoint` in `probe.wgsl`. */
-export const PROBE_COLUMNS = 8;
-export const PROBE_ROWS: readonly number[] = [0.28, -0.04, -0.36, -0.78];
-
-export function probePoint(slot: number): Vec2 {
-  return [-1.4 + 0.4 * (slot % PROBE_COLUMNS), PROBE_ROWS[Math.floor(slot / PROBE_COLUMNS)] ?? 0];
 }

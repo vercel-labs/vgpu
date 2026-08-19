@@ -14,11 +14,6 @@ export function Example() {
   const setControls = useCallback((controls: PrismControls) => {
     rendererRef.current?.setControls?.(controls);
   }, []);
-  const accumulated = useCallback(
-    () => rendererRef.current?.accumulated() ?? 0,
-    []
-  );
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -43,7 +38,7 @@ export function Example() {
         ref={canvasRef}
         className="block h-full w-full cursor-ns-resize touch-none"
       />
-      <Controls onChange={setControls} accumulated={accumulated} />
+      <Controls onChange={setControls} />
       <div className="pointer-events-none absolute bottom-[18px] left-1/2 z-[2] -translate-x-1/2 text-xs font-medium uppercase tracking-[.08em] text-white/80">
         drag up or down to swing the lamp · move to tilt the camera
       </div>

@@ -15,8 +15,6 @@ import {
 export interface ControlsProps {
   initialValue?: Readonly<PrismControls>;
   onChange(value: PrismControls): void;
-  /** Read lazily so the render loop's progress never causes a React render. */
-  accumulated(): number;
   disabled?: boolean;
 }
 
@@ -24,7 +22,6 @@ interface GuiValues {
   dispersion: PrismDispersion;
   view: PrismView;
   wallColor: string;
-  frames: number;
 }
 
 function options<T extends string>(
@@ -38,14 +35,11 @@ function options<T extends string>(
 export function Controls({
   initialValue = DEFAULT_PRISM_CONTROLS,
   onChange,
-  accumulated,
   disabled = false,
 }: ControlsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
-  const accumulatedRef = useRef(accumulated);
   onChangeRef.current = onChange;
-  accumulatedRef.current = accumulated;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -57,7 +51,6 @@ export function Controls({
       dispersion: initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion,
       view: initialValue.view ?? DEFAULT_PRISM_CONTROLS.view,
       wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
-      frames: 0,
     };
     const gui = new GUI({ title: "Prism", container });
     Object.assign(gui.domElement.style, {
@@ -88,16 +81,9 @@ export function Controls({
         .onChange(publish),
       gui.addColor(values, "wallColor").name("wall color").onChange(publish),
     ];
-    const frames = gui.add(values, "frames").name("frames averaged").disable();
     if (disabled) controllers.forEach((controller) => controller.disable());
 
-    const readout = window.setInterval(() => {
-      values.frames = accumulatedRef.current();
-      frames.updateDisplay();
-    }, 250);
-
     return () => {
-      window.clearInterval(readout);
       gui.destroy();
     };
   }, [disabled, initialValue]);
