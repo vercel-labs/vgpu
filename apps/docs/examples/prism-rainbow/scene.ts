@@ -180,6 +180,8 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
     // Runtime fallback keeps Fast Refresh safe across the control schema change.
     beamWidth: clampBeamWidth(controls.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth),
     wireframe: controls.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
+    environmentDebug:
+      controls.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
   };
   const opticsChanged = next.dispersion !== scene.controls.dispersion
     || next.beamWidth !== scene.controls.beamWidth;

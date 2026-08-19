@@ -4,7 +4,7 @@ export const meta = {
   slug: 'prism-rainbow',
   title: 'Prism Rainbow',
   description:
-    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, while a three-pass HDR ping-pong pipeline resolves the inner and outer glass interfaces independently. The result is deterministic in one frame and the refracted beam keeps its physical width.',
+    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, while a three-pass HDR ping-pong pipeline resolves the inner and outer glass interfaces independently. An optional orbitable mirror ball and XYZ gizmo expose the analytic studio environment for visual tuning.',
   tags: ['lighting', 'raycasting', 'rendering', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
@@ -27,6 +27,7 @@ export const meta = {
     'index.tsx',
     'controls.tsx',
     'renderer.ts',
+    'environment-debug.ts',
     'scene.ts',
     'camera.ts',
     'prism-mesh.ts',
@@ -43,6 +44,8 @@ export const meta = {
     'glass.wgsl',
     'wireframe.wgsl',
     'environment.wgsl',
+    'environment-debug.wgsl',
+    'environment-debug-axes.wgsl',
     'present.wgsl',
   ],
 } as const satisfies ExampleMetaDefinition;

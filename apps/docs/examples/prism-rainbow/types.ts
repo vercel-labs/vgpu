@@ -109,6 +109,8 @@ export interface PrismControls {
   readonly wallColor: string;
   /** Draw the generated triangle edges over the glass for topology inspection. */
   readonly wireframe: boolean;
+  /** Show an orbitable mirror sphere for inspecting the analytic studio environment. */
+  readonly environmentDebug: boolean;
 }
 
 export const PRISM_DEFAULT_BEAM_WIDTH = 0.08;
@@ -125,6 +127,7 @@ export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
   wallColor: "#141414",
   wireframe: false,
+  environmentDebug: false,
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;

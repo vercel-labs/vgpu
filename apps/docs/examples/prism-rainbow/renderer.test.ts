@@ -313,6 +313,12 @@ test("only optical controls rebuild the light mesh", async () => {
     wireframe: true,
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
+  // The optional mirror ball is a separate renderer and cannot retrace light.
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    environmentDebug: true,
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
   // A different index of refraction bends every ribbon differently.
   renderer.setControls?.({
     ...DEFAULT_PRISM_CONTROLS,

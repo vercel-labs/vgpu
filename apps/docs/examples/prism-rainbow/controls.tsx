@@ -25,6 +25,7 @@ interface GuiValues {
   beamWidth: number;
   wallColor: string;
   wireframe: boolean;
+  environmentDebug: boolean;
 }
 
 function options<T extends string>(
@@ -56,6 +57,8 @@ export function Controls({
       beamWidth: initialValue.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth,
       wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
       wireframe: initialValue.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
+      environmentDebug:
+        initialValue.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
     };
     const gui = new GUI({ title: "Prism", container });
     Object.assign(gui.domElement.style, {
@@ -72,6 +75,7 @@ export function Controls({
         beamWidth: values.beamWidth,
         wallColor: values.wallColor,
         wireframe: values.wireframe,
+        environmentDebug: values.environmentDebug,
       });
     const controllers: Controller[] = [
       gui
@@ -98,6 +102,10 @@ export function Controls({
         .onChange(publish),
       gui.addColor(values, "wallColor").name("wall color").onChange(publish),
       gui.add(values, "wireframe").name("wireframe").onChange(publish),
+      gui
+        .add(values, "environmentDebug")
+        .name("environment debug")
+        .onChange(publish),
     ];
     if (disabled) controllers.forEach((controller) => controller.disable());
 
