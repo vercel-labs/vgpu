@@ -45,7 +45,7 @@ vi.mock("vgpu", () => ({
 
 import { createRenderer } from "./renderer";
 import { wallExtent } from "./scene";
-import { DEFAULT_PRISM_CONTROLS } from "./types";
+import { DEFAULT_PRISM_CONTROLS, PRISM_LIGHT_PLANE_Z } from "./types";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -214,7 +214,7 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.instance.device.createBuffer).toHaveBeenCalledOnce();
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(2);
   expect(live.effects).toHaveLength(10);
-  expect(live.draws).toHaveLength(5);
+  expect(live.draws).toHaveLength(6);
   for (const created of [...live.effects, ...live.draws])
     expect(created.compile).toHaveBeenCalledOnce();
   // Canvas surfaces do not expose a current texture until a frame begins, so
@@ -251,6 +251,7 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.draws[2]!.compile).toHaveBeenCalledWith(live.targets[1]);
   expect(live.draws[3]!.compile).toHaveBeenCalledWith(live.targets[0]);
   expect(live.draws[4]!.compile).toHaveBeenCalledWith(live.targets[0]);
+  expect(live.draws[5]!.compile).toHaveBeenCalledWith(live.targets[0]);
   expect(live.effects[0]!.set).toHaveBeenLastCalledWith({
     sceneTexture: live.targets[0],
   });
@@ -284,6 +285,9 @@ test("renders the deterministic light once and idles until something changes", a
       bloomTexture: live.targets[2],
     })
   );
+  expect(live.draws[0]!.set).toHaveBeenLastCalledWith({
+    scene: expect.objectContaining({ lightPlaneZ: PRISM_LIGHT_PLANE_Z }),
+  });
 
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
   tick(live.loopFrame);
@@ -292,8 +296,8 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.instance.fns.frame).not.toHaveBeenCalled();
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(11);
   expect(live.encodedPasses).toEqual([
-    [live.draws[1], live.draws[0]],
-    [live.effects[0], live.draws[2]],
+    [live.draws[1]],
+    [live.effects[0], live.draws[2], live.draws[0]],
     [live.effects[1], live.draws[3]],
     [live.effects[2]],
     [live.effects[3]],
@@ -324,8 +328,8 @@ test("the back-face view presents the second target before the front interface",
   tick(live.loopFrame);
 
   expect(live.encodedPasses).toEqual([
-    [live.draws[1], live.draws[0]],
-    [live.effects[0], live.draws[2]],
+    [live.draws[1]],
+    [live.effects[0], live.draws[2], live.draws[0]],
     [live.effects[1]],
     [live.effects[2]],
     [live.effects[3]],
@@ -336,6 +340,32 @@ test("the back-face view presents the second target before the front interface",
     [live.effects[8]],
     [live.effects[9]],
   ]);
+  renderer.dispose();
+});
+
+test("the light wireframe reveals every generated triangle in the light-only view", async () => {
+  const env = browser();
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    view: "caustic",
+    lightWireframe: true,
+  });
+  tick(live.loopFrame);
+
+  expect(live.encodedPasses[0]).toEqual([
+    live.draws[1],
+    live.draws[0],
+    live.draws[5],
+  ]);
+  expect(live.draws[5]!.set).toHaveBeenLastCalledWith({
+    scene: expect.objectContaining({ lightPlaneZ: PRISM_LIGHT_PLANE_Z }),
+  });
   renderer.dispose();
 });
 
@@ -463,6 +493,36 @@ test("only optical controls rebuild the light mesh", async () => {
     beamWidth: 0.14,
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 2);
+  renderer.dispose();
+});
+
+test("fade controls rebuild only the data that cannot stay in the shader", async () => {
+  const env = browser();
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+  const writes = live.lightBuffer.write.mock.calls.length;
+
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    lightFade: { edgeFalloff: 10, rainbowFalloff: 3.2 },
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 1);
+
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    lightFade: { edgeFalloff: 10, rainbowFalloff: 5.5 },
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 1);
+  tick(live.loopFrame);
+  expect(live.draws[0]!.set).toHaveBeenLastCalledWith({
+    scene: expect.objectContaining({
+      lightEdgeFalloff: 10,
+      rainbowFalloff: 5.5,
+    }),
+  });
   renderer.dispose();
 });
 

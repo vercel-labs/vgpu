@@ -94,8 +94,8 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
 
   /**
    * Hovering tilts the camera a couple of degrees. It never touches the
-   * light mesh: it already lives on the wall in world space, so only its camera
-   * projection changes.
+   * light mesh: it already lives on a world-space plane inside the prism, so
+   * only its camera projection changes.
    */
   const orbitFromPointer = (event: PointerEvent) => {
     const rect = options.canvas.getBoundingClientRect();

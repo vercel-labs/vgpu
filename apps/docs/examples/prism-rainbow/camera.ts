@@ -1,18 +1,17 @@
 /**
  * The one camera in the scene, and the wall it decides the size of.
  *
- * The wall is the picture: outside the rectangle the light mesh covers there is
- * nothing, so a frame that saw past a corner of it would end in a hard edge
- * against an empty room. Rather than pick a wall size and hope, this module runs
+ * The wall is the picture: a frame that saw past a corner of it would end in a
+ * hard edge against an empty room. Rather than pick a wall size and hope, this module runs
  * the relationship the other way — `wallCoverage` walks the frustum's corners to
  * the wall plane and `wallHalfHeight` returns the size that covers the worst of
  * them, over every position the pointer can put the camera in.
  * `geometry.test.ts` holds that at every aspect a canvas can take.
  *
  * The pointer only ever moves the view a few degrees off its resting angle. That
- * is deliberate: the deterministic ribbons live in world space on the wall, so
- * moving the camera only changes their projection — and a small swing is enough
- * to show the glass standing off the wall.
+ * is deliberate: the deterministic ribbons live on a world-space sheet inside
+ * the glass, so moving the camera only changes their projection — and a small
+ * swing is enough to reveal their separation from the wall.
  */
 
 import { perspectiveCamera, type SceneCamera } from "vgpu/scene";

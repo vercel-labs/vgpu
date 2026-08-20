@@ -83,9 +83,9 @@ export const PRISM_DISPERSION_LABELS: Record<PrismDispersion, string> = {
  * What the frame shows, peeling the picture back one layer at a time.
  *
  * `glass` is the final scene after the front-face pass. `back` presents the
- * second HDR target immediately after the back-face glass pass. `wall` stops
- * before either glass interface, and `caustic` goes further by showing the
- * light mesh alone over black.
+ * second HDR target after the back-face glass and internal-light draws. `wall`
+ * stops before either glass interface or the light sheet, and `caustic` shows
+ * that light sheet alone over black.
  */
 export type PrismView = "glass" | "back" | "wall" | "caustic";
 
@@ -131,6 +131,13 @@ export interface PostprocessControls {
   readonly bloomRadius: number;
 }
 
+export interface LightFadeControls {
+  /** Exponential concentration from the beam centre toward its side edges. */
+  readonly edgeFalloff: number;
+  /** Exponential attenuation applied only to the dispersed outgoing light. */
+  readonly rainbowFalloff: number;
+}
+
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
   readonly view: PrismView;
@@ -140,10 +147,14 @@ export interface PrismControls {
   readonly cameraFov: number;
   /** Full beam width in scene units, measured perpendicular to its axis. */
   readonly beamWidth: number;
+  /** Visual attenuation of the finite light sheet. */
+  readonly lightFade: LightFadeControls;
   /** CSS hex color, interpreted as sRGB before the additive light is applied. */
   readonly wallColor: string;
   /** Draw the generated triangle edges over the glass for topology inspection. */
   readonly wireframe: boolean;
+  /** Draw the triangulation of the generated light sheet. */
+  readonly lightWireframe: boolean;
   /** Show an orbitable mirror sphere for inspecting the analytic studio environment. */
   readonly environmentDebug: boolean;
   /** Runtime material parameters shared by the front and back glass passes. */
@@ -157,6 +168,14 @@ export const PRISM_BEAM_WIDTH_RANGE = {
   min: 0.01,
   max: 0.2,
   step: 0.005,
+} as const;
+export const DEFAULT_LIGHT_FADE_CONTROLS: LightFadeControls = {
+  edgeFalloff: 6.5,
+  rainbowFalloff: 3.2,
+};
+export const PRISM_LIGHT_FADE_RANGES = {
+  edgeFalloff: { min: 0, max: 16, step: 0.1 },
+  rainbowFalloff: { min: 0, max: 8, step: 0.1 },
 } as const;
 /** Vertical field of view of the camera looking at the wall, in degrees. */
 export const CAMERA_FOV_DEGREES = 48;
@@ -230,8 +249,10 @@ export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   cameraDistance: CAMERA_DISTANCE,
   cameraFov: CAMERA_FOV_DEGREES,
   beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
+  lightFade: DEFAULT_LIGHT_FADE_CONTROLS,
   wallColor: "#141414",
   wireframe: false,
+  lightWireframe: false,
   environmentDebug: false,
   glass: DEFAULT_GLASS_CONTROLS,
   postprocess: DEFAULT_POSTPROCESS_CONTROLS,
@@ -385,12 +406,11 @@ export const PRISM_MAX_INTERNAL_BOUNCES = 3;
 /**
  * How far the triangle is extruded off the wall, towards the camera.
  *
- * The light mesh lives in the wall plane, so the beam and the fan it
- * paints belong to the cross-section, not to the solid. Depth is therefore a
- * framing decision rather than an optical one: enough for the side faces to catch
- * the studio environment at their own angles and read as a block of glass, little
- * enough that the parallax between the solid's silhouette and the shadow it casts
- * still reads as the object standing in front of the wall.
+ * The analytic tracer still solves a 2D cross-section, but that result is drawn
+ * halfway through this depth. The distance is therefore both a framing decision
+ * and the separation that gives the light sheet parallax: enough for the side
+ * faces to catch the studio environment and read as a block of glass, little
+ * enough that the scene still reads as one compact prism.
  */
 export const PRISM_DEPTH = 0.3;
 
@@ -406,6 +426,8 @@ export const PRISM_WALL_GAP = 0.015;
 /** The prism occupies `z` in [`PRISM_BACK_Z`, `PRISM_FRONT_Z`]; the wall is `z = 0`. */
 export const PRISM_BACK_Z = PRISM_WALL_GAP;
 export const PRISM_FRONT_Z = PRISM_WALL_GAP + PRISM_DEPTH;
+/** The emissive light sheet crosses halfway between the two glass interfaces. */
+export const PRISM_LIGHT_PLANE_Z = (PRISM_BACK_Z + PRISM_FRONT_Z) * 0.5;
 
 /**
  * Transmissive glass, as `vgpu.sh/examples/glass-fractal` shades it.

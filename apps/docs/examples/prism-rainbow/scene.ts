@@ -33,11 +33,13 @@ import glassBackWgsl from "./glass-back.wgsl";
 import glassWgsl from "./glass.wgsl";
 import {
   buildLightMesh,
+  LIGHT_WHITE_QUADS,
   LIGHT_VERTEX_STRIDE,
   lightVertexCount,
   type LightMeshStats,
 } from "./light-mesh";
 import lightWgsl from "./light.wgsl";
+import lightWireframeWgsl from "./light-wireframe.wgsl";
 import presentWgsl from "./present.wgsl";
 import { prismGeometry, prismWireframeGeometry } from "./prism-mesh";
 import wallWgsl from "./wall.wgsl";
@@ -45,11 +47,14 @@ import wireframeWgsl from "./wireframe.wgsl";
 import {
   DEFAULT_PRISM_CONTROLS,
   PRISM_BACK_Z,
+  PRISM_BEAM_SLICES,
   PRISM_DEFAULT_ARC,
   PRISM_DISPERSION_PRESETS,
   PRISM_FRONT_Z,
   PRISM_GLASS,
   PRISM_INCIDENCE_ARC,
+  PRISM_LIGHT_PLANE_Z,
+  PRISM_LIGHT_FADE_RANGES,
   PRISM_TRIANGLE,
   clampBeamWidth,
   clampCameraDistance,
@@ -72,6 +77,7 @@ export interface PrismScene {
   sceneTargets?: readonly [Target, Target];
   bloomTargets?: BloomTargets;
   readonly light: Draw;
+  readonly lightWireframe: Draw;
   readonly lightBuffer: Buffer;
   lightStats: LightMeshStats;
   readonly wall: Draw;
@@ -103,6 +109,7 @@ export function createScene(
   const initialMesh = buildLightMesh({
     light: lampAt(PRISM_DEFAULT_ARC, DEFAULT_PRISM_CONTROLS.beamWidth),
     dispersion: PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion],
+    edgeFalloff: DEFAULT_PRISM_CONTROLS.lightFade.edgeFalloff,
     wallHalfExtent: wallExtent(
       aspect,
       DEFAULT_PRISM_CONTROLS.cameraDistance,
@@ -115,6 +122,22 @@ export function createScene(
     label: `${label}.light-vertices`,
   });
   lightBuffer.write(initialMesh.vertices);
+  const lightGeometry = {
+    vertexBuffers: [lightBuffer.gpu],
+    vertexBufferLayouts: [
+      {
+        arrayStride: LIGHT_VERTEX_STRIDE,
+        attributes: [
+          { shaderLocation: 0, offset: 0, format: "float32x2" as const },
+          { shaderLocation: 1, offset: 8, format: "float32" as const },
+          { shaderLocation: 2, offset: 12, format: "float32" as const },
+          { shaderLocation: 3, offset: 16, format: "float32" as const },
+          { shaderLocation: 4, offset: 20, format: "float32" as const },
+        ],
+      },
+    ],
+    vertexCount: lightVertexCount(),
+  };
   const prism = prismGeometry(gpu, `${label}.prism`);
   const prismWireframe = prismWireframeGeometry(
     gpu,
@@ -125,21 +148,7 @@ export function createScene(
     outputSize: output,
     light: draw(gpu, {
       shader: lightWgsl,
-      geometry: {
-        vertexBuffers: [lightBuffer.gpu],
-        vertexBufferLayouts: [
-          {
-            arrayStride: LIGHT_VERTEX_STRIDE,
-            attributes: [
-              { shaderLocation: 0, offset: 0, format: "float32x2" },
-              { shaderLocation: 1, offset: 8, format: "float32" },
-              { shaderLocation: 2, offset: 12, format: "float32" },
-              { shaderLocation: 3, offset: 16, format: "float32" },
-            ],
-          },
-        ],
-        vertexCount: lightVertexCount(),
-      },
+      geometry: lightGeometry,
       blend: "additive",
       cull: "none",
       depth: false,
@@ -201,6 +210,14 @@ export function createScene(
       blend: "premultiplied",
       label: `${label}.wireframe`,
     }),
+    lightWireframe: draw(gpu, {
+      shader: lightWireframeWgsl,
+      geometry: lightGeometry,
+      cull: "none",
+      depth: false,
+      blend: "premultiplied",
+      label: `${label}.light-wireframe`,
+    }),
     prism,
     prismWireframe,
     sceneSampler: sampler(gpu, {
@@ -238,6 +255,7 @@ function refreshLightMesh(scene: PrismScene): void {
   const mesh = buildLightMesh({
     light: lampAt(scene.lampArc, scene.controls.beamWidth),
     dispersion: PRISM_DISPERSION_PRESETS[scene.controls.dispersion],
+    edgeFalloff: scene.controls.lightFade.edgeFalloff,
     wallHalfExtent: wallExtent(
       scene.aspect,
       scene.controls.cameraDistance,
@@ -251,8 +269,10 @@ function refreshLightMesh(scene: PrismScene): void {
 export function setControls(scene: PrismScene, controls: PrismControls): void {
   const defaultGlass = DEFAULT_PRISM_CONTROLS.glass;
   const defaultPostprocess = DEFAULT_PRISM_CONTROLS.postprocess;
+  const defaultLightFade = DEFAULT_PRISM_CONTROLS.lightFade;
   const inputGlass = controls.glass ?? defaultGlass;
   const inputPostprocess = controls.postprocess ?? defaultPostprocess;
+  const inputLightFade = controls.lightFade ?? defaultLightFade;
   const inputAbsorption = inputGlass.absorption ?? defaultGlass.absorption;
   const finite = (value: number | undefined, fallback: number) =>
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -268,7 +288,28 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
     beamWidth: clampBeamWidth(
       controls.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth
     ),
+    lightFade: {
+      edgeFalloff: Math.min(
+        PRISM_LIGHT_FADE_RANGES.edgeFalloff.max,
+        Math.max(
+          PRISM_LIGHT_FADE_RANGES.edgeFalloff.min,
+          finite(inputLightFade.edgeFalloff, defaultLightFade.edgeFalloff)
+        )
+      ),
+      rainbowFalloff: Math.min(
+        PRISM_LIGHT_FADE_RANGES.rainbowFalloff.max,
+        Math.max(
+          PRISM_LIGHT_FADE_RANGES.rainbowFalloff.min,
+          finite(
+            inputLightFade.rainbowFalloff,
+            defaultLightFade.rainbowFalloff
+          )
+        )
+      ),
+    },
     wireframe: controls.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
+    lightWireframe:
+      controls.lightWireframe ?? DEFAULT_PRISM_CONTROLS.lightWireframe,
     environmentDebug:
       controls.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
     glass: {
@@ -314,7 +355,8 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
   };
   const opticsChanged =
     next.dispersion !== scene.controls.dispersion ||
-    next.beamWidth !== scene.controls.beamWidth;
+    next.beamWidth !== scene.controls.beamWidth ||
+    next.lightFade.edgeFalloff !== scene.controls.lightFade.edgeFalloff;
   const cameraChanged =
     next.cameraDistance !== scene.controls.cameraDistance ||
     next.cameraFov !== scene.controls.cameraFov;
@@ -390,6 +432,11 @@ export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
       ? wallColor.slice(1).map((channel) => Number.parseInt(channel, 16) / 255)
       : [0, 0, 0],
     causticOnly: scene.controls.view === "caustic" ? 1 : 0,
+    lightPlaneZ: PRISM_LIGHT_PLANE_Z,
+    lightWhiteQuads: LIGHT_WHITE_QUADS,
+    lightBeamSlices: PRISM_BEAM_SLICES,
+    lightEdgeFalloff: scene.controls.lightFade.edgeFalloff,
+    rainbowFalloff: scene.controls.lightFade.rainbowFalloff,
   };
 }
 
@@ -478,6 +525,7 @@ export async function prepareScene(
     scene.copyToFront.compile(readTarget),
     scene.glassFront.compile(readTarget),
     scene.wireframe.compile(readTarget),
+    scene.lightWireframe.compile(readTarget),
     ...scene.bloomDownsample.map((bloom, level) =>
       bloom.compile(bloomTargets[level]!)
     ),
@@ -503,13 +551,21 @@ export function presentScene(
   const encode = (current: Frame) => {
     const showBackFace =
       scene.controls.view === "glass" || scene.controls.view === "back";
+    const showLightOnly = scene.controls.view === "caustic";
     current.pass({ target: readTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(scene.wall);
-      pass.draw(scene.light);
+      if (showLightOnly) {
+        pass.draw(scene.light);
+        if (scene.controls.lightWireframe) pass.draw(scene.lightWireframe);
+      }
     });
     current.pass({ target: writeTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(scene.copyToBack);
       if (showBackFace) pass.draw(scene.glassBack);
+      if (showBackFace) {
+        pass.draw(scene.light);
+        if (scene.controls.lightWireframe) pass.draw(scene.lightWireframe);
+      }
     });
     current.pass({ target: readTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(scene.copyToFront);
@@ -547,6 +603,7 @@ function bind(
 ): void {
   const values = sceneUniforms(scene);
   scene.light.set({ scene: values });
+  scene.lightWireframe.set({ scene: values });
   scene.wall.set({ scene: values });
   scene.copyToBack.set({ sceneTexture: readTarget });
   scene.glassBack.set({

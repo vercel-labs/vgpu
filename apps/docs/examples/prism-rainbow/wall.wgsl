@@ -1,12 +1,8 @@
 // The wall: a plane at z = 0, facing the camera, written in linear HDR.
 //
-// The additive light mesh is drawn immediately after this shader in the same
-// pass. Its corners use the same world rectangle that clipped the CPU rays, so
-// the rasterized fan and wall stay registered at every aspect ratio.
-//
 // The wall uses the sRGB color selected in lil-gui wherever no light reaches it.
-// The following draw contains all three parts of the same physical bundle:
-// incoming white beam, refracted interior and dispersed outgoing fan.
+// The light bundle is a separate sheet in front of this plane, composited between
+// the prism's back and front glass interfaces.
 
 import { srgbToLinear3 } from "@vgpu/wgsl-std/color";
 import { Scene, scenePoint } from "./scene.wgsl";

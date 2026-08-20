@@ -129,4 +129,28 @@ describe("finite spectral beam", () => {
     );
     expect(wavelengths).toEqual([400, 550, 550, 400, 550, 400]);
   });
+
+  test("keeps the collimated source constant while fading the outgoing spectrum", () => {
+    const mesh = buildLightMesh({
+      ...defaultOptions,
+      samples: 3,
+      beamSlices: 1,
+    });
+    const attribute = (vertex: number, offset: number) =>
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS + offset];
+
+    // A collimated source does not lose radiance over this scene-scale distance.
+    expect(
+      Array.from({ length: 6 }, (_, vertex) => attribute(vertex, 5))
+    ).toEqual([0, 0, 0, 0, 0, 0]);
+
+    // Every outgoing spectral cell starts at the glass and fades toward its cap.
+    const spectralStart = mesh.vertexCount - 12;
+    expect(
+      Array.from({ length: 6 }, (_, vertex) =>
+        attribute(spectralStart + vertex, 5)
+      )
+    ).toEqual([0, 0, 1, 0, 1, 1]);
+  });
+
 });

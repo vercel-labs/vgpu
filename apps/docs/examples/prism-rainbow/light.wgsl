@@ -1,4 +1,5 @@
-// Additive rasterization of the deterministic CPU ray bundle.
+// Additive rasterization of the deterministic CPU ray bundle as a world-space
+// sheet halfway through the prism's depth.
 //
 // Neighbouring wavelength rails form continuous spectral cells. Color is
 // evaluated at their vertices, then interpolated by rasterization; the fragment
@@ -46,6 +47,7 @@ struct VertexOut {
   @location(0) color: vec3f,
   @location(1) profile: f32,
   @location(2) intensity: f32,
+  @location(3) travel: f32,
 };
 
 @vertex
@@ -54,18 +56,27 @@ fn vs_main(
   @location(1) wavelength: f32,
   @location(2) profile: f32,
   @location(3) intensity: f32,
+  @location(4) travel: f32,
 ) -> VertexOut {
   var out: VertexOut;
-  out.position = scene.viewProjection * vec4f(position, 0.0, 1.0);
+  out.position = scene.viewProjection * vec4f(position, scene.lightPlaneZ, 1.0);
   let spectral = wavelengthToLinearRgb(max(wavelength, 400.0));
   out.color = select(spectral, vec3f(1.0), wavelength < 0.0);
   out.profile = profile;
   out.intensity = intensity;
+  out.travel = travel;
   return out;
 }
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
-  let edge = 1.0 - smoothstep(0.72, 1.0, abs(in.profile));
-  return vec4f(in.color * in.intensity * edge, 0.0);
+  let radius = abs(in.profile);
+  let radialFalloff = exp(-scene.lightEdgeFalloff * radius * radius)
+    * (1.0 - smoothstep(0.55, 1.0, radius));
+  let longitudinalFalloff = exp(-scene.rainbowFalloff * in.travel)
+    * (1.0 - smoothstep(0.55, 0.95, in.travel));
+  return vec4f(
+    in.color * in.intensity * radialFalloff * longitudinalFalloff,
+    0.0,
+  );
 }

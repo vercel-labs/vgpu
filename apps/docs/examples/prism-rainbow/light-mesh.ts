@@ -4,11 +4,13 @@
  * The mesh integrates two continuous dimensions. Wavelength vertices are
  * connected to their neighbours, so RGB can interpolate without visible bands.
  * Several additive spectral sheets sample the finite width of the collimated
- * beam, preserving the footprint that a single centre ray would collapse.
+ * beam, preserving the footprint that a single centre ray would collapse. Their
+ * XY coordinates are lifted to a shared world-space depth by `light.wgsl`.
  */
 
 import { iorAt, tracePrismDetailed, type DetailedPrismPath } from "./optics";
 import {
+  DEFAULT_LIGHT_FADE_CONTROLS,
   PRISM_BEAM_SLICES,
   PRISM_LIGHT_EXPOSURE,
   PRISM_MAX_INTERNAL_BOUNCES,
@@ -21,21 +23,25 @@ import {
   type Vec2,
 } from "./types";
 
-/** position.xy, wavelength, transverse profile coordinate, intensity. */
-export const LIGHT_VERTEX_FLOATS = 5;
-export const LIGHT_VERTEX_STRIDE = LIGHT_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+/** position.xy, wavelength, transverse profile, intensity, distance from glass. */
+export const LIGHT_VERTEX_FLOATS = 6;
+export const LIGHT_VERTEX_STRIDE =
+  LIGHT_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT;
 const VERTICES_PER_QUAD = 6;
 const MAX_INTERNAL_SEGMENTS = PRISM_MAX_INTERNAL_BOUNCES + 1;
+export const LIGHT_WHITE_QUADS = 1 + MAX_INTERNAL_SEGMENTS;
 const DENSITY_MEASURE_DISTANCE = 1;
 /** The collimated source is deliberately emissive HDR, not painted white. */
 export const INPUT_BEAM_RADIANCE = 6;
 /** Fresnel transmission makes the light inside the glass slightly dimmer. */
 export const INTERNAL_BEAM_RADIANCE = 4.5;
-
 /** White input/internal quads, then one cell per wavelength interval and beam slice. */
-export function lightVertexCount(samples = PRISM_SPECTRAL_SAMPLES, beamSlices = PRISM_BEAM_SLICES): number {
+export function lightVertexCount(
+  samples = PRISM_SPECTRAL_SAMPLES,
+  beamSlices = PRISM_BEAM_SLICES
+): number {
   const intervals = Math.max(1, samples - 1);
-  return (1 + MAX_INTERNAL_SEGMENTS + intervals * beamSlices) * VERTICES_PER_QUAD;
+  return (LIGHT_WHITE_QUADS + intervals * beamSlices) * VERTICES_PER_QUAD;
 }
 
 export interface SpectralBand {
@@ -72,6 +78,7 @@ export interface LightMeshOptions {
   readonly samples?: number;
   readonly beamSlices?: number;
   readonly exposure?: number;
+  readonly edgeFalloff?: number;
 }
 
 interface SpectralNode {
@@ -90,18 +97,33 @@ const normalize = (a: Vec2): Vec2 => {
 };
 
 /** Origin at a normalized coordinate across the finite collimated beam. */
-export function beamProfileOrigin(light: CollimatedLight, profile: number): Vec2 {
+export function beamProfileOrigin(
+  light: CollimatedLight,
+  profile: number
+): Vec2 {
   const perpendicular: Vec2 = [-light.direction[1], light.direction[0]];
-  return add(light.center, scale(perpendicular, light.beamHalfWidth * Math.min(1, Math.max(-1, profile))));
+  return add(
+    light.center,
+    scale(
+      perpendicular,
+      light.beamHalfWidth * Math.min(1, Math.max(-1, profile))
+    )
+  );
 }
 
 /** Origins of the lower and upper parallel boundaries of a collimated beam. */
-export function beamBoundaryOrigins(light: CollimatedLight): readonly [Vec2, Vec2] {
+export function beamBoundaryOrigins(
+  light: CollimatedLight
+): readonly [Vec2, Vec2] {
   return [beamProfileOrigin(light, -1), beamProfileOrigin(light, 1)];
 }
 
 /** First point where a forward ray reaches the axis-aligned wall rectangle. */
-export function rayToWallBoundary(origin: Vec2, direction: Vec2, halfExtent: Vec2): Vec2 {
+export function rayToWallBoundary(
+  origin: Vec2,
+  direction: Vec2,
+  halfExtent: Vec2
+): Vec2 {
   let nearest = Number.POSITIVE_INFINITY;
   for (let axis = 0; axis < 2; axis++) {
     const component = direction[axis]!;
@@ -111,14 +133,20 @@ export function rayToWallBoundary(origin: Vec2, direction: Vec2, halfExtent: Vec
       if (distance <= 0 || distance >= nearest) continue;
       const other = 1 - axis;
       const otherCoordinate = origin[other]! + direction[other]! * distance;
-      if (Math.abs(otherCoordinate) <= halfExtent[other]! + 1e-6) nearest = distance;
+      if (Math.abs(otherCoordinate) <= halfExtent[other]! + 1e-6)
+        nearest = distance;
     }
   }
-  return Number.isFinite(nearest) ? add(origin, scale(direction, nearest)) : origin;
+  return Number.isFinite(nearest)
+    ? add(origin, scale(direction, nearest))
+    : origin;
 }
 
 function matchingTopology(a: DetailedPrismPath, b: DetailedPrismPath): boolean {
-  return a.edges.length === b.edges.length && a.edges.every((edge, index) => edge === b.edges[index]);
+  return (
+    a.edges.length === b.edges.length &&
+    a.edges.every((edge, index) => edge === b.edges[index])
+  );
 }
 
 /** Trace the two physical boundaries for one wavelength. */
@@ -126,7 +154,7 @@ export function traceSpectralBand(
   triangle: Triangle,
   light: CollimatedLight,
   dispersion: DispersionPreset,
-  wavelength: number,
+  wavelength: number
 ): SpectralBand | undefined {
   const ior = iorAt(wavelength, dispersion.base, dispersion.strength);
   const [lowerOrigin, upperOrigin] = beamBoundaryOrigins(light);
@@ -135,7 +163,9 @@ export function traceSpectralBand(
   if (!lower || !upper || !matchingTopology(lower, upper)) return undefined;
 
   const direction = normalize(add(lower.direction, upper.direction));
-  const outputWidth = Math.abs(cross(sub(upper.origin, lower.origin), direction));
+  const outputWidth = Math.abs(
+    cross(sub(upper.origin, lower.origin), direction)
+  );
   if (outputWidth <= 1e-5) return undefined;
   return {
     wavelength,
@@ -151,18 +181,25 @@ function traceProfilePath(
   light: CollimatedLight,
   dispersion: DispersionPreset,
   wavelength: number,
-  profile: number,
+  profile: number
 ): DetailedPrismPath | undefined {
   return tracePrismDetailed(
     triangle,
     beamProfileOrigin(light, profile),
     light.direction,
-    iorAt(wavelength, dispersion.base, dispersion.strength),
+    iorAt(wavelength, dispersion.base, dispersion.strength)
   );
 }
 
-function pushVertex(output: number[], point: Vec2, wavelength: number, profile: number, intensity: number): void {
-  output.push(point[0], point[1], wavelength, profile, intensity);
+function pushVertex(
+  output: number[],
+  point: Vec2,
+  wavelength: number,
+  profile: number,
+  intensity: number,
+  travel: number
+): void {
+  output.push(point[0], point[1], wavelength, profile, intensity, travel);
 }
 
 function pushQuad(
@@ -173,13 +210,15 @@ function pushQuad(
   upperEnd: Vec2,
   wavelength: number,
   intensity: number,
+  startTravel = 0,
+  endTravel = 0
 ): void {
-  pushVertex(output, lowerStart, wavelength, -1, intensity);
-  pushVertex(output, upperStart, wavelength, 1, intensity);
-  pushVertex(output, upperEnd, wavelength, 1, intensity);
-  pushVertex(output, lowerStart, wavelength, -1, intensity);
-  pushVertex(output, upperEnd, wavelength, 1, intensity);
-  pushVertex(output, lowerEnd, wavelength, -1, intensity);
+  pushVertex(output, lowerStart, wavelength, -1, intensity, startTravel);
+  pushVertex(output, upperStart, wavelength, 1, intensity, startTravel);
+  pushVertex(output, upperEnd, wavelength, 1, intensity, endTravel);
+  pushVertex(output, lowerStart, wavelength, -1, intensity, startTravel);
+  pushVertex(output, upperEnd, wavelength, 1, intensity, endTravel);
+  pushVertex(output, lowerEnd, wavelength, -1, intensity, endTravel);
 }
 
 /** A cell whose two rails carry neighbouring wavelengths and intensities. */
@@ -192,14 +231,14 @@ function pushSpectralCell(
   lowWavelength: number,
   highWavelength: number,
   lowIntensity: number,
-  highIntensity: number,
+  highIntensity: number
 ): void {
-  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity);
-  pushVertex(output, highStart, highWavelength, 0, highIntensity);
-  pushVertex(output, highEnd, highWavelength, 0, highIntensity);
-  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity);
-  pushVertex(output, highEnd, highWavelength, 0, highIntensity);
-  pushVertex(output, lowEnd, lowWavelength, 0, lowIntensity);
+  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, 0);
+  pushVertex(output, highStart, highWavelength, 0, highIntensity, 0);
+  pushVertex(output, highEnd, highWavelength, 0, highIntensity, 1);
+  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, 0);
+  pushVertex(output, highEnd, highWavelength, 0, highIntensity, 1);
+  pushVertex(output, lowEnd, lowWavelength, 0, lowIntensity, 1);
 }
 
 function pushEmptyQuad(output: number[]): void {
@@ -207,15 +246,21 @@ function pushEmptyQuad(output: number[]): void {
 }
 
 function profileCoordinates(slices: number): readonly number[] {
-  return Array.from({ length: slices }, (_, index) => -1 + (2 * (index + 0.5)) / slices);
+  return Array.from(
+    { length: slices },
+    (_, index) => -1 + (2 * (index + 0.5)) / slices
+  );
 }
 
-/** Flat-centred beam profile with only the outer edge feathered. */
-function normalizedProfileWeights(profiles: readonly number[]): readonly number[] {
+/** Gaussian scattering profile with a zero-energy rim at the beam boundary. */
+function normalizedProfileWeights(
+  profiles: readonly number[],
+  edgeFalloff: number
+): readonly number[] {
   const weights = profiles.map((profile) => {
-    const edge = Math.min(1, Math.max(0, (Math.abs(profile) - 0.72) / 0.28));
+    const edge = Math.min(1, Math.max(0, (Math.abs(profile) - 0.55) / 0.45));
     const smooth = edge * edge * (3 - 2 * edge);
-    return 1 - smooth;
+    return Math.exp(-edgeFalloff * profile * profile) * (1 - smooth);
   });
   const sum = weights.reduce((total, weight) => total + weight, 0) || 1;
   return weights.map((weight) => weight / sum);
@@ -245,7 +290,7 @@ function spectralDensity(
   profileIndex: number,
   exposure: number,
   inputWidth: number,
-  profileWeight: number,
+  profileWeight: number
 ): number {
   const node = nodes[nodeIndex];
   if (!node) return 0;
@@ -262,22 +307,43 @@ function spectralDensity(
   const rightPath = nodes[right]!.paths[profileIndex]!;
   if (!matchingTopology(leftPath, rightPath)) return 0;
   const direction = normalize(add(leftPath.direction, rightPath.direction));
-  const spectralWidth = Math.abs(cross(sub(densityReference(rightPath), densityReference(leftPath)), direction));
+  const spectralWidth = Math.abs(
+    cross(
+      sub(densityReference(rightPath), densityReference(leftPath)),
+      direction
+    )
+  );
   const normalizedSpan = (right - left) / (nodes.length - 1);
   const jacobian = spectralWidth / normalizedSpan;
-  return (exposure * inputWidth * profileWeight * node.paths[profileIndex]!.transmission) / Math.max(jacobian, 1e-4);
+  return (
+    (exposure *
+      inputWidth *
+      profileWeight *
+      node.paths[profileIndex]!.transmission) /
+    Math.max(jacobian, 1e-4)
+  );
 }
 
 /** Build the white input and wavelength-connected spectral sheets. */
 export function buildLightMesh(options: LightMeshOptions): LightMeshData {
   const triangle = options.triangle ?? PRISM_TRIANGLE;
-  const samples = Math.max(2, Math.floor(options.samples ?? PRISM_SPECTRAL_SAMPLES));
-  const beamSlices = Math.max(1, Math.floor(options.beamSlices ?? PRISM_BEAM_SLICES));
+  const samples = Math.max(
+    2,
+    Math.floor(options.samples ?? PRISM_SPECTRAL_SAMPLES)
+  );
+  const beamSlices = Math.max(
+    1,
+    Math.floor(options.beamSlices ?? PRISM_BEAM_SLICES)
+  );
   const exposure = options.exposure ?? PRISM_LIGHT_EXPOSURE;
+  const edgeFalloff = Math.max(
+    0,
+    options.edgeFalloff ?? DEFAULT_LIGHT_FADE_CONTROLS.edgeFalloff
+  );
   const vertices: number[] = [];
   const inputWidth = options.light.beamHalfWidth * 2;
   const profiles = profileCoordinates(beamSlices);
-  const profileWeights = normalizedProfileWeights(profiles);
+  const profileWeights = normalizedProfileWeights(profiles, edgeFalloff);
 
   // Entry geometry is wavelength-independent. Use the middle of the spectrum to
   // obtain the two exact face intersections, then extend backwards to the frame.
@@ -285,12 +351,15 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
     triangle,
     options.light,
     options.dispersion,
-    (PRISM_WAVELENGTHS.min + PRISM_WAVELENGTHS.max) * 0.5,
+    (PRISM_WAVELENGTHS.min + PRISM_WAVELENGTHS.max) * 0.5
   );
   if (middle) {
     const lowerEntry = middle.lower.points[0]!;
     const upperEntry = middle.upper.points[0]!;
-    const backwards: Vec2 = [-options.light.direction[0], -options.light.direction[1]];
+    const backwards: Vec2 = [
+      -options.light.direction[0],
+      -options.light.direction[1],
+    ];
     pushQuad(
       vertices,
       rayToWallBoundary(lowerEntry, backwards, options.wallHalfExtent),
@@ -316,7 +385,7 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
           lowerEnd,
           upperEnd,
           -1,
-          INTERNAL_BEAM_RADIANCE,
+          INTERNAL_BEAM_RADIANCE
         );
       } else {
         pushEmptyQuad(vertices);
@@ -324,7 +393,8 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
     }
   } else {
     pushEmptyQuad(vertices);
-    for (let segment = 0; segment < MAX_INTERNAL_SEGMENTS; segment++) pushEmptyQuad(vertices);
+    for (let segment = 0; segment < MAX_INTERNAL_SEGMENTS; segment++)
+      pushEmptyQuad(vertices);
   }
 
   const nodes: (SpectralNode | undefined)[] = [];
@@ -332,14 +402,26 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
   let maxOutputWidth = 0;
   for (let index = 0; index < samples; index++) {
     const wavelength =
-      PRISM_WAVELENGTHS.min + (PRISM_WAVELENGTHS.max - PRISM_WAVELENGTHS.min) * (index / (samples - 1));
-    const band = traceSpectralBand(triangle, options.light, options.dispersion, wavelength);
+      PRISM_WAVELENGTHS.min +
+      (PRISM_WAVELENGTHS.max - PRISM_WAVELENGTHS.min) * (index / (samples - 1));
+    const band = traceSpectralBand(
+      triangle,
+      options.light,
+      options.dispersion,
+      wavelength
+    );
     if (!band) {
       nodes.push(undefined);
       continue;
     }
     const paths = profiles.map((profile) =>
-      traceProfilePath(triangle, options.light, options.dispersion, wavelength, profile),
+      traceProfilePath(
+        triangle,
+        options.light,
+        options.dispersion,
+        wavelength,
+        profile
+      )
     );
     if (paths.some((path) => !path || !matchingTopology(band.lower, path))) {
       nodes.push(undefined);
@@ -352,8 +434,17 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
 
   const densities = nodes.map((node, nodeIndex) =>
     profiles.map((_, profileIndex) =>
-      node ? spectralDensity(nodes, nodeIndex, profileIndex, exposure, inputWidth, profileWeights[profileIndex]!) : 0,
-    ),
+      node
+        ? spectralDensity(
+            nodes,
+            nodeIndex,
+            profileIndex,
+            exposure,
+            inputWidth,
+            profileWeights[profileIndex]!
+          )
+        : 0
+    )
   );
 
   let totalFlux = 0;
@@ -364,18 +455,20 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
     if (connected) {
       const lowTransmission = low!.paths.reduce(
         (sum, path, index) => sum + path.transmission * profileWeights[index]!,
-        0,
+        0
       );
       const highTransmission = high!.paths.reduce(
         (sum, path, index) => sum + path.transmission * profileWeights[index]!,
-        0,
+        0
       );
-      totalFlux += (exposure * inputWidth * (lowTransmission + highTransmission) * 0.5) / (samples - 1);
+      totalFlux +=
+        (exposure * inputWidth * (lowTransmission + highTransmission) * 0.5) /
+        (samples - 1);
     }
 
     for (let profileIndex = 0; profileIndex < beamSlices; profileIndex++) {
       if (!connected) {
-        pushEmptyQuad(vertices);
+        pushQuad(vertices, [0, 0], [0, 0], [0, 0], [0, 0], -1, 0);
         continue;
       }
       const lowPath = low!.paths[profileIndex]!;
@@ -387,12 +480,20 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
         vertices,
         lowPath.origin,
         highPath.origin,
-        rayToWallBoundary(lowPath.origin, lowPath.direction, options.wallHalfExtent),
-        rayToWallBoundary(highPath.origin, highPath.direction, options.wallHalfExtent),
+        rayToWallBoundary(
+          lowPath.origin,
+          lowPath.direction,
+          options.wallHalfExtent
+        ),
+        rayToWallBoundary(
+          highPath.origin,
+          highPath.direction,
+          options.wallHalfExtent
+        ),
         low!.wavelength,
         high!.wavelength,
         lowIntensity,
-        highIntensity,
+        highIntensity
       );
     }
   }
@@ -400,7 +501,12 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
   const data = new Float32Array(vertices);
   const vertexCount = data.length / LIGHT_VERTEX_FLOATS;
   if (vertexCount !== lightVertexCount(samples, beamSlices)) {
-    throw new Error(`Light mesh wrote ${vertexCount} vertices; expected ${lightVertexCount(samples, beamSlices)}.`);
+    throw new Error(
+      `Light mesh wrote ${vertexCount} vertices; expected ${lightVertexCount(
+        samples,
+        beamSlices
+      )}.`
+    );
   }
   const validBands = nodes.filter(Boolean).length;
   return {

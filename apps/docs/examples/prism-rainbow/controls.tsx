@@ -8,6 +8,7 @@ import {
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
   PRISM_GLASS_RANGES,
+  PRISM_LIGHT_FADE_RANGES,
   PRISM_POSTPROCESS_RANGES,
   PRISM_VIEW_LABELS,
   PRISM_VIEW_ORDER,
@@ -28,8 +29,11 @@ interface GuiValues {
   cameraDistance: number;
   cameraFov: number;
   beamWidth: number;
+  edgeFalloff: number;
+  rainbowFalloff: number;
   wallColor: string;
   wireframe: boolean;
+  lightWireframe: boolean;
   environmentDebug: boolean;
   ior: number;
   reflectionStrength: number;
@@ -72,6 +76,8 @@ export function Controls({
     const glass = initialValue.glass ?? DEFAULT_PRISM_CONTROLS.glass;
     const postprocess =
       initialValue.postprocess ?? DEFAULT_PRISM_CONTROLS.postprocess;
+    const lightFade =
+      initialValue.lightFade ?? DEFAULT_PRISM_CONTROLS.lightFade;
     const absorption =
       glass.absorption ?? DEFAULT_PRISM_CONTROLS.glass.absorption;
     const values: GuiValues = {
@@ -81,8 +87,15 @@ export function Controls({
         initialValue.cameraDistance ?? DEFAULT_PRISM_CONTROLS.cameraDistance,
       cameraFov: initialValue.cameraFov ?? DEFAULT_PRISM_CONTROLS.cameraFov,
       beamWidth: initialValue.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth,
+      edgeFalloff:
+        lightFade.edgeFalloff ?? DEFAULT_PRISM_CONTROLS.lightFade.edgeFalloff,
+      rainbowFalloff:
+        lightFade.rainbowFalloff ??
+        DEFAULT_PRISM_CONTROLS.lightFade.rainbowFalloff,
       wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
       wireframe: initialValue.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
+      lightWireframe:
+        initialValue.lightWireframe ?? DEFAULT_PRISM_CONTROLS.lightWireframe,
       environmentDebug:
         initialValue.environmentDebug ??
         DEFAULT_PRISM_CONTROLS.environmentDebug,
@@ -133,8 +146,13 @@ export function Controls({
         cameraDistance: values.cameraDistance,
         cameraFov: values.cameraFov,
         beamWidth: values.beamWidth,
+        lightFade: {
+          edgeFalloff: values.edgeFalloff,
+          rainbowFalloff: values.rainbowFalloff,
+        },
         wallColor: values.wallColor,
         wireframe: values.wireframe,
+        lightWireframe: values.lightWireframe,
         environmentDebug: values.environmentDebug,
         glass: {
           ior: values.ior,
@@ -158,6 +176,7 @@ export function Controls({
       });
 
     const sceneFolder = gui.addFolder("Scene");
+    const lightFolder = gui.addFolder("Light fade");
     const cameraFolder = gui.addFolder("Camera");
     const glassFolder = gui.addFolder("Glass");
     const transmissionFolder = glassFolder.addFolder("Transmission");
@@ -186,6 +205,26 @@ export function Controls({
       sceneFolder
         .addColor(values, "wallColor")
         .name("wall color")
+        .onChange(publish),
+      lightFolder
+        .add(
+          values,
+          "edgeFalloff",
+          PRISM_LIGHT_FADE_RANGES.edgeFalloff.min,
+          PRISM_LIGHT_FADE_RANGES.edgeFalloff.max,
+          PRISM_LIGHT_FADE_RANGES.edgeFalloff.step
+        )
+        .name("edge falloff")
+        .onChange(publish),
+      lightFolder
+        .add(
+          values,
+          "rainbowFalloff",
+          PRISM_LIGHT_FADE_RANGES.rainbowFalloff.min,
+          PRISM_LIGHT_FADE_RANGES.rainbowFalloff.max,
+          PRISM_LIGHT_FADE_RANGES.rainbowFalloff.step
+        )
+        .name("rainbow falloff")
         .onChange(publish),
       cameraFolder
         .add(
@@ -341,7 +380,14 @@ export function Controls({
         .add(values, "view", options(PRISM_VIEW_ORDER, PRISM_VIEW_LABELS))
         .name("show")
         .onChange(publish),
-      debugFolder.add(values, "wireframe").name("wireframe").onChange(publish),
+      debugFolder
+        .add(values, "wireframe")
+        .name("prism wireframe")
+        .onChange(publish),
+      debugFolder
+        .add(values, "lightWireframe")
+        .name("light wireframe")
+        .onChange(publish),
       debugFolder
         .add(values, "environmentDebug")
         .name("environment debug")

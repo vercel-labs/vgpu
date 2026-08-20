@@ -7,6 +7,14 @@ export struct Scene {
   wallColor: vec3f,
   /** 1 shows only the generated light over black. */
   causticOnly: u32,
+  /** World-space depth of the emissive sheet between the glass interfaces. */
+  lightPlaneZ: f32,
+  /** Fixed layout metadata used to decimate the debug wireframe. */
+  lightWhiteQuads: u32,
+  lightBeamSlices: u32,
+  /** User-controlled lateral and outgoing-distance falloff strengths. */
+  lightEdgeFalloff: f32,
+  rainbowFalloff: f32,
 }
 
 /** Maps top-origin texture coordinates to the wall plane in world space. */

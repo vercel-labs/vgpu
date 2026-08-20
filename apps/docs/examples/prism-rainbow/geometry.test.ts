@@ -34,6 +34,7 @@ import {
   PRISM_BACK_Z,
   PRISM_DEFAULT_ARC,
   PRISM_FRONT_Z,
+  PRISM_LIGHT_PLANE_Z,
   PRISM_SIDE,
   PRISM_TRIANGLE,
 } from "./types";
@@ -135,6 +136,11 @@ describe("the extruded prism", () => {
     // The back face is against the wall and the front face is towards the camera.
     expect(PRISM_BACK_Z).toBeGreaterThan(0);
     expect(PRISM_FRONT_Z).toBeGreaterThan(PRISM_BACK_Z);
+    expect(PRISM_LIGHT_PLANE_Z).toBeCloseTo(
+      (PRISM_BACK_Z + PRISM_FRONT_Z) * 0.5
+    );
+    expect(PRISM_LIGHT_PLANE_Z).toBeGreaterThan(PRISM_BACK_Z);
+    expect(PRISM_LIGHT_PLANE_Z).toBeLessThan(PRISM_FRONT_Z);
   });
 
   test("subdivides every long bevel run and connects the cap boundary to it", () => {
