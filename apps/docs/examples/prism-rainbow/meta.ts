@@ -4,7 +4,7 @@ export const meta = {
   slug: 'prism-rainbow',
   title: 'Prism Rainbow',
   description:
-    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, while a four-pass HDR ping-pong pipeline resolves the inner and outer glass interfaces before final tone mapping. An optional orbitable mirror ball and XYZ gizmo expose the analytic studio environment for visual tuning.',
+    'A finite collimated beam is traced analytically through a prism with Snell refraction, Fresnel transmission and total internal reflection. Adjacent wavelength vertices become continuous additive mesh sheets, while an HDR ping-pong pipeline resolves both glass interfaces and a jittered four-level bloom pyramid before final tone mapping. An optional orbitable mirror ball and XYZ gizmo expose the analytic studio environment for visual tuning.',
   tags: ['lighting', 'raycasting', 'rendering', 'frosted-glass', 'shader'],
   capabilities: [
     'webgpu',
@@ -39,6 +39,8 @@ export const meta = {
     'light.wgsl',
     'wall.wgsl',
     'copy-linear.wgsl',
+    'bloom.wgsl',
+    'bloom-upsample.wgsl',
     'glass-common.wgsl',
     'glass-back.wgsl',
     'glass.wgsl',

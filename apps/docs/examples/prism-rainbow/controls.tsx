@@ -4,9 +4,11 @@ import GUI, { type Controller } from "lil-gui";
 import {
   DEFAULT_PRISM_CONTROLS,
   PRISM_BEAM_WIDTH_RANGE,
+  PRISM_CAMERA_RANGES,
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
   PRISM_GLASS_RANGES,
+  PRISM_POSTPROCESS_RANGES,
   PRISM_VIEW_LABELS,
   PRISM_VIEW_ORDER,
   type PrismControls,
@@ -23,6 +25,8 @@ export interface ControlsProps {
 interface GuiValues {
   dispersion: PrismDispersion;
   view: PrismView;
+  cameraDistance: number;
+  cameraFov: number;
   beamWidth: number;
   wallColor: string;
   wireframe: boolean;
@@ -37,6 +41,9 @@ interface GuiValues {
   iridescenceStrength: number;
   iridescenceFrequency: number;
   environmentExposure: number;
+  bloomStrength: number;
+  bloomThreshold: number;
+  bloomRadius: number;
 }
 
 function options<T extends string>(
@@ -63,30 +70,51 @@ export function Controls({
     // Fall back per-field as well as per-object so Fast Refresh can safely
     // cross control-schema changes without rebuilding the renderer.
     const glass = initialValue.glass ?? DEFAULT_PRISM_CONTROLS.glass;
-    const absorption = glass.absorption ?? DEFAULT_PRISM_CONTROLS.glass.absorption;
+    const postprocess =
+      initialValue.postprocess ?? DEFAULT_PRISM_CONTROLS.postprocess;
+    const absorption =
+      glass.absorption ?? DEFAULT_PRISM_CONTROLS.glass.absorption;
     const values: GuiValues = {
       dispersion: initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion,
       view: initialValue.view ?? DEFAULT_PRISM_CONTROLS.view,
+      cameraDistance:
+        initialValue.cameraDistance ?? DEFAULT_PRISM_CONTROLS.cameraDistance,
+      cameraFov: initialValue.cameraFov ?? DEFAULT_PRISM_CONTROLS.cameraFov,
       beamWidth: initialValue.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth,
       wallColor: initialValue.wallColor ?? DEFAULT_PRISM_CONTROLS.wallColor,
       wireframe: initialValue.wireframe ?? DEFAULT_PRISM_CONTROLS.wireframe,
       environmentDebug:
-        initialValue.environmentDebug ?? DEFAULT_PRISM_CONTROLS.environmentDebug,
+        initialValue.environmentDebug ??
+        DEFAULT_PRISM_CONTROLS.environmentDebug,
       ior: glass.ior ?? DEFAULT_PRISM_CONTROLS.glass.ior,
       reflectionStrength:
-        glass.reflectionStrength ?? DEFAULT_PRISM_CONTROLS.glass.reflectionStrength,
+        glass.reflectionStrength ??
+        DEFAULT_PRISM_CONTROLS.glass.reflectionStrength,
       absorptionR: absorption[0] ?? DEFAULT_PRISM_CONTROLS.glass.absorption[0],
       absorptionG: absorption[1] ?? DEFAULT_PRISM_CONTROLS.glass.absorption[1],
       absorptionB: absorption[2] ?? DEFAULT_PRISM_CONTROLS.glass.absorption[2],
-      frostRadius: glass.frostRadius ?? DEFAULT_PRISM_CONTROLS.glass.frostRadius,
+      frostRadius:
+        glass.frostRadius ?? DEFAULT_PRISM_CONTROLS.glass.frostRadius,
       glassDispersion:
         glass.dispersion ?? DEFAULT_PRISM_CONTROLS.glass.dispersion,
       iridescenceStrength:
-        glass.iridescenceStrength ?? DEFAULT_PRISM_CONTROLS.glass.iridescenceStrength,
+        glass.iridescenceStrength ??
+        DEFAULT_PRISM_CONTROLS.glass.iridescenceStrength,
       iridescenceFrequency:
-        glass.iridescenceFrequency ?? DEFAULT_PRISM_CONTROLS.glass.iridescenceFrequency,
+        glass.iridescenceFrequency ??
+        DEFAULT_PRISM_CONTROLS.glass.iridescenceFrequency,
       environmentExposure:
-        glass.environmentExposure ?? DEFAULT_PRISM_CONTROLS.glass.environmentExposure,
+        glass.environmentExposure ??
+        DEFAULT_PRISM_CONTROLS.glass.environmentExposure,
+      bloomStrength:
+        postprocess.bloomStrength ??
+        DEFAULT_PRISM_CONTROLS.postprocess.bloomStrength,
+      bloomThreshold:
+        postprocess.bloomThreshold ??
+        DEFAULT_PRISM_CONTROLS.postprocess.bloomThreshold,
+      bloomRadius:
+        postprocess.bloomRadius ??
+        DEFAULT_PRISM_CONTROLS.postprocess.bloomRadius,
     };
     const gui = new GUI({ title: "Prism", container });
     Object.assign(gui.domElement.style, {
@@ -102,6 +130,8 @@ export function Controls({
       onChangeRef.current({
         dispersion: values.dispersion,
         view: values.view,
+        cameraDistance: values.cameraDistance,
+        cameraFov: values.cameraFov,
         beamWidth: values.beamWidth,
         wallColor: values.wallColor,
         wireframe: values.wireframe,
@@ -109,19 +139,30 @@ export function Controls({
         glass: {
           ior: values.ior,
           reflectionStrength: values.reflectionStrength,
-          absorption: [values.absorptionR, values.absorptionG, values.absorptionB],
+          absorption: [
+            values.absorptionR,
+            values.absorptionG,
+            values.absorptionB,
+          ],
           frostRadius: values.frostRadius,
           dispersion: values.glassDispersion,
           iridescenceStrength: values.iridescenceStrength,
           iridescenceFrequency: values.iridescenceFrequency,
           environmentExposure: values.environmentExposure,
         },
+        postprocess: {
+          bloomStrength: values.bloomStrength,
+          bloomThreshold: values.bloomThreshold,
+          bloomRadius: values.bloomRadius,
+        },
       });
 
     const sceneFolder = gui.addFolder("Scene");
+    const cameraFolder = gui.addFolder("Camera");
     const glassFolder = gui.addFolder("Glass");
     const transmissionFolder = glassFolder.addFolder("Transmission");
     const reflectionFolder = glassFolder.addFolder("Reflection");
+    const postprocessFolder = gui.addFolder("Postprocessing");
     const debugFolder = gui.addFolder("Debug");
     const controllers: Controller[] = [
       sceneFolder
@@ -138,18 +179,41 @@ export function Controls({
           "beamWidth",
           PRISM_BEAM_WIDTH_RANGE.min,
           PRISM_BEAM_WIDTH_RANGE.max,
-          PRISM_BEAM_WIDTH_RANGE.step,
+          PRISM_BEAM_WIDTH_RANGE.step
         )
         .name("beam width")
         .onChange(publish),
-      sceneFolder.addColor(values, "wallColor").name("wall color").onChange(publish),
+      sceneFolder
+        .addColor(values, "wallColor")
+        .name("wall color")
+        .onChange(publish),
+      cameraFolder
+        .add(
+          values,
+          "cameraDistance",
+          PRISM_CAMERA_RANGES.distance.min,
+          PRISM_CAMERA_RANGES.distance.max,
+          PRISM_CAMERA_RANGES.distance.step
+        )
+        .name("distance")
+        .onChange(publish),
+      cameraFolder
+        .add(
+          values,
+          "cameraFov",
+          PRISM_CAMERA_RANGES.fov.min,
+          PRISM_CAMERA_RANGES.fov.max,
+          PRISM_CAMERA_RANGES.fov.step
+        )
+        .name("FOV")
+        .onChange(publish),
       transmissionFolder
         .add(
           values,
           "ior",
           PRISM_GLASS_RANGES.ior.min,
           PRISM_GLASS_RANGES.ior.max,
-          PRISM_GLASS_RANGES.ior.step,
+          PRISM_GLASS_RANGES.ior.step
         )
         .name("IOR")
         .onChange(publish),
@@ -159,7 +223,7 @@ export function Controls({
           "absorptionR",
           PRISM_GLASS_RANGES.absorption.min,
           PRISM_GLASS_RANGES.absorption.max,
-          PRISM_GLASS_RANGES.absorption.step,
+          PRISM_GLASS_RANGES.absorption.step
         )
         .name("absorption R")
         .onChange(publish),
@@ -169,7 +233,7 @@ export function Controls({
           "absorptionG",
           PRISM_GLASS_RANGES.absorption.min,
           PRISM_GLASS_RANGES.absorption.max,
-          PRISM_GLASS_RANGES.absorption.step,
+          PRISM_GLASS_RANGES.absorption.step
         )
         .name("absorption G")
         .onChange(publish),
@@ -179,7 +243,7 @@ export function Controls({
           "absorptionB",
           PRISM_GLASS_RANGES.absorption.min,
           PRISM_GLASS_RANGES.absorption.max,
-          PRISM_GLASS_RANGES.absorption.step,
+          PRISM_GLASS_RANGES.absorption.step
         )
         .name("absorption B")
         .onChange(publish),
@@ -189,7 +253,7 @@ export function Controls({
           "frostRadius",
           PRISM_GLASS_RANGES.frostRadius.min,
           PRISM_GLASS_RANGES.frostRadius.max,
-          PRISM_GLASS_RANGES.frostRadius.step,
+          PRISM_GLASS_RANGES.frostRadius.step
         )
         .name("frost px")
         .onChange(publish),
@@ -199,7 +263,7 @@ export function Controls({
           "glassDispersion",
           PRISM_GLASS_RANGES.dispersion.min,
           PRISM_GLASS_RANGES.dispersion.max,
-          PRISM_GLASS_RANGES.dispersion.step,
+          PRISM_GLASS_RANGES.dispersion.step
         )
         .name("chromatic shift")
         .onChange(publish),
@@ -209,7 +273,7 @@ export function Controls({
           "reflectionStrength",
           PRISM_GLASS_RANGES.reflectionStrength.min,
           PRISM_GLASS_RANGES.reflectionStrength.max,
-          PRISM_GLASS_RANGES.reflectionStrength.step,
+          PRISM_GLASS_RANGES.reflectionStrength.step
         )
         .name("strength")
         .onChange(publish),
@@ -219,7 +283,7 @@ export function Controls({
           "environmentExposure",
           PRISM_GLASS_RANGES.environmentExposure.min,
           PRISM_GLASS_RANGES.environmentExposure.max,
-          PRISM_GLASS_RANGES.environmentExposure.step,
+          PRISM_GLASS_RANGES.environmentExposure.step
         )
         .name("env exposure")
         .onChange(publish),
@@ -229,7 +293,7 @@ export function Controls({
           "iridescenceStrength",
           PRISM_GLASS_RANGES.iridescenceStrength.min,
           PRISM_GLASS_RANGES.iridescenceStrength.max,
-          PRISM_GLASS_RANGES.iridescenceStrength.step,
+          PRISM_GLASS_RANGES.iridescenceStrength.step
         )
         .name("iridescence")
         .onChange(publish),
@@ -239,9 +303,39 @@ export function Controls({
           "iridescenceFrequency",
           PRISM_GLASS_RANGES.iridescenceFrequency.min,
           PRISM_GLASS_RANGES.iridescenceFrequency.max,
-          PRISM_GLASS_RANGES.iridescenceFrequency.step,
+          PRISM_GLASS_RANGES.iridescenceFrequency.step
         )
         .name("film frequency")
+        .onChange(publish),
+      postprocessFolder
+        .add(
+          values,
+          "bloomStrength",
+          PRISM_POSTPROCESS_RANGES.bloomStrength.min,
+          PRISM_POSTPROCESS_RANGES.bloomStrength.max,
+          PRISM_POSTPROCESS_RANGES.bloomStrength.step
+        )
+        .name("bloom strength")
+        .onChange(publish),
+      postprocessFolder
+        .add(
+          values,
+          "bloomThreshold",
+          PRISM_POSTPROCESS_RANGES.bloomThreshold.min,
+          PRISM_POSTPROCESS_RANGES.bloomThreshold.max,
+          PRISM_POSTPROCESS_RANGES.bloomThreshold.step
+        )
+        .name("threshold")
+        .onChange(publish),
+      postprocessFolder
+        .add(
+          values,
+          "bloomRadius",
+          PRISM_POSTPROCESS_RANGES.bloomRadius.min,
+          PRISM_POSTPROCESS_RANGES.bloomRadius.max,
+          PRISM_POSTPROCESS_RANGES.bloomRadius.step
+        )
+        .name("radius")
         .onChange(publish),
       debugFolder
         .add(values, "view", options(PRISM_VIEW_ORDER, PRISM_VIEW_LABELS))

@@ -131,6 +131,26 @@ fn traceExit(
   return ExitPath(position, direction, direction, inwardNormal, 0u);
 }
 
+/**
+ * An inner-face reflection remains inside the solid. Follow it to the next
+ * interface (and through any subsequent TIR bounces) before using its direction
+ * to sample the exterior studio environment.
+ */
+fn traceReflectedEnvironmentExit(
+  surfacePosition: vec3f,
+  incidentDirection: vec3f,
+  inwardNormal: vec3f,
+) -> ExitPath {
+  let direction = normalize(reflect(incidentDirection, inwardNormal));
+  let shiftedPosition = surfacePosition + direction * SURFACE_EPSILON;
+  let hit = nextSurface(shiftedPosition, direction);
+  if (hit.distance >= 10.0) {
+    return ExitPath(surfacePosition, direction, direction, inwardNormal, 0u);
+  }
+  let position = shiftedPosition + direction * hit.distance;
+  return traceExit(position, direction, -hit.outwardNormal);
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let view = normalize(params.cameraPosition - in.worldPosition);
@@ -158,10 +178,24 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let exteriorColor = glassEnvironment(exit.direction, params) * params.reflectionStrength;
   let sceneColor = select(exteriorColor, wallColor, validWallHit);
 
-  let reflectedEnvironment = glassEnvironment(
-    reflect(exit.incidentDirection, exit.inwardNormal),
-    params,
-  ) * params.reflectionStrength;
+  let reflectedExit = traceReflectedEnvironmentExit(
+    exit.position,
+    exit.incidentDirection,
+    exit.inwardNormal,
+  );
+  let reflectedFacing = clamp(
+    -dot(reflectedExit.incidentDirection, reflectedExit.inwardNormal),
+    0.0,
+    1.0,
+  );
+  let reflectedExitTransmission = select(
+    0.0,
+    1.0 - dielectricFresnel(params.ior, reflectedFacing),
+    reflectedExit.escaped != 0u,
+  );
+  let reflectedEnvironment = glassEnvironment(reflectedExit.direction, params)
+    * params.reflectionStrength
+    * reflectedExitTransmission;
   let facing = clamp(-dot(exit.incidentDirection, exit.inwardNormal), 0.0, 1.0);
   let fresnel = dielectricFresnel(params.ior, facing);
   let radiance = select(

@@ -27,6 +27,10 @@ export const LIGHT_VERTEX_STRIDE = LIGHT_VERTEX_FLOATS * Float32Array.BYTES_PER_
 const VERTICES_PER_QUAD = 6;
 const MAX_INTERNAL_SEGMENTS = PRISM_MAX_INTERNAL_BOUNCES + 1;
 const DENSITY_MEASURE_DISTANCE = 1;
+/** The collimated source is deliberately emissive HDR, not painted white. */
+export const INPUT_BEAM_RADIANCE = 6;
+/** Fresnel transmission makes the light inside the glass slightly dimmer. */
+export const INTERNAL_BEAM_RADIANCE = 4.5;
 
 /** White input/internal quads, then one cell per wavelength interval and beam slice. */
 export function lightVertexCount(samples = PRISM_SPECTRAL_SAMPLES, beamSlices = PRISM_BEAM_SLICES): number {
@@ -294,7 +298,7 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
       lowerEntry,
       upperEntry,
       -1,
-      0.34,
+      INPUT_BEAM_RADIANCE,
     );
     // Dispersion inside this small prism is narrower than the beam itself, so
     // the spectrum still overlaps into white. Drawing the finite envelope once
@@ -305,7 +309,15 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
       const upperStart = middle.upper.points[segment];
       const upperEnd = middle.upper.points[segment + 1];
       if (lowerStart && lowerEnd && upperStart && upperEnd) {
-        pushQuad(vertices, lowerStart, upperStart, lowerEnd, upperEnd, -1, 0.28);
+        pushQuad(
+          vertices,
+          lowerStart,
+          upperStart,
+          lowerEnd,
+          upperEnd,
+          -1,
+          INTERNAL_BEAM_RADIANCE,
+        );
       } else {
         pushEmptyQuad(vertices);
       }

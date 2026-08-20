@@ -1,9 +1,9 @@
 // The deliberately sparse studio the prism reflects.
 //
 // It started as `glass-fractal`'s nine-panel baked cubemap, but this shot only
-// needs three intentional edge lights: warm left, cool right and a neutral strip
-// below the prism. Evaluating them directly keeps the environment editable in
-// one WGSL file and available to both the glass and the mirror-ball debugger.
+// needs three intentional surfaces: a dark back-left wall, a cool right key and
+// a neutral strip below the prism. Evaluating them directly keeps the environment
+// editable in one WGSL file and available to both the glass and mirror-ball debugger.
 //
 // The final line replays the round trip the asset used to perform — encode to
 // gamma 2.2, decode as sRGB — so the values a reflection reads here are the values
@@ -24,16 +24,16 @@ struct StudioPanel {
   intensity: f32,
 }
 
-/** Three panels with a dim left fill, soft center fill and dominant right key. */
+/** A back-left wall, soft center fill and dominant right key. */
 fn studioPanels() -> array<StudioPanel, 3> {
   return array<StudioPanel, 3>(
-    // A warm fill pushed left so it only grazes the left bevel.
+    // A broad back-left wall, only a touch brighter than the dark floor.
     StudioPanel(
-      vec3f(-0.78, 0.315, 0.54), // direction
-      vec2f(0.44, 0.16), // size
-      0.06, // feather
-      vec3f(1.0, 0.86, 0.74), // color
-      0.65 // intensity
+      vec3f(-0.82, 0.08, 0.57), // direction
+      vec2f(1.35, 1.1), // size
+      0.22, // feather
+      vec3f(0.82, 0.84, 0.88), // color
+      0.011 // intensity
     ),
     // A broad, heavily feathered center fill that barely lifts the bottom edge.
     StudioPanel(

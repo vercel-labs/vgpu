@@ -122,9 +122,22 @@ export interface GlassControls {
   readonly environmentExposure: number;
 }
 
+export interface PostprocessControls {
+  /** Multiplier applied to the blurred HDR highlights before tone mapping. */
+  readonly bloomStrength: number;
+  /** Linear-light brightness at which pixels begin contributing to bloom. */
+  readonly bloomThreshold: number;
+  /** Reconstruction radius in texels at every level of the bloom pyramid. */
+  readonly bloomRadius: number;
+}
+
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
   readonly view: PrismView;
+  /** Distance from the wall along the camera's orbit sphere, in scene units. */
+  readonly cameraDistance: number;
+  /** Vertical field of view of the perspective camera, in degrees. */
+  readonly cameraFov: number;
   /** Full beam width in scene units, measured perpendicular to its axis. */
   readonly beamWidth: number;
   /** CSS hex color, interpreted as sRGB before the additive light is applied. */
@@ -135,10 +148,24 @@ export interface PrismControls {
   readonly environmentDebug: boolean;
   /** Runtime material parameters shared by the front and back glass passes. */
   readonly glass: GlassControls;
+  /** HDR operations performed after both glass interfaces. */
+  readonly postprocess: PostprocessControls;
 }
 
-export const PRISM_DEFAULT_BEAM_WIDTH = 0.08;
-export const PRISM_BEAM_WIDTH_RANGE = { min: 0.01, max: 0.2, step: 0.005 } as const;
+export const PRISM_DEFAULT_BEAM_WIDTH = 0.01;
+export const PRISM_BEAM_WIDTH_RANGE = {
+  min: 0.01,
+  max: 0.2,
+  step: 0.005,
+} as const;
+/** Vertical field of view of the camera looking at the wall, in degrees. */
+export const CAMERA_FOV_DEGREES = 48;
+/** How far the camera sits from the wall, in scene units. */
+export const CAMERA_DISTANCE = 1.25;
+export const PRISM_CAMERA_RANGES = {
+  distance: { min: 1.25, max: 4, step: 0.01 },
+  fov: { min: 20, max: 70, step: 1 },
+} as const;
 export const PRISM_GLASS_RANGES = {
   ior: { min: 1, max: 2.5, step: 0.001 },
   reflectionStrength: { min: 0, max: 3, step: 0.01 },
@@ -151,29 +178,63 @@ export const PRISM_GLASS_RANGES = {
 } as const;
 
 export const DEFAULT_GLASS_CONTROLS: GlassControls = {
-  ior: 1.5,
-  reflectionStrength: 1.2,
-  absorption: [0.1, 0.085, 0.075],
-  frostRadius: 1.4,
-  dispersion: 0.02,
-  iridescenceStrength: 0.08,
+  ior: 1.244,
+  reflectionStrength: 2.21,
+  absorption: [0.58, 0.685, 0.15],
+  frostRadius: 0.3,
+  dispersion: 0.015,
+  iridescenceStrength: 0.16,
   iridescenceFrequency: 2,
-  environmentExposure: 1.6,
+  environmentExposure: 1.55,
+};
+
+export const PRISM_POSTPROCESS_RANGES = {
+  bloomStrength: { min: 0, max: 3, step: 0.05 },
+  bloomThreshold: { min: 0, max: 4, step: 0.05 },
+  bloomRadius: { min: 0.25, max: 3, step: 0.05 },
+} as const;
+
+export const DEFAULT_POSTPROCESS_CONTROLS: PostprocessControls = {
+  bloomStrength: 0.6,
+  bloomThreshold: 0.45,
+  bloomRadius: 1,
 };
 
 export function clampBeamWidth(width: number): number {
   if (!Number.isFinite(width)) return PRISM_DEFAULT_BEAM_WIDTH;
-  return Math.min(PRISM_BEAM_WIDTH_RANGE.max, Math.max(PRISM_BEAM_WIDTH_RANGE.min, width));
+  return Math.min(
+    PRISM_BEAM_WIDTH_RANGE.max,
+    Math.max(PRISM_BEAM_WIDTH_RANGE.min, width)
+  );
+}
+
+export function clampCameraDistance(distance: number): number {
+  if (!Number.isFinite(distance)) return CAMERA_DISTANCE;
+  return Math.min(
+    PRISM_CAMERA_RANGES.distance.max,
+    Math.max(PRISM_CAMERA_RANGES.distance.min, distance)
+  );
+}
+
+export function clampCameraFov(fov: number): number {
+  if (!Number.isFinite(fov)) return CAMERA_FOV_DEGREES;
+  return Math.min(
+    PRISM_CAMERA_RANGES.fov.max,
+    Math.max(PRISM_CAMERA_RANGES.fov.min, fov)
+  );
 }
 
 export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   dispersion: "stylized",
   view: "glass",
+  cameraDistance: CAMERA_DISTANCE,
+  cameraFov: CAMERA_FOV_DEGREES,
   beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
   wallColor: "#141414",
   wireframe: false,
   environmentDebug: false,
   glass: DEFAULT_GLASS_CONTROLS,
+  postprocess: DEFAULT_POSTPROCESS_CONTROLS,
 };
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -272,7 +333,7 @@ export const PRISM_INCIDENCE_ARC = { min: 44, max: 58 } as const;
  */
 export function lampForIncidence(
   incidenceDegrees: number,
-  beamWidth = PRISM_DEFAULT_BEAM_WIDTH,
+  beamWidth = PRISM_DEFAULT_BEAM_WIDTH
 ): CollimatedLight {
   const face: Vec2 = [
     PRISM_TRIANGLE.b[0] - PRISM_TRIANGLE.a[0],
@@ -297,7 +358,9 @@ export function lampForIncidence(
 }
 
 /** The default lamp, at `PRISM_INCIDENCE_DEGREES`. */
-export const PRISM_LIGHT: CollimatedLight = lampForIncidence(PRISM_INCIDENCE_DEGREES);
+export const PRISM_LIGHT: CollimatedLight = lampForIncidence(
+  PRISM_INCIDENCE_DEGREES
+);
 
 /** Where `PRISM_INCIDENCE_DEGREES` sits on `PRISM_INCIDENCE_ARC`, in [0, 1]. */
 export const PRISM_DEFAULT_ARC =
@@ -314,7 +377,7 @@ export const PRISM_SPECTRAL_SAMPLES = 64;
 export const PRISM_BEAM_SLICES = 24;
 
 /** Display exposure for the finite spectral integral represented by the mesh. */
-export const PRISM_LIGHT_EXPOSURE = 5.5;
+export const PRISM_LIGHT_EXPOSURE = 88;
 
 /** Internal reflections a ray may take before the analytic solver gives up. */
 export const PRISM_MAX_INTERNAL_BOUNCES = 3;
@@ -362,21 +425,6 @@ export const PRISM_GLASS: GlassMaterial = {
   ...DEFAULT_GLASS_CONTROLS,
   environmentRotation: [0, 0, 0],
 };
-
-/** Vertical field of view of the camera looking at the wall, in degrees. */
-export const CAMERA_FOV_DEGREES = 38;
-
-/**
- * How far the camera sits from the wall.
- *
- * The one real trade-off in the framing, because both sides of it follow from
- * this number alone: closer and the prism grows in the frame — it takes about a
- * fifth of the width here, which leaves the fan the room it needs to open — while
- * further back it shrinks and more wall fits in frame. `camera.ts` derives the wall's
- * size from whatever this is, so moving it cannot break the picture; it only
- * changes how many texels the fan gets.
- */
-export const CAMERA_DISTANCE = 2.55;
 
 /**
  * The resting camera is centered on the prism and square to the wall. Hovering

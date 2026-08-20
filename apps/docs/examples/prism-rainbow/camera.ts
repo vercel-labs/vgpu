@@ -15,7 +15,7 @@
  * to show the glass standing off the wall.
  */
 
-import { perspectiveCamera, type SceneCamera } from 'vgpu/scene';
+import { perspectiveCamera, type SceneCamera } from "vgpu/scene";
 
 import {
   CAMERA_DISTANCE,
@@ -23,7 +23,7 @@ import {
   CAMERA_ORBIT_DEGREES,
   CAMERA_PITCH_DEGREES,
   CAMERA_YAW_DEGREES,
-} from './types';
+} from "./types";
 
 type Vec3 = readonly [number, number, number];
 
@@ -32,9 +32,11 @@ const WALL_SAFETY = 1.02;
 
 /**
  * Last answer from `wallHalfHeight`, which costs nine cameras and is read while
- * assembling uniforms. It only changes when the canvas does.
+ * assembling uniforms. It changes with the canvas shape or camera controls.
  */
 let memoizedAspect = 0;
+let memoizedDistance = 0;
+let memoizedFov = 0;
 let memoizedHalfHeight = 0;
 
 export interface CameraView {
@@ -52,26 +54,32 @@ export interface CameraView {
  * It swings on a sphere around the origin and keeps looking at it, so the prism
  * stays put in the frame and only the parallax against the wall behind it moves.
  */
-export function cameraView(aspect: number, orbitX = 0, orbitY = 0): CameraView {
+export function cameraView(
+  aspect: number,
+  orbitX = 0,
+  orbitY = 0,
+  distance = CAMERA_DISTANCE,
+  fov = CAMERA_FOV_DEGREES
+): CameraView {
   const limit = CAMERA_ORBIT_DEGREES;
   const yaw = radians(CAMERA_YAW_DEGREES + clamp(orbitX, -1, 1) * limit);
   const pitch = radians(CAMERA_PITCH_DEGREES - clamp(orbitY, -1, 1) * limit);
   const cosPitch = Math.cos(pitch);
   const position: Vec3 = [
-    Math.sin(yaw) * cosPitch * CAMERA_DISTANCE,
-    Math.sin(pitch) * CAMERA_DISTANCE,
-    Math.cos(yaw) * cosPitch * CAMERA_DISTANCE,
+    Math.sin(yaw) * cosPitch * distance,
+    Math.sin(pitch) * distance,
+    Math.cos(yaw) * cosPitch * distance,
   ];
   const forward = normalize([-position[0], -position[1], -position[2]]);
   const right = normalize(cross(forward, [0, 1, 0]));
   return {
     camera: perspectiveCamera({
-      fov: CAMERA_FOV_DEGREES,
+      fov,
       aspect,
       // The whole scene sits between the wall at z = 0 and the glass in front of
       // it, so the depth range only has to bracket a couple of units.
       near: 0.05,
-      far: 4 * CAMERA_DISTANCE,
+      far: 4 * distance,
       position,
       target: [0, 0, 0],
     }),
@@ -96,15 +104,29 @@ export function cameraView(aspect: number, orbitX = 0, orbitY = 0): CameraView {
  * fixed in scene units, so a taller wall means a larger visible rectangle around
  * an unchanged scene — the same picture with more room in the corners.
  */
-export function wallHalfHeight(aspect: number): number {
-  if (aspect === memoizedAspect) return memoizedHalfHeight;
+export function wallHalfHeight(
+  aspect: number,
+  distance = CAMERA_DISTANCE,
+  fov = CAMERA_FOV_DEGREES
+): number {
+  if (
+    aspect === memoizedAspect &&
+    distance === memoizedDistance &&
+    fov === memoizedFov
+  )
+    return memoizedHalfHeight;
   let worst = 0;
   for (const orbitX of [-1, 0, 1]) {
     for (const orbitY of [-1, 0, 1]) {
-      worst = Math.max(worst, wallCoverage(aspect, orbitX, orbitY));
+      worst = Math.max(
+        worst,
+        wallCoverage(aspect, orbitX, orbitY, distance, fov)
+      );
     }
   }
   memoizedAspect = aspect;
+  memoizedDistance = distance;
+  memoizedFov = fov;
   memoizedHalfHeight = worst * WALL_SAFETY;
   return memoizedHalfHeight;
 }
@@ -115,16 +137,24 @@ export function wallHalfHeight(aspect: number): number {
  * Measured by walking the four corner rays of the frustum to the wall plane,
  * which is the only place a shortfall could appear.
  */
-export function wallCoverage(aspect: number, orbitX = 0, orbitY = 0): number {
-  const view = cameraView(aspect, orbitX, orbitY);
-  const tanHalfFov = Math.tan(radians(CAMERA_FOV_DEGREES) / 2);
+export function wallCoverage(
+  aspect: number,
+  orbitX = 0,
+  orbitY = 0,
+  distance = CAMERA_DISTANCE,
+  fov = CAMERA_FOV_DEGREES
+): number {
+  const view = cameraView(aspect, orbitX, orbitY, distance, fov);
+  const tanHalfFov = Math.tan(radians(fov) / 2);
   let worst = 0;
   for (const horizontal of [-1, 1]) {
     for (const vertical of [-1, 1]) {
-      const direction: Vec3 = [0, 1, 2].map((axis) =>
-        view.forward[axis]!
-        + view.right[axis]! * horizontal * tanHalfFov * aspect
-        + view.up[axis]! * vertical * tanHalfFov) as unknown as Vec3;
+      const direction: Vec3 = [0, 1, 2].map(
+        (axis) =>
+          view.forward[axis]! +
+          view.right[axis]! * horizontal * tanHalfFov * aspect +
+          view.up[axis]! * vertical * tanHalfFov
+      ) as unknown as Vec3;
       // The camera is on the +z side of the wall and looking towards it, so every
       // corner ray crosses z = 0 at a positive distance.
       if (direction[2] >= 0) return Infinity;
@@ -143,16 +173,30 @@ export function wallCoverage(aspect: number, orbitX = 0, orbitY = 0): number {
  * Copied from `glass-fractal`, which turns its environment the same way and by
  * the same default angles.
  */
-export function rotationMatrix(degrees: readonly [number, number, number]): Float32Array {
+export function rotationMatrix(
+  degrees: readonly [number, number, number]
+): Float32Array {
   const [x, y, z] = degrees.map(radians) as [number, number, number];
   const [sx, cx] = [Math.sin(x), Math.cos(x)];
   const [sy, cy] = [Math.sin(y), Math.cos(y)];
   const [sz, cz] = [Math.sin(z), Math.cos(z)];
   return new Float32Array([
-    cy * cz, cy * sz, -sy, 0,
-    sx * sy * cz - cx * sz, sx * sy * sz + cx * cz, sx * cy, 0,
-    cx * sy * cz + sx * sz, cx * sy * sz - sx * cz, cx * cy, 0,
-    0, 0, 0, 1,
+    cy * cz,
+    cy * sz,
+    -sy,
+    0,
+    sx * sy * cz - cx * sz,
+    sx * sy * sz + cx * cz,
+    sx * cy,
+    0,
+    cx * sy * cz + sx * sz,
+    cx * sy * sz - sx * cz,
+    cx * cy,
+    0,
+    0,
+    0,
+    0,
+    1,
   ]);
 }
 
@@ -165,7 +209,11 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 function cross(a: Vec3, b: Vec3): Vec3 {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
 }
 
 function normalize(value: Vec3): Vec3 {

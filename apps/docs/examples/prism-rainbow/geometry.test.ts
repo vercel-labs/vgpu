@@ -22,6 +22,7 @@ import {
   PRISM_BEVEL_RADIUS,
   PRISM_BEVEL_SEGMENTS,
   PRISM_CORNER_SEGMENTS,
+  PRISM_EDGE_SEGMENTS,
   PRISM_VERTEX_STRIDE,
   prismMeshData,
   prismPlanes,
@@ -33,6 +34,7 @@ import {
   PRISM_BACK_Z,
   PRISM_DEFAULT_ARC,
   PRISM_FRONT_Z,
+  PRISM_SIDE,
   PRISM_TRIANGLE,
 } from "./types";
 
@@ -84,11 +86,13 @@ describe("the extruded prism", () => {
   });
 
   test("rounds the visible solid inward without changing its optical envelope", () => {
-    const contourPoints = 3 * (PRISM_CORNER_SEGMENTS + 1);
+    const contourPoints = 3 * (PRISM_CORNER_SEGMENTS + PRISM_EDGE_SEGMENTS);
     const ringCount = 2 * (PRISM_BEVEL_SEGMENTS + 1);
     // Every bevel ring shares one fixed contour; each cap duplicates that ring
     // for a flat normal and adds a centre vertex for its triangle fan.
-    expect(vertexCount).toBe(ringCount * contourPoints + 2 * (contourPoints + 1));
+    expect(vertexCount).toBe(
+      ringCount * contourPoints + 2 * (contourPoints + 1)
+    );
     expect(indices).toHaveLength(
       ((ringCount - 1) * contourPoints * 2 + contourPoints * 2) * 3
     );
@@ -101,10 +105,14 @@ describe("the extruded prism", () => {
       const { position, normal } = vertexAt(index);
       expect(position[2]).toBeGreaterThanOrEqual(PRISM_BACK_Z - 1e-6);
       expect(position[2]).toBeLessThanOrEqual(PRISM_FRONT_Z + 1e-6);
-      if (!near(position[2], PRISM_BACK_Z) && !near(position[2], PRISM_FRONT_Z)) {
+      if (
+        !near(position[2], PRISM_BACK_Z) &&
+        !near(position[2], PRISM_FRONT_Z)
+      ) {
         intermediateDepths++;
       }
-      if (Math.abs(normal[2]) > 0.05 && Math.abs(normal[2]) < 0.95) blendedNormals++;
+      if (Math.abs(normal[2]) > 0.05 && Math.abs(normal[2]) < 0.95)
+        blendedNormals++;
 
       // Rounding cuts material away: it never adds a point beyond one of the
       // ideal planes through which the analytic tracer refracts.
@@ -115,14 +123,50 @@ describe("the extruded prism", () => {
     expect(intermediateDepths).toBeGreaterThan(contourPoints * 2);
     expect(blendedNormals).toBeGreaterThan(contourPoints * 2);
     // The sharp mathematical corners are gone from the visual mesh.
-    expect(corners.every(([x, y]) =>
-      Array.from({ length: vertexCount }, (_, index) => vertexAt(index).position)
-        .every((position) => !near(x, position[0]) || !near(y, position[1]))
-    )).toBe(true);
+    expect(
+      corners.every(([x, y]) =>
+        Array.from(
+          { length: vertexCount },
+          (_, index) => vertexAt(index).position
+        ).every((position) => !near(x, position[0]) || !near(y, position[1]))
+      )
+    ).toBe(true);
     expect(PRISM_BEVEL_RADIUS).toBeLessThan(0.03);
     // The back face is against the wall and the front face is towards the camera.
     expect(PRISM_BACK_Z).toBeGreaterThan(0);
     expect(PRISM_FRONT_Z).toBeGreaterThan(PRISM_BACK_Z);
+  });
+
+  test("subdivides every long bevel run and connects the cap boundary to it", () => {
+    const contourPoints = 3 * (PRISM_CORNER_SEGMENTS + PRISM_EDGE_SEGMENTS);
+    const firstRing = Array.from(
+      { length: contourPoints },
+      (_, index) => vertexAt(index).position
+    );
+    const boundaryLengths = firstRing.map((position, index) => {
+      const next = firstRing[(index + 1) % firstRing.length]!;
+      return Math.hypot(
+        next[0] - position[0],
+        next[1] - position[1],
+        next[2] - position[2]
+      );
+    });
+    expect(Math.max(...boundaryLengths)).toBeLessThan(
+      (PRISM_SIDE / PRISM_EDGE_SEGMENTS) * 1.01
+    );
+
+    const ringCount = 2 * (PRISM_BEVEL_SEGMENTS + 1);
+    const firstCapVertex = ringCount * contourPoints;
+    const capBoundary = new Set(
+      Array.from(
+        { length: contourPoints },
+        (_, index) => firstCapVertex + index
+      )
+    );
+    const capIndices = Array.from(indices).slice(-contourPoints * 2 * 3);
+    expect([...capBoundary].every((index) => capIndices.includes(index))).toBe(
+      true
+    );
   });
 
   test("has smooth unit normals and faces wound counter-clockwise from outside", () => {
@@ -159,7 +203,9 @@ describe("the extruded prism", () => {
         (a!.position[1] + b!.position[1] + c!.position[1]) / 3,
         (a!.position[2] + b!.position[2] + c!.position[2]) / 3,
       ];
-      expect(dot(geometricNormal, subtract(triangleCenter, centroid))).toBeGreaterThan(0);
+      expect(
+        dot(geometricNormal, subtract(triangleCenter, centroid))
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -293,7 +339,7 @@ describe("the camera", () => {
 
   test("sizes the wall to the frame, and never large enough to reach the lamp", () => {
     // A wider canvas sees more wall, so more of it has to be traced.
-    const heights = ASPECTS.map(wallHalfHeight);
+    const heights = ASPECTS.map((aspect) => wallHalfHeight(aspect));
     expect(heights[heights.length - 1]!).toBeGreaterThan(heights[3]!);
     for (const [index, aspect] of ASPECTS.entries()) {
       const [halfWidth, halfHeight] = [
@@ -317,7 +363,7 @@ describe("the camera", () => {
     }
   });
 
-  test("keeps the prism in frame and looks at it", () => {
+  test("keeps the composed shot framed and remains visible on narrow screens", () => {
     for (const aspect of [0.56, 1, 16 / 9, 2.4]) {
       for (const orbit of [
         [0, 0],
@@ -327,8 +373,15 @@ describe("the camera", () => {
         [1, -1],
       ] as const) {
         const box = prismSilhouette(aspect, orbit);
-        expect(box.x0, `aspect ${aspect}`).toBeGreaterThan(0);
-        expect(box.x1, `aspect ${aspect}`).toBeLessThan(1);
+        if (aspect >= 1) {
+          expect(box.x0, `aspect ${aspect}`).toBeGreaterThan(0);
+          expect(box.x1, `aspect ${aspect}`).toBeLessThan(1);
+        } else {
+          // The intentionally close new default crops a sliver of the prism on
+          // portrait phones, but must never move the subject out of the frame.
+          expect(box.x0, `aspect ${aspect}`).toBeLessThan(1);
+          expect(box.x1, `aspect ${aspect}`).toBeGreaterThan(0);
+        }
         expect(box.y0, `aspect ${aspect}`).toBeGreaterThan(0);
         expect(box.y1, `aspect ${aspect}`).toBeLessThan(1);
       }
@@ -349,6 +402,24 @@ describe("the camera", () => {
     expect(rest.position[1]).toBeCloseTo(0, 8);
     expect(rest.forward[0]).toBeCloseTo(0, 8);
     expect(rest.forward[1]).toBeCloseTo(0, 8);
+  });
+
+  test("derives the camera and wall from runtime distance and FOV", () => {
+    const distance = 3.2;
+    const fov = 56;
+    const view = cameraView(16 / 9, 0, 0, distance, fov);
+    expect(Math.hypot(...view.position)).toBeCloseTo(distance, 8);
+
+    const defaultWall = wallHalfHeight(16 / 9);
+    const configuredWall = wallHalfHeight(16 / 9, distance, fov);
+    expect(configuredWall).toBeGreaterThan(defaultWall);
+    for (const orbitX of [-1, 0, 1]) {
+      for (const orbitY of [-1, 0, 1]) {
+        expect(
+          wallCoverage(16 / 9, orbitX, orbitY, distance, fov) / configuredWall
+        ).toBeLessThan(1);
+      }
+    }
   });
 
   test("shows the glass standing off the wall, not painted on it", () => {

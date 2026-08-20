@@ -9,15 +9,20 @@
  * The construction mirrors the validated text-to-cad model: an equilateral
  * triangle with a small fillet on all nine edges. The triangular cross-section
  * is replaced by tangent circular arcs, then quarter-round rings blend that
- * outline into inset front and back caps. Four segments in each direction keep
- * the rim smooth at this scale while leaving its topology easy to inspect in
- * wireframe mode.
+ * outline into inset front and back caps. Four segments resolve each rounded
+ * direction, while the long straight runs are split independently so neither
+ * the bevel strips nor the cap triangles span an entire side of the prism.
  */
 
-import type { Geometry, Gpu } from 'vgpu';
-import { geometry } from 'vgpu';
+import type { Geometry, Gpu } from "vgpu";
+import { geometry } from "vgpu";
 
-import { PRISM_BACK_Z, PRISM_FRONT_Z, PRISM_TRIANGLE, type Triangle } from './types';
+import {
+  PRISM_BACK_Z,
+  PRISM_FRONT_Z,
+  PRISM_TRIANGLE,
+  type Triangle,
+} from "./types";
 
 type Vec2 = readonly [number, number];
 type Vec3 = readonly [number, number, number];
@@ -35,12 +40,14 @@ export interface PrismMeshData {
 
 /** Bytes between two vertices of `PrismMeshData.vertices`. */
 export const PRISM_VERTEX_STRIDE = 24;
-/** 1.125 mm fillet on the 57 mm text-to-cad reference scale. */
-export const PRISM_BEVEL_RADIUS = 0.01125;
+/** 2.25 mm fillet on the 57 mm text-to-cad reference scale. */
+export const PRISM_BEVEL_RADIUS = 0.0225;
 /** Arc subdivisions around each triangular corner. */
 export const PRISM_CORNER_SEGMENTS = 4;
 /** Quarter-round subdivisions between each broad side and cap. */
 export const PRISM_BEVEL_SEGMENTS = 4;
+/** Longitudinal subdivisions along each straight run of the rounded contour. */
+export const PRISM_EDGE_SEGMENTS = 16;
 
 /**
  * Vertices and indices for the rounded prism, wound counter-clockwise from
@@ -49,7 +56,7 @@ export const PRISM_BEVEL_SEGMENTS = 4;
 export function prismMeshData(
   triangle: Triangle = PRISM_TRIANGLE,
   backZ = PRISM_BACK_Z,
-  frontZ = PRISM_FRONT_Z,
+  frontZ = PRISM_FRONT_Z
 ): PrismMeshData {
   const depth = Math.max(0, frontZ - backZ);
   const radius = Math.min(PRISM_BEVEL_RADIUS, depth * 0.45);
@@ -66,10 +73,12 @@ export function prismMeshData(
   const addRing = (theta: number, z: number, zNormal: number): number[] => {
     const inset = radius * (1 - Math.cos(theta));
     const xyWeight = Math.cos(theta);
-    const ring = contour.map(({ position, normal }) => push(
-      [position[0] - normal[0] * inset, position[1] - normal[1] * inset, z],
-      [normal[0] * xyWeight, normal[1] * xyWeight, zNormal],
-    ));
+    const ring = contour.map(({ position, normal }) =>
+      push(
+        [position[0] - normal[0] * inset, position[1] - normal[1] * inset, z],
+        [normal[0] * xyWeight, normal[1] * xyWeight, zNormal]
+      )
+    );
     rings.push(ring);
     return ring;
   };
@@ -79,19 +88,19 @@ export function prismMeshData(
   const maxTheta = Math.PI / 2 - 0.06;
   const maxSine = Math.sin(maxTheta);
   for (let step = PRISM_BEVEL_SEGMENTS; step >= 0; step--) {
-    const theta = maxTheta * step / PRISM_BEVEL_SEGMENTS;
+    const theta = (maxTheta * step) / PRISM_BEVEL_SEGMENTS;
     addRing(
       theta,
-      backZ + radius - radius * Math.sin(theta) / maxSine,
-      -Math.sin(theta),
+      backZ + radius - (radius * Math.sin(theta)) / maxSine,
+      -Math.sin(theta)
     );
   }
   for (let step = 0; step <= PRISM_BEVEL_SEGMENTS; step++) {
-    const theta = maxTheta * step / PRISM_BEVEL_SEGMENTS;
+    const theta = (maxTheta * step) / PRISM_BEVEL_SEGMENTS;
     addRing(
       theta,
-      frontZ - radius + radius * Math.sin(theta) / maxSine,
-      Math.sin(theta),
+      frontZ - radius + (radius * Math.sin(theta)) / maxSine,
+      Math.sin(theta)
     );
   }
 
@@ -101,8 +110,12 @@ export function prismMeshData(
     for (let point = 0; point < contour.length; point++) {
       const following = (point + 1) % contour.length;
       indices.push(
-        current[point]!, current[following]!, next[following]!,
-        current[point]!, next[following]!, next[point]!,
+        current[point]!,
+        current[following]!,
+        next[following]!,
+        current[point]!,
+        next[following]!,
+        next[point]!
       );
     }
   }
@@ -115,18 +128,24 @@ export function prismMeshData(
     indices: new Uint16Array(indices),
   };
 
-  function addCap(sourceRing: readonly number[], normal: Vec3, reverse: boolean): void {
+  function addCap(
+    sourceRing: readonly number[],
+    normal: Vec3,
+    reverse: boolean
+  ): void {
     const cap = sourceRing.map((source) => {
       const base = source * 6;
       return push(
         [vertices[base]!, vertices[base + 1]!, vertices[base + 2]!],
-        normal,
+        normal
       );
     });
     const center: Vec3 = [
       cap.reduce((sum, index) => sum + vertices[index * 6]!, 0) / cap.length,
-      cap.reduce((sum, index) => sum + vertices[index * 6 + 1]!, 0) / cap.length,
-      cap.reduce((sum, index) => sum + vertices[index * 6 + 2]!, 0) / cap.length,
+      cap.reduce((sum, index) => sum + vertices[index * 6 + 1]!, 0) /
+        cap.length,
+      cap.reduce((sum, index) => sum + vertices[index * 6 + 2]!, 0) /
+        cap.length,
     ];
     const centerIndex = push(center, normal);
     for (let point = 0; point < cap.length; point++) {
@@ -139,7 +158,7 @@ export function prismMeshData(
 
 /** Unique line-list edges for visualising the generated topology. */
 export function prismWireframeIndices(
-  triangleIndices: Uint16Array<ArrayBuffer>,
+  triangleIndices: Uint16Array<ArrayBuffer>
 ): Uint16Array<ArrayBuffer> {
   const seen = new Set<number>();
   const edges: number[] = [];
@@ -167,7 +186,7 @@ export function prismWireframeIndices(
 export function prismPlanes(
   triangle: Triangle = PRISM_TRIANGLE,
   backZ = PRISM_BACK_Z,
-  frontZ = PRISM_FRONT_Z,
+  frontZ = PRISM_FRONT_Z
 ): readonly (readonly [number, number, number, number])[] {
   const corners = [triangle.a, triangle.b, triangle.c];
   const sides = corners.map((start, edge) => {
@@ -194,28 +213,37 @@ function upload(
   label: string,
   vertices: Float32Array<ArrayBuffer>,
   indices: Uint16Array<ArrayBuffer>,
-  wireframe = false,
+  wireframe = false
 ): Geometry {
   return geometry(gpu, {
     label,
-    ...(wireframe ? { topology: 'line-list' as const } : {}),
-    buffers: [{
-      data: vertices,
-      stride: PRISM_VERTEX_STRIDE,
-      attributes: { position: 'float32x3', normal: 'float32x3' },
-    }],
+    ...(wireframe ? { topology: "line-list" as const } : {}),
+    buffers: [
+      {
+        data: vertices,
+        stride: PRISM_VERTEX_STRIDE,
+        attributes: { position: "float32x3", normal: "float32x3" },
+      },
+    ],
     indices,
   });
 }
 
-function roundedTriangleContour(triangle: Triangle, radius: number): ContourPoint[] {
+function roundedTriangleContour(
+  triangle: Triangle,
+  radius: number
+): ContourPoint[] {
   const corners = [triangle.a, triangle.b, triangle.c];
-  return corners.flatMap((corner, index) => {
+  const arcs = corners.map((corner, index) => {
     const previous = corners[(index + corners.length - 1) % corners.length]!;
     const next = corners[(index + 1) % corners.length]!;
-    const towardPrevious = normalize2([previous[0] - corner[0], previous[1] - corner[1]]);
+    const towardPrevious = normalize2([
+      previous[0] - corner[0],
+      previous[1] - corner[1],
+    ]);
     const towardNext = normalize2([next[0] - corner[0], next[1] - corner[1]]);
-    const halfAngle = Math.acos(clamp(dot2(towardPrevious, towardNext), -1, 1)) / 2;
+    const halfAngle =
+      Math.acos(clamp(dot2(towardPrevious, towardNext), -1, 1)) / 2;
     const tangentDistance = radius / Math.max(Math.tan(halfAngle), 1e-6);
     const centerDistance = radius / Math.max(Math.sin(halfAngle), 1e-6);
     const bisector = normalize2([
@@ -237,15 +265,47 @@ function roundedTriangleContour(triangle: Triangle, radius: number): ContourPoin
     const startAngle = Math.atan2(start[1] - center[1], start[0] - center[0]);
     let endAngle = Math.atan2(end[1] - center[1], end[0] - center[0]);
     while (endAngle <= startAngle) endAngle += Math.PI * 2;
-    return Array.from({ length: PRISM_CORNER_SEGMENTS + 1 }, (_, step) => {
-      const angle = startAngle
-        + (endAngle - startAngle) * step / PRISM_CORNER_SEGMENTS;
-      const normal: Vec2 = [Math.cos(angle), Math.sin(angle)];
-      return {
-        position: [center[0] + normal[0] * radius, center[1] + normal[1] * radius],
-        normal,
-      };
-    });
+    return Array.from(
+      { length: PRISM_CORNER_SEGMENTS + 1 },
+      (_, step): ContourPoint => {
+        const angle =
+          startAngle + ((endAngle - startAngle) * step) / PRISM_CORNER_SEGMENTS;
+        const normal: Vec2 = [Math.cos(angle), Math.sin(angle)];
+        return {
+          position: [
+            center[0] + normal[0] * radius,
+            center[1] + normal[1] * radius,
+          ],
+          normal,
+        };
+      }
+    );
+  });
+
+  return arcs.flatMap((arc, index) => {
+    const end = arc[arc.length - 1]!;
+    const nextArc = arcs[(index + 1) % arcs.length]!;
+    const nextStart = nextArc[0]!;
+    const edgeNormal = outwardNormal(
+      corners[index]!,
+      corners[(index + 1) % corners.length]!
+    );
+    const straight = Array.from(
+      { length: PRISM_EDGE_SEGMENTS - 1 },
+      (_, step): ContourPoint => {
+        const amount = (step + 1) / PRISM_EDGE_SEGMENTS;
+        return {
+          position: [
+            end.position[0] +
+              (nextStart.position[0] - end.position[0]) * amount,
+            end.position[1] +
+              (nextStart.position[1] - end.position[1]) * amount,
+          ],
+          normal: edgeNormal,
+        };
+      }
+    );
+    return [...arc, ...straight];
   });
 }
 

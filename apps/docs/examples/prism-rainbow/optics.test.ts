@@ -13,8 +13,10 @@ import {
   insideTriangle,
   intersectTriangle,
   iorAt,
+  reflect,
   refract,
   tracePrism,
+  tracePrismDetailed,
   triangleWinding,
   wavelengthToLinearRgb,
 } from './optics';
@@ -38,6 +40,23 @@ import {
 const degrees = (radians: number): number => (radians * 180) / Math.PI;
 const distance = (a: Vec2, b: Vec2): number => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const angleOf = (direction: Vec2): number => degrees(Math.atan2(direction[1], direction[0]));
+const dot2 = (a: Vec2, b: Vec2): number => a[0] * b[0] + a[1] * b[1];
+const normalize2 = (value: Vec2): Vec2 => {
+  const magnitude = Math.hypot(value[0], value[1]);
+  return [value[0] / magnitude, value[1] / magnitude];
+};
+
+function edgeFrame(edgeIndex: number): { midpoint: Vec2; outward: Vec2; tangent: Vec2 } {
+  const corners = [PRISM_TRIANGLE.a, PRISM_TRIANGLE.b, PRISM_TRIANGLE.c] as const;
+  const start = corners[edgeIndex]!;
+  const end = corners[(edgeIndex + 1) % corners.length]!;
+  const tangent = normalize2([end[0] - start[0], end[1] - start[1]]);
+  return {
+    midpoint: [(start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5],
+    outward: [tangent[1], -tangent[0]],
+    tangent,
+  };
+}
 
 /** Traces the lamp's own beam forward through the glass, one wavelength at a time. */
 function beamThrough(dispersion: PrismDispersion, wavelength: number, incidence = PRISM_INCIDENCE_DEGREES) {
@@ -149,6 +168,72 @@ describe('refraction', () => {
   test('keeps refracted directions unit length', () => {
     const transmitted = refract([0.6, -0.8], [0, 1], 1 / 1.6)!;
     expect(Math.hypot(transmitted[0], transmitted[1])).toBeCloseTo(1, 6);
+  });
+});
+
+describe('internal environment reflection', () => {
+  test('reflects back into the solid with equal incidence on every inner face', () => {
+    const incidence = (28 * Math.PI) / 180;
+    for (let edge = 0; edge < 3; edge++) {
+      const { midpoint, outward, tangent } = edgeFrame(edge);
+      // A ray already in glass approaches this boundary from its inner side.
+      const incident: Vec2 = [
+        outward[0] * Math.cos(incidence) + tangent[0] * Math.sin(incidence),
+        outward[1] * Math.cos(incidence) + tangent[1] * Math.sin(incidence),
+      ];
+      // This is the exact convention used by glass-back.wgsl: the rasterized
+      // back face exposes the normal pointing into the solid.
+      const inwardNormal: Vec2 = [-outward[0], -outward[1]];
+      const reflected = reflect(incident, inwardNormal);
+
+      expect(Math.hypot(reflected[0], reflected[1])).toBeCloseTo(1, 12);
+      expect(dot2(reflected, outward)).toBeCloseTo(-dot2(incident, outward), 12);
+      expect(dot2(reflected, tangent)).toBeCloseTo(dot2(incident, tangent), 12);
+      expect(dot2(reflected, outward)).toBeLessThan(0);
+      expect(insideTriangle(PRISM_TRIANGLE, [
+        midpoint[0] + reflected[0] * 1e-3,
+        midpoint[1] + reflected[1] * 1e-3,
+      ])).toBe(true);
+    }
+  });
+
+  test('the reflected environment ray reaches another interface before escaping', () => {
+    const ior = iorAt(550, PRISM_DISPERSION_PRESETS.stylized.base, PRISM_DISPERSION_PRESETS.stylized.strength);
+    const path = tracePrismDetailed(
+      PRISM_TRIANGLE,
+      PRISM_LIGHT.center,
+      PRISM_LIGHT.direction,
+      ior,
+    );
+    expect(path).toBeDefined();
+    expect(path!.points).toHaveLength(2);
+
+    const entry = path!.points[0]!;
+    const innerFace = path!.points[1]!;
+    const insideDirection = normalize2([
+      innerFace[0] - entry[0],
+      innerFace[1] - entry[1],
+    ]);
+    const { outward } = edgeFrame(path!.edges[1]!);
+    const reflected = reflect(insideDirection, [-outward[0], -outward[1]]);
+    const nextHit = intersectTriangle(
+      PRISM_TRIANGLE,
+      [innerFace[0] + reflected[0] * 1e-4, innerFace[1] + reflected[1] * 1e-4],
+      reflected,
+      1e-4,
+    );
+
+    expect(nextHit).toBeDefined();
+    expect(nextHit!.edge).not.toBe(path!.edges[1]);
+    expect(dot2(reflected, nextHit!.normal)).toBeGreaterThan(0);
+    const environmentDirection = refract(
+      reflected,
+      [-nextHit!.normal[0], -nextHit!.normal[1]],
+      ior,
+    );
+    expect(environmentDirection).toBeDefined();
+    expect(dot2(environmentDirection!, nextHit!.normal)).toBeGreaterThan(0);
+    expect(angleOf(environmentDirection!)).not.toBeCloseTo(angleOf(reflected), 3);
   });
 });
 
