@@ -1,20 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useExampleErrorReporter } from "../../lib/example-error-reporter";
-import { Controls } from "./controls";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRenderer, type PrismRenderer } from "./renderer";
 import type { EnvironmentDebugRenderer } from "./environment-debug";
 import { DEFAULT_PRISM_CONTROLS, type PrismControls } from "./types";
 
-export function Example() {
-  const reportError = useExampleErrorReporter();
+const Controls = lazy(() =>
+  import("./controls").then(({ Controls: Component }) => ({
+    default: Component,
+  }))
+);
+
+export function PrismBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<PrismRenderer | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
   const [environmentDebug, setEnvironmentDebug] = useState(() => ({
     visible: DEFAULT_PRISM_CONTROLS.environmentDebug,
     exposure: DEFAULT_PRISM_CONTROLS.glass.environmentExposure,
   }));
+  const reportError = useCallback((error: unknown) => {
+    console.error("Prism background failed to render.", error);
+  }, []);
+
+  useEffect(() => {
+    setShowDebug(new URLSearchParams(window.location.search).has("debug"));
+  }, []);
 
   const setControls = useCallback((controls: PrismControls) => {
     const nextDebug = {
@@ -40,7 +58,7 @@ export function Example() {
     });
     rendererRef.current = renderer;
     void renderer.ready.catch(() => {
-      // onError reports initialization failures to the preview host.
+      // onError reports initialization failures without replacing the hero.
     });
     return () => {
       rendererRef.current = null;
@@ -49,12 +67,17 @@ export function Example() {
   }, [reportError]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-black">
+    <div className="absolute inset-0 overflow-hidden bg-black">
       <canvas
         ref={canvasRef}
-        className="block h-full w-full cursor-ns-resize touch-none"
+        aria-hidden="true"
+        className="block h-full w-full touch-none"
       />
-      <Controls onChange={setControls} />
+      {showDebug ? (
+        <Suspense fallback={null}>
+          <Controls onChange={setControls} />
+        </Suspense>
+      ) : null}
       {environmentDebug.visible
         ? (
           <EnvironmentDebugCanvas

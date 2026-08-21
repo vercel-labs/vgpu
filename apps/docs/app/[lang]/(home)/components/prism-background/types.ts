@@ -140,6 +140,8 @@ export interface LightFadeControls {
 
 export interface PrismControls {
   readonly dispersion: PrismDispersion;
+  /** Optional custom Cauchy coefficients; the selected preset is used when absent. */
+  readonly spectralDispersion?: DispersionPreset;
   readonly view: PrismView;
   /** Distance from the wall along the camera's orbit sphere, in scene units. */
   readonly cameraDistance: number;
@@ -170,17 +172,17 @@ export const PRISM_BEAM_WIDTH_RANGE = {
   step: 0.005,
 } as const;
 export const DEFAULT_LIGHT_FADE_CONTROLS: LightFadeControls = {
-  edgeFalloff: 6.5,
-  rainbowFalloff: 3.2,
+  edgeFalloff: 16,
+  rainbowFalloff: 8,
 };
 export const PRISM_LIGHT_FADE_RANGES = {
   edgeFalloff: { min: 0, max: 16, step: 0.1 },
   rainbowFalloff: { min: 0, max: 8, step: 0.1 },
 } as const;
 /** Vertical field of view of the camera looking at the wall, in degrees. */
-export const CAMERA_FOV_DEGREES = 48;
+export const CAMERA_FOV_DEGREES = 70;
 /** How far the camera sits from the wall, in scene units. */
-export const CAMERA_DISTANCE = 1.25;
+export const CAMERA_DISTANCE = 1.31;
 export const PRISM_CAMERA_RANGES = {
   distance: { min: 1.25, max: 4, step: 0.01 },
   fov: { min: 20, max: 70, step: 1 },
@@ -194,6 +196,12 @@ export const PRISM_GLASS_RANGES = {
   iridescenceStrength: { min: 0, max: 1, step: 0.01 },
   iridescenceFrequency: { min: 0, max: 8, step: 0.1 },
   environmentExposure: { min: 0, max: 4, step: 0.05 },
+} as const;
+
+/** Practical optical-glass Cauchy ranges, widened for stylized experimentation. */
+export const PRISM_SPECTRAL_DISPERSION_RANGES = {
+  base: { min: 1.2, max: 2.1, step: 0.001 },
+  strength: { min: 0, max: 0.06, step: 0.0005 },
 } as const;
 
 export const DEFAULT_GLASS_CONTROLS: GlassControls = {
@@ -250,7 +258,7 @@ export const DEFAULT_PRISM_CONTROLS: PrismControls = {
   cameraFov: CAMERA_FOV_DEGREES,
   beamWidth: PRISM_DEFAULT_BEAM_WIDTH,
   lightFade: DEFAULT_LIGHT_FADE_CONTROLS,
-  wallColor: "#141414",
+  wallColor: "#000000",
   wireframe: false,
   lightWireframe: false,
   environmentDebug: false,
@@ -275,7 +283,7 @@ export const PRISM_SIDE = 0.57;
 export const PRISM_TILT_DEGREES = 0;
 /**
  * The prism stands at the middle of the wall, so the camera can look straight at
- * it and the fan has the whole lower right quadrant to open into.
+ * it and the fan has the whole lower left quadrant to open into.
  */
 export const PRISM_CENTROID: Vec2 = [0, 0];
 
@@ -298,11 +306,38 @@ export const PRISM_TRIANGLE: Triangle = (() => {
   return { a: vertex(90), b: vertex(210), c: vertex(330) };
 })();
 
-/** Midpoint of the face the beam enters, and the point the lamp is aimed at. */
+/** Midpoint of the right face the beam enters, and the default aim point. */
 export const PRISM_ENTRY_FACE_MIDPOINT: Vec2 = [
-  (PRISM_TRIANGLE.a[0] + PRISM_TRIANGLE.b[0]) / 2,
-  (PRISM_TRIANGLE.a[1] + PRISM_TRIANGLE.b[1]) / 2,
+  (PRISM_TRIANGLE.a[0] + PRISM_TRIANGLE.c[0]) / 2,
+  (PRISM_TRIANGLE.a[1] + PRISM_TRIANGLE.c[1]) / 2,
 ];
+
+/** Point along the entry edge, ordered left-to-right as it appears on screen. */
+export function prismEntryPoint(position: number): Vec2 {
+  const clamped = Math.min(1, Math.max(0, position));
+  return [
+    PRISM_TRIANGLE.a[0] + (PRISM_TRIANGLE.c[0] - PRISM_TRIANGLE.a[0]) * clamped,
+    PRISM_TRIANGLE.a[1] + (PRISM_TRIANGLE.c[1] - PRISM_TRIANGLE.a[1]) * clamped,
+  ];
+}
+
+/** A finite collimated beam emitted from one point and aimed at another. */
+export function collimatedLightBetween(
+  center: Vec2,
+  target: Vec2,
+  beamWidth = PRISM_DEFAULT_BEAM_WIDTH
+): CollimatedLight {
+  const offset: Vec2 = [target[0] - center[0], target[1] - center[1]];
+  const distance = Math.hypot(offset[0], offset[1]);
+  if (!Number.isFinite(distance) || distance <= 1e-8) {
+    throw new Error("A collimated light needs distinct finite center and target points.");
+  }
+  return {
+    center,
+    direction: [offset[0] / distance, offset[1] / distance],
+    beamHalfWidth: clampBeamWidth(beamWidth) * 0.5,
+  };
+}
 
 /**
  * How far outside the frame the lamp sits — and the reason there is a rainbow at
@@ -337,45 +372,57 @@ export const PRISM_INCIDENCE_DEGREES = 50;
 /**
  * The arc the pointer can swing the lamp along, in degrees of incidence.
  *
- * Both ends show something. Towards 44 the fan opens to 23 degrees and dense
- * flint visibly loses its violet end to the critical angle — swinging down there
- * is how the example demonstrates it. Towards 58 the fan narrows to 13.5 and
- * flattens out across the frame. The clamp keeps the default view clear of the
- * lower cliff, where the stylized glass would start shedding violet too.
+ * The homepage uses a deliberately broad sweep so the source can travel from
+ * above the frame to below it. The negative minimum deliberately makes a
+ * top-positioned pointer send the beam steeply down through the prism and out
+ * through its base. The default remains at 50 degrees.
  */
-export const PRISM_INCIDENCE_ARC = { min: 44, max: 58 } as const;
+export const PRISM_INCIDENCE_ARC = { min: -35, max: 75 } as const;
 
 /**
  * The lamp for a given angle of incidence on the entry face.
  *
  * The prism never moves. The lamp swings around it on a fixed radius, always
- * aimed at the middle of the entry face, so incidence is the only thing the
- * pointer changes.
+ * aimed at a point along the entry face. The pointer can therefore change the
+ * incidence and the point of impact independently.
  */
 export function lampForIncidence(
   incidenceDegrees: number,
-  beamWidth = PRISM_DEFAULT_BEAM_WIDTH
+  beamWidth = PRISM_DEFAULT_BEAM_WIDTH,
+  entryPosition = 0.5
 ): CollimatedLight {
   const face: Vec2 = [
-    PRISM_TRIANGLE.b[0] - PRISM_TRIANGLE.a[0],
-    PRISM_TRIANGLE.b[1] - PRISM_TRIANGLE.a[1],
+    PRISM_TRIANGLE.a[0] - PRISM_TRIANGLE.c[0],
+    PRISM_TRIANGLE.a[1] - PRISM_TRIANGLE.c[1],
   ];
   const faceLength = Math.hypot(face[0], face[1]);
   // Outward normal of a counter-clockwise edge, flipped to point into the glass:
   // a beam along it would strike the face head on, at zero incidence.
   const inward: Vec2 = [-face[1] / faceLength, face[0] / faceLength];
-  const direction = rotate(inward, radians(incidenceDegrees));
-  return {
-    center: [
-      PRISM_ENTRY_FACE_MIDPOINT[0] - direction[0] * PRISM_LAMP_DISTANCE,
-      PRISM_ENTRY_FACE_MIDPOINT[1] - direction[1] * PRISM_LAMP_DISTANCE,
+  // Negating incidence mirrors the former left-entry setup exactly: the white
+  // beam now arrives from the right and its dispersed output heads left.
+  const direction = rotate(inward, radians(-incidenceDegrees));
+  const clampedBeamWidth = clampBeamWidth(beamWidth);
+  // Keep both finite beam boundaries on the face even when the pointer reaches
+  // a viewport edge. At oblique incidence their footprint along the face grows
+  // by 1 / cos(incidence).
+  const entryMargin = Math.min(
+    0.45,
+    clampedBeamWidth /
+      (2 * faceLength * Math.max(0.05, Math.abs(Math.cos(radians(incidenceDegrees))))) +
+      1e-4
+  );
+  const entryPoint = prismEntryPoint(
+    Math.min(1 - entryMargin, Math.max(entryMargin, entryPosition))
+  );
+  return collimatedLightBetween(
+    [
+      entryPoint[0] - direction[0] * PRISM_LAMP_DISTANCE,
+      entryPoint[1] - direction[1] * PRISM_LAMP_DISTANCE,
     ],
-    direction,
-    // A narrow slit-like beam. Its boundaries are parallel, so refraction bends
-    // the bundle without focusing it to the infinitesimal point produced by the
-    // old point-light estimator.
-    beamHalfWidth: clampBeamWidth(beamWidth) * 0.5,
-  };
+    entryPoint,
+    clampedBeamWidth
+  );
 }
 
 /** The default lamp, at `PRISM_INCIDENCE_DEGREES`. */
@@ -461,3 +508,6 @@ export const CAMERA_ORBIT_DEGREES = 3.5;
 
 /** Per-frame interpolation towards the pointer's camera angle. */
 export const CAMERA_ORBIT_LERP = 0.08;
+
+/** Per-frame interpolation towards the pointer's requested lamp position. */
+export const LAMP_AIM_LERP = 0.12;

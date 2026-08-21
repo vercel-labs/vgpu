@@ -1,4 +1,5 @@
 import type { GeistdocsAgentReadinessConfig } from "@vercel/geistdocs/config";
+import { VgpuWordmark } from "@/components/vgpu-wordmark";
 
 // TGEIST-11 follow-up (branding sweep): this whole file is the scaffold
 // template's placeholder content (TGEIST-01 explicitly told this ticket NOT
@@ -9,9 +10,10 @@ import type { GeistdocsAgentReadinessConfig } from "@vercel/geistdocs/config";
 // chat system prompt, agent-readiness manifest) so it all becomes vgpu's real
 // branding, sourced verbatim from apps/docs/app/layout.tsx where it overlaps.
 export const Logo = () => (
-  <span className="font-semibold text-gray-1000 text-lg leading-none tracking-[-3%]">
-    vgpu
-  </span>
+  <VgpuWordmark
+    aria-label="vgpu"
+    className="text-gray-1000 h-[1.125rem] w-[2.9rem] fill-current"
+  />
 );
 
 export const github = {

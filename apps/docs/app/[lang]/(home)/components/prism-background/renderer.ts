@@ -1,7 +1,7 @@
 import type { Frame, Gpu, Surface, Target } from 'vgpu';
 import { frameLoop, surface } from 'vgpu';
 
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '../../lib/example-renderer';
+import type { BrowserRendererOptions, ExampleRenderer, RenderSize, ThumbnailOptions } from '@/lib/example-renderer';
 import {
   createScene,
   destroyScene,
@@ -9,11 +9,18 @@ import {
   presentScene,
   resizeScene,
   setControls,
+  setLampAim,
   setLampArc,
   setOrbit,
   type PrismScene,
 } from './scene';
-import { CAMERA_ORBIT_LERP, DEFAULT_PRISM_CONTROLS, type PrismControls } from './types';
+import {
+  CAMERA_ORBIT_LERP,
+  DEFAULT_PRISM_CONTROLS,
+  LAMP_AIM_LERP,
+  PRISM_DEFAULT_ARC,
+  type PrismControls,
+} from './types';
 
 export type PrismRenderer = ExampleRenderer<PrismControls>;
 
@@ -35,10 +42,12 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
   let observer: ResizeObserver | undefined;
   let resizeFrame = 0;
   let pendingSize: RenderSize | undefined;
-  let pointerId: number | undefined;
   /** Where the camera is being asked to look, and where it currently looks. */
   let orbitTarget: readonly [number, number] = [0, 0];
   let orbitCurrent: readonly [number, number] = [0, 0];
+  /** Requested and rendered lamp positions, both normalized to the viewport. */
+  let aimTarget: readonly [number, number] = [PRISM_DEFAULT_ARC, 0.5];
+  let aimCurrent: readonly [number, number] = [PRISM_DEFAULT_ARC, 0.5];
   /** Set whenever the picture would differ from the frame already on screen. */
   let pendingPresent = true;
 
@@ -83,12 +92,15 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     });
   };
 
-  /** Vertical drag swings the lamp along its arc; the estimate starts over. */
+  /** Pointer height swings the source; pointer width chooses its point of impact. */
   const aimFromPointer = (event: PointerEvent) => {
-    if (!scene) return;
     const rect = options.canvas.getBoundingClientRect();
-    if (rect.height <= 0) return;
-    setLampArc(scene, 1 - (event.clientY - rect.top) / rect.height);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
+    aimTarget = [
+      clampUnit((event.clientY - rect.top) / rect.height),
+      clampUnit((event.clientX - rect.left) / rect.width),
+    ];
     pendingPresent = true;
   };
 
@@ -100,27 +112,17 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
   const orbitFromPointer = (event: PointerEvent) => {
     const rect = options.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
+    const clampOrbit = (value: number) => Math.min(1, Math.max(-1, value));
     orbitTarget = [
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      ((event.clientY - rect.top) / rect.height) * 2 - 1,
+      clampOrbit(((event.clientX - rect.left) / rect.width) * 2 - 1),
+      clampOrbit(((event.clientY - rect.top) / rect.height) * 2 - 1),
     ];
   };
 
-  const onPointerDown = (event: PointerEvent) => {
-    if (!event.isPrimary) return;
-    pointerId = event.pointerId;
-    options.canvas.setPointerCapture(event.pointerId);
-    aimFromPointer(event);
-  };
   const onPointerMove = (event: PointerEvent) => {
+    if (event.isPrimary === false) return;
     orbitFromPointer(event);
-    if (pointerId !== event.pointerId) return;
     aimFromPointer(event);
-  };
-  const onPointerUp = (event: PointerEvent) => {
-    if (pointerId !== event.pointerId) return;
-    if (options.canvas.hasPointerCapture(event.pointerId)) options.canvas.releasePointerCapture(event.pointerId);
-    pointerId = undefined;
   };
   const onPointerLeave = () => { orbitTarget = [0, 0]; };
 
@@ -140,12 +142,30 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     return true;
   };
 
+  /** Eases both the source angle and its point of impact towards the pointer. */
+  const stepAim = (): boolean => {
+    const dArc = aimTarget[0] - aimCurrent[0];
+    const dTarget = aimTarget[1] - aimCurrent[1];
+    if (Math.abs(dArc) < 1e-4 && Math.abs(dTarget) < 1e-4) {
+      if (aimCurrent[0] === aimTarget[0] && aimCurrent[1] === aimTarget[1]) return false;
+      aimCurrent = aimTarget;
+      return true;
+    }
+    aimCurrent = [
+      aimCurrent[0] + dArc * LAMP_AIM_LERP,
+      aimCurrent[1] + dTarget * LAMP_AIM_LERP,
+    ];
+    return true;
+  };
+
   const tick = (currentFrame: Frame) => {
     if (disposed || !scene || !canvasSurface || !prepared) return;
-    const moved = stepOrbit();
-    if (!moved && !pendingPresent) return;
+    const aimMoved = stepAim();
+    const orbitMoved = stepOrbit();
+    if (!aimMoved && !orbitMoved && !pendingPresent) return;
     try {
-      if (moved) setOrbit(scene, orbitCurrent[0], orbitCurrent[1]);
+      if (aimMoved) setLampAim(scene, aimCurrent[0], aimCurrent[1]);
+      if (orbitMoved) setOrbit(scene, orbitCurrent[0], orbitCurrent[1]);
       presentScene(scene, canvasSurface, currentFrame);
       pendingPresent = false;
     } catch (error) {
@@ -163,13 +183,8 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     pendingSize = undefined;
     observer?.disconnect();
     observer = undefined;
-    for (const [name, listener] of pointerListeners) {
-      options.canvas.removeEventListener(name, listener as EventListener);
-    }
-    if (pointerId !== undefined && options.canvas.hasPointerCapture(pointerId)) {
-      options.canvas.releasePointerCapture(pointerId);
-    }
-    pointerId = undefined;
+    window.removeEventListener('pointermove', onPointerMove as EventListener);
+    window.removeEventListener('blur', onPointerLeave);
     if (typeof window !== 'undefined') window.removeEventListener('resize', measure);
     if (scene) destroyScene(scene);
     scene = undefined;
@@ -178,14 +193,6 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     gpu?.dispose();
     gpu = undefined;
   }
-
-  const pointerListeners: readonly [string, (event: PointerEvent) => void][] = [
-    ['pointerdown', onPointerDown],
-    ['pointermove', onPointerMove],
-    ['pointerup', onPointerUp],
-    ['pointercancel', onPointerUp],
-    ['pointerleave', onPointerLeave],
-  ];
 
   const initialize = async () => {
     const { init } = await import('vgpu');
@@ -199,9 +206,8 @@ export function createRenderer(options: BrowserRendererOptions<PrismControls>): 
     canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] });
     scene = createScene(gpu, canvasSurface.size, 'prism-rainbow');
     setControls(scene, controls);
-    for (const [name, listener] of pointerListeners) {
-      options.canvas.addEventListener(name, listener as EventListener);
-    }
+    window.addEventListener('pointermove', onPointerMove as EventListener, { passive: true });
+    window.addEventListener('blur', onPointerLeave);
     observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     observer?.observe(options.canvas);
     window.addEventListener('resize', measure);

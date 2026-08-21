@@ -45,7 +45,11 @@ vi.mock("vgpu", () => ({
 
 import { createRenderer } from "./renderer";
 import { wallExtent } from "./scene";
-import { DEFAULT_PRISM_CONTROLS, PRISM_LIGHT_PLANE_Z } from "./types";
+import {
+  DEFAULT_PRISM_CONTROLS,
+  PRISM_DEFAULT_ARC,
+  PRISM_LIGHT_PLANE_Z,
+} from "./types";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -369,36 +373,35 @@ test("the light wireframe reveals every generated triangle in the light-only vie
   renderer.dispose();
 });
 
-test("a pointer drag swings the lamp and rewrites the deterministic mesh", async () => {
+test("pointer position smoothly moves the lamp and its target without dragging", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
-  const writesBeforeDrag = live.lightBuffer.write.mock.calls.length;
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+  const writesBeforeMove = live.lightBuffer.write.mock.calls.length;
 
-  env.canvasListeners.get("pointerdown")?.({
-    isPrimary: true,
+  env.windowListeners.get("pointermove")?.({
     pointerId: 4,
+    clientX: 20,
     clientY: 10,
   } as unknown as Event);
-  expect(env.canvas.setPointerCapture).toHaveBeenCalledWith(4);
-  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 1);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeMove);
+  tick(live.loopFrame);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeMove + 1);
+  tick(live.loopFrame);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeMove + 2);
 
-  env.canvasListeners.get("pointermove")?.({
-    pointerId: 4,
+  env.windowListeners.get("pointermove")?.({
+    pointerId: 9,
+    clientX: 180,
     clientY: 90,
   } as unknown as Event);
-  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 2);
-  // A move from a pointer we never captured is ignored.
-  env.canvasListeners.get("pointermove")?.({
-    pointerId: 9,
-    clientY: 20,
-  } as unknown as Event);
-  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeDrag + 2);
-
-  env.canvasListeners.get("pointerup")?.({ pointerId: 4 } as unknown as Event);
-  expect(env.canvas.releasePointerCapture).toHaveBeenCalledWith(4);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeMove + 2);
+  tick(live.loopFrame);
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writesBeforeMove + 3);
+  expect(env.canvas.setPointerCapture).not.toHaveBeenCalled();
   renderer.dispose();
 });
 
@@ -493,6 +496,14 @@ test("only optical controls rebuild the light mesh", async () => {
     beamWidth: 0.14,
   });
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 2);
+  // Custom Cauchy coefficients let the debug GUI tune the optical material
+  // without changing the visible prism geometry.
+  renderer.setControls?.({
+    ...DEFAULT_PRISM_CONTROLS,
+    spectralDispersion: { base: 1.3, strength: 0.025 },
+    view: "caustic",
+  });
+  expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes + 3);
   renderer.dispose();
 });
 
@@ -552,22 +563,25 @@ test("camera controls update the framing and its derived wall boundary", async (
   renderer.dispose();
 });
 
-test("the camera follows the pointer without rebuilding world-space light", async () => {
+test("the camera follows the pointer without rebuilding an unchanged light", async () => {
   const env = browser();
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
   const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
-  const writes = live.lightBuffer.write.mock.calls.length;
-
-  // Hovering — no capture, no drag — moves only the camera matrix.
-  env.canvasListeners.get("pointermove")?.({
+  const pointer = {
     pointerId: 7,
-    clientX: 180,
-    clientY: 20,
-  } as unknown as Event);
+    clientX: 100,
+    clientY: PRISM_DEFAULT_ARC * 100,
+  } as unknown as Event;
+
+  env.windowListeners.get("pointermove")?.(pointer);
+  const writes = live.lightBuffer.write.mock.calls.length;
   tick(live.loopFrame);
+  // Repeating the same pointer coordinate continues the camera easing without
+  // regenerating the already-current world-space light mesh.
+  env.windowListeners.get("pointermove")?.(pointer);
   expect(live.lightBuffer.write).toHaveBeenCalledTimes(writes);
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(11);
   renderer.dispose();

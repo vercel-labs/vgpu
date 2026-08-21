@@ -40,8 +40,8 @@ export interface PrismMeshData {
 
 /** Bytes between two vertices of `PrismMeshData.vertices`. */
 export const PRISM_VERTEX_STRIDE = 24;
-/** 2.25 mm fillet on the 57 mm text-to-cad reference scale. */
-export const PRISM_BEVEL_RADIUS = 0.0225;
+/** 1.125 mm fillet on the 57 mm text-to-cad reference scale. */
+export const PRISM_BEVEL_RADIUS = 0.01125;
 /** Arc subdivisions around each triangular corner. */
 export const PRISM_CORNER_SEGMENTS = 4;
 /** Quarter-round subdivisions between each broad side and cap. */

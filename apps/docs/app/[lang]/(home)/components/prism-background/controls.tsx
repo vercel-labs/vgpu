@@ -7,9 +7,11 @@ import {
   PRISM_CAMERA_RANGES,
   PRISM_DISPERSION_LABELS,
   PRISM_DISPERSION_ORDER,
+  PRISM_DISPERSION_PRESETS,
   PRISM_GLASS_RANGES,
   PRISM_LIGHT_FADE_RANGES,
   PRISM_POSTPROCESS_RANGES,
+  PRISM_SPECTRAL_DISPERSION_RANGES,
   PRISM_VIEW_LABELS,
   PRISM_VIEW_ORDER,
   type PrismControls,
@@ -25,6 +27,8 @@ export interface ControlsProps {
 
 interface GuiValues {
   dispersion: PrismDispersion;
+  dispersionBase: number;
+  dispersionStrength: number;
   view: PrismView;
   cameraDistance: number;
   cameraFov: number;
@@ -80,8 +84,15 @@ export function Controls({
       initialValue.lightFade ?? DEFAULT_PRISM_CONTROLS.lightFade;
     const absorption =
       glass.absorption ?? DEFAULT_PRISM_CONTROLS.glass.absorption;
+    const spectralDispersion =
+      initialValue.spectralDispersion ??
+      PRISM_DISPERSION_PRESETS[
+        initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion
+      ];
     const values: GuiValues = {
       dispersion: initialValue.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion,
+      dispersionBase: spectralDispersion.base,
+      dispersionStrength: spectralDispersion.strength,
       view: initialValue.view ?? DEFAULT_PRISM_CONTROLS.view,
       cameraDistance:
         initialValue.cameraDistance ?? DEFAULT_PRISM_CONTROLS.cameraDistance,
@@ -142,6 +153,10 @@ export function Controls({
     const publish = () =>
       onChangeRef.current({
         dispersion: values.dispersion,
+        spectralDispersion: {
+          base: values.dispersionBase,
+          strength: values.dispersionStrength,
+        },
         view: values.view,
         cameraDistance: values.cameraDistance,
         cameraFov: values.cameraFov,
@@ -176,6 +191,7 @@ export function Controls({
       });
 
     const sceneFolder = gui.addFolder("Scene");
+    const spectralFolder = sceneFolder.addFolder("Spectral optics");
     const lightFolder = gui.addFolder("Light fade");
     const cameraFolder = gui.addFolder("Camera");
     const glassFolder = gui.addFolder("Glass");
@@ -183,15 +199,45 @@ export function Controls({
     const reflectionFolder = glassFolder.addFolder("Reflection");
     const postprocessFolder = gui.addFolder("Postprocessing");
     const debugFolder = gui.addFolder("Debug");
+    const dispersionPresetController = spectralFolder
+      .add(
+        values,
+        "dispersion",
+        options(PRISM_DISPERSION_ORDER, PRISM_DISPERSION_LABELS)
+      )
+      .name("preset");
+    const dispersionBaseController = spectralFolder
+      .add(
+        values,
+        "dispersionBase",
+        PRISM_SPECTRAL_DISPERSION_RANGES.base.min,
+        PRISM_SPECTRAL_DISPERSION_RANGES.base.max,
+        PRISM_SPECTRAL_DISPERSION_RANGES.base.step
+      )
+      .name("base IOR")
+      .onChange(publish);
+    const dispersionStrengthController = spectralFolder
+      .add(
+        values,
+        "dispersionStrength",
+        PRISM_SPECTRAL_DISPERSION_RANGES.strength.min,
+        PRISM_SPECTRAL_DISPERSION_RANGES.strength.max,
+        PRISM_SPECTRAL_DISPERSION_RANGES.strength.step
+      )
+      .name("dispersion B")
+      .onChange(publish);
+    dispersionPresetController.onChange((preset: PrismDispersion) => {
+      const next = PRISM_DISPERSION_PRESETS[preset];
+      values.dispersionBase = next.base;
+      values.dispersionStrength = next.strength;
+      dispersionBaseController.updateDisplay();
+      dispersionStrengthController.updateDisplay();
+      publish();
+    });
     const controllers: Controller[] = [
-      sceneFolder
-        .add(
-          values,
-          "dispersion",
-          options(PRISM_DISPERSION_ORDER, PRISM_DISPERSION_LABELS)
-        )
-        .name("spectrum")
-        .onChange(publish),
+      dispersionPresetController,
+      dispersionBaseController,
+      dispersionStrengthController,
       sceneFolder
         .add(
           values,
@@ -254,7 +300,7 @@ export function Controls({
           PRISM_GLASS_RANGES.ior.max,
           PRISM_GLASS_RANGES.ior.step
         )
-        .name("IOR")
+        .name("surface IOR")
         .onChange(publish),
       transmissionFolder
         .add(

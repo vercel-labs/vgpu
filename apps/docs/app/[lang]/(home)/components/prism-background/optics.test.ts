@@ -23,6 +23,7 @@ import {
 import {
   PRISM_DISPERSION_ORDER,
   PRISM_DISPERSION_PRESETS,
+  PRISM_CENTROID,
   PRISM_ENTRY_FACE_MIDPOINT,
   PRISM_INCIDENCE_ARC,
   PRISM_INCIDENCE_DEGREES,
@@ -32,6 +33,7 @@ import {
   PRISM_TILT_DEGREES,
   PRISM_TRIANGLE,
   PRISM_WAVELENGTHS,
+  collimatedLightBetween,
   lampForIncidence,
   type PrismDispersion,
   type Vec2,
@@ -262,9 +264,9 @@ describe('dispersion', () => {
   test('violet is deviated further than red, which is why the fan is ordered', () => {
     const violet = beamThrough('stylized', PRISM_WAVELENGTHS.min);
     const red = beamThrough('stylized', PRISM_WAVELENGTHS.max);
-    // Both leave heading down and to the right; violet turns further from the
-    // incoming beam, so its exit angle is the more negative of the two.
-    expect(violet.meanAngle).toBeLessThan(red.meanAngle);
+    // Mirroring the light reverses the signed angular order while preserving
+    // the physical fact that violet deviates farther than red.
+    expect(violet.meanAngle).toBeGreaterThan(red.meanAngle);
   });
 
   test('wavelengths map to hues in spectral order', () => {
@@ -281,10 +283,34 @@ describe('dispersion', () => {
 });
 
 describe('the lamp', () => {
+  test('can enter and refract through any triangle face', () => {
+    for (let edgeIndex = 0; edgeIndex < 3; edgeIndex++) {
+      const { midpoint, outward, tangent } = edgeFrame(edgeIndex);
+      const source: Vec2 = [
+        midpoint[0] + outward[0] * 2,
+        midpoint[1] + outward[1] * 2,
+      ];
+      const target: Vec2 = [
+        PRISM_CENTROID[0] + tangent[0] * 0.03,
+        PRISM_CENTROID[1] + tangent[1] * 0.03,
+      ];
+      const light = collimatedLightBetween(source, target);
+      const path = tracePrismDetailed(
+        PRISM_TRIANGLE,
+        light.center,
+        light.direction,
+        iorAt(550, PRISM_DISPERSION_PRESETS.stylized.base, PRISM_DISPERSION_PRESETS.stylized.strength)
+      );
+      expect(path, `entry edge ${edgeIndex}`).toBeDefined();
+      expect(path!.edges[0]).toBe(edgeIndex);
+      expect(path!.edges.at(-1)).not.toBe(edgeIndex);
+    }
+  });
+
   test('sits outside the frame at the declared distance, aimed at the entry face', () => {
     expect(distance(PRISM_LIGHT.center, PRISM_ENTRY_FACE_MIDPOINT)).toBeCloseTo(PRISM_LAMP_DISTANCE, 6);
     // Well outside x in [-aspect, aspect] for any reasonable aspect ratio.
-    expect(PRISM_LIGHT.center[0]).toBeLessThan(-3);
+    expect(PRISM_LIGHT.center[0]).toBeGreaterThan(3);
     const towardsPrism: Vec2 = [
       PRISM_ENTRY_FACE_MIDPOINT[0] - PRISM_LIGHT.center[0],
       PRISM_ENTRY_FACE_MIDPOINT[1] - PRISM_LIGHT.center[1],
@@ -296,13 +322,51 @@ describe('the lamp', () => {
 
   test('arrives at the entry face at the declared angle of incidence', () => {
     const face: Vec2 = [
-      PRISM_TRIANGLE.b[0] - PRISM_TRIANGLE.a[0],
-      PRISM_TRIANGLE.b[1] - PRISM_TRIANGLE.a[1],
+      PRISM_TRIANGLE.a[0] - PRISM_TRIANGLE.c[0],
+      PRISM_TRIANGLE.a[1] - PRISM_TRIANGLE.c[1],
     ];
     const faceLength = Math.hypot(face[0], face[1]);
     const outward: Vec2 = [face[1] / faceLength, -face[0] / faceLength];
     const cosine = -(PRISM_LIGHT.direction[0] * outward[0] + PRISM_LIGHT.direction[1] * outward[1]);
     expect(degrees(Math.acos(cosine))).toBeCloseTo(PRISM_INCIDENCE_DEGREES, 4);
+  });
+
+  test('can aim from left to right along the entry face', () => {
+    const edge: Vec2 = [
+      PRISM_TRIANGLE.c[0] - PRISM_TRIANGLE.a[0],
+      PRISM_TRIANGLE.c[1] - PRISM_TRIANGLE.a[1],
+    ];
+    const edgeLengthSquared = dot2(edge, edge);
+    const impactPositions: number[] = [];
+    for (const position of [0, 0.25, 0.5, 0.75, 1]) {
+      const light = lampForIncidence(PRISM_INCIDENCE_DEGREES, undefined, position);
+      const impact: Vec2 = [
+        light.center[0] + light.direction[0] * PRISM_LAMP_DISTANCE,
+        light.center[1] + light.direction[1] * PRISM_LAMP_DISTANCE,
+      ];
+      impactPositions.push(dot2([
+        impact[0] - PRISM_TRIANGLE.a[0],
+        impact[1] - PRISM_TRIANGLE.a[1],
+      ], edge) / edgeLengthSquared);
+    }
+    expect(impactPositions[0]).toBeGreaterThan(0);
+    expect(impactPositions[2]).toBeCloseTo(0.5, 6);
+    expect(impactPositions[4]).toBeLessThan(1);
+    expect(impactPositions).toEqual([...impactPositions].sort((a, b) => a - b));
+  });
+
+  test('the top pointer extreme sends the light from above and out through the base', () => {
+    const light = lampForIncidence(PRISM_INCIDENCE_ARC.min);
+    const path = tracePrismDetailed(
+      PRISM_TRIANGLE,
+      light.center,
+      light.direction,
+      iorAt(550, PRISM_DISPERSION_PRESETS.stylized.base, PRISM_DISPERSION_PRESETS.stylized.strength)
+    );
+    expect(light.center[1]).toBeGreaterThan(PRISM_TRIANGLE.a[1]);
+    expect(path).toBeDefined();
+    expect(path!.edges[0]).toBe(2);
+    expect(path!.edges.at(-1)).toBe(1);
   });
 
   test('is collimated: every boundary of one wavelength leaves in parallel', () => {
@@ -344,24 +408,27 @@ describe('total internal reflection', () => {
     const redAtDefault = beamThrough('flint', PRISM_WAVELENGTHS.max);
     expect(Math.abs(violetAtDefault.meanAngle - redAtDefault.meanAngle)).toBeLessThan(15);
 
-    // Swing the lamp to the bottom of the arc and dense flint sheds its violet:
-    // swinging down there is how the example demonstrates the critical angle.
-    const violetAtArcMin = beamThrough('flint', PRISM_WAVELENGTHS.min, PRISM_INCIDENCE_ARC.min);
-    const redAtArcMin = beamThrough('flint', PRISM_WAVELENGTHS.max, PRISM_INCIDENCE_ARC.min);
+    // At the original 44-degree threshold dense flint sheds its violet, even
+    // though the homepage interaction can now sweep much farther past it.
+    const violetAtArcMin = beamThrough('flint', PRISM_WAVELENGTHS.min, 44);
+    const redAtArcMin = beamThrough('flint', PRISM_WAVELENGTHS.max, 44);
     expect(Math.abs(violetAtArcMin.meanAngle - redAtArcMin.meanAngle)).toBeGreaterThan(40);
     expect(violetAtArcMin.bounced).toBeGreaterThan(0.5);
     expect(redAtArcMin.bounced).toBe(0);
   });
 
-  test('the stylized glass keeps its whole spectrum across the whole arc', () => {
-    for (const incidence of [PRISM_INCIDENCE_ARC.min, PRISM_INCIDENCE_DEGREES, PRISM_INCIDENCE_ARC.max]) {
+  test('the wider pointer arc keeps tracing light through reflected regimes', () => {
+    for (const incidence of [PRISM_INCIDENCE_ARC.min, PRISM_INCIDENCE_ARC.max]) {
       const violet = beamThrough('stylized', PRISM_WAVELENGTHS.min, incidence);
       const red = beamThrough('stylized', PRISM_WAVELENGTHS.max, incidence);
-      expect(violet.bounced, `violet at ${incidence} degrees`).toBe(0);
-      expect(violet.meanAngle).toBeLessThan(red.meanAngle);
-      // Wider open at grazing incidence, tighter as the beam straightens up.
-      expect(Math.abs(violet.meanAngle - red.meanAngle)).toBeGreaterThan(12);
+      expect(violet.missed, `violet at ${incidence} degrees`).toBe(0);
+      expect(red.missed, `red at ${incidence} degrees`).toBe(0);
+      expect(violet.trapped, `violet at ${incidence} degrees`).toBe(0);
+      expect(red.trapped, `red at ${incidence} degrees`).toBe(0);
     }
+    expect(
+      beamThrough('stylized', PRISM_WAVELENGTHS.min, PRISM_INCIDENCE_ARC.min).bounced
+    ).toBeGreaterThan(0);
   });
 
   test('a trapped ray is dropped rather than escaping through the wrong face', () => {

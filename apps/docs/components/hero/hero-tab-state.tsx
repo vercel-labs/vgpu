@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-export type HeroTab = "Prompt" | "Skill";
+export type HeroTab = "For humans" | "For agents";
 
 interface HeroTabState {
   readonly activeTab: HeroTab;
@@ -18,7 +18,7 @@ interface HeroTabState {
 const HeroTabContext = createContext<HeroTabState | null>(null);
 
 export function HeroTabProvider({ children }: { children: ReactNode }) {
-  const [activeTab, setActiveTab] = useState<HeroTab>("Prompt");
+  const [activeTab, setActiveTab] = useState<HeroTab>("For humans");
   const value = useMemo(() => ({ activeTab, setActiveTab }), [activeTab]);
 
   return (

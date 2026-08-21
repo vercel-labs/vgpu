@@ -20,7 +20,6 @@ import { meta as environmentMapMeta } from '../examples/environment-map/meta';
 import { meta as transmissionMeta } from '../examples/transmission/meta';
 import { meta as radianceCascadesMeta } from '../examples/radiance-cascades/meta';
 import { meta as agentRadianceCascadesMeta } from '../examples/agent-radiance-cascades/meta';
-import { meta as prismRainbowMeta } from '../examples/prism-rainbow/meta';
 import { meta as nextjsFlareMeta } from '../examples/nextjs-flare/meta';
 import { meta as depthEstimationMeta } from '../examples/depth-estimation/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
@@ -45,7 +44,6 @@ const rawMetadata = {
   transmission: transmissionMeta,
   'radiance-cascades': radianceCascadesMeta,
   'agent-radiance-cascades': agentRadianceCascadesMeta,
-  'prism-rainbow': prismRainbowMeta,
   'nextjs-flare': nextjsFlareMeta,
   'depth-estimation': depthEstimationMeta,
   'mnist-classifier': mnistClassifierMeta,
@@ -79,7 +77,6 @@ export const exampleMetadataBySlug = {
   transmission: withThumbnails(rawMetadata.transmission),
   'radiance-cascades': withThumbnails(rawMetadata['radiance-cascades']),
   'agent-radiance-cascades': withThumbnails(rawMetadata['agent-radiance-cascades']),
-  'prism-rainbow': withThumbnails(rawMetadata['prism-rainbow']),
   'nextjs-flare': withThumbnails(rawMetadata['nextjs-flare']),
   'depth-estimation': withThumbnails(rawMetadata['depth-estimation']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),

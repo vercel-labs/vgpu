@@ -5,23 +5,13 @@ import { Check, Copy } from "lucide-react";
 import { type HeroTab, useHeroTab } from "@/components/hero/hero-tab-state";
 import { InlineCode, stripBackticks } from "./inline-code";
 
-/**
- * `backtick` spans are atomic (never broken across lines); `mono` decides
- * whether they are also *presented* as code. See InlineCode.
- *
- * The two tabs differ in kind, not in taste. Skill is a shell command you paste
- * into a terminal, so mono is carrying meaning: "this is literal, type it
- * exactly". Prompt is a sentence you paste into an agent — the whole line is
- * natural language, including the command it happens to name, so setting that
- * fragment as code mislabelled it; it read as two registers spliced together
- * when it is one instruction throughout.
- *
- * Prompt stays fenced regardless, because "npx vgpu" must not wrap: unset, it
- * breaks after "npx" on a phone and strands the command name on line two.
- */
+/** Both setup paths are literal terminal commands, so they use code styling. */
 const tabContent = {
-  Prompt: { text: "Setup vgpu on my project, run `npx vgpu`", mono: false },
-  Skill: { text: "`npx skills add vercel-labs/vgpu`", mono: true },
+  "For humans": { text: "`npm i vgpu`", mono: true },
+  "For agents": {
+    text: "`npx skills add vercel-labs/vgpu`",
+    mono: true,
+  },
 } as const;
 
 type Tab = keyof typeof tabContent;
@@ -102,7 +92,7 @@ export function HeroTabs() {
           <Fragment key={tab}>
             {index > 0 && (
               <span aria-hidden className="px-2 text-white">
-                ·
+                *
               </span>
             )}
             <button
@@ -160,8 +150,8 @@ export function HeroTabs() {
           Stacking rather than swapping a single node is what keeps the block
           rigid: the cell is always as tall as the LONGEST snippet, so neither
           the rule above nor the tagline this is centred with can move — not
-          during the transition, and not between tabs either (Prompt wraps to
-          two lines on a phone where Skill fits on one).
+          during the transition, and not between tabs either (the agent command
+          is considerably longer than the human install command).
 
           Three states instead of active/inactive, because direction matters:
           the one leaving lifts UP and the one arriving rises from BELOW, so a

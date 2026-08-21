@@ -24,12 +24,12 @@ import {
   DEFAULT_PRISM_CONTROLS,
   type PrismControls,
   type PrismDispersion,
-} from '../../../apps/docs/examples/prism-rainbow/types';
+} from './types';
 import {
   prismSilhouette,
   regionStats,
   renderComposite,
-} from '../../../apps/docs/examples/prism-rainbow/validation';
+} from './validation';
 
 const gpuOnly = process.env.VGPU_DOCKER_TEST !== '1';
 
@@ -37,12 +37,12 @@ const SIZE: readonly [number, number] = [320, 180];
 
 /**
  * Regions of the frame, in normalized coordinates, that the physics pins down.
- * Chosen by measuring a render, not by eye: `fan` is where the beam leaves the
- * glass heading right and down, `wall` is a corner the lamp's cone never reaches.
+ * Chosen by measuring a render, not by eye: `fan` is where the mirrored beam
+ * leaves the glass heading left and down; `wall` stays outside the lamp's cone.
  */
 const REGIONS = {
-  fan: { x0: 0.66, y0: 0.44, x1: 0.98, y1: 0.72 },
-  wall: { x0: 0.04, y0: 0.04, x1: 0.3, y1: 0.2 },
+  fan: { x0: 0.02, y0: 0.44, x1: 0.34, y1: 0.72 },
+  wall: { x0: 0.7, y0: 0.04, x1: 0.96, y1: 0.2 },
 } as const;
 
 const WALL_ONLY: PrismControls = { ...DEFAULT_PRISM_CONTROLS, view: 'wall' };
@@ -78,7 +78,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
       let violetY = 0;
       let violetCount = 0;
       for (let y = 0; y < SIZE[1]; y++) {
-        for (let x = Math.floor(SIZE[0] * 0.62); x < SIZE[0]; x++) {
+        for (let x = 0; x < Math.ceil(SIZE[0] * 0.38); x++) {
           const index = (y * SIZE[0] + x) * 4;
           const red = pixels[index]!;
           const green = pixels[index + 1]!;

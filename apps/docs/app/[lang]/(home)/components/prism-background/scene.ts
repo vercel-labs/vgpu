@@ -55,6 +55,7 @@ import {
   PRISM_INCIDENCE_ARC,
   PRISM_LIGHT_PLANE_Z,
   PRISM_LIGHT_FADE_RANGES,
+  PRISM_SPECTRAL_DISPERSION_RANGES,
   PRISM_TRIANGLE,
   clampBeamWidth,
   clampCameraDistance,
@@ -94,6 +95,7 @@ export interface PrismScene {
   readonly sceneSampler: ReturnType<typeof sampler>;
   controls: PrismControls;
   lampArc: number;
+  lampTarget: number;
   orbit: readonly [number, number];
   aspect: number;
   view: CameraView;
@@ -108,7 +110,9 @@ export function createScene(
   const aspect = output[0] / Math.max(1, output[1]);
   const initialMesh = buildLightMesh({
     light: lampAt(PRISM_DEFAULT_ARC, DEFAULT_PRISM_CONTROLS.beamWidth),
-    dispersion: PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion],
+    dispersion:
+      DEFAULT_PRISM_CONTROLS.spectralDispersion ??
+      PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion],
     edgeFalloff: DEFAULT_PRISM_CONTROLS.lightFade.edgeFalloff,
     wallHalfExtent: wallExtent(
       aspect,
@@ -226,8 +230,14 @@ export function createScene(
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",
     }),
-    controls: DEFAULT_PRISM_CONTROLS,
+    controls: {
+      ...DEFAULT_PRISM_CONTROLS,
+      spectralDispersion:
+        DEFAULT_PRISM_CONTROLS.spectralDispersion ??
+        PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion],
+    },
     lampArc: PRISM_DEFAULT_ARC,
+    lampTarget: 0.5,
     orbit: [0, 0],
     aspect,
     view: cameraView(
@@ -253,8 +263,10 @@ function refreshCamera(scene: PrismScene): void {
 
 function refreshLightMesh(scene: PrismScene): void {
   const mesh = buildLightMesh({
-    light: lampAt(scene.lampArc, scene.controls.beamWidth),
-    dispersion: PRISM_DISPERSION_PRESETS[scene.controls.dispersion],
+    light: lampAt(scene.lampArc, scene.controls.beamWidth, scene.lampTarget),
+    dispersion:
+      scene.controls.spectralDispersion ??
+      PRISM_DISPERSION_PRESETS[scene.controls.dispersion],
     edgeFalloff: scene.controls.lightFade.edgeFalloff,
     wallHalfExtent: wallExtent(
       scene.aspect,
@@ -273,6 +285,11 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
   const inputGlass = controls.glass ?? defaultGlass;
   const inputPostprocess = controls.postprocess ?? defaultPostprocess;
   const inputLightFade = controls.lightFade ?? defaultLightFade;
+  const inputSpectralDispersion =
+    controls.spectralDispersion ??
+    PRISM_DISPERSION_PRESETS[
+      controls.dispersion ?? DEFAULT_PRISM_CONTROLS.dispersion
+    ];
   const inputAbsorption = inputGlass.absorption ?? defaultGlass.absorption;
   const finite = (value: number | undefined, fallback: number) =>
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -288,6 +305,28 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
     beamWidth: clampBeamWidth(
       controls.beamWidth ?? DEFAULT_PRISM_CONTROLS.beamWidth
     ),
+    spectralDispersion: {
+      base: Math.min(
+        PRISM_SPECTRAL_DISPERSION_RANGES.base.max,
+        Math.max(
+          PRISM_SPECTRAL_DISPERSION_RANGES.base.min,
+          finite(
+            inputSpectralDispersion.base,
+            PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion].base
+          )
+        )
+      ),
+      strength: Math.min(
+        PRISM_SPECTRAL_DISPERSION_RANGES.strength.max,
+        Math.max(
+          PRISM_SPECTRAL_DISPERSION_RANGES.strength.min,
+          finite(
+            inputSpectralDispersion.strength,
+            PRISM_DISPERSION_PRESETS[DEFAULT_PRISM_CONTROLS.dispersion].strength
+          )
+        )
+      ),
+    },
     lightFade: {
       edgeFalloff: Math.min(
         PRISM_LIGHT_FADE_RANGES.edgeFalloff.max,
@@ -355,6 +394,9 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
   };
   const opticsChanged =
     next.dispersion !== scene.controls.dispersion ||
+    next.spectralDispersion.base !== scene.controls.spectralDispersion?.base ||
+    next.spectralDispersion.strength !==
+      scene.controls.spectralDispersion?.strength ||
     next.beamWidth !== scene.controls.beamWidth ||
     next.lightFade.edgeFalloff !== scene.controls.lightFade.edgeFalloff;
   const cameraChanged =
@@ -366,9 +408,19 @@ export function setControls(scene: PrismScene, controls: PrismControls): void {
 }
 
 export function setLampArc(scene: PrismScene, position: number): void {
-  const next = Math.min(1, Math.max(0, position));
-  if (next === scene.lampArc) return;
-  scene.lampArc = next;
+  setLampAim(scene, position, scene.lampTarget);
+}
+
+export function setLampAim(
+  scene: PrismScene,
+  arcPosition: number,
+  targetPosition: number
+): void {
+  const nextArc = Math.min(1, Math.max(0, arcPosition));
+  const nextTarget = Math.min(1, Math.max(0, targetPosition));
+  if (nextArc === scene.lampArc && nextTarget === scene.lampTarget) return;
+  scene.lampArc = nextArc;
+  scene.lampTarget = nextTarget;
   refreshLightMesh(scene);
 }
 
@@ -402,9 +454,10 @@ export function incidenceAt(position: number): number {
 
 export function lampAt(
   position: number,
-  beamWidth = DEFAULT_PRISM_CONTROLS.beamWidth
+  beamWidth = DEFAULT_PRISM_CONTROLS.beamWidth,
+  targetPosition = 0.5
 ): CollimatedLight {
-  return lampForIncidence(incidenceAt(position), beamWidth);
+  return lampForIncidence(incidenceAt(position), beamWidth, targetPosition);
 }
 
 export function wallExtent(

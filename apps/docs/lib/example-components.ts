@@ -26,7 +26,6 @@ export const exampleComponentLoaders = {
   transmission: () => import('../examples/transmission/index'),
   'radiance-cascades': () => import('../examples/radiance-cascades/index'),
   'agent-radiance-cascades': () => import('../examples/agent-radiance-cascades/index'),
-  'prism-rainbow': () => import('../examples/prism-rainbow/index'),
   'nextjs-flare': () => import('../examples/nextjs-flare/index'),
   'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
