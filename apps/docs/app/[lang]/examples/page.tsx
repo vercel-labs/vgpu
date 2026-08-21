@@ -4,6 +4,7 @@ import { translations } from "@/geistdocs";
 // ported by TGEIST-07 (`lib/examples-metadata.ts`) -- this page only decides
 // how it is painted, not what is shown or in what order.
 import { examplesMetadata } from "@/lib/examples-metadata";
+import { siteUrl } from "@/lib/site";
 
 const title = "Examples";
 const description =
@@ -12,6 +13,8 @@ const description =
 export const metadata = {
   title,
   description,
+  alternates: { canonical: siteUrl("/examples") },
+  openGraph: { type: "website", title, description, url: siteUrl("/examples") },
 };
 
 export const generateStaticParams = () => Object.keys(translations).map((lang) => ({ lang }));

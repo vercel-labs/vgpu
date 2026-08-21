@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "../global.css";
 import { mono, sans } from "@/lib/geistdocs/fonts";
 import { cn } from "@/lib/utils";
+import { SITE_ORIGIN } from "@/lib/site";
 
 /*
  * ANCHOR TGEIST-08 (previews verbatim, headless render targets).
@@ -48,6 +49,7 @@ import { cn } from "@/lib/utils";
  */
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_ORIGIN),
   title: "vgpu example preview",
   robots: { index: false, follow: false },
 };

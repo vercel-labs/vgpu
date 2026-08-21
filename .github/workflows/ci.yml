@@ -288,6 +288,8 @@ jobs:
       # build, for the same reason as the checks above: it grades this exact `.next`.
       - name: Check example static asset smoke (no i18n-proxied 404s)
         run: pnpm --filter docs check:example-static-asset-smoke
+      - name: Check canonical metadata, Markdown recovery, trust pages, and machine discovery
+        run: pnpm --filter docs check:production-readiness
       # Remark plugins M1-M9 (gate (c) of Decision 4 runs in `docs-parity` below).
       # `test:remark` unit-tests the mappings (including the adversarial case the
       # design names: a `*.docs.md` path inside a code-span that must NOT be
