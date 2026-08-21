@@ -4,8 +4,7 @@ export const meta = {
   slug: 'gradient',
   title: 'Simple Gradient',
   description: 'Map screen coordinates to color with a tiny fullscreen fragment shader.',
-  tags: ['gradient', 'animation', 'shader'],
-  capabilities: ['webgpu', 'fragment-shader', 'continuous-rendering', 'responsive-canvas'],
-  thumb: { time: Math.PI / 4 },
+  tags: ['gradient', 'shader'],
+  capabilities: ['webgpu', 'fragment-shader', 'responsive-canvas'],
   files: ['index.tsx', 'renderer.ts', 'shader.wgsl'],
 } as const satisfies ExampleMetaDefinition;
