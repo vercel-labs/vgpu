@@ -15,6 +15,7 @@ export const exampleSlugs = [
   'glass-fractal',
   'environment-map',
   'transmission',
+  'clipping',
   'radiance-cascades',
   'agent-radiance-cascades',
   'nextjs-flare',
