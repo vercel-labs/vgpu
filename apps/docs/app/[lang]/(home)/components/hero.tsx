@@ -61,7 +61,7 @@ export function Hero() {
             <h1
               aria-label="vgpu"
               data-hero-title
-              className="relative mb-[0.6em] aspect-[188/75] w-[200px] [--wordmark-fill-blur:3px] [--wordmark-outline-blur:20px]"
+              className="relative mb-[1em] aspect-[188/75] w-[200px] [--wordmark-fill-blur:3px] [--wordmark-outline-blur:20px]"
             >
               <svg
                 aria-hidden="true"
