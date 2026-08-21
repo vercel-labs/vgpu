@@ -7,5 +7,5 @@ export const meta = {
   tags: ['black-hole', 'raymarching', 'hdr', 'bloom'],
   capabilities: ['webgpu', 'pointer-orbit', 'multi-pass', 'continuous-rendering', 'responsive-canvas'],
   thumb: { warmupFrames: 1, time: 8.5 },
-  files: ['index.tsx', 'renderer.ts', 'black-hole.wgsl', 'bright-pass.wgsl', 'blur.wgsl', 'composite.wgsl'],
+  files: ['index.tsx', 'renderer.ts', 'pipeline.ts', 'black-hole.wgsl', 'bright-pass.wgsl', 'blur.wgsl', 'composite.wgsl'],
 } as const satisfies ExampleMetaDefinition;

@@ -28,4 +28,6 @@ export interface ThumbnailOptions {
   readonly warmupFrames?: number;
   readonly time?: number;
   readonly dt?: number;
+  /** Absolute path to apps/docs/public for entries that load authored assets. */
+  readonly publicAssetsRoot?: string;
 }

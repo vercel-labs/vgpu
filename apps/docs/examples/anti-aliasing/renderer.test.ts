@@ -7,7 +7,7 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
     .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
 )) as Record<string, unknown>;
 const mocks = vi.hoisted(() => ({ init: vi.fn() })); vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
-import { Controls } from './controls'; import { createRenderer, renderThumbnail } from './renderer'; import { AA_MODE_FXAA, AA_MODE_OFF, DEFAULT_ANTI_ALIASING_CONTROLS } from './types';
+import { Controls } from './controls'; import { renderThumbnail } from './render-thumbnail'; import { createRenderer } from './renderer'; import { AA_MODE_FXAA, AA_MODE_OFF, DEFAULT_ANTI_ALIASING_CONTROLS } from './types';
 function setup() {
  vi.stubGlobal('window', { devicePixelRatio: 1, addEventListener: vi.fn(), removeEventListener: vi.fn() }); vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1)); vi.stubGlobal('cancelAnimationFrame', vi.fn()); const disconnect=vi.fn(); vi.stubGlobal('ResizeObserver', class { observe=vi.fn(); disconnect=disconnect; });
  const set=vi.fn(), compile=vi.fn(async()=>{}), stop=vi.fn(), buffer={ gpu:{ destroy:vi.fn() }, write:vi.fn() }; const target=()=>({size:[100,50],format:'rgba8unorm',resize:vi.fn(),destroy:vi.fn()}); const surface={size:[100,50],format:'bgra8unorm',dispose:vi.fn()};

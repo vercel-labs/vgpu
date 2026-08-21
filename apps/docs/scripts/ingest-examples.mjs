@@ -115,6 +115,11 @@ async function registryKeys(fileName, variableName) {
 async function validatedFiles(metadata) {
   const seen = new Set();
   const directory = path.join(examplesDir, metadata.slug);
+  const thumbnailName = 'render-thumbnail.ts';
+  if (metadata.files.includes(thumbnailName)) {
+    throw new Error(`${metadata.slug}/meta.ts must not list ${thumbnailName}; the internal thumbnail entry is not public example source.`);
+  }
+  await assertThumbnailEntry(metadata.slug, path.join(directory, thumbnailName));
   for (const name of metadata.files) {
     if (!name || path.isAbsolute(name) || name.includes('\\') || name.split('/').includes('..') || path.posix.normalize(name) !== name) {
       throw new Error(`${metadata.slug}/meta.ts contains unsafe file path '${name}'.`);
@@ -137,6 +142,25 @@ async function validatedFiles(metadata) {
     throw new Error(`${metadata.slug}/meta.ts must list index.tsx first.`);
   }
   return metadata.files;
+}
+
+async function assertThumbnailEntry(slug, fileName) {
+  const source = await readFile(fileName, 'utf8').catch((error) => {
+    if (error?.code === 'ENOENT') {
+      throw new Error(`${slug} is missing required render-thumbnail.ts.`);
+    }
+    throw error;
+  });
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const renderThumbnail = file.statements.find((statement) =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'renderThumbnail'
+  );
+  const modifiers = renderThumbnail?.modifiers ?? [];
+  const isExported = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  const isAsync = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+  if (!renderThumbnail || !isExported || !isAsync) {
+    throw new Error(`${slug}/render-thumbnail.ts must export a named async function renderThumbnail(gpu, target, options?).`);
+  }
 }
 
 async function writeIfChanged(fileName, source) {

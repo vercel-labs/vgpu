@@ -7,7 +7,7 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
     .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
 )) as Record<string, unknown>;
 const mocks=vi.hoisted(()=>({init:vi.fn()}));vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
-import { Controls } from './controls'; import { DEFAULT_POST_PROCESSING_CONTROLS } from './types'; import { createRenderer, renderThumbnail } from './renderer';
+import { Controls } from './controls'; import { DEFAULT_POST_PROCESSING_CONTROLS } from './types'; import { renderThumbnail } from './render-thumbnail'; import { createRenderer } from './renderer';
 afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
 test('uses shared all-on defaults in accessible controlled toggles',()=>{const html=renderToStaticMarkup(createElement(Controls, { value: DEFAULT_POST_PROCESSING_CONTROLS, onChange: () => {} }));expect(DEFAULT_POST_PROCESSING_CONTROLS).toEqual({bloom:true,ca:true});expect(html).toContain('Post-processing effects');expect(html.match(/checked=""/g)).toHaveLength(2);expect(html).toContain('Chromatic Aberration');});
 

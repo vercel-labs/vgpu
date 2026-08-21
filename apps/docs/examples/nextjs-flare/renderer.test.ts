@@ -13,7 +13,8 @@ vi.mock('./logo-raster', () => ({
   rasterizeLogo: vi.fn(async () => ({ width: 130, height: 156 })),
 }));
 
-import { createRenderer, renderThumbnail } from './renderer';
+import { renderThumbnail } from './render-thumbnail';
+import { createRenderer } from './renderer';
 
 function setup(options: { failCompile?: boolean } = {}) {
   const canvasListeners = new Map<string, EventListener>();

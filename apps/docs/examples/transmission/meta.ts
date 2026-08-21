@@ -12,7 +12,7 @@ export const meta = {
   ],
   thumb: { warmupFrames: 3, dt: 1 / 60, time: 2.1 },
   files: [
-    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'camera.ts', 'pointer-input.ts',
+    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'scene.ts', 'camera.ts', 'pointer-input.ts',
     'sky.wgsl', 'blur.wgsl', 'env-common.wgsl', 'scene-background.wgsl', 'floor.wgsl',
     'backface-normal.wgsl', 'backface.wgsl', 'refraction.wgsl', 'dispersion.wgsl', 'cone.wgsl',
     'fresnel.wgsl', 'lod-selection.wgsl', 'glass.wgsl', 'present.wgsl',

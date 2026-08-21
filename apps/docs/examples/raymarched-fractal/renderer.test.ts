@@ -8,7 +8,8 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
 )) as Record<string, unknown>;
 vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 
-import { createRenderer, renderThumbnail } from './renderer';
+import { renderThumbnail } from './render-thumbnail';
+import { createRenderer } from './renderer';
 
 const canvas = {
   style: { touchAction: '' },

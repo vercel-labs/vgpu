@@ -12,7 +12,8 @@ vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.
 vi.mock('./scene-renderer', () => ({ createHeroRenderer: mocks.createHeroRenderer }));
 
 import { Controls } from './controls';
-import { createRenderer, renderThumbnail } from './renderer';
+import { renderThumbnail } from './render-thumbnail';
+import { createRenderer } from './renderer';
 import { DEFAULT_TRIANGLE_LED_CONTROLS } from './types';
 
 function deferred<T = void>() {

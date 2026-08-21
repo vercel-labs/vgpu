@@ -1,3 +1,8 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import ts from 'typescript';
 import { afterEach, expect, test, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -11,6 +16,8 @@ import { exampleMetadataBySlug } from './examples-metadata';
 function sorted(values: readonly string[]) {
   return [...values].sort();
 }
+
+const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('canonical, metadata, generated source, and component registries cover exactly the same slugs', () => {
   const canonical = sorted(exampleSlugs);
@@ -41,6 +48,68 @@ test('generated metadata and files preserve the canonical and explicit order', (
       expect(file.content.endsWith('\n')).toBe(true);
       expect(file.content).not.toContain('\r');
     }
+  }
+});
+
+test('all thumbnail entries satisfy the internal contract and stay out of public source', async () => {
+  expect(exampleSlugs).toHaveLength(22);
+  const latest = JSON.parse(
+    await readFile(
+      path.join(docsDir, 'generated/examples-api/examples/v1/latest.json'),
+      'utf8'
+    )
+  ) as { revision: string };
+
+  for (const slug of exampleSlugs) {
+    const directory = path.join(docsDir, 'examples', slug);
+    const [entrySource, rendererSource, manifestSource] = await Promise.all([
+      readFile(path.join(directory, 'render-thumbnail.ts'), 'utf8'),
+      readFile(path.join(directory, 'renderer.ts'), 'utf8'),
+      readFile(
+        path.join(
+          docsDir,
+          'generated/examples-api/examples/v1/revisions',
+          latest.revision,
+          'examples',
+          slug,
+          'manifest.json'
+        ),
+        'utf8'
+      ),
+    ]);
+    const sourceFile = ts.createSourceFile(
+      `${slug}/render-thumbnail.ts`,
+      entrySource,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    const declaration = sourceFile.statements.find(
+      (statement): statement is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(statement) &&
+        statement.name?.text === 'renderThumbnail'
+    );
+    const modifierKinds = declaration?.modifiers?.map(({ kind }) => kind) ?? [];
+    expect(declaration, `${slug} has no named renderThumbnail function`).toBeDefined();
+    expect(modifierKinds, `${slug} renderThumbnail is not exported`).toContain(
+      ts.SyntaxKind.ExportKeyword
+    );
+    expect(modifierKinds, `${slug} renderThumbnail is not async`).toContain(
+      ts.SyntaxKind.AsyncKeyword
+    );
+    expect(rendererSource, `${slug}/renderer.ts retains renderThumbnail`).not.toMatch(
+      /\brenderThumbnail\b/
+    );
+    expect(exampleMetadataBySlug[slug].files).not.toContain('render-thumbnail.ts');
+    expect(exampleSources[slug].files.map(({ path: file }) => file)).not.toContain(
+      'render-thumbnail.ts'
+    );
+    const manifest = JSON.parse(manifestSource) as {
+      files: Array<{ path: string }>;
+    };
+    expect(manifest.files.map(({ path: file }) => file)).not.toContain(
+      'render-thumbnail.ts'
+    );
   }
 });
 

@@ -7,5 +7,5 @@ export const meta = {
   tags: ['fluid', 'simulation', 'compute', 'navier-stokes'],
   capabilities: ['webgpu', 'compute-shader', 'fixed-timestep', 'pointer-input', 'multi-pass', 'responsive-canvas'],
   thumb: { warmupFrames: 120, dt: 1 / 60 },
-  files: ['index.tsx', 'renderer.ts', 'pointer-input.ts', 'simulation.ts', 'validation.ts', 'math.ts', 'fluid-common.wgsl', 'advect-velocity.wgsl', 'curl.wgsl', 'vorticity.wgsl', 'divergence.wgsl', 'pressure.wgsl', 'project.wgsl', 'advect-dye.wgsl', 'display.wgsl'],
+  files: ['index.tsx', 'renderer.ts', 'pointer-input.ts', 'simulation.ts', 'math.ts', 'fluid-common.wgsl', 'advect-velocity.wgsl', 'curl.wgsl', 'vorticity.wgsl', 'divergence.wgsl', 'pressure.wgsl', 'project.wgsl', 'advect-dye.wgsl', 'display.wgsl'],
 } as const satisfies ExampleMetaDefinition;

@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import { init, effect, frame, target } from 'vgpu/node';
+import { init, target } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
@@ -15,37 +15,11 @@ const rendererBundle = path.join(cacheDir, 'renderers.mjs');
 const docsDataEntry = path.join(cacheDir, 'docs-data-entry.ts');
 const docsDataBundle = path.join(cacheDir, 'docs-data.mjs');
 
-/** @typedef {{ slug: string; module: string; exportName: string }} RendererEntry */
-/** @type {RendererEntry[]} */
-const rendererEntries = [
-  { slug: 'gradient', module: '../examples/gradient/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'triangle-led-front', module: '../examples/triangle-led-front/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'anti-aliasing', module: '../examples/anti-aliasing/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'post-processing', module: '../examples/post-processing/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'black-hole', module: '../examples/black-hole/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'earth', module: '../examples/earth/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'fluid', module: '../examples/fluid/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'instanced-rendering', module: '../examples/instanced-rendering/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'batch-rendering', module: '../examples/batch-rendering/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'fft-ocean', module: '../examples/fft-ocean/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'fft-ocean-surface', module: '../examples/fft-ocean-surface/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'raymarched-fractal', module: '../examples/raymarched-fractal/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'environment-map', module: '../examples/environment-map/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'transmission', module: '../examples/transmission/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'radiance-cascades', module: '../examples/radiance-cascades/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'agent-radiance-cascades', module: '../examples/agent-radiance-cascades/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'nextjs-flare', module: '../examples/nextjs-flare/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'depth-estimation', module: '../examples/depth-estimation/thumbnail.ts', exportName: 'renderThumbnail' },
-  { slug: 'mnist-classifier', module: '../examples/mnist-classifier/renderer.ts', exportName: 'renderThumbnail' },
-  { slug: 'air-painting', module: '../examples/air-painting/renderer.ts', exportName: 'renderThumbnail' },
-];
-
 const sizes = args.proofDir ? { proof: [160, 90] } : {
   card: [1280, 720],
   hero: [1600, 900],
 };
 
-const defaultFragmentTime = Math.PI / 4;
 const minLumaVariance = 6;
 const compareOptions = {
   pixelmatchThreshold: 0.1,
@@ -54,25 +28,13 @@ const compareOptions = {
 const aaModeNames = new Map([[0, 'off'], [1, 'msaa-4x'], [2, 'ssaa-2x'], [3, 'fxaa']]);
 const postProcessingModeNames = ['all-off', 'bloom-only', 'ca-only'];
 
-function renderFragmentThumb(gpu, colorTarget, fragmentSource, { time }) {
-  const shader = effect(gpu, fragmentSource);
-  const [width, height] = colorTarget.size;
-  shader.set({
-    uniforms: {
-      time,
-      resolution: [width, height],
-    },
-  });
-  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(shader)));
-}
-
 await mkdir(outDir, { recursive: true });
 if (args.artifactDir) {
   await rm(args.artifactDir, { recursive: true, force: true });
   await mkdir(args.artifactDir, { recursive: true });
 }
-const [renderers, docsData] = await Promise.all([loadRenderers(), loadDocsData()]);
-const { examples, exampleSources } = docsData;
+const { examples } = await loadDocsData();
+const renderers = await loadRenderers(examples.map((example) => example.meta.slug));
 
 let failures = 0;
 const comparisonSummary = [];
@@ -82,15 +44,11 @@ if (args.only && selected.length === 0) throw new Error(`Unknown example slug '$
 for (const example of selected) {
   const slug = example.meta.slug;
   const metaThumb = example.meta.thumb ?? {};
-  if (metaThumb.headless === false) {
-    console.log(`- ${slug}: skipped (headless:false)`);
-    continue;
-  }
 
   const selectedSizes = args.fluidSoak && slug === 'fluid' ? { card: sizes.card } : sizes;
   for (const [kind, size] of Object.entries(selectedSizes)) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
-    const result = await renderOne(renderers, example, exampleSources, size, metaThumb, output);
+    const result = await renderOne(renderers, example, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
     console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
@@ -106,7 +64,7 @@ await rm(cacheDir, { recursive: true, force: true });
 if (args.artifactDir) await writeFile(path.join(args.artifactDir, 'summary.txt'), `${comparisonSummary.join('\n')}\n`);
 if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
-async function renderOne(renderers, example, exampleSources, size, metaThumb, output) {
+async function renderOne(renderers, example, size, metaThumb, output) {
   const slug = example.meta.slug;
   const gpu = await init();
   try {
@@ -121,11 +79,11 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
     const modePixels = aaModePixels ?? postProcessingModePixels;
     let fluidState;
     let radianceStats;
-    if (renderer) {
-      await renderer(gpu, colorTarget, {
+    await renderer(gpu, colorTarget, {
         warmupFrames: args.proofDir ? (slug === 'fluid' ? 24 : 3) : (metaThumb.warmupFrames ?? 60),
         dt: metaThumb.dt ?? 1 / 60,
         time: metaThumb.time,
+        publicAssetsRoot: path.join(docsDir, 'public'),
         onModeRendered: modePixels
           ? (mode, pixels) => modePixels.set(mode, pixels.slice())
           : undefined,
@@ -145,17 +103,6 @@ async function renderOne(renderers, example, exampleSources, size, metaThumb, ou
           ? (stats) => { assertFluidState(stats); fluidState = stats; }
           : slug === 'radiance-cascades' ? (stats) => { radianceStats = stats; } : undefined,
       });
-    } else {
-      const fragmentFile = resolveFragmentFile(example, exampleSources);
-      if (!fragmentFile) throw new Error(`No fragment shader found for '${slug}'.`);
-      const fragmentSource = sourceFor(exampleSources, slug, fragmentFile);
-      renderFragmentThumb(
-        gpu,
-        colorTarget,
-        fragmentSource,
-        { time: metaThumb.time ?? defaultFragmentTime },
-      );
-    }
     const pixels = await colorTarget.read();
     const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
     const postProcessingMetrics = postProcessingModePixels && !args.proofDir
@@ -215,22 +162,6 @@ async function persistComparisonArtifacts(compare, pixels, size, baselinePath) {
   } else {
     await writePng(actual, pixels, size[0], size[1]);
   }
-}
-
-function resolveFragmentFile(example, exampleSources) {
-  const slug = example.meta.slug;
-  const preferred = example.meta.thumb?.fragmentFile;
-  if (preferred) return preferred;
-  const metaListed = example.meta.files?.find((file) => file.endsWith('.wgsl'));
-  if (metaListed) return metaListed;
-  const generated = exampleSources[slug]?.files.find((item) => item.language === 'wgsl');
-  return generated?.path;
-}
-
-function sourceFor(exampleSources, slug, fileName) {
-  const file = exampleSources[slug]?.files.find((item) => item.path === fileName);
-  if (!file) throw new Error(`Missing generated source for ${slug}/${fileName}. Run scripts/ingest-examples.mjs first.`);
-  return file.content;
 }
 
 function lumaVariance(bytes) {
@@ -617,11 +548,15 @@ async function writeAaModePngs(modePixels, size, kind) {
   await Promise.all([...aaModeNames].map(([mode, name]) => writePng(path.join(dir, `${kind}-${name}.png`), modePixels.get(mode), size[0], size[1])));
 }
 
-async function loadRenderers() {
-  if (rendererEntries.length === 0) return {};
+async function loadRenderers(slugs) {
+  if (slugs.length === 0) return {};
+  if (new Set(slugs).size !== slugs.length) throw new Error('Canonical example slugs contain duplicates.');
+  for (const slug of slugs) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error(`Unsafe canonical example slug '${slug}'.`);
+  }
   await mkdir(cacheDir, { recursive: true });
-  const contents = rendererEntries
-    .map((entry, index) => `export { ${entry.exportName} as renderer_${index} } from '${entry.module}';`)
+  const contents = slugs
+    .map((slug, index) => `export { renderThumbnail as renderer_${index} } from '../examples/${slug}/render-thumbnail.ts';`)
     .join('\n');
   await import('node:fs/promises').then(({ writeFile }) => writeFile(rendererEntry, `${contents}\n`));
   await build({
@@ -631,17 +566,17 @@ async function loadRenderers() {
     platform: 'node',
     format: 'esm',
     sourcemap: false,
-    external: ['vgpu', 'vgpu/node'],
+    external: ['pngjs', 'vgpu', 'vgpu/node'],
     plugins: [wgslPlugin()],
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);
-  return rendererEntries.reduce((acc, entry, index) => {
+  return slugs.reduce((acc, slug, index) => {
     const renderer = module[`renderer_${index}`];
     if (typeof renderer !== 'function') {
-      throw new Error(`Renderer export for '${entry.slug}' was not found.`);
+      throw new Error(`Named renderThumbnail export for '${slug}' was not found.`);
     }
-    acc[entry.slug] = renderer;
+    acc[slug] = renderer;
     return acc;
   }, /** @type {Record<string, Function>} */ ({}));
 }
@@ -663,16 +598,8 @@ async function loadDocsData() {
   await mkdir(cacheDir, { recursive: true });
   await import('node:fs/promises').then(({ writeFile }) => writeFile(docsDataEntry, `
     import { examplesMetadata } from '../lib/examples-metadata';
-    import { exampleSources } from '../lib/examples-source.generated';
-    const examples = examplesMetadata.map((meta) => ({
-      meta,
-      sources: (exampleSources[meta.slug]?.files ?? []).map((file) => ({
-        name: file.path,
-        lang: file.language,
-        code: file.content,
-      })),
-    }));
-    export { examples, exampleSources };
+    const examples = examplesMetadata.map((meta) => ({ meta }));
+    export { examples };
   `));
   await build({
     entryPoints: [docsDataEntry],

@@ -4,9 +4,7 @@ export interface ExampleThumbOptions {
   readonly warmupFrames?: number;
   readonly time?: number;
   readonly dt?: number;
-  readonly headless?: boolean;
   readonly note?: string;
-  readonly fragmentFile?: string;
 }
 
 /** Data-only contract for a migrated example's meta.ts export. */

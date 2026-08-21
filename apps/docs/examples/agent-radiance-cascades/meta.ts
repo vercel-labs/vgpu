@@ -12,7 +12,7 @@ export const meta = {
   ],
   thumb: { warmupFrames: 1, time: 1.5, dt: 1 / 60 },
   files: [
-    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'simulation.ts', 'validation.ts', 'math.ts',
+    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'scene-size.ts', 'simulation.ts', 'validation.ts', 'math.ts',
     'agent-dots.wgsl', 'jfa-init.wgsl', 'jfa-pass.wgsl', 'jfa-step.wgsl', 'sdf-finalize.wgsl',
     'sdf-sample.wgsl', 'radiance-cascade.wgsl', 'rc-directions.wgsl', 'rc-intervals.wgsl',
     'rc-merge.wgsl', 'scene-grid.wgsl', 'present.wgsl',

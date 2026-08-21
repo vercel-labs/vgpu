@@ -21,6 +21,7 @@ export const meta = {
     'pipeline.ts',
     'uniforms.ts',
     'settings.ts',
+    'placement.ts',
     'animation.ts',
     'blur-kernel.ts',
     'textures.ts',

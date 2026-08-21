@@ -20,6 +20,7 @@ export const meta = {
   files: [
     'index.tsx',
     'renderer.ts',
+    'pipeline.ts',
     'scene.ts',
     'params.wgsl',
     'complex.wgsl',

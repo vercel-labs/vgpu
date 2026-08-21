@@ -9,7 +9,7 @@ export const meta = {
   capabilities: ['webgpu', 'pointer-orbit', 'multi-pass', 'continuous-rendering', 'responsive-canvas', 'textures'],
   thumb: { warmupFrames: 3, dt: 1 / 60, time: 2.1 },
   files: [
-    'index.tsx', 'renderer.ts', 'camera.ts', 'pointer-input.ts',
+    'index.tsx', 'renderer.ts', 'scene.ts', 'camera.ts', 'pointer-input.ts',
     'sky.wgsl', 'blur.wgsl', 'metal.wgsl', 'present.wgsl', 'env-common.wgsl',
   ],
 } as const satisfies ExampleMetaDefinition;

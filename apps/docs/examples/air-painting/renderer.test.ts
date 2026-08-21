@@ -29,7 +29,7 @@ import {
   LANDMARK_POINTS_BUFFER_BYTES,
   LANDMARK_SIZE,
 } from './hand-model-contract';
-import { renderThumbnail, THUMB_DT } from './renderer';
+import { renderThumbnail, THUMB_DT } from './render-thumbnail';
 import { createVisualPipeline, ROI_LOOPBACK_SCALE } from './visual-pipeline';
 
 // 0.2.0 replaced the `Gpu` facade with free functions, and a real one resolves a kernel this

@@ -17,13 +17,12 @@ export const meta = {
     "textures",
     "hdr",
   ],
-  thumb: {
-    headless: false,
-    note: "Browser capture: the optimized renderer uses its production multi-pass pipeline.",
-  },
+  thumb: { warmupFrames: 1, time: 2.5, dt: 1 / 60 },
   files: [
     "index.tsx",
     "renderer.ts",
+    "settings.ts",
+    "pipeline.ts",
     "noise-volume.mjs",
     "bake.wgsl",
     "refine.wgsl",

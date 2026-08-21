@@ -24,7 +24,8 @@ vi.mock('./simulation', () => ({
 }));
 vi.mock('./pointer-input', () => ({ installStirInput: () => ({ dispose: mocks.inputDispose }) }));
 
-import { createRenderer, renderThumbnail } from './renderer';
+import { renderThumbnail } from './render-thumbnail';
+import { createRenderer } from './renderer';
 
 function setup() {
   let nextRaf = 1;

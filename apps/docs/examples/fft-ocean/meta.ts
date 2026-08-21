@@ -8,7 +8,7 @@ export const meta = {
   capabilities: ['webgpu', 'compute-shader', 'multi-pass', 'continuous-rendering', 'responsive-canvas'],
   thumb: { warmupFrames: 1, time: 18 },
   files: [
-    'index.tsx', 'renderer.ts', 'ocean-graph.ts', 'tuning.ts', 'camera.ts',
+    'index.tsx', 'renderer.ts', 'scene.ts', 'ocean-graph.ts', 'tuning.ts', 'camera.ts',
     'ocean-common.wgsl', 'noise.wgsl', 'initial-spectrum.wgsl', 'spectrum.wgsl', 'ifft-stage.wgsl', 'normal-foam.wgsl',
     'particles.wgsl', 'particles-common.wgsl', 'particles-light.wgsl',
     'bloom-bright.wgsl', 'bloom-blur.wgsl', 'bloom-composite.wgsl', 'present.wgsl', 'stage-preview.wgsl',

@@ -7,7 +7,7 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
     .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
 )) as Record<string, unknown>;
 const mocks=vi.hoisted(()=>({init:vi.fn()}));vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));vi.mock('vgpu/scene',()=>({perspectiveCamera:()=>({viewProjection:new Float32Array(16)})}));
-import { Controls } from './controls'; import { createRenderer, renderThumbnail } from './renderer'; import { DEFAULT_INSTANCED_RENDERING_CONTROLS } from './types';
+import { Controls } from './controls'; import { renderThumbnail } from './render-thumbnail'; import { createRenderer } from './renderer'; import { DEFAULT_INSTANCED_RENDERING_CONTROLS } from './types';
 function deferred(){let resolve!:()=>void,reject!:(error:unknown)=>void;const promise=new Promise<void>((r,j)=>{resolve=r;reject=j;});return{promise,resolve,reject};}
 afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
 test('shares 50 cubed default with accessible count select',()=>{const html=renderToStaticMarkup(createElement(Controls, { value: DEFAULT_INSTANCED_RENDERING_CONTROLS, onChange: () => {} }));expect(DEFAULT_INSTANCED_RENDERING_CONTROLS.count).toBe(50);expect(html).toContain('aria-label="Instance count (1M is an opt-in stress test)"');expect(html).toContain('value="50" selected');});

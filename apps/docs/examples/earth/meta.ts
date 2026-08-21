@@ -9,7 +9,7 @@ export const meta = {
   capabilities: ['webgpu', 'pointer-orbit', 'controls', 'multi-pass', 'continuous-rendering', 'responsive-canvas', 'textures'],
   thumb: { warmupFrames: 2, dt: 1 / 60, time: 0 },
   files: [
-    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'planet.ts',
+    'index.tsx', 'controls.tsx', 'types.ts', 'renderer.ts', 'scene.ts', 'planet.ts',
     'planet-common.wgsl', 'bake-surface.wgsl', 'bake-clouds.wgsl',
     'sky.wgsl', 'earth.wgsl', 'atmosphere.wgsl',
     'overlay.wgsl', 'bright-pass.wgsl', 'blur.wgsl', 'composite.wgsl',

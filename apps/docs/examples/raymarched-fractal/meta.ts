@@ -7,5 +7,5 @@ export const meta = {
   tags: ['raymarching', 'raymarch', 'fractal', 'sierpinski', 'hdr', 'bloom'],
   capabilities: ['webgpu', 'demand-rendering', 'pointer-orbit', 'multi-pass', 'responsive-canvas'],
   thumb: { warmupFrames: 1 },
-  files: ['index.tsx', 'renderer.ts', 'pointer-input.ts', 'fractal-math.ts', 'fractal.wgsl', 'bright-pass.wgsl', 'blur.wgsl', 'composite.wgsl'],
+  files: ['index.tsx', 'renderer.ts', 'pipeline.ts', 'pointer-input.ts', 'fractal-math.ts', 'fractal.wgsl', 'bright-pass.wgsl', 'blur.wgsl', 'composite.wgsl'],
 } as const satisfies ExampleMetaDefinition;

@@ -9,7 +9,8 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
 vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 vi.mock('vgpu/scene', () => ({ perspectiveCamera: () => ({ viewProjection: new Float32Array(16) }) }));
 
-import { createRenderer, renderThumbnail } from './renderer';
+import { renderThumbnail } from './render-thumbnail';
+import { createRenderer } from './renderer';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
