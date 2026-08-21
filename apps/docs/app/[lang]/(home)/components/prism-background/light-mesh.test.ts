@@ -4,6 +4,7 @@ import {
   buildLightMesh,
   beamIntersectsTriangle,
   INPUT_BEAM_RADIANCE,
+  LIGHT_INTERNAL_SEGMENTS,
   LIGHT_VERTEX_FLOATS,
   lightVertexCount,
   traceSpectralBand,
@@ -185,14 +186,63 @@ describe("finite spectral beam", () => {
       samples: 3,
       beamSlices: 1,
     });
-    const spectralVertexCount = 2 * 6;
+    const whiteQuads = 1;
+    const internalQuads = 3 * LIGHT_INTERNAL_SEGMENTS;
     const firstCell =
-      (mesh.vertexCount - spectralVertexCount) * LIGHT_VERTEX_FLOATS;
+      (whiteQuads + internalQuads) * 6 * LIGHT_VERTEX_FLOATS;
     const wavelengths = Array.from(
       { length: 6 },
       (_, vertex) => mesh.vertices[firstCell + vertex * LIGHT_VERTEX_FLOATS + 2]
     );
     expect(wavelengths).toEqual([400, 550, 550, 400, 550, 400]);
+  });
+
+  test("starts every internal spectral strip with finite beam width", () => {
+    const mesh = buildLightMesh({
+      ...defaultOptions,
+      samples: 3,
+      beamSlices: 1,
+    });
+    const firstInternal = 6;
+    const position = (vertex: number) => [
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS],
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS + 1],
+    ];
+    const lowerEntry = position(firstInternal);
+    const upperEntry = position(firstInternal + 1);
+
+    expect(Math.hypot(
+      upperEntry[0]! - lowerEntry[0]!,
+      upperEntry[1]! - lowerEntry[1]!
+    )).toBeGreaterThan(0.001);
+  });
+
+  test("tiles adjacent internal beam slices without gaps", () => {
+    const mesh = buildLightMesh({
+      ...defaultOptions,
+      samples: 3,
+      beamSlices: 24,
+    });
+    const position = (vertex: number) => [
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS],
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS + 1],
+    ];
+    const intensity = (vertex: number) =>
+      mesh.vertices[vertex * LIGHT_VERTEX_FLOATS + 4]!;
+    let connectedPair: readonly [number, number] | undefined;
+    for (let slice = 0; slice < 23; slice++) {
+      const current = 24 * 6 + slice * LIGHT_INTERNAL_SEGMENTS * 6;
+      const next = current + LIGHT_INTERNAL_SEGMENTS * 6;
+      if (intensity(current) > 0 && intensity(next) > 0) {
+        connectedPair = [current, next];
+        break;
+      }
+    }
+
+    expect(connectedPair).toBeDefined();
+    expect(position(connectedPair![0] + 1)).toEqual(
+      position(connectedPair![1])
+    );
   });
 
   test("keeps the collimated source constant while fading the outgoing spectrum", () => {
@@ -209,8 +259,16 @@ describe("finite spectral beam", () => {
       Array.from({ length: 6 }, (_, vertex) => attribute(vertex, 5))
     ).toEqual([0, 0, 0, 0, 0, 0]);
 
+    // Internal spectral cells do not use the outgoing-distance fade.
+    const internalStart = 6;
+    expect(
+      Array.from({ length: 6 }, (_, vertex) =>
+        attribute(internalStart + vertex, 5)
+      )
+    ).toEqual([0, 0, 0, 0, 0, 0]);
+
     // Every outgoing spectral cell starts at the glass and fades toward its cap.
-    const spectralStart = mesh.vertexCount - 12;
+    const spectralStart = mesh.vertexCount - 6;
     expect(
       Array.from({ length: 6 }, (_, vertex) =>
         attribute(spectralStart + vertex, 5)

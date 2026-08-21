@@ -33,6 +33,8 @@ import glassBackWgsl from "./glass-back.wgsl";
 import glassWgsl from "./glass.wgsl";
 import {
   buildLightMesh,
+  LIGHT_INTERNAL_QUADS,
+  LIGHT_INTERNAL_SEGMENTS,
   LIGHT_WHITE_QUADS,
   LIGHT_VERTEX_STRIDE,
   lightVertexCount,
@@ -488,6 +490,8 @@ export function sceneUniforms(scene: PrismScene): Record<string, unknown> {
     lightPlaneZ: PRISM_LIGHT_PLANE_Z,
     lightWhiteQuads: LIGHT_WHITE_QUADS,
     lightBeamSlices: PRISM_BEAM_SLICES,
+    lightInternalQuads: LIGHT_INTERNAL_QUADS,
+    lightInternalSegments: LIGHT_INTERNAL_SEGMENTS,
     lightEdgeFalloff: scene.controls.lightFade.edgeFalloff,
     rainbowFalloff: scene.controls.lightFade.rainbowFalloff,
   };

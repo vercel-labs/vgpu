@@ -12,6 +12,7 @@ import {
   intersectTriangle,
   iorAt,
   tracePrismDetailed,
+  wavelengthToLinearRgb,
   type DetailedPrismPath,
 } from "./optics";
 import {
@@ -33,22 +34,30 @@ export const LIGHT_VERTEX_FLOATS = 6;
 export const LIGHT_VERTEX_STRIDE =
   LIGHT_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT;
 const VERTICES_PER_QUAD = 6;
-const MAX_INTERNAL_SEGMENTS = PRISM_MAX_INTERNAL_BOUNCES + 1;
-const whiteQuadCount = (beamSlices: number) =>
-  (1 + MAX_INTERNAL_SEGMENTS) * beamSlices;
+/** Entry-to-exit segment plus one slot for every possible internal bounce. */
+export const LIGHT_INTERNAL_SEGMENTS = PRISM_MAX_INTERNAL_BOUNCES + 1;
+const whiteQuadCount = (beamSlices: number) => beamSlices;
+const internalQuadCount = (samples: number, beamSlices: number) =>
+  samples * beamSlices * LIGHT_INTERNAL_SEGMENTS;
 export const LIGHT_WHITE_QUADS = whiteQuadCount(PRISM_BEAM_SLICES);
+export const LIGHT_INTERNAL_QUADS = internalQuadCount(
+  PRISM_SPECTRAL_SAMPLES,
+  PRISM_BEAM_SLICES
+);
 const DENSITY_MEASURE_DISTANCE = 1;
 /** The collimated source is deliberately emissive HDR, not painted white. */
 export const INPUT_BEAM_RADIANCE = 6;
-/** Fresnel transmission makes the light inside the glass slightly dimmer. */
-export const INTERNAL_BEAM_RADIANCE = 4.5;
-/** White input/internal quads, then one cell per wavelength interval and beam slice. */
+/** White input, finite-width internal strips, then the outgoing spectral fan. */
 export function lightVertexCount(
   samples = PRISM_SPECTRAL_SAMPLES,
   beamSlices = PRISM_BEAM_SLICES
 ): number {
   const intervals = Math.max(1, samples - 1);
-  return (whiteQuadCount(beamSlices) + intervals * beamSlices) * VERTICES_PER_QUAD;
+  return (
+    whiteQuadCount(beamSlices) +
+    internalQuadCount(samples, beamSlices) +
+    intervals * beamSlices
+  ) * VERTICES_PER_QUAD;
 }
 
 export interface SpectralBand {
@@ -90,7 +99,10 @@ export interface LightMeshOptions {
 
 interface SpectralNode {
   readonly wavelength: number;
+  /** Paths through the center of each slice, used by the outgoing fan. */
   readonly paths: readonly (DetailedPrismPath | undefined)[];
+  /** Paths along every slice boundary, used to give internal light width. */
+  readonly boundaryPaths: readonly (DetailedPrismPath | undefined)[];
 }
 
 const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
@@ -308,14 +320,16 @@ function pushSpectralCell(
   lowWavelength: number,
   highWavelength: number,
   lowIntensity: number,
-  highIntensity: number
+  highIntensity: number,
+  startTravel = 0,
+  endTravel = 1
 ): void {
-  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, 0);
-  pushVertex(output, highStart, highWavelength, 0, highIntensity, 0);
-  pushVertex(output, highEnd, highWavelength, 0, highIntensity, 1);
-  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, 0);
-  pushVertex(output, highEnd, highWavelength, 0, highIntensity, 1);
-  pushVertex(output, lowEnd, lowWavelength, 0, lowIntensity, 1);
+  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, startTravel);
+  pushVertex(output, highStart, highWavelength, 0, highIntensity, startTravel);
+  pushVertex(output, highEnd, highWavelength, 0, highIntensity, endTravel);
+  pushVertex(output, lowStart, lowWavelength, 0, lowIntensity, startTravel);
+  pushVertex(output, highEnd, highWavelength, 0, highIntensity, endTravel);
+  pushVertex(output, lowEnd, lowWavelength, 0, lowIntensity, endTravel);
 }
 
 function pushEmptyQuad(output: number[]): void {
@@ -429,12 +443,6 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
   // White light is sliced across its finite width too. This lets neighbouring
   // parts of a grazing beam enter different faces—or miss the prism—without
   // invalidating the rest of the beam.
-  const middleWavelength = (PRISM_WAVELENGTHS.min + PRISM_WAVELENGTHS.max) * 0.5;
-  const middleIor = iorAt(
-    middleWavelength,
-    options.dispersion.base,
-    options.dispersion.strength
-  );
   const boundaryProfiles = Array.from(
     { length: beamSlices + 1 },
     (_, index) => -1 + (2 * index) / beamSlices
@@ -459,12 +467,6 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
         origin,
         options.light.direction,
         options.wallHalfExtent
-      ),
-      path: tracePrismDetailed(
-        triangle,
-        origin,
-        options.light.direction,
-        middleIor
       ),
     };
   });
@@ -519,39 +521,6 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
         pushEmptyQuad(vertices);
       }
     }
-
-    const connectedInternal = Boolean(
-      lower.path && upper.path && matchingTopology(lower.path, upper.path)
-    );
-    for (let segment = 0; segment < MAX_INTERNAL_SEGMENTS; segment++) {
-      const lowerStart = lower.path?.points[segment];
-      const lowerEnd = lower.path?.points[segment + 1];
-      const upperStart = upper.path?.points[segment];
-      const upperEnd = upper.path?.points[segment + 1];
-      if (
-        connectedInternal &&
-        lowerStart &&
-        lowerEnd &&
-        upperStart &&
-        upperEnd
-      ) {
-        pushQuad(
-          vertices,
-          lowerStart,
-          upperStart,
-          lowerEnd,
-          upperEnd,
-          -1,
-          INTERNAL_BEAM_RADIANCE,
-          0,
-          0,
-          lower.profile,
-          upper.profile
-        );
-      } else {
-        pushEmptyQuad(vertices);
-      }
-    }
   }
 
   const nodes: (SpectralNode | undefined)[] = [];
@@ -576,7 +545,19 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
         profile
       )
     );
-    if (paths.every((path) => !path)) {
+    const boundaryPaths = boundaryProfiles.map((profile) =>
+      traceProfilePath(
+        triangle,
+        options.light,
+        options.dispersion,
+        wavelength,
+        profile
+      )
+    );
+    if (
+      paths.every((path) => !path) &&
+      boundaryPaths.every((path) => !path)
+    ) {
       nodes.push(undefined);
       continue;
     }
@@ -584,7 +565,7 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
       minOutputWidth = Math.min(minOutputWidth, band.outputWidth);
       maxOutputWidth = Math.max(maxOutputWidth, band.outputWidth);
     }
-    nodes.push({ wavelength, paths });
+    nodes.push({ wavelength, paths, boundaryPaths });
   }
 
   const densities = nodes.map((node, nodeIndex) =>
@@ -602,6 +583,77 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
     )
   );
 
+  // Each wavelength strip spans the finite width of a beam slice. All strips
+  // therefore overlap at the entry face instead of collapsing to independent
+  // points. Normalize their additive RGB sum back to the white source level.
+  const internalRgbSum = nodes.reduce<[number, number, number]>(
+    (sum, node) => {
+      if (!node) return sum;
+      const rgb = wavelengthToLinearRgb(node.wavelength);
+      return [sum[0] + rgb[0], sum[1] + rgb[1], sum[2] + rgb[2]];
+    },
+    [0, 0, 0]
+  );
+  const internalIntensityScale =
+    INPUT_BEAM_RADIANCE /
+    Math.max(internalRgbSum[0], internalRgbSum[1], internalRgbSum[2], 1);
+
+  for (const node of nodes) {
+    if (!node) {
+      for (
+        let quad = 0;
+        quad < beamSlices * LIGHT_INTERNAL_SEGMENTS;
+        quad++
+      ) {
+        pushEmptyQuad(vertices);
+      }
+      continue;
+    }
+
+    for (let slice = 0; slice < beamSlices; slice++) {
+      const lower = node.boundaryPaths[slice];
+      const upper = node.boundaryPaths[slice + 1];
+      const connected = Boolean(
+        lower && upper && matchingTopology(lower, upper)
+      );
+      const intensity = connected
+        ? internalIntensityScale *
+          (lower!.entryTransmission + upper!.entryTransmission) *
+          0.5
+        : 0;
+
+      for (let segment = 0; segment < LIGHT_INTERNAL_SEGMENTS; segment++) {
+        const lowerStart = lower?.points[segment];
+        const lowerEnd = lower?.points[segment + 1];
+        const upperStart = upper?.points[segment];
+        const upperEnd = upper?.points[segment + 1];
+        if (
+          connected &&
+          lowerStart &&
+          lowerEnd &&
+          upperStart &&
+          upperEnd
+        ) {
+          pushQuad(
+            vertices,
+            lowerStart,
+            upperStart,
+            lowerEnd,
+            upperEnd,
+            node.wavelength,
+            intensity,
+            0,
+            0,
+            boundaryProfiles[slice],
+            boundaryProfiles[slice + 1]
+          );
+        } else {
+          pushEmptyQuad(vertices);
+        }
+      }
+    }
+  }
+
   let totalFlux = 0;
   for (let interval = 0; interval < samples - 1; interval++) {
     const low = nodes[interval];
@@ -610,7 +662,7 @@ export function buildLightMesh(options: LightMeshOptions): LightMeshData {
     for (let profileIndex = 0; profileIndex < beamSlices; profileIndex++) {
       const connected = canConnect(low, high, profileIndex);
       if (!connected) {
-        pushQuad(vertices, [0, 0], [0, 0], [0, 0], [0, 0], -1, 0);
+        pushEmptyQuad(vertices);
         continue;
       }
       const lowPath = low!.paths[profileIndex]!;

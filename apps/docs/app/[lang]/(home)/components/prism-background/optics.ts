@@ -142,6 +142,8 @@ export interface DetailedPrismPath extends PrismPath {
   readonly edges: readonly number[];
   /** Fresnel transmission accumulated at entry and final exit. */
   readonly transmission: number;
+  /** Fresnel transmission at the air-to-glass interface only. */
+  readonly entryTransmission: number;
 }
 
 export interface PrismPath {
@@ -194,7 +196,13 @@ export function tracePrismDetailed(
   if (!inside) return undefined;
   const points: Vec2[] = [position];
   const edges: number[] = [entry.edge];
-  let transmission = fresnelTransmittance(direction, entry.normal, 1, ior);
+  const entryTransmission = fresnelTransmittance(
+    direction,
+    entry.normal,
+    1,
+    ior,
+  );
+  let transmission = entryTransmission;
 
   for (let bounces = 0; bounces <= maxBounces; bounces++) {
     const exit = intersectTriangle(triangle, position, inside, SURFACE_EPSILON);
@@ -212,6 +220,7 @@ export function tracePrismDetailed(
         points,
         edges,
         transmission,
+        entryTransmission,
       };
     }
     inside = reflect(inside, exit.normal);

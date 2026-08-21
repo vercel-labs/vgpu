@@ -60,7 +60,7 @@ export interface DispersionPreset {
 }
 
 export const PRISM_DISPERSION_PRESETS = {
-  stylized: { base: 1.47, strength: 0.035 },
+  stylized: { base: 1.245, strength: 0.06 },
   crown: { base: 1.5046, strength: 0.0042 },
   flint: { base: 1.664, strength: 0.0105 },
 } as const satisfies Record<string, DispersionPreset>;
@@ -180,9 +180,9 @@ export const PRISM_LIGHT_FADE_RANGES = {
   rainbowFalloff: { min: 0, max: 8, step: 0.1 },
 } as const;
 /** Vertical field of view of the camera looking at the wall, in degrees. */
-export const CAMERA_FOV_DEGREES = 70;
+export const CAMERA_FOV_DEGREES = 48;
 /** How far the camera sits from the wall, in scene units. */
-export const CAMERA_DISTANCE = 1.31;
+export const CAMERA_DISTANCE = 1.25;
 export const PRISM_CAMERA_RANGES = {
   distance: { min: 1.25, max: 4, step: 0.01 },
   fov: { min: 20, max: 70, step: 1 },
@@ -439,7 +439,7 @@ export const PRISM_DEFAULT_ARC =
 export const PRISM_WAVELENGTHS = { min: 400, max: 700 } as const;
 
 /** Wavelength vertices connected into the smooth spectral mesh. */
-export const PRISM_SPECTRAL_SAMPLES = 64;
+export const PRISM_SPECTRAL_SAMPLES = 64 * 2;
 
 /** Additive sheets that integrate the finite width of the collimated beam. */
 export const PRISM_BEAM_SLICES = 24;

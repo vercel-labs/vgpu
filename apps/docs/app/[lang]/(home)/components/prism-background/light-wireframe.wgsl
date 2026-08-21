@@ -31,13 +31,22 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
   if in.quadIndex >= scene.lightWhiteQuads {
-    let spectralCell = in.quadIndex - scene.lightWhiteQuads;
-    let interval = spectralCell / scene.lightBeamSlices;
-    let profile = spectralCell % scene.lightBeamSlices;
-    // The full 63 x 24 grid is denser than a pixel and reads as a solid fill.
-    // Sampling it regularly exposes the same topology without hiding the light.
-    if interval % 4u != 0u || profile % 6u != 0u {
-      discard;
+    let spectralQuad = in.quadIndex - scene.lightWhiteQuads;
+    if spectralQuad < scene.lightInternalQuads {
+      let ray = spectralQuad / scene.lightInternalSegments;
+      let wavelength = ray / scene.lightBeamSlices;
+      let profile = ray % scene.lightBeamSlices;
+      // The full 128 x 24 internal grid is denser than a pixel.
+      if wavelength % 8u != 0u || profile % 6u != 0u {
+        discard;
+      }
+    } else {
+      let outgoingCell = spectralQuad - scene.lightInternalQuads;
+      let interval = outgoingCell / scene.lightBeamSlices;
+      let profile = outgoingCell % scene.lightBeamSlices;
+      if interval % 8u != 0u || profile % 6u != 0u {
+        discard;
+      }
     }
   }
   let closest = min(in.barycentric.x, min(in.barycentric.y, in.barycentric.z));

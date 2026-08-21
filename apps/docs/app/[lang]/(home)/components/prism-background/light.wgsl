@@ -1,9 +1,10 @@
 // Additive rasterization of the deterministic CPU ray bundle as a world-space
 // sheet halfway through the prism's depth.
 //
-// Neighbouring wavelength rails form continuous spectral cells. Color is
-// evaluated at their vertices, then interpolated by rasterization; the fragment
-// stage only applies intensity and the white input beam's edge profile.
+// Inside the prism, every sampled wavelength is a finite-width strip spanning
+// adjacent beam boundaries, so all colors overlap into white at entry and
+// separate continuously as they travel. The outgoing fan connects neighbouring
+// wavelengths. The fragment stage only applies intensity and beam falloff.
 
 import { Scene } from "./scene.wgsl";
 
