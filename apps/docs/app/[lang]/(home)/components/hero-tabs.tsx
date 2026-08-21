@@ -5,10 +5,11 @@ import { Check, Copy } from "lucide-react";
 import { type HeroTab, useHeroTab } from "@/components/hero/hero-tab-state";
 import { InlineCode, stripBackticks } from "./inline-code";
 
-/** Both setup paths are literal terminal commands, so they use code styling. */
+/** `mono` distinguishes terminal commands from the natural-language prompt. */
 const tabContent = {
-  "For humans": { text: "`npm i vgpu`", mono: true },
-  "For agents": {
+  Prompt: { text: "Setup vgpu on my project, run `npx vgpu`", mono: false },
+  CLI: { text: "`pnpm add vgpu`", mono: true },
+  Skill: {
     text: "`npx skills add vercel-labs/vgpu`",
     mono: true,
   },
@@ -92,7 +93,7 @@ export function HeroTabs() {
           <Fragment key={tab}>
             {index > 0 && (
               <span aria-hidden className="px-2 text-white">
-                *
+                ·
               </span>
             )}
             <button
@@ -150,8 +151,8 @@ export function HeroTabs() {
           Stacking rather than swapping a single node is what keeps the block
           rigid: the cell is always as tall as the LONGEST snippet, so neither
           the rule above nor the tagline this is centred with can move — not
-          during the transition, and not between tabs either (the agent command
-          is considerably longer than the human install command).
+          during the transition, and not between tabs with different content
+          lengths.
 
           Three states instead of active/inactive, because direction matters:
           the one leaving lifts UP and the one arriving rises from BELOW, so a
