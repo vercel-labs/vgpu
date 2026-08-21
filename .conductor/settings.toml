@@ -7,6 +7,6 @@ run_mode = "concurrent"
 
 [scripts.run.docs]
 available_in = [ "local" ]
-command = ". scripts/use-project-node.sh >/dev/null && PORTLESS_PORT=1355 PORTLESS_HTTPS=1 PORTLESS_SYNC_HOSTS=0 pnpm exec portless --name \"vgpu-$CONDUCTOR_WORKSPACE_NAME\" --app-port \"$CONDUCTOR_PORT\" -- pnpm --dir apps/docs dev"
+command = ". scripts/use-project-node.sh >/dev/null && PORTLESS_PORT=1355 PORTLESS_HTTPS=1 PORTLESS_SYNC_HOSTS=0 pnpm exec portless --name \"vgpu-$CONDUCTOR_WORKSPACE_NAME\" -- pnpm --dir apps/docs dev"
 default = true
 icon = "globe"

@@ -27,7 +27,7 @@ html.light [data-hero-invert] [data-hero-foot-fade] {
    is inverted as a whole, so authoring this title white produces a solid black
    title after the parent filter is applied. */
 [data-hero-title] {
-  -webkit-text-stroke: 0.01em #999;
+  -webkit-text-stroke: 0.00em #999;
 }
 
 html.light [data-hero-invert] [data-hero-title] {

@@ -1,0 +1,54 @@
+.hero-glass-wordmark-fill,
+.hero-glass-wordmark-outline-backdrop,
+.hero-glass-wordmark-outline {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-glass-wordmark-fill,
+.hero-glass-wordmark-outline-backdrop {
+  display: block;
+  background: rgba(255, 255, 255, 0.001);
+  transform: translateZ(0);
+}
+
+.hero-glass-wordmark-outline {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-glass-wordmark-fill {
+  -webkit-backdrop-filter:
+    url(#hero-wordmark-inner-bezel)
+    blur(var(--wordmark-fill-blur))
+    saturate(3.4)
+    contrast(1.5)
+    brightness(2);
+  backdrop-filter:
+    url(#hero-wordmark-inner-bezel)
+    blur(var(--wordmark-fill-blur))
+    saturate(3.4)
+    contrast(1.5)
+    brightness(2);
+  -webkit-mask: url(#hero-wordmark-fill-mask);
+  mask: url(#hero-wordmark-fill-mask);
+}
+
+.hero-glass-wordmark-outline-backdrop {
+  -webkit-backdrop-filter:
+    blur(var(--wordmark-outline-blur))
+    saturate(2.8)
+    contrast(1.45)
+    brightness(2.1);
+  backdrop-filter:
+    blur(var(--wordmark-outline-blur))
+    saturate(2.8)
+    contrast(1.45)
+    brightness(2.1);
+  -webkit-mask: url(#hero-wordmark-outline-mask);
+  mask: url(#hero-wordmark-outline-mask);
+}
+
+.hero-glass-wordmark-outline path {
+  vector-effect: non-scaling-stroke;
+}
