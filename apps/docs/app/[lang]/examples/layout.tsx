@@ -11,10 +11,7 @@ import { buildExamplesPageTree } from "@/lib/examples-page-tree";
 // `content/docs/**` + `meta.json` source -- this route still isn't part of
 // the docs content pipeline, it just borrows its chrome.
 export const metadata: Metadata = {
-  title: {
-    default: "Examples",
-    template: "%s | Examples",
-  },
+  title: "Examples",
   description: "Interactive WebGPU examples built with vgpu.",
 };
 

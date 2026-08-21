@@ -1,0 +1,64 @@
+---
+title: Examples API
+description: Read-only, tokenless discovery for versioned vgpu example manifests and source artifacts.
+---
+
+The examples API is the machine-readable source behind the vgpu examples workflow. Most users and coding agents should prefer `npx vgpu examples`, which performs compatibility checks, integrity verification, and safe filesystem writes.
+
+## Discovery
+
+Start with `GET /.well-known/vgpu-examples.json`. It lists supported contracts and links to the mutable latest pointer. The API requires no token or other authentication.
+
+The complete OpenAPI 3.1 description is available at [`/openapi.json`](https://vgpu.sh/openapi.json).
+
+```bash
+curl https://vgpu.sh/.well-known/vgpu-examples.json
+curl https://vgpu.sh/api/examples/v1/latest.json
+```
+
+The latest pointer names an immutable revision and provides the SHA-256 digest of its index. Follow its `indexUrl`; do not construct a revision URL from an unvalidated value.
+
+## Indexes and manifests
+
+An immutable index lists examples and links each one to a manifest. A manifest contains metadata plus a `files` array. Every file entry is a hypermedia link with its raw artifact URL, byte size, content type, and SHA-256 digest.
+
+Raw artifact paths may contain slashes and are intentionally not modeled as a conventional OpenAPI path parameter. Follow the `url` returned in the manifest rather than assembling a path yourself.
+
+## Caching and integrity
+
+Discovery and latest-pointer responses use short, revalidated caches. Revision indexes, manifests, and raw source artifacts are immutable and may be cached for one year. All successful artifact responses include an `ETag`; send it in `If-None-Match` to receive `304 Not Modified` when appropriate.
+
+Before using downloaded content, verify the index, manifest, aggregate, and file SHA-256 values. The preferred CLI workflow performs these checks automatically.
+
+## Methods and CORS
+
+Every API resource supports `GET`, `HEAD`, and `OPTIONS`. `HEAD` returns the same status and headers as `GET` without a body. `OPTIONS` returns the public CORS policy. Cross-origin reads are allowed without credentials, and conditional requests may send `If-None-Match`.
+
+`POST`, `PUT`, `PATCH`, and `DELETE` return `405 Method Not Allowed` with `Allow: GET, HEAD, OPTIONS`. The API is read-only.
+
+## Errors
+
+Errors keep a stable JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "VGPU-EXAMPLES-NOT-FOUND",
+    "message": "Artifact not found"
+  }
+}
+```
+
+`404` means the requested immutable revision or artifact does not exist. Rediscover from `/.well-known/vgpu-examples.json` and follow its current links. `405` means the method is unsupported. `500` uses the opaque `VGPU-EXAMPLES-STORAGE` code; retry later rather than treating it as a missing example. The frozen wire body intentionally contains no deployment-specific recovery details.
+
+## CLI workflow
+
+Use the CLI to list, inspect, and copy examples without hand-implementing this protocol:
+
+```bash
+npx vgpu examples
+npx vgpu examples list
+npx vgpu examples get gradient
+```
+
+See the [CLI reference](/docs/cli) for command options and exit codes.

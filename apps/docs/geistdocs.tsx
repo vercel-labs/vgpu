@@ -33,6 +33,14 @@ export const nav = [
     label: "Examples",
     href: "/examples",
   },
+  {
+    label: "About",
+    href: "/about",
+  },
+  {
+    label: "Contact",
+    href: "/contact",
+  },
 ];
 
 export const suggestions = [
@@ -52,7 +60,7 @@ export const agent = {
     name: "vgpu",
     description:
       "vgpu is a small, composable WebGPU library -- one API for rendering in the browser and headless in Node.js, with WGSL modules you import like TypeScript.",
-    category: "Documentation",
+    category: "Developer tools",
     audience: ["Coding agents", "WebGPU and graphics developers"],
     useCases: [
       "Render to a canvas in the browser or headless through Dawn in Node.js",
@@ -66,6 +74,36 @@ export const agent = {
       href: `https://github.com/${github.owner}/${github.repo}`,
       description: "Source repository for vgpu",
     },
+    {
+      label: "vgpu on npm",
+      href: "https://www.npmjs.com/package/vgpu",
+      description: "Published vgpu package",
+    },
+    {
+      label: "CLI documentation",
+      href: "https://vgpu.sh/docs/cli",
+      description: "Commands for docs, examples, diagnostics, and rendering",
+    },
+    {
+      label: "Examples discovery",
+      href: "https://vgpu.sh/.well-known/vgpu-examples.json",
+      description: "Tokenless discovery document for the read-only examples API",
+    },
+  ],
+  api: {
+    openApiUrl: "https://vgpu.sh/openapi.json",
+    openApiSpecs: [
+      {
+        label: "Examples API",
+        url: "https://vgpu.sh/openapi.json",
+        description: "OpenAPI 3.1 for examples discovery, indexes, and manifests",
+      },
+    ],
+    errorsUrl: "https://vgpu.sh/docs/examples-api#errors",
+  },
+  instructions: [
+    "Prefer `npx vgpu examples` for discovering and copying examples.",
+    "Use the examples API without authentication; verify the published SHA-256 values before using artifacts.",
   ],
 } satisfies GeistdocsAgentReadinessConfig;
 
