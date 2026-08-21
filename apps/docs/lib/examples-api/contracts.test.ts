@@ -21,4 +21,10 @@ describe('frozen schema copies', () => {
     expect(CLI_HASHES).toEqual(EXAMPLES_SCHEMA_HASHES);
     expect(CLI_SHA).toBe(EXAMPLES_SCHEMA_SHA256);
   });
+
+  it('keeps the deployed JSON error envelope schema hash unchanged', () => {
+    expect(EXAMPLES_SCHEMA_HASHES['error.schema.json']).toBe(
+      '7966011fe073f416f95d3ea29b77121b68845583523e2306c659d373b33877ea',
+    );
+  });
 });

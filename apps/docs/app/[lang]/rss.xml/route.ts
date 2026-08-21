@@ -4,11 +4,9 @@ import type { NextRequest } from "next/server";
 import { title } from "@/geistdocs";
 import { config } from "@/lib/geistdocs/config";
 import { source } from "@/lib/geistdocs/source";
-
-const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-const baseUrl = `${protocol}://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}`;
+import { SITE_ORIGIN, siteUrl } from "@/lib/site";
 const sitePath = getPublicPath("/", config.basePath);
-const siteUrl = sitePath === "/" ? baseUrl : `${baseUrl}${sitePath}`;
+const canonicalSiteUrl = new URL(sitePath, SITE_ORIGIN).toString();
 
 export const revalidate = false;
 
@@ -19,10 +17,10 @@ export const GET = async (
   const { lang } = await params;
   const feed = new Feed({
     title,
-    id: siteUrl,
-    link: siteUrl,
+    id: canonicalSiteUrl,
+    link: canonicalSiteUrl,
     language: lang,
-    copyright: `All rights reserved ${new Date().getFullYear()}, Vercel`,
+    copyright: `Copyright ${new Date().getFullYear()} Vercel. vgpu is licensed under MIT.`,
   });
 
   for (const page of source.getPages(lang)) {
@@ -36,7 +34,7 @@ export const GET = async (
       id: page.url,
       title: data.title ?? page.url,
       description: data.description,
-      link: `${baseUrl}${getPublicPath(page.url, config.basePath)}`,
+      link: siteUrl(getPublicPath(page.url, config.basePath)),
       date: new Date(data.lastModified ?? new Date()),
       author: [
         {

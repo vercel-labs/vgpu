@@ -1,15 +1,12 @@
 import type { MetadataRoute } from "next";
 
 import { source } from "@/lib/geistdocs/source";
-
-const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-const baseUrl = `${protocol}://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}`;
+import { examplesMetadata } from "@/lib/examples-metadata";
+import { siteUrl } from "@/lib/site";
 
 export const revalidate = false;
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const url = (path: string): string => new URL(path, baseUrl).toString();
-
   const pages: MetadataRoute.Sitemap = [];
 
   for (const page of source.getPages()) {
@@ -21,7 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly" as const,
       lastModified: data.lastModified ? new Date(data.lastModified) : undefined,
       priority: 0.5,
-      url: url(page.url),
+      url: siteUrl(page.url),
     });
   }
 
@@ -29,7 +26,27 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       changeFrequency: "monthly",
       priority: 1,
-      url: url("/"),
+      url: siteUrl("/"),
+    },
+    {
+      changeFrequency: "weekly",
+      priority: 0.8,
+      url: siteUrl("/examples"),
+    },
+    ...examplesMetadata.map((example) => ({
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+      url: siteUrl(`/examples/${example.slug}`),
+    })),
+    {
+      changeFrequency: "monthly",
+      priority: 0.6,
+      url: siteUrl("/about"),
+    },
+    {
+      changeFrequency: "monthly",
+      priority: 0.5,
+      url: siteUrl("/contact"),
     },
     ...pages,
   ];

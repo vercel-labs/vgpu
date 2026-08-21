@@ -4,6 +4,7 @@ import { getMDXComponents } from "@/components/geistdocs/mdx-components";
 import { config } from "@/lib/geistdocs/config";
 import { geistdocsSource } from "@/lib/geistdocs/source";
 import { titleAnchorId } from "@/lib/title-anchor.mjs";
+import { siteUrl } from "@/lib/site";
 
 const docsPage = createDocsPage({
   config,
@@ -15,6 +16,24 @@ const docsPage = createDocsPage({
   mdx: ({ link }) => getMDXComponents(link ? { a: link } : undefined),
   openGraph: {
     images: true,
+  },
+  metadata: ({ metadata, page }) => {
+    const data = page.data as typeof page.data & { canonical?: string };
+    const canonical = siteUrl(data.canonical ?? page.url);
+    return {
+      ...metadata,
+      alternates: {
+        ...metadata.alternates,
+        canonical,
+      },
+      openGraph: {
+        type: "article",
+        title: data.title,
+        description: data.description,
+        url: canonical,
+        images: [siteUrl("/opengraph-image")],
+      },
+    };
   },
   source: geistdocsSource,
   tableOfContentPopover: {

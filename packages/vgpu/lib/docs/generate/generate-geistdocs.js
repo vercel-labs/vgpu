@@ -41,10 +41,11 @@ import { loadManifest } from "./generate.js";
 
 export const DEFAULT_CONTENT_DIR = "apps/docs/content/docs";
 
-// meta.json entries that intentionally point at content this target does NOT own: `get-started` is
-// hand-authored MDX (TGEIST-11) and the section index pages (`index.mdx`) are hand-authored too.
-// check-docs-content.mjs allows these to be unresolved instead of reporting a dangling entry.
-export const EXTERNALLY_OWNED_META_ENTRIES = ["get-started"];
+// meta.json entries that intentionally point at content this target does NOT own: `get-started`
+// and `examples-api` are hand-authored MDX, and the section index pages (`index.mdx`) are
+// hand-authored too. check-docs-content.mjs allows these to be unresolved instead of reporting a
+// dangling entry.
+export const EXTERNALLY_OWNED_META_ENTRIES = ["get-started", "examples-api"];
 
 /* ------------------------------------------------------------------ paths */
 
@@ -363,6 +364,11 @@ export function buildMetaFiles(nav, pages) {
     const segments = href.slice(1).split("/");
     rootPages.push(segments.length === 1 ? segments[0] : `[${section.title}](/docs${href})`);
   }
+  // The examples API reference is intentionally hand-authored beside the generated `.md` corpus.
+  // Keep it adjacent to the examples gallery in the root navigation without pretending it is a
+  // manifest-derived page or adding a second navigation source.
+  const examplesIndex = rootPages.findIndex((entry) => entry.startsWith("[Examples]("));
+  rootPages.splice(examplesIndex === -1 ? rootPages.length : examplesIndex + 1, 0, "examples-api");
   // Root branding (TGEIST-11 gap 2, flagged in the #278 review): nav.json's optional
   // `root.{title,description}` becomes content/docs/meta.json's own `title`/`description`, the
   // same keys `geistdocsMetaSchema` already accepts on every other directory's meta.json. nav.json
