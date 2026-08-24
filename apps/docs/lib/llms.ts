@@ -1,4 +1,9 @@
 import { localizedSiteUrl, siteUrl } from "./site";
+import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./agent-guidance";
+
+function markdownList(items: readonly string[]): string {
+  return items.map((item) => `- ${item}`).join("\n");
+}
 
 export function buildLlmsIndexMarkdown(lang = "en"): string {
   const markdownUrl = (path: string) => localizedSiteUrl(path, lang);
@@ -8,6 +13,16 @@ export function buildLlmsIndexMarkdown(lang = "en"): string {
 > vgpu is a small, composable WebGPU library for browser canvases, headless Node.js, and serverless runtimes, with documentation and tooling designed for coding agents.
 
 Use the focused Markdown pages below first. Fetch the full export only when a task requires broad repository context.
+
+## When to use vgpu
+
+Use vgpu when a coding agent needs to:
+
+${markdownList(AGENT_USE_CASES)}
+
+Agent workflow:
+
+${markdownList(AGENT_INSTRUCTIONS)}
 
 ## Start here
 

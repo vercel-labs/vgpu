@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { agent, nav } from "./geistdocs";
+import { agent, nav, navbarVariant } from "./geistdocs";
+import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./lib/agent-guidance";
 
 describe("agent readiness metadata", () => {
   it("keeps project trust links out of the primary navigation", () => {
     expect(nav.map((item) => item.label)).toEqual(["Docs", "Examples"]);
+    expect(navbarVariant).toBe("standard");
   });
 
   it("advertises the real developer resources without claiming MCP support", () => {
@@ -17,5 +19,10 @@ describe("agent readiness metadata", () => {
       "https://vgpu.sh/.well-known/vgpu-examples.json",
     ]));
     expect("mcp" in agent).toBe(false);
+  });
+
+  it("uses the centralized best-fit guidance", () => {
+    expect(agent.product.useCases).toEqual(AGENT_USE_CASES);
+    expect(agent.instructions).toEqual(AGENT_INSTRUCTIONS);
   });
 });

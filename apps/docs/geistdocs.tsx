@@ -1,4 +1,5 @@
 import type { GeistdocsAgentReadinessConfig } from "@vercel/geistdocs/config";
+import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./lib/agent-guidance";
 
 // TGEIST-11 follow-up (branding sweep): this whole file is the scaffold
 // template's placeholder content (TGEIST-01 explicitly told this ticket NOT
@@ -44,6 +45,8 @@ export const suggestions = [
 
 export const title = "vgpu";
 
+export const navbarVariant = "standard" as const;
+
 export const prompt =
   "You are a helpful assistant specializing in answering questions about vgpu, an agentic-first WebGPU library for Node, browsers, and serverless runtimes.";
 
@@ -54,11 +57,7 @@ export const agent = {
       "vgpu is a small, composable WebGPU library -- one API for rendering in the browser and headless in Node.js, with WGSL modules you import like TypeScript.",
     category: "Developer tools",
     audience: ["Coding agents", "WebGPU and graphics developers"],
-    useCases: [
-      "Render to a canvas in the browser or headless through Dawn in Node.js",
-      "Import and compose .wgsl shader modules like TypeScript",
-      "Expose vgpu's docs as AI-readable Markdown for agents",
-    ],
+    useCases: [...AGENT_USE_CASES],
   },
   links: [
     {
@@ -93,10 +92,7 @@ export const agent = {
     ],
     errorsUrl: "https://vgpu.sh/docs/examples-api#errors",
   },
-  instructions: [
-    "Prefer `npx vgpu examples` for discovering and copying examples.",
-    "Use the examples API without authentication; verify the published SHA-256 values before using artifacts.",
-  ],
+  instructions: [...AGENT_INSTRUCTIONS],
 } satisfies GeistdocsAgentReadinessConfig;
 
 export const translations = {

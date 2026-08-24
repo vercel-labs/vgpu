@@ -12,6 +12,14 @@ describe("llms.txt index", () => {
     expect(response.headers.get("content-type")).toContain("text/markdown");
     expect(response.headers.get("link")).toContain('<https://vgpu.sh/llms.txt>; rel="canonical"');
     expect(body.startsWith("# vgpu\n\n> ")).toBe(true);
+    expect(body).toContain("## When to use vgpu");
+    for (const guidance of [
+      "Render to a canvas in the browser or headless through Dawn in Node.js",
+      "Import and compose .wgsl shader modules like TypeScript",
+      "Prefer `npx vgpu examples` for discovering and copying examples.",
+    ]) {
+      expect(body).toContain(guidance);
+    }
     expect(body.length).toBeLessThan(30_000);
     for (const expected of [
       "/docs/get-started/agents.md",

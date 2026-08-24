@@ -111,6 +111,10 @@ async function checkHomepage(baseUrl) {
   const html = await response.text();
   assert(response.status === 200, `homepage: status ${response.status}`);
   assert(/<h1\b/iu.test(html), "homepage: raw SSR HTML has no h1");
+  assert(
+    html.match(/<h([1-6])\b/iu)?.[1] === "1",
+    "homepage: navigation heading appears before the page h1",
+  );
   assert(visibleText(html).length >= 500, `homepage: only ${visibleText(html).length} visible SSR characters`);
   assert(html.includes('<link rel="canonical" href="https://vgpu.sh"'), "homepage: canonical metadata is missing");
   for (const property of ["og:type", "og:title", "og:description", "og:url", "og:image"]) {
@@ -167,6 +171,65 @@ async function checkMarkdown(baseUrl) {
   assertMarkdownResponse(missing, "missing docs Markdown", 404);
   assert(/Page Not Found|suggest/iu.test(missingBody), "missing docs Markdown: useful recovery body is missing");
   assert(missingBody.includes("/llms.txt"), "missing docs Markdown: agent index link is missing");
+
+  const missingPage = await request(baseUrl, "/definitely-missing-agent-readiness", {
+    headers: { Accept: "text/markdown" },
+  });
+  const missingPageBody = await missingPage.text();
+  assertMarkdownResponse(missingPage, "missing page Markdown", 404);
+  for (const expected of ["# Page Not Found", "/llms.txt", "/llms-full.txt", "/sitemap.md"]) {
+    assert(missingPageBody.includes(expected), `missing page Markdown: recovery body is missing ${expected}`);
+  }
+
+  const examplesHtml = await request(baseUrl, "/examples", { headers: { Accept: "text/markdown" } });
+  assert(examplesHtml.status === 200, `examples Markdown preference fallback: status ${examplesHtml.status}`);
+  assert(
+    examplesHtml.headers.get("content-type")?.includes("text/html"),
+    "examples Markdown preference fallback: valid app page was replaced",
+  );
+
+  const exampleHtml = await request(baseUrl, "/examples/gradient", { headers: { Accept: "text/markdown" } });
+  assert(exampleHtml.status === 200, `example Markdown preference fallback: status ${exampleHtml.status}`);
+  assert(
+    exampleHtml.headers.get("content-type")?.includes("text/html"),
+    "example Markdown preference fallback: valid detail page was replaced",
+  );
+
+  const missingExample = await request(baseUrl, "/examples/not-a-real-example", {
+    headers: { Accept: "text/markdown" },
+  });
+  assertMarkdownResponse(missingExample, "missing example Markdown", 404);
+
+  const agentMissing = await request(baseUrl, "/definitely-missing-agent-readiness", {
+    headers: { "User-Agent": "ClaudeBot" },
+  });
+  assertMarkdownResponse(agentMissing, "recognized agent missing page Markdown", 404);
+
+  const explicitDefaultLocale = await request(baseUrl, "/en/definitely-missing-agent-readiness", {
+    headers: { Accept: "text/markdown" },
+  });
+  assert(
+    [307, 308].includes(explicitDefaultLocale.status) &&
+      explicitDefaultLocale.headers.get("location")?.endsWith("/definitely-missing-agent-readiness"),
+    "explicit default locale: canonical redirect was replaced",
+  );
+
+  const localizedMissing = await request(baseUrl, "/cn/definitely-missing-agent-readiness", {
+    headers: { Accept: "text/markdown" },
+  });
+  const localizedMissingBody = await localizedMissing.text();
+  assertMarkdownResponse(localizedMissing, "localized missing page Markdown", 404);
+  assert(localizedMissingBody.includes("/cn/llms.txt"), "localized missing page Markdown: index link is not localized");
+
+  const trailingSlash = await request(baseUrl, "/about/", { headers: { Accept: "text/markdown" } });
+  assert(
+    [307, 308].includes(trailingSlash.status) && trailingSlash.headers.get("location")?.endsWith("/about"),
+    "trailing-slash app page: canonical redirect was replaced",
+  );
+  assert(
+    !trailingSlash.headers.get("content-type")?.includes("text/markdown"),
+    "trailing-slash app page was replaced by Markdown 404",
+  );
 
   const localizedDocs = await request(baseUrl, "/cn/docs/get-started/agents.md");
   assertMarkdownResponse(localizedDocs, "localized docs Markdown");
@@ -280,6 +343,7 @@ async function checkAgentResources(baseUrl) {
   const llmsBody = await llms.text();
   assert(llms.status === 200 && llmsBody.startsWith("# vgpu\n\n> "), "llms.txt: v2 index header is missing");
   assert(llmsBody.length < 30_000, `llms.txt: index is too large at ${llmsBody.length} characters`);
+  assert(llmsBody.includes("## When to use vgpu"), "llms.txt: explicit when-to-use guidance is missing");
   for (const expected of ["/docs/get-started/agents.md", "/openapi.json", "/llms-full.txt"]) {
     assert(llmsBody.includes(expected), `llms.txt: missing ${expected}`);
   }

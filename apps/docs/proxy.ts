@@ -1,11 +1,14 @@
 import { createProxy } from "@vercel/geistdocs/proxy";
 import { config as geistdocsConfig } from "@/lib/geistdocs/config";
 import { trackMdRequest } from "@/lib/geistdocs/md-tracking";
+import { createUnmatchedMarkdownNotFoundResponse } from "@/lib/geistdocs/markdown-not-found";
 
 const proxy = createProxy({
   config: geistdocsConfig,
   trackMarkdownRequest: trackMdRequest,
   before: () => null,
+  after: ({ defaultLanguage, languages, request }) =>
+    createUnmatchedMarkdownNotFoundResponse(request, { defaultLanguage, languages }),
   // Keep negotiation deliberately narrow. `/` is the homepage representation;
   // docs retain their explicit catch-all. No root wildcard is allowed to capture
   // `/examples`, `/api`, or future application routes.
