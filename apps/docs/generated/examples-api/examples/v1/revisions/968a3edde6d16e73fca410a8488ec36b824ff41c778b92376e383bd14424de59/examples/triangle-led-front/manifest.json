@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "triangle-led-front",
+  "title": "Triangle LED Hero",
+  "description": "Analytic edge-glow triangle with LED emitters, floor radiance, and interactive color deploy. Canvas-scoped pointer input drives the lighting while an accessible mode selector chooses highlighted edges.",
+  "tags": [
+    "triangle",
+    "led",
+    "raycasting",
+    "lighting"
+  ],
+  "capabilities": [
+    "webgpu",
+    "select-control",
+    "pointer-input",
+    "multi-pass",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "f8946fd9b5446aa74fca82aa0ec441893f9746dae588480608ae57c9242c287a",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 1586,
+      "sha256": "18188395398989989151ebca9d5f5989913343e4701bed2ebcbf74187252b262",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/index.tsx.raw"
+    },
+    {
+      "path": "controls.tsx",
+      "contentType": "text/typescript",
+      "size": 1007,
+      "sha256": "f594c05d56f0ca1a8c39512444222f7578888b1fff8c5a199a884258d3e8b801",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/controls.tsx.raw"
+    },
+    {
+      "path": "types.ts",
+      "contentType": "text/typescript",
+      "size": 351,
+      "sha256": "9a96bdd83171063d270fc274a20cb804f4543c82f92b50899a78e7b45590186e",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/types.ts.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 8149,
+      "sha256": "83ca6ef21c98421240e1420ed071c69e1b9a2a124f090b056c9101bc16212529",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene-renderer.ts",
+      "contentType": "text/typescript",
+      "size": 34217,
+      "sha256": "6a247cddc540dfd61ec5101f1f487f4cc947eba0863e44ac6bb2128b5461342a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/scene-renderer.ts.raw"
+    },
+    {
+      "path": "light-sources-raw.ts",
+      "contentType": "text/typescript",
+      "size": 11680,
+      "sha256": "44562ce6f250283e549b81321be86552755f979bde3cc5e3ba0566686e4e9d4a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/light-sources-raw.ts.raw"
+    },
+    {
+      "path": "light-sources-pass.ts",
+      "contentType": "text/typescript",
+      "size": 877,
+      "sha256": "2aeed47f215784e47d24a59e33a6badc778ebf803dde11a3998f54cfc71dc40b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/light-sources-pass.ts.raw"
+    },
+    {
+      "path": "led-buffer.ts",
+      "contentType": "text/typescript",
+      "size": 49000,
+      "sha256": "fd60e5b14996e9d777fa1d4bb0fd1ff43e5380f760833bd563ffd1bfa631cba2",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/led-buffer.ts.raw"
+    },
+    {
+      "path": "settings.ts",
+      "contentType": "text/typescript",
+      "size": 49555,
+      "sha256": "ba2a3c48413d07ba9badb64fa30d56c5aed9825d762ae0600e5e5910a4a55cf4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/settings.ts.raw"
+    },
+    {
+      "path": "hero-frame-state.ts",
+      "contentType": "text/typescript",
+      "size": 15396,
+      "sha256": "7d2fb5762f56e727dae0a4bd35c2eb065cd35f0ae9a368aab3bea5d65632d63d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/hero-frame-state.ts.raw"
+    },
+    {
+      "path": "direct-triangle-raycast.ts",
+      "contentType": "text/typescript",
+      "size": 5020,
+      "sha256": "061ef7758352b39867ad5a02bc14701e1cd2dfa64f1a4b0cd6b0cd5430bb9ba2",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/direct-triangle-raycast.ts.raw"
+    },
+    {
+      "path": "value-noise.ts",
+      "contentType": "text/typescript",
+      "size": 631,
+      "sha256": "94fe93715ec7bc925b7f3882b96f37731043d96e8bfd1728160bbdad2e643f95",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/value-noise.ts.raw"
+    },
+    {
+      "path": "triangle-hit.ts",
+      "contentType": "text/typescript",
+      "size": 780,
+      "sha256": "6b9105c81eebcfa3e7cc8300bf538034e41236536c5aa66707b3ed6e2bd9d3a7",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/triangle-hit.ts.raw"
+    },
+    {
+      "path": "sim-sizing.ts",
+      "contentType": "text/typescript",
+      "size": 2546,
+      "sha256": "9acd4043938304fb90a3044408829d55bbd306525d5cb310881966ffb527bc42",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/sim-sizing.ts.raw"
+    },
+    {
+      "path": "shaders/light-sources.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3507,
+      "sha256": "b4c71c9fae10c22645f67f97f1f7f65e497b3880bc8b2f18d491c092c0e4fbe3",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/light-sources.wgsl.raw"
+    },
+    {
+      "path": "shaders/led-emitters.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2739,
+      "sha256": "3725215b7798fff22b28e64ccd78a3de9e29fc377060457bc41711e5cfad39af",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/led-emitters.wgsl.raw"
+    },
+    {
+      "path": "shaders/direct-triangle-raycast.wgsl",
+      "contentType": "text/wgsl",
+      "size": 8778,
+      "sha256": "dd4427486684a30ad179aff83332972752eccc6a6196899a5de11a7e23fb0440",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/direct-triangle-raycast.wgsl.raw"
+    },
+    {
+      "path": "shaders/floor-noise.wgsl",
+      "contentType": "text/wgsl",
+      "size": 582,
+      "sha256": "b2aa2a8782abc717f0dfc25efd6cf6287acf749bd64ec08b333f7b66788e5ff5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/floor-noise.wgsl.raw"
+    },
+    {
+      "path": "shaders/color-utils.wgsl",
+      "contentType": "text/wgsl",
+      "size": 5996,
+      "sha256": "0271c61283020a9e3540a54a7a4134d8ac0645b803fa87591e7a1d47a5e9eae5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/color-utils.wgsl.raw"
+    },
+    {
+      "path": "shaders/geometry.wgsl",
+      "contentType": "text/wgsl",
+      "size": 737,
+      "sha256": "963bea7617dfc4673c04d3b0bd175c91d380b936f17d8f064870553764a240c5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/geometry.wgsl.raw"
+    },
+    {
+      "path": "shaders/floor-falloff.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2912,
+      "sha256": "f2ccd259efc4b5ecb81e483847304caafb1fe2caf20e189b78a0760c5217cea6",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/floor-falloff.wgsl.raw"
+    },
+    {
+      "path": "shaders/hash.wgsl",
+      "contentType": "text/wgsl",
+      "size": 104,
+      "sha256": "b3af41e05b2f309c30fe03c87971715cac7889d82c5f24771e688dc44998a01b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/hash.wgsl.raw"
+    },
+    {
+      "path": "shaders/themes/dark/main-scene-floor.wgsl",
+      "contentType": "text/wgsl",
+      "size": 17701,
+      "sha256": "7c1e821f3cf4b7515ecd59553fe94b8cb0250229c6fe42c1c478b560a733de14",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/themes/dark/main-scene-floor.wgsl.raw"
+    },
+    {
+      "path": "shaders/themes/light/main-scene-floor.wgsl",
+      "contentType": "text/wgsl",
+      "size": 20341,
+      "sha256": "3286b689947dd53f57514a87fde2b23de18f36cd0a06adf044ef0e2a83ebdbd1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/triangle-led-front/files/shaders/themes/light/main-scene-floor.wgsl.raw"
+    }
+  ]
+}

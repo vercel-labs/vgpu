@@ -31,6 +31,7 @@ export const exampleComponentLoaders = {
   'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
   'air-painting': () => import('../examples/air-painting/index'),
+  'video-to-texture': () => import('../examples/video-to-texture/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

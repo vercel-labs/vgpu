@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "video-to-texture",
+  "title": "Video to Texture",
+  "description": "Drive a texture from a playing video with requestVideoFrameCallback, so a copy into the GPU happens once per decoded frame while the cube keeps spinning at the display refresh rate.",
+  "tags": [
+    "video",
+    "animation",
+    "3d",
+    "rendering"
+  ],
+  "capabilities": [
+    "webgpu",
+    "textures",
+    "video-input",
+    "external-device",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "494bc68034d4a128d84bf02f5bb535e735c31c350d6c47a85d4c3f7ffb1cf5ed",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 2146,
+      "sha256": "8b6a53e4f855abe8f7a908d6899fb65ccaa37c9781388f02b365e2d84f04163f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 3662,
+      "sha256": "648d3b5a8f82d5d65be8706db3e190623ee2c75f81bc66c2c02d580c183b3bd8",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/renderer.ts.raw"
+    },
+    {
+      "path": "video-source.ts",
+      "contentType": "text/typescript",
+      "size": 7401,
+      "sha256": "1c5bf4d2df69da585152fddb3084e43d34cf95336f4245da705f46bb93fce0f7",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/video-source.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 4319,
+      "sha256": "05484077dbeaf6248f488a884ad6bf5be6c194c5c6b4df56665cf21ea01c09e4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/scene.ts.raw"
+    },
+    {
+      "path": "test-pattern.ts",
+      "contentType": "text/typescript",
+      "size": 2158,
+      "sha256": "6d71a717644f55457c43fa3aa189b8750168509794a48933328b9d8da3a5e208",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/test-pattern.ts.raw"
+    },
+    {
+      "path": "cube.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2375,
+      "sha256": "18a2f0bb60ebc1c9e874598d20bd956a2a60ac24bc771ac1d02450b3f9174953",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/video-to-texture/files/cube.wgsl.raw"
+    }
+  ]
+}

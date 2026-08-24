@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "fft-ocean-surface",
+  "title": "FFT ocean surface",
+  "description": "A displaced ocean surface driven by a real inverse FFT. A Phillips spectrum evolves in frequency space, two compute passes run a shared-memory radix-2 IFFT into a displacement field, and a procedural grid rides it with per-pixel normals, foam and a Fresnel sky reflection under a tunable sunset. Orbit with the mouse; tweak the sea from the panel.",
+  "tags": [
+    "ocean",
+    "fft",
+    "compute",
+    "lighting",
+    "hdr"
+  ],
+  "capabilities": [
+    "webgpu",
+    "compute-shader",
+    "storage-buffers",
+    "multi-pass",
+    "hdr",
+    "pointer-orbit",
+    "controls",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "7217b78cf8c05e26a21c62e53e2a84bc451d6de49bd987a7ae3ac7699041e41f",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 791,
+      "sha256": "aeb069b6053ef8ba841208d2afac9e54520d560bbd24fbf5336c13cd1284ee81",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 6506,
+      "sha256": "97135d906b8b89e360353859e507e61c410799336df99c64a3103b20a04c023b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/renderer.ts.raw"
+    },
+    {
+      "path": "pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 901,
+      "sha256": "dcb7f3f34bd8059e9b4a894aa36ec925a20b2948c86aa69e0b32778692531c02",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/pipeline.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 8729,
+      "sha256": "eef6090041e365490980df51a5bc1849da5a8d6c34c3a31189e8870f3591d3eb",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/scene.ts.raw"
+    },
+    {
+      "path": "params.wgsl",
+      "contentType": "text/wgsl",
+      "size": 847,
+      "sha256": "c75a2af58e266e0d7a970c963f747cb4226e586384f5db3aece933861eb32162",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/params.wgsl.raw"
+    },
+    {
+      "path": "complex.wgsl",
+      "contentType": "text/wgsl",
+      "size": 419,
+      "sha256": "1f67bd6368961bee8e008a43b58f2a967129059303d20832947ca6c7f4443066",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/complex.wgsl.raw"
+    },
+    {
+      "path": "fft-core.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2103,
+      "sha256": "7f9f1f8461dfaa792f5e58e44fb79240d4620a8ec89865b8dbd5cb420ca56747",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/fft-core.wgsl.raw"
+    },
+    {
+      "path": "fft-row.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1577,
+      "sha256": "1d75d474356085108260e2f7d49b71d88ff04d9c932cd49b1ffbfa133d73b4cd",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/fft-row.wgsl.raw"
+    },
+    {
+      "path": "fft-col.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1697,
+      "sha256": "18029f56a282dfb98e87e555c87820e4421b9b62314a330ab8c417b63bfd86c9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/fft-col.wgsl.raw"
+    },
+    {
+      "path": "bake.wgsl",
+      "contentType": "text/wgsl",
+      "size": 506,
+      "sha256": "5039bd560eb94beebce2da204db5c66f1cc268c820a957e4c3a1cea670248987",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/bake.wgsl.raw"
+    },
+    {
+      "path": "spectrum-init.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2395,
+      "sha256": "93d89e7cc67aed1d7ee1f1ae8fe525be9b9808b39522f76733b863719247a935",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/spectrum-init.wgsl.raw"
+    },
+    {
+      "path": "spectrum-update.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1673,
+      "sha256": "c2339681b9974d2216f4aac3175a93c12d6c5ed26e0180fe4bb04fbe3a5ffea4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/spectrum-update.wgsl.raw"
+    },
+    {
+      "path": "sky.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1258,
+      "sha256": "800db87f4772d0d60e0b72d7fd971f4d70b121e9fd43b62974f7d4262cfa9f4c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/sky.wgsl.raw"
+    },
+    {
+      "path": "skydome.wgsl",
+      "contentType": "text/wgsl",
+      "size": 813,
+      "sha256": "60b5326fea832194a22d5be4b90993b763644d1e3436e4e5b9157015d852f125",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/skydome.wgsl.raw"
+    },
+    {
+      "path": "ocean-surface.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4990,
+      "sha256": "588a0c0f71f67c67f57632e9593163039d772d8f690aaeaca4825173c8d7a8cb",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/ocean-surface.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 912,
+      "sha256": "2af565f47fc735a64ee244d5387cda6579ee088ff70fc2c857dc07d1bec95273",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/fft-ocean-surface/files/composite.wgsl.raw"
+    }
+  ]
+}

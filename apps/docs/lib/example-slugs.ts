@@ -22,6 +22,7 @@ export const exampleSlugs = [
   'depth-estimation',
   'mnist-classifier',
   'air-painting',
+  'video-to-texture',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

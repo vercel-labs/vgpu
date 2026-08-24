@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "nextjs-flare",
+  "title": "Next.js Flare",
+  "description": "Next.js logo shader — a rim-lit N glyph with volumetric scattering: a 48-step ray walk jittered by blue noise over a separable Gaussian blur chain, breathing autonomously until the pointer takes over.",
+  "tags": [
+    "flare",
+    "volumetric",
+    "lighting",
+    "animation"
+  ],
+  "capabilities": [
+    "webgpu",
+    "multi-pass",
+    "pointer-input",
+    "textures",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "672379065eca73d3945dfb7c5cc8596aa466c6fdeb669083c89e48053b486469",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 817,
+      "sha256": "29257f24de5a94d5e50757e5f42602f8c5064e187db97027f134cb51d69d8c48",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 7433,
+      "sha256": "8dcae75b3223aed1e200c643d3e523a4f20083d105d93f94ec8214340784ae16",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/renderer.ts.raw"
+    },
+    {
+      "path": "pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 5817,
+      "sha256": "741e2b5a3e7fca7661c06a1ff55a8e70fcecb6573de664f8cdfb5be988dc4386",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/pipeline.ts.raw"
+    },
+    {
+      "path": "uniforms.ts",
+      "contentType": "text/typescript",
+      "size": 2688,
+      "sha256": "8ccb6d4379db6f3c28c53030e9d5f36440df6e90b3b3d51582cf800fe1b9b97a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/uniforms.ts.raw"
+    },
+    {
+      "path": "settings.ts",
+      "contentType": "text/typescript",
+      "size": 2708,
+      "sha256": "f9fd19b6f04d80102787f28537dd02a7da4b5b251930a4035885a1fcdb8e694c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/settings.ts.raw"
+    },
+    {
+      "path": "placement.ts",
+      "contentType": "text/typescript",
+      "size": 616,
+      "sha256": "472296dc83f59ca1905d0751f8bf056d68b02e5f58b0f2d35cfa7ff5ab19ca38",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/placement.ts.raw"
+    },
+    {
+      "path": "animation.ts",
+      "contentType": "text/typescript",
+      "size": 2665,
+      "sha256": "2701db453557c50b11b0d51d4bd92908b1bea07d3acfc21cedef6dbb1b75fb07",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/animation.ts.raw"
+    },
+    {
+      "path": "blur-kernel.ts",
+      "contentType": "text/typescript",
+      "size": 1763,
+      "sha256": "784965bb3e8d0579820d767b1ab20e9a634d60b4ee6a823e989e55fcbd6a84b0",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/blur-kernel.ts.raw"
+    },
+    {
+      "path": "textures.ts",
+      "contentType": "text/typescript",
+      "size": 2167,
+      "sha256": "e7c5b1dff43d6e01c0582c6a5da83bb8093ba1679e7d4d8ca228ff674c481a77",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/textures.ts.raw"
+    },
+    {
+      "path": "logo-raster.ts",
+      "contentType": "text/typescript",
+      "size": 1920,
+      "sha256": "4f66c7fad633ff4caaba0cdb540f214bf710f516284e11a1550dec811b7ce4e5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/logo-raster.ts.raw"
+    },
+    {
+      "path": "fullscreen.ts",
+      "contentType": "text/typescript",
+      "size": 1377,
+      "sha256": "a87c89eee21196e999fe72d8f16e1467cc2b425707e87ea2d6ee1398faa9f565",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/fullscreen.ts.raw"
+    },
+    {
+      "path": "logo.wgsl",
+      "contentType": "text/wgsl",
+      "size": 892,
+      "sha256": "84ce3ec2e4c0c37a03a8bdd31907b27c8ff35ed2ac62c1f46eac0fb6037f4f91",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/logo.wgsl.raw"
+    },
+    {
+      "path": "rim.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1061,
+      "sha256": "691f5fe8c43602218a1f4a36cb13b05e73b0f7c9dabf4e2f433145b17bc34e76",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/rim.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 933,
+      "sha256": "cd859c2e2560457d271dcf535efebef3cc6cc420cdba6e3ac08e31ecf84c9c88",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/blur.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 5743,
+      "sha256": "a46de2e28b2b99b9f7095a21929b4f28cb5e8c5fe86432f5f4331cd323e1cac5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/nextjs-flare/files/composite.wgsl.raw"
+    }
+  ]
+}

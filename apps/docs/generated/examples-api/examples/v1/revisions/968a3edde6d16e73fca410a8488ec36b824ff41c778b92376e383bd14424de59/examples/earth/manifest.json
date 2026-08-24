@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "earth",
+  "title": "Earth",
+  "description": "A procedural planet with GPU-baked albedo, night lights and clouds, a lit atmosphere, and an HDR bloom chain tuned so only the sun glows.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "bloom",
+    "rendering"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "controls",
+    "multi-pass",
+    "continuous-rendering",
+    "responsive-canvas",
+    "textures"
+  ],
+  "aggregateSha256": "2215445bfb364cb4818ac43e0f8afcc3cc940aa92979c24f60600473c70ca1e8",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 1556,
+      "sha256": "796c1b9fec909fb1277f72656ed1bca158fc95d1c800272464b75a990f6c37e1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/index.tsx.raw"
+    },
+    {
+      "path": "controls.tsx",
+      "contentType": "text/typescript",
+      "size": 1259,
+      "sha256": "388b4ecc8dc55cd1e443fed4d66964f981d1dce1a406b69517f0c757c296e6ab",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/controls.tsx.raw"
+    },
+    {
+      "path": "types.ts",
+      "contentType": "text/typescript",
+      "size": 194,
+      "sha256": "49cbe2a2ada90cd1a138c8683916d1b747967b83a2f081c0a7b0218f1996bcf9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/types.ts.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 42,
+      "sha256": "22ae0ca7bc622fbe6f125d30ea8c16e8e7bff931f8d15cce2032b658215662ae",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 17565,
+      "sha256": "60189ed5f667ea3b8b2db4cc3d5eb063a950966de5ff7fa34d524cfe6963ce1f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/scene.ts.raw"
+    },
+    {
+      "path": "planet.ts",
+      "contentType": "text/typescript",
+      "size": 4223,
+      "sha256": "ea144bf23e9e37ee0702ba53bb0d96471ea08bc9c0df29fc2c08eb5d5e70d9af",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/planet.ts.raw"
+    },
+    {
+      "path": "planet-common.wgsl",
+      "contentType": "text/wgsl",
+      "size": 5609,
+      "sha256": "b9c3dbf5d696e2e1eb0852fa2129f901b531eba0837ac62d8e805315d5b5c1b4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/planet-common.wgsl.raw"
+    },
+    {
+      "path": "bake-surface.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4255,
+      "sha256": "ffd2c308ec15d5b65c3b5510503d0c6fe2d8d010ee7014c6b59249bcef018232",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/bake-surface.wgsl.raw"
+    },
+    {
+      "path": "bake-clouds.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2123,
+      "sha256": "bb24205a08a72b0a519f6fcde39d8e70dbedd3323b0722fd38dad89a030329bf",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/bake-clouds.wgsl.raw"
+    },
+    {
+      "path": "sky.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4216,
+      "sha256": "45a835d93d223e94c6198d5a947ef40e5fde2fd0d3d014662ec1c164c479d1bd",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/sky.wgsl.raw"
+    },
+    {
+      "path": "earth.wgsl",
+      "contentType": "text/wgsl",
+      "size": 6845,
+      "sha256": "4dbe1203e01520add7ff145a9987462cc055dfb2360a570c50d51785ac4c8fb1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/earth.wgsl.raw"
+    },
+    {
+      "path": "atmosphere.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2228,
+      "sha256": "b04a2ea611043ce60170e075aa936491d58cd2da1facb3c8ffbc32688c457d4f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/atmosphere.wgsl.raw"
+    },
+    {
+      "path": "overlay.wgsl",
+      "contentType": "text/wgsl",
+      "size": 727,
+      "sha256": "5b2260000eb1c712cdda95220b9d58bd60ee756f2e99ad6a41f16094aebf5b73",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/overlay.wgsl.raw"
+    },
+    {
+      "path": "bright-pass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 978,
+      "sha256": "afbf8c0e1eac605d9357fe4c97b049b812c82a8e122d80ff4c217013847793d4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/bright-pass.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 989,
+      "sha256": "0e6e8e11dc5a2c1ee4ccac1b649a24741f09b1816c7485d9cf1b80f61fb66023",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/blur.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2960,
+      "sha256": "d6482f7684a493bf77a99d4d4b51ea2aba9b7fedd57b95bb3530fbe812d1412f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/earth/files/composite.wgsl.raw"
+    }
+  ]
+}

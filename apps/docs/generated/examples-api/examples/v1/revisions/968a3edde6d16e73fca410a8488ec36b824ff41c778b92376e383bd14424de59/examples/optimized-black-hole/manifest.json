@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "optimized-black-hole",
+  "title": "Optimized Black Hole",
+  "description": "A multi-pass black hole that bakes relativistic ray traversal once into a G-buffer, then reuses it for animated disk shading, stars, antialiasing and HDR bloom.",
+  "tags": [
+    "black-hole",
+    "raymarching",
+    "performance",
+    "hdr",
+    "bloom",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "multi-pass",
+    "render-targets",
+    "offscreen-rendering",
+    "continuous-rendering",
+    "responsive-canvas",
+    "textures",
+    "hdr"
+  ],
+  "aggregateSha256": "a208dc87b1421ba7fd98aec0ed9e1a98cbea79d50a6c3a9967ebcb5ed8d21499",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 3324,
+      "sha256": "9207a7d09cd82d32407f81551877626410092ff0fc96e58bb19ec7988c1eecb6",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 58940,
+      "sha256": "25b1bb5c0dc636c68e54d844b8aea56f286172f05d2f87ef1631e7e8b37d8213",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/renderer.ts.raw"
+    },
+    {
+      "path": "settings.ts",
+      "contentType": "text/typescript",
+      "size": 1753,
+      "sha256": "8a69c5ed255c437bb993de98eea5c154d44a84495b96f1af6498487ee876fef3",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/settings.ts.raw"
+    },
+    {
+      "path": "pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 11519,
+      "sha256": "01266639452761c9809ab51c6cb459b8bd4598d838f338ba10961cbee15ee9da",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/pipeline.ts.raw"
+    },
+    {
+      "path": "noise-volume.mjs",
+      "contentType": "text/plain",
+      "size": 10019,
+      "sha256": "d8bad8579b5be77b3b5ff465e8a86f6ef1ec4a23c66effc3a67abcb438f0e69e",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/noise-volume.mjs.raw"
+    },
+    {
+      "path": "bake.wgsl",
+      "contentType": "text/wgsl",
+      "size": 6238,
+      "sha256": "93ba925a4b2707c3c510a572cd008decede718a29412385d20995a56b621b63b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/bake.wgsl.raw"
+    },
+    {
+      "path": "refine.wgsl",
+      "contentType": "text/wgsl",
+      "size": 17538,
+      "sha256": "bddb914585aec9247301f8d5e3491d609ad28228738bde31d6a3d7b795140de8",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/refine.wgsl.raw"
+    },
+    {
+      "path": "gbuffer.wgsl",
+      "contentType": "text/wgsl",
+      "size": 10607,
+      "sha256": "2ccdf2f37cd1f8042373ae79ff90c37a619dd94d58134968500acf750e77c674",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/gbuffer.wgsl.raw"
+    },
+    {
+      "path": "geodesic.wgsl",
+      "contentType": "text/wgsl",
+      "size": 9711,
+      "sha256": "9d7fc152d391bf0d4a7313c1122034a84e737367a94cff18475c58568b9684fc",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/geodesic.wgsl.raw"
+    },
+    {
+      "path": "shade.wgsl",
+      "contentType": "text/wgsl",
+      "size": 29896,
+      "sha256": "290331f2b5e776b5b81920b1da67879de812ee2407883bdfdbf29ed0bee35081",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/shade.wgsl.raw"
+    },
+    {
+      "path": "disk.wgsl",
+      "contentType": "text/wgsl",
+      "size": 29962,
+      "sha256": "4f2e90c5e2bb66a7e72a066407b799cabbcb846af4f1f25d3146d72430b88a2d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/disk.wgsl.raw"
+    },
+    {
+      "path": "stars.wgsl",
+      "contentType": "text/wgsl",
+      "size": 26694,
+      "sha256": "1c8f83edad8c710c359c3fcbe5213cedf56ed182481bd14ddd1576c5e03a7044",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/stars.wgsl.raw"
+    },
+    {
+      "path": "bloom.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3948,
+      "sha256": "2655f806b8987e219c25ae613221adf3dda0c2b60550a79ae2a1bd7ba38c318f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/bloom.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1837,
+      "sha256": "df39518f8882503c0c7b769c2e62efe3e72834526fb1932758393ab7ee8327fe",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/optimized-black-hole/files/composite.wgsl.raw"
+    }
+  ]
+}

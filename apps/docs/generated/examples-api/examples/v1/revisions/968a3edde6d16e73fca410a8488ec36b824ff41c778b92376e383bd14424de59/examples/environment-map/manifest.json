@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59",
+  "id": "environment-map",
+  "title": "Environment Map",
+  "description": "One 360° equirectangular map lights the whole scene: it is the background and every reflection on a mirror-metal cube floating in it.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "rendering"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "multi-pass",
+    "continuous-rendering",
+    "responsive-canvas",
+    "textures"
+  ],
+  "aggregateSha256": "8adebd47f14548542619ddf99f809533fa5cfe8c424b8820f30856319e3c34e1",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 1284,
+      "sha256": "480b38a284734b00039f4064a6335dcf034e49c53e2606d37b8e10114cc92589",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 42,
+      "sha256": "22ae0ca7bc622fbe6f125d30ea8c16e8e7bff931f8d15cce2032b658215662ae",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 12170,
+      "sha256": "0268da3499a072822feccf6f2b96961dce63ed6b15636bc67bc3ad4cf9c6484c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/scene.ts.raw"
+    },
+    {
+      "path": "camera.ts",
+      "contentType": "text/typescript",
+      "size": 2471,
+      "sha256": "962101a738c00ec213e4a49c5a3ef5ad2aa643251543853dd17298a01c5fe47e",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/camera.ts.raw"
+    },
+    {
+      "path": "pointer-input.ts",
+      "contentType": "text/typescript",
+      "size": 2616,
+      "sha256": "4667b3253cdd90367bfd05c8394d671ac3658d6e6c027a26254d80cb0a4c980b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/pointer-input.ts.raw"
+    },
+    {
+      "path": "sky.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4361,
+      "sha256": "454ad611e999446600eb322f8e77a1a4877545566caedc86cdb817bc7196e24c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/sky.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1738,
+      "sha256": "67e2d862245d277910f02d7a57e79d948fbc90c991f5d0d1cf0467624fe71f25",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/blur.wgsl.raw"
+    },
+    {
+      "path": "metal.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2347,
+      "sha256": "50b26255f1c819bcc3840bc3dfa201a7b734a2ae74c0b8475a659489f68cb5aa",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/metal.wgsl.raw"
+    },
+    {
+      "path": "present.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1886,
+      "sha256": "b797afdd91d5f410ebad7f314bbc440567b43488787fa1f6ecd297f565ecdcec",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/present.wgsl.raw"
+    },
+    {
+      "path": "env-common.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2769,
+      "sha256": "da1deaadb9cdc8c47f42ded78145289fa881e8f8784211cf97c22937c9dd31a2",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/968a3edde6d16e73fca410a8488ec36b824ff41c778b92376e383bd14424de59/examples/environment-map/files/env-common.wgsl.raw"
+    }
+  ]
+}
