@@ -1380,6 +1380,43 @@ export const exampleSources = {
       }
     ]
   },
+  "clipping": {
+    "slug": "clipping",
+    "title": "Clipping",
+    "description": "A single signed-distance test slices an animated icosphere, while a fitted disk reveals the moving cross-section.",
+    "tags": [
+      "clipping",
+      "3d",
+      "shader"
+    ],
+    "capabilities": [
+      "webgpu",
+      "continuous-rendering",
+      "responsive-canvas"
+    ],
+    "files": [
+      {
+        "path": "index.tsx",
+        "language": "tsx",
+        "content": "'use client';\n\nimport { useEffect, useRef } from 'react';\nimport { createRenderer } from './renderer';\n\nexport function Example() {\n  const canvasRef = useRef<HTMLCanvasElement>(null);\n\n  useEffect(() => {\n    if (!canvasRef.current) return;\n    const pending = createRenderer(canvasRef.current).catch(() => undefined);\n\n    return () => {\n      void pending.then((renderer) => renderer?.dispose());\n    };\n  }, []);\n\n  return <canvas ref={canvasRef} className=\"block h-full w-full bg-black\" />;\n}\n"
+      },
+      {
+        "path": "renderer.ts",
+        "language": "typescript",
+        "content": "import { clock, frameLoop, init, surface } from 'vgpu';\n\nimport { createScene, renderScene } from './scene';\n\nexport async function createRenderer(canvas: HTMLCanvasElement) {\n  const gpu = await init();\n  try {\n    const output = surface(gpu, canvas, { dpr: [1, 2] });\n    const scene = createScene(gpu);\n    const time = clock(gpu);\n    frameLoop(gpu, (currentFrame) => renderScene(currentFrame, scene, output, time.time));\n    return { dispose: () => gpu.dispose() };\n  } catch (error) {\n    gpu.dispose();\n    throw error;\n  }\n}\n"
+      },
+      {
+        "path": "scene.ts",
+        "language": "typescript",
+        "content": "import type { Draw, Frame, Geometry, Gpu, Target } from 'vgpu';\nimport { draw, geometry } from 'vgpu';\nimport { disk, icosphere, perspectiveCamera } from 'vgpu/scene';\n\nimport clippedWgsl from './clipped.wgsl';\n\nexport interface ClippingScene {\n  geometries: Geometry[];\n  body: Draw;\n  cap: Draw;\n}\n\nexport function createScene(gpu: Gpu): ClippingScene {\n  const geometries = [\n    geometry(gpu, icosphere({ radius: 1, subdivisions: 4, shading: 'flat' })),\n    geometry(gpu, disk({ radius: 1, segments: 64 })),\n  ];\n  const body = draw(gpu, { shader: clippedWgsl, geometry: geometries[0], cull: 'back' });\n  const cap = draw(gpu, { shader: clippedWgsl, geometry: geometries[1], cull: 'back' });\n  return { geometries, body, cap };\n}\n\nexport function destroyScene(scene: ClippingScene): void {\n  scene.geometries.forEach((item) => item.destroy());\n}\n\nexport function renderScene(\n  currentFrame: Frame,\n  scene: ClippingScene,\n  output: Target,\n  time: number\n): void {\n  const camera = perspectiveCamera({\n    fov: 36,\n    aspect: output.size[0] / Math.max(1, output.size[1]),\n    near: 0.1,\n    far: 20,\n    position: [0, 0, 4.2],\n    target: [0, 0, 0],\n  });\n  const clip = 0.08 + Math.sin(time * 0.72) * 0.46;\n  const uniforms = { view_projection: camera.viewProjection, time, clip };\n  scene.body.set({ scene: { ...uniforms, cap: 0 } });\n  scene.cap.set({ scene: { ...uniforms, cap: 1 } });\n  currentFrame.pass(output, (pass) => {\n    pass.draw(scene.body);\n    pass.draw(scene.cap);\n  });\n}\n"
+      },
+      {
+        "path": "clipped.wgsl",
+        "language": "wgsl",
+        "content": "struct Scene {\n  view_projection: mat4x4f,\n  time: f32,\n  clip: f32,\n  cap: f32,\n};\n@group(0) @binding(0) var<uniform> scene: Scene;\n\nstruct VertexOut {\n  @builtin(position) position: vec4f,\n  @location(0) local: vec3f,\n  @location(1) normal: vec3f,\n};\n\nfn rotate(p: vec3f) -> vec3f {\n  let cy = cos(scene.time * 0.28); let sy = sin(scene.time * 0.28);\n  let q = vec3f(cy * p.x + sy * p.z, p.y, -sy * p.x + cy * p.z);\n  let cx = cos(0.62); let sx = sin(0.62);\n  return vec3f(q.x, cx * q.y - sx * q.z, sx * q.y + cx * q.z);\n}\n\n@vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {\n  var local = position;\n  if (scene.cap > 0.5) {\n    let radius = sqrt(max(0.0, 1.0 - scene.clip * scene.clip));\n    local = vec3f(position.x * radius, scene.clip, position.z * radius);\n  }\n\n  var out: VertexOut;\n  out.position = scene.view_projection * vec4f(rotate(local), 1.0);\n  out.local = local;\n  out.normal = rotate(normal);\n  return out;\n}\n\nfn grid_line(x: f32) -> f32 {\n  let d = min(fract(x), 1.0 - fract(x));\n  return 1.0 - smoothstep(0.02, 0.07, d);\n}\n\n@fragment fn fs_main(in: VertexOut) -> @location(0) vec4f {\n  if (scene.cap < 0.5 && in.local.y > scene.clip) { discard; }\n\n  let n = normalize(in.normal);\n  let diffuse = max(dot(n, normalize(vec3f(-0.4, 0.8, 1.0))), 0.0);\n  let rim = pow(1.0 - abs(n.z), 2.5);\n\n  if (scene.cap > 0.5) {\n    let grid = max(grid_line(in.local.x * 5.0), grid_line(in.local.z * 5.0));\n    let radius = sqrt(max(0.001, 1.0 - scene.clip * scene.clip));\n    let edge = smoothstep(0.78, 1.0, length(in.local.xz) / radius);\n    let color = mix(vec3f(1.0, 0.18, 0.035), vec3f(1.0, 0.72, 0.16), grid * 0.38 + diffuse * 0.28);\n    return vec4f(mix(color, vec3f(1.0, 0.88, 0.42), edge), 1.0);\n  }\n\n  let latitude = 0.5 + 0.5 * sin((in.local.y + 0.08) * 12.0);\n  var color = mix(vec3f(0.08, 0.11, 0.55), vec3f(0.05, 0.72, 0.95), latitude * 0.24 + diffuse * 0.7);\n  color += vec3f(0.18, 0.35, 0.7) * rim;\n  let cut_edge = 1.0 - smoothstep(0.0, 0.045, abs(in.local.y - scene.clip));\n  return vec4f(mix(color, vec3f(1.0, 0.27, 0.055), cut_edge), 1.0);\n}\n"
+      }
+    ]
+  },
   "radiance-cascades": {
     "slug": "radiance-cascades",
     "title": "Radiance Cascades",

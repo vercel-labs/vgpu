@@ -52,7 +52,7 @@ test('generated metadata and files preserve the canonical and explicit order', (
 });
 
 test('all thumbnail entries satisfy the internal contract and stay out of public source', async () => {
-  expect(exampleSlugs).toHaveLength(22);
+  expect(exampleSlugs).toHaveLength(23);
   const latest = JSON.parse(
     await readFile(
       path.join(docsDir, 'generated/examples-api/examples/v1/latest.json'),

@@ -18,6 +18,7 @@ import { meta as raymarchedFractalMeta } from '../examples/raymarched-fractal/me
 import { meta as glassFractalMeta } from '../examples/glass-fractal/meta';
 import { meta as environmentMapMeta } from '../examples/environment-map/meta';
 import { meta as transmissionMeta } from '../examples/transmission/meta';
+import { meta as clippingMeta } from '../examples/clipping/meta';
 import { meta as radianceCascadesMeta } from '../examples/radiance-cascades/meta';
 import { meta as agentRadianceCascadesMeta } from '../examples/agent-radiance-cascades/meta';
 import { meta as nextjsFlareMeta } from '../examples/nextjs-flare/meta';
@@ -42,6 +43,7 @@ const rawMetadata = {
   'glass-fractal': glassFractalMeta,
   'environment-map': environmentMapMeta,
   transmission: transmissionMeta,
+  clipping: clippingMeta,
   'radiance-cascades': radianceCascadesMeta,
   'agent-radiance-cascades': agentRadianceCascadesMeta,
   'nextjs-flare': nextjsFlareMeta,
@@ -75,6 +77,7 @@ export const exampleMetadataBySlug = {
   'glass-fractal': withThumbnails(rawMetadata['glass-fractal']),
   'environment-map': withThumbnails(rawMetadata['environment-map']),
   transmission: withThumbnails(rawMetadata.transmission),
+  clipping: withThumbnails(rawMetadata.clipping),
   'radiance-cascades': withThumbnails(rawMetadata['radiance-cascades']),
   'agent-radiance-cascades': withThumbnails(rawMetadata['agent-radiance-cascades']),
   'nextjs-flare': withThumbnails(rawMetadata['nextjs-flare']),
