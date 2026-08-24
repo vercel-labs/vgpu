@@ -1,5 +1,5 @@
 import { applyMarkdownHeaders } from "@vercel/agent-readability";
-import { siteUrl } from "../../../lib/site";
+import { homepageDiscoveryLinkHeader, siteUrl } from "../../../lib/site";
 
 export const revalidate = false;
 
@@ -32,7 +32,8 @@ The preferred way to discover and copy examples is \`npx vgpu examples\`. The ex
 ## Agent resources
 
 - [Agent readiness manifest](/agents.md)
-- [Complete documentation export](/llms.txt)
+- [Agent documentation index](/llms.txt)
+- [Complete documentation export](/llms-full.txt)
 - [Markdown sitemap](/sitemap.md)
 - [XML sitemap](/sitemap.xml)
 
@@ -44,5 +45,6 @@ export function GET(): Response {
     new Headers({ "Content-Type": "text/markdown; charset=utf-8" }),
     { canonicalUrl: siteUrl("/") },
   );
+  headers.append("Link", homepageDiscoveryLinkHeader);
   return new Response(homepageMarkdown, { headers });
 }

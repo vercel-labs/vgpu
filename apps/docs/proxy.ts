@@ -82,7 +82,7 @@ const proxy = createProxy({
 // of the geistdocs rewrite just like `/models/**` and `/ort/**` above.
 export const config = {
   matcher: [
-    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|\\.well-known/api-catalog(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],
 };
 

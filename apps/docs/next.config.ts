@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 // run on bare node, with no TS toolchain), so the gate and the app can never
 // disagree about what the redirect table is.
 import { loadDocsRedirects } from "./lib/docs-redirects.mjs";
+import { homepageLinkHeader } from "./lib/site";
 
 const withMDX = createMDX();
 const require = createRequire(import.meta.url);
@@ -63,6 +64,20 @@ const config: NextConfig = {
   // ship without any of them; `scripts/check-url-anchor-parity.mjs` will not.
   async redirects() {
     return loadDocsRedirects();
+  },
+
+  async headers() {
+    return [
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Link",
+            value: homepageLinkHeader,
+          },
+        ],
+      },
+    ];
   },
 
   images: {

@@ -10,6 +10,13 @@ const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const READY_TIMEOUT_MS = 120_000;
 const CANONICAL_ORIGIN = "https://vgpu.sh";
 const DEPLOYMENT_ALIAS = "vgpu.labs.vercel.dev";
+const HOMEPAGE_DISCOVERY_LINKS = [
+  '<https://vgpu.sh/index.md>; rel="alternate"; type="text/markdown"',
+  '<https://vgpu.sh/llms.txt>; rel="describedby"; type="text/markdown"',
+  '<https://vgpu.sh/sitemap.xml>; rel="sitemap"; type="application/xml"',
+  '<https://vgpu.sh/openapi.json>; rel="service-desc"; type="application/json"',
+  '<https://vgpu.sh/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"',
+];
 
 function fail(message) {
   throw new Error(message);
@@ -110,12 +117,23 @@ async function checkHomepage(baseUrl) {
     assert(html.includes(`property="${property}"`), `homepage: ${property} is missing`);
   }
   assert(html.includes("https://vgpu.sh/opengraph-image"), "homepage: canonical OG image URL is missing");
+  assert(html.includes("/docs/examples-api"), "homepage: examples API reference is not discoverable");
+  assert(html.includes("/openapi.json"), "homepage: OpenAPI description is not discoverable");
+
+  const linkHeader = response.headers.get("link") ?? "";
+  for (const expected of HOMEPAGE_DISCOVERY_LINKS) {
+    assert(linkHeader.includes(expected), `homepage: Link header is missing ${expected}`);
+  }
 
   const jsonLdMatch = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/iu);
   assert(jsonLdMatch, "homepage: JSON-LD is missing from server HTML");
   const jsonLd = JSON.parse(jsonLdMatch[1]);
   const types = jsonLd["@graph"].map((entry) => entry["@type"]);
   assert(types.includes("WebSite") && types.includes("SoftwareSourceCode"), "homepage: JSON-LD entities are incomplete");
+  const jsonLdText = JSON.stringify(jsonLd);
+  for (const identity of ["https://github.com/vercel-labs/vgpu", "https://www.npmjs.com/package/vgpu"]) {
+    assert(jsonLdText.includes(identity), `homepage: JSON-LD sameAs is missing ${identity}`);
+  }
   assert(!html.includes(DEPLOYMENT_ALIAS), "homepage: deployment alias leaked into metadata");
   console.log("  ok  homepage SSR, canonical, Open Graph, and JSON-LD");
 }
@@ -124,7 +142,11 @@ async function checkMarkdown(baseUrl) {
   const negotiated = await request(baseUrl, "/", { headers: { Accept: "text/markdown" } });
   const negotiatedBody = await negotiated.text();
   assertMarkdownResponse(negotiated, "negotiated homepage");
-  assert(negotiated.headers.get("link") === '<https://vgpu.sh/>; rel="canonical"', "negotiated homepage: canonical Link is wrong");
+  const negotiatedLinks = negotiated.headers.get("link") ?? "";
+  assert(negotiatedLinks.includes('<https://vgpu.sh/>; rel="canonical"'), "negotiated homepage: canonical Link is wrong");
+  for (const expected of HOMEPAGE_DISCOVERY_LINKS) {
+    assert(negotiatedLinks.includes(expected), `negotiated homepage: Link header is missing ${expected}`);
+  }
 
   const index = await request(baseUrl, "/index.md");
   const indexBody = await index.text();
@@ -141,7 +163,14 @@ async function checkMarkdown(baseUrl) {
   const missingBody = await missing.text();
   assertMarkdownResponse(missing, "missing docs Markdown", 404);
   assert(/Page Not Found|suggest/iu.test(missingBody), "missing docs Markdown: useful recovery body is missing");
-  assert(missingBody.includes("/llms.txt"), "missing docs Markdown: full index link is missing");
+  assert(missingBody.includes("/llms.txt"), "missing docs Markdown: agent index link is missing");
+
+  const localizedDocs = await request(baseUrl, "/cn/docs/get-started/agents.md");
+  assertMarkdownResponse(localizedDocs, "localized docs Markdown");
+  assert(
+    localizedDocs.headers.get("link")?.includes('<https://vgpu.sh/cn/llms.txt>; rel="describedby"'),
+    "localized docs Markdown: describedby Link is not localized",
+  );
   console.log("  ok  homepage/docs Markdown negotiation and useful 404 recovery");
 }
 
@@ -161,6 +190,51 @@ async function checkApi(baseUrl) {
   assert(openApi.status === 200, `OpenAPI: status ${openApi.status}`);
   assert(openApi.headers.get("content-type")?.includes("application/json"), "OpenAPI: wrong content type");
   assert(document.openapi === "3.1.0", "OpenAPI: version is not 3.1.0");
+  assert(openApi.headers.get("link")?.includes('rel="api-catalog"'), "OpenAPI: API catalog Link is missing");
+  assert(
+    openApi.headers.get("access-control-expose-headers")?.toLowerCase().split(/\s*,\s*/u).includes("link"),
+    "OpenAPI: Link is not CORS-exposed",
+  );
+
+  const catalog = await request(baseUrl, "/.well-known/api-catalog");
+  const catalogBody = await catalog.json();
+  assert(catalog.status === 200, `API catalog: status ${catalog.status}`);
+  assert(catalog.headers.get("access-control-allow-origin") === "*", "API catalog: CORS is missing");
+  assert(
+    catalog.headers.get("access-control-expose-headers")?.toLowerCase().split(/\s*,\s*/u).includes("link"),
+    "API catalog: Link is not CORS-exposed",
+  );
+  assert(
+    catalog.headers.get("cache-control") === "public, max-age=300, must-revalidate",
+    "API catalog: cache policy changed",
+  );
+  assert(
+    catalog.headers.get("content-type") ===
+      'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    `API catalog: wrong content type ${catalog.headers.get("content-type")}`,
+  );
+  const catalogText = JSON.stringify(catalogBody);
+  for (const expected of ["/.well-known/vgpu-examples.json", "/openapi.json", "/docs/examples-api"]) {
+    assert(catalogText.includes(expected), `API catalog: missing ${expected}`);
+  }
+  const catalogHead = await request(baseUrl, "/.well-known/api-catalog", { method: "HEAD" });
+  assert(catalogHead.status === 200, `API catalog HEAD: status ${catalogHead.status}`);
+  assert((await catalogHead.text()) === "", "API catalog HEAD: body must be empty");
+  for (const header of [
+    "access-control-allow-origin",
+    "access-control-expose-headers",
+    "cache-control",
+    "content-length",
+    "content-type",
+    "link",
+    "x-content-type-options",
+  ]) {
+    assert(
+      catalogHead.headers.get(header) === catalog.headers.get(header),
+      `API catalog HEAD: ${header} differs from GET`,
+    );
+  }
+  assert(catalogHead.headers.get("link")?.includes('rel="api-catalog"'), "API catalog HEAD: Link is missing");
 
   const discovery = await request(baseUrl, "/.well-known/vgpu-examples.json");
   const discoveryBody = await discovery.json();
@@ -187,7 +261,7 @@ async function checkApi(baseUrl) {
   assert(method.status === 405, `examples JSON 405: status ${method.status}`);
   assert(method.headers.get("allow") === "GET, HEAD, OPTIONS", "examples JSON 405: Allow header changed");
   assert(methodJson.error?.code === "VGPU-EXAMPLES-METHOD-NOT-ALLOWED", "examples JSON 405: frozen code changed");
-  console.log("  ok  OpenAPI, discovery, and frozen examples JSON errors");
+  console.log("  ok  OpenAPI, RFC 9727 catalog, discovery, and frozen examples JSON errors");
 }
 
 async function checkAgentResources(baseUrl) {
@@ -199,9 +273,36 @@ async function checkAgentResources(baseUrl) {
   }
   assert(!body.toLowerCase().includes("mcp server"), "agents.md: undeclared MCP support leaked in");
 
+  const llms = await request(baseUrl, "/llms.txt");
+  const llmsBody = await llms.text();
+  assert(llms.status === 200 && llmsBody.startsWith("# vgpu\n\n> "), "llms.txt: v2 index header is missing");
+  assert(llmsBody.length < 30_000, `llms.txt: index is too large at ${llmsBody.length} characters`);
+  for (const expected of ["/docs/get-started/agents.md", "/openapi.json", "/llms-full.txt"]) {
+    assert(llmsBody.includes(expected), `llms.txt: missing ${expected}`);
+  }
+
+  const llmsFull = await request(baseUrl, "/llms-full.txt");
+  const llmsFullBody = await llmsFull.text();
+  assert(llmsFull.status === 200, `llms-full.txt: status ${llmsFull.status}`);
+  assert(llmsFull.headers.get("content-type")?.includes("text/markdown"), "llms-full.txt: wrong content type");
+  assert(
+    llmsFull.headers.get("link")?.includes('<https://vgpu.sh/llms-full.txt>; rel="canonical"'),
+    "llms-full.txt: canonical Link is missing",
+  );
+  assert(llmsFullBody.length > 30_000, "llms-full.txt: complete corpus is unexpectedly short");
+  for (const heading of ["# CLI", "# vgpu Examples API", "# API Reference"]) {
+    assert(llmsFullBody.includes(heading), `llms-full.txt: representative page is missing ${heading}`);
+  }
+
+  const localizedLlmsFull = await request(baseUrl, "/cn/llms-full.txt");
+  assert(
+    localizedLlmsFull.headers.get("link")?.includes('<https://vgpu.sh/cn/llms-full.txt>; rel="canonical"'),
+    "localized llms-full.txt: canonical Link is missing",
+  );
+
   const mcp = await request(baseUrl, "/.well-known/mcp.json");
   assert(mcp.status === 404, `MCP manifest must remain 404, received ${mcp.status}`);
-  console.log("  ok  agent metadata advertises API/CLI/npm and leaves MCP undeclared");
+  console.log("  ok  agent metadata and concise/full llms surfaces leave MCP undeclared");
 }
 
 async function checkCanonicalMachineFiles(baseUrl) {
