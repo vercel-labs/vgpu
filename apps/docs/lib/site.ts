@@ -10,8 +10,12 @@ export function siteUrl(path = "/"): string {
   return new URL(path, SITE_ORIGIN).toString();
 }
 
+export function localizedSitePath(path: string, lang: string): string {
+  return lang === "en" ? path : `/${lang}${path}`;
+}
+
 export function localizedSiteUrl(path: string, lang: string): string {
-  return siteUrl(lang === "en" ? path : `/${lang}${path}`);
+  return siteUrl(localizedSitePath(path, lang));
 }
 
 export const homepageDiscoveryLinkHeader = [

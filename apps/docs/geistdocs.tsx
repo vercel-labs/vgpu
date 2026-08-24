@@ -33,14 +33,6 @@ export const nav = [
     label: "Examples",
     href: "/examples",
   },
-  {
-    label: "About",
-    href: "/about",
-  },
-  {
-    label: "Contact",
-    href: "/contact",
-  },
 ];
 
 export const suggestions = [

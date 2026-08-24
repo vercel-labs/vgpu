@@ -4,6 +4,7 @@ import {
   homepageLinkHeader,
   SITE_IDENTITY_URLS,
   SITE_ORIGIN,
+  localizedSitePath,
   localizedSiteUrl,
   siteUrl,
 } from "./site";
@@ -14,6 +15,8 @@ describe("canonical site URLs", () => {
     expect(siteUrl()).toBe("https://vgpu.sh/");
     expect(siteUrl("/docs/get-started")).toBe("https://vgpu.sh/docs/get-started");
     expect(siteUrl("docs/cli")).toBe("https://vgpu.sh/docs/cli");
+    expect(localizedSitePath("/about", "en")).toBe("/about");
+    expect(localizedSitePath("/about", "cn")).toBe("/cn/about");
     expect(localizedSiteUrl("/llms.txt", "en")).toBe("https://vgpu.sh/llms.txt");
     expect(localizedSiteUrl("/llms.txt", "cn")).toBe("https://vgpu.sh/cn/llms.txt");
   });

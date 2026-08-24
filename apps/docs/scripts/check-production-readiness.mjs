@@ -119,6 +119,9 @@ async function checkHomepage(baseUrl) {
   assert(html.includes("https://vgpu.sh/opengraph-image"), "homepage: canonical OG image URL is missing");
   assert(html.includes("/docs/examples-api"), "homepage: examples API reference is not discoverable");
   assert(html.includes("/openapi.json"), "homepage: OpenAPI description is not discoverable");
+  for (const trustPath of ["/about", "/contact"]) {
+    assert(html.includes(`href="${trustPath}"`), `homepage footer: ${trustPath} is not discoverable`);
+  }
 
   const linkHeader = response.headers.get("link") ?? "";
   for (const expected of HOMEPAGE_DISCOVERY_LINKS) {

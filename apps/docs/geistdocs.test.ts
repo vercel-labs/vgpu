@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { agent } from "./geistdocs";
+import { agent, nav } from "./geistdocs";
 
 describe("agent readiness metadata", () => {
+  it("keeps project trust links out of the primary navigation", () => {
+    expect(nav.map((item) => item.label)).toEqual(["Docs", "Examples"]);
+  });
+
   it("advertises the real developer resources without claiming MCP support", () => {
     expect(agent.product.category).toBe("Developer tools");
     expect(agent.api?.openApiUrl).toBe("https://vgpu.sh/openapi.json");
