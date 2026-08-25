@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { agent } from "./geistdocs";
+
+const docsContent = (path: string) => readFileSync(new URL(`content/docs/${path}`, import.meta.url), "utf8");
 
 describe("agent readiness metadata", () => {
   it("advertises the real developer resources and public MCP endpoint", () => {
@@ -27,5 +30,24 @@ describe("agent readiness metadata", () => {
     expect(instructions).toContain("npx vgpu mcp --output-dir /absolute/path");
     expect(instructions).toContain("relative `destination`");
     expect(instructions).toContain("configured output directory");
+  });
+
+  it("makes MCP a first-class docs and agent-onboarding destination", () => {
+    const pages = JSON.parse(docsContent("meta.json")).pages as string[];
+    const cli = pages.indexOf("cli");
+    expect(pages.slice(cli, cli + 3)).toEqual(["cli", "mcp", "ml"]);
+
+    const index = docsContent("index.mdx");
+    expect(index.indexOf("[CLI](/docs/cli)")).toBeLessThan(index.indexOf("[MCP](/docs/mcp)"));
+    expect(index.indexOf("[MCP](/docs/mcp)")).toBeLessThan(index.indexOf("[ML](/docs/ml)"));
+
+    const agents = docsContent("get-started/agents.mdx");
+    expect(agents).toContain("https://vgpu.sh/api/mcp");
+    expect(agents).toContain("[MCP reference](/docs/mcp)");
+
+    const mcp = docsContent("mcp.md");
+    expect(mcp).toContain("## Hosted HTTP");
+    expect(mcp).toContain("https://vgpu.sh/api/mcp");
+    expect(mcp).toContain("## Local stdio");
   });
 });

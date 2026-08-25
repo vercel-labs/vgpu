@@ -1,0 +1,90 @@
+---
+title: MCP
+summary: Connect coding agents to VGPU documentation and verified examples over hosted HTTP or local stdio.
+websitePath: /mcp
+relatedSymbols:
+---
+# MCP
+
+Connect coding agents directly to VGPU documentation and verified examples. Use the hosted HTTP server for the simplest read-only setup, or run the local stdio server when an agent needs versioned offline access or explicitly scoped example downloads.
+
+## Hosted HTTP
+
+Add this remote MCP server URL to your agent or editor:
+
+```text
+https://vgpu.sh/api/mcp
+```
+
+| Setting | Value |
+| --- | --- |
+| Transport | Streamable HTTP |
+| Authentication | None |
+| Access | Read-only |
+| Protocol | Modern MCP `2026-07-28` |
+| Discovery | `https://vgpu.sh/.well-known/mcp.json` |
+
+Use automatic protocol negotiation when the client offers it. The endpoint is stateless and intentionally rejects legacy session-based HTTP because requests may be served by different deployment instances.
+
+Hosted HTTP never writes to disk and does not expose `download` or local-cache `offline` inputs. It is the recommended transport for searching VGPU docs, resolving API symbols, finding examples, and reading verified source without installing anything.
+
+## Tools
+
+| Tool | Operations |
+| --- | --- |
+| `docs` | `search`, `resolve`, `list`, `grep`, `symbols`, and `read` |
+| `examples` | `search`, `show`, and `read`; scoped local stdio can also expose `download` |
+
+Both `read` operations accept an optional UTF-16 `offset` and `limit`. A truncated structured result includes `nextOffset`, which the agent can use to request the next page without exceeding MCP response limits.
+
+Tool failures return bounded structured errors with stable VGPU error codes. Example manifests and source files retain the same compatibility and SHA-256 integrity verification used by the human CLI.
+
+## Local stdio
+
+Run the MCP server from the public `vgpu` package:
+
+```terminal
+npx -y vgpu mcp
+```
+
+Bare stdio is read-only. Unlike hosted HTTP, it can read from the verified local examples cache with `offline: true`.
+
+## Enable local downloads
+
+Filesystem writes are opt-in and supported only on Linux and macOS. Select one output boundary when starting the server:
+
+```terminal
+# The MCP host launches the process from the active project
+npx -y vgpu mcp --project-from-cwd
+
+# A fixed project
+npx -y vgpu mcp --output-dir /absolute/path/to/project
+
+# A host-managed environment
+VGPU_MCP_OUTPUT_DIR=/absolute/path/to/project npx -y vgpu mcp
+```
+
+The agent then supplies a normalized relative destination:
+
+```json
+{
+  "operation": "download",
+  "id": "gradient",
+  "destination": "examples/gradient"
+}
+```
+
+VGPU canonicalizes the user-selected output boundary and returns the canonical absolute destination. It rejects absolute or encoded agent paths, dot segments, backslashes, control characters, symlink ancestors, the boundary itself, and existing destinations before repository access. Publication also retains the CLI's integrity, cancellation, locking, confinement, and cleanup checks.
+
+On Windows, local stdio remains read-only even when an output boundary is configured. This lets one shared MCP configuration work across platforms without advertising an unsafe operation.
+
+## Choose a transport
+
+| Need | Recommended setup |
+| --- | --- |
+| Search and read docs or examples | Hosted HTTP at `https://vgpu.sh/api/mcp` |
+| Work from a previously verified cache | Bare local stdio with `offline: true` |
+| Download into the active project | Local stdio with `--project-from-cwd` |
+| Download into a fixed project | Local stdio with `--output-dir /absolute/path` |
+
+See the [CLI reference](/docs/cli#mcp) for command syntax and the editor-specific Claude Code, Cursor, Codex, and Conductor configuration notes.

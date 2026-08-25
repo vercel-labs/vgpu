@@ -1,11 +1,23 @@
 ---
 title: Agents
-description: vgpu is agent-first — point your agent at npx vgpu, or install the vgpu skill.
+description: Connect your agent through MCP, point it at npx vgpu, or install the vgpu skill.
 ---
 
 # Agents
 
-vgpu is an agent-first library. The full documentation ships inside the npm package, versioned with the API in your `node_modules` — an agent can learn and verify vgpu without leaving the terminal.
+vgpu is an agent-first library. Connect an agent to the hosted MCP server for immediate read-only access, or use the CLI and skill when it should work from documentation versioned with the API in your `node_modules`.
+
+## Connect the hosted MCP server
+
+Add this remote MCP URL to your agent or editor:
+
+```text
+https://vgpu.sh/api/mcp
+```
+
+It requires no authentication and gives the agent two read-only tools: `docs` for searching and resolving the VGPU documentation, and `examples` for finding and reading verified example source. Use automatic protocol negotiation when your client offers it.
+
+If the agent needs to download an example, run `npx -y vgpu mcp --project-from-cwd` locally on Linux or macOS. Filesystem writes remain disabled until you explicitly select an output boundary. See the [MCP reference](/docs/mcp) for hosted HTTP details, local stdio setup, safe download destinations, and editor-specific guidance.
 
 ## Point your agent at the docs
 
