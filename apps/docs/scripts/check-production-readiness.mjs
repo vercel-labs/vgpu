@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -10,6 +12,8 @@ const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const READY_TIMEOUT_MS = 120_000;
 const CANONICAL_ORIGIN = "https://vgpu.sh";
 const DEPLOYMENT_ALIAS = "vgpu.labs.vercel.dev";
+const require = createRequire(import.meta.url);
+const PUBLIC_PACKAGE_VERSION = require("vgpu/package.json").version;
 
 function fail(message) {
   throw new Error(message);
@@ -194,14 +198,54 @@ async function checkAgentResources(baseUrl) {
   const agents = await request(baseUrl, "/agents.md");
   const body = await agents.text();
   assert(agents.status === 200, `agents.md: status ${agents.status}`);
-  for (const expected of ["openapi.json", "docs/cli", "npmjs.com/package/vgpu", ".well-known/vgpu-examples.json"]) {
+  for (const expected of ["openapi.json", "docs/cli", "npmjs.com/package/vgpu", ".well-known/vgpu-examples.json", "api/mcp"]) {
     assert(body.toLowerCase().includes(expected.toLowerCase()), `agents.md: missing ${expected}`);
   }
-  assert(!body.toLowerCase().includes("mcp server"), "agents.md: undeclared MCP support leaked in");
 
   const mcp = await request(baseUrl, "/.well-known/mcp.json");
-  assert(mcp.status === 404, `MCP manifest must remain 404, received ${mcp.status}`);
-  console.log("  ok  agent metadata advertises API/CLI/npm and leaves MCP undeclared");
+  const manifest = await mcp.json();
+  assert(mcp.status === 200, `MCP manifest: status ${mcp.status}`);
+  assert(manifest.servers?.some((server) => server.url === "https://vgpu.sh/api/mcp"), "MCP manifest: public endpoint missing");
+  console.log("  ok  agent metadata advertises API, CLI, npm, and MCP");
+}
+
+async function checkMcp(baseUrl) {
+  const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/api/mcp`));
+  const client = new Client(
+    { name: "vgpu-production-readiness", version: "1.0.0" },
+    { versionNegotiation: { mode: "auto" } },
+  );
+  try {
+    await client.connect(transport);
+    assert(client.getProtocolEra() === "modern", "MCP: hosted endpoint did not negotiate the modern protocol");
+    assert(client.getServerVersion()?.version === PUBLIC_PACKAGE_VERSION, "MCP: server version does not match public vgpu package");
+    const listed = await client.listTools();
+    assert(listed.tools.map((tool) => tool.name).join(",") === "docs,examples", "MCP: unexpected tool surface");
+    const examplesTool = listed.tools.find((tool) => tool.name === "examples");
+    assert(examplesTool?.annotations?.readOnlyHint === true, "MCP: public examples tool is not read-only");
+    assert(!JSON.stringify(examplesTool.inputSchema).includes('"download"'), "MCP: public examples tool exposes download");
+
+    const resolved = await client.callTool({ name: "docs", arguments: { operation: "resolve", target: "Buffer" } });
+    assert(!resolved.isError, "MCP: docs resolve returned a tool error");
+    assert(resolved.structuredContent?.virtualPath === "/vgpu/core/buffer.docs.md", "MCP: docs resolve returned the wrong path");
+
+    if (process.platform === "darwin") {
+      console.log("  skip MCP examples call on Darwin (fd-relative local store is Linux-only)");
+    } else {
+      const searched = await client.callTool({
+        name: "examples",
+        arguments: { operation: "search", query: "gradient" },
+      });
+      assert(!searched.isError, "MCP: examples search returned a tool error");
+      assert(
+        searched.structuredContent?.results?.some((example) => example.id === "gradient"),
+        "MCP: examples search did not return the verified gradient example",
+      );
+    }
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+  console.log("  ok  MCP discovery, public version, read-only surface, and live tool calls");
 }
 
 async function checkCanonicalMachineFiles(baseUrl) {
@@ -237,6 +281,7 @@ async function main() {
     await checkHtmlNotFound(server.baseUrl);
     await checkApi(server.baseUrl);
     await checkAgentResources(server.baseUrl);
+    await checkMcp(server.baseUrl);
     await checkCanonicalMachineFiles(server.baseUrl);
     await checkTrustPages(server.baseUrl);
   } finally {

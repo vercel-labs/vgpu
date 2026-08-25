@@ -5,6 +5,7 @@ export const usage = (message) => new ExamplesError('VGPU-EXAMPLES-USAGE', messa
 export const notFound = (message) => new ExamplesError('VGPU-EXAMPLES-NOT-FOUND', message, 3);
 export const network = (message) => new ExamplesError('VGPU-EXAMPLES-NETWORK', message, 4);
 export const integrity = (message) => new ExamplesError('VGPU-EXAMPLES-INTEGRITY', message, 5);
+export const destinationExists = (message) => new ExamplesError('VGPU-EXAMPLES-DESTINATION-EXISTS', message, 6);
 export const filesystem = (message) => new ExamplesError('VGPU-EXAMPLES-FILESYSTEM', message, 7);
 export function errorResult(error) {
   const e = error instanceof ExamplesError ? error : filesystem(error instanceof Error ? error.message : String(error));

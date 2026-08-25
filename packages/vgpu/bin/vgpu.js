@@ -57,6 +57,9 @@ the same code running in the browser, headless Node, and your test suite.
   npx vgpu examples search "<topic>"
   npx vgpu examples pull <slug> --out <dir>
 
+## Agent tools (MCP)
+  npx vgpu mcp                           Serve docs and examples over stdio
+
 ## Node rendering environment
   npx vgpu doctor
 `;
@@ -74,6 +77,9 @@ export function runCli(args) {
   if (command === "check") return runCheck(rest);
   if (command === "docs") return runDocs(rest);
   if (command === "examples") return runExamples(rest, { version: VERSION });
+  if (command === "mcp") {
+    return import("../lib/mcp/stdio.js").then(({ runMcpStdio }) => runMcpStdio(rest, { version: VERSION }));
+  }
   if (command === "snapshot") return runSnapshotCommand({ args: rest });
   if (command === "install-dawn") return runInstallDawn(rest);
   if (command === "install-software-renderer") return runInstallSoftwareRenderer(rest);

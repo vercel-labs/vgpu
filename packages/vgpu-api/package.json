@@ -55,7 +55,8 @@
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js",
       "default": "./dist/core.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "client.d.ts",
@@ -71,15 +72,17 @@
     "prepack": "pnpm --dir ../vgpu generate:docs"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
     "@vgpu/adapter-mock": "workspace:*",
     "@vgpu/adapter-node": "workspace:*",
     "@vgpu/core": "workspace:*",
     "@vgpu/wgsl": "workspace:*",
     "@vgpu/wgsl-std": "workspace:*",
-    "wgpu-matrix": "^3.4.2",
     "@webgpu/types": "^0.1.69",
     "pixelmatch": "^7.2.0",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "wgpu-matrix": "^3.4.2",
+    "zod": "^4.4.3"
   },
   "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
   "vgpuExportBundleAudiences": {

@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { runExamples } from "../../lib/examples/run.js";
 import { ExamplesClient } from "../../lib/examples/client.js";
+import { ExamplesCache } from "../../lib/examples/cache.js";
 import { aggregateSha256, sha256 } from "../../lib/examples/hashing.js";
+import { requestBytes } from "../../lib/examples/http.js";
 import { EXAMPLES_SCHEMA_SHA256 } from "../../lib/examples/contracts.js";
 
 const revision = "1".repeat(64);
@@ -43,6 +45,89 @@ async function fixture(change: Record<string, unknown> = {}) {
   return { origin, requests, poisonPointer(){ pointer=Buffer.from(JSON.stringify({schemaVersion:1,contractId:"vgpu-examples/v1",revision,indexUrl:`${origin}/examples/v1/revisions/${revision}/index.json`,indexSha256:"f".repeat(64)})); } };
 }
 async function testEnv() { const root = await mkdtemp(join(tmpdir(), "examples-cache-")); cleanup.push(() => rm(root, { recursive: true, force: true })); return { VGPU_CACHE_DIR: root } as any; }
+
+test("ExamplesClient propagates external cancellation through discovery without rewriting the AbortError", async () => {
+  const root = await mkdtemp(join(tmpdir(), "examples-cancel-"));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const controller = new AbortController();
+  const hangingFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+  });
+  const client = new ExamplesClient({
+    baseUrl: "http://127.0.0.1:1",
+    fetchImpl: hangingFetch,
+    cache: new ExamplesCache(root, { persistent: false }),
+    timeoutMs: 100,
+  });
+
+  const request = client.getIndex({ signal: controller.signal });
+  controller.abort();
+
+  await expect(request).rejects.toBe(controller.signal.reason);
+});
+
+test("requestBytes rejects cancellation that races with a valid 304 response", async () => {
+  const controller = new AbortController();
+  const cancellation = new DOMException("cancelled after response", "AbortError");
+  const etag = '"cached"';
+  const fetchImpl: typeof fetch = async () => {
+    controller.abort(cancellation);
+    return new Response(null, { status: 304, headers: { etag } });
+  };
+
+  const request = requestBytes("https://vgpu.sh/cached.json", {
+    fetchImpl,
+    limit: 1024,
+    contentTypes: ["application/json"],
+    etag,
+    signal: controller.signal,
+  });
+
+  await expect(request).rejects.toBe(cancellation);
+});
+
+test("requestBytes rejects a timeout that races with a valid 304 response", async () => {
+  const etag = '"cached"';
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    await new Promise<void>((resolve) => {
+      init?.signal?.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return new Response(null, { status: 304, headers: { etag } });
+  };
+
+  const request = requestBytes("https://vgpu.sh/slow-cached.json", {
+    fetchImpl,
+    limit: 1024,
+    contentTypes: ["application/json"],
+    etag,
+    timeoutMs: 1,
+  });
+
+  await expect(request).rejects.toMatchObject({
+    code: "VGPU-EXAMPLES-NETWORK",
+    message: "Request timed out: https://vgpu.sh/slow-cached.json",
+  });
+});
+
+test("requestBytes rejects when a timed-out body closes without surfacing an AbortError", async () => {
+  const fetchImpl: typeof fetch = async (_input, init) => new Response(new ReadableStream({
+    start(controller) {
+      init?.signal?.addEventListener("abort", () => controller.close(), { once: true });
+    },
+  }), { headers: { "content-type": "application/json" } });
+
+  const request = requestBytes("https://vgpu.sh/slow-body.json", {
+    fetchImpl,
+    limit: 1024,
+    contentTypes: ["application/json"],
+    timeoutMs: 1,
+  });
+
+  await expect(request).rejects.toMatchObject({
+    code: "VGPU-EXAMPLES-NETWORK",
+    message: "Truncated or timed out response: https://vgpu.sh/slow-body.json",
+  });
+});
 
 test("selects v1 beside v2, searches without source fetch, cats verified bytes, then works offline", async () => {
   const f = await fixture(), env = await testEnv();

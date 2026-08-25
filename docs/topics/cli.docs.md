@@ -6,7 +6,7 @@ relatedSymbols:
 ---
 # CLI
 
-The vgpu CLI provides command-line tooling for working with vgpu. Use it to validate WGSL shaders, query the vgpu documentation, inspect canonical example source, diagnose your local GPU environment, and set up the native runtime for Node.js workflows.
+The vgpu CLI provides command-line tooling for working with vgpu. Use it to validate WGSL shaders, query the vgpu documentation, inspect canonical example source, serve those same docs and examples over MCP, diagnose your local GPU environment, and set up the native runtime for Node.js workflows.
 
 ## Installation and usage
 
@@ -27,6 +27,7 @@ The `examples` commands never execute fetched code.
 | `check` | Validate and reflect a WGSL file as JSON |
 | `docs` | Explore bundled VGPU documentation |
 | `examples` | Inspect canonical gallery source (never executes code) |
+| `mcp` | Serve documentation and examples as MCP tools over stdio |
 | `snapshot` | Compare the representative GPU pixel snapshot |
 | `install-dawn` | Download and verify the portable Node Dawn prebuild |
 | `install-software-renderer` | Download and verify the portable CPU renderer |
@@ -270,6 +271,79 @@ npx vgpu examples cache clear
 | `5` | `VGPU-EXAMPLES-INTEGRITY` and incompatible API errors |
 | `6` | `VGPU-EXAMPLES-DESTINATION-EXISTS` |
 | `7` | `VGPU-EXAMPLES-FILESYSTEM` |
+
+## mcp
+
+VGPU exposes the existing docs and examples behavior as two typed MCP tools:
+
+- `docs` supports `search`, `read`, `resolve`, `list`, `grep`, and `symbols` operations against the documentation bundled with the package.
+- `examples` supports `search`, `show`, and `read`. On Linux and macOS, the local stdio transport also supports `download`.
+
+Both `read` operations are paginated for transport-safe responses. They accept an optional UTF-16 `offset` and `limit`; `limit` defaults to and cannot exceed 65,536 code units. When more content remains, structured output includes `truncated: true` and the `nextOffset` to request.
+
+Use the public, read-only Streamable HTTP endpoint when an agent only needs to inspect content:
+
+```text
+https://vgpu.sh/api/mcp
+```
+
+The hosted endpoint is stateless and implements the modern MCP 2026-07-28 transport. Configure clients for automatic or modern protocol negotiation; legacy session-based HTTP is intentionally rejected because a request may be served by any deployment instance. The endpoint is also advertised at `https://vgpu.sh/.well-known/mcp.json`.
+
+Start the stdio server without filesystem writes when an agent is running locally:
+
+```terminal
+npx vgpu mcp
+```
+
+Bare stdio exposes the same read-only operations as HTTP. To enable `download` on Linux or macOS, explicitly select its output boundary in one of three ways:
+
+```terminal
+# Project-scoped clients that launch the server from the project directory
+npx vgpu mcp --project-from-cwd
+
+# A fixed project directory
+npx vgpu mcp --output-dir /absolute/path/to/project
+
+# A host-managed environment
+VGPU_MCP_OUTPUT_DIR=/absolute/path/to/project npx vgpu mcp
+```
+
+`--output-dir` and `VGPU_MCP_OUTPUT_DIR` must name an existing absolute directory; VGPU canonicalizes it before serving. An explicit CLI selector overrides the environment variable, and `--output-dir` cannot be combined with `--project-from-cwd`. Without one of these configurations, `download` is omitted from the tool schema.
+
+The agent supplies a normalized relative destination beneath that boundary:
+
+```json
+{
+  "operation": "download",
+  "id": "gradient",
+  "destination": "examples/gradient"
+}
+```
+
+Absolute destinations, dot segments, encoded paths, backslashes, control characters, the boundary directory itself, and existing destinations are rejected. Successful structured output reports the canonical absolute `destination`. VGPU coordinates concurrent VGPU writers with a lock and never exposes the human-operated `vgpu examples pull --force` behavior through MCP. Node does not expose a portable atomic no-replace rename for directories, so another process with write access to the output directory must not concurrently claim the same destination during final publication.
+
+Use project-scoped Claude Code (`.mcp.json`) or Cursor (`.cursor/mcp.json`) configuration with `--project-from-cwd` only when that client launches the command from the project directory:
+
+```json
+{
+  "mcpServers": {
+    "vgpu": {
+      "command": "npx",
+      "args": ["-y", "vgpu", "mcp", "--project-from-cwd"]
+    }
+  }
+}
+```
+
+Codex can use the same project-scoped pattern in `.codex/config.toml` when Codex launches the MCP process from the active workspace; omitting `cwd` preserves that inherited working directory:
+
+```toml
+[mcp_servers.vgpu]
+command = "npx"
+args = ["-y", "vgpu", "mcp", "--project-from-cwd"]
+```
+
+For global MCP configuration, use a fixed `--output-dir` or set `VGPU_MCP_OUTPUT_DIR` in the server environment. Claude Code and Codex MCP configurations load inside Conductor. Cursor reads `.cursor/mcp.json` only after you open the Conductor workspace in Cursor. Conductor does not define a separate MCP format. There is no cross-editor MCP convention that safely grants a local server write access to whichever workspace is currently active, so VGPU does not infer one. On Windows, the stdio server remains read-only even when an output boundary is configured because the CLI cannot provide the same safe publication guarantees there.
 
 ## install-dawn
 

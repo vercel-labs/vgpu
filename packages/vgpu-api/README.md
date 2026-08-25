@@ -64,6 +64,16 @@ npx vgpu docs cat getting-started.md
 npx vgpu docs find effect
 ```
 
+Agents can use the same docs and verified examples through the public read-only MCP endpoint at
+`https://vgpu.sh/api/mcp` with automatic or modern MCP protocol negotiation, or start the local
+stdio server. Filesystem writes are opt-in; `--project-from-cwd` enables relative example downloads
+on Linux and macOS:
+
+```bash
+npx vgpu mcp
+npx vgpu mcp --project-from-cwd
+```
+
 Start with [`docs/topics/getting-started.docs.md`](../../docs/topics/getting-started.docs.md), then [`docs/topics/performance-playbook.docs.md`](../../docs/topics/performance-playbook.docs.md) for the defaults (bundles, target pre-warm, in-place `set()`, instancing, ping-pong, MSAA/depth) that shader authors should reach for from day one.
 
 ## Contributing

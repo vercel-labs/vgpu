@@ -65,7 +65,7 @@ export const agent = {
     useCases: [
       "Render to a canvas in the browser or headless through Dawn in Node.js",
       "Import and compose .wgsl shader modules like TypeScript",
-      "Expose vgpu's docs as AI-readable Markdown for agents",
+      "Give coding agents direct tools for VGPU docs and verified examples",
     ],
   },
   links: [
@@ -89,6 +89,11 @@ export const agent = {
       href: "https://vgpu.sh/.well-known/vgpu-examples.json",
       description: "Tokenless discovery document for the read-only examples API",
     },
+    {
+      label: "MCP endpoint",
+      href: "https://vgpu.sh/api/mcp",
+      description: "Stateless, read-only MCP tools for VGPU documentation and verified examples",
+    },
   ],
   api: {
     openApiUrl: "https://vgpu.sh/openapi.json",
@@ -101,8 +106,20 @@ export const agent = {
     ],
     errorsUrl: "https://vgpu.sh/docs/examples-api#errors",
   },
+  mcp: {
+    manifestUrl: "/.well-known/mcp.json",
+    servers: [
+      {
+        name: "vgpu MCP",
+        url: "https://vgpu.sh/api/mcp",
+        description: "Stateless modern MCP tools for searching VGPU documentation and verified examples.",
+      },
+    ],
+  },
   instructions: [
-    "Prefer `npx vgpu examples` for discovering and copying examples.",
+    "Prefer the public MCP server with automatic or modern protocol negotiation for agent-driven documentation and example discovery.",
+    "Use `npx vgpu mcp --project-from-cwd` for an active project workspace or `npx vgpu mcp --output-dir /absolute/path` for a fixed project when a local agent needs downloads.",
+    "When download is enabled, pass a relative `destination` beneath the configured output directory.",
     "Use the examples API without authentication; verify the published SHA-256 values before using artifacts.",
   ],
 } satisfies GeistdocsAgentReadinessConfig;

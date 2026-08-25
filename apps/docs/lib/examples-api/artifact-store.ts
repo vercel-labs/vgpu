@@ -15,6 +15,10 @@ export interface StoredArtifact {
   readonly sha256: string;
 }
 
+export interface ArtifactReadOptions {
+  readonly signal?: AbortSignal;
+}
+
 interface RevisionObject {
   readonly key: string;
   readonly size: number;
@@ -27,18 +31,29 @@ interface RevisionDocument {
   readonly objects: readonly RevisionObject[];
 }
 
-export async function readMutableArtifact(key: string): Promise<StoredArtifact | undefined> {
+export async function readMutableArtifact(
+  key: string,
+  { signal }: ArtifactReadOptions = {},
+): Promise<StoredArtifact | undefined> {
+  signal?.throwIfAborted();
   if (key !== DISCOVERY_ARTIFACT_KEY && key !== LATEST_ARTIFACT_KEY) return undefined;
-  const bytes = await readRawObject(key, responseLimit(key));
+  const bytes = await readRawObject(key, responseLimit(key), signal);
+  signal?.throwIfAborted();
   if (!bytes) return undefined;
   return { bytes, contentType: 'application/json; charset=utf-8', sha256: sha256(bytes) };
 }
 
-export async function readRevisionArtifact(revision: string, key: string): Promise<StoredArtifact | undefined> {
+export async function readRevisionArtifact(
+  revision: string,
+  key: string,
+  { signal }: ArtifactReadOptions = {},
+): Promise<StoredArtifact | undefined> {
+  signal?.throwIfAborted();
   const base = `examples/v1/revisions/${revision}`;
   if (!key.startsWith(`${base}/`)) return undefined;
   const revisionKey = `${base}/revision.json`;
-  const revisionBytes = await readRawObject(revisionKey, responseLimit(revisionKey));
+  const revisionBytes = await readRawObject(revisionKey, responseLimit(revisionKey), signal);
+  signal?.throwIfAborted();
   if (!revisionBytes) return undefined;
   const document = parseRevisionDocument(revisionBytes, revision);
 
@@ -48,7 +63,8 @@ export async function readRevisionArtifact(revision: string, key: string): Promi
 
   const expected = document.objects.find((object) => object.key === key);
   if (!expected || expected.size > responseLimit(key)) return undefined;
-  const bytes = await readRawObject(key, responseLimit(key));
+  const bytes = await readRawObject(key, responseLimit(key), signal);
+  signal?.throwIfAborted();
   if (!bytes) return undefined;
   if (bytes.byteLength !== expected.size || sha256(bytes) !== expected.sha256) {
     throw new Error(`Stored artifact integrity mismatch: ${key}`);
@@ -83,10 +99,15 @@ function parseRevisionDocument(bytes: Uint8Array, expectedRevision: string): Rev
  * still selectable for the dormant versioned-retention mode and stays fail-closed without a token:
  * serving unverified bytes would be worse than serving nothing.
  */
-async function readRawObject(key: string, maximumBytes: number): Promise<Uint8Array | undefined> {
+async function readRawObject(
+  key: string,
+  maximumBytes: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array | undefined> {
+  signal?.throwIfAborted();
   const mode = process.env.VGPU_EXAMPLES_ARTIFACT_STORE ?? 'local';
-  if (mode === 'local') return readLocalObject(key, maximumBytes);
-  if (mode === 'blob') return readBlobObject(key, maximumBytes);
+  if (mode === 'local') return readLocalObject(key, maximumBytes, signal);
+  if (mode === 'blob') return readBlobObject(key, maximumBytes, signal);
   throw new Error(`Unsupported VGPU_EXAMPLES_ARTIFACT_STORE: ${mode}`);
 }
 
@@ -120,29 +141,62 @@ async function localRoot(): Promise<string> {
   return resolve(process.cwd(), LOCAL_ROOT_LAYOUTS[0]);
 }
 
-async function readLocalObject(key: string, maximumBytes: number): Promise<Uint8Array | undefined> {
-  return readSafeLocalFile(await localRoot(), key, maximumBytes);
+async function readLocalObject(
+  key: string,
+  maximumBytes: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array | undefined> {
+  signal?.throwIfAborted();
+  const bytes = await readSafeLocalFile(await localRoot(), key, maximumBytes);
+  signal?.throwIfAborted();
+  return bytes;
 }
 
-async function readBlobObject(key: string, maximumBytes: number): Promise<Uint8Array | undefined> {
+async function readBlobObject(
+  key: string,
+  maximumBytes: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array | undefined> {
+  signal?.throwIfAborted();
   const token = process.env.VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error('Missing VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN');
   const result = await get(key, { access: 'public', useCache: false, token });
+  signal?.throwIfAborted();
   if (!result?.stream) return undefined;
   const reader = result.stream.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let rejectAborted: ((reason: unknown) => void) | undefined;
+  let cancellation: Promise<void> | undefined;
+  const cancelReader = (reason: unknown) => {
+    cancellation ??= reader.cancel(reason).catch(() => undefined);
+    return cancellation;
+  };
+  const aborted = signal && new Promise<never>((_resolve, reject) => { rejectAborted = reject; });
+  const onAbort = () => {
+    const reason = signal?.reason;
+    void cancelReader(reason);
+    rejectAborted?.(reason);
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      signal?.throwIfAborted();
+      const reading = reader.read();
+      const { done, value } = aborted ? await Promise.race([reading, aborted]) : await reading;
       if (done) break;
       size += value.byteLength;
       if (size > maximumBytes) throw new Error(`Stored artifact exceeds response limit: ${key}`);
       chunks.push(value);
     }
+    signal?.throwIfAborted();
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    await cancelReader(signal?.aborted ? signal.reason : error);
+    signal?.throwIfAborted();
     throw error;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+    reader.releaseLock();
   }
   const bytes = new Uint8Array(size);
   let offset = 0;

@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "^22.10.7",
     "@types/pngjs": "^6.0.5",
     "@vgpu/cli": "workspace:*",

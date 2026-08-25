@@ -46,11 +46,22 @@ const config: NextConfig = {
   // to bundle the tree explicitly or every artifact 404s in production.
   // Keys are picomatch globs, not literal route paths, so a dynamic segment cannot be written
   // out: `[revision]` and `[...artifact]` would parse as character classes and match nothing.
-  // `check:examples-api-tracing` fails the build if any of the three routes loses the tree.
+  // `check:examples-api-tracing` fails the build if any artifact-backed route loses the tree.
   outputFileTracingIncludes: {
     "/.well-known/vgpu-examples.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/latest.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/revisions/**": ["./generated/examples-api/**/*"],
+    "/api/mcp": ["./generated/examples-api/**/*"],
+  },
+  // The artifact reader probes from process.cwd() so it works in both monorepo and deployed
+  // layouts. Next's static tracer consequently treats the whole app root as reachable unless the
+  // routes exclude unrelated CDN assets. Keep the generated tree above and prevent large models,
+  // videos, and images under public/ from being copied into every artifact-backed function.
+  outputFileTracingExcludes: {
+    "/.well-known/vgpu-examples.json": ["./public/**/*"],
+    "/api/examples/v1/latest.json": ["./public/**/*"],
+    "/api/examples/v1/revisions/**": ["./public/**/*"],
+    "/api/mcp": ["./public/**/*"],
   },
 
   // ANCHOR TGEIST-12 (gate (d) of Decision 4). The table lives in

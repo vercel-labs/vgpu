@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Fails the build when the generated examples-api tree is not bundled into every examples route.
+ * Fails the build when an artifact-backed route loses the generated examples tree or traces an
+ * unsafe deployment bundle.
  *
  * The route handlers read the tree with `fs` at request time, so Next's static tracing cannot see
  * the path and `outputFileTracingIncludes` in `next.config.mjs` is the only thing putting those
@@ -11,11 +12,12 @@
  *     normalized app path, so a literal dynamic segment such as `[revision]` parses as a
  *     character class and matches nothing at all.
  *
- * Either way every local test still passes -- `next dev` and `next start` read the working tree,
- * never the bundle -- and the failure only appears in production as a 404 on the CLI's very first
- * request. So it is asserted against the real build output instead of trusted.
+ * Dynamic filesystem probes can also make Next trace unrelated public assets into each function,
+ * silently crossing Vercel's standard 250 MB function limit. Local servers read the working tree
+ * and mask both classes of problem, so completeness, forbidden prefixes, and size are asserted
+ * against the real build output instead of trusting the config shape.
  */
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const appDirectory = resolve(import.meta.dirname, '..');
@@ -26,7 +28,10 @@ const ROUTES = [
   '.well-known/vgpu-examples.json',
   'api/examples/v1/latest.json',
   'api/examples/v1/revisions/[revision]/[...artifact]',
+  'api/mcp',
 ];
+const MAX_TRACE_BYTES = 250_000_000;
+const FORBIDDEN_APP_PREFIXES = ['public/'];
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -57,8 +62,9 @@ for (const route of ROUTES) {
     continue;
   }
   const traceDirectory = dirname(tracePath);
+  const resolvedFiles = [...new Set(trace.files.map((file) => resolve(traceDirectory, file)))];
   const traced = new Set(
-    trace.files.map((file) => relative(treeRoot, resolve(traceDirectory, file))).filter((file) => !file.startsWith('..')),
+    resolvedFiles.map((file) => relative(treeRoot, file)).filter((file) => !file.startsWith('..')),
   );
   const missing = artifacts.filter((artifact) => !traced.has(artifact));
   if (missing.length > 0) {
@@ -70,6 +76,39 @@ for (const route of ROUTES) {
     );
   } else {
     console.log(`/${route}: ${traced.size}/${artifacts.length} examples-api artifacts bundled`);
+  }
+
+  const appRelativeFiles = resolvedFiles.map((file) => relative(appDirectory, file).replaceAll('\\', '/'));
+  const forbidden = appRelativeFiles.filter((file) =>
+    FORBIDDEN_APP_PREFIXES.some((prefix) => file.startsWith(prefix)),
+  );
+  if (forbidden.length > 0) {
+    failed = true;
+    console.error(
+      `::error::/${route} traces ${forbidden.length} unrelated public assets, first: ` +
+        `${forbidden.slice(0, 3).join(', ')}. Add a route-scoped outputFileTracingExcludes entry.`,
+    );
+  }
+
+  const traceBytes = (
+    await Promise.all(
+      resolvedFiles.map(async (file) => {
+        try {
+          return (await stat(file)).size;
+        } catch {
+          return 0;
+        }
+      }),
+    )
+  ).reduce((total, size) => total + size, 0);
+  if (traceBytes > MAX_TRACE_BYTES) {
+    failed = true;
+    console.error(
+      `::error::/${route} trace is ${traceBytes.toLocaleString('en-US')} bytes, over the ` +
+        `${MAX_TRACE_BYTES.toLocaleString('en-US')}-byte standard Vercel Function limit.`,
+    );
+  } else {
+    console.log(`/${route}: ${traceBytes.toLocaleString('en-US')} traced bytes`);
   }
 }
 

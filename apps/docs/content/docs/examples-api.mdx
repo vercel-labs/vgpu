@@ -3,7 +3,7 @@ title: Examples API
 description: Read-only, tokenless discovery for versioned vgpu example manifests and source artifacts.
 ---
 
-The examples API is the machine-readable source behind the vgpu examples workflow. Most users and coding agents should prefer `npx vgpu examples`, which performs compatibility checks, integrity verification, and safe filesystem writes.
+The examples API is the machine-readable source behind the vgpu examples workflow. Coding agents should prefer the stateless, read-only MCP endpoint at `https://vgpu.sh/api/mcp` with automatic or modern protocol negotiation; use `npx vgpu mcp --project-from-cwd` or an absolute `--output-dir` when the agent also needs to download an example. The MCP and CLI surfaces both reuse the compatibility checks and integrity verification described here.
 
 ## Discovery
 
@@ -57,8 +57,9 @@ Use the CLI to list, inspect, and copy examples without hand-implementing this p
 
 ```bash
 npx vgpu examples
-npx vgpu examples list
-npx vgpu examples get gradient
+npx vgpu examples search gradient
+npx vgpu examples show gradient
+npx vgpu examples pull gradient --out ./gradient
 ```
 
 See the [CLI reference](/docs/cli) for command options and exit codes.
