@@ -327,7 +327,46 @@ async function checkApi(baseUrl) {
   assert(method.status === 405, `examples JSON 405: status ${method.status}`);
   assert(method.headers.get("allow") === "GET, HEAD, OPTIONS", "examples JSON 405: Allow header changed");
   assert(methodJson.error?.code === "VGPU-EXAMPLES-METHOD-NOT-ALLOWED", "examples JSON 405: frozen code changed");
-  console.log("  ok  OpenAPI, RFC 9727 catalog, discovery, and frozen examples JSON errors");
+
+  const unknownApiPath = "/api/definitely-missing-agent-readiness/nested";
+  const unknownApi = await request(baseUrl, unknownApiPath);
+  const unknownApiJson = await unknownApi.json();
+  assert(unknownApi.status === 404, `unknown API JSON 404: status ${unknownApi.status}`);
+  assert(unknownApi.headers.get("content-type")?.includes("application/json"), "unknown API JSON 404: wrong content type");
+  assert(unknownApi.headers.get("cache-control") === "no-store", "unknown API JSON 404: unsafe cache policy");
+  assert(unknownApi.headers.get("access-control-allow-origin") === "*", "unknown API JSON 404: CORS is missing");
+  assert(unknownApiJson.error?.code === "VGPU-API-NOT-FOUND", "unknown API JSON 404: code changed");
+  assert(unknownApiJson.error?.message === "API endpoint not found", "unknown API JSON 404: message changed");
+  assert(
+    unknownApiJson.error?.resolution === "Use the OpenAPI document to find a supported endpoint.",
+    "unknown API JSON 404: resolution guidance changed",
+  );
+  assert(
+    unknownApiJson.error?.documentationUrl === "https://vgpu.sh/openapi.json",
+    "unknown API JSON 404: OpenAPI recovery link changed",
+  );
+
+  const bareApi = await request(baseUrl, "/api");
+  assert(
+    [307, 308].includes(bareApi.status) && bareApi.headers.get("location")?.endsWith("/docs/reference"),
+    "bare API: existing reference redirect changed",
+  );
+
+  const unknownApiPost = await request(baseUrl, unknownApiPath, { method: "POST" });
+  assert(unknownApiPost.status === 404, `unknown API POST JSON 404: status ${unknownApiPost.status}`);
+  assert(
+    (await unknownApiPost.json()).error?.code === "VGPU-API-NOT-FOUND",
+    "unknown API POST JSON 404: code changed",
+  );
+
+  const unknownApiHead = await request(baseUrl, unknownApiPath, { method: "HEAD" });
+  assert(unknownApiHead.status === 404, `unknown API HEAD JSON 404: status ${unknownApiHead.status}`);
+  assert(
+    unknownApiHead.headers.get("content-length") === unknownApi.headers.get("content-length"),
+    "unknown API HEAD JSON 404: content length differs from GET",
+  );
+  assert((await unknownApiHead.text()) === "", "unknown API HEAD JSON 404: body must be empty");
+  console.log("  ok  OpenAPI, RFC 9727 catalog, discovery, and structured JSON API errors");
 }
 
 async function checkAgentResources(baseUrl) {
