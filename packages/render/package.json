@@ -10,7 +10,7 @@
     "pipeline",
     "render-pass"
   ],
-  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "homepage": "https://vgpu.sh",
   "bugs": {
     "url": "https://github.com/vercel-labs/vgpu/issues"
   },

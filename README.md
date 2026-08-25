@@ -4,7 +4,16 @@
 [![CI](https://github.com/vercel-labs/vgpu/actions/workflows/ci.yml/badge.svg)](https://github.com/vercel-labs/vgpu/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/vgpu.svg)](./LICENSE)
 
-vgpu is a TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and the same code running in the browser, headless Node, and your test suite. Ship a 25 KB effect, not a 500 KB engine.
+vgpu is a TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and the same code running in the browser, headless Node, and your test suite.
+
+- **Typed WGSL imports.** `.wgsl` files import and export like TypeScript modules, and reflection keeps binding names, types, and layouts correct without hand-written declarations.
+- **One `Gpu` context.** `init()` returns a single handle; every entry point (`draw`, `effect`, `frame`, `surface`, `target`, ...) takes it as its first argument. No hidden global state.
+- **Small by design.** Unused declarations are pruned before minification, and a complete fullscreen effect ships in 25 KB gzipped — a budget enforced in CI.
+- **Multi-runtime by default.** One public API surface across the browser, headless Node (`vgpu/node`, Dawn-backed), and a deterministic mock (`vgpu/mock`) built for tests and CI.
+- **Explicit frames.** `frame(gpu, (f) => f.pass(target, effect))` — passes, clears, and draws are explicit calls, never implicit scene-graph state.
+- **Agent-ready.** Docs, the example gallery, and shader validation all run from the CLI (`npx vgpu docs`, `npx vgpu examples`, `npx vgpu check`), and [vgpu.sh](https://vgpu.sh) publishes `agents.md` and `llms.txt` for LLM consumption.
+
+**View full documentation and examples on [vgpu.sh](https://vgpu.sh).**
 
 ## Quick Start
 
@@ -27,6 +36,8 @@ frameLoop(gpu, (frame) => {
   frame.pass(canvasSurface, wave);
 });
 ```
+
+In this example, `init()` acquires an adapter and device and returns the single `Gpu` context; every other entry point takes it as its first argument. `surface` wraps the canvas as a render target and keeps its size current, clamping the device-pixel ratio between 1 and 2. `effect` compiles the shader into a fullscreen effect whose uniforms are addressed by their WGSL names through `set()` — writes land immediately, so the loop only sets what changes each frame. `clock` provides frame time, and `frameLoop` runs the callback once per frame, where `frame.pass` draws the effect into the surface.
 
 ### Node quick start
 
@@ -62,23 +73,29 @@ export fn grain(uv: vec2f, time: f32) -> f32 {
 
 Imports resolve at build time through typed WGSL reflection — no codegen step and no manual binding declarations to keep in sync.
 
-## Why vgpu
-
-- **One `Gpu` context.** `init()` returns a single handle; every entry point (`draw`, `effect`, `frame`, `surface`, `target`, ...) takes it as its first argument. No facade, no hidden global state.
-- **Typed WGSL imports.** Shaders import from `@vgpu/wgsl-std` or from each other, and reflection keeps binding names, types, and layouts correct without hand-written declarations.
-- **Real tree-shaking.** Unused declarations are pruned before minification, so a single fullscreen effect ships in a 25 KB gzip budget instead of a 500 KB engine.
-- **Multi-runtime by default.** One public API surface across the browser, headless Node (`vgpu/node`, Dawn-backed), and a deterministic mock (`vgpu/mock`) built for tests and CI.
-
 ## Documentation
 
-Guides and API reference ship inside the package and run fully offline through the CLI:
+Full documentation lives on [vgpu.sh](https://vgpu.sh). Start with [Getting started](https://vgpu.sh/docs/get-started), then the [performance playbook](https://vgpu.sh/docs/guides/performance-playbook) for the defaults (bundles, target pre-warm, in-place `set()`, instancing, ping-pong, MSAA/depth) that shader authors should reach for from day one. [Interactive examples](https://vgpu.sh/examples) run in the browser, and their source is what `vgpu examples` serves.
+
+The same guides and API reference also ship inside the package and run fully offline through the CLI:
 
 ```bash
 npx vgpu docs cat getting-started.md
 npx vgpu docs find effect
 ```
 
-Start with [`docs/topics/getting-started.docs.md`](./docs/topics/getting-started.docs.md), then [`docs/topics/performance-playbook.docs.md`](./docs/topics/performance-playbook.docs.md) for the defaults (bundles, target pre-warm, in-place `set()`, instancing, ping-pong, MSAA/depth) that shader authors should reach for from day one.
+## Agent resources
+
+vgpu is built to be operated by coding agents as well as people. The example gallery is searchable from the CLI, and any example's complete source can be copied locally without cloning the repository:
+
+```bash
+npx vgpu examples search "raymarching"
+npx vgpu examples pull <id> --out ./example
+```
+
+- [Agent readiness manifest](https://vgpu.sh/agents.md) — how agents should discover and use vgpu
+- [llms.txt](https://vgpu.sh/llms.txt) and [llms-full.txt](https://vgpu.sh/llms-full.txt) — documentation index and full export for LLMs
+- [Examples discovery API](https://vgpu.sh/docs/examples-api) — tokenless and read-only, described by [OpenAPI](https://vgpu.sh/openapi.json)
 
 ## Packages
 
