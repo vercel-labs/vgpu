@@ -56,11 +56,15 @@ test("bare vgpu mcp serves docs and read-only examples over stdio", async () => 
 
 test("vgpu mcp does not advertise download when the platform cannot publish safely", async () => {
   const root = await temporaryDirectory("vgpu-mcp-windows-");
-  const preload = join(root, "windows-platform.mjs");
-  await writeFile(preload, 'Object.defineProperty(process, "platform", { value: "win32" });\n');
+  const nodeArgs: string[] = [];
+  if (process.platform !== "win32") {
+    const preload = join(root, "windows-platform.mjs");
+    await writeFile(preload, 'Object.defineProperty(process, "platform", { value: "win32" });\n');
+    nodeArgs.push("--import", preload);
+  }
   const client = await connectStdio({
     args: ["--output-dir", root],
-    nodeArgs: ["--import", preload],
+    nodeArgs,
   });
   const examples = (await client.listTools()).tools.find((tool) => tool.name === "examples");
   expect(examples?.annotations?.readOnlyHint).toBe(true);
