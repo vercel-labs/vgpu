@@ -52,8 +52,16 @@ describe("agent readiness metadata", () => {
     );
 
     const mcp = docsContent("mcp.md");
+    expect(mcp).toContain("## Quick setup");
+    expect(mcp).toContain("npx -y add-mcp https://vgpu.sh/api/mcp -g");
+    expect(mcp).toContain("## What is VGPU MCP?");
+    expect(mcp).toContain("claude mcp add --transport http vgpu https://vgpu.sh/api/mcp");
+    expect(mcp).toContain("codex mcp add vgpu --url https://vgpu.sh/api/mcp");
+    expect(mcp).toContain("## Try it");
     expect(mcp).toContain("## Hosted HTTP");
     expect(mcp).toContain("https://vgpu.sh/api/mcp");
     expect(mcp).toContain("## Local stdio");
+    expect(mcp).toContain("## Security");
+    expect(mcp).toContain("## Troubleshooting");
   });
 });
