@@ -44,6 +44,17 @@ export function DocsLinksSection() {
           </DynamicLink>
         ))}
       </div>
+      <p className="mt-6 text-pretty text-sm text-gray-900">
+        Building agent tooling? Read the{" "}
+        <DynamicLink className="underline" href="/[lang]/docs/examples-api">
+          vgpu Examples API reference
+        </DynamicLink>{" "}
+        or inspect its{" "}
+        <a className="underline" href="/openapi.json">
+          OpenAPI 3.1 description
+        </a>
+        .
+      </p>
     </section>
   );
 }

@@ -25,6 +25,10 @@ const docsPage = createDocsPage({
       alternates: {
         ...metadata.alternates,
         canonical,
+        types: {
+          ...metadata.alternates?.types,
+          "text/markdown": siteUrl(`${page.url}.md`),
+        },
       },
       openGraph: {
         type: "article",

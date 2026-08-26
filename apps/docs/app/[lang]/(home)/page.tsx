@@ -6,7 +6,7 @@ import { Hero } from "./components/hero";
 import { OneShaderEverySurfaceSection } from "./components/one-shader-every-surface-section";
 import { ShaderCodeScalesSection } from "./components/shader-code-scales-section";
 import "./hero-solo.css";
-import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_IDENTITY_URLS, SITE_NAME, siteUrl } from "@/lib/site";
 
 // Landing metadata + body copy carried over unchanged from the old
 // `apps/docs/app/page.tsx` (this ticket rebuilds the chrome, not the text —
@@ -45,6 +45,7 @@ const structuredData = {
       url: siteUrl("/"),
       description,
       publisher: { "@id": "https://vercel.com/#organization" },
+      sameAs: SITE_IDENTITY_URLS,
     },
     {
       "@type": "SoftwareSourceCode",
@@ -57,6 +58,7 @@ const structuredData = {
       license: "https://github.com/vercel-labs/vgpu/blob/main/LICENSE",
       programmingLanguage: ["TypeScript", "WGSL"],
       runtimePlatform: ["Web browsers", "Node.js", "Serverless runtimes"],
+      sameAs: SITE_IDENTITY_URLS,
       publisher: {
         "@type": "Organization",
         "@id": "https://vercel.com/#organization",

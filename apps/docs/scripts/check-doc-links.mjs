@@ -63,7 +63,18 @@ const MARKDOWN = /\.mdx?$/u;
  * `/examples/<slug>` and `/preview/<slug>` are validated against the real
  * example directories, not accepted blindly.
  */
-const APP_ROUTES = new Set(["/", "/examples", "/llms.txt", "/agents.md", "/sitemap.xml", "/robots.txt"]);
+const APP_ROUTES = new Set([
+  "/",
+  "/.well-known/api-catalog",
+  "/agents.md",
+  "/examples",
+  "/llms-full.txt",
+  "/llms.txt",
+  "/openapi.json",
+  "/robots.txt",
+  "/sitemap.md",
+  "/sitemap.xml",
+]);
 
 function parseArgs(argv) {
   const options = { anchorsFrom: null };

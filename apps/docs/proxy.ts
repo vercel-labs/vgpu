@@ -1,11 +1,14 @@
 import { createProxy } from "@vercel/geistdocs/proxy";
 import { config as geistdocsConfig } from "@/lib/geistdocs/config";
 import { trackMdRequest } from "@/lib/geistdocs/md-tracking";
+import { createUnmatchedMarkdownNotFoundResponse } from "@/lib/geistdocs/markdown-not-found";
 
 const proxy = createProxy({
   config: geistdocsConfig,
   trackMarkdownRequest: trackMdRequest,
   before: () => null,
+  after: ({ defaultLanguage, languages, request }) =>
+    createUnmatchedMarkdownNotFoundResponse(request, { defaultLanguage, languages }),
   // Keep negotiation deliberately narrow. `/` is the homepage representation;
   // docs retain their explicit catch-all. No root wildcard is allowed to capture
   // `/examples`, `/api`, or future application routes.
@@ -82,7 +85,7 @@ const proxy = createProxy({
 // of the geistdocs rewrite just like `/models/**` and `/ort/**` above.
 export const config = {
   matcher: [
-    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|\\.well-known/api-catalog(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],
 };
 

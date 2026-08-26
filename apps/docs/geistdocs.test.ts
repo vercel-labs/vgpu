@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { agent } from "./geistdocs";
+import { agent, nav, navbarVariant } from "./geistdocs";
+import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./lib/agent-guidance";
 
 const docsContent = (path: string) => readFileSync(new URL(`content/docs/${path}`, import.meta.url), "utf8");
 
 describe("agent readiness metadata", () => {
+  it("keeps project trust links out of the primary navigation", () => {
+    expect(nav.map((item) => item.label)).toEqual(["Docs", "Examples"]);
+    expect(navbarVariant).toBe("standard");
+  });
+
   it("advertises the real developer resources and public MCP endpoint", () => {
     expect(agent.product.category).toBe("Developer tools");
     expect(agent.api?.openApiUrl).toBe("https://vgpu.sh/openapi.json");
@@ -26,6 +32,11 @@ describe("agent readiness metadata", () => {
         },
       ],
     });
+  });
+
+  it("uses the centralized best-fit guidance", () => {
+    expect(agent.product.useCases).toEqual(AGENT_USE_CASES);
+    expect(agent.instructions).toEqual(AGENT_INSTRUCTIONS);
     const instructions = agent.instructions?.join("\n") ?? "";
     expect(instructions).toContain("npx vgpu mcp --output-dir /absolute/path");
     expect(instructions).toContain("relative `destination`");

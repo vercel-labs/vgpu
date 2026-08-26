@@ -1,12 +1,19 @@
 import "../global.css";
 import type { Metadata } from "next";
+import { getPublicPath } from "@vercel/geistdocs/config";
 import { Footer } from "@vercel/geistdocs/footer";
 import { Navbar } from "@vercel/geistdocs/navbar";
 import { GeistdocsProvider } from "@/components/geistdocs/provider";
 import { config } from "@/lib/geistdocs/config";
 import { mono, sans } from "@/lib/geistdocs/fonts";
 import { cn } from "@/lib/utils";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "@/lib/site";
+import {
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_ORIGIN,
+  localizedSitePath,
+  siteUrl,
+} from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
@@ -46,6 +53,23 @@ const Layout = async ({ children, params }: LayoutProps<"/[lang]">) => {
           <Navbar config={config} />
           {children}
           <Footer />
+          <nav
+            aria-label="vgpu project links"
+            className="mx-auto flex max-w-[1448px] items-center gap-4 px-6 pb-8 text-sm text-gray-900"
+          >
+            <a
+              className="transition-colors hover:text-gray-1000"
+              href={getPublicPath(localizedSitePath("/about", lang), config.basePath)}
+            >
+              About
+            </a>
+            <a
+              className="transition-colors hover:text-gray-1000"
+              href={getPublicPath(localizedSitePath("/contact", lang), config.basePath)}
+            >
+              Contact
+            </a>
+          </nav>
         </GeistdocsProvider>
       </body>
     </html>
