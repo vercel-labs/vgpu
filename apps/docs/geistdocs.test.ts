@@ -44,6 +44,12 @@ describe("agent readiness metadata", () => {
     const agents = docsContent("get-started/agents.mdx");
     expect(agents).toContain("https://vgpu.sh/api/mcp");
     expect(agents).toContain("[MCP reference](/docs/mcp)");
+    expect(agents.indexOf("## Point your agent at the docs")).toBeLessThan(
+      agents.indexOf("## Install the skill"),
+    );
+    expect(agents.indexOf("## Install the skill")).toBeLessThan(
+      agents.indexOf("## Connect the hosted MCP server"),
+    );
 
     const mcp = docsContent("mcp.md");
     expect(mcp).toContain("## Hosted HTTP");
