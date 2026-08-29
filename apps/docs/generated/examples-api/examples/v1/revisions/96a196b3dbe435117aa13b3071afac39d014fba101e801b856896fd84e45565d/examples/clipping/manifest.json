@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "clipping",
+  "title": "Clipping",
+  "description": "A single signed-distance test slices an animated icosphere, while a fitted disk reveals the moving cross-section.",
+  "tags": [
+    "clipping",
+    "3d",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "6e8394a84a4ae3bc834bac79c2474b94e3abccf996bbfc0acfbc36dc015095a7",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 468,
+      "sha256": "462ebeb1bcd29fd65dc93150be7e19c93aceea05eff408243c40f878f4a742e0",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/clipping/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 1631,
+      "sha256": "491ae187a4b6accbd13a0dc4e4520744673815e0efc4da7ca790eeb0c3a05dff",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/clipping/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 2255,
+      "sha256": "9135033381207db674243e171c99181e4e0788848f73725d6fef41c049705a13",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/clipping/files/scene.ts.raw"
+    },
+    {
+      "path": "clipped.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2165,
+      "sha256": "f289764c7dbd473d4171899fcdeb1a9422102d9d64285ca3ae2e210de908012d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/clipping/files/clipped.wgsl.raw"
+    }
+  ]
+}

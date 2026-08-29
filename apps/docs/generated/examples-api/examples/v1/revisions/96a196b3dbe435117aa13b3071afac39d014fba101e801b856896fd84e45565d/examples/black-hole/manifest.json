@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "black-hole",
+  "title": "Black Hole",
+  "description": "Raymarched gravitational lensing — null geodesics bend starlight around an event horizon while a Keplerian accretion disk glows with Doppler beaming, graded through an HDR bloom chain.",
+  "tags": [
+    "black-hole",
+    "raymarching",
+    "hdr",
+    "bloom"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "multi-pass",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "7b2bbffc32edab65f4175ab09469c0c3cfdeb247dbde6ea1687ded635bfac1dd",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 568,
+      "sha256": "9176013acfc657b709963b84740460cfbfa652891c1222088c50d19657bc70d6",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 5916,
+      "sha256": "771e3025572e14edcc7e3b3709f619bbaa4e5a17b4c35bb3503b9fed191e13bc",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/renderer.ts.raw"
+    },
+    {
+      "path": "pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 3304,
+      "sha256": "5a521874507f9373fe3e53f84647baeed3aa6b9fd0c29023ba840cc4f536cf24",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/pipeline.ts.raw"
+    },
+    {
+      "path": "black-hole.wgsl",
+      "contentType": "text/wgsl",
+      "size": 6397,
+      "sha256": "de290cc9326ba45487c4afb000a4372a6ff77404a60139f4aa94536194aea8b4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/black-hole.wgsl.raw"
+    },
+    {
+      "path": "bright-pass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 599,
+      "sha256": "407ff3883b24c95632a4e550bf0601d48adcf265e9047b6383d49e6e214ea7ad",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/bright-pass.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 781,
+      "sha256": "91f570ff052ae08a14f62ee9d84c204cb495dbe9363665d2a68df02ad5b820cf",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/blur.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 881,
+      "sha256": "44cf949831eeccb0ae812a87d5aad7942d745ba19a3207153d15cb0635f9eea4",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/black-hole/files/composite.wgsl.raw"
+    }
+  ]
+}

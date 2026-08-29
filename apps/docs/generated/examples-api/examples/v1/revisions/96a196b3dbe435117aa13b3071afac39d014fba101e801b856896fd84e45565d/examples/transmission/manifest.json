@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "transmission",
+  "title": "Transmission",
+  "description": "A glass cube refracts the scene behind it in screen space: the frame is rendered, blurred into a pyramid, and read back through Snell refraction, chromatic dispersion and a Fresnel-weighted environment reflection.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "rendering",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "pointer-orbit",
+    "controls",
+    "checkbox-controls",
+    "select-control",
+    "multi-pass",
+    "render-targets",
+    "continuous-rendering",
+    "responsive-canvas",
+    "textures",
+    "hdr"
+  ],
+  "aggregateSha256": "22996d74112471c46f8507d29593b1f213e8b62365bff61dffe9094665f78b6f",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 566,
+      "sha256": "7ae34ad57b7995e87ca445886d4952ba687696e261fc179946689705070e9cf5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 4309,
+      "sha256": "a1f48fe869a5417222c31765a61dcf49eb545ab6ae7a7cb1c9471cf851eb93e1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 15154,
+      "sha256": "645c7915f50ce51a11fe1d7ea9ddc8e0630abf159af0195b33b64f00bcea78f1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/scene.ts.raw"
+    },
+    {
+      "path": "camera.ts",
+      "contentType": "text/typescript",
+      "size": 2438,
+      "sha256": "f90cfbca5c1a655ab689874134b59de2bd8b61a401c37e7431d316664a3ce100",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/camera.ts.raw"
+    },
+    {
+      "path": "pointer-input.ts",
+      "contentType": "text/typescript",
+      "size": 3314,
+      "sha256": "e30966ed7678a2c7e1bc85b02f5bc795db8d0b177a182887d7a5a6174075432f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/pointer-input.ts.raw"
+    },
+    {
+      "path": "sky.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3242,
+      "sha256": "8c97b6020f03224702b0552ecadbe85a46928734d9e281087189df618ce72686",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/sky.wgsl.raw"
+    },
+    {
+      "path": "blur.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1090,
+      "sha256": "b9dcbafa8d9688c0e03d7d9687531f18eeb62c25ad9fdf42a4b76da3f029c805",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/blur.wgsl.raw"
+    },
+    {
+      "path": "env-common.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1549,
+      "sha256": "5fab216c6d4f5f2730d6e35aa602ca9cad4cb08278535a2c99cae1fd7467b581",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/env-common.wgsl.raw"
+    },
+    {
+      "path": "scene-background.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1380,
+      "sha256": "42b3e9075653f56d987eb140549b9f28ea301cd178b93ee0d8714b3bb8230617",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/scene-background.wgsl.raw"
+    },
+    {
+      "path": "floor.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2005,
+      "sha256": "d6cd7daad20a74392e439b5008087ad45109f955bdfab0a457a48db01786a0ce",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/floor.wgsl.raw"
+    },
+    {
+      "path": "glass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 7332,
+      "sha256": "487b8069b80b33c683b64fc5f79d89dccfc37c8a60983d372b1090e6f507d959",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/glass.wgsl.raw"
+    },
+    {
+      "path": "present.wgsl",
+      "contentType": "text/wgsl",
+      "size": 446,
+      "sha256": "13c58faf74c877c06df4ccc5dae4a77b60262abe0256bfbefd5904393c70f581",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/transmission/files/present.wgsl.raw"
+    }
+  ]
+}

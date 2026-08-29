@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "matcap",
+  "title": "Matcap Shading",
+  "description": "A lighting rig baked once into a sphere-shaped lookup texture, then replayed as a single texture fetch per pixel on a spinning faceted solid.",
+  "tags": [
+    "matcap",
+    "lighting",
+    "shader",
+    "3d"
+  ],
+  "capabilities": [
+    "webgpu",
+    "textures",
+    "offscreen-rendering",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "beb98240e3b45e6508a9aa339b5d1a8a5df101b8155cb0d8a176ea880948e534",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 498,
+      "sha256": "593deaf139110f685b2642e0bba3f287e0b86cc2e88da4ed30283f783fbb963b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/matcap/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 700,
+      "sha256": "d8b830b7f938e9e5f9366a03fc27a39e8773b624fe3e6a951360312a56b6df1d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/matcap/files/renderer.ts.raw"
+    },
+    {
+      "path": "scene.ts",
+      "contentType": "text/typescript",
+      "size": 2319,
+      "sha256": "a4d96ce196539db14542f8ea579cc97b4a77e573dfc959ace88f0375a7cc8cd0",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/matcap/files/scene.ts.raw"
+    },
+    {
+      "path": "bake-matcap.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1787,
+      "sha256": "700819eec5fcfe56a55065bb880a0e3b9cceb1dba9998622be675e11c608bc95",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/matcap/files/bake-matcap.wgsl.raw"
+    },
+    {
+      "path": "matcap.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3227,
+      "sha256": "6d0c2bcab515b7198a00758f2cefafc8dd46c87e01708c385f80a558f425e1f5",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/matcap/files/matcap.wgsl.raw"
+    }
+  ]
+}

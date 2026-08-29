@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "mnist-classifier",
+  "title": "MNIST Classifier",
+  "description": "Draw a digit and classify it with ONNX Runtime Web on WebGPU. Render the GPU-resident logits through a non-owning vgpu buffer wrap.",
+  "tags": [
+    "machine-learning",
+    "onnx",
+    "mnist",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "machine-learning",
+    "external-device",
+    "zero-copy",
+    "gpu-buffer-interop",
+    "storage-buffers",
+    "pointer-input",
+    "demand-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "82ccc3c2c122dee22a91c4152f02c5ae2050722bbba99c6ba25a4fc345d22bfe",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 3781,
+      "sha256": "2810a64eb7d9ab8f44240413228417ee3f89c93336cbf1347bd41844c3df3989",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 1176,
+      "sha256": "a3d110ba8fe943fc5ab73ea180c0eca5c0911d139e577faa86bd65ea5de230a3",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/renderer.ts.raw"
+    },
+    {
+      "path": "ort-runtime.ts",
+      "contentType": "text/typescript",
+      "size": 12630,
+      "sha256": "8e8f2bb6ac14078e3b6889e3ba3391b8ea1eee8ab0764e8e1e49d8627c5569f9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/ort-runtime.ts.raw"
+    },
+    {
+      "path": "ort-webgpu.ts",
+      "contentType": "text/typescript",
+      "size": 6580,
+      "sha256": "12758be55ce03579a1636d7544bd651a8c3bad2b7993346ed71c4cad571f2e3b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/ort-webgpu.ts.raw"
+    },
+    {
+      "path": "preprocess.ts",
+      "contentType": "text/typescript",
+      "size": 3762,
+      "sha256": "051d70c5aa2f3f848e1669e6236069a43fda50ac47747677e44870ecf2184e42",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/preprocess.ts.raw"
+    },
+    {
+      "path": "visualize.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3466,
+      "sha256": "295807a25fefbd005f270e52edef4bcce9a3625684ef555adcefecd5faaf2b51",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/mnist-classifier/files/visualize.wgsl.raw"
+    }
+  ]
+}

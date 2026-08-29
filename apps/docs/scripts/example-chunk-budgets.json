@@ -1,6 +1,6 @@
 {
   "description": "Production Turbopack gzip baselines for every canonical preview route after the examples were made self-contained. The checker requires exact coverage of exampleSlugs, allows the larger of 2% or 5 KiB growth per example and 5 KiB for the shared host, rejects stale builds and shared route-owned chunks, and supplements those checks with surviving WGSL source markers. ML runtimes and model files are fetched dynamically as public assets and are not attributed to route chunks.",
-  "$comment:tgeist-08": "All 22 current baselines and the shared host were measured from the same Node 22 / Next 16.3.2 production build and confirmed by a second build. previousAppsDocsBaseline remains read-only historical provenance, including examples that no longer exist.",
+  "$comment:tgeist-08": "All 23 current baselines and the shared host were measured from the same Node 22 / Next 16.3.2 production build and confirmed by a second build; the matcap baseline was measured and re-confirmed the same way when it was added. previousAppsDocsBaseline remains read-only historical provenance, including examples that no longer exist.",
   "sharedHost": {
     "gzipBytes": 2104,
     "maxGrowthBytes": 5120
@@ -22,6 +22,7 @@
     "environment-map": 64637,
     "transmission": 76076,
     "clipping": 59215,
+    "matcap": 63368,
     "radiance-cascades": 67214,
     "agent-radiance-cascades": 66236,
     "nextjs-flare": 74593,

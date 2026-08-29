@@ -1187,6 +1187,51 @@ export const exampleSources = {
       }
     ]
   },
+  "matcap": {
+    "slug": "matcap",
+    "title": "Matcap Shading",
+    "description": "A lighting rig baked once into a sphere-shaped lookup texture, then replayed as a single texture fetch per pixel on a spinning faceted solid.",
+    "tags": [
+      "matcap",
+      "lighting",
+      "shader",
+      "3d"
+    ],
+    "capabilities": [
+      "webgpu",
+      "textures",
+      "offscreen-rendering",
+      "continuous-rendering",
+      "responsive-canvas"
+    ],
+    "files": [
+      {
+        "path": "index.tsx",
+        "language": "tsx",
+        "content": "\"use client\";\n\nimport { useEffect, useRef } from \"react\";\nimport { createRenderer } from \"./renderer\";\n\nexport function Example() {\n  const canvasRef = useRef<HTMLCanvasElement>(null);\n\n  useEffect(() => {\n    if (!canvasRef.current) return;\n    const pending = createRenderer(canvasRef.current).catch(() => undefined);\n\n    return () => {\n      void pending.then((renderer) => renderer?.dispose());\n    };\n  }, []);\n\n  return <canvas ref={canvasRef} className=\"block h-full w-full bg-black\" />;\n}\n"
+      },
+      {
+        "path": "renderer.ts",
+        "language": "typescript",
+        "content": "import { clock, frameLoop, init, surface } from \"vgpu\";\n\nimport { createScene, renderScene } from \"./scene\";\n\nexport async function createRenderer(canvas: HTMLCanvasElement) {\n  const gpu = await init();\n  try {\n    const output = surface(gpu, canvas, { dpr: [1, 2] });\n    const scene = createScene(gpu);\n    const time = clock(gpu);\n\n    // The loop is registered with the gpu, and every target, geometry and\n    // surface above is owned by it, so `gpu.dispose()` is the whole teardown.\n    frameLoop(gpu, (currentFrame) =>\n      renderScene(currentFrame, scene, output, time.time)\n    );\n\n    return { dispose: () => gpu.dispose() };\n  } catch (error) {\n    gpu.dispose();\n    throw error;\n  }\n}\n"
+      },
+      {
+        "path": "scene.ts",
+        "language": "typescript",
+        "content": "import type { Draw, Frame, Gpu, Target } from \"vgpu\";\nimport { draw, effect, frame, geometry, sampler, target } from \"vgpu\";\nimport { icosphere, perspectiveCamera } from \"vgpu/scene\";\n\nimport bakeMatcapWgsl from \"./bake-matcap.wgsl\";\nimport matcapWgsl from \"./matcap.wgsl\";\n\n// 512 is plenty: the texture is only ever sampled across a unit disk, so extra\n// resolution buys detail nobody can see on a silhouette this size.\nconst MATCAP_SIZE: readonly [number, number] = [512, 512];\n\nexport interface MatcapScene {\n  readonly solid: Draw;\n}\n\nexport function createScene(gpu: Gpu): MatcapScene {\n  // Baked once, into a plain offscreen target. Nothing writes to it again.\n  const matcap = target(gpu, { size: MATCAP_SIZE, format: \"rgba16float\" });\n  const bake = effect(gpu, bakeMatcapWgsl);\n  frame(gpu, (currentFrame) =>\n    currentFrame.pass({ target: matcap }, (pass) => pass.draw(bake))\n  );\n\n  // Curvature is what makes a matcap legible: a smooth ball sweeps its normals\n  // across the whole disk, so the baked gradient, highlight and rim all land on\n  // screen at once. Flat-faced solids sample a single texel per face and throw\n  // that gradient away. Convex also means back-face culling resolves visibility\n  // on its own, with no depth buffer to size or resize.\n  const solid = draw(gpu, {\n    shader: matcapWgsl,\n    geometry: geometry(gpu, icosphere({ radius: 1, subdivisions: 5 })),\n    cull: \"back\",\n  });\n  solid.set({\n    matcap_tex: matcap,\n    matcap_samp: sampler(gpu, {\n      minFilter: \"linear\",\n      magFilter: \"linear\",\n      addressModeU: \"clamp-to-edge\",\n      addressModeV: \"clamp-to-edge\",\n    }),\n  });\n\n  return { solid };\n}\n\nexport function renderScene(\n  currentFrame: Frame,\n  scene: MatcapScene,\n  output: Target,\n  time: number\n): void {\n  const camera = perspectiveCamera({\n    fov: 34,\n    aspect: output.size[0] / Math.max(1, output.size[1]),\n    near: 0.1,\n    far: 20,\n    position: [0, 0, 4.4],\n    target: [0, 0, 0],\n  });\n  scene.solid.set({\n    view_projection: camera.viewProjection,\n    // Matcap lighting lives in view space, which is why the shading stays put\n    // while the solid turns underneath it.\n    view: camera.view,\n    yaw: time * 0.42,\n    pitch: 0.34 + Math.sin(time * 0.29) * 0.24,\n  });\n  currentFrame.pass(output, (pass) => pass.draw(scene.solid));\n}\n"
+      },
+      {
+        "path": "bake-matcap.wgsl",
+        "language": "wgsl",
+        "content": "// Bakes the matcap itself: a sphere lit head-on, stored so that the texel at a\n// given offset from the disk center holds the color of a surface whose\n// view-space normal points that way. Every light in this file is evaluated once\n// at startup and never again.\n\nconst BASE = vec3f(0.05, 0.068, 0.1);\nconst SKY = vec3f(0.4, 0.6, 0.95);\nconst KEY = vec3f(1.0, 0.93, 0.78);\nconst KEY_DIRECTION = vec3f(-0.42, 0.72, 0.55);\nconst FILL_DIRECTION = vec3f(0.68, -0.34, 0.42);\nconst VIEW = vec3f(0.0, 0.0, 1.0);\n\n@fragment\nfn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {\n  // Texture space runs top-down, so flipping v here is what puts +y up on the\n  // baked ball. The lookup in matcap.wgsl flips it back exactly once.\n  let disk = vec2f(uv.x, 1.0 - uv.y) * 2.0 - 1.0;\n  let radius_squared = dot(disk, disk);\n  // Outside the ball there is no normal to shade. Keeping the corners dark\n  // means a stray fetch reads as unlit instead of as a bright seam.\n  if (radius_squared > 1.0) {\n    return vec4f(BASE * 0.4, 1.0);\n  }\n\n  // Reconstruct the sphere: the disk offset *is* the normal's xy.\n  let normal = vec3f(disk, sqrt(1.0 - radius_squared));\n  let key_direction = normalize(KEY_DIRECTION);\n\n  // A softbox key, a cool bounce from below, and the room gradient a polished\n  // surface would reflect - all folded into one texel.\n  let key = pow(max(dot(normal, key_direction), 0.0), 1.6);\n  let highlight = pow(max(dot(normal, normalize(key_direction + VIEW)), 0.0), 220.0);\n  let fill = max(dot(normal, normalize(FILL_DIRECTION)), 0.0);\n  let room = mix(BASE, SKY, smoothstep(-0.7, 0.9, reflect(-VIEW, normal).y));\n  let rim = pow(1.0 - normal.z, 3.5);\n\n  let color = room + KEY * (key * 0.5 + highlight * 3.0) + SKY * (fill * 0.16 + rim * 0.45);\n  return vec4f(color, 1.0);\n}\n"
+      },
+      {
+        "path": "matcap.wgsl",
+        "language": "wgsl",
+        "content": "struct Uniforms {\n  view_projection: mat4x4f,\n  view: mat4x4f,\n  yaw: f32,\n  pitch: f32,\n};\n@group(0) @binding(0) var<uniform> uniforms: Uniforms;\n@group(0) @binding(1) var matcap_tex: texture_2d<f32>;\n@group(0) @binding(2) var matcap_samp: sampler;\n\nstruct VertexOut {\n  @builtin(position) position: vec4f,\n  @location(0) local_position: vec3f,\n  @location(1) normal: vec3f,\n};\n\n// Spinning on the CPU would mean a model matrix; two angles and a rotation are\n// enough here, and they keep the uniform block to one small struct.\nfn rotate(p: vec3f) -> vec3f {\n  let cy = cos(uniforms.yaw);\n  let sy = sin(uniforms.yaw);\n  let yawed = vec3f(cy * p.x + sy * p.z, p.y, -sy * p.x + cy * p.z);\n  let cx = cos(uniforms.pitch);\n  let sx = sin(uniforms.pitch);\n  return vec3f(yawed.x, cx * yawed.y - sx * yawed.z, sx * yawed.y + cx * yawed.z);\n}\n\n@vertex\nfn vs_main(\n  @location(0) position: vec3f,\n  @location(1) normal: vec3f,\n) -> VertexOut {\n  var out: VertexOut;\n  out.position = uniforms.view_projection * vec4f(rotate(position), 1.0);\n  // The relief is carved in object space, so the pattern stays fixed to the\n  // surface and travels with the spin. Both the position and the untransformed\n  // normal are handed over in that same space, and the fragment stage rotates\n  // only after the perturbation is applied.\n  out.local_position = position;\n  out.normal = normal;\n  return out;\n}\n\n// Height field the relief is derived from. Three axis-aligned lobes fold into a\n// pattern with no visible seam or pole.\nfn relief(p: vec3f) -> f32 {\n  let waves = sin(p.x * 7.0) * sin(p.y * 7.0) * sin(p.z * 7.0);\n  return waves * 0.5 + sin(p.y * 3.0 + waves * 1.4) * 0.5;\n}\n\n// A smooth ball would sample the same texel forever as it turns, hiding the\n// rotation entirely. Tilting the normal by the height field's gradient makes\n// the lookup move, which is what puts the matcap's behavior on screen.\nfn perturbed_normal(local_position: vec3f, normal: vec3f) -> vec3f {\n  let epsilon = 0.012;\n  let gradient = vec3f(\n    relief(local_position + vec3f(epsilon, 0.0, 0.0)) - relief(local_position - vec3f(epsilon, 0.0, 0.0)),\n    relief(local_position + vec3f(0.0, epsilon, 0.0)) - relief(local_position - vec3f(0.0, epsilon, 0.0)),\n    relief(local_position + vec3f(0.0, 0.0, epsilon)) - relief(local_position - vec3f(0.0, 0.0, epsilon)),\n  ) / (2.0 * epsilon);\n  // Only the part of the gradient along the surface bends the normal; the\n  // component along it would just push in and out without tilting anything.\n  let tangential = gradient - normal * dot(gradient, normal);\n  return normalize(normal - tangential * 0.055);\n}\n\n@fragment\nfn fs_main(in: VertexOut) -> @location(0) vec4f {\n  let normal = perturbed_normal(in.local_position, normalize(in.normal));\n  // The entire lighting model: put the normal in view space and read the\n  // matching texel of the baked ball. No lights, no BRDF, one fetch.\n  let view_normal = normalize((uniforms.view * vec4f(rotate(normal), 0.0)).xyz);\n  // 0.49 rather than 0.5 keeps the fetch inside the disk, so the unlit corners\n  // can never bleed in along the silhouette.\n  let uv = vec2f(view_normal.x, -view_normal.y) * 0.49 + vec2f(0.5);\n  return textureSample(matcap_tex, matcap_samp, uv);\n}\n"
+      }
+    ]
+  },
   "radiance-cascades": {
     "slug": "radiance-cascades",
     "title": "Radiance Cascades",

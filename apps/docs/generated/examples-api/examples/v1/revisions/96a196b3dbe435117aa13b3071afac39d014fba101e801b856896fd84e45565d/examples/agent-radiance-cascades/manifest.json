@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "agent-radiance-cascades",
+  "title": "Agent Radiance Cascades",
+  "description": "The static ten-dot Agent mark becomes a selectable loading field with capture-quality controls: every gray-to-white dot is both an HDR emitter and an occluder, feeding a jump-flooded distance field and six top-down radiance cascades.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "raymarching",
+    "rendering",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "multi-pass",
+    "render-targets",
+    "textures",
+    "hdr",
+    "controls",
+    "select-control",
+    "responsive-canvas",
+    "continuous-rendering"
+  ],
+  "aggregateSha256": "2800db003915458fcad7d10be39f139bd89ccc5e8a08d48e1c0509706c1496fe",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 824,
+      "sha256": "868bb6ef0d60ea7794d230e4bfb905612dc8e7d0c2f2f2d79478a8ecc2e338cb",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 8513,
+      "sha256": "03d0da62c84a8ffacfefc0f823598db5bcbff288e19d00a899af110398841e14",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/renderer.ts.raw"
+    },
+    {
+      "path": "simulation.ts",
+      "contentType": "text/typescript",
+      "size": 8646,
+      "sha256": "8150e77195ce20f89a0f98f03c7b427d14cc3b7b36a16629b0a2430fb29cad8a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/simulation.ts.raw"
+    },
+    {
+      "path": "agent-dots.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3666,
+      "sha256": "f0e4aa870cf1934f6852d6930f16a850af6e15cecad23b2723007b7d21b4f786",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/agent-dots.wgsl.raw"
+    },
+    {
+      "path": "jfa-init.wgsl",
+      "contentType": "text/wgsl",
+      "size": 719,
+      "sha256": "ef4b22a45cfdf63b5a94eff235d3d1292c153ac2ee9be4cb6484d01d78afaa8b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/jfa-init.wgsl.raw"
+    },
+    {
+      "path": "jfa-pass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1654,
+      "sha256": "563e9c2f7d2b1c7e73c04c6d937dc6e472ac362cd3d6fad880c395549f183d3c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/jfa-pass.wgsl.raw"
+    },
+    {
+      "path": "sdf-finalize.wgsl",
+      "contentType": "text/wgsl",
+      "size": 707,
+      "sha256": "27aec1d05f74100678a4553ee65ad5d267bbb9f358796cac76863bc67b85793c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/sdf-finalize.wgsl.raw"
+    },
+    {
+      "path": "sdf-sample.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1440,
+      "sha256": "10153dd04f86f6ce88bf75eeea44e1766aff369e141247b3121feb89b9126af7",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/sdf-sample.wgsl.raw"
+    },
+    {
+      "path": "radiance-cascade.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3487,
+      "sha256": "1aed29b814a8f4a53ffe0e5b976958e88079f53084246cd5b898dbb37e4f52a1",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/radiance-cascade.wgsl.raw"
+    },
+    {
+      "path": "rc-directions.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1168,
+      "sha256": "021c67f2867c4fe86bb53af1141bd151eba7ae42f5a628fe8aae7cf192364cef",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/rc-directions.wgsl.raw"
+    },
+    {
+      "path": "present.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4066,
+      "sha256": "1663e181f77ed2a94cf51c33c0fc1dad062ebae4511ae8f574e29c663945ad64",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/agent-radiance-cascades/files/present.wgsl.raw"
+    }
+  ]
+}

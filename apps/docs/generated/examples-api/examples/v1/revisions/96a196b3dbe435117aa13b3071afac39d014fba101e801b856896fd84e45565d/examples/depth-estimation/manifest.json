@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "depth-estimation",
+  "title": "Depth Estimation",
+  "description": "Estimate depth from a photo or webcam with ONNX Runtime Web on WebGPU. Shade its GPU-resident output beside the input through a zero-copy vgpu buffer wrap.",
+  "tags": [
+    "machine-learning",
+    "onnx",
+    "depth-estimation",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "machine-learning",
+    "external-device",
+    "zero-copy",
+    "gpu-buffer-interop",
+    "storage-buffers",
+    "compute-shader",
+    "camera-input",
+    "select-control",
+    "demand-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "2c4492e21670001953ef591e839b97568cc4f98b4e714ea545009b2d939fbbc5",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 718,
+      "sha256": "02659f8b34027d16351e8f12924b986ac24f50c7db78a2dd19646649724ba925",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 7899,
+      "sha256": "66f02a5ec42efc969634f789f3a044e175cd7fb62f869da3c49ce3ceb3ebd457",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/renderer.ts.raw"
+    },
+    {
+      "path": "ort-runtime.ts",
+      "contentType": "text/typescript",
+      "size": 15516,
+      "sha256": "a4ef789afc7f54af97e059d5567bacaf9812c684b02ee31f705aba5481aba601",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/ort-runtime.ts.raw"
+    },
+    {
+      "path": "ort-webgpu.ts",
+      "contentType": "text/typescript",
+      "size": 6217,
+      "sha256": "5a8496e20fd44f6559be3538a14153f54460fe12706906448b36fa4462e6081c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/ort-webgpu.ts.raw"
+    },
+    {
+      "path": "scheduling.ts",
+      "contentType": "text/typescript",
+      "size": 3715,
+      "sha256": "54766075d235761e635407c59e87ae7ecec4277a6b922824d153f23dfe2db918",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/scheduling.ts.raw"
+    },
+    {
+      "path": "side-by-side.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3808,
+      "sha256": "41a4c4728a8d990e298cdfeff7b6b3c6783508dff2a1750d4c805f36dad0f5d9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/side-by-side.wgsl.raw"
+    },
+    {
+      "path": "reduce-range.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1510,
+      "sha256": "0ad860bc2993163a6e8aeac1f8e764ad4d43669a09c88ced5452a6c842c5906a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/depth-estimation/files/reduce-range.wgsl.raw"
+    }
+  ]
+}

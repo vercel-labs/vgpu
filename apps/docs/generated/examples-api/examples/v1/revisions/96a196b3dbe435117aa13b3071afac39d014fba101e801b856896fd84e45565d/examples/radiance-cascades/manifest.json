@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "radiance-cascades",
+  "title": "Radiance Cascades",
+  "description": "Draw light with the pointer and watch it bounce: a jump-flooded distance field feeds six radiance cascades — base 4, geometric intervals, linear RGBA16F — merged top-down with visibility alpha into 2D global illumination.",
+  "tags": [
+    "lighting",
+    "hdr",
+    "raymarching",
+    "rendering",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "multi-pass",
+    "render-targets",
+    "textures",
+    "hdr",
+    "pointer-input",
+    "controls",
+    "select-control",
+    "responsive-canvas",
+    "continuous-rendering"
+  ],
+  "aggregateSha256": "38046ba81b5e35d591be7fc7d740655d44e65c42b314dcf3f8bda90dd95e9193",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 811,
+      "sha256": "24cfe7b6f22592914d0d86171d0d6d40285bae8f7b81421197574b3f00ef71a9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 6837,
+      "sha256": "5b7bf8b322cee654567e01b0b10e60f13e6a2952b66bd1e5ccd7a8304ca8ebc0",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/renderer.ts.raw"
+    },
+    {
+      "path": "simulation.ts",
+      "contentType": "text/typescript",
+      "size": 8547,
+      "sha256": "e2db3c291386bfe9bcd66a196a8711c09b8337bebe65720059c6605d28622ab8",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/simulation.ts.raw"
+    },
+    {
+      "path": "pointer-input.ts",
+      "contentType": "text/typescript",
+      "size": 2833,
+      "sha256": "de3274c11d42314f7a1ca14e494758f4fb297b9ff4da0a33ce12ba8b99c70dfc",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/pointer-input.ts.raw"
+    },
+    {
+      "path": "rc-directions.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1840,
+      "sha256": "2c8786c881287214471a96849d4320ca5641370925adfeef4eda476d499fdf41",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/rc-directions.wgsl.raw"
+    },
+    {
+      "path": "sdf-sample.wgsl",
+      "contentType": "text/wgsl",
+      "size": 2953,
+      "sha256": "5bc048b338fc1847b792cacf757030b55ba4dc998de126b10dd5661abd8df7ae",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/sdf-sample.wgsl.raw"
+    },
+    {
+      "path": "paint-emitter.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1982,
+      "sha256": "31ea2aa6981381addea37bec639c4f87607bccc0f6dafde1f48c0619688cda0a",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/paint-emitter.wgsl.raw"
+    },
+    {
+      "path": "jfa-init.wgsl",
+      "contentType": "text/wgsl",
+      "size": 857,
+      "sha256": "9e7461840564f4ebd04df1fa5409c651f4610e6379e08584ca2f04ec932336e9",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/jfa-init.wgsl.raw"
+    },
+    {
+      "path": "jfa-pass.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1662,
+      "sha256": "a235ff6391eff805836f259c5b47391ac6c1479d311fb17dc928d1bdb70ad2ef",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/jfa-pass.wgsl.raw"
+    },
+    {
+      "path": "sdf-finalize.wgsl",
+      "contentType": "text/wgsl",
+      "size": 802,
+      "sha256": "06ecec4b8070c80ad28b1ff172a33348f3a25a3a550f94d70d36677e78a08e1b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/sdf-finalize.wgsl.raw"
+    },
+    {
+      "path": "radiance-cascade.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4407,
+      "sha256": "79f02a930a0be58e3e1ec1fa24dd466c535d27a483970a65cc091847023af536",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/radiance-cascade.wgsl.raw"
+    },
+    {
+      "path": "present.wgsl",
+      "contentType": "text/wgsl",
+      "size": 3922,
+      "sha256": "3a5f227bb8e9681cb7325cc7075be6cf1384749e9778b08baddbb0bcefefa469",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/radiance-cascades/files/present.wgsl.raw"
+    }
+  ]
+}

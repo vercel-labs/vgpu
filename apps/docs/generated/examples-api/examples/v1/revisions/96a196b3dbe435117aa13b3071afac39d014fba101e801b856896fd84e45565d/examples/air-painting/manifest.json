@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-examples/v1",
+  "revision": "96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d",
+  "id": "air-painting",
+  "title": "Air Painting",
+  "description": "Wipe fog off the glass with your hands. ONNX Runtime Web tracks both palms on WebGPU to clear a frosted camera feed.",
+  "tags": [
+    "machine-learning",
+    "onnx",
+    "hand-tracking",
+    "frosted-glass",
+    "shader"
+  ],
+  "capabilities": [
+    "webgpu",
+    "machine-learning",
+    "external-device",
+    "zero-copy",
+    "gpu-buffer-interop",
+    "storage-buffers",
+    "compute-shader",
+    "camera-input",
+    "textures",
+    "continuous-rendering",
+    "responsive-canvas"
+  ],
+  "aggregateSha256": "da94acd457a90c668b59395ced4cd2b334d89cbc71f4d14a7434c4d50f285a9c",
+  "files": [
+    {
+      "path": "index.tsx",
+      "contentType": "text/typescript",
+      "size": 715,
+      "sha256": "8b96020c684c902ed03e3275690c293980e582acc8893356287b484757ccf3fc",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/index.tsx.raw"
+    },
+    {
+      "path": "renderer.ts",
+      "contentType": "text/typescript",
+      "size": 2876,
+      "sha256": "87ec55d47e7a1c5de89ecbfb018c7b44bb70856bbc40d017731c08914d248f46",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/renderer.ts.raw"
+    },
+    {
+      "path": "ort-runtime.ts",
+      "contentType": "text/typescript",
+      "size": 12180,
+      "sha256": "1d274bf72fc63ece928a4fa95e92b9cf57ee41ad286f90fee314e3bb536ba28e",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/ort-runtime.ts.raw"
+    },
+    {
+      "path": "ort-webgpu.ts",
+      "contentType": "text/typescript",
+      "size": 5546,
+      "sha256": "e07f40d3df31ff746567b88d0b54f1b41db7174275dcc9ade34f8a15e7637d2e",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/ort-webgpu.ts.raw"
+    },
+    {
+      "path": "visual-pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 12701,
+      "sha256": "8f979c0be628d78e47723ac1de290037bf4c7c1e4efe1e6e0cfeac9a08d6c456",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/visual-pipeline.ts.raw"
+    },
+    {
+      "path": "inference-scheduler.ts",
+      "contentType": "text/typescript",
+      "size": 1522,
+      "sha256": "dd10b50283ad09b942c0335540983c15286101f5b19a706886db04c0bcccbd6b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/inference-scheduler.ts.raw"
+    },
+    {
+      "path": "camera-source.ts",
+      "contentType": "text/typescript",
+      "size": 5850,
+      "sha256": "29c9ed745a7e24b9fc6b28505437e75ccca80518accdf1e2fff114dac8e503ba",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/camera-source.ts.raw"
+    },
+    {
+      "path": "hand-model-contract.ts",
+      "contentType": "text/typescript",
+      "size": 1802,
+      "sha256": "27e58b64d77d6ad4d08f8c5d55f287adf1bebe1f3e3a9b2e2afaffd24ede72db",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/hand-model-contract.ts.raw"
+    },
+    {
+      "path": "hand-pipeline.ts",
+      "contentType": "text/typescript",
+      "size": 7467,
+      "sha256": "395c66bcc7d2b01fba95b6fe8576a1fc7e4694a6b07fc38b219cd334b8d4838d",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/hand-pipeline.ts.raw"
+    },
+    {
+      "path": "hand-tracker.ts",
+      "contentType": "text/typescript",
+      "size": 6090,
+      "sha256": "75af08ffdc52f37695f5bcd8c91e45085809aa479da9190351ce9643c3d89148",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/hand-tracker.ts.raw"
+    },
+    {
+      "path": "fixtures.ts",
+      "contentType": "text/typescript",
+      "size": 5371,
+      "sha256": "13eb3bd694ac64d2bc1318cc0ba56e4b3b6df482e17cf457f5faa28d7512819b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/fixtures.ts.raw"
+    },
+    {
+      "path": "hand-crop.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1527,
+      "sha256": "2cba2b08d71aed6a1ddb973ab45da3d7af91e0569c0808ebf52a27e1e914855f",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/hand-crop.wgsl.raw"
+    },
+    {
+      "path": "hand.wgsl",
+      "contentType": "text/wgsl",
+      "size": 5925,
+      "sha256": "5c6cd4c8dd553cda7502f5b1bbb9556ebbff8012d71ca5cf860444d9578b767c",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/hand.wgsl.raw"
+    },
+    {
+      "path": "paint.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1928,
+      "sha256": "ea1668bacf936aeb1ca195d911811afb46fd8d210aef0cbe2ef93c875952e31b",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/paint.wgsl.raw"
+    },
+    {
+      "path": "composite.wgsl",
+      "contentType": "text/wgsl",
+      "size": 4437,
+      "sha256": "fb0f64ec35ee2146861d8e85f2258855fee3b379a3aacfa869b346ef8b3b8665",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/composite.wgsl.raw"
+    },
+    {
+      "path": "frost.wgsl",
+      "contentType": "text/wgsl",
+      "size": 1018,
+      "sha256": "2aec42fa2710206cae7a2f35129fd1d555598e7f6af8e70dba56a3f63dea8003",
+      "url": "https://vgpu.sh/api/examples/v1/revisions/96a196b3dbe435117aa13b3071afac39d014fba101e801b856896fd84e45565d/examples/air-painting/files/frost.wgsl.raw"
+    }
+  ]
+}
