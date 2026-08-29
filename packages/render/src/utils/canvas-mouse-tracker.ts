@@ -17,8 +17,13 @@ export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTra
     const rawY = Number.isFinite(event.offsetY) ? event.offsetY : event.clientY - rect.top;
     const width = spec.canvas.width || rect.width || 1;
     const height = spec.canvas.height || rect.height || 1;
-    const x = spec.normalize === true ? rawX / width : rawX;
-    const y = spec.normalize === true ? rawY / height : rawY;
+    // `offsetX`/`offsetY` are CSS pixels; `canvas.width`/`height` are drawing-buffer pixels.
+    // A canvas sized for a device pixel ratio (what `surface()` does) makes the two differ, so
+    // the raw CSS reading is scaled into buffer space before it is normalized or flipped.
+    const bufferX = rawX * (rect.width > 0 ? width / rect.width : 1);
+    const bufferY = rawY * (rect.height > 0 ? height / rect.height : 1);
+    const x = spec.normalize === true ? bufferX / width : bufferX;
+    const y = spec.normalize === true ? bufferY / height : bufferY;
     position = Object.freeze([x, spec.flipY === true ? (spec.normalize === true ? 1 - y : height - y) : y] as const);
   };
   spec.canvas.addEventListener("pointermove", handler);
