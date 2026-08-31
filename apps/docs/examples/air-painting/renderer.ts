@@ -1,13 +1,21 @@
 import GUI from "lil-gui";
 
-import { requestCamera, type CameraSource } from "./camera-source";
+import {
+  CameraUnavailableError,
+  describeCameraFailure,
+  requestCamera,
+  type CameraNotice,
+  type CameraSource,
+} from "./camera-source";
 import { createCameraRenderer, type CameraRenderer } from "./ort-runtime";
 
 interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
+  /** Receives expected camera failures (and `null` once one is resolved). */
+  readonly onCameraNotice?: (notice: CameraNotice | null) => void;
 }
 
-export function createRenderer({ canvas }: RendererOptions) {
+export function createRenderer({ canvas, onCameraNotice }: RendererOptions) {
   let disposed = false;
   let requesting = false;
   let cameraRenderer: CameraRenderer | undefined;
@@ -16,6 +24,7 @@ export function createRenderer({ canvas }: RendererOptions) {
     async enableCamera() {
       if (disposed || requesting || cameraRenderer) return;
       requesting = true;
+      onCameraNotice?.(null);
       updateControllers();
       try {
         let camera: CameraSource;
@@ -23,6 +32,12 @@ export function createRenderer({ canvas }: RendererOptions) {
           camera = await requestCamera(cameraRequest.signal);
         } catch (error) {
           if (disposed && cameraRequest.signal.aborted) return;
+          // Only environment failures are recoverable; everything else is a bug
+          // and still surfaces as a preview error.
+          if (error instanceof CameraUnavailableError) {
+            onCameraNotice?.(describeCameraFailure(error));
+            return;
+          }
           throw error;
         }
         if (disposed) {

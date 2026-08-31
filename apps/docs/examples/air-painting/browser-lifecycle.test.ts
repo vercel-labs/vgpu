@@ -56,11 +56,18 @@ vi.mock("lil-gui", () => ({
     }
   },
 }));
-vi.mock("./camera-source", () => ({ requestCamera: mocked.requestCamera }));
+vi.mock("./camera-source", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./camera-source")>();
+  return { ...actual, requestCamera: mocked.requestCamera };
+});
 vi.mock("./ort-runtime", () => ({
   createCameraRenderer: mocked.createCameraRenderer,
 }));
 
+import {
+  CameraUnavailableError,
+  type CameraNotice,
+} from "./camera-source";
 import { createRenderer } from "./renderer";
 
 function deferred<T>() {
@@ -73,13 +80,15 @@ function deferred<T>() {
 
 function setup() {
   const parent = {};
+  const notices: (CameraNotice | null)[] = [];
   const renderer = createRenderer({
     canvas: { parentElement: parent } as HTMLCanvasElement,
+    onCameraNotice: (notice) => notices.push(notice),
   });
   const gui = mocked.guis[0]!;
   const controller = (key: string) =>
     gui.controllers.find((item) => item.key === key)!;
-  return { renderer, gui, parent, controller };
+  return { renderer, gui, parent, controller, notices };
 }
 
 describe("browser controls and lifecycle", () => {
@@ -157,6 +166,76 @@ describe("browser controls and lifecycle", () => {
     expect(active.dispose).toHaveBeenCalledOnce();
     expect(controller("enableCamera").disabled).toBe(false);
     expect(controller("stopCamera").disabled).toBe(true);
+  });
+
+  it("reports an unavailable camera as a notice instead of crashing the preview", async () => {
+    mocked.requestCamera.mockRejectedValue(
+      new CameraUnavailableError("Camera permission was declined.", "denied")
+    );
+    const { controller, notices } = setup();
+
+    await expect(controller("enableCamera").invoke()).resolves.toBeUndefined();
+    expect(notices).toEqual([
+      null,
+      {
+        reason: "denied",
+        message: "Camera permission was declined.",
+        hint: "Allow camera access for this page, then enable the camera again.",
+      },
+    ]);
+    expect(mocked.createCameraRenderer).not.toHaveBeenCalled();
+    expect(controller("enableCamera").disabled).toBe(false);
+    expect(controller("stopCamera").disabled).toBe(true);
+    expect(controller("clear").disabled).toBe(true);
+  });
+
+  it("clears the notice when a retry acquires the camera", async () => {
+    mocked.requestCamera
+      .mockRejectedValueOnce(
+        new CameraUnavailableError(
+          "The camera could not be started on this device.",
+          "failed"
+        )
+      )
+      .mockResolvedValueOnce({ dispose: vi.fn() });
+    mocked.createCameraRenderer.mockReturnValue({
+      ready: Promise.resolve(),
+      clear: vi.fn(),
+      dispose: vi.fn(),
+    });
+    const { controller, notices } = setup();
+
+    await controller("enableCamera").invoke();
+    await controller("enableCamera").invoke();
+
+    expect(notices.map((notice) => notice?.reason ?? null)).toEqual([
+      null,
+      "failed",
+      null,
+    ]);
+    expect(controller("stopCamera").disabled).toBe(false);
+  });
+
+  it("stays silent when an unavailable camera resolves after disposal", async () => {
+    let fail!: (error: unknown) => void;
+    mocked.requestCamera.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      })
+    );
+    const { renderer, controller, notices } = setup();
+
+    const request = Promise.resolve(controller("enableCamera").invoke());
+    renderer.dispose();
+    fail(
+      new CameraUnavailableError(
+        "The camera could not be started on this device.",
+        "failed"
+      )
+    );
+    await request;
+
+    expect(notices).toEqual([null]);
   });
 
   it("preserves initialization failures and restores the idle controls", async () => {

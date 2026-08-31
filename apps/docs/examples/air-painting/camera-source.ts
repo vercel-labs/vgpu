@@ -10,6 +10,35 @@ export class CameraUnavailableError extends Error {
   }
 }
 
+export type CameraFailureReason = CameraUnavailableError["reason"];
+
+export interface CameraNotice {
+  readonly reason: CameraFailureReason;
+  readonly message: string;
+  readonly hint: string;
+}
+
+const CAMERA_HINTS: Record<CameraFailureReason, string> = {
+  insecure: "Open this example over https, or run it on localhost.",
+  unsupported:
+    "Try a recent Chrome, Edge, or Safari build on a device with a camera.",
+  denied: "Allow camera access for this page, then enable the camera again.",
+  failed:
+    "Close any other app or tab using the camera, then enable the camera again.",
+};
+
+// A missing, blocked, or busy camera is the visitor's environment, not a bug:
+// the example renders this copy in place of crashing the preview.
+export function describeCameraFailure(
+  error: CameraUnavailableError
+): CameraNotice {
+  return {
+    reason: error.reason,
+    message: error.message,
+    hint: CAMERA_HINTS[error.reason],
+  };
+}
+
 type VideoFrameCallbackHost = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: (now: number) => void) => number;
   cancelVideoFrameCallback?: (handle: number) => void;
