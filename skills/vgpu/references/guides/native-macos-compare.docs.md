@@ -89,13 +89,15 @@ npx vgpu native compare \
   --out ./artifacts/gradient-present
 ```
 
-`compare` runs `native verify` first and refuses to use a stale artifact. The generated package includes an `AppShadersMetalRunner` executable target used only by tests. The CLI compiles it with Swift on a cache miss, keyed by the artifact hash, Metal-runner ABI, Swift runner target triple, and Swift toolchain.
+`compare` runs `native verify` first and refuses to use a stale artifact. When compare support is present, the generated package includes an `AppShadersMetalRunner` executable target used only by testing tooling. The CLI compiles it with Swift on a cache miss, keyed by the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. The protocol and metadata shape are part of this proposal; whether generation always emits the runner or emits it only when compare testing is enabled remains open.
 
-The CLI and runner exchange one versioned JSON request and response over standard input and output. The protocol is explicitly Metal-specific and is recorded under `projection.testing`; it is excluded from runtime compatibility and never linked into the application product.
+The CLI and runner use `single-json-eof` framing: the CLI writes one versioned UTF-8 JSON request to standard input and closes it, and the runner writes one versioned UTF-8 JSON response to standard output and closes it. Diagnostics belong on standard error. The protocol is explicitly Metal-specific and is recorded under `projection.testing`; it is excluded from runtime compatibility and never linked into the application product.
 
 Before writing the request, the CLI validates the author-facing fixture, materializes every default, turns keyed resources, instances, and bindings into records with explicit IDs, resolves blend and write-mask state per color attachment, and represents floating-point values by their IEEE 754 bits. The runner therefore receives one canonical form rather than interpreting user shorthand.
 
 The runner returns either a typed error or the Metal-device identity, a hashed top-origin RGBA8 image encoded inline, and a versioned logical-command trace. Runner transport and harness failures use `VGPU-NATIVE-METAL-RUNNER-*` codes; semantic failures shared with the runtime keep their existing codes.
+
+The current C3 artifact fixture does not implement or validate this runner. Its `AppShadersC3MetalProbe` is a fixture-local executable around a handwritten Metal shader and has no JSON transport or `projection.testing` entry. C3b could not execute that probe because the separate Apple Metal toolchain was unavailable. When enabled, the probe checks only the packaged resource and Metal execution path; it cannot establish WGSL-to-MSL translation or compare-runner compatibility.
 
 ## Read the results
 

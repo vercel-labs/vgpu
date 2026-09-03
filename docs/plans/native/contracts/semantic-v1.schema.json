@@ -75,7 +75,7 @@
       }
     },
     "programFingerprint": {
-      "description": "Hash of the canonical program semantics, including the layout model, enabled WGSL language features, selected overrides, entry points, bindings, and reflected intrinsic layouts.",
+      "description": "SHA-256 of the JCS-RFC8785+VGPU-PATHS-v1 canonical preimage containing the vgpu-native-program/v1 domain, referenced WGSL input IDs and content hashes, layout model, resolved language features, executable program semantics and capabilities, and the transitively reachable types and intrinsic layouts. The preimage excludes its own fingerprint, redundant source IDs, Swift presentation names, source spans, and unreachable declarations; feature, language-feature, visibility, and entry binding-ID sets are sorted before hashing.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],

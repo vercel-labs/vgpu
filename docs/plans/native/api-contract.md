@@ -180,9 +180,40 @@ is an opaque Apple toolchain result, so its hash proves payload integrity withou
 byte-for-byte reproducibility across toolchains. The root manifest hashes every generated payload
 except itself and the output-ownership marker.
 
-The logical and program fingerprints include the resolved WGSL language-feature set, so toggling
-`uniform_buffer_standard_layout` cannot reuse a layout or translation cache entry. The semantic
-fingerprint covers that set, `layoutModel`, and every intrinsic layout.
+The `vgpu-native-program/v1` SHA-256 includes its domain in the canonical preimage rather than
+using the domain only as an adjacent label. Its exact logical value is:
+
+```text
+{
+  domain: "vgpu-native-program/v1",
+  layoutModel,
+  sources: [{ id, sha256 }],
+  languageFeatures,
+  program,
+  types,
+  layouts
+}
+```
+
+`sources` contains each referenced WGSL input ID and content hash, sorted by ID. `program` contains
+the executable semantic program and its capabilities, but omits `fingerprint`, the redundant source
+ID list, every `swiftName`, and source spans. `types` and `layouts` contain only the complete
+transitive closure reachable from that program's bindings and entry-point interfaces. Arrays that
+represent `features`, `languageFeatures`, `visibility`, or an entry point's binding-ID set are sorted
+before canonicalization; ordered arrays keep their authored semantic order. The value is serialized
+with the artifact's `JCS-RFC8785+VGPU-PATHS-v1` canonicalization and then hashed. Consequently,
+changing referenced WGSL bytes, `layoutModel`, an enabled language feature such as
+`uniform_buffer_standard_layout`, executable program semantics, or a reachable type or intrinsic
+layout changes the fingerprint. Adding an unreachable type or layout does not. The semantic
+fingerprint still covers the complete semantic object, including presentation, provenance, and
+unreachable declarations.
+
+Generated output is checked against a positive path plan, not accepted merely because every file
+appears in `files`. The plan permits the package manifest, exact generated Swift sources, the one
+projected `.metallib`, and conditional generated runner or test sources. `artifact.json` and the
+output-ownership marker are the only unhashed exceptions. Unknown files or directories, path and
+case-folding collisions, links, special files, intermediates, source shaders, translators, package
+resolution state, and build state are rejected.
 
 Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
 Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
@@ -194,7 +225,9 @@ maps, generated sources, tests, and `projection.testing`. An incompatible runner
 Compatibility is determined by understood schemas, the named layout and binding models, and integer
 ABI contracts. The artifact requires the small shared `VGPUABI` product and one ABI integer; the
 runtime advertises the integer range it supports rather than comparing package release versions for
-exact equality.
+exact equality. During `0.x`, generated remote package dependencies use
+`.upToNextMinor(from:)` so compatible patch releases remain selectable without admitting
+minor-version source drift.
 
 The contract family is:
 

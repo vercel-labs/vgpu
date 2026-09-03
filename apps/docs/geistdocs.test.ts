@@ -231,4 +231,33 @@ describe("agent readiness metadata", () => {
     expect(runnerResponse).toContain('"gpuArchitecture"');
     expect(runnerResponse).not.toContain('"architecture":');
   });
+
+  it("keeps the native artifact proposal aligned with the validated C3 boundaries", () => {
+    const macos = docsContent("native/macos/index.md");
+    const programs = docsContent("native/macos/programs.md");
+    const artifacts = docsContent("native/macos/artifacts.md");
+    const build = docsContent("native/macos/build.md");
+    const compare = docsContent("native/macos/compare.md");
+    const semantic = nativeContract("semantic-v1.schema.json");
+
+    expect(macos).toContain('.upToNextMinor(from: "<version>")');
+    expect(programs).toContain("transitive type and layout closure");
+    expect(programs).toContain("unrelated types or layouts do not");
+    expect(artifacts).toContain("vgpu-native-program/v1");
+    expect(artifacts).toContain("transitively reached elemental layout");
+    expect(artifacts).toContain("separate runner-build fingerprint");
+    expect(artifacts).toContain("its emission policy remains open");
+    expect(build).toContain("C3a passed the current structural artifact fixture");
+    expect(build).toContain("intentionally invalid UTF-8 text");
+    expect(build).toContain("C3b was skipped");
+    expect(build).toContain("does not implement the compare request and response protocol");
+    expect(compare).toContain("`single-json-eof` framing");
+    expect(compare).toContain("`AppShadersC3MetalProbe`");
+    expect(compare).toContain("whether generation always emits the runner");
+    expect(compare).not.toContain(
+      "The generated package includes an `AppShadersMetalRunner` executable target used only by tests",
+    );
+    expect(semantic).toContain("referenced WGSL input IDs and content hashes");
+    expect(semantic).toContain("transitively reachable types and intrinsic layouts");
+  });
 });

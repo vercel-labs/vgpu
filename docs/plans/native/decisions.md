@@ -89,6 +89,14 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   reflection. `uniform_buffer_standard_layout` participates in logical, program, and semantic
   fingerprints, but never in Metal device requirements. The compiler does not infer it by retrying
   a failed parse or validation.
+- The `vgpu-native-program/v1` fingerprint hashes a canonical value containing the domain itself,
+  referenced WGSL input IDs and content hashes, `layoutModel`, the resolved language-feature set,
+  executable program semantics and capabilities, and only the transitively reachable types and
+  intrinsic layouts. It excludes its own fingerprint, redundant source IDs, Swift presentation
+  names, and source spans. Feature, language-feature, visibility, and entry binding-ID sets are
+  sorted before `JCS-RFC8785+VGPU-PATHS-v1` canonicalization; ordered arrays retain their order.
+  Referenced WGSL bytes and reachable semantics change the fingerprint; unreachable declarations
+  do not.
 - Generated Swift and TypeScript packers consume the reflected semantic layout rather than Swift
   `MemoryLayout` or TypeScript's current layout calculator. They reject invalid shapes, fixed-array
   counts, integer values, ranges, and runtime extents before mutation; write little-endian scalars
@@ -106,6 +114,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   function-constant or runtime-specialization contract.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
+- Generated packages use `.upToNextMinor(from:)` for remote package dependencies during `0.x`.
+  Runtime ABI integers remain authoritative for artifact compatibility; package version selection
+  separately limits Swift source and binary drift.
 - Artifact format requirements contain only formats fixed by shader semantics. Sampled texture and
   render-target formats, sample counts, and render state are runtime inputs.
 
@@ -172,9 +183,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    the spike allocator with the vgpu binding map, and pass offline Apple compilation,
    authored-diagnostic provenance, artifact determinism, and pixel/buffer parity. Keep Naga only as
    a differential oracle.
-2. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
+2. C3a passed its structural fixture: strict Ajv compilation and cross-schema resolution, artifact
+   and fingerprint validation, deterministic assembly, Swift tools and language mode 6, macOS 14,
+   clean SwiftPM consumption without invoking Node.js, Tint, or Apple Metal compiler tools after
+   generation, exact dependency and resource checks, compatibility mutations, and rejection of
+   files outside the positive generated-output allowlist. C3b was skipped because the optional
+   offline Metal toolchain was not installed. Its handwritten Metal probe is only a fixture-local
+   package/resource/pipeline canary, not the compare runner and not WGSL-to-MSL evidence. C3
+   remains open until a real C1-connected artifact, production runtime and ABI package, supported
+   toolchain and hardware matrix, and
+   newest-generator to oldest-runtime consumption pass. One product decision also remains open:
+   always emit the real compare runner, or emit it only when compare testing is enabled.
+3. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.
-3. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
+4. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.

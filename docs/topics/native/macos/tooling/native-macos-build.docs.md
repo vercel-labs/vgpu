@@ -73,7 +73,9 @@ The plan includes:
 - the separate logical-source and toolchain-sensitive build fingerprint inputs, including the semantic layout model, binding-slot ABI, and compiler identities;
 - capabilities that the build requires.
 
-It contains no timestamp or absolute path. Two equivalent checkouts using the same native compiler, `vgpu-tint-compiler` binary and pinned Dawn/Tint revision, SDK, flags, Metal compiler target triple, Swift runner target triple, and generated ABI produce the same build plan after paths are normalized relative to the configuration directory. A toolchain change keeps the logical-source fingerprint but changes the build fingerprint and forces regeneration.
+It contains no timestamp or absolute path. Two equivalent checkouts using the same native compiler, `vgpu-tint-compiler` binary and pinned Dawn/Tint revision, SDK, flags, Metal compiler target triple, and generated ABI produce the same application build plan after paths are normalized relative to the configuration directory. A toolchain change keeps the logical-source fingerprint but changes the build fingerprint and forces regeneration.
+
+When a compare runner is present, its separate runner-build fingerprint and cache key additionally include the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. Runner incompatibility invalidates or blocks compare without changing whether the application artifact itself is compatible.
 
 ## Validate without compiling Metal
 
@@ -125,6 +127,14 @@ The watcher tracks imported modules as well as entry files. Changing a shared mo
 
 Generated MSL and compiler intermediates belong to an inspectable build cache, not the application package. Use `--keep-intermediates` for a failed build when a platform diagnostic needs the generated source.
 
+## Understand the current validation status
+
+C3a passed the current structural artifact fixture. It assembles the generated package around intentionally invalid UTF-8 text whose filename ends in `.metallib`, then verifies deterministic output, schemas and hashes, compatibility checks, SwiftPM dependency and resource boundaries, clean consumer builds without invoking Node.js, Tint, or Apple Metal compiler tools after generation, and the positive generated-output allowlist. The test resolves and hashes that resource through `Bundle.module`, but it never passes the sentinel to Metal. C3a therefore validates the package boundary, not a Metal library or shader execution.
+
+C3b was skipped because the separately installed Apple Metal toolchain was unavailable. When that gate can run, it compiles a handwritten no-op Metal shader and uses the fixture-local `AppShadersC3MetalProbe` to load the exact packaged resource, create a pipeline, dispatch work, and check its readback. That probe does not implement the compare request and response protocol, does not appear in `projection.testing`, and cannot prove that the recorded WGSL produced the MSL.
+
+C3 remains open until a real artifact connected to the WGSL-to-MSL compiler, the production `VGPUABI` and runtime, the supported Xcode, macOS, and physical-hardware matrix, and newest-generator to oldest-runtime consumption all pass. Packaging also remains undecided between always emitting the real compare runner and emitting it only when compare testing is enabled.
+
 ## Verify committed output
 
 Commit the generated package when another machine must build the application without Node.js or the Metal compiler. Check it without regenerating:
@@ -145,7 +155,7 @@ The `.metallib` hash proves package integrity. It is not used as a reproducible-
 
 ## Compare WebGPU and Metal output
 
-Pixel parity uses a separate Metal runner and canonical fixture protocol. See [Compare WebGPU and Metal](/native/macos/compare) for fixture structure, normalization, tolerances, and runner isolation.
+Pixel parity requires a separate Metal compare runner that implements the canonical fixture protocol. It is distinct from the fixture-local C3b probe. Its artifact metadata is optional, and the generator has not yet chosen between always emitting the runner and emitting it only when compare testing is enabled. See [Compare WebGPU and Metal](/native/macos/compare) for fixture structure, normalization, tolerances, and runner isolation.
 
 ## Inspect a generated program
 

@@ -99,7 +99,7 @@ List any WGSL environment feature that validation depends on in `languageFeature
 }
 ```
 
-The canonical feature list and the reflected layout both participate in program fingerprints. Changing either one requires a new artifact even if the authored WGSL text is unchanged.
+The program fingerprint covers the referenced WGSL IDs and hashes, fixed layout model, selected language features, normalized program semantics, and only the transitive type and layout closure reachable from that program's bindings and stage interfaces. That closure includes elemental layouts reached through arrays and other composite types. Changing any of those inputs requires a new artifact even when the authored entry file is unchanged; Swift presentation names, source spans, and unrelated types or layouts do not. [Generated artifacts](/native/macos/artifacts) defines the canonical preimage and ordering rules.
 
 ### Bake overrides at build time
 
@@ -157,7 +157,7 @@ The same program can therefore render to both an HDR offscreen target and the di
 
 The runtime can reject formats, sample counts, and limits that are known to be unsupported from its effective capability tables. Metal does not expose one universal query for every format, usage, and render-state combination, so final pipeline creation remains authoritative. A failed preflight never causes a silent format or shader substitution.
 
-The generated package layout, semantic contract, Metal projection, payload integrity, and test-only runner are documented in [Generated artifacts](/native/macos/artifacts).
+The generated package layout, semantic contract, Metal projection, payload integrity, and optional compare-runner contract are documented in [Generated artifacts](/native/macos/artifacts). Whether generation always emits that runner or emits it only when compare testing is enabled remains an open packaging decision.
 
 ## Keep Swift names predictable
 

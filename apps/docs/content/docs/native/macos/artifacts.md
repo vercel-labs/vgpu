@@ -24,18 +24,18 @@ Generated/app-shaders/
 │   │   ├── Particles.generated.swift
 │   │   └── Resources/
 │   │       └── AppShaders.metallib
-│   └── AppShadersMetalRunner/
+│   └── AppShadersMetalRunner/       (when emitted)
 │       └── main.swift
 └── Tests/
     └── AppShadersTests/
         └── ArtifactCompatibilityTests.swift
 ```
 
-`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`, so generated code loads `AppShaders.metallib` through `Bundle.module`. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications select only the runtime products they use and import their public modules explicitly.
+`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`, so generated code loads `AppShaders.metallib` through `Bundle.module`. During `0.x`, a remote vGPU dependency uses `.upToNextMinor(from: "<version>")`; runtime ABI integers still decide artifact compatibility independently from SwiftPM version selection. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications select only the runtime products they use and import their public modules explicitly.
 
 The generated package is also the shader-payload boundary. Omitting `VGPUCompute` avoids linking the compute executor, but it does not remove compute functions already packaged in `AppShaders.metallib`. Put programs for independently distributed features in separate configurations and generated packages.
 
-`AppShadersMetalRunner` is a test-only executable for `native compare`. Its source is part of the generated payload, but the application library does not depend on or link it.
+`AppShadersMetalRunner` is the proposed test-only executable for `native compare`. Its protocol and optional metadata under `projection.testing` are part of the artifact design, but its emission policy remains open: generation may always include it or include it only when compare testing is enabled. When it is emitted, its source is part of the generated payload; the application library never depends on or links it.
 
 ## Read the artifact envelope
 
@@ -109,7 +109,20 @@ There is one `projection`, not a `projections` array. A future backend consumes 
 
 ## Separate runtime compatibility from provenance
 
-The logical fingerprint covers canonical resolved WGSL and normalized program configuration, including the selected language features. The semantic fingerprint covers the complete backend-neutral semantic object, including `layoutModel` and its intrinsic layouts. The build fingerprint additionally covers `@vgpu/native`, the `vgpu-tint-compiler` protocol and binary, pinned Dawn/Tint revision, translator flags, generated API and ABI versions, the Metal compiler target triple, the Swift runner target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
+Each program fingerprint is the SHA-256 of the `JCS-RFC8785+VGPU-PATHS-v1` canonical form of a logical value with these fields:
+
+- `domain`, fixed to `vgpu-native-program/v1`;
+- the semantic contract's `layoutModel`;
+- each referenced WGSL input as its stable ID and SHA-256, sorted by ID;
+- the explicitly selected WGSL `languageFeatures`, sorted as a set;
+- the normalized semantic program without its fingerprint, redundant source list, Swift presentation names, or source spans; and
+- only the transitive `types` and `layouts` closure reachable from the program's bindings and entry-point inputs and outputs.
+
+The closure traverses structure members, composite element types, layouts, and member layouts. A change to a directly referenced layout or a transitively reached elemental layout therefore changes the fingerprint; adding an unreachable type or layout does not. Capabilities remain in the normalized program. Feature, language-feature, visibility, and entry binding-ID arrays defined by this contract as unordered sets are sorted before hashing, while arrays whose order is semantic retain that order.
+
+The logical fingerprint covers canonical resolved WGSL and normalized program configuration, including the selected language features. The semantic fingerprint covers the complete backend-neutral semantic object, including `layoutModel` and its intrinsic layouts. The application build fingerprint additionally covers `@vgpu/native`, the `vgpu-tint-compiler` protocol and binary, pinned Dawn/Tint revision, translator flags, generated API and ABI versions, the Metal compiler target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
+
+When a compare runner is emitted, its separate runner-build fingerprint covers the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. Those inputs invalidate the runner cache without becoming application runtime-compatibility requirements.
 
 The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI and binding model, deployment target, `.metallib` hash, emitted names, user and internal slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, and `projection.testing`.
 
@@ -121,7 +134,7 @@ Artifact compatibility and device-capability validation do not expand the publis
 
 ## Verify payload integrity
 
-The manifest contains no timestamps or absolute machine paths. Its root `files` array hashes the raw bytes of every generated payload—`Package.swift`, Swift sources, runner, tests, resources, and `.metallib`—but excludes `artifact.json` itself and the ownership marker. The marker records the raw manifest hash and configuration identity without participating in the artifact fingerprint.
+The manifest contains no timestamps or absolute machine paths. Its root `files` array hashes the raw bytes of every emitted generated payload—`Package.swift`, Swift library sources, tests, resources, `.metallib`, and runner sources when present—but excludes `artifact.json` itself and the ownership marker. The marker records the raw manifest hash and configuration identity without participating in the artifact fingerprint.
 
 Canonical JSON uses RFC 8785, NFC strings, relative POSIX paths without `.` or `..`, and a defined order for programs, files, bindings, overrides, and capabilities. Semantically ordered arrays keep their order.
 

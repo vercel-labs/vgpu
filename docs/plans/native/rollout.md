@@ -136,6 +136,24 @@ the oldest runtime member. Publish an exact Xcode patch floor only after this ma
 deployment target, build-host minimum, compiler floor, and tested hardware matrix as separate
 values.
 
+C3a passed the current structural fixture. It compiled all five schemas with strict Ajv, resolved
+their cross-schema references, reproduced the generated tree byte for byte, checked every artifact
+and fingerprint relation, tested the generated package, and built and ran a clean consumer without
+invoking Node.js, Tint, or Apple Metal compiler tools after generation. It also checked the SwiftPM
+tools, language, deployment, dependency, target, and resource declarations; exercised compatibility
+mutations; and rejected an injected file outside the positive generated-output allowlist. The
+fixture's sibling packages use relative paths only for isolation; the production winner for remote
+dependencies during `0.x` is `.upToNextMinor(from:)`.
+
+C3b was skipped because the separately installed offline Metal toolchain was unavailable. When it
+runs, its handwritten Metal no-op probe checks the exact packaged `.metallib`, function lookup,
+pipeline creation, slot use, dispatch, and readback. That probe is not the compare runner, does not
+appear in `projection.testing`, and cannot prove that recorded WGSL produced the MSL. C3 therefore
+remains open pending a C1-connected artifact, production `VGPUABI` and runtime, the supported
+Xcode/macOS and physical-hardware matrix, and newest-generator to oldest-runtime consumption. It is
+also still undecided whether production always emits the real compare runner or emits it only when
+compare testing is enabled.
+
 The matrix type-checks positive `@MainActor` and instance-actor `onError` handlers, rejects a
 non-`Sendable` capture, and exercises every async live-object method with the default `#isolation`
 parameter. It also sends a `VGPUSubmission` across actors and verifies that `settled()` resumes on
