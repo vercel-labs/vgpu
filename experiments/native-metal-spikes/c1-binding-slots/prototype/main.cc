@@ -488,9 +488,19 @@ int Run(const Arguments& arguments) {
     tint::msl::writer::ArrayLengthOptions array_lengths;
     if (!runtime_storage.empty()) {
         array_lengths.ubo_binding = *arguments.storage_buffer_sizes_index;
-        for (size_t index = 0; index < runtime_storage.size(); ++index) {
-            array_lengths.bindpoint_to_size_index.emplace(
-                runtime_storage[index], static_cast<uint32_t>(index));
+        for (const auto& binding_point : runtime_storage) {
+            const auto mapping =
+                std::find_if(requested->begin(), requested->end(), [&](const auto& item) {
+                    return item.kind == "storage" &&
+                           SameBindingPoint(item.source, binding_point);
+                });
+            if (mapping == requested->end() ||
+                !array_lengths.bindpoint_to_size_index
+                     .emplace(binding_point, mapping->index)
+                     .second) {
+                std::cerr << "runtime storage size-word mapping is missing or not unique\n";
+                return 1;
+            }
         }
     }
 
