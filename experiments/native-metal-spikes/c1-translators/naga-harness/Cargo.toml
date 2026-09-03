@@ -1,0 +1,9 @@
+[package]
+name = "vgpu-c1-naga-harness"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+naga = { version = "=30.0.1", features = ["wgsl-in", "msl-out"] }
+serde_json = "1"
