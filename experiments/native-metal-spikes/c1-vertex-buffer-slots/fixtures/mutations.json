@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "mutations": [
+    {
+      "id": "pipeline-order-is-not-semantic",
+      "operations": [{ "op": "reverse", "path": ["pipelines"] }],
+      "expected": { "status": "same-projection" }
+    },
+    {
+      "id": "interval-and-role-order-are-not-semantic",
+      "operations": [
+        { "op": "reverse", "path": ["profile", "internalReservations"] },
+        { "op": "reverse", "path": ["pipelines", 0, "internalRoles"] },
+        { "op": "reverse", "path": ["pipelines", 2, "shaderBufferIntervals"] }
+      ],
+      "expected": { "status": "same-projection" }
+    },
+    {
+      "id": "shader-interval-crosses-external-ceiling",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["pipelines", 1, "shaderBufferIntervals", 1, "start"],
+          "value": 29
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "SHADER_INTERVAL_OVERFLOW",
+        "messageIncludes": "external ceiling is 29"
+      }
+    },
+    {
+      "id": "shader-intervals-overlap",
+      "operations": [
+        {
+          "op": "append",
+          "path": ["pipelines", 0, "shaderBufferIntervals"],
+          "value": { "start": 20, "count": 2 }
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "SHADER_INTERVAL_COLLISION",
+        "messageIncludes": "overlaps at 20"
+      }
+    },
+    {
+      "id": "semantic-vertex-stream-limit",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["pipelines", 0, "vertexStreamCount"],
+          "value": 9
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "VERTEX_STREAM_LIMIT",
+        "messageIncludes": "semantic maximum is 8"
+      }
+    },
+    {
+      "id": "derived-vertex-range-overflow",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["pipelines", 2, "shaderBufferIntervals", 0, "start"],
+          "value": 28
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "VERTEX_RANGE_OVERFLOW",
+        "messageIncludes": "shader end 29 plus 1 streams"
+      }
+    },
+    {
+      "id": "zero-sized-shader-interval",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["pipelines", 3, "shaderBufferIntervals", 0, "count"],
+          "value": 0
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_COUNT",
+        "messageIncludes": "shaderBufferIntervals[0].count"
+      }
+    },
+    {
+      "id": "unknown-internal-role",
+      "operations": [
+        {
+          "op": "append",
+          "path": ["pipelines", 2, "internalRoles"],
+          "value": "unreserved-role"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "UNKNOWN_INTERNAL_ROLE",
+        "messageIncludes": "SparseSpan/unreserved-role"
+      }
+    },
+    {
+      "id": "duplicate-internal-role",
+      "operations": [
+        {
+          "op": "append",
+          "path": ["pipelines", 0, "internalRoles"],
+          "value": "immediate-data"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "DUPLICATE_INTERNAL_ROLE",
+        "messageIncludes": "DrawExactCapacity/immediate-data"
+      }
+    },
+    {
+      "id": "duplicate-mapping-key",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["pipelines", 4, "mappingKey"],
+          "value": {
+            "programFingerprint": {
+              "domain": "vgpu-native-program/v1",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "runtimeProjectionFingerprint": {
+              "domain": "vgpu-native-metal-runtime-projection/v1",
+              "sha256": "7777777777777777777777777777777777777777777777777777777777777777"
+            },
+            "vertexLayoutFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+            "bindingProfileVersion": 1
+          }
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "MAPPING_KEY_COLLISION",
+        "messageIncludes": "incompatible inputs"
+      }
+    },
+    {
+      "id": "invalid-program-fingerprint",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "pipelines",
+            3,
+            "mappingKey",
+            "programFingerprint",
+            "sha256"
+          ],
+          "value": "not-a-fingerprint"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_FINGERPRINT",
+        "messageIncludes": "mappingKey"
+      }
+    },
+    {
+      "id": "invalid-runtime-projection-fingerprint",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "pipelines",
+            4,
+            "mappingKey",
+            "runtimeProjectionFingerprint",
+            "sha256"
+          ],
+          "value": "not-a-runtime-fingerprint"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_FINGERPRINT",
+        "messageIncludes": "mappingKey"
+      }
+    },
+    {
+      "id": "external-ceiling-overlaps-internals",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["profile", "externalBufferCeiling"],
+          "value": 30
+        },
+        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 22 }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "PROFILE_COLLISION",
+        "messageIncludes": "overlaps the previous profile interval"
+      }
+    },
+    {
+      "id": "static-baseline-does-not-end-at-ceiling",
+      "operations": [
+        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 20 }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "NON_CANONICAL_PROFILE",
+        "messageIncludes": "static baseline must end"
+      }
+    },
+    {
+      "id": "duplicate-pipeline-id",
+      "operations": [
+        { "op": "set", "path": ["pipelines", 4, "id"], "value": "SwitchA" }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "DUPLICATE_PIPELINE",
+        "messageIncludes": "SwitchA"
+      }
+    },
+    {
+      "id": "empty-pipeline-set",
+      "operations": [{ "op": "set", "path": ["pipelines"], "value": [] }],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_INPUT",
+        "messageIncludes": "at least one case"
+      }
+    },
+    {
+      "id": "unknown-input-property",
+      "operations": [{ "op": "set", "path": ["ignored"], "value": true }],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_INPUT",
+        "messageIncludes": "unexpected or missing properties"
+      }
+    }
+  ]
+}

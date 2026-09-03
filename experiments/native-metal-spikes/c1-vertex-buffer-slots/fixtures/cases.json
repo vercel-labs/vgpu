@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "candidate": "c1-metal-pipeline-local-vertex-partition",
+  "profile": {
+    "totalBufferSlots": 31,
+    "externalBufferCeiling": 29,
+    "maxVertexStreams": 8,
+    "staticBaselineStart": 21,
+    "internalReservations": [
+      { "role": "immediate-data", "index": 29, "count": 1 },
+      { "role": "storage-buffer-sizes", "index": 30, "count": 1 }
+    ]
+  },
+  "pipelines": [
+    {
+      "id": "DrawExactCapacity",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        "vertexLayoutFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [{ "start": 0, "count": 21 }],
+      "vertexStreamCount": 8,
+      "internalRoles": ["immediate-data", "storage-buffer-sizes"]
+    },
+    {
+      "id": "NoVertexStreams",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+        },
+        "vertexLayoutFingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [
+        { "start": 0, "count": 1 },
+        { "start": 28, "count": 1 }
+      ],
+      "vertexStreamCount": 0,
+      "internalRoles": []
+    },
+    {
+      "id": "SparseSpan",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        "vertexLayoutFingerprint": "4444444444444444444444444444444444444444444444444444444444444444",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [
+        { "start": 11, "count": 1 },
+        { "start": 0, "count": 1 }
+      ],
+      "vertexStreamCount": 1,
+      "internalRoles": ["immediate-data"]
+    },
+    {
+      "id": "SwitchA",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777"
+        },
+        "vertexLayoutFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [{ "start": 0, "count": 1 }],
+      "vertexStreamCount": 1,
+      "internalRoles": []
+    },
+    {
+      "id": "SwitchB",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+        },
+        "vertexLayoutFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [{ "start": 0, "count": 2 }],
+      "vertexStreamCount": 1,
+      "internalRoles": []
+    },
+    {
+      "id": "SwitchAVariant",
+      "mappingKey": {
+        "programFingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "runtimeProjectionFingerprint": {
+          "domain": "vgpu-native-metal-runtime-projection/v1",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777"
+        },
+        "vertexLayoutFingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+        "bindingProfileVersion": 1
+      },
+      "shaderBufferIntervals": [{ "start": 0, "count": 1 }],
+      "vertexStreamCount": 1,
+      "internalRoles": []
+    }
+  ]
+}
