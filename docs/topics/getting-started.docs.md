@@ -138,3 +138,10 @@ vgpu docs cat /guides/performance-model.docs.md
 vgpu docs cat /guides/performance-patterns.docs.md
 vgpu docs cat browser-testing
 ```
+
+Finishing, opening a PR, or calling a render done? Run the pre-PR checklist
+before you hand it over:
+
+```sh
+vgpu docs cat shipping-to-production   # correctness gates, measure, free defaults, propose the rest
+```
