@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+  "profile": {
+    "totalBufferSlots": 31,
+    "externalBufferCeiling": 30,
+    "immediateDataSlot": 30,
+    "immediateDataPrefixWords": 1,
+    "wordBytes": 4,
+    "uploadAlignmentBytes": 16,
+    "maxRangeBytes": 4294967295
+  },
+  "programs": [
+    {
+      "id": "MultiRuntimeCrossRow",
+      "stage": "compute",
+      "needsStorageBufferSizes": true,
+      "buffers": [
+        {
+          "semanticBinding": "g2b9",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 4,
+          "count": 1,
+          "rangeBytes": 20,
+          "minimumBindingSize": 4,
+          "logicalBufferSize": 2048,
+          "effectiveOffset": 768
+        },
+        {
+          "semanticBinding": "g0b1",
+          "kind": "storage",
+          "runtimeSized": false,
+          "index": 1,
+          "count": 1,
+          "rangeBytes": 40,
+          "minimumBindingSize": 40,
+          "logicalBufferSize": 40,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g3b1",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 5,
+          "count": 1,
+          "rangeBytes": 112,
+          "minimumBindingSize": 32,
+          "logicalBufferSize": 2048,
+          "effectiveOffset": 1024
+        },
+        {
+          "semanticBinding": "g0b7",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 2,
+          "count": 1,
+          "rangeBytes": 32,
+          "minimumBindingSize": 16,
+          "logicalBufferSize": 2048,
+          "effectiveOffset": 256
+        },
+        {
+          "semanticBinding": "g0b0",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 0,
+          "count": 1,
+          "rangeBytes": 32,
+          "minimumBindingSize": 16,
+          "logicalBufferSize": 2048,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g1b4",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 3,
+          "count": 1,
+          "rangeBytes": 36,
+          "minimumBindingSize": 24,
+          "logicalBufferSize": 2048,
+          "effectiveOffset": 512
+        }
+      ],
+      "internalBindings": [
+        {
+          "role": "immediate-data",
+          "stage": "compute",
+          "index": 30,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "NoRuntimeTable",
+      "stage": "fragment",
+      "needsStorageBufferSizes": false,
+      "buffers": [
+        {
+          "semanticBinding": "g0b0",
+          "kind": "storage",
+          "runtimeSized": false,
+          "index": 0,
+          "count": 1,
+          "rangeBytes": 16,
+          "minimumBindingSize": 16,
+          "logicalBufferSize": 16,
+          "effectiveOffset": 0
+        }
+      ],
+      "internalBindings": [
+        {
+          "role": "immediate-data",
+          "stage": "fragment",
+          "index": 30,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "SparseVertexStage",
+      "stage": "vertex",
+      "needsStorageBufferSizes": true,
+      "buffers": [
+        {
+          "semanticBinding": "g4b2",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 28,
+          "count": 1,
+          "rangeBytes": 48,
+          "minimumBindingSize": 4,
+          "logicalBufferSize": 48,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g0b0",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 0,
+          "count": 1,
+          "rangeBytes": 16,
+          "minimumBindingSize": 4,
+          "logicalBufferSize": 16,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g1b3",
+          "kind": "uniform",
+          "runtimeSized": false,
+          "index": 11,
+          "count": 1,
+          "rangeBytes": 64,
+          "minimumBindingSize": 64,
+          "logicalBufferSize": 64,
+          "effectiveOffset": 0
+        }
+      ],
+      "internalBindings": [
+        {
+          "role": "immediate-data",
+          "stage": "vertex",
+          "index": 30,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "UpperNonRuntimeSlots",
+      "stage": "compute",
+      "needsStorageBufferSizes": true,
+      "buffers": [
+        {
+          "semanticBinding": "g0b0",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 2,
+          "count": 1,
+          "rangeBytes": 16,
+          "minimumBindingSize": 4,
+          "logicalBufferSize": 16,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g0b1",
+          "kind": "storage",
+          "runtimeSized": false,
+          "index": 28,
+          "count": 1,
+          "rangeBytes": 16,
+          "minimumBindingSize": 16,
+          "logicalBufferSize": 16,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g0b2",
+          "kind": "uniform",
+          "runtimeSized": false,
+          "index": 29,
+          "count": 1,
+          "rangeBytes": 64,
+          "minimumBindingSize": 64,
+          "logicalBufferSize": 64,
+          "effectiveOffset": 0
+        }
+      ],
+      "internalBindings": [
+        {
+          "role": "immediate-data",
+          "stage": "compute",
+          "index": 30,
+          "count": 1
+        }
+      ]
+    }
+  ]
+}

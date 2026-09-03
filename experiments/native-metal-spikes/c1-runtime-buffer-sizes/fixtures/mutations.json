@@ -1,0 +1,540 @@
+{
+  "schemaVersion": 1,
+  "inputMutations": [
+    {
+      "id": "ordering-is-not-semantic",
+      "operations": [
+        { "op": "reverse", "path": ["programs"] },
+        { "op": "reverse", "path": ["programs", 3, "buffers"] }
+      ],
+      "expected": { "status": "same-projection" }
+    },
+    {
+      "id": "unknown-root-property",
+      "operations": [{ "op": "set", "path": ["ignored"], "value": true }],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_INPUT",
+        "messageIncludes": "unexpected or missing properties"
+      }
+    },
+    {
+      "id": "duplicate-program",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 1, "id"],
+          "value": "MultiRuntimeCrossRow"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "DUPLICATE_PROGRAM",
+        "messageIncludes": "MultiRuntimeCrossRow"
+      }
+    },
+    {
+      "id": "invalid-stage",
+      "operations": [
+        { "op": "set", "path": ["programs", 0, "stage"], "value": "mesh" }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_STAGE",
+        "messageIncludes": "unsupported"
+      }
+    },
+    {
+      "id": "zero-buffer-count",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "count"],
+          "value": 0
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_COUNT",
+        "messageIncludes": ".count"
+      }
+    },
+    {
+      "id": "binding-array-is-unsupported",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "count"],
+          "value": 2
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "UNSUPPORTED_BUFFER_BINDING_ARRAY",
+        "messageIncludes": "semantic v1"
+      }
+    },
+    {
+      "id": "external-slot-crosses-ceiling",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 2, "buffers", 0, "index"],
+          "value": 30
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "EXTERNAL_BUFFER_OVERFLOW",
+        "messageIncludes": "ceiling 30"
+      }
+    },
+    {
+      "id": "external-slots-collide",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 1, "index"],
+          "value": 4
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "EXTERNAL_BUFFER_COLLISION",
+        "messageIncludes": "overlap"
+      }
+    },
+    {
+      "id": "duplicate-semantic-binding",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 1, "semanticBinding"],
+          "value": "g2b9"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "DUPLICATE_SEMANTIC_BINDING",
+        "messageIncludes": "g2b9"
+      }
+    },
+    {
+      "id": "range-overflows-u32",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "rangeBytes"],
+          "value": 4294967296
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_RANGE_BYTES",
+        "messageIncludes": "rangeBytes"
+      }
+    },
+    {
+      "id": "fractional-range",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "rangeBytes"],
+          "value": 1.5
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_RANGE_BYTES",
+        "messageIncludes": "integer"
+      }
+    },
+    {
+      "id": "storage-range-is-not-word-aligned",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "rangeBytes"],
+          "value": 21
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "STORAGE_RANGE_NOT_WORD_ALIGNED",
+        "messageIncludes": "multiple of 4 bytes"
+      }
+    },
+    {
+      "id": "fixed-storage-range-is-not-word-aligned",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 1, "rangeBytes"],
+          "value": 41
+        },
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 1, "logicalBufferSize"],
+          "value": 41
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "STORAGE_RANGE_NOT_WORD_ALIGNED",
+        "messageIncludes": "multiple of 4 bytes"
+      }
+    },
+    {
+      "id": "range-below-minimum-binding-size",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 5, "rangeBytes"],
+          "value": 20
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "RANGE_BELOW_MINIMUM_BINDING_SIZE",
+        "messageIncludes": "minimumBindingSize 24"
+      }
+    },
+    {
+      "id": "range-exceeds-logical-buffer-after-offset",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "logicalBufferSize"],
+          "value": 780
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "RANGE_EXCEEDS_LOGICAL_BUFFER",
+        "messageIncludes": "logicalBufferSize - effectiveOffset (12)"
+      }
+    },
+    {
+      "id": "effective-offset-exceeds-logical-buffer",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "effectiveOffset"],
+          "value": 2049
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_EFFECTIVE_OFFSET",
+        "messageIncludes": "effectiveOffset"
+      }
+    },
+    {
+      "id": "non-multiple-array-stride-is-allowed",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 3, "rangeBytes"],
+          "value": 36
+        }
+      ],
+      "expected": {
+        "status": "word",
+        "program": "MultiRuntimeCrossRow",
+        "index": 2,
+        "value": 36
+      }
+    },
+    {
+      "id": "missing-internal-table",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "internalBindings"],
+          "value": []
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "MISSING_INTERNAL_TABLE",
+        "messageIncludes": "needs"
+      }
+    },
+    {
+      "id": "wrong-internal-slot",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "internalBindings", 0, "index"],
+          "value": 29
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "NON_CANONICAL_INTERNAL_SLOT",
+        "messageIncludes": "buffer(30)"
+      }
+    },
+    {
+      "id": "wrong-internal-stage",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "internalBindings", 0, "stage"],
+          "value": "fragment"
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INTERNAL_STAGE_MISMATCH",
+        "messageIncludes": "differs"
+      }
+    },
+    {
+      "id": "table-without-runtime-storage",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 1, "needsStorageBufferSizes"],
+          "value": true
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "TABLE_WITHOUT_RUNTIME_STORAGE",
+        "messageIncludes": "without runtime storage"
+      }
+    },
+    {
+      "id": "runtime-uniform",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 2, "buffers", 2, "runtimeSized"],
+          "value": true
+        }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_BINDING",
+        "messageIncludes": "uniform runtime-sized"
+      }
+    },
+    {
+      "id": "external-slot-29-is-valid",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 2, "buffers", 0, "index"],
+          "value": 29
+        }
+      ],
+      "expected": {
+        "status": "word",
+        "program": "SparseVertexStage",
+        "index": 29,
+        "value": 48
+      }
+    },
+    {
+      "id": "unsupported-upload-alignment",
+      "operations": [
+        { "op": "set", "path": ["profile", "uploadAlignmentBytes"], "value": 8 }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "UNSUPPORTED_TABLE_LAYOUT",
+        "messageIncludes": "16-byte immediate uploads"
+      }
+    },
+    {
+      "id": "internal-slot-overlaps-externals",
+      "operations": [
+        { "op": "set", "path": ["profile", "immediateDataSlot"], "value": 29 }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "PROFILE_COLLISION",
+        "messageIncludes": "overlaps"
+      }
+    },
+    {
+      "id": "unknown-model",
+      "operations": [
+        { "op": "set", "path": ["model"], "value": "unknown-model" }
+      ],
+      "expected": {
+        "status": "error",
+        "code": "UNKNOWN_MODEL",
+        "messageIncludes": "unknown-model"
+      }
+    },
+    {
+      "id": "empty-programs",
+      "operations": [{ "op": "set", "path": ["programs"], "value": [] }],
+      "expected": {
+        "status": "error",
+        "code": "INVALID_INPUT",
+        "messageIncludes": "at least one"
+      }
+    }
+  ],
+  "sourceCorruptions": [
+    {
+      "id": "verifier-rejects-unaligned-storage-range",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "buffers", 0, "rangeBytes"],
+          "value": 21
+        }
+      ],
+      "expected": {
+        "code": "INVALID_SOURCE_RANGE",
+        "messageIncludes": "storage range is invalid"
+      }
+    }
+  ],
+  "projectionCorruptions": [
+    {
+      "id": "dense-size-word-map",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "programs",
+            0,
+            "storageBufferSizes",
+            "entries",
+            2,
+            "sizeWordIndex"
+          ],
+          "value": 1
+        }
+      ],
+      "expected": {
+        "code": "ENTRY_MAPPING_MISMATCH",
+        "messageIncludes": "Metal slot"
+      }
+    },
+    {
+      "id": "wrong-word-payload",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "words", 2],
+          "value": 20
+        }
+      ],
+      "expected": {
+        "code": "WORD_PAYLOAD_MISMATCH",
+        "messageIncludes": "words"
+      }
+    },
+    {
+      "id": "truncated-table-extent",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "payloadByteLength"],
+          "value": 16
+        }
+      ],
+      "expected": {
+        "code": "TABLE_EXTENT_MISMATCH",
+        "messageIncludes": "extent"
+      }
+    },
+    {
+      "id": "truncated-word-array",
+      "operations": [
+        {
+          "op": "remove-last",
+          "path": ["programs", 0, "storageBufferSizes", "words"]
+        }
+      ],
+      "expected": {
+        "code": "WORD_COUNT_MISMATCH",
+        "messageIncludes": "word count"
+      }
+    },
+    {
+      "id": "nonzero-padding",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "uploadWords", 7],
+          "value": 1
+        }
+      ],
+      "expected": {
+        "code": "UPLOAD_PAYLOAD_MISMATCH",
+        "messageIncludes": "upload words"
+      }
+    },
+    {
+      "id": "big-endian-bytes",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "bytesHex"],
+          "value": "000000200000000000000020000000240000001400000070"
+        }
+      ],
+      "expected": {
+        "code": "BYTE_PAYLOAD_MISMATCH",
+        "messageIncludes": "little-endian"
+      }
+    },
+    {
+      "id": "wrong-projected-internal-slot",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "internalSlot"],
+          "value": 29
+        }
+      ],
+      "expected": {
+        "code": "INTERNAL_SLOT_MISMATCH",
+        "messageIncludes": "slot"
+      }
+    },
+    {
+      "id": "missing-projected-table",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes"],
+          "value": null
+        }
+      ],
+      "expected": {
+        "code": "MALFORMED_PROJECTION",
+        "messageIncludes": "object"
+      }
+    },
+    {
+      "id": "unknown-projection-property",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["programs", 0, "storageBufferSizes", "ignored"],
+          "value": true
+        }
+      ],
+      "expected": {
+        "code": "MALFORMED_PROJECTION",
+        "messageIncludes": "unexpected"
+      }
+    },
+    {
+      "id": "missing-projected-program",
+      "operations": [{ "op": "remove-last", "path": ["programs"] }],
+      "expected": {
+        "code": "PROGRAM_SET_MISMATCH",
+        "messageIncludes": "program set"
+      }
+    }
+  ]
+}
