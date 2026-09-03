@@ -34,16 +34,16 @@ The command does not require `vgpu.native.json` and does not modify the project.
 
 ## Choose a project command
 
-| Command | Writes the configured output | Compiles Metal shaders | Purpose |
-| --- | ---: | ---: | --- |
-| `native plan` | No | No | Resolve configuration and list every logical input and expected output. |
-| `native check` | No | No | Validate configuration, WGSL modules, entry points, layouts, names, and support in the installed compiler/runtime version. |
-| `native build` | Yes | Yes | Translate programs, compile the Metal library, and atomically exchange the generated package. |
-| `native dev` | Yes | Yes | Watch the complete source graph and rebuild changed programs. |
-| `native verify` | No | No | Check file hashes, compiler/runtime compatibility, and the current logical input fingerprint. |
-| `native inspect` | No | No | Print normalized program, binding, entry-point, layout, and artifact metadata. |
-| `native capabilities` | No | No | Report the compiler/runtime set or its effective intersection with a local Metal device. |
-| `native compare` | Test artifacts only | Uses an existing build | Render a fixture through WebGPU and Metal and compare normalized results. |
+| Command               | Writes the configured output | Compiles Metal shaders | Purpose                                                                                                                    |
+| --------------------- | ---------------------------: | ---------------------: | -------------------------------------------------------------------------------------------------------------------------- |
+| `native plan`         |                           No |                     No | Resolve configuration and list every logical input and expected output.                                                    |
+| `native check`        |                           No |                     No | Validate configuration, WGSL modules, entry points, layouts, names, and support in the installed compiler/runtime version. |
+| `native build`        |                          Yes |                    Yes | Translate programs, compile the Metal library, and atomically exchange the generated package.                              |
+| `native dev`          |                          Yes |                    Yes | Watch the complete source graph and rebuild changed programs.                                                              |
+| `native verify`       |                           No |                     No | Check file hashes, compiler/runtime compatibility, and the current logical input fingerprint.                              |
+| `native inspect`      |                           No |                     No | Print normalized program, binding, entry-point, layout, and artifact metadata.                                             |
+| `native capabilities` |                           No |                     No | Report the compiler/runtime set or its effective intersection with a local Metal device.                                   |
+| `native compare`      |          Test artifacts only | Uses an existing build | Render a fixture through WebGPU and Metal and compare normalized results.                                                  |
 
 Project commands read `./vgpu.native.json` from the current directory. They do not search parent directories. Name another file explicitly in a monorepo:
 
@@ -70,12 +70,12 @@ The plan includes:
 
 - normalized configuration and Metal compiler target triple;
 - every entry WGSL file and resolved module dependency;
-- selected program kinds, entry points, and overrides;
+- selected program kinds, entry points, overrides, and WGSL language features;
 - expected Swift, manifest, library, and source-provenance outputs;
-- the separate logical-source and toolchain-sensitive build fingerprint inputs;
+- the separate logical-source and toolchain-sensitive build fingerprint inputs, including the semantic layout model, binding-slot ABI, and compiler identities;
 - capabilities that the build requires.
 
-It contains no timestamp or absolute path. Two equivalent checkouts using the same compiler, translator, SDK, flags, Metal compiler target triple, Swift runner target triple, and generated ABI produce the same build plan after paths are normalized relative to the configuration directory. A toolchain change keeps the logical-source fingerprint but changes the build fingerprint and forces regeneration.
+It contains no timestamp or absolute path. Two equivalent checkouts using the same native compiler, `vgpu-tint-compiler` binary and pinned Dawn/Tint revision, SDK, flags, Metal compiler target triple, Swift runner target triple, and generated ABI produce the same build plan after paths are normalized relative to the configuration directory. A toolchain change keeps the logical-source fingerprint but changes the build fingerprint and forces regeneration.
 
 ## Validate without compiling Metal
 
@@ -85,17 +85,23 @@ It contains no timestamp or absolute path. Two equivalent checkouts using the sa
 npx vgpu native check
 ```
 
+`check` exercises the same resolver and `vgpu-tint-compiler` boundary as `build`, but stops before Apple's `metal` and `metallib` tools and does not write an artifact.
+
 It verifies:
 
 - JSON Schema and safe output boundaries;
 - WGSL parsing, imports, pure modules, and reflection;
 - explicit selection when a source has multiple compatible entry points;
 - typed overrides and workgroup sizes;
-- host-shareable layouts and generated Swift identifiers;
+- intrinsic `wgsl-host-shareable-v1` layouts and generated Swift identifiers;
+- address-space constraints under the explicitly selected WGSL language features;
 - stage interfaces and active resources;
+- the versioned vgpu Metal slot map, including any internal slots required by lowering;
 - support in the capability set reported by the installed native compiler and matching runtime version.
 
-An unsupported static feature fails with `VGPU-NATIVE-FEATURE-UNSUPPORTED`. `check` cannot certify the Metal device on an end user's machine. The semantic contract records backend-neutral requirements, while the Metal projection records only device requirements fixed by shader semantics, such as a storage-texture format. Sampled texture formats, render targets, sample counts, and render state remain runtime inputs.
+Tint supplies the reflected type layout. It does not decide whether vgpu changes that layout for a uniform: intrinsic offsets and strides remain address-space neutral, and validation either accepts or rejects the use. `uniform_buffer_standard_layout` and every other environment feature must be present in the configuration before validation starts. `check` does not retry failed source with additional features.
+
+An unsupported static feature fails with `VGPU-NATIVE-FEATURE-UNSUPPORTED`. `check` cannot certify the Metal device on an end user's machine. The semantic contract records build-time language features separately from backend-neutral execution requirements, while the Metal projection records only device requirements fixed by shader semantics, such as a storage-texture format. Sampled texture formats, render targets, sample counts, and render state remain runtime inputs.
 
 At runtime, effective capabilities are the intersection of what the runtime implements, what the selected compiler projection can express, and what the actual `MTLDevice` supports. Known family, format, sample-count, and limit checks provide early failures, but Metal has no universal query for every format-and-usage combination. Final resource and pipeline creation remain authoritative. Neither `check` nor the runtime removes a binding, changes a format, substitutes a shader stage, or silently chooses a different entry point.
 
@@ -113,7 +119,11 @@ Keep it current while editing WGSL:
 npx vgpu native dev
 ```
 
-The watcher tracks imported modules as well as entry files. Changing a shared module rebuilds every affected program but preserves unaffected generated files when their build fingerprints did not change. A compiler, translator, SDK, target, or ABI change invalidates every affected fingerprint.
+The build invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, baked overrides, the explicit language-feature set, a stable emitted function name, and vgpu's versioned external and internal Metal slot map. It returns MSL plus structured entry-point, interface, workgroup, binding, slot, and intrinsic-layout metadata. Tint's automatic slot allocator is not used as the artifact contract.
+
+Apple's compiler then compiles that source with `metal -std=macos-metal2.4` to AIR, and `metallib` links the packaged library. The Apple compiler invocation is the MSL 2.4 gate; the Tint writer does not switch its output dialect from that flag. Node.js, `vgpu-tint-compiler`, Tint, source WGSL, generated MSL, and Apple build tools remain on the build machine and are not application runtime dependencies.
+
+The watcher tracks imported modules as well as entry files. Changing a shared module rebuilds every affected program but preserves unaffected generated files when their build fingerprints did not change. A native compiler, wrapper binary, pinned Dawn/Tint revision, SDK, target, language-feature set, layout model, slot ABI, or generated ABI change invalidates every affected fingerprint.
 
 Generated MSL and compiler intermediates belong to an inspectable build cache, not the application package. Use `--keep-intermediates` for a failed build when a platform diagnostic needs the generated source.
 
@@ -152,8 +162,11 @@ The result separates backend-neutral semantics from the selected Metal projectio
 - program kind and selected entry points;
 - authored and generated function names;
 - entry-point inputs, outputs, and active bindings;
-- WGSL types and host-shareable layouts;
-- translated Metal buffer, texture, and sampler slots per stage;
+- the `wgsl-host-shareable-v1` layout model and Tint-reflected intrinsic WGSL layouts;
+- binding address spaces and access modes separately from their referenced layouts;
+- enabled WGSL language features and their validation result;
+- vgpu-mapped Metal buffer, texture, and sampler slots per stage, including explicit internal slots;
+- runtime-sized array prefixes and element strides, without an allocation-specific runtime extent;
 - baked override values and resolved workgroup sizes;
 - semantic capabilities and static Metal-device requirements;
 - artifact, semantic, projection, generated-Swift, and `VGPUABI` identities.
@@ -215,21 +228,21 @@ Steady-state tests verify that no pipeline is created after warm-up, memory does
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-| --- | --- | --- |
-| `VGPU-NATIVE-CONFIG-INVALID` | Configuration fails its schema or contains a Swift name collision. | Follow the reported JSON path and inspect the normalized plan. |
-| `VGPU-NATIVE-OUTPUT-UNSAFE` | The configured output is too broad, symlinked, contains inputs, or is not owned by this configuration. | Choose an empty dedicated directory; never force replacement of unrelated files. |
-| `VGPU-NATIVE-OUTPUT-SWAP-UNSUPPORTED` | The output volume cannot atomically exchange two directories. | Move generated output to an APFS volume that reports `RENAME_SWAP` support. |
-| `VGPU-NATIVE-OUTPUT-INTERRUPTED` | A read-only command found an orphaned staging directory from an interrupted swap cleanup. | Run the reported `native build` or `native dev` command; it validates markers before removing the orphan. |
-| `VGPU-NATIVE-TOOLCHAIN-MISSING` | The selected SDK or downloadable Metal toolchain cannot compile and link. | Run `native doctor --target macos` and apply its reported fix. |
-| `VGPU-NATIVE-FEATURE-UNSUPPORTED` | A program requires a resource, stage, format, or option unavailable in the installed compiler/runtime pair. | Inspect `native capabilities --json`; upgrade both packages together or remove the feature. |
-| `VGPU-NATIVE-MSL-COMPILE` | Generated MSL failed Apple's compiler. | Open the retained MSL location and use the WGSL span when the translator provided one. |
-| `VGPU-NATIVE-ARTIFACT-STALE` | Source or configuration no longer matches committed output. | Rebuild on a supported macOS build machine and commit the complete package. |
-| `VGPU-NATIVE-ARTIFACT-INCOMPATIBLE` | Manifest, generated Swift, Metal library, or `VGPUABI` contract do not agree. | Regenerate with a compatible native compiler/runtime release. |
-| `VGPU-NATIVE-METAL-UNAVAILABLE` | No compatible Metal device is available. | Render the view fallback or avoid constructing the renderer. |
-| `VGPU-NATIVE-DEVICE-UNSUPPORTED` | The active Metal device lacks a required feature, format, sample count, or limit. | Read `gpu.capabilities`, choose supported runtime state, or use the fallback. |
-| `VGPU-NATIVE-VIEW-INCOMPATIBLE` | A borrowed view has a different device, invalid format/sample count, or occupied delegate. | Apply the named view requirement before creating or starting the driver. |
-| `VGPU-NATIVE-PIPELINE-CREATE` | Metal rejected a pipeline for the requested program and target signature. | Inspect the complete signature and verify the artifact before rendering. |
+| Error                                 | Cause                                                                                                       | Fix                                                                                                       |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `VGPU-NATIVE-CONFIG-INVALID`          | Configuration fails its schema or contains a Swift name collision.                                          | Follow the reported JSON path and inspect the normalized plan.                                            |
+| `VGPU-NATIVE-OUTPUT-UNSAFE`           | The configured output is too broad, symlinked, contains inputs, or is not owned by this configuration.      | Choose an empty dedicated directory; never force replacement of unrelated files.                          |
+| `VGPU-NATIVE-OUTPUT-SWAP-UNSUPPORTED` | The output volume cannot atomically exchange two directories.                                               | Move generated output to an APFS volume that reports `RENAME_SWAP` support.                               |
+| `VGPU-NATIVE-OUTPUT-INTERRUPTED`      | A read-only command found an orphaned staging directory from an interrupted swap cleanup.                   | Run the reported `native build` or `native dev` command; it validates markers before removing the orphan. |
+| `VGPU-NATIVE-TOOLCHAIN-MISSING`       | The selected SDK or downloadable Metal toolchain cannot compile and link.                                   | Run `native doctor --target macos` and apply its reported fix.                                            |
+| `VGPU-NATIVE-FEATURE-UNSUPPORTED`     | A program requires a resource, stage, format, or option unavailable in the installed compiler/runtime pair. | Inspect `native capabilities --json`; upgrade both packages together or remove the feature.               |
+| `VGPU-NATIVE-MSL-COMPILE`             | Generated MSL failed Apple's compiler.                                                                      | Open the retained MSL location and use the WGSL span when the translator provided one.                    |
+| `VGPU-NATIVE-ARTIFACT-STALE`          | Source or configuration no longer matches committed output.                                                 | Rebuild on a supported macOS build machine and commit the complete package.                               |
+| `VGPU-NATIVE-ARTIFACT-INCOMPATIBLE`   | Manifest, generated Swift, Metal library, or `VGPUABI` contract do not agree.                               | Regenerate with a compatible native compiler/runtime release.                                             |
+| `VGPU-NATIVE-METAL-UNAVAILABLE`       | No compatible Metal device is available.                                                                    | Render the view fallback or avoid constructing the renderer.                                              |
+| `VGPU-NATIVE-DEVICE-UNSUPPORTED`      | The active Metal device lacks a required feature, format, sample count, or limit.                           | Read `gpu.capabilities`, choose supported runtime state, or use the fallback.                             |
+| `VGPU-NATIVE-VIEW-INCOMPATIBLE`       | A borrowed view has a different device, invalid format/sample count, or occupied delegate.                  | Apply the named view requirement before creating or starting the driver.                                  |
+| `VGPU-NATIVE-PIPELINE-CREATE`         | Metal rejected a pipeline for the requested program and target signature.                                   | Inspect the complete signature and verify the artifact before rendering.                                  |
 
 ## Next steps
 

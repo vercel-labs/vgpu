@@ -81,6 +81,26 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `vgpu-native-semantic/v1` object and one selected `vgpu-native-metal-projection/v1` object. The
   root `files` entries contain only path, size, and hash. Metal toolchains, emitted names, slots,
   `.metallib`, and device requirements stay in the projection.
+- `wgsl-host-shareable-v1` is the canonical semantic layout model. Tint semantic types are the
+  oracle for intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride. A
+  layout carries no address space; each buffer binding carries `uniform` or `storage`, and the
+  compiler validates that use separately without inserting address-space-dependent padding.
+- WGSL environment language features are explicit semantic capabilities and are validated before
+  reflection. `uniform_buffer_standard_layout` participates in logical, program, and semantic
+  fingerprints, but never in Metal device requirements. The compiler does not infer it by retrying
+  a failed parse or validation.
+- Generated Swift and TypeScript packers consume the reflected semantic layout rather than Swift
+  `MemoryLayout` or TypeScript's current layout calculator. They reject invalid shapes, fixed-array
+  counts, integer values, ranges, and runtime extents before mutation; write little-endian scalars
+  and column-major matrices; and zero padding. WGSL `f16` conversion uses IEEE 754 binary16
+  round-to-nearest, ties-to-even. Quiet-NaN class is portable; NaN payload bits are not a value
+  contract.
+- C2 demonstrated the intrinsic layout through an independent Swift packer and Metal compute
+  readback. The current TypeScript `naga-standard` calculation diverges for four small uniform
+  canaries, including a valid four-byte root struct that does not require
+  `uniform_buffer_standard_layout`. Replacing that public layout identity and implementation with
+  `wgsl-host-shareable-v1` is an implementation prerequisite, not an alternative native contract;
+  no compatibility alias is planned.
 - WGSL overrides are selected and substituted before WGSL-to-MSL translation. V1 records their
   declarations, defaults, selected values, and resolved workgroup dimensions but exposes no Metal
   function-constant or runtime-specialization contract.
@@ -135,18 +155,23 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   capabilities and resource or pipeline creation remain authoritative. The implementation does not
   assume unified-memory coherence. An `x86_64` cross-build is useful portability evidence but
   cannot establish Intel or AMD runtime support.
+- Native builds use one vgpu-owned, statically linked `vgpu-tint-compiler` executable built from an
+  immutable Dawn/Tint revision. The wrapper parses and reflects WGSL, accepts the versioned direct
+  Metal slot map allocated by vgpu, emits the selected MSL entry point, and returns structured
+  metadata including every external and internal slot. Stock `tint`/`tint_info`, `dump_shaders`,
+  and Tint's convenience binding allocator are not production interfaces.
 
 ## Open decisions and spike results
 
-1. Tint is the provisional semantic leader for WGSL-to-MSL translation, not a frozen dependency.
-   C1 accepted all 223 expected-valid repository shaders through Tint/Dawn and real Metal pipeline
-   creation. Naga 30.0.1 accepted 220: it cannot translate the FFT library's
-   `unrestricted_pointer_parameters`, and it rejects the `uniform_buffer_standard_layout` canary
-   that matches vgpu's current natural uniform-array stride. Keep Naga as a differential oracle,
-   not the primary candidate. Before freezing Tint, build it standalone at a pinned Dawn commit,
-   return MSL plus structured entry-point and slot metadata, and pass offline Apple compilation,
-   authored-diagnostic provenance, determinism, and pixel/buffer parity. This remains an empirical
-   integration gate rather than an API choice.
+1. Tint is the provisional semantic leader for WGSL-to-MSL translation, not a frozen source pin.
+   C1 accepted all 223 expected-valid repository shaders; Naga 30.0.1 accepted 220 and fails the FFT
+   pointer parameters plus `uniform_buffer_standard_layout`. The standalone follow-up proved that
+   a vgpu-owned wrapper can return deterministic MSL, emitted names, reflected layouts, workgroup
+   metadata, and exact slots without a WebGPU device. Before freezing the dependency, build that
+   wrapper from direct Tint targets at the macOS 14 baseline with arm64 and x86_64 slices, replace
+   the spike allocator with the vgpu binding map, and pass offline Apple compilation,
+   authored-diagnostic provenance, artifact determinism, and pixel/buffer parity. Keep Naga only as
+   a differential oracle.
 2. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.

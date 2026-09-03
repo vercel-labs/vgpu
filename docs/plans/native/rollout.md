@@ -9,9 +9,9 @@ the boundaries these gates protect and [decisions](./decisions.md) for unresolve
 | Gate | Fixture | Exit condition |
 | --- | --- | --- |
 | C0: module and link boundaries | ABI-only, context-only, effect-only, low-level draw, scene-recipe, compute-only, view-integration, and full-runtime release applications | Declared dependency graphs and negative imports pass; public symbol graphs, final link maps, linked frameworks, stripped Mach-O payloads, and packaged resources contain no forbidden feature. If a protocol witness graph retains an unused backend capability, split that Metal implementation before freezing the package graph. |
-| C1: translation | Imports, multiple entry points, I/O built-ins and interpolation, typed overrides baked before translation, resolved override-backed workgroup sizes, and deliberate failures | Resolved WGSL translates and compiles; the semantic contract contains no backend fields; the Metal projection contains emitted names and slots; available diagnostics identify the authored span or clearly identify generated MSL when no mapping exists. |
-| C2: binding ABI | Scalars, vectors including `vec3`, matrices, arrays, and multiple resource groups | JavaScript and Swift packers produce identical bytes; a canary shader reads every value correctly; translated slots come from translator output. |
-| C3: artifact and SwiftPM | Generated package in a clean sample project | `swift build` and `swift test` need no Node.js after generation; `Bundle.module` loads the single `.metallib`; schema references resolve; incompatible semantic, Metal-projection, generated-Swift, binding-layout, or `VGPUABI` integers fail before pipeline creation; runner incompatibility blocks compare only. |
+| C1: translation | Imports, explicit language features, multiple entry points, I/O built-ins and interpolation, typed overrides baked before translation, resolved override-backed workgroup sizes, external and internal binding slots, and deliberate failures | The vgpu-owned Tint wrapper validates only the declared language features, reflects intrinsic semantic layouts, applies the versioned vgpu slot map, and returns deterministic MSL plus emitted names, workgroup metadata, and the exact slots used. Resolved MSL compiles offline; diagnostics identify the authored span or clearly identify generated MSL when no mapping exists. |
+| C2: binding ABI | Scalars, vectors including `vec3`, matrices, fixed and runtime arrays, compact uniform layouts, explicit `@align`/`@size`, strict negative inputs, and f16 edge values | Tint reflection, Swift, and TypeScript agree on `wgsl-host-shareable-v1` layouts and valid packed bytes; invalid shapes, counts, integer ranges, and extents fail before mutation; f16 matches round-to-nearest-ties-even; Metal readback observes every value at the intrinsic offset. |
+| C3: artifact and SwiftPM | Generated package in a clean sample project | `swift build` and `swift test` need no Node.js after generation; `Bundle.module` loads the single `.metallib`; schema references resolve; unknown layout or binding models and incompatible semantic, Metal-projection, generated-Swift, binding-layout, or `VGPUABI` integers fail before pipeline creation; runner incompatibility blocks compare only. |
 | R1: effect parity | Existing UV-orientation fixture plus a uniform-driven effect | Top-origin UV, clear, alpha, blend, resize, and readback meet the fixture's declared tolerance. |
 | R2: multipass | Two draws into an offscreen target followed by a sampling pass | One frame creates one command buffer, preserves pass order, commits once, and creates no pipeline after warm-up. |
 | D1: draw and geometry | Procedural triangle, indexed box, depth, culling, instancing, and Swift ports of the `plane` and `sphere` CPU generators | Draw counts, topology, vertex layouts, ranges, winding, depth, and output match the WebGPU oracle; each `VGPUScene` recipe also matches golden CPU vertex/index data, attributes, UVs, bounds, and winding. A plane-only link map retains no unrelated primitive implementation. |
@@ -57,22 +57,27 @@ linker, or package-graph changes.
 Run C1 and C2 before freezing the translator or generated Swift. Compare candidates against the
 existing shader corpus instead of choosing from isolated examples.
 
-The translator spike runs every repository WGSL source plus explicit entry-point I/O, `vec3`,
-matrix, array, override, override-backed workgroup, and binding-slot canaries. Both candidates use
-the same slot-allocation policy and feed their MSL through Apple's `metal` and `metallib` tools. Hard
-gates are semantic coverage, compilable MSL, correct binding and entry-point metadata, deterministic
-output, actionable negative diagnostics, and pixel/buffer parity. Distribution size, startup cost,
-integration complexity, and license obligations break a tie only after those gates pass.
+The translator spike runs every repository WGSL source plus explicit language-feature,
+entry-point I/O, `vec3`, matrix, array, override, override-backed workgroup, and binding-slot
+canaries. Production v1 constructs a deterministic direct-slot map, including reserved internal
+bindings, before translation. The wrapper passes that map into Tint and returns the exact map used
+with the MSL; Tint's convenience allocator is never an ABI. Hard gates are semantic coverage,
+offline Apple compilation, correct binding and entry-point metadata, deterministic output,
+actionable negative diagnostics, and pixel/buffer parity.
 
-The first C1 pass makes Tint the provisional semantic leader. Tint/Dawn accepted all 223
-expected-valid shaders and created real Metal pipelines for every applicable entry point. Naga
-30.0.1 accepted 220: it does not implement the FFT library's `unrestricted_pointer_parameters`,
-and it rejects the `uniform_buffer_standard_layout` canary that matches vgpu's current natural
-uniform-array stride. Retain Naga as a differential oracle. Do not freeze Tint until a standalone
-build pinned to the tested Dawn commit returns MSL and structured projection metadata, then passes
-offline `metal` + `metallib`, authored-diagnostic provenance, artifact determinism, and
-pixel/buffer parity. The reproducible fixture lives in
-`experiments/native-metal-spikes/c1-translators`.
+Tint is the provisional semantic leader. Tint/Dawn accepted all 223 expected-valid shaders and
+created real Metal pipelines for every applicable entry point. Naga 30.0.1 accepted 220: it does
+not implement the FFT library's `unrestricted_pointer_parameters`, and it rejects the
+`uniform_buffer_standard_layout` canary. Retain Naga as a differential oracle.
+
+The standalone follow-up proved a single vgpu-owned Tint executable can parse and reflect WGSL,
+choose stable emitted names, and return deterministic MSL with structured layouts, entry points,
+workgroup metadata, and slots selected by a temporary allocator. It did not yet apply the
+versioned vgpu map. Do not freeze its source pin until the wrapper is built from direct Tint targets
+for macOS 14 with arm64 and x86_64 slices, replaces the spike allocator with that map, and passes
+offline `metal` + `metallib`, authored-diagnostic provenance, artifact determinism, and pixel/buffer
+parity. The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators` and
+`experiments/native-metal-spikes/c1-tint-standalone`.
 
 The first canary must cover alignment traps rather than just a gradient:
 
@@ -89,7 +94,25 @@ struct Params {
 }
 ```
 
-The wrapper makes the uniform-array stride explicit and valid.
+This padded canary is valid with the baseline language-feature set. A separate compact canary uses
+`array<f32, 3>` and a small nested struct. It must fail when
+`uniform_buffer_standard_layout` is absent and preserve intrinsic four-byte alignment and stride
+when the feature is explicitly present. The feature changes address-space validation, not WGSL
+`AlignOf` or `SizeOf`, and participates in every logical, program, and semantic fingerprint.
+
+C2 established `wgsl-host-shareable-v1` as the packing contract. An independent Swift
+implementation agrees with Tint's intrinsic layouts for scalars, vectors, matrices, nested structs,
+fixed arrays, runtime arrays, and explicit member alignment and size. Metal compute readback also
+passes the four decisive small-uniform canaries. The existing TypeScript `naga-standard` calculator
+diverges for those four canaries, including a valid four-byte root struct; replacing it directly
+with the semantic layout model is a prerequisite to closing C2. No compatibility alias is part of
+the native contract.
+
+Both packers must validate the complete value before writing: fixed shapes and counts are exact,
+integers are integral and in range, and a runtime array's element count and byte extent are checked
+without mutating its immutable layout. Writes are little-endian with column-major matrices and
+zeroed padding. The f16 edge table uses IEEE 754 binary16 round-to-nearest, ties-to-even; NaN class,
+not payload bits, is the portable assertion.
 
 `native doctor` must compile and link a minimal shader. Finding `xcrun` or the `metal` executable is
 not sufficient because recent Xcode installations can omit the downloadable Metal toolchain.

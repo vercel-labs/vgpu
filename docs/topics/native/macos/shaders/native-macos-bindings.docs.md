@@ -81,6 +81,23 @@ Generated value-only types such as `Gradient.Params` conform to `Sendable`. Gene
 
 Types referenced by more than one program are generated once at module scope. A `Particle` used by both `StepParticles` and `ParticleDraw` has one Swift identity, so the same `VGPUStorage<Particle>` can bind to both programs.
 
+## Pack values with the WGSL layout
+
+Every generated packer follows the semantic artifact's `layoutModel`, which is fixed to `"wgsl-host-shareable-v1"` for this contract. Tint reflects the intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride from the resolved module. Generated Swift consumes that reflection directly. The TypeScript packer must match the same semantic offsets; neither it nor Swift `MemoryLayout` defines them.
+
+Intrinsic layout is independent of address space. A binding records `uniform` or `storage` and its access separately, then the compiler validates that use against the explicitly enabled WGSL language features. Validation may reject a use, but it never changes offsets or strides and never retries with an undeclared feature. For example, `uniform_buffer_standard_layout` must be selected explicitly when a uniform depends on those constraints.
+
+Packing is strict and deterministic:
+
+- scalar bytes are written little-endian;
+- matrices are written column-major, with every column placed at its reflected matrix stride;
+- the destination starts zeroed, so member, vector, matrix, array, and trailing padding is zero on every pack;
+- vectors, fixed arrays, structures, and integer values must have the exact expected shape and range;
+- a failure identifies the complete value path, including member names and array indices, before any GPU-visible state changes;
+- conversion from `Float` to WGSL `f16` uses IEEE 754 binary16 round-to-nearest, ties-to-even; a NaN stays a quiet NaN, but its payload bits are not portable.
+
+A runtime-sized array keeps its fixed prefix and reflected element stride in the layout. Its element count and checked byte length belong to the resource instance and bound buffer range instead, so allocating a larger buffer never changes the program's semantic layout. See [Resources and Metal interop](/native/macos/resources) for the runtime extent rules.
+
 ## Initialize every binding
 
 Pass a complete generated `Bindings` value when you create a program instance:
@@ -198,7 +215,9 @@ let present = try gpu.effect(
 )
 ```
 
-Generated code uses the Metal projection's translated slot mapping. It never assumes that WGSL `@binding(1)` means Metal texture, buffer, or sampler index `1`.
+Generated code uses the Metal projection's vgpu-owned, versioned slot mapping. It never assumes that WGSL `@binding(1)` means Metal texture, buffer, or sampler index `1`; Metal keeps independent buffer, texture, and sampler namespaces, and the mapping may also differ by stage.
+
+The native compiler supplies that mapping to Tint and serializes the same result into the projection. Backend-only resources, such as storage-buffer-size metadata used for robust runtime-array access, occupy explicit internal slots in the artifact. They cannot silently displace a user binding. Tint's automatic binding allocation is useful compiler machinery, but it is not the vgpu ABI.
 
 Bind a `VGPUTarget` directly when the resource must follow resize. The runtime observes its texture generation and rebuilds only the affected argument state. `target.color` returns the current concrete texture; code that binds that snapshot must call `set` again after `target.resize` replaces it.
 

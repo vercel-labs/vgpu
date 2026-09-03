@@ -122,11 +122,26 @@ The semantic contract records:
   invariance;
 - WGSL binding names, groups, bindings, address spaces, access, active stages, resource shapes,
   sample and storage types, and sampler kinds;
-- reflected minimum buffer sizes, alignments, field offsets, array strides, and matrix strides;
+- the `wgsl-host-shareable-v1` layout model and Tint-reflected intrinsic WGSL minimum sizes,
+  alignments, field offsets, array strides, and matrix strides, independently of address space;
 - typed override declarations, defaults, and selected values;
 - literal or override-backed workgroup dimensions;
-- backend-neutral feature requirements;
+- explicitly enabled WGSL environment language features, separately from backend-neutral execution
+  requirements;
 - integer binding-layout, generated-Swift, and required `VGPUABI` contract versions.
+
+Tint semantic reflection is the layout oracle. Uniform and storage are validated against the
+intrinsic layout after reflection; they do not cause the compiler to pad or rewrite that layout.
+In particular, `uniform_buffer_standard_layout` is an explicit build-time WGSL language feature,
+not a Metal-device requirement. The compiler starts from the declared language-feature set and
+never retries failed source with an additional feature enabled.
+
+Generated Swift and TypeScript packers consume the same semantic offsets. They require exact
+vector, matrix, and fixed-array shapes; reject non-integral or out-of-range integers and invalid
+runtime-array extents before mutating state; write matrices column-major and scalar values
+little-endian; and initialize padding to zero. Conversion to WGSL `f16` uses IEEE 754 binary16
+round-to-nearest, ties-to-even. A NaN must remain a quiet NaN, but its payload is not a cross-runtime
+value contract.
 
 Selected override values are substituted before WGSL-to-MSL translation. The semantic contract
 preserves the declaration, default, selected value, and any override-backed workgroup origin, but it
@@ -138,14 +153,21 @@ The Metal projection records:
 - macOS target, deployment version, the exact `metalCompilerTargetTriple` passed to Apple's Metal
   compiler, and Metal language version; this AIR/platform/deployment triple is not the Swift host
   CPU triple or a GPU-family support claim;
-- translator identity and flags plus the producing Apple toolchain;
+- the vgpu-owned `vgpu-tint-compiler` wrapper identity, immutable Dawn/Tint revision, executable
+  hash, flags, and producing Apple toolchain;
 - the single `.metallib` reference;
-- emitted function names, interface indices, and translated Metal buffer, texture, sampler, and
-  argument slots;
+- emitted function names and interface indices;
+- the exact direct Metal buffer, texture, and sampler slots allocated by the versioned vgpu
+  binding policy, including backend-internal bindings required by Metal lowering or the vgpu ABI;
 - literal resolved workgroup sizes;
 - static Metal-device requirements;
 - optional source maps;
 - optional compare-runner metadata under `projection.testing`.
+
+The production native compiler constructs the binding map before translation, passes it to Tint,
+and records the same map returned with the generated MSL. The standalone spike used Tint's
+convenience allocator only to prove that structured slots can cross the wrapper boundary; that
+temporary allocation is evidence, not the artifact ABI.
 
 Render target formats, sampled texture formats, sample count, blend and depth state, and geometry
 remain instance or target state. Artifact format requirements include only formats fixed by shader
@@ -158,16 +180,21 @@ is an opaque Apple toolchain result, so its hash proves payload integrity withou
 byte-for-byte reproducibility across toolchains. The root manifest hashes every generated payload
 except itself and the output-ownership marker.
 
-Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
-Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI, deployment
-target, `.metallib` hash, emitted names and slots, resolved workgroup sizes, and static device
-requirements. It excludes provenance, inputs, source maps, generated sources, tests, and
-`projection.testing`. An incompatible runner blocks `native compare` only; it does not block
-application use.
+The logical and program fingerprints include the resolved WGSL language-feature set, so toggling
+`uniform_buffer_standard_layout` cannot reuse a layout or translation cache entry. The semantic
+fingerprint covers that set, `layoutModel`, and every intrinsic layout.
 
-Compatibility is determined by understood schema and integer ABI contracts. The artifact requires
-the small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer range it
-supports rather than comparing package release versions for exact equality.
+Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
+Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
+binding model, deployment target, `.metallib` hash, emitted names, external and internal slots,
+resolved workgroup sizes, and static device requirements. It excludes provenance, inputs, source
+maps, generated sources, tests, and `projection.testing`. An incompatible runner blocks
+`native compare` only; it does not block application use.
+
+Compatibility is determined by understood schemas, the named layout and binding models, and integer
+ABI contracts. The artifact requires the small shared `VGPUABI` product and one ABI integer; the
+runtime advertises the integer range it supports rather than comparing package release versions for
+exact equality.
 
 The contract family is:
 

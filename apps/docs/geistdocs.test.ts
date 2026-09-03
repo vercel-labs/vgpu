@@ -207,14 +207,24 @@ describe("agent readiness metadata", () => {
     }, [])).toThrow('Native navigation has multiple groups for platform directory "linux"');
   });
 
-  it("distinguishes Metal, Swift runner, and GPU architecture identities", () => {
+  it("distinguishes semantic, Metal, Swift runner, and GPU architecture identities", () => {
+    const semantic = nativeContract("semantic-v1.schema.json");
+    const semanticSchema = JSON.parse(semantic);
     const projection = nativeContract("metal-projection-v1.schema.json");
     const runnerRequest = nativeContract("metal-runner-request-v1.schema.json");
     const runnerResponse = nativeContract("metal-runner-response-v1.schema.json");
 
+    expect(() => JSON.parse(semantic)).not.toThrow();
     expect(() => JSON.parse(projection)).not.toThrow();
     expect(() => JSON.parse(runnerRequest)).not.toThrow();
     expect(() => JSON.parse(runnerResponse)).not.toThrow();
+    expect(semantic).toContain('"layoutModel"');
+    expect(semantic).toContain('"wgsl-host-shareable-v1"');
+    expect(semantic).toContain('"languageFeatures"');
+    expect(semanticSchema.$defs.layout.properties.addressSpace).toBeUndefined();
+    expect(semanticSchema.$defs.bufferBinding.properties.addressSpace).toBeDefined();
+    expect(projection).toContain('"vgpu-metal-binding-slots-v1"');
+    expect(projection).toContain('"internalBindings"');
     expect(projection).toContain('"metalCompilerTargetTriple"');
     expect(projection).not.toContain('"targetTriple"');
     expect(runnerRequest).toContain("Swift runner target triple");

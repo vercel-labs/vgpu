@@ -65,12 +65,23 @@ Every `artifact.json` starts with this identity and then embeds one semantic con
   "semantic": {
     "schemaVersion": 1,
     "contractId": "vgpu-native-semantic/v1",
-    "module": { "name": "AppShaders", "swiftName": "AppShaders" }
+    "module": { "name": "AppShaders", "swiftName": "AppShaders" },
+    "layoutModel": "wgsl-host-shareable-v1",
+    "capabilities": {
+      "vocabulary": 1,
+      "languageFeatures": ["uniform_buffer_standard_layout"],
+      "features": []
+    }
   },
   "projection": {
     "schemaVersion": 1,
     "contractId": "vgpu-native-metal-projection/v1",
-    "backend": "metal"
+    "backend": "metal",
+    "abi": {
+      "projection": 1,
+      "bindingSlots": 1,
+      "bindingModel": "vgpu-metal-binding-slots-v1"
+    }
   }
 }
 ```
@@ -82,32 +93,38 @@ The `semantic` object is independent of Metal. It records:
 - the Swift module and public names;
 - effect, draw, and compute program kinds;
 - authored and resolved WGSL entry points and stage interfaces;
-- WGSL resource bindings, host-shareable types, and exact packing layouts;
+- the fixed `wgsl-host-shareable-v1` layout model, host-shareable types, and intrinsic WGSL alignment, size, offset, and stride values reflected by Tint;
+- WGSL resource bindings, including their address space and access independently from the referenced intrinsic layout;
 - typed override defaults and selected values baked before translation;
 - literal or override-backed workgroup dimensions;
-- backend-neutral feature requirements;
+- explicitly enabled WGSL environment features and backend-neutral execution requirements;
 - the generated Swift, binding-layout, and required `VGPUABI` contract integers.
+
+Intrinsic layout does not acquire a uniform or storage variant. Address-space constraints are a separate validation result under the recorded language-feature set; validation cannot rewrite a reflected layout. A struct ending in a runtime-sized array records its fixed prefix, while the trailing array records its element stride. Neither carries an allocation-specific element count or final byte length; that extent belongs to the resource and binding at runtime.
 
 The `projection` object records only the selected Metal result:
 
 - the macOS deployment target, Metal compiler target triple, and Metal language version;
-- translator options and producing Apple toolchain;
+- `vgpu-tint-compiler`, its pinned Dawn/Tint revision, wrapper protocol and binary hash, translator options, and the producing Apple toolchain;
 - the single `.metallib` reference;
-- emitted Metal function names, interface indices, and resource slots;
+- emitted Metal function names and interface indices;
+- the versioned vgpu mapping from semantic bindings to Metal buffer, texture, and sampler slots, plus every backend-only internal slot;
 - resolved compute workgroup dimensions;
 - static Metal-device requirements;
 - optional WGSL-to-MSL source maps;
 - optional compare-runner metadata under `projection.testing`.
 
+vgpu supplies the complete external and internal slot map to Tint and records the result. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
+
 There is one `projection`, not a `projections` array. A future backend consumes the same semantic contract but defines its own separately versioned projection.
 
 ## Separate runtime compatibility from provenance
 
-The logical fingerprint covers canonical resolved WGSL and normalized program configuration. The semantic fingerprint covers the complete backend-neutral semantic object. The build fingerprint additionally covers `@vgpu/native`, translator and flags, generated API and ABI versions, the Metal compiler target triple, the Swift runner target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
+The logical fingerprint covers canonical resolved WGSL and normalized program configuration, including the selected language features. The semantic fingerprint covers the complete backend-neutral semantic object, including `layoutModel` and its intrinsic layouts. The build fingerprint additionally covers `@vgpu/native`, the `vgpu-tint-compiler` protocol and binary, pinned Dawn/Tint revision, translator flags, generated API and ABI versions, the Metal compiler target triple, the Swift runner target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
 
-The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI, deployment target, `.metallib` hash, emitted names and slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, and `projection.testing`.
+The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI and binding model, deployment target, `.metallib` hash, emitted names, user and internal slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, and `projection.testing`.
 
-Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, and Metal-projection ABI must all be understood before a program loads. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
+Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, and `bindingModel` must all be understood before a program loads. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
 
 An incompatible Metal runner protocol blocks `native compare` only. It does not make the application artifact incompatible. Missing source maps reduce diagnostic precision without changing runtime compatibility.
 

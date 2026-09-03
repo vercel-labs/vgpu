@@ -65,24 +65,39 @@ List every program exported by the generated Swift module:
 }
 ```
 
-| Field | Required | Default | Description |
-| --- | ---: | --- | --- |
-| `moduleName` | Yes | — | Swift module, library, and product name. |
-| `platform` | Yes | — | Native compiler target; currently `"macos"`. |
-| `minimumOSVersion` | No | `"14.0"` | Deployment target for the Swift package and Metal compiler. |
-| `programs` | Yes | — | Programs exported by this module. |
-| `output` | Yes | — | Dedicated generated directory; replacement requires this configuration's ownership marker. |
-| `program.name` | Yes | — | Generated Swift namespace and stable artifact identifier. |
-| `program.kind` | No | `"effect"` | `"effect"`, `"draw"`, or `"compute"`. |
-| `program.source` | Yes | — | Entry WGSL file, relative to the configuration file. |
-| `program.entryPoints` | Sometimes | Inferred | Required when the resolved source has more than one compatible entry point. |
-| `program.overrides` | No | Shader defaults | Typed WGSL override values fixed for this native program. |
+| Field                 |  Required | Default         | Description                                                                                |
+| --------------------- | --------: | --------------- | ------------------------------------------------------------------------------------------ |
+| `moduleName`          |       Yes | —               | Swift module, library, and product name.                                                   |
+| `platform`            |       Yes | —               | Native compiler target; currently `"macos"`.                                               |
+| `minimumOSVersion`    |        No | `"14.0"`        | Deployment target for the Swift package and Metal compiler.                                |
+| `languageFeatures`    |        No | `[]`            | WGSL environment features explicitly enabled for every program in this configuration.      |
+| `programs`            |       Yes | —               | Programs exported by this module.                                                          |
+| `output`              |       Yes | —               | Dedicated generated directory; replacement requires this configuration's ownership marker. |
+| `program.name`        |       Yes | —               | Generated Swift namespace and stable artifact identifier.                                  |
+| `program.kind`        |        No | `"effect"`      | `"effect"`, `"draw"`, or `"compute"`.                                                      |
+| `program.source`      |       Yes | —               | Entry WGSL file, relative to the configuration file.                                       |
+| `program.entryPoints` | Sometimes | Inferred        | Required when the resolved source has more than one compatible entry point.                |
+| `program.overrides`   |        No | Shader defaults | Typed WGSL override values fixed for this native program.                                  |
 
 An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
 
 When exactly one compatible entry point exists for a required stage, omit it from `entryPoints`. Multiple compatible entry points are never chosen by source order: `native check` requires an explicit selection. The artifact records whether an effect's vertex stage was authored or injected.
 
 Render target formats, blend state, culling, depth state, sample count, geometry, and dispatch dimensions do not belong in this file. They are properties of targets and program instances at runtime.
+
+### Select the WGSL language environment
+
+Native artifacts use one semantic layout model, `wgsl-host-shareable-v1`; it is not a configuration toggle. Tint reflects each type's intrinsic WGSL layout before the Metal projection is created. Whether a binding may use that type as `uniform` or `storage` is a separate validation step.
+
+List any WGSL environment feature that validation depends on in `languageFeatures`. For example, a uniform whose intrinsic array or nested-struct layout would violate the default uniform constraints needs `"uniform_buffer_standard_layout"`. This is a build-time language feature, not a Metal device capability. `native check` fails if the selected compiler does not support it, and it also fails when source requires a feature that the configuration did not select. The compiler never infers a missing feature from a failed validation and never retries with a broader environment.
+
+```json
+{
+  "languageFeatures": ["uniform_buffer_standard_layout"]
+}
+```
+
+The canonical feature list and the reflected layout both participate in program fingerprints. Changing either one requires a new artifact even if the authored WGSL text is unchanged.
 
 ### Bake overrides at build time
 
