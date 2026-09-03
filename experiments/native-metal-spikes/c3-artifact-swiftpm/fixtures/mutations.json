@@ -65,6 +65,14 @@
     "expectedPipelineCalls": 0
   },
   {
+    "name": "vertex-buffer-policy-model",
+    "kind": "descriptorString",
+    "field": "vertexBufferPolicyModel",
+    "value": "unknown-vertex-buffer-policy-model",
+    "expectedApplicationCode": "unsupported-vertex-buffer-policy-model",
+    "expectedPipelineCalls": 0
+  },
+  {
     "name": "semantic-fingerprint",
     "kind": "descriptorString",
     "field": "projectionSemanticFingerprint",

@@ -171,6 +171,11 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   Metal slot map allocated by vgpu, emits the selected MSL entry point, and returns structured
   metadata including every external and internal slot. Stock `tint`/`tint_info`, `dump_shaders`,
   and Tint's convenience binding allocator are not production interfaces.
+- Metal vertex streams use a versioned pipeline-local hybrid mapping. Shader and internal slots
+  stay exact projection data; logical stream zero follows the highest occupied vertex-stage
+  shader-buffer interval, and the full stream range must fit below the projection's exclusive
+  external-buffer ceiling. The runtime-projection fingerprint covers the policy and ceiling. A
+  pipeline-mapping change invalidates and rebinds every active physical vertex stream.
 
 ## Open decisions and spike results
 
@@ -186,13 +191,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    The buffer indices `29` and `30`, and the resource ceilings used by this fixture, are test inputs
    only. They are not public ABI constants or Metal device-limit claims.
 
+   The vertex-buffer follow-up rejected a fixed partition in favor of the pipeline-local hybrid.
+   It proved that Metal accepts a colliding vertex stream and shader argument, used readback to
+   expose last-binding-wins aliasing, exercised the fixture's complete 31-entry table in a draw,
+   and showed that a pipeline switch does not clear or remap existing vertex-buffer state. The
+   fixture's numeric indices and conservative constant-argument budget are not public ABI or
+   device-limit claims.
+
    Before freezing the dependency or slot ABI, build the wrapper from direct Tint targets at the
-   macOS 14 baseline with arm64 and x86_64 slices, partition vertex-stream indices from shader
-   buffers, prove the size-table packing for multiple runtime storage buffers, and pass offline
+   macOS 14 baseline with arm64 and x86_64 slices, prove the size-table packing for multiple runtime storage buffers, and pass offline
    Apple compilation, authored-diagnostic provenance, artifact determinism, and pixel/buffer
    parity. Semantic v1 has no WGSL resource binding-array (`binding_array`) cardinality, so the
    alpha rejects all resource binding arrays; the sampled-texture writer canary is future evidence
    only. Keep Naga only as a differential oracle.
+
 2. C3a passed its structural fixture: strict Ajv compilation and cross-schema resolution, artifact
    and fingerprint validation, deterministic assembly, Swift tools and language mode 6, macOS 14,
    clean SwiftPM consumption without invoking Node.js, Tint, or Apple Metal compiler tools after

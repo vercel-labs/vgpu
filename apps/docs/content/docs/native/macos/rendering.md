@@ -237,11 +237,11 @@ try frame.pass(
 
 The load policy stays aligned across the attachments, matching JavaScript:
 
-| Color option | Color | Depth | Stencil |
-| --- | --- | --- | --- |
-| Omitted or `.targetDefault` | Clear with `target.clearColor` | Clear to `1` | Clear to `0` |
-| `.clear(color)` | Clear with `color` | Clear to `1`, or the explicit depth value | Clear to `0`, or the explicit stencil value |
-| `.preserve` | Preserve | Preserve | Preserve |
+| Color option                | Color                          | Depth                                     | Stencil                                     |
+| --------------------------- | ------------------------------ | ----------------------------------------- | ------------------------------------------- |
+| Omitted or `.targetDefault` | Clear with `target.clearColor` | Clear to `1`                              | Clear to `0`                                |
+| `.clear(color)`             | Clear with `color`             | Clear to `1`, or the explicit depth value | Clear to `0`, or the explicit stencil value |
+| `.preserve`                 | Preserve                       | Preserve                                  | Preserve                                    |
 
 `.preserve` cannot be combined with an explicit depth or stencil clear. A read-only depth/stencil aspect cannot be cleared, and every draw in that pass must disable writes to the corresponding aspect. The runtime preserves the existing values for testing without exposing backend load/store actions as public API.
 
@@ -312,6 +312,8 @@ let geometry = try gpu.geometry(
 ```
 
 The raw overload accepts backend-neutral `VGPUBuffer` values plus explicit vertex layouts. Import an existing `MTLBuffer` through the opt-in `VGPUMetalInterop` product first; `VGPURender` itself never exposes Metal types. Buffer ownership, usage validation, and handoff are covered in [Resources and Metal interop](/native/macos/resources).
+
+Geometry exposes logical vertex streams, not Metal buffer indices. The backend assigns their physical indices when it creates the complete draw pipeline, immediately after that program's highest occupied vertex-stage shader-buffer interval. It rejects a layout that would cross the artifact's exclusive external-buffer ceiling. Because two pipelines may map the same logical stream to different physical indices, changing to a pipeline with a different stream mapping makes the encoder rebind every active vertex stream before the next draw.
 
 Leave geometry out for procedural vertices. Counts remain instance state and may be overridden per call:
 

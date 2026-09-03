@@ -114,7 +114,7 @@ npx vgpu native dev
 
 The build invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, baked overrides, the explicit language-feature set, a stable emitted function name, and vgpu's versioned external and internal Metal slot map. It returns MSL plus structured entry-point, interface, workgroup, binding, slot, and intrinsic-layout metadata. Tint's automatic slot allocator is not used as the artifact contract.
 
-The map is deterministic per semantic program, selected stage, and Metal buffer, texture, or sampler namespace. Required backend-internal resources use explicit reservations and cannot shift a user slot silently. Both the compiler response and generated artifact retain the supplied map, so changing the slot ABI invalidates the build fingerprint.
+The map is deterministic per semantic program, selected stage, and Metal buffer, texture, or sampler namespace. Required backend-internal resources use explicit reservations and cannot shift a user slot silently. Both the compiler response and generated artifact retain the supplied map. The projection also records a versioned `vertexBufferPolicy` with an exclusive external-buffer ceiling; changing either the slot ABI or that policy invalidates the build and runtime-projection fingerprints.
 
 Apple's compiler then compiles that source with `metal -std=macos-metal2.4` to AIR, and `metallib` links the packaged library. The Apple compiler invocation is the MSL 2.4 gate; the Tint writer does not switch its output dialect from that flag. Node.js, `vgpu-tint-compiler`, Tint, source WGSL, generated MSL, and Apple build tools remain on the build machine and are not application runtime dependencies.
 
@@ -126,7 +126,9 @@ Generated MSL and compiler intermediates belong to an inspectable build cache, n
 
 The C1 binding-slot fixture now passes a vgpu-owned map directly into Tint without calling its automatic allocator. It covers stage-local resources, sparse WGSL groups, multiple programs from one source, contiguous intervals, and simultaneous storage-size and immediate-data internals. An independent verifier and negative map canaries reject drift, collisions, overflow, missing or extra resources, and wrong resource classes. The sampled-texture resource binding-array canary is translator evidence only; resource binding arrays stay outside alpha because semantic v1 cannot carry their cardinality.
 
-C1 remains open for the direct-target macOS 14 arm64 and x86_64 compiler build, offline `metal` and `metallib`, the full shader corpus through that exact wrapper, vertex-stream versus shader-buffer index partitioning, and size-table packing with multiple runtime storage buffers.
+The vertex-buffer follow-up establishes a pipeline-local mapping instead of a fixed shader-versus-geometry partition. It preserves artifact-fixed shader and internal slots, starts logical vertex streams after the highest occupied external shader-buffer interval, and rejects a range that crosses the recorded external ceiling. A deliberately colliding Metal pipeline still compiled, while order-sensitive readback exposed the alias; vgpu must therefore validate disjointness itself. Another canary switched between two mappings in one encoder and proved that every active vertex stream must be rebound when the pipeline mapping changes. The exact-capacity fixture used its complete 31-entry test table in a real draw. Its numeric partition and conservative constant-argument mix are fixture inputs, not public ABI or hardware-support claims. This runtime evidence comes from the current Apple-silicon machine; it does not establish Intel or discrete-GPU support, and offline `metal` plus `metallib` validation remains pending.
+
+C1 remains open for the direct-target macOS 14 arm64 and x86_64 compiler build, offline `metal` and `metallib`, the full shader corpus through that exact wrapper, and size-table packing with multiple runtime storage buffers. The reproducible vertex-buffer fixture lives in `experiments/native-metal-spikes/c1-vertex-buffer-slots`.
 
 C3a passed the current structural artifact fixture. It assembles the generated package around intentionally invalid UTF-8 text whose filename ends in `.metallib`, then verifies deterministic output, schemas and hashes, compatibility checks, SwiftPM dependency and resource boundaries, clean consumer builds without invoking Node.js, Tint, or Apple Metal compiler tools after generation, and the positive generated-output allowlist. The test resolves and hashes that resource through `Bundle.module`, but it never passes the sentinel to Metal. C3a therefore validates the package boundary, not a Metal library or shader execution.
 
@@ -173,6 +175,7 @@ The result separates backend-neutral semantics from the selected Metal projectio
 - binding address spaces and access modes separately from their referenced layouts;
 - enabled WGSL language features and their validation result;
 - vgpu-mapped Metal buffer, texture, and sampler slots per stage, including explicit internal slots;
+- the vertex-buffer policy identity, exclusive external ceiling, and shader-derived stream capacity, without inventing a concrete stream map before a vertex layout exists;
 - runtime-sized array prefixes and element strides, without an allocation-specific runtime extent;
 - baked override values and resolved workgroup sizes;
 - semantic capabilities and static Metal-device requirements;

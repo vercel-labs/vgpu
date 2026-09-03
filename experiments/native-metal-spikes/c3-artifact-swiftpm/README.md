@@ -44,21 +44,24 @@ The runner:
 2. compiles all five native JSON Schemas in strict mode, resolves their external references, and
    validates `artifact.json`;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
-   hashes and checks every cross-reference;
-4. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
+   hashes, checks every cross-reference, and proves that the vertex-buffer policy changes runtime
+   compatibility;
+4. rejects external vertex-buffer intervals that cross the policy ceiling and internal
+   vertex-buffer intervals that begin below it;
+5. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
    dependency, and the `AppShaders` target's single ABI product dependency;
-5. tests the generated package for the native architecture, builds the generated package and clean
+6. tests the generated package for the native architecture, builds the generated package and clean
    consumer for both `arm64` and `x86_64`, then runs the native consumer and the `x86_64` consumer
    through Rosetta when available;
-6. puts failing `node`, `npx`, `pnpm`, Tint, `metal`, and `metallib` shims first on `PATH` for every
+7. puts failing `node`, `npx`, `pnpm`, Tint, `metal`, and `metallib` shims first on `PATH` for every
    post-generation SwiftPM command and requires that no shim was invoked;
-7. resolves exactly one `.metallib` through `Bundle.module`, checks its SHA-256, and confirms its
+8. resolves exactly one `.metallib` through `Bundle.module`, checks its SHA-256, and confirms its
    bytes begin with `VGPU-C3-STRUCTURAL-SENTINEL-NOT-A-METALLIB`;
-8. rejects the mutation matrix before a pipeline-factory closure runs, including ABI, model,
+9. rejects the mutation matrix before a pipeline-factory closure runs, including ABI, model,
    fingerprint, and payload-hash mismatches; and
-9. checks the generated package and clean consumer contain no WGSL, MSL, Metal source, AIR,
-   JavaScript, translator executable, build directory, or package-resolution residue, and proves
-   the package allowlist rejects an injected `.env` file.
+10. checks the generated package and clean consumer contain no WGSL, MSL, Metal source, AIR,
+    JavaScript, translator executable, build directory, or package-resolution residue, and proves
+    the package allowlist rejects an injected `.env` file.
 
 The `vgpu-native-program/v1` fingerprint preimage is domain-separated and contains the referenced
 WGSL input IDs and hashes, `layoutModel`, the semantic program without its fingerprint, Swift

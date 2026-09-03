@@ -6,23 +6,23 @@ accepted status of individual choices.
 
 ## API parity target
 
-| JavaScript | Swift | Runtime responsibility |
-| --- | --- | --- |
-| `init()` / `initFromDevice()` | `VGPU.metal()` / `VGPU.metal(device:)` / `VGPU.metal(commandQueue:)` | Select Metal explicitly; create a queue or retain one supplied for ordered host interop |
-| `surface(gpu, canvas)` | `gpu.surface(view)` | Borrow an `MTKView`; acquire and present drawables |
-| `target(gpu, options)` | `gpu.target(...)` | Own offscreen color and optional depth textures |
-| `effect(gpu, shader)` | `gpu.effect(Program.self, ...)` | Inject the fullscreen stage and own bindings |
-| `draw(gpu, options)` | `gpu.draw(Program.self, ...)` | Vertex/fragment program, geometry, and render state |
-| `compute(gpu, source, options)` | `gpu.compute(Program.self, ...)` | Compute pipeline, bindings, and dispatch |
-| `geometry(gpu, recipe)` | `gpu.geometry(recipe)` | Upload vertex and index data |
-| `sampler(gpu, options)` | `gpu.sampler(...)` | Own and cache sampler state |
-| `frame(gpu, callback)` | `gpu.frame { ... } -> VGPUSubmission` | One ordered logical submission; Metal v1 uses one command buffer and one queue commit |
-| `frame.pass(target, body)` | `frame.pass(target) { ... }` | One render command encoder |
-| `Frame.done` | `await submission.settled()` with a default `#isolation` parameter | Wait without throwing for one logical submission and its deferred error delivery |
-| `drawable.set(values)` | Generated `set` / `update` methods | Preserve WGSL names and pack at reflected offsets |
-| `frameLoop(gpu, callback)` | `VGPUView` / `VGPUViewDriver` from opt-in host modules | Scheduling, clock advancement, resize, pause stay outside the context namespace |
-| `gpu.onError(callback)` | `gpu.onError { ... }` with an `@isolated(any) @Sendable` handler | Preserve the subscriber's actor, reject unsafe captures, and return an idempotent `@Sendable` unsubscribe closure |
-| `gpu.settled()` | `await gpu.settled()` with a default `#isolation` parameter | Snapshot known work, its completions, and corresponding error delivery without throwing |
+| JavaScript                      | Swift                                                                | Runtime responsibility                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `init()` / `initFromDevice()`   | `VGPU.metal()` / `VGPU.metal(device:)` / `VGPU.metal(commandQueue:)` | Select Metal explicitly; create a queue or retain one supplied for ordered host interop                           |
+| `surface(gpu, canvas)`          | `gpu.surface(view)`                                                  | Borrow an `MTKView`; acquire and present drawables                                                                |
+| `target(gpu, options)`          | `gpu.target(...)`                                                    | Own offscreen color and optional depth textures                                                                   |
+| `effect(gpu, shader)`           | `gpu.effect(Program.self, ...)`                                      | Inject the fullscreen stage and own bindings                                                                      |
+| `draw(gpu, options)`            | `gpu.draw(Program.self, ...)`                                        | Vertex/fragment program, geometry, and render state                                                               |
+| `compute(gpu, source, options)` | `gpu.compute(Program.self, ...)`                                     | Compute pipeline, bindings, and dispatch                                                                          |
+| `geometry(gpu, recipe)`         | `gpu.geometry(recipe)`                                               | Upload vertex and index data                                                                                      |
+| `sampler(gpu, options)`         | `gpu.sampler(...)`                                                   | Own and cache sampler state                                                                                       |
+| `frame(gpu, callback)`          | `gpu.frame { ... } -> VGPUSubmission`                                | One ordered logical submission; Metal v1 uses one command buffer and one queue commit                             |
+| `frame.pass(target, body)`      | `frame.pass(target) { ... }`                                         | One render command encoder                                                                                        |
+| `Frame.done`                    | `await submission.settled()` with a default `#isolation` parameter   | Wait without throwing for one logical submission and its deferred error delivery                                  |
+| `drawable.set(values)`          | Generated `set` / `update` methods                                   | Preserve WGSL names and pack at reflected offsets                                                                 |
+| `frameLoop(gpu, callback)`      | `VGPUView` / `VGPUViewDriver` from opt-in host modules               | Scheduling, clock advancement, resize, pause stay outside the context namespace                                   |
+| `gpu.onError(callback)`         | `gpu.onError { ... }` with an `@isolated(any) @Sendable` handler     | Preserve the subscriber's actor, reject unsafe captures, and return an idempotent `@Sendable` unsubscribe closure |
+| `gpu.settled()`                 | `await gpu.settled()` with a default `#isolation` parameter          | Snapshot known work, its completions, and corresponding error delivery without throwing                           |
 
 Parity includes defaults, ordering, ownership, target signatures, and coded failures. Swift APIs
 may use methods, key paths, throwing initializers, and scoped closures where those express the same
@@ -46,18 +46,18 @@ program semantics.
 
 These differences are part of the contract rather than accidental drift:
 
-| JavaScript behavior | Swift behavior | Reason |
-| --- | --- | --- |
-| A missing entry-point name selects the first stage match | A source with multiple compatible matches requires `entryPoints` at build time | Generated types must have stable functions and bindings |
-| Bindings may stay unset until materialization fails | Every binding is supplied when an instance is constructed | An unrenderable typed instance cannot exist |
-| The first `set` chooses value- or resource-owned uniform storage | `Bindings` accepts either a value or `VGPUUniform<T>` at construction and preserves that ownership | Keep shared uniforms without an untyped union |
-| Frames can be created manually or callback-scoped | The first Swift API exposes the scoped closure; captured frame/pass values become invalid after callback return | Make command lifetime explicit; a later manual form can be added without changing the scoped one |
-| `Frame.done` stays on the frame returned from `frame(...)` | A successful frame returns a discardable, `Sendable` `VGPUSubmission` | Preserve per-submission completion after the callback-scoped frame becomes invalid |
-| One-shot effect, draw, and dispatch calls return `void` | Successful Swift one-shots return a discardable `VGPUSubmission` | Extend the same scoped completion primitive to work that has no frame value |
-| Today's `gpu.settled()` can omit a plain one-shot or compute queue completion unless another tracked fence covers it | Swift registers every vgpu submission in the context snapshot | Make the context-wide wait complete and consistent across submission forms |
-| A one-shot draw or dispatch can submit independently while a JavaScript frame callback is active | Swift rejects one-shot submission while `gpu.frame` is active | Prevent an accidental nested command buffer whose work is not part of the visible scope |
-| Errors are dynamic objects with string codes | Extensible `VGPUErrorCode` static values preserve shared `VGPU-*` raw codes; native-only failures use `VGPU-NATIVE-*` | Swift ergonomics while opt-in modules can add codes without making Core depend on them |
-| A target can be bound directly and follows resized textures | Swift also binds `VGPUTarget` directly; `target.color` is a concrete generation snapshot | Preserve resize behavior and make the safe path obvious |
+| JavaScript behavior                                                                                                  | Swift behavior                                                                                                        | Reason                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| A missing entry-point name selects the first stage match                                                             | A source with multiple compatible matches requires `entryPoints` at build time                                        | Generated types must have stable functions and bindings                                          |
+| Bindings may stay unset until materialization fails                                                                  | Every binding is supplied when an instance is constructed                                                             | An unrenderable typed instance cannot exist                                                      |
+| The first `set` chooses value- or resource-owned uniform storage                                                     | `Bindings` accepts either a value or `VGPUUniform<T>` at construction and preserves that ownership                    | Keep shared uniforms without an untyped union                                                    |
+| Frames can be created manually or callback-scoped                                                                    | The first Swift API exposes the scoped closure; captured frame/pass values become invalid after callback return       | Make command lifetime explicit; a later manual form can be added without changing the scoped one |
+| `Frame.done` stays on the frame returned from `frame(...)`                                                           | A successful frame returns a discardable, `Sendable` `VGPUSubmission`                                                 | Preserve per-submission completion after the callback-scoped frame becomes invalid               |
+| One-shot effect, draw, and dispatch calls return `void`                                                              | Successful Swift one-shots return a discardable `VGPUSubmission`                                                      | Extend the same scoped completion primitive to work that has no frame value                      |
+| Today's `gpu.settled()` can omit a plain one-shot or compute queue completion unless another tracked fence covers it | Swift registers every vgpu submission in the context snapshot                                                         | Make the context-wide wait complete and consistent across submission forms                       |
+| A one-shot draw or dispatch can submit independently while a JavaScript frame callback is active                     | Swift rejects one-shot submission while `gpu.frame` is active                                                         | Prevent an accidental nested command buffer whose work is not part of the visible scope          |
+| Errors are dynamic objects with string codes                                                                         | Extensible `VGPUErrorCode` static values preserve shared `VGPU-*` raw codes; native-only failures use `VGPU-NATIVE-*` | Swift ergonomics while opt-in modules can add codes without making Core depend on them           |
+| A target can be bound directly and follows resized textures                                                          | Swift also binds `VGPUTarget` directly; `target.color` is a concrete generation snapshot                              | Preserve resize behavior and make the safe path obvious                                          |
 
 Effect behavior is not a difference: both runtimes inject the full-screen vertex stage only when
 the resolved shader has no authored vertex entry point. Native build requires an explicit authored
@@ -159,6 +159,7 @@ The Metal projection records:
 - emitted function names and interface indices;
 - the exact direct Metal buffer, texture, and sampler slots allocated by the versioned vgpu
   binding policy, including backend-internal bindings required by Metal lowering or the vgpu ABI;
+- the versioned pipeline-local vertex-buffer policy and its exclusive external-buffer ceiling;
 - literal resolved workgroup sizes;
 - static Metal-device requirements;
 - optional source maps;
@@ -172,11 +173,15 @@ independent Metal buffer, texture, and sampler namespaces. Only explicitly requi
 are emitted, from reservations at the high end of their namespace. An independent verifier
 reconstructs the same allocation and rejects non-canonical, colliding, or overflowing maps.
 
-This establishes the allocation shape, not the final numeric profile. Vertex-stage shader buffers
-still need an explicit partition from vertex-stream buffer indices, and runtime storage-buffer size
-metadata still needs a multi-buffer packing canary. The semantic v1 contract also carries no WGSL
-resource binding-array (`binding_array`) cardinality, so the first alpha rejects every resource
-binding array during `native check`.
+Vertex-stage shader buffers and runtime vertex streams share one Metal buffer namespace. The
+selected policy keeps shader and internal slots exact in the artifact, records an exclusive
+external-buffer ceiling, and derives only the vertex-stream map with the active pipeline. Logical
+stream zero starts at the maximum end of the vertex-stage shader-buffer intervals, later streams
+are contiguous, and the complete range must not cross the ceiling. This uses interval ends rather
+than binding count, so sparse shader slots remain deterministic without reserving a fixed vertex
+partition. Runtime storage-buffer size metadata still needs a multi-buffer packing canary. The
+semantic v1 contract also carries no WGSL resource binding-array (`binding_array`) cardinality, so
+the first alpha rejects every resource binding array during `native check`.
 A sampled-texture array accepted by the pinned Tint writer remains future translator evidence, not
 a supported v1 binding.
 
@@ -228,13 +233,13 @@ resolution state, and build state are rejected.
 
 Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
 Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
-binding model, deployment target, `.metallib` hash, emitted names, external and internal slots,
-resolved workgroup sizes, and static device requirements. It excludes provenance, inputs, source
-maps, generated sources, tests, and `projection.testing`. An incompatible runner blocks
+binding model, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and
+ceiling, external and internal slots, resolved workgroup sizes, and static device requirements. It
+excludes provenance, inputs, source maps, generated sources, tests, and `projection.testing`. An incompatible runner blocks
 `native compare` only; it does not block application use.
 
-Compatibility is determined by understood schemas, the named layout and binding models, and integer
-ABI contracts. The artifact requires the small shared `VGPUABI` product and one ABI integer; the
+Compatibility is determined by understood schemas, the named layout, binding, and vertex-buffer
+policy models, and integer ABI contracts. The artifact requires the small shared `VGPUABI` product and one ABI integer; the
 runtime advertises the integer range it supports rather than comparing package release versions for
 exact equality. During `0.x`, generated remote package dependencies use
 `.upToNextMinor(from:)` so compatible patch releases remain selectable without admitting

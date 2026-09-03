@@ -317,6 +317,7 @@ function runtimeProjectionInput(projection, librarySHA256) {
     semantic: projection.semantic,
     target: projection.target,
     abi: projection.abi,
+    vertexBufferPolicy: projection.vertexBufferPolicy,
     library: {
       path: projection.library.path,
       sha256: librarySHA256,
@@ -324,6 +325,61 @@ function runtimeProjectionInput(projection, librarySHA256) {
     programs: projection.programs,
     deviceRequirements: projection.deviceRequirements,
   };
+}
+
+function validateVertexBufferPolicy(projection) {
+  const ceiling = projection.vertexBufferPolicy?.externalBufferCeiling;
+  if (!Number.isSafeInteger(ceiling) || ceiling < 0) {
+    fail("vertex-buffer policy has an invalid external ceiling");
+  }
+  for (const program of projection.programs) {
+    for (const binding of program.bindings) {
+      for (const slot of binding.slots) {
+        if (slot.stage !== "vertex" || slot.resourceClass !== "buffer") {
+          continue;
+        }
+        const end = slot.index + slot.count;
+        if (!Number.isSafeInteger(end) || end > ceiling) {
+          fail(
+            `${program.semanticProgram}/${binding.semanticBinding} external vertex buffer interval ends at ${end}, above ceiling ${ceiling}`
+          );
+        }
+      }
+    }
+    for (const internal of program.internalBindings) {
+      for (const slot of internal.slots) {
+        if (
+          slot.stage === "vertex" &&
+          slot.resourceClass === "buffer" &&
+          slot.index < ceiling
+        ) {
+          fail(
+            `${program.semanticProgram}/${internal.role} internal vertex buffer interval starts at ${slot.index}, below ceiling ${ceiling}`
+          );
+        }
+      }
+    }
+  }
+}
+
+function requireVertexPolicyMutationFailure(
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const candidate = clone(projection);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    validateVertexBufferPolicy(candidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
 }
 
 function walk(root) {
@@ -717,11 +773,51 @@ assertEqual(libraries[0].path, libraryPath, "projected Metal library path");
 const runtimeSHA256 = sha256Canonical(
   runtimeProjectionInput(artifact.projection, libraries[0].sha256)
 );
+validateVertexBufferPolicy(artifact.projection);
+requireVertexPolicyMutationFailure(
+  artifact.projection,
+  (projection) => {
+    const slot = projection.programs[0].bindings[0].slots[0];
+    slot.stage = "vertex";
+    slot.index = projection.vertexBufferPolicy.externalBufferCeiling;
+  },
+  "external vertex buffer interval ends",
+  "external vertex interval crossing ceiling"
+);
+requireVertexPolicyMutationFailure(
+  artifact.projection,
+  (projection) => {
+    projection.programs[0].internalBindings.push({
+      role: "fixture-internal",
+      slots: [
+        {
+          stage: "vertex",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: projection.vertexBufferPolicy.externalBufferCeiling - 1,
+          count: 1,
+        },
+      ],
+    });
+  },
+  "internal vertex buffer interval starts",
+  "internal vertex interval below ceiling"
+);
 assertEqual(
   artifact.projection.runtimeFingerprint.sha256,
   runtimeSHA256,
   "runtime projection fingerprint"
 );
+const changedVertexBufferPolicy = clone(artifact.projection);
+changedVertexBufferPolicy.vertexBufferPolicy.externalBufferCeiling -= 1;
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedVertexBufferPolicy, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes vertex-buffer policy");
+}
 
 const semanticPrograms = new Map(
   artifact.semantic.programs.map((program) => [program.name, program])
@@ -948,6 +1044,14 @@ for (const [label, expected] of [
   ],
   ["layout model", `layoutModel: "${artifact.semantic.layoutModel}"`],
   ["binding model", `bindingModel: "${artifact.projection.abi.bindingModel}"`],
+  [
+    "vertex-buffer policy model",
+    `vertexBufferPolicyModel: "${artifact.projection.vertexBufferPolicy.model}"`,
+  ],
+  [
+    "external buffer ceiling",
+    `externalBufferCeiling: ${artifact.projection.vertexBufferPolicy.externalBufferCeiling}`,
+  ],
   ["semantic fingerprint", `semanticFingerprint: "${semanticSHA256}"`],
   [
     "projection semantic fingerprint",

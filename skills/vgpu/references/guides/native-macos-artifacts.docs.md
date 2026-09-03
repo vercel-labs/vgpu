@@ -109,6 +109,7 @@ The `projection` object records only the selected Metal result:
 - the single `.metallib` reference;
 - emitted Metal function names and interface indices;
 - the versioned vgpu mapping from semantic bindings to Metal buffer, texture, and sampler slots, plus every backend-only internal slot;
+- the versioned policy and exclusive external-buffer ceiling used to place pipeline-local vertex streams without colliding with vertex-stage shader buffers;
 - resolved compute workgroup dimensions;
 - static Metal-device requirements;
 - optional WGSL-to-MSL source maps;
@@ -117,6 +118,16 @@ The `projection` object records only the selected Metal result:
 vgpu supplies the complete external and internal slot map to Tint and records the result. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
 
 Slots are scoped by semantic program, selected stage, and Metal resource class. Within each namespace, active bindings are ordered by `(group, binding)`, projected components by stable component name, and each component occupies a contiguous interval. Only internal roles required by lowering or the versioned vgpu ABI appear in `internalBindings`. A slot `count` is projection width; it does not add WGSL resource binding-array semantics to semantic contract v1. The first alpha rejects WGSL resource binding arrays (`binding_array`) before projection.
+
+Vertex-stage shader buffers and vertex streams share Metal's buffer-index namespace. The artifact keeps external shader and internal slots exact, but it does not serialize runtime geometry. When a draw pipeline is created, the Metal backend computes the end of the highest occupied external vertex-stage shader-buffer interval and places logical vertex streams contiguously after it:
+
+```text
+shaderOccupiedEnd = max(externalShaderSlot.index + externalShaderSlot.count, default: 0)
+vertexStream[i] = shaderOccupiedEnd + i
+shaderOccupiedEnd + activeVertexStreamCount <= externalBufferCeiling
+```
+
+`shaderOccupiedEnd` and the stream map are derived pipeline data; neither is serialized into the artifact. `externalBufferCeiling` is an exclusive bound carried by `vertexBufferPolicy`. It remains authoritative even when the program emits no `internalBindings`, and is versioned projection policy rather than a device limit inferred from a hard-coded internal role. External shader intervals must end at or before that ceiling, and every vertex-stage internal buffer reservation must begin at or above it. Sparse holes below `shaderOccupiedEnd` are not reused. Effects do not accept vertex streams; fragment and compute stages keep their independent buffer namespaces.
 
 There is one `projection`, not a `projections` array. A future backend consumes the same semantic contract but defines its own separately versioned projection.
 
@@ -137,9 +148,9 @@ The logical fingerprint covers canonical resolved WGSL and normalized program co
 
 When a compare runner is emitted, its separate runner-build fingerprint covers the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. Those inputs invalidate the runner cache without becoming application runtime-compatibility requirements.
 
-The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI and binding model, deployment target, `.metallib` hash, emitted names, user and internal slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, and `projection.testing`.
+The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI and binding model, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and ceiling, user and internal slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, and `projection.testing`.
 
-Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, and `bindingModel` must all be understood before a program loads. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
+Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, `bindingModel`, and `vertexBufferPolicy.model` must all be understood before a program loads. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
 
 An incompatible Metal runner protocol blocks `native compare` only. It does not make the application artifact incompatible. Missing source maps reduce diagnostic precision without changing runtime compatibility.
 

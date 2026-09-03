@@ -25,6 +25,13 @@ try gpu.frame { frame in
 values. The `VGPU` context owns device-level caches and creates a pipeline for the complete program,
 vertex-layout, target, and render-state signature encountered at draw time.
 
+`VGPURender` owns logical vertex layouts, their canonical fingerprints, and logical stream
+cardinality without exposing physical buffer indices. `_VGPUMetalRenderImpl` combines that state
+with the artifact-fixed shader slots and `vertexBufferPolicy` to derive a pipeline-local Metal
+stream map. A pipeline switch that changes the map invalidates the implementation's physical
+vertex-buffer cache and rebinds every active logical stream. This keeps backend slot policy out of
+the shared rendering API.
+
 The first implementation supports macOS and Metal only. Shared public contracts must still avoid
 making Metal part of the generated-program ABI or the meaning of rendering primitives. This keeps
 a future backend possible without designing speculative Vulkan queues, barriers, or swapchains.
@@ -101,15 +108,15 @@ retain exactly the selected graph, so source-file separation is not an implement
 
 Applications select backend-complete, additive SwiftPM products:
 
-| Product selected by the application | Importable public modules | Metal capabilities linked |
-| --- | --- | --- |
-| `VGPUMetal` | `VGPUCore`, `VGPUMetal` | Core |
-| `VGPUMetalResources` | `VGPUCore`, `VGPUResources`, `VGPUMetal` | Core + Resources |
-| `VGPUMetalRender` | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUMetal` | Core + Resources + Render |
-| `VGPUMetalCompute` | `VGPUCore`, `VGPUResources`, `VGPUCompute`, `VGPUMetal` | Core + Resources + Compute |
-| `VGPUMetalInterop` | Resource stack + `VGPUMetalInterop` | Core + Resources |
-| `VGPUMetalKit` | Render stack + `VGPUMetalKit` | Core + Resources + Render |
-| `VGPUSwiftUI` | MetalKit stack + `VGPUSwiftUI` | Core + Resources + Render |
+| Product selected by the application | Importable public modules                               | Metal capabilities linked  |
+| ----------------------------------- | ------------------------------------------------------- | -------------------------- |
+| `VGPUMetal`                         | `VGPUCore`, `VGPUMetal`                                 | Core                       |
+| `VGPUMetalResources`                | `VGPUCore`, `VGPUResources`, `VGPUMetal`                | Core + Resources           |
+| `VGPUMetalRender`                   | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUMetal`  | Core + Resources + Render  |
+| `VGPUMetalCompute`                  | `VGPUCore`, `VGPUResources`, `VGPUCompute`, `VGPUMetal` | Core + Resources + Compute |
+| `VGPUMetalInterop`                  | Resource stack + `VGPUMetalInterop`                     | Core + Resources           |
+| `VGPUMetalKit`                      | Render stack + `VGPUMetalKit`                           | Core + Resources + Render  |
+| `VGPUSwiftUI`                       | MetalKit stack + `VGPUSwiftUI`                          | Core + Resources + Render  |
 
 These are multi-target selection products, not umbrella modules. Swift source still imports every
 module it names. Selecting both `VGPUMetalRender` and `VGPUMetalCompute` forms the union and links
@@ -132,20 +139,20 @@ that queue through the backend-neutral API.
 Declared products are insufficient if implementation imports recreate a monolith. CI rejects the
 following dependencies even when their measured size is small:
 
-| Module | Must not import |
-| --- | --- |
-| `VGPUABI` | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI |
-| `VGPUCore` | `VGPUResources`, `VGPURender`, `VGPUCompute`, any backend, UI, Scene, Queries, Testing |
-| `VGPUResources` | `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `VGPURender` | `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `VGPUCompute` | `VGPURender`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `VGPUMetal` | `VGPUResources`, `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `_VGPUMetalResourcesImpl` | `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `_VGPUMetalRenderImpl` | `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `_VGPUMetalComputeImpl` | `VGPURender`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `VGPUMetalInterop` | `VGPURender`, `VGPUCompute`, MetalKit, SwiftUI, Scene, Queries, Testing |
-| `VGPUMetalKit` | SwiftUI, Scene, Queries, Testing |
-| `VGPUSwiftUI` | Scene, Queries, Testing |
+| Module                    | Must not import                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `VGPUABI`                 | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI                           |
+| `VGPUCore`                | `VGPUResources`, `VGPURender`, `VGPUCompute`, any backend, UI, Scene, Queries, Testing                       |
+| `VGPUResources`           | `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                               |
+| `VGPURender`              | `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                                             |
+| `VGPUCompute`             | `VGPURender`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                                              |
+| `VGPUMetal`               | `VGPUResources`, `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
+| `_VGPUMetalResourcesImpl` | `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing                  |
+| `_VGPUMetalRenderImpl`    | `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing                                |
+| `_VGPUMetalComputeImpl`   | `VGPURender`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing                                 |
+| `VGPUMetalInterop`        | `VGPURender`, `VGPUCompute`, MetalKit, SwiftUI, Scene, Queries, Testing                                      |
+| `VGPUMetalKit`            | SwiftUI, Scene, Queries, Testing                                                                             |
+| `VGPUSwiftUI`             | Scene, Queries, Testing                                                                                      |
 
 Modules are imported explicitly. Selecting a multi-target product makes its public modules
 available to the application target, but does not import them in source. The package does not use

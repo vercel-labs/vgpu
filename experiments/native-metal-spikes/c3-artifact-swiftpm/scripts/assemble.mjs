@@ -239,6 +239,7 @@ function runtimeProjectionInput(projection, librarySHA256) {
     semantic: projection.semantic,
     target: projection.target,
     abi: projection.abi,
+    vertexBufferPolicy: projection.vertexBufferPolicy,
     library: {
       path: projection.library.path,
       sha256: librarySHA256,
@@ -246,6 +247,41 @@ function runtimeProjectionInput(projection, librarySHA256) {
     programs: projection.programs,
     deviceRequirements: projection.deviceRequirements,
   };
+}
+
+function validateVertexBufferPolicy(projection) {
+  const ceiling = projection.vertexBufferPolicy?.externalBufferCeiling;
+  if (!Number.isSafeInteger(ceiling) || ceiling < 0) {
+    fail("vertex-buffer policy has an invalid external ceiling");
+  }
+  for (const program of projection.programs) {
+    for (const binding of program.bindings) {
+      for (const slot of binding.slots) {
+        if (slot.stage !== "vertex" || slot.resourceClass !== "buffer") {
+          continue;
+        }
+        const end = slot.index + slot.count;
+        if (!Number.isSafeInteger(end) || end > ceiling) {
+          fail(
+            `${program.semanticProgram}/${binding.semanticBinding} external vertex buffer interval ends at ${end}, above ceiling ${ceiling}`
+          );
+        }
+      }
+    }
+    for (const internal of program.internalBindings) {
+      for (const slot of internal.slots) {
+        if (
+          slot.stage === "vertex" &&
+          slot.resourceClass === "buffer" &&
+          slot.index < ceiling
+        ) {
+          fail(
+            `${program.semanticProgram}/${internal.role} internal vertex buffer interval starts at ${slot.index}, below ceiling ${ceiling}`
+          );
+        }
+      }
+    }
+  }
 }
 
 function walkFiles(root) {
@@ -292,6 +328,7 @@ function mutationStatement(mutation) {
   const descriptorStrings = new Set([
     "layoutModel",
     "bindingModel",
+    "vertexBufferPolicyModel",
     "semanticFingerprint",
     "projectionSemanticFingerprint",
     "runtimeFingerprint",
@@ -483,6 +520,7 @@ const librarySHA256 = sha256Bytes(payloadBytes);
 const artifact = JSON.parse(
   readFileSync(join(fixtureDirectory, "fixtures", "artifact.base.json"), "utf8")
 );
+validateVertexBufferPolicy(artifact.projection);
 const sourcePath = join(fixtureDirectory, "fixtures", "noop.wgsl");
 const sourceBytes = readFileSync(sourcePath);
 artifact.inputs = [
@@ -568,6 +606,14 @@ for (const [placeholder, replacement] of [
   ["__SEMANTIC_SHA256__", semanticSHA256],
   ["__RUNTIME_SHA256__", runtimeSHA256],
   ["__LIBRARY_SHA256__", librarySHA256],
+  [
+    "__VERTEX_BUFFER_POLICY_MODEL__",
+    artifact.projection.vertexBufferPolicy.model,
+  ],
+  [
+    "__EXTERNAL_BUFFER_CEILING__",
+    String(artifact.projection.vertexBufferPolicy.externalBufferCeiling),
+  ],
   ["__NOOP_METAL_ENTRY_POINT__", noopEntries[0].metal],
   ["__NOOP_BUFFER_INDEX__", String(noopBufferIndex)],
   ["__NOOP_WORKGROUP_WIDTH__", String(noopWorkgroup.x)],

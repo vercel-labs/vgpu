@@ -47,8 +47,10 @@ intervals themselves; a successful `makeRenderPipelineState` call is not an orac
 
 The allocator combines versioned artifact data with pipeline-local vertex-layout state:
 
-- the artifact supplies `shaderBufferIntervals`, `internalReservations`,
+- the artifact supplies exact shader and internal buffer slots, a `vertexBufferPolicy` containing
   `externalBufferCeiling`, and its runtime-projection fingerprint;
+- the compiler's binding profile owns the complete internal reservation table, while a program's
+  projection emits only the internal slots that program actually requires;
 - the vertex layout supplies its fingerprint and active stream count;
 - the derived pipeline record stores `vertexInputRange`, including the smaller of physical
   capacity and the semantic stream limit; and
@@ -61,12 +63,17 @@ values, not a stable ABI. Metal's 31-entry buffer argument table is a documented
 how vgpu partitions that table remains versioned projection policy. See Apple's
 [Metal capability tables](https://developer.apple.com/metal/capabilities/).
 
-The stream-mapping cache key includes all of the following:
+The fixture's stream-mapping cache key includes all of the following:
 
 - the semantic program fingerprint;
 - the runtime-projection fingerprint that covers emitted Metal and its exact slot map;
 - the vertex-layout fingerprint; and
 - the binding-profile version.
+
+In the proposed production artifact, the runtime-projection fingerprint already covers the
+versioned vertex-buffer policy, ceiling, binding-slot ABI, and exact shader and internal slots. A
+production pipeline key therefore does not need to duplicate the fixture's binding-profile version
+as a separate component.
 
 The fingerprint objects use the same domain-plus-SHA-256 shape as the native contracts, but their
 hash bytes are fixture sentinels. This spike validates key composition and collisions, not the

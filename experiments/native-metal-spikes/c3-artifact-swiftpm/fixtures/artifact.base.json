@@ -136,6 +136,10 @@
       "bindingSlots": 1,
       "bindingModel": "vgpu-metal-binding-slots-v1"
     },
+    "vertexBufferPolicy": {
+      "model": "vgpu-metal-pipeline-local-vertex-buffer-slots-v1",
+      "externalBufferCeiling": 29
+    },
     "toolchain": {
       "translator": {
         "name": "vgpu-tint-compiler",

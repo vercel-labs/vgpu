@@ -11,6 +11,7 @@ public struct AppShadersRuntimeSupport: Sendable {
   public var bindingSlotsABIs: ClosedRange<Int>
   public var layoutModels: Set<String>
   public var bindingModels: Set<String>
+  public var vertexBufferPolicyModels: Set<String>
 
   public init(
     semanticSchemaVersions: ClosedRange<Int>,
@@ -20,7 +21,8 @@ public struct AppShadersRuntimeSupport: Sendable {
     vgpuABIVersions: ClosedRange<Int>,
     bindingSlotsABIs: ClosedRange<Int>,
     layoutModels: Set<String>,
-    bindingModels: Set<String>
+    bindingModels: Set<String>,
+    vertexBufferPolicyModels: Set<String>
   ) {
     self.semanticSchemaVersions = semanticSchemaVersions
     self.metalProjectionABIs = metalProjectionABIs
@@ -30,6 +32,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     self.bindingSlotsABIs = bindingSlotsABIs
     self.layoutModels = layoutModels
     self.bindingModels = bindingModels
+    self.vertexBufferPolicyModels = vertexBufferPolicyModels
   }
 
   public static let fixtureSupported = AppShadersRuntimeSupport(
@@ -40,7 +43,8 @@ public struct AppShadersRuntimeSupport: Sendable {
     vgpuABIVersions: 1...1,
     bindingSlotsABIs: 1...1,
     layoutModels: ["wgsl-host-shareable-v1"],
-    bindingModels: ["vgpu-metal-binding-slots-v1"]
+    bindingModels: ["vgpu-metal-binding-slots-v1"],
+    vertexBufferPolicyModels: ["vgpu-metal-pipeline-local-vertex-buffer-slots-v1"]
   )
 }
 
@@ -53,6 +57,8 @@ public struct AppShadersDescriptor: Sendable {
   public var bindingSlotsABI: Int
   public var layoutModel: String
   public var bindingModel: String
+  public var vertexBufferPolicyModel: String
+  public var externalBufferCeiling: Int
   public var semanticFingerprint: String
   public var projectionSemanticFingerprint: String
   public var runtimeFingerprint: String
@@ -69,6 +75,8 @@ public struct AppShadersDescriptor: Sendable {
     bindingSlotsABI: Int,
     layoutModel: String,
     bindingModel: String,
+    vertexBufferPolicyModel: String,
+    externalBufferCeiling: Int,
     semanticFingerprint: String,
     projectionSemanticFingerprint: String,
     runtimeFingerprint: String,
@@ -84,6 +92,8 @@ public struct AppShadersDescriptor: Sendable {
     self.bindingSlotsABI = bindingSlotsABI
     self.layoutModel = layoutModel
     self.bindingModel = bindingModel
+    self.vertexBufferPolicyModel = vertexBufferPolicyModel
+    self.externalBufferCeiling = externalBufferCeiling
     self.semanticFingerprint = semanticFingerprint
     self.projectionSemanticFingerprint = projectionSemanticFingerprint
     self.runtimeFingerprint = runtimeFingerprint
@@ -163,6 +173,8 @@ public enum AppShadersArtifact {
     bindingSlotsABI: 1,
     layoutModel: "wgsl-host-shareable-v1",
     bindingModel: "vgpu-metal-binding-slots-v1",
+    vertexBufferPolicyModel: "__VERTEX_BUFFER_POLICY_MODEL__",
+    externalBufferCeiling: __EXTERNAL_BUFFER_CEILING__,
     semanticFingerprint: "__SEMANTIC_SHA256__",
     projectionSemanticFingerprint: "__SEMANTIC_SHA256__",
     runtimeFingerprint: "__RUNTIME_SHA256__",
@@ -274,6 +286,12 @@ public enum AppShadersArtifact {
       code: "unsupported-binding-model",
       field: "binding model",
       value: candidate.bindingModel
+    )
+    try require(
+      runtime.vertexBufferPolicyModels.contains(candidate.vertexBufferPolicyModel),
+      code: "unsupported-vertex-buffer-policy-model",
+      field: "vertex-buffer policy model",
+      value: candidate.vertexBufferPolicyModel
     )
     try require(
       candidate.semanticFingerprint == candidate.projectionSemanticFingerprint,
