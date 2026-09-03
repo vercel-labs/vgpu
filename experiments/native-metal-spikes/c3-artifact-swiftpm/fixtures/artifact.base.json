@@ -1,0 +1,218 @@
+{
+  "$schema": "https://vgpu.sh/schemas/native/v1/artifact.schema.json",
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-artifact/v1",
+  "canonicalization": "JCS-RFC8785+VGPU-PATHS-v1",
+  "compiler": {
+    "name": "c3-fixture-assembler",
+    "version": "0.1.0"
+  },
+  "semantic": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-semantic/v1",
+    "module": {
+      "name": "AppShaders",
+      "swiftName": "AppShaders"
+    },
+    "abi": {
+      "bindingLayout": 1,
+      "generatedSwift": 1,
+      "vgpuABI": {
+        "product": "VGPUABI",
+        "requiredVersion": 1
+      }
+    },
+    "layoutModel": "wgsl-host-shareable-v1",
+    "types": {
+      "u32": {
+        "kind": "scalar",
+        "scalar": "u32"
+      },
+      "u32x4": {
+        "kind": "array",
+        "element": "u32",
+        "count": 4
+      }
+    },
+    "layouts": {
+      "u32": {
+        "type": "u32",
+        "alignment": 4,
+        "minimumSize": 4,
+        "size": 4,
+        "runtimeSized": false,
+        "members": []
+      },
+      "u32x4": {
+        "type": "u32x4",
+        "alignment": 4,
+        "minimumSize": 16,
+        "size": 16,
+        "runtimeSized": false,
+        "arrayStride": 4,
+        "members": []
+      }
+    },
+    "programs": [
+      {
+        "name": "Noop",
+        "swiftName": "Noop",
+        "kind": "compute",
+        "sources": ["noop-wgsl"],
+        "fingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "__PROGRAM_SHA256__"
+        },
+        "entryPoints": {
+          "compute": {
+            "stage": "compute",
+            "origin": "authored",
+            "names": {
+              "authored": "c3_noop",
+              "wgsl": "c3_noop"
+            },
+            "source": {
+              "input": "noop-wgsl",
+              "start": { "line": 4, "column": 1 },
+              "end": { "line": 7, "column": 2 }
+            },
+            "inputs": [],
+            "outputs": [],
+            "bindings": ["g0b0"],
+            "samplingPairs": [],
+            "workgroupSize": {
+              "x": { "kind": "literal", "value": 4 },
+              "y": { "kind": "literal", "value": 1 },
+              "z": { "kind": "literal", "value": 1 }
+            }
+          }
+        },
+        "bindings": [
+          {
+            "id": "g0b0",
+            "name": "values",
+            "swiftName": "values",
+            "group": 0,
+            "binding": 0,
+            "kind": "buffer",
+            "visibility": ["compute"],
+            "addressSpace": "storage",
+            "access": "read_write",
+            "type": "u32x4",
+            "layout": "u32x4",
+            "minimumBindingSize": 16
+          }
+        ],
+        "overrides": [],
+        "capabilities": {
+          "vocabulary": 1,
+          "languageFeatures": [],
+          "features": []
+        }
+      }
+    ],
+    "capabilities": {
+      "vocabulary": 1,
+      "languageFeatures": [],
+      "features": []
+    }
+  },
+  "projection": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-metal-projection/v1",
+    "backend": "metal",
+    "semantic": {
+      "contractId": "vgpu-native-semantic/v1",
+      "sha256": "__SEMANTIC_SHA256__"
+    },
+    "target": {
+      "platform": "macos",
+      "minimumOSVersion": "14.0",
+      "metalCompilerTargetTriple": "air64-apple-macos14.0",
+      "metalLanguageVersion": "2.4"
+    },
+    "abi": {
+      "projection": 1,
+      "bindingSlots": 1,
+      "bindingModel": "vgpu-metal-binding-slots-v1"
+    },
+    "toolchain": {
+      "translator": {
+        "name": "vgpu-tint-compiler",
+        "version": "0.0.0",
+        "protocol": 1,
+        "upstream": {
+          "name": "dawn/tint",
+          "revision": "0000000000000000000000000000000000000000"
+        },
+        "executableSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "options": [
+          { "name": "fixture-mode", "value": "synthetic-no-translation" }
+        ]
+      },
+      "apple": {
+        "xcodeVersion": "0.0",
+        "xcodeBuild": "synthetic-c3a",
+        "metalVersion": "0.0",
+        "swiftVersion": "6.0",
+        "sdkVersion": "0.0",
+        "sdkBuild": "synthetic-c3a"
+      }
+    },
+    "runtimeFingerprint": {
+      "domain": "vgpu-native-metal-runtime-projection/v1",
+      "sha256": "__RUNTIME_SHA256__"
+    },
+    "library": {
+      "path": "Sources/AppShaders/Resources/AppShaders.metallib"
+    },
+    "programs": [
+      {
+        "semanticProgram": "Noop",
+        "kind": "compute",
+        "entryPoints": [
+          {
+            "stage": "compute",
+            "wgsl": "c3_noop",
+            "metal": "c3_noop",
+            "interfaceLocations": []
+          }
+        ],
+        "bindings": [
+          {
+            "semanticBinding": "g0b0",
+            "slots": [
+              {
+                "stage": "compute",
+                "mode": "direct",
+                "resourceClass": "buffer",
+                "component": "buffer",
+                "index": 0,
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "internalBindings": [],
+        "resolvedWorkgroupSize": { "x": 4, "y": 1, "z": 1 },
+        "deviceRequirements": {
+          "features": [],
+          "limits": [],
+          "formats": []
+        }
+      }
+    ],
+    "deviceRequirements": {
+      "features": [],
+      "limits": [],
+      "formats": []
+    }
+  },
+  "extensions": {
+    "dev.vgpu.c3": {
+      "fixture": true,
+      "payloadKind": "__PAYLOAD_KIND__",
+      "translationInvoked": false
+    }
+  }
+}
