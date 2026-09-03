@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9902,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9902",
+    "sourceId": "issue:9902",
+    "title": "Rendering does not work",
+    "body": "The renderer fails in my project. Please fix it.",
+    "author": "fixture-reporter",
+    "createdAt": "2026-08-21T09:00:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "question", "description": "Further information is requested" },
+    {
+      "name": "needs-information",
+      "description": "More reporter context is required"
+    }
+  ],
+  "availableSourceIds": ["issue:9902"],
+  "contextWarnings": [
+    "Duplicate search was unavailable; no duplicate conclusion may rely on search results."
+  ],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": false }
+}

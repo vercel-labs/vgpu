@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9904,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9904",
+    "sourceId": "issue:9904",
+    "title": "How can I select the software renderer in CI?",
+    "body": "Our GitHub Actions runners do not have a GPU. Is there a documented environment variable or setup command that selects the CPU software renderer? I am looking for configuration guidance; I have not observed a vgpu regression.",
+    "author": "fixture-reporter",
+    "createdAt": "2026-08-23T11:45:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "enhancement", "description": "New feature or request" },
+    { "name": "question", "description": "Further information is requested" }
+  ],
+  "availableSourceIds": ["issue:9904"],
+  "contextWarnings": [],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": true }
+}
