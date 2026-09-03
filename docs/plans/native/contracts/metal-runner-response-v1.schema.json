@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/metal-runner/v1/response.schema.json",
+  "title": "vGPU Native Metal Runner Response v1",
+  "description": "The one UTF-8 JSON value written by a generated Metal runner to stdout. EOF terminates the message; diagnostics belong on stderr.",
+  "oneOf": [
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "fixtureIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "base64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
+    "logicalInputsFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-logical-inputs/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runtimeProjectionFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-metal-runtime-projection/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runnerBuildFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-metal-runner-build/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractId", "schemaVersion", "manifestSha256", "logicalInputs", "runtimeProjection"],
+      "properties": {
+        "contractId": { "const": "vgpu-native-artifact/v1" },
+        "schemaVersion": { "const": 1 },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "logicalInputs": { "$ref": "#/$defs/logicalInputsFingerprint" },
+        "runtimeProjection": { "$ref": "#/$defs/runtimeProjectionFingerprint" }
+      }
+    },
+    "executionIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "runnerBuild"],
+      "properties": {
+        "artifact": { "$ref": "#/$defs/artifactIdentity" },
+        "runnerBuild": { "$ref": "#/$defs/runnerBuildFingerprint" }
+      }
+    },
+    "device": {
+      "description": "Metal device identity recorded with comparison artifacts. registryId is hexadecimal because UInt64 is not safely representable by every JSON consumer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "registryId",
+        "gpuArchitecture",
+        "isLowPower",
+        "isRemovable",
+        "hasUnifiedMemory",
+        "operatingSystemVersion"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "registryId": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+        "gpuArchitecture": {
+          "description": "The raw value of MTLDevice.architecture.name for the Metal device; this identifies the GPU architecture, not the runner's CPU architecture.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "isLowPower": { "type": "boolean" },
+        "isRemovable": { "type": "boolean" },
+        "hasUnifiedMemory": { "type": "boolean" },
+        "operatingSystemVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+        }
+      }
+    },
+    "image": {
+      "description": "Tightly packed normalized pixels. byteLength and sha256 describe the decoded bytes; bytesPerRow MUST equal width * 4 and byteLength MUST equal bytesPerRow * height.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "bytesPerRow",
+        "byteLength",
+        "pixelFormat",
+        "origin",
+        "channelOrder",
+        "colorSpace",
+        "alphaMode",
+        "encoding",
+        "sha256",
+        "data"
+      ],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "bytesPerRow": { "type": "integer", "minimum": 4, "maximum": 32768 },
+        "byteLength": { "type": "integer", "minimum": 4, "maximum": 268435456 },
+        "pixelFormat": { "const": "rgba8unorm" },
+        "origin": { "const": "top-left" },
+        "channelOrder": { "const": "rgba" },
+        "colorSpace": { "enum": ["linear", "srgb"] },
+        "alphaMode": { "enum": ["straight", "premultiplied", "opaque"] },
+        "encoding": { "const": "base64" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "data": { "$ref": "#/$defs/base64" }
+      }
+    },
+    "outputTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "output" }
+      }
+    },
+    "resourceTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resource"],
+      "properties": {
+        "kind": { "const": "resource" },
+        "resource": { "$ref": "#/$defs/fixtureIdentifier" }
+      }
+    },
+    "traceTarget": {
+      "oneOf": [
+        { "$ref": "#/$defs/outputTarget" },
+        { "$ref": "#/$defs/resourceTarget" }
+      ]
+    },
+    "frameBeginEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "frame.begin" }
+      }
+    },
+    "passBeginEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code", "pass", "target"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "render-pass.begin" },
+        "pass": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "target": { "$ref": "#/$defs/traceTarget" }
+      }
+    },
+    "drawEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code", "pass", "draw", "instance"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "draw" },
+        "pass": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "draw": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "instance": { "$ref": "#/$defs/fixtureIdentifier" }
+      }
+    },
+    "passEndEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code", "pass", "target"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "render-pass.end" },
+        "pass": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "target": { "$ref": "#/$defs/traceTarget" }
+      }
+    },
+    "frameSubmitEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "frame.submit" }
+      }
+    },
+    "frameCompleteEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "frame.complete" }
+      }
+    },
+    "readbackEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "code", "sha256"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "code": { "const": "readback.complete" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "traceEvent": {
+      "oneOf": [
+        { "$ref": "#/$defs/frameBeginEvent" },
+        { "$ref": "#/$defs/passBeginEvent" },
+        { "$ref": "#/$defs/drawEvent" },
+        { "$ref": "#/$defs/passEndEvent" },
+        { "$ref": "#/$defs/frameSubmitEvent" },
+        { "$ref": "#/$defs/frameCompleteEvent" },
+        { "$ref": "#/$defs/readbackEvent" }
+      ]
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "events"],
+      "properties": {
+        "version": { "const": 1 },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/traceEvent" }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "image", "trace"],
+      "properties": {
+        "device": { "$ref": "#/$defs/device" },
+        "image": { "$ref": "#/$defs/image" },
+        "trace": { "$ref": "#/$defs/trace" }
+      }
+    },
+    "successResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "contractId", "requestId", "ok", "identity", "result"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "contractId": { "const": "vgpu-native-metal-runner/v1" },
+        "requestId": { "$ref": "#/$defs/requestId" },
+        "ok": { "const": true },
+        "identity": { "$ref": "#/$defs/executionIdentity" },
+        "result": { "$ref": "#/$defs/result" }
+      }
+    },
+    "errorCode": {
+      "enum": [
+        "VGPU-NATIVE-METAL-RUNNER-PROTOCOL",
+        "VGPU-NATIVE-METAL-RUNNER-ARTIFACT-MISMATCH",
+        "VGPU-NATIVE-METAL-RUNNER-FIXTURE-INVALID",
+        "VGPU-NATIVE-METAL-UNAVAILABLE",
+        "VGPU-NATIVE-DEVICE-UNSUPPORTED",
+        "VGPU-NATIVE-METAL-RUNNER-RESOURCE-CREATE",
+        "VGPU-NATIVE-METAL-RUNNER-BINDING-INVALID",
+        "VGPU-NATIVE-PIPELINE-CREATE",
+        "VGPU-NATIVE-METAL-RUNNER-ENCODE",
+        "VGPU-NATIVE-METAL-RUNNER-COMMAND-BUFFER",
+        "VGPU-NATIVE-METAL-RUNNER-READBACK",
+        "VGPU-NATIVE-METAL-RUNNER-INTERNAL"
+      ]
+    },
+    "metalError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "code"],
+      "properties": {
+        "domain": { "$ref": "#/$defs/nonEmptyString" },
+        "code": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "description": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "runnerError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "phase"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": { "$ref": "#/$defs/nonEmptyString" },
+        "phase": {
+          "enum": [
+            "protocol",
+            "artifact",
+            "fixture",
+            "device",
+            "resources",
+            "bindings",
+            "pipeline",
+            "encode",
+            "execute",
+            "readback",
+            "internal"
+          ]
+        },
+        "jsonPath": { "type": "string", "pattern": "^\\$", "maxLength": 2048 },
+        "program": { "$ref": "#/$defs/nonEmptyString" },
+        "resource": { "$ref": "#/$defs/fixtureIdentifier" },
+        "instance": { "$ref": "#/$defs/fixtureIdentifier" },
+        "metal": { "$ref": "#/$defs/metalError" }
+      }
+    },
+    "errorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "contractId", "ok", "error"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "contractId": { "const": "vgpu-native-metal-runner/v1" },
+        "requestId": {
+          "description": "Echoed when the runner decoded it; omitted only when protocol decoding failed before a request identifier was available.",
+          "$ref": "#/$defs/requestId"
+        },
+        "ok": { "const": false },
+        "identity": { "$ref": "#/$defs/executionIdentity" },
+        "error": { "$ref": "#/$defs/runnerError" },
+        "trace": { "$ref": "#/$defs/trace" }
+      }
+    }
+  }
+}

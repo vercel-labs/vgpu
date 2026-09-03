@@ -1,0 +1,154 @@
+---
+title: "Programs"
+description: "Configure effect, draw, and compute entry points without baking renderer state into generated shader programs."
+---
+
+A native shader module contains programs, not renderers. `vgpu native build` selects WGSL entry points and generates Swift descriptors that the opt-in render and compute products can instantiate.
+
+The generated descriptor owns no GPU resources. An instance such as `VGPUEffect<Gradient>` owns binding state and asks its `VGPU` context for pipelines as it encounters target signatures.
+
+> Warning: Native macOS support is a docs-first API proposal. The configuration and Swift API on this page are not implemented yet.
+
+## Configure programs
+
+List every program exported by the generated Swift module:
+
+```json
+{
+  "$schema": "./node_modules/@vgpu/native/native.schema.json",
+  "moduleName": "AppShaders",
+  "platform": "macos",
+  "minimumOSVersion": "14.0",
+  "programs": [
+    {
+      "name": "Gradient",
+      "kind": "effect",
+      "source": "./Shaders/Gradient.wgsl"
+    },
+    {
+      "name": "LitCube",
+      "kind": "draw",
+      "source": "./Shaders/LitCube.wgsl",
+      "entryPoints": {
+        "vertex": "vs_main",
+        "fragment": "fs_main"
+      }
+    },
+    {
+      "name": "StepParticles",
+      "kind": "compute",
+      "source": "./Shaders/Particles.wgsl",
+      "entryPoints": {
+        "compute": "cs_update"
+      }
+    },
+    {
+      "name": "ParticleDraw",
+      "kind": "draw",
+      "source": "./Shaders/Particles.wgsl",
+      "entryPoints": {
+        "vertex": "vs_particles",
+        "fragment": "fs_particles"
+      }
+    }
+  ],
+  "output": "./Generated/app-shaders"
+}
+```
+
+| Field | Required | Default | Description |
+| --- | ---: | --- | --- |
+| `moduleName` | Yes | — | Swift module, library, and product name. |
+| `platform` | Yes | — | Native compiler target; currently `"macos"`. |
+| `minimumOSVersion` | No | `"14.0"` | Deployment target for the Swift package and Metal compiler. |
+| `programs` | Yes | — | Programs exported by this module. |
+| `output` | Yes | — | Dedicated generated directory; replacement requires this configuration's ownership marker. |
+| `program.name` | Yes | — | Generated Swift namespace and stable artifact identifier. |
+| `program.kind` | No | `"effect"` | `"effect"`, `"draw"`, or `"compute"`. |
+| `program.source` | Yes | — | Entry WGSL file, relative to the configuration file. |
+| `program.entryPoints` | Sometimes | Inferred | Required when the resolved source has more than one compatible entry point. |
+| `program.overrides` | No | Shader defaults | Typed WGSL override values fixed for this native program. |
+
+An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
+
+When exactly one compatible entry point exists for a required stage, omit it from `entryPoints`. Multiple compatible entry points are never chosen by source order: `native check` requires an explicit selection. The artifact records whether an effect's vertex stage was authored or injected.
+
+Render target formats, blend state, culling, depth state, sample count, geometry, and dispatch dimensions do not belong in this file. They are properties of targets and program instances at runtime.
+
+### Bake overrides at build time
+
+Set WGSL overrides in the program configuration when the shader default is not the native value you want:
+
+```json
+{
+  "name": "Bloom",
+  "kind": "effect",
+  "source": "./Shaders/Bloom.wgsl",
+  "overrides": {
+    "SAMPLE_COUNT": 9,
+    "USE_DITHER": true
+  }
+}
+```
+
+Override names and values are checked against the resolved WGSL declaration. The compiler substitutes the selected values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. The selected values and resolved workgroup dimensions become part of the program fingerprint.
+
+Runtime specialization would require a separate artifact and API contract. It is not implicit in this proposal.
+
+Generated types, complete initialization, typed updates, resource ownership, and translated slot mappings are documented in [Bindings and generated types](/native/macos/bindings).
+
+## Programs compile for target signatures
+
+The `.metallib` contains functions, not complete render pipelines. The runtime creates and caches pipeline state for the target where an effect or draw is used:
+
+```swift
+public struct VGPURenderTargetSignature: Hashable, Sendable {
+  public let colorFormats: [VGPUTextureFormat]
+  public let depthFormat: VGPUTextureFormat?
+  public let stencilFormat: VGPUTextureFormat?
+  public let sampleCount: Int
+}
+```
+
+`VGPUTarget.signature` and `VGPUSurface.signature` return snapshots of this value. A target convenience overload reads the offscreen signature directly; a surface must be reduced to its signature before pre-warming outside a frame:
+
+```swift
+try await gradient.compile(for: scene)
+try await gradient.compile(for: surface.signature)
+
+try gpu.frame { frame in
+  try frame.pass(target: surface) { pass in
+    try pass.draw(gradient)
+  }
+}
+```
+
+A render signature contains every color format, separate depth and stencil formats, and the sample count. A surface may be used only from inside `gpu.frame`; use its immutable `signature` snapshot when pre-warming outside a frame. Changing a view's format or sample count produces another signature and therefore another pipeline.
+
+The complete pipeline cache key includes the program fingerprint and selected entry points, vertex layouts, topology and strip format, the render signature, per-attachment blend and write masks, cull and front-face state, unclipped depth, depth/stencil state, multisample state, and fixed override values. Encoder-only values such as a blend constant or stencil reference do not create another pipeline.
+
+The same program can therefore render to both an HDR offscreen target and the display surface. Pre-warm each signature that must avoid first-frame pipeline creation.
+
+The runtime can reject formats, sample counts, and limits that are known to be unsupported from its effective capability tables. Metal does not expose one universal query for every format, usage, and render-state combination, so final pipeline creation remains authoritative. A failed preflight never causes a silent format or shader substitution.
+
+The generated package layout, semantic contract, Metal projection, payload integrity, and test-only runner are documented in [Generated artifacts](/native/macos/artifacts).
+
+## Keep Swift names predictable
+
+`moduleName`, program names, bindings, structs, and fields must map to distinct Swift identifiers. `native check` rejects Swift keywords, generated API names, and case-insensitive collisions rather than silently renaming public symbols.
+
+Paths are relative to `vgpu.native.json`. Commands read that file from the current directory and do not search parent directories; pass `--config` explicitly in a monorepo:
+
+```sh
+npx vgpu native build --config ./apps/example/vgpu.native.json
+```
+
+Put every program that belongs to one application module in the same configuration. They share one `VGPUABI` dependency, generated host types, Swift product, and Metal library. A mixed generated module does not make an application link render or compute executors it never imports.
+
+## Next steps
+
+- [Use generated bindings](/native/macos/bindings)
+- [Inspect generated artifacts](/native/macos/artifacts)
+- [Compose native rendering primitives](/native/macos/rendering)
+- [Integrate with SwiftUI and MetalKit](/native/macos/views)
+- [Build and verify native artifacts](/native/macos/build)

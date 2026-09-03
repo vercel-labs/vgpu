@@ -1,0 +1,178 @@
+# Native API contract
+
+This document maps the existing vgpu model into Swift and records the generated-program contract.
+See [architecture](./architecture.md) for product ownership and [decisions](./decisions.md) for the
+accepted status of individual choices.
+
+## API parity target
+
+| JavaScript | Swift | Runtime responsibility |
+| --- | --- | --- |
+| `init()` / `initFromDevice()` | `VGPU.metal()` / `VGPU.metal(device:)` / `VGPU.metal(commandQueue:)` | Select Metal explicitly; create a queue or retain one supplied for ordered host interop |
+| `surface(gpu, canvas)` | `gpu.surface(view)` | Borrow an `MTKView`; acquire and present drawables |
+| `target(gpu, options)` | `gpu.target(...)` | Own offscreen color and optional depth textures |
+| `effect(gpu, shader)` | `gpu.effect(Program.self, ...)` | Inject the fullscreen stage and own bindings |
+| `draw(gpu, options)` | `gpu.draw(Program.self, ...)` | Vertex/fragment program, geometry, and render state |
+| `compute(gpu, source, options)` | `gpu.compute(Program.self, ...)` | Compute pipeline, bindings, and dispatch |
+| `geometry(gpu, recipe)` | `gpu.geometry(recipe)` | Upload vertex and index data |
+| `sampler(gpu, options)` | `gpu.sampler(...)` | Own and cache sampler state |
+| `frame(gpu, callback)` | `gpu.frame { ... } -> VGPUSubmission` | One ordered logical submission; Metal v1 uses one command buffer and one queue commit |
+| `frame.pass(target, body)` | `frame.pass(target) { ... }` | One render command encoder |
+| `Frame.done` | `await submission.settled()` with a default `#isolation` parameter | Wait without throwing for one logical submission and its deferred error delivery |
+| `drawable.set(values)` | Generated `set` / `update` methods | Preserve WGSL names and pack at reflected offsets |
+| `frameLoop(gpu, callback)` | `VGPUView` / `VGPUViewDriver` from opt-in host modules | Scheduling, clock advancement, resize, pause stay outside the context namespace |
+| `gpu.onError(callback)` | `gpu.onError { ... }` with an `@isolated(any) @Sendable` handler | Preserve the subscriber's actor, reject unsafe captures, and return an idempotent `@Sendable` unsubscribe closure |
+| `gpu.settled()` | `await gpu.settled()` with a default `#isolation` parameter | Snapshot known work, its completions, and corresponding error delivery without throwing |
+
+Parity includes defaults, ordering, ownership, target signatures, and coded failures. Swift APIs
+may use methods, key paths, throwing initializers, and scoped closures where those express the same
+contract more safely.
+
+## Platform support and capabilities
+
+The first alpha's supported execution contract is macOS 14 or later on Apple silicon, running the
+Swift application natively as `arm64`. Intel-based Macs and their Intel or AMD GPUs are not yet a
+supported target. Cross-compiling the runtime and a generated sample for `x86_64` is useful
+portability evidence, but it is not a runtime compatibility claim.
+
+No public initializer selects an architecture or vendor tier. `VGPU.metal(...)` validates the
+chosen `MTLDevice`, and `gpu.capabilities` reports the effective intersection of runtime,
+projection, and device support. Packing, resource storage, synchronization, upload, and readback
+behavior cannot depend on pointer width or unified-memory coherence. The same contract must remain
+implementable by a future tested Intel, AMD, or non-Metal backend without changing generated
+program semantics.
+
+## Deliberate Swift differences
+
+These differences are part of the contract rather than accidental drift:
+
+| JavaScript behavior | Swift behavior | Reason |
+| --- | --- | --- |
+| A missing entry-point name selects the first stage match | A source with multiple compatible matches requires `entryPoints` at build time | Generated types must have stable functions and bindings |
+| Bindings may stay unset until materialization fails | Every binding is supplied when an instance is constructed | An unrenderable typed instance cannot exist |
+| The first `set` chooses value- or resource-owned uniform storage | `Bindings` accepts either a value or `VGPUUniform<T>` at construction and preserves that ownership | Keep shared uniforms without an untyped union |
+| Frames can be created manually or callback-scoped | The first Swift API exposes the scoped closure; captured frame/pass values become invalid after callback return | Make command lifetime explicit; a later manual form can be added without changing the scoped one |
+| `Frame.done` stays on the frame returned from `frame(...)` | A successful frame returns a discardable, `Sendable` `VGPUSubmission` | Preserve per-submission completion after the callback-scoped frame becomes invalid |
+| One-shot effect, draw, and dispatch calls return `void` | Successful Swift one-shots return a discardable `VGPUSubmission` | Extend the same scoped completion primitive to work that has no frame value |
+| Today's `gpu.settled()` can omit a plain one-shot or compute queue completion unless another tracked fence covers it | Swift registers every vgpu submission in the context snapshot | Make the context-wide wait complete and consistent across submission forms |
+| A one-shot draw or dispatch can submit independently while a JavaScript frame callback is active | Swift rejects one-shot submission while `gpu.frame` is active | Prevent an accidental nested command buffer whose work is not part of the visible scope |
+| Errors are dynamic objects with string codes | Extensible `VGPUErrorCode` static values preserve shared `VGPU-*` raw codes; native-only failures use `VGPU-NATIVE-*` | Swift ergonomics while opt-in modules can add codes without making Core depend on them |
+| A target can be bound directly and follows resized textures | Swift also binds `VGPUTarget` directly; `target.color` is a concrete generation snapshot | Preserve resize behavior and make the safe path obvious |
+
+Effect behavior is not a difference: both runtimes inject the full-screen vertex stage only when
+the resolved shader has no authored vertex entry point. Native build requires an explicit authored
+vertex selection when more than one exists.
+
+## Runtime ownership contract
+
+- `VGPU` and live objects created from it are non-`Sendable` and stay in one application-selected
+  isolation domain. Public encoding remains synchronous inside that owner.
+- A context-wide, non-blocking access gate permits reentrant calls in one synchronous stack and
+  throws `VGPU-NATIVE-CONCURRENT-ACCESS` when another thread overlaps it. The gate detects misuse;
+  it does not make the graph safe to share.
+- Async methods on live objects accept
+  `isolation: isolated (any Actor)? = #isolation`. They validate and register immutable work before
+  suspending, then return a `Sendable` result to the caller's actor.
+- Frames and passes are callback-scoped. Escaped values fail with stable closed-state codes, nested
+  frames, passes, and one-shot submissions fail synchronously, and throwing from an open frame
+  cancels that logical submission.
+- A normally returning `gpu.frame` auto-submits and returns a discardable `VGPUSubmission`.
+  `frame.submit()` returns the same stable token idempotently, and the one-shot effect, draw, and
+  dispatch entry points return their own token. Even an empty normal frame commits one ordered
+  submission and returns a token. A throw before submission produces no token. If a callback
+  explicitly submits and then throws, the outer call still throws and the token is observable only
+  when the callback saved the `frame.submit()` result.
+- `VGPUSubmission` is `Sendable`. Its non-throwing
+  `settled(isolation: isolated (any Actor)? = #isolation)` waits only for that logical submission and
+  its deferred error deliveries. A serial or shared queue still makes it observe earlier queue
+  commands before its own command buffer completes, without adopting their readbacks or error
+  deliveries. Context-wide `gpu.settled()` tracks every vgpu submission and snapshots all known work.
+- Core `dispose()` methods throw, close synchronously, and never wait for the GPU. They are
+  idempotent after success, retain already submitted resources until completion, reject overlap,
+  and leave `settled()` available to drain known work. Main-actor host adapters can expose
+  non-throwing disposal because they stop and serialize their own scheduler first.
+- `VGPUMetalInterop` converts `MTLBuffer` and `MTLTexture` objects into context-owned neutral
+  wrappers. Shared Resources, Render, Compute, and generated programs never expose Metal types.
+- `VGPUFramePassResult` distinguishes `.encoded` from normal drawable `.unavailable` without using
+  errors for a hidden or resizing window.
+
+## Artifact contract to freeze first
+
+`NativeArtifact` is a build manifest, not an extension of `ShaderSource`. One configuration
+produces one generic envelope with one semantic contract and one selected projection:
+
+```text
+artifact
+├── compiler, fingerprints, inputs, and generic file hashes
+├── semantic: vgpu-native-semantic/v1
+└── projection: vgpu-native-metal-projection/v1
+    └── testing.runner: vgpu-native-metal-runner/v1
+```
+
+The root `files` array contains only `path`, `size`, and `sha256`. Platform-specific file
+roles and references stay in the projection. The singular `projection` field is intentional: v1 emits one
+backend and one `.metallib` for each configuration. A future backend uses the same semantic object
+with its own separately versioned projection rather than adding Metal fields to the envelope.
+
+The semantic contract records:
+
+- module and generated Swift names;
+- `effect`, `draw`, and `compute` program records;
+- authored and resolved WGSL entry points, stage inputs and outputs, built-ins, interpolation, and
+  invariance;
+- WGSL binding names, groups, bindings, address spaces, access, active stages, resource shapes,
+  sample and storage types, and sampler kinds;
+- reflected minimum buffer sizes, alignments, field offsets, array strides, and matrix strides;
+- typed override declarations, defaults, and selected values;
+- literal or override-backed workgroup dimensions;
+- backend-neutral feature requirements;
+- integer binding-layout, generated-Swift, and required `VGPUABI` contract versions.
+
+Selected override values are substituted before WGSL-to-MSL translation. The semantic contract
+preserves the declaration, default, selected value, and any override-backed workgroup origin, but it
+does not describe Metal function constants. Runtime specialization requires a future explicit API
+and artifact revision.
+
+The Metal projection records:
+
+- macOS target, deployment version, the exact `metalCompilerTargetTriple` passed to Apple's Metal
+  compiler, and Metal language version; this AIR/platform/deployment triple is not the Swift host
+  CPU triple or a GPU-family support claim;
+- translator identity and flags plus the producing Apple toolchain;
+- the single `.metallib` reference;
+- emitted function names, interface indices, and translated Metal buffer, texture, sampler, and
+  argument slots;
+- literal resolved workgroup sizes;
+- static Metal-device requirements;
+- optional source maps;
+- optional compare-runner metadata under `projection.testing`.
+
+Render target formats, sampled texture formats, sample count, blend and depth state, and geometry
+remain instance or target state. Artifact format requirements include only formats fixed by shader
+semantics, such as a storage-texture format. Runtime effective capabilities are the intersection of
+the runtime implementation, compiler projection, and actual device. Family and format tables allow
+preflight, but final Metal resource and pipeline creation remains authoritative.
+
+Logical inputs, semantic data, manifests, and generated Swift must be reproducible. The `.metallib`
+is an opaque Apple toolchain result, so its hash proves payload integrity without promising
+byte-for-byte reproducibility across toolchains. The root manifest hashes every generated payload
+except itself and the output-ownership marker.
+
+Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
+Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI, deployment
+target, `.metallib` hash, emitted names and slots, resolved workgroup sizes, and static device
+requirements. It excludes provenance, inputs, source maps, generated sources, tests, and
+`projection.testing`. An incompatible runner blocks `native compare` only; it does not block
+application use.
+
+Compatibility is determined by understood schema and integer ABI contracts. The artifact requires
+the small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer range it
+supports rather than comparing package release versions for exact equality.
+
+The contract family is:
+
+- [Artifact envelope](./contracts/artifact-v1.schema.json)
+- [Semantic contract](./contracts/semantic-v1.schema.json)
+- [Metal projection](./contracts/metal-projection-v1.schema.json)
+- [Metal runner request](./contracts/metal-runner-request-v1.schema.json)
+- [Metal runner response](./contracts/metal-runner-response-v1.schema.json)

@@ -1,0 +1,15 @@
+{
+  "title": "macOS",
+  "pages": [
+    "programs",
+    "bindings",
+    "resources",
+    "rendering",
+    "views",
+    "lifecycle",
+    "artifacts",
+    "build",
+    "compare",
+    "..."
+  ]
+}

@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/v1/metal-projection.schema.json",
+  "title": "vGPU Native Metal Projection v1",
+  "description": "Metal-specific projection of one vGPU native semantic contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "backend",
+    "semantic",
+    "target",
+    "abi",
+    "toolchain",
+    "runtimeFingerprint",
+    "library",
+    "programs",
+    "deviceRequirements"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "vgpu-native-metal-projection/v1" },
+    "backend": { "const": "metal" },
+    "semantic": { "$ref": "#/$defs/semanticIdentity" },
+    "target": { "$ref": "#/$defs/target" },
+    "abi": { "$ref": "#/$defs/abi" },
+    "toolchain": { "$ref": "#/$defs/toolchain" },
+    "runtimeFingerprint": { "$ref": "#/$defs/runtimeProjectionFingerprint" },
+    "library": { "$ref": "#/$defs/library" },
+    "programs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/program" } },
+    "deviceRequirements": { "$ref": "#/$defs/deviceRequirements" },
+    "sourceMaps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourceMap" } },
+    "testing": { "$ref": "#/$defs/testing" },
+    "extensions": {
+      "description": "Namespaced, informational metadata. Extensions MUST NOT alter compilation, ABI, capability requirements, or runtime behavior.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "swiftIdentifier": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 256 },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "appleVersion": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+){1,3}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^\\u0000]+$"
+    },
+    "bindingId": { "type": "string", "pattern": "^g(?:0|[1-9][0-9]*)b(?:0|[1-9][0-9]*)$" },
+    "stage": { "enum": ["vertex", "fragment", "compute"] },
+    "semanticIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractId", "sha256"],
+      "properties": {
+        "contractId": { "const": "vgpu-native-semantic/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "minimumOSVersion", "metalCompilerTargetTriple", "metalLanguageVersion"],
+      "properties": {
+        "platform": { "const": "macos" },
+        "minimumOSVersion": { "$ref": "#/$defs/appleVersion" },
+        "metalCompilerTargetTriple": {
+          "description": "The exact target triple passed to Apple's Metal compiler. It identifies the Metal/AIR platform and deployment target, not the build-host CPU, Swift process architecture, or GPU architecture.",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "metalLanguageVersion": { "$ref": "#/$defs/appleVersion" }
+      }
+    },
+    "abi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projection", "bindingSlots"],
+      "properties": {
+        "projection": { "const": 1 },
+        "bindingSlots": { "const": 1 }
+      }
+    },
+    "toolOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "value": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["translator", "apple"],
+      "properties": {
+        "translator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "options"],
+          "properties": {
+            "name": { "$ref": "#/$defs/nonEmptyString" },
+            "version": { "$ref": "#/$defs/semanticVersion" },
+            "revision": { "type": "string", "pattern": "^[a-f0-9]{7,64}$" },
+            "options": { "type": "array", "items": { "$ref": "#/$defs/toolOption" } }
+          }
+        },
+        "apple": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["xcodeVersion", "xcodeBuild", "metalVersion", "swiftVersion", "sdkVersion", "sdkBuild"],
+          "properties": {
+            "xcodeVersion": { "$ref": "#/$defs/appleVersion" },
+            "xcodeBuild": { "$ref": "#/$defs/nonEmptyString" },
+            "metalVersion": { "$ref": "#/$defs/appleVersion" },
+            "swiftVersion": { "$ref": "#/$defs/appleVersion" },
+            "sdkVersion": { "$ref": "#/$defs/appleVersion" },
+            "sdkBuild": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        }
+      }
+    },
+    "runtimeProjectionFingerprint": {
+      "description": "Hash of the semantic fingerprint, Metal ABI, deployment target, referenced metallib hash, emitted names and slots, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, and testing metadata are excluded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-metal-runtime-projection/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "library": {
+      "description": "The one .metallib payload emitted by this projection. path references an entry in the artifact's generic files array.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": { "path": { "$ref": "#/$defs/relativePath" } }
+    },
+    "interfaceLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "semanticName", "location", "metalIndex"],
+      "properties": {
+        "direction": { "enum": ["input", "output"] },
+        "semanticName": { "$ref": "#/$defs/nonEmptyString" },
+        "location": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "metalIndex": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "entryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl", "metal", "interfaceLocations"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stage" },
+        "wgsl": { "$ref": "#/$defs/nonEmptyString" },
+        "metal": { "$ref": "#/$defs/nonEmptyString" },
+        "interfaceLocations": { "type": "array", "items": { "$ref": "#/$defs/interfaceLocation" } }
+      }
+    },
+    "directMetalSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "mode", "resourceClass", "component", "index", "count"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stage" },
+        "mode": { "const": "direct" },
+        "resourceClass": { "enum": ["buffer", "texture", "sampler"] },
+        "component": { "$ref": "#/$defs/nonEmptyString" },
+        "index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "count": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "argumentBufferMetalSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "mode", "resourceClass", "component", "bufferIndex", "argumentIndex", "count"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stage" },
+        "mode": { "const": "argument-buffer" },
+        "resourceClass": { "enum": ["buffer", "texture", "sampler"] },
+        "component": { "$ref": "#/$defs/nonEmptyString" },
+        "bufferIndex": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "argumentIndex": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "count": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "metalSlot": {
+      "oneOf": [
+        { "$ref": "#/$defs/directMetalSlot" },
+        { "$ref": "#/$defs/argumentBufferMetalSlot" }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticBinding", "slots"],
+      "properties": {
+        "semanticBinding": { "$ref": "#/$defs/bindingId" },
+        "slots": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/metalSlot" } }
+      }
+    },
+    "resolvedWorkgroupSize": {
+      "description": "Literal dimensions after every WGSL override has been baked before translation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "y": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "z": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "capabilityId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)*/v[1-9][0-9]*$" },
+    "deviceLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "comparison", "value"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "comparison": { "enum": [">=", "<="] },
+        "value": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "formatRequirement": {
+      "description": "A format fixed by shader semantics, such as a WGSL storage-texture format. Dynamic sampled textures and render-target formats are validated from runtime state and MUST NOT be recorded here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "usages"],
+      "properties": {
+        "format": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "usages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["storage-read", "storage-write"] }
+        }
+      }
+    },
+    "deviceRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["features", "limits", "formats"],
+      "properties": {
+        "features": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/capabilityId" } },
+        "limits": { "type": "array", "items": { "$ref": "#/$defs/deviceLimit" } },
+        "formats": { "type": "array", "items": { "$ref": "#/$defs/formatRequirement" } }
+      }
+    },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticProgram", "kind", "entryPoints", "bindings", "deviceRequirements"],
+      "properties": {
+        "semanticProgram": { "$ref": "#/$defs/nonEmptyString" },
+        "kind": { "enum": ["effect", "draw", "compute"] },
+        "entryPoints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/entryPoint" } },
+        "bindings": { "type": "array", "items": { "$ref": "#/$defs/binding" } },
+        "resolvedWorkgroupSize": { "$ref": "#/$defs/resolvedWorkgroupSize" },
+        "deviceRequirements": { "$ref": "#/$defs/deviceRequirements" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "compute" } }, "required": ["kind"] },
+          "then": {
+            "required": ["resolvedWorkgroupSize"],
+            "properties": { "resolvedWorkgroupSize": { "$ref": "#/$defs/resolvedWorkgroupSize" } }
+          },
+          "else": { "properties": { "resolvedWorkgroupSize": false } }
+        }
+      ]
+    },
+    "generatedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["virtualPath", "sha256"],
+      "properties": {
+        "virtualPath": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceMapV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sources", "names", "mappings"],
+      "properties": {
+        "version": { "const": 3 },
+        "file": { "$ref": "#/$defs/relativePath" },
+        "sourceRoot": { "$ref": "#/$defs/relativePath" },
+        "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/relativePath" } },
+        "names": { "type": "array", "items": { "type": "string" } },
+        "mappings": { "type": "string" }
+      }
+    },
+    "sourceMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program", "stage", "generatedSource", "map"],
+      "properties": {
+        "program": { "$ref": "#/$defs/nonEmptyString" },
+        "stage": { "$ref": "#/$defs/stage" },
+        "generatedSource": { "$ref": "#/$defs/generatedSource" },
+        "map": { "$ref": "#/$defs/sourceMapV3" }
+      }
+    },
+    "runnerProtocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractId", "schemaVersion", "framing", "requestSchema", "responseSchema"],
+      "properties": {
+        "contractId": { "const": "vgpu-native-metal-runner/v1" },
+        "schemaVersion": { "const": 1 },
+        "framing": { "const": "single-json-eof" },
+        "requestSchema": { "const": "https://vgpu.sh/schemas/native/metal-runner/v1/request.schema.json" },
+        "responseSchema": { "const": "https://vgpu.sh/schemas/native/metal-runner/v1/response.schema.json" }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "protocol", "commands"],
+      "properties": {
+        "product": { "$ref": "#/$defs/swiftIdentifier" },
+        "protocol": { "$ref": "#/$defs/runnerProtocol" },
+        "commands": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "compare" } }
+      }
+    },
+    "testing": {
+      "description": "Build- and test-only metadata. It is excluded from runtime compatibility and does not block application use when absent or incompatible.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runner"],
+      "properties": { "runner": { "$ref": "#/$defs/runner" } }
+    }
+  }
+}

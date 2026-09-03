@@ -1,0 +1,492 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/metal-runner/v1/request.schema.json",
+  "title": "vGPU Native Metal Runner Request v1",
+  "description": "The one UTF-8 JSON value written to a generated Metal runner's stdin. EOF terminates the message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contractId", "requestId", "command", "artifact", "runnerBuild", "fixture"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "vgpu-native-metal-runner/v1" },
+    "requestId": { "$ref": "#/$defs/requestId" },
+    "command": { "const": "compare" },
+    "artifact": { "$ref": "#/$defs/artifactIdentity" },
+    "runnerBuild": { "$ref": "#/$defs/runnerBuildFingerprint" },
+    "fixture": { "$ref": "#/$defs/fixture" }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "fixtureIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "f16Bits": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{4}$"
+    },
+    "f32Bits": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}$"
+    },
+    "logicalInputsFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-logical-inputs/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runtimeProjectionFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-metal-runtime-projection/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runnerBuildFingerprint": {
+      "description": "SHA-256 over the domain-separated canonical tuple of artifact manifest SHA, runner ABI, Swift runner target triple, and Swift toolchain identity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "const": "vgpu-native-metal-runner-build/v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractId", "schemaVersion", "manifestSha256", "logicalInputs", "runtimeProjection"],
+      "properties": {
+        "contractId": { "const": "vgpu-native-artifact/v1" },
+        "schemaVersion": { "const": 1 },
+        "manifestSha256": {
+          "description": "SHA-256 of the raw artifact.json bytes used to build this runner.",
+          "$ref": "#/$defs/sha256"
+        },
+        "logicalInputs": { "$ref": "#/$defs/logicalInputsFingerprint" },
+        "runtimeProjection": { "$ref": "#/$defs/runtimeProjectionFingerprint" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "format", "colorSpace", "alphaMode"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "format": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "colorSpace": { "enum": ["linear", "srgb"] },
+        "alphaMode": { "enum": ["straight", "premultiplied", "opaque"] }
+      }
+    },
+    "targetUsage": {
+      "enum": ["sampled", "render-attachment", "copy-source", "copy-destination"]
+    },
+    "targetResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "width",
+        "height",
+        "format",
+        "sampleCount",
+        "mipLevelCount",
+        "usage"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/fixtureIdentifier" },
+        "kind": { "const": "target" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "format": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "sampleCount": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "mipLevelCount": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "usage": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/targetUsage" }
+        }
+      }
+    },
+    "addressMode": {
+      "enum": ["clamp-to-edge", "repeat", "mirror-repeat"]
+    },
+    "filterMode": {
+      "enum": ["nearest", "linear"]
+    },
+    "compareFunction": {
+      "enum": [
+        "none",
+        "never",
+        "less",
+        "equal",
+        "less-equal",
+        "greater",
+        "not-equal",
+        "greater-equal",
+        "always"
+      ]
+    },
+    "samplerResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "addressModeU",
+        "addressModeV",
+        "addressModeW",
+        "minFilter",
+        "magFilter",
+        "mipmapFilter",
+        "lodMinClamp",
+        "lodMaxClamp",
+        "compare",
+        "maxAnisotropy"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/fixtureIdentifier" },
+        "kind": { "const": "sampler" },
+        "addressModeU": { "$ref": "#/$defs/addressMode" },
+        "addressModeV": { "$ref": "#/$defs/addressMode" },
+        "addressModeW": { "$ref": "#/$defs/addressMode" },
+        "minFilter": { "$ref": "#/$defs/filterMode" },
+        "magFilter": { "$ref": "#/$defs/filterMode" },
+        "mipmapFilter": { "$ref": "#/$defs/filterMode" },
+        "lodMinClamp": { "$ref": "#/$defs/f32Bits" },
+        "lodMaxClamp": { "$ref": "#/$defs/f32Bits" },
+        "compare": { "$ref": "#/$defs/compareFunction" },
+        "maxAnisotropy": { "type": "integer", "minimum": 1, "maximum": 16 }
+      }
+    },
+    "resource": {
+      "oneOf": [
+        { "$ref": "#/$defs/targetResource" },
+        { "$ref": "#/$defs/samplerResource" }
+      ]
+    },
+    "boolValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "const": "bool" },
+        "value": { "type": "boolean" }
+      }
+    },
+    "i32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "const": "i32" },
+        "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 }
+      }
+    },
+    "u32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "const": "u32" },
+        "value": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "f16Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "bits"],
+      "properties": {
+        "kind": { "const": "f16" },
+        "bits": { "$ref": "#/$defs/f16Bits" }
+      }
+    },
+    "f32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "bits"],
+      "properties": {
+        "kind": { "const": "f32" },
+        "bits": { "$ref": "#/$defs/f32Bits" }
+      }
+    },
+    "sequenceValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "elements"],
+      "properties": {
+        "kind": { "const": "sequence" },
+        "elements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/bindingValue" }
+        }
+      }
+    },
+    "structField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "value": { "$ref": "#/$defs/bindingValue" }
+      }
+    },
+    "structValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "fields"],
+      "properties": {
+        "kind": { "const": "struct" },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/structField" }
+        }
+      }
+    },
+    "resourceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resource"],
+      "properties": {
+        "kind": { "const": "resource" },
+        "resource": { "$ref": "#/$defs/fixtureIdentifier" }
+      }
+    },
+    "targetTextureReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target", "aspect", "mipLevel", "arrayLayer"],
+      "properties": {
+        "kind": { "const": "target-texture" },
+        "target": { "$ref": "#/$defs/fixtureIdentifier" },
+        "aspect": { "const": "color" },
+        "mipLevel": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "arrayLayer": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "bindingValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/boolValue" },
+        { "$ref": "#/$defs/i32Value" },
+        { "$ref": "#/$defs/u32Value" },
+        { "$ref": "#/$defs/f16Value" },
+        { "$ref": "#/$defs/f32Value" },
+        { "$ref": "#/$defs/sequenceValue" },
+        { "$ref": "#/$defs/structValue" },
+        { "$ref": "#/$defs/resourceReference" },
+        { "$ref": "#/$defs/targetTextureReference" }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "value": { "$ref": "#/$defs/bindingValue" }
+      }
+    },
+    "blendFactor": {
+      "enum": [
+        "zero",
+        "one",
+        "src",
+        "one-minus-src",
+        "src-alpha",
+        "one-minus-src-alpha",
+        "dst",
+        "one-minus-dst",
+        "dst-alpha",
+        "one-minus-dst-alpha",
+        "src-alpha-saturated",
+        "constant",
+        "one-minus-constant",
+        "src1",
+        "one-minus-src1",
+        "src1-alpha",
+        "one-minus-src1-alpha"
+      ]
+    },
+    "blendOperation": {
+      "enum": ["add", "subtract", "reverse-subtract", "min", "max"]
+    },
+    "blendComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["srcFactor", "dstFactor", "operation"],
+      "properties": {
+        "srcFactor": { "$ref": "#/$defs/blendFactor" },
+        "dstFactor": { "$ref": "#/$defs/blendFactor" },
+        "operation": { "$ref": "#/$defs/blendOperation" }
+      }
+    },
+    "blendState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color", "alpha"],
+      "properties": {
+        "color": { "$ref": "#/$defs/blendComponent" },
+        "alpha": { "$ref": "#/$defs/blendComponent" }
+      }
+    },
+    "colorRenderState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blend", "writeMask"],
+      "properties": {
+        "blend": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/blendState" }
+          ]
+        },
+        "writeMask": { "type": "integer", "minimum": 0, "maximum": 15 }
+      }
+    },
+    "renderState": {
+      "description": "Normalized immutable fragment state. colors is aligned with the program's fragment outputs; every inherited default has already been resolved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colors", "blendConstant"],
+      "properties": {
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/colorRenderState" }
+        },
+        "blendConstant": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/f32Bits" }
+        }
+      }
+    },
+    "instance": {
+      "description": "A complete render-program binding set. Program kind and static state are validated against the artifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "program", "bindings", "renderState"],
+      "properties": {
+        "id": { "$ref": "#/$defs/fixtureIdentifier" },
+        "program": { "$ref": "#/$defs/nonEmptyString" },
+        "bindings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/binding" }
+        },
+        "renderState": { "$ref": "#/$defs/renderState" }
+      }
+    },
+    "outputTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "output" }
+      }
+    },
+    "resourceTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resource"],
+      "properties": {
+        "kind": { "const": "resource" },
+        "resource": { "$ref": "#/$defs/fixtureIdentifier" }
+      }
+    },
+    "passTarget": {
+      "oneOf": [
+        { "$ref": "#/$defs/outputTarget" },
+        { "$ref": "#/$defs/resourceTarget" }
+      ]
+    },
+    "clearColor": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/f32Bits" }
+    },
+    "drawCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance"],
+      "properties": {
+        "instance": { "$ref": "#/$defs/fixtureIdentifier" }
+      }
+    },
+    "renderPass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "loadAction", "clearColor", "storeAction", "draws"],
+      "properties": {
+        "target": { "$ref": "#/$defs/passTarget" },
+        "loadAction": { "const": "clear" },
+        "clearColor": { "$ref": "#/$defs/clearColor" },
+        "storeAction": { "const": "store" },
+        "draws": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/drawCommand" }
+        }
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxChannelDelta", "maxDifferentPixels"],
+      "properties": {
+        "maxChannelDelta": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "maxDifferentPixels": { "type": "integer", "minimum": 0, "maximum": 67108864 }
+      }
+    },
+    "fixture": {
+      "description": "Canonical runner projection of a user-authored compare fixture. All defaults have already been materialized.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "output", "resources", "instances", "frame", "tolerance"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "output": { "$ref": "#/$defs/output" },
+        "resources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/resource" }
+        },
+        "instances": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/instance" }
+        },
+        "frame": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/renderPass" }
+        },
+        "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/v1/artifact.schema.json",
+  "title": "vGPU Native Artifact v1",
+  "description": "Build-time envelope for one generated native module and one selected backend projection.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contractId",
+    "canonicalization",
+    "compiler",
+    "fingerprints",
+    "inputs",
+    "files",
+    "semantic",
+    "projection"
+  ],
+  "properties": {
+    "$schema": { "const": "https://vgpu.sh/schemas/native/v1/artifact.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "vgpu-native-artifact/v1" },
+    "canonicalization": { "const": "JCS-RFC8785+VGPU-PATHS-v1" },
+    "compiler": { "$ref": "#/$defs/compiler" },
+    "fingerprints": { "$ref": "#/$defs/fingerprints" },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/input" }
+    },
+    "files": {
+      "description": "Every generated payload except artifact.json and the output-ownership marker. Roles stay in the owning projection so this envelope remains backend-neutral.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "semantic": { "$ref": "https://vgpu.sh/schemas/native/v1/semantic.schema.json" },
+    "projection": { "$ref": "https://vgpu.sh/schemas/native/v1/metal-projection.schema.json" },
+    "extensions": {
+      "description": "Namespaced, informational metadata. Extensions MUST NOT alter compilation, ABI, capability requirements, or runtime behavior.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "relativePath": {
+      "description": "NFC-normalized, output- or configuration-relative POSIX path. Semantic validation also rejects symlinks and case-insensitive collisions.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^\\u0000]+$"
+    },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "version": { "$ref": "#/$defs/semanticVersion" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{7,64}$" }
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "$ref": "#/$defs/nonEmptyString" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "logicalInputsFingerprint": {
+      "allOf": [
+        { "$ref": "#/$defs/fingerprint" },
+        { "type": "object", "properties": { "domain": { "const": "vgpu-native-logical-inputs/v1" } } }
+      ]
+    },
+    "semanticFingerprint": {
+      "allOf": [
+        { "$ref": "#/$defs/fingerprint" },
+        { "type": "object", "properties": { "domain": { "const": "vgpu-native-semantic/v1" } } }
+      ]
+    },
+    "buildFingerprint": {
+      "allOf": [
+        { "$ref": "#/$defs/fingerprint" },
+        { "type": "object", "properties": { "domain": { "const": "vgpu-native-build/v1" } } }
+      ]
+    },
+    "fingerprints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logicalInputs", "semantic", "build"],
+      "properties": {
+        "logicalInputs": { "$ref": "#/$defs/logicalInputsFingerprint" },
+        "semantic": { "$ref": "#/$defs/semanticFingerprint" },
+        "build": { "$ref": "#/$defs/buildFingerprint" }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "role", "size", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "role": { "enum": ["config", "wgsl"] },
+        "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}
