@@ -213,6 +213,36 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "RuntimeTypeNoSizeQuery",
+      "stage": "compute",
+      "needsStorageBufferSizes": false,
+      "buffers": [
+        {
+          "semanticBinding": "g0b0",
+          "kind": "storage",
+          "runtimeSized": true,
+          "index": 7,
+          "count": 1,
+          "rangeBytes": 16,
+          "minimumBindingSize": 8,
+          "logicalBufferSize": 16,
+          "effectiveOffset": 0
+        },
+        {
+          "semanticBinding": "g0b1",
+          "kind": "storage",
+          "runtimeSized": false,
+          "index": 1,
+          "count": 1,
+          "rangeBytes": 4,
+          "minimumBindingSize": 4,
+          "logicalBufferSize": 4,
+          "effectiveOffset": 0
+        }
+      ],
+      "internalBindings": []
     }
   ]
 }

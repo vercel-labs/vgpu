@@ -359,6 +359,29 @@ function verifyFixtureCoverage(input, projection) {
     fail("fixed-only program unexpectedly allocated a storage-size table");
   }
 
+  const noSizeQuerySource = namedProgram(
+    input.programs,
+    "RuntimeTypeNoSizeQuery",
+    "fixture"
+  );
+  const noSizeQuery = namedProgram(
+    projection.programs,
+    "RuntimeTypeNoSizeQuery",
+    "projection"
+  );
+  const unusedRuntimeBuffer = noSizeQuerySource.buffers.find(
+    (buffer) => buffer.kind === "storage" && buffer.runtimeSized
+  );
+  if (
+    noSizeQuerySource.needsStorageBufferSizes !== false ||
+    unusedRuntimeBuffer?.index !== 7 ||
+    unusedRuntimeBuffer.minimumBindingSize !== 8 ||
+    noSizeQuery.storageBufferSizes !== null ||
+    noSizeQuery.internalBindings.length !== 0
+  ) {
+    fail("runtime storage type incorrectly implied a storage-size table");
+  }
+
   const upperSource = namedProgram(
     input.programs,
     "UpperNonRuntimeSlots",
@@ -913,6 +936,218 @@ function runStageLocalTint(wrapper, scratch, transport) {
   };
 }
 
+function generateTintCanary(
+  wrapper,
+  scratch,
+  { id, owner, mappings, source, entryPoint, emittedEntryPoint, transport }
+) {
+  const mappingPath = join(scratch, `${id}-${transport}.map`);
+  writeMapping(mappingPath, mappings);
+  const attempts = ["first", "second"].map((suffix) => {
+    const outputPath = join(scratch, `${id}-${transport}-${suffix}.metal`);
+    const process = invokeWrapper(wrapper, mappingPath, outputPath, {
+      source,
+      entryPoint,
+      emittedEntryPoint,
+      transport,
+    });
+    return {
+      ...process,
+      msl: existsSync(outputPath) ? readFileSync(outputPath, "utf8") : "",
+    };
+  });
+  for (const attempt of attempts) {
+    if (
+      attempt.error ||
+      attempt.signal ||
+      attempt.status !== 0 ||
+      attempt.msl.length === 0
+    ) {
+      commandFailure(`${owner} Tint canary`, attempt);
+    }
+  }
+  if (
+    attempts[0].stdout !== attempts[1].stdout ||
+    attempts[0].msl !== attempts[1].msl
+  ) {
+    fail(`${owner} Tint output is not deterministic`);
+  }
+  return {
+    msl: attempts[0].msl,
+    response: JSON.parse(attempts[0].stdout),
+  };
+}
+
+function runNoSizeQueryTint(wrapper, scratch, transport) {
+  const emittedEntryPoint = "vgpu_runtime_type_no_size_query";
+  const mappings = [
+    {
+      kind: "storage",
+      group: 0,
+      binding: 0,
+      metalIndex: 7,
+      count: 1,
+      runtimeSized: true,
+    },
+    {
+      kind: "storage",
+      group: 0,
+      binding: 1,
+      metalIndex: 1,
+      count: 1,
+      runtimeSized: false,
+    },
+  ];
+  const { response, msl } = generateTintCanary(wrapper, scratch, {
+    id: "no-size-query",
+    owner: "runtime type without size query",
+    mappings,
+    source: "runtime-storage-fixed-prefix.wgsl",
+    entryPoint: "fixedPrefixOnly",
+    emittedEntryPoint,
+    transport,
+  });
+  if (
+    response.entryPoint !== "fixedPrefixOnly" ||
+    response.emittedEntryPoint !== emittedEntryPoint ||
+    response.stage !== "compute" ||
+    response.needsStorageBufferSizes !== false ||
+    response.transport !== transport ||
+    response.storageBufferSizesIndex !== 30 ||
+    response.bufferSizesOffset !== (transport === "immediate" ? 4 : null) ||
+    response.wordCount !== 8 ||
+    !isDeepStrictEqual(response.postLoweringBufferIndices, [1, 7]) ||
+    !isDeepStrictEqual(
+      response.bindings,
+      mappings.map((mapping) => ({
+        kind: mapping.kind,
+        group: mapping.group,
+        binding: mapping.binding,
+        metalIndex: mapping.metalIndex,
+        sizeWordIndex: null,
+      }))
+    )
+  ) {
+    fail("runtime type without size query disagrees with Tint metadata");
+  }
+  if (
+    !msl.includes(emittedEntryPoint) ||
+    !msl.includes("[[buffer(7)]]") ||
+    !msl.includes("[[buffer(1)]]") ||
+    msl.includes("[[buffer(30)]]") ||
+    msl.includes("tint_storage_buffer_sizes") ||
+    msl.includes("tint_immediate_data")
+  ) {
+    fail("runtime type without size query emitted the internal size transport");
+  }
+  return {
+    status: "passed",
+    deterministicRuns: 2,
+    reflectedBindings: mappings.length,
+    runtimeSizedBindings: mappings.filter((mapping) => mapping.runtimeSized)
+      .length,
+    needsStorageBufferSizes: response.needsStorageBufferSizes,
+    postLoweringBufferIndices: response.postLoweringBufferIndices,
+  };
+}
+
+function runMixedSizeQueryTint(wrapper, scratch, transport) {
+  const emittedEntryPoint = "vgpu_mixed_size_query";
+  const mappings = [
+    {
+      kind: "storage",
+      group: 0,
+      binding: 0,
+      metalIndex: 7,
+      count: 1,
+      runtimeSized: true,
+    },
+    {
+      kind: "storage",
+      group: 0,
+      binding: 1,
+      metalIndex: 1,
+      count: 1,
+      runtimeSized: false,
+    },
+    {
+      kind: "storage",
+      group: 0,
+      binding: 2,
+      metalIndex: 0,
+      count: 1,
+      runtimeSized: true,
+    },
+  ];
+  const { response, msl } = generateTintCanary(wrapper, scratch, {
+    id: "mixed-size-query",
+    owner: "mixed runtime size query",
+    mappings,
+    source: "runtime-storage-fixed-prefix.wgsl",
+    entryPoint: "mixedSizeQuery",
+    emittedEntryPoint,
+    transport,
+  });
+  const expectedBindings = mappings.map((mapping) => ({
+    kind: mapping.kind,
+    group: mapping.group,
+    binding: mapping.binding,
+    metalIndex: mapping.metalIndex,
+    sizeWordIndex: mapping.runtimeSized ? mapping.metalIndex : null,
+  }));
+  if (
+    response.entryPoint !== "mixedSizeQuery" ||
+    response.emittedEntryPoint !== emittedEntryPoint ||
+    response.stage !== "compute" ||
+    response.needsStorageBufferSizes !== true ||
+    response.transport !== transport ||
+    response.storageBufferSizesIndex !== 30 ||
+    response.bufferSizesOffset !== (transport === "immediate" ? 4 : null) ||
+    response.wordCount !== 8 ||
+    response.payloadByteLength !== 32 ||
+    response.shaderTableByteLength !== 32 ||
+    response.uploadByteLength !== (transport === "immediate" ? 48 : 32) ||
+    !isDeepStrictEqual(response.postLoweringBufferIndices, [0, 1, 7, 30]) ||
+    !isDeepStrictEqual(response.bindings, expectedBindings)
+  ) {
+    fail("mixed runtime size query disagrees with configured-map extent");
+  }
+
+  const hasExpectedTableType =
+    transport === "immediate"
+      ? /tint_array<uint,\s*8>\s+tint_storage_buffer_sizes/.test(msl)
+      : /tint_array<uint4,\s*2>/.test(msl);
+  const readsLowSizeWord =
+    transport === "immediate"
+      ? msl.includes("tint_storage_buffer_sizes[0u]")
+      : msl.includes("[0u].x");
+  const readsHighSizeWord =
+    transport === "immediate"
+      ? msl.includes("tint_storage_buffer_sizes[7u]")
+      : msl.includes("[1u].w");
+  if (
+    !msl.includes(emittedEntryPoint) ||
+    !msl.includes("[[buffer(0)]]") ||
+    !msl.includes("[[buffer(1)]]") ||
+    !msl.includes("[[buffer(7)]]") ||
+    !msl.includes("[[buffer(30)]]") ||
+    !hasExpectedTableType ||
+    !readsLowSizeWord ||
+    readsHighSizeWord
+  ) {
+    fail("mixed runtime size query MSL did not preserve sparse map extent");
+  }
+  return {
+    status: "passed",
+    deterministicRuns: 2,
+    runtimeSizedBindings: mappings.filter((mapping) => mapping.runtimeSized)
+      .length,
+    queriedSizeWordIndices: [0],
+    configuredSizeWordIndices: [0, 7],
+    wordCount: response.wordCount,
+  };
+}
+
 function normalizeDiagnostic(value, scratch) {
   return value
     .replaceAll(spikeDirectory, "<spike-dir>")
@@ -1049,6 +1284,8 @@ function runTintTransport(wrapper, allocatorResult, scratch, transport) {
   }
   verifyGeneratedMSL(attempts[0].msl, mappings, transport);
   const stageLocal = runStageLocalTint(wrapper, scratch, transport);
+  const noSizeQuery = runNoSizeQueryTint(wrapper, scratch, transport);
+  const mixedSizeQuery = runMixedSizeQueryTint(wrapper, scratch, transport);
 
   if (transport === "immediate") {
     const duplicateTarget = clone(mappings);
@@ -1116,6 +1353,8 @@ function runTintTransport(wrapper, allocatorResult, scratch, transport) {
       negativeMappings: transport === "immediate" ? 6 : 0,
       transport,
       stageLocal,
+      noSizeQuery,
+      mixedSizeQuery,
       sizeWordIndices: response.bindings.map(
         (binding) => binding.sizeWordIndex
       ),

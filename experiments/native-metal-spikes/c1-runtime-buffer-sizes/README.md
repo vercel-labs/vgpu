@@ -1,8 +1,8 @@
 # C1 runtime storage buffer sizes
 
-This spike tests the byte-size table that Tint needs when lowering WGSL `arrayLength()` to Metal.
-It compares Tint's legacy dedicated UBO path with the immediate-data path used by the pinned Dawn
-Metal backend.
+This spike tests the byte-size table that Tint needs when lowering explicit or
+robustness-generated WGSL `arrayLength()` calls to Metal. It compares Tint's legacy dedicated UBO
+path with the immediate-data path used by the pinned Dawn Metal backend.
 
 ## Result
 
@@ -57,20 +57,38 @@ so pipeline creation also covers the exact-capacity coexistence of vertex stream
 data `30`. This is pipeline-compilation and reflection evidence; the stage-local render pipeline is
 not drawn.
 
+A separate compute canary reflects a storage struct with a fixed `u32` prefix followed by a runtime
+array, but reads only the prefix. For both transports, the pinned Tint writer reports
+`needs_storage_buffer_sizes = false`, preserves the external buffers at `buffer(1)` and
+`buffer(7)`, and omits the internal `buffer(30)` parameter. `runtimeSized` is therefore a binding
+layout fact, not proof that an entry point needs the size transport. Conversely, merely omitting an
+explicit `arrayLength()` call is not sufficient: Tint's robustness pass can introduce the query for
+a runtime-array access. The writer result for the selected entry point and options is authoritative.
+
+The companion entry proves the extent rule independently from that boolean. It accesses a runtime
+array projected to `buffer(0)`, which makes Tint request the size transport, and reads only the fixed
+prefix of another runtime-sized storage binding projected to `buffer(7)`. With both runtime
+bindings in the configured size map, the generated shader reads size word `0` but still declares an
+eight-word immediate region; the UBO comparison likewise declares two `uint4` rows. Under this
+mapping policy, `wordCount` is therefore `max(all runtime-sized projected Metal slots) + 1`, not the
+maximum word visibly read by the generated MSL.
+
 ## Candidate boundaries
 
-The artifact root retains the size-table model. Each program/stage region retains only its byte
-offset, while the physical slot lives once in the stage's `immediate-data` internal binding.
-`wordCount` is derived as `max(runtime-sized projected Metal slots) + 1`; it is not serialized in
-the artifact. Bound ranges, packed words, derived extent, upload padding, and whether the runtime
-uses `set*Bytes` or a ring buffer are runtime state, not shader identity or artifact fingerprints.
-The snapshot in this spike intentionally includes those dynamic values because it tests the
-runtime packer; it is not an artifact schema.
+The Metal projection root retains the size-table model. When Tint requests the transport, each
+program/stage region retains only its byte offset, while the physical slot lives once in the
+stage's `immediate-data` internal binding. `wordCount` is then derived as
+`max(runtime-sized projected Metal slots) + 1`; it is not serialized in the artifact. Bound ranges,
+packed words, derived extent, upload padding, and whether the runtime uses `set*Bytes` or a ring
+buffer are runtime state, not shader identity or artifact fingerprints. The snapshot in this spike
+intentionally includes those dynamic values because it tests the runtime packer; it is not an
+artifact schema.
 
-`immediate-data` and `storageBufferSizes` are separate concepts. The fixture includes a program
-with `immediate-data` at `buffer(30)` and no storage-size region, demonstrating that other immediate
-features may still require the physical binding. Presence of the region, not presence of the
-binding, triggers size packing.
+`runtimeSized`, `immediate-data`, and `storageBufferSizes` are separate concepts. One fixture
+program has `immediate-data` at `buffer(30)` and no storage-size region, demonstrating that other
+immediate features may still require the physical binding. Another has runtime-sized storage but
+neither the region nor the internal binding because its selected entry does not query the trailing
+array. Presence of the compiler-emitted region, not either other property, triggers size packing.
 
 Before packing, the allocator rejects ranges above `UInt32.max`, below the reflected
 `minimumBindingSize`, beyond `logicalBufferSize - effectiveOffset`, or not aligned to four bytes as
@@ -109,7 +127,7 @@ directory. If both `metal` and `metallib` are available, it additionally compile
 generated compute MSL for the explicit `air64-apple-macos14.0` target. Use
 `--require-offline-metal` to make that optional gate mandatory.
 
-The recorded run passes 4 allocator programs, 27 input mutations, 11 independently verified source
+The recorded run passes 5 allocator programs, 27 input mutations, 12 independently verified source
 or output corruptions, 6 native map failures, deterministic immediate/UBO generation, Metal
 reflection, and readback. The offline gate is skipped because `metallib` is unavailable.
 
@@ -129,3 +147,6 @@ Primary pinned implementation references:
 - [Dawn Metal pipeline layout](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/dawn/native/metal/PipelineLayoutMTL.h)
 - [Dawn Metal immediate upload](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/dawn/native/metal/CommandBufferMTL.mm)
 - [Tint MSL writer options](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/msl/writer/common/options.h)
+- [Tint MSL raise pipeline](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/msl/writer/raise/raise.cc)
+- [Tint robustness transform](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/core/ir/transform/robustness.cc)
+- [Tint array-length transform](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/core/ir/transform/array_length_from.cc)

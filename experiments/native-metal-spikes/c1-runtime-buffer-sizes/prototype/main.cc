@@ -286,7 +286,7 @@ struct EmittedSlot {
 std::optional<std::vector<EmittedSlot>>
 ValidateEmittedSlots(tint::core::ir::Module &ir,
                      const std::vector<Mapping> &mappings,
-                     uint32_t internal_index) {
+                     uint32_t internal_index, bool require_internal) {
   std::vector<EmittedSlot> emitted;
   for (auto *function : ir.functions) {
     if (!function->IsEntryPoint()) {
@@ -333,10 +333,13 @@ ValidateEmittedSlots(tint::core::ir::Module &ir,
       return std::nullopt;
     }
   }
-  if (std::none_of(emitted.begin(), emitted.end(), [&](const auto &slot) {
+  const bool emitted_internal =
+      std::any_of(emitted.begin(), emitted.end(), [&](const auto &slot) {
         return slot.internal && slot.index == internal_index;
-      })) {
-    std::cerr << "MSL lowering omitted storage-buffer-sizes binding\n";
+      });
+  if (require_internal && !emitted_internal) {
+    std::cerr << "MSL lowering omitted the required storage-buffer-sizes "
+                 "binding\n";
     return std::nullopt;
   }
   return emitted;
@@ -448,13 +451,9 @@ int Run(const Arguments &arguments) {
     std::cerr << output.Failure() << '\n';
     return 1;
   }
-  if (!output->needs_storage_buffer_sizes) {
-    std::cerr
-        << "Tint did not request the configured storage-buffer-sizes table\n";
-    return 1;
-  }
   const auto emitted_slots =
-      ValidateEmittedSlots(ir, *mappings, arguments.storage_buffer_sizes_index);
+      ValidateEmittedSlots(ir, *mappings, arguments.storage_buffer_sizes_index,
+                           output->needs_storage_buffer_sizes);
   if (!emitted_slots) {
     return 1;
   }
@@ -490,7 +489,8 @@ int Run(const Arguments &arguments) {
             << ",\n";
   std::cout << "  \"stage\": " << JsonString(StageName(entry_point.stage))
             << ",\n";
-  std::cout << "  \"needsStorageBufferSizes\": true,\n";
+  std::cout << "  \"needsStorageBufferSizes\": "
+            << (output->needs_storage_buffer_sizes ? "true" : "false") << ",\n";
   std::cout << "  \"transport\": " << JsonString(arguments.transport) << ",\n";
   std::cout << "  \"storageBufferSizesIndex\": "
             << arguments.storage_buffer_sizes_index << ",\n";
@@ -518,7 +518,9 @@ int Run(const Arguments &arguments) {
               << ", \"binding\": " << mapping.source.binding
               << ", \"metalIndex\": " << mapping.metal_index
               << ", \"sizeWordIndex\": "
-              << (std::any_of(runtime_storage.begin(), runtime_storage.end(),
+              << (output->needs_storage_buffer_sizes &&
+                          std::any_of(
+                              runtime_storage.begin(), runtime_storage.end(),
                               [&](const auto &item) {
                                 return SameBindingPoint(item, mapping.source);
                               })

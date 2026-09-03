@@ -96,6 +96,12 @@
         "storageBufferSizes": null
       },
       {
+        "id": "RuntimeTypeNoSizeQuery",
+        "stage": "compute",
+        "internalBindings": [],
+        "storageBufferSizes": null
+      },
+      {
         "id": "SparseVertexStage",
         "stage": "vertex",
         "internalBindings": [
