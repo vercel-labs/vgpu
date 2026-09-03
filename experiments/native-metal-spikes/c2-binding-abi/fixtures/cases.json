@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "scalars-storage",
+      "addressSpace": "storage",
+      "wgsl": "struct Params { f: f32, i: i32, u: u32 }\n@group(0) @binding(0) var<storage, read> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "f", "type": { "kind": "scalar", "scalar": "f32" } },
+          { "name": "i", "type": { "kind": "scalar", "scalar": "i32" } },
+          { "name": "u", "type": { "kind": "scalar", "scalar": "u32" } }
+        ]
+      },
+      "value": { "f": 1.25, "i": -18, "u": 4000000000 }
+    },
+    {
+      "id": "f16-storage",
+      "addressSpace": "storage",
+      "wgsl": "enable f16;\nstruct Params { h: f16, hv: vec3h, tail: f16 }\n@group(0) @binding(0) var<storage, read> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "h", "type": { "kind": "scalar", "scalar": "f16" } },
+          { "name": "hv", "type": { "kind": "vector", "width": 3, "scalar": "f16" } },
+          { "name": "tail", "type": { "kind": "scalar", "scalar": "f16" } }
+        ]
+      },
+      "value": { "h": -2.5, "hv": [1.5, 2, -3], "tail": 4 }
+    },
+    {
+      "id": "vectors-uniform-tail-packing",
+      "addressSpace": "uniform",
+      "wgsl": "struct Params { a: vec2f, b: vec3f, tail: f32, c: vec4f }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "a", "type": { "kind": "vector", "width": 2, "scalar": "f32" } },
+          { "name": "b", "type": { "kind": "vector", "width": 3, "scalar": "f32" } },
+          { "name": "tail", "type": { "kind": "scalar", "scalar": "f32" } },
+          { "name": "c", "type": { "kind": "vector", "width": 4, "scalar": "f32" } }
+        ]
+      },
+      "value": { "a": [1, 2], "b": [3, 4, 5], "tail": 6, "c": [7, 8, 9, 10] }
+    },
+    {
+      "id": "non-square-and-mat4-storage",
+      "addressSpace": "storage",
+      "wgsl": "struct Params { m32: mat3x2f, m23: mat2x3f, m44: mat4x4f }\n@group(0) @binding(0) var<storage, read> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "m32", "type": { "kind": "matrix", "columns": 3, "rows": 2, "scalar": "f32" } },
+          { "name": "m23", "type": { "kind": "matrix", "columns": 2, "rows": 3, "scalar": "f32" } },
+          { "name": "m44", "type": { "kind": "matrix", "columns": 4, "rows": 4, "scalar": "f32" } }
+        ]
+      },
+      "value": {
+        "m32": [1, 2, 3, 4, 5, 6],
+        "m23": [7, 8, 9, 10, 11, 12],
+        "m44": [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+      }
+    },
+    {
+      "id": "mat3x3-uniform-column-padding",
+      "addressSpace": "uniform",
+      "wgsl": "struct Params { m: mat3x3f, after: f32 }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "m", "type": { "kind": "matrix", "columns": 3, "rows": 3, "scalar": "f32" } },
+          { "name": "after", "type": { "kind": "scalar", "scalar": "f32" } }
+        ]
+      },
+      "value": { "m": [1, 2, 3, 4, 5, 6, 7, 8, 9], "after": 10 }
+    },
+    {
+      "id": "nested-uniform",
+      "addressSpace": "uniform",
+      "wgsl": "struct Inner { a: vec3f, b: f32 }\nstruct Params { x: f32, inner: Inner, y: vec2f }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "x", "type": { "kind": "scalar", "scalar": "f32" } },
+          {
+            "name": "inner",
+            "type": {
+              "kind": "struct",
+              "name": "Inner",
+              "members": [
+                { "name": "a", "type": { "kind": "vector", "width": 3, "scalar": "f32" } },
+                { "name": "b", "type": { "kind": "scalar", "scalar": "f32" } }
+              ]
+            }
+          },
+          { "name": "y", "type": { "kind": "vector", "width": 2, "scalar": "f32" } }
+        ]
+      },
+      "value": { "x": 1, "inner": { "a": [2, 3, 4], "b": 5 }, "y": [6, 7] }
+    },
+    {
+      "id": "fixed-arrays-storage",
+      "addressSpace": "storage",
+      "wgsl": "struct Item { p: vec3f, w: f32 }\nstruct Params { items: array<Item, 2>, weights: array<vec2f, 3> }\n@group(0) @binding(0) var<storage, read> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          {
+            "name": "items",
+            "type": {
+              "kind": "array",
+              "count": 2,
+              "element": {
+                "kind": "struct",
+                "name": "Item",
+                "members": [
+                  { "name": "p", "type": { "kind": "vector", "width": 3, "scalar": "f32" } },
+                  { "name": "w", "type": { "kind": "scalar", "scalar": "f32" } }
+                ]
+              }
+            }
+          },
+          {
+            "name": "weights",
+            "type": {
+              "kind": "array",
+              "count": 3,
+              "element": { "kind": "vector", "width": 2, "scalar": "f32" }
+            }
+          }
+        ]
+      },
+      "value": {
+        "items": [
+          { "p": [1, 2, 3], "w": 4 },
+          { "p": [5, 6, 7], "w": 8 }
+        ],
+        "weights": [[9, 10], [11, 12], [13, 14]]
+      }
+    },
+    {
+      "id": "explicit-align-size-uniform",
+      "addressSpace": "uniform",
+      "wgsl": "struct Params { a: f32, @align(32) @size(32) b: f32, c: vec2f }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "a", "type": { "kind": "scalar", "scalar": "f32" } },
+          { "name": "b", "align": 32, "size": 32, "type": { "kind": "scalar", "scalar": "f32" } },
+          { "name": "c", "type": { "kind": "vector", "width": 2, "scalar": "f32" } }
+        ]
+      },
+      "value": { "a": 1, "b": 2, "c": [3, 4] }
+    },
+    {
+      "id": "uniform-root-small-struct",
+      "addressSpace": "uniform",
+      "wgsl": "struct Params { x: f32 }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "x", "type": { "kind": "scalar", "scalar": "f32" } }
+        ]
+      },
+      "value": { "x": 7.25 }
+    },
+    {
+      "id": "uniform-standard-scalar-array",
+      "addressSpace": "uniform",
+      "wgsl": "requires uniform_buffer_standard_layout;\nstruct Params { lead: f32, values: array<f32, 3>, tail: f32 }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "lead", "type": { "kind": "scalar", "scalar": "f32" } },
+          {
+            "name": "values",
+            "type": {
+              "kind": "array",
+              "count": 3,
+              "element": { "kind": "scalar", "scalar": "f32" }
+            }
+          },
+          { "name": "tail", "type": { "kind": "scalar", "scalar": "f32" } }
+        ]
+      },
+      "value": { "lead": 1, "values": [2, 3, 4], "tail": 5 }
+    },
+    {
+      "id": "uniform-standard-nested-small",
+      "addressSpace": "uniform",
+      "wgsl": "requires uniform_buffer_standard_layout;\nstruct Small { x: f32 }\nstruct Params { lead: f32, small: Small, tail: f32 }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          { "name": "lead", "type": { "kind": "scalar", "scalar": "f32" } },
+          {
+            "name": "small",
+            "type": {
+              "kind": "struct",
+              "name": "Small",
+              "members": [
+                { "name": "x", "type": { "kind": "scalar", "scalar": "f32" } }
+              ]
+            }
+          },
+          { "name": "tail", "type": { "kind": "scalar", "scalar": "f32" } }
+        ]
+      },
+      "value": { "lead": 1.25, "small": { "x": 2.5 }, "tail": 3.75 }
+    },
+    {
+      "id": "uniform-standard-small-struct-array",
+      "addressSpace": "uniform",
+      "wgsl": "requires uniform_buffer_standard_layout;\nstruct Small { x: f32 }\nstruct Params { items: array<Small, 2>, tail: f32 }\n@group(0) @binding(0) var<uniform> params: Params;",
+      "root": {
+        "kind": "struct",
+        "name": "Params",
+        "members": [
+          {
+            "name": "items",
+            "type": {
+              "kind": "array",
+              "count": 2,
+              "element": {
+                "kind": "struct",
+                "name": "Small",
+                "members": [
+                  { "name": "x", "type": { "kind": "scalar", "scalar": "f32" } }
+                ]
+              }
+            }
+          },
+          { "name": "tail", "type": { "kind": "scalar", "scalar": "f32" } }
+        ]
+      },
+      "value": { "items": [{ "x": 4.25 }, { "x": 5.5 }], "tail": 6.75 }
+    },
+    {
+      "id": "runtime-array-storage",
+      "addressSpace": "storage",
+      "wgsl": "struct Item { p: vec3f, w: f32 }\n@group(0) @binding(0) var<storage, read> params: array<Item>;",
+      "root": {
+        "kind": "array",
+        "element": {
+          "kind": "struct",
+          "name": "Item",
+          "members": [
+            { "name": "p", "type": { "kind": "vector", "width": 3, "scalar": "f32" } },
+            { "name": "w", "type": { "kind": "scalar", "scalar": "f32" } }
+          ]
+        }
+      },
+      "value": [
+        { "p": [1, 2, 3], "w": 4 },
+        { "p": [5, 6, 7], "w": 8 }
+      ]
+    }
+  ]
+}
