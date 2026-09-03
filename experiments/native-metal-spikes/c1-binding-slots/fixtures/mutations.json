@@ -137,7 +137,7 @@
           "op": "replace",
           "target": "internalRequirement.role",
           "program": "RuntimeArray",
-          "role": "storage-buffer-sizes",
+          "role": "immediate-data",
           "value": "unknown-lowering-table"
         }
       ],
@@ -155,7 +155,7 @@
           "op": "append",
           "target": "profile.internalReservations",
           "value": {
-            "role": "second-size-table",
+            "role": "second-immediate-block",
             "stage": "compute",
             "resourceClass": "buffer",
             "component": "second-table",
@@ -180,13 +180,13 @@
           "program": "CapacityExact",
           "binding": "g1b0",
           "component": "capacity-probe",
-          "value": 30
+          "value": 31
         }
       ],
       "expected": {
         "status": "error",
         "code": "SLOT_OVERFLOW",
-        "messageIncludes": "external ceiling is 29"
+        "messageIncludes": "external ceiling is 30"
       }
     },
     {
@@ -293,7 +293,7 @@
           "op": "replace",
           "target": "internalRequirement.role",
           "program": "RuntimeArray",
-          "role": "storage-buffer-sizes",
+          "role": "immediate-data",
           "value": "BAD ROLE"
         }
       ],
@@ -319,7 +319,7 @@
       "expected": {
         "status": "error",
         "code": "RESERVATION_NOT_HIGH_END",
-        "messageIncludes": "gap at 29"
+        "messageIncludes": "reservations end at 29"
       }
     },
     {
@@ -330,10 +330,10 @@
           "op": "append",
           "target": "profile.internalReservations",
           "value": {
-            "role": "storage-buffer-sizes",
+            "role": "immediate-data",
             "stage": "compute",
             "resourceClass": "buffer",
-            "component": "buffer-size-table",
+            "component": "immediate-data",
             "index": 30,
             "count": 1
           }
@@ -342,7 +342,7 @@
       "expected": {
         "status": "error",
         "code": "DUPLICATE_RESERVATION",
-        "messageIncludes": "storage-buffer-sizes/compute/buffer/buffer-size-table"
+        "messageIncludes": "immediate-data/compute/buffer/immediate-data"
       }
     },
     {

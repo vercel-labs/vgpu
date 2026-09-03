@@ -13,14 +13,6 @@
         "stage": "vertex",
         "resourceClass": "buffer",
         "component": "immediate-data",
-        "index": 29,
-        "count": 1
-      },
-      {
-        "role": "storage-buffer-sizes",
-        "stage": "vertex",
-        "resourceClass": "buffer",
-        "component": "buffer-size-table",
         "index": 30,
         "count": 1
       },
@@ -29,14 +21,6 @@
         "stage": "fragment",
         "resourceClass": "buffer",
         "component": "immediate-data",
-        "index": 29,
-        "count": 1
-      },
-      {
-        "role": "storage-buffer-sizes",
-        "stage": "fragment",
-        "resourceClass": "buffer",
-        "component": "buffer-size-table",
         "index": 30,
         "count": 1
       },
@@ -45,14 +29,6 @@
         "stage": "compute",
         "resourceClass": "buffer",
         "component": "immediate-data",
-        "index": 29,
-        "count": 1
-      },
-      {
-        "role": "storage-buffer-sizes",
-        "stage": "compute",
-        "resourceClass": "buffer",
-        "component": "buffer-size-table",
         "index": 30,
         "count": 1
       }
@@ -66,6 +42,7 @@
       "source": "binding-slots.wgsl",
       "entryPoint": "main",
       "emittedEntryPoint": "vgpu_mixed_resources",
+      "needsStorageBufferSizes": false,
       "bindingKinds": {
         "g0b3": "uniform",
         "g1b2": "sampler",
@@ -80,6 +57,7 @@
       "source": "stage-local.wgsl",
       "entryPoint": "vs_main",
       "emittedEntryPoint": "vgpu_shared_draw_vs",
+      "needsStorageBufferSizes": false,
       "bindingKinds": { "g0b0": "uniform", "g0b1": "storage" }
     },
     {
@@ -89,6 +67,7 @@
       "source": "stage-local.wgsl",
       "entryPoint": "fs_main",
       "emittedEntryPoint": "vgpu_shared_draw_fs",
+      "needsStorageBufferSizes": false,
       "bindingKinds": {
         "g0b0": "uniform",
         "g0b2": "texture",
@@ -103,6 +82,7 @@
       "source": "two-kernels.wgsl",
       "entryPoint": "clear",
       "emittedEntryPoint": "vgpu_clear_kernel",
+      "needsStorageBufferSizes": false,
       "bindingKinds": { "g3b9": "storage" }
     },
     {
@@ -112,6 +92,7 @@
       "source": "two-kernels.wgsl",
       "entryPoint": "sample",
       "emittedEntryPoint": "vgpu_sample_kernel",
+      "needsStorageBufferSizes": false,
       "bindingKinds": {
         "g7b5": "texture",
         "g7b6": "sampler",
@@ -125,8 +106,11 @@
       "source": "runtime-array.wgsl",
       "entryPoint": "main",
       "emittedEntryPoint": "vgpu_runtime_array",
+      "needsStorageBufferSizes": true,
+      "runtimeStorageBindings": 1,
+      "bufferSizesOffset": 4,
       "bindingKinds": { "g0b0": "storage" },
-      "internalRoles": ["storage-buffer-sizes"]
+      "internalRoles": ["immediate-data"]
     },
     {
       "case": "internal-bindings-coexist",
@@ -135,9 +119,39 @@
       "source": "internal-coexistence.wgsl",
       "entryPoint": "main",
       "emittedEntryPoint": "vgpu_internal_coexistence",
-      "bindingKinds": { "g0b0": "storage" },
-      "internalRoles": ["immediate-data", "storage-buffer-sizes"],
+      "needsStorageBufferSizes": true,
+      "runtimeStorageBindings": 1,
+      "bufferSizesOffset": 4,
+      "bindingKinds": { "g0b0": "storage", "g0b1": "storage" },
+      "internalRoles": ["immediate-data"],
       "writerOptions": ["force-u32-div-mod-immediate"]
+    },
+    {
+      "case": "internal-bindings-coexist",
+      "program": "RuntimeTypeWithOrdinaryImmediate",
+      "stage": "compute",
+      "source": "internal-coexistence.wgsl",
+      "entryPoint": "fixed_prefix_only",
+      "emittedEntryPoint": "vgpu_runtime_type_with_ordinary_immediate",
+      "needsStorageBufferSizes": false,
+      "runtimeStorageBindings": 1,
+      "bufferSizesOffset": 4,
+      "bindingKinds": { "g0b0": "storage", "g0b1": "storage" },
+      "internalRoles": ["immediate-data"],
+      "writerOptions": ["force-u32-div-mod-immediate"]
+    },
+    {
+      "case": "internal-bindings-coexist",
+      "program": "RuntimeTypeWithoutSizeQuery",
+      "stage": "compute",
+      "source": "internal-coexistence.wgsl",
+      "entryPoint": "fixed_prefix_only",
+      "emittedEntryPoint": "vgpu_runtime_type_without_size_query",
+      "needsStorageBufferSizes": false,
+      "runtimeStorageBindings": 1,
+      "bufferSizesOffset": 4,
+      "bindingKinds": { "g0b0": "storage", "g0b1": "storage" },
+      "internalRoles": []
     },
     {
       "case": "sized-resource-arrays",
@@ -146,6 +160,7 @@
       "source": "resource-arrays.wgsl",
       "entryPoint": "main",
       "emittedEntryPoint": "vgpu_resource_arrays",
+      "needsStorageBufferSizes": false,
       "bindingKinds": {
         "g0b0": "texture",
         "g0b1": "sampler",
@@ -364,7 +379,7 @@
             }
           ],
           "requiredInternalBindings": [
-            { "role": "storage-buffer-sizes", "stages": ["compute"] }
+            { "role": "immediate-data", "stages": ["compute"] }
           ]
         }
       ]
@@ -386,7 +401,7 @@
                 {
                   "resourceClass": "buffer",
                   "component": "capacity-probe",
-                  "count": 29
+                  "count": 30
                 }
               ]
             }
@@ -397,12 +412,12 @@
     },
     {
       "id": "internal-bindings-coexist",
-      "evidence": "Tint-writer canary for distinct lowering-owned buffer slots",
+      "evidence": "Tint-writer canary for shared immediate and storage-size data at one buffer slot",
       "sources": ["internal-coexistence.wgsl"],
       "programs": [
         {
           "semanticProgram": "InternalCoexistence",
-          "entries": [{ "stage": "compute", "bindings": ["g0b0"] }],
+          "entries": [{ "stage": "compute", "bindings": ["g0b0", "g0b1"] }],
           "bindings": [
             {
               "id": "g0b0",
@@ -411,12 +426,67 @@
               "components": [
                 { "resourceClass": "buffer", "component": "buffer", "count": 1 }
               ]
+            },
+            {
+              "id": "g0b1",
+              "group": 0,
+              "binding": 1,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
             }
           ],
           "requiredInternalBindings": [
-            { "role": "immediate-data", "stages": ["compute"] },
-            { "role": "storage-buffer-sizes", "stages": ["compute"] }
+            { "role": "immediate-data", "stages": ["compute"] }
           ]
+        },
+        {
+          "semanticProgram": "RuntimeTypeWithOrdinaryImmediate",
+          "entries": [{ "stage": "compute", "bindings": ["g0b0", "g0b1"] }],
+          "bindings": [
+            {
+              "id": "g0b0",
+              "group": 0,
+              "binding": 0,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
+            },
+            {
+              "id": "g0b1",
+              "group": 0,
+              "binding": 1,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
+            }
+          ],
+          "requiredInternalBindings": [
+            { "role": "immediate-data", "stages": ["compute"] }
+          ]
+        },
+        {
+          "semanticProgram": "RuntimeTypeWithoutSizeQuery",
+          "entries": [{ "stage": "compute", "bindings": ["g0b0", "g0b1"] }],
+          "bindings": [
+            {
+              "id": "g0b0",
+              "group": 0,
+              "binding": 0,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
+            },
+            {
+              "id": "g0b1",
+              "group": 0,
+              "binding": 1,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
+            }
+          ],
+          "requiredInternalBindings": []
         }
       ]
     },

@@ -240,13 +240,13 @@
           ],
           "internalBindings": [
             {
-              "role": "storage-buffer-sizes",
+              "role": "immediate-data",
               "slots": [
                 {
                   "stage": "compute",
                   "mode": "direct",
                   "resourceClass": "buffer",
-                  "component": "buffer-size-table",
+                  "component": "immediate-data",
                   "index": 30,
                   "count": 1
                 }
@@ -271,7 +271,7 @@
                   "resourceClass": "buffer",
                   "component": "capacity-probe",
                   "index": 0,
-                  "count": 29
+                  "count": 30
                 }
               ]
             }
@@ -298,6 +298,19 @@
                   "count": 1
                 }
               ]
+            },
+            {
+              "semanticBinding": "g0b1",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
             }
           ],
           "internalBindings": [
@@ -309,25 +322,90 @@
                   "mode": "direct",
                   "resourceClass": "buffer",
                   "component": "immediate-data",
-                  "index": 29,
-                  "count": 1
-                }
-              ]
-            },
-            {
-              "role": "storage-buffer-sizes",
-              "slots": [
-                {
-                  "stage": "compute",
-                  "mode": "direct",
-                  "resourceClass": "buffer",
-                  "component": "buffer-size-table",
                   "index": 30,
                   "count": 1
                 }
               ]
             }
           ]
+        },
+        {
+          "semanticProgram": "RuntimeTypeWithOrdinaryImmediate",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b1",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": [
+            {
+              "role": "immediate-data",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "immediate-data",
+                  "index": 30,
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "semanticProgram": "RuntimeTypeWithoutSizeQuery",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b1",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
         }
       ]
     },

@@ -47,8 +47,9 @@ struct Arguments {
     std::string output_path;
     std::string mapping_path;
     bool sized_binding_array = false;
-    std::optional<uint32_t> storage_buffer_sizes_index;
     std::optional<uint32_t> immediate_index;
+    std::optional<uint32_t> buffer_sizes_offset;
+    bool expect_storage_buffer_sizes = false;
     bool force_u32_div_mod_immediate = false;
 };
 
@@ -86,14 +87,6 @@ std::optional<Arguments> ParseArguments(int argc, char** argv) {
             arguments.sized_binding_array = true;
             continue;
         }
-        if (flag == "--storage-buffer-sizes-index" && index + 1 < argc) {
-            const auto value = ParseUInt32(argv[++index]);
-            if (!value) {
-                return std::nullopt;
-            }
-            arguments.storage_buffer_sizes_index = *value;
-            continue;
-        }
         if (flag == "--immediate-index" && index + 1 < argc) {
             const auto value = ParseUInt32(argv[++index]);
             if (!value) {
@@ -102,8 +95,20 @@ std::optional<Arguments> ParseArguments(int argc, char** argv) {
             arguments.immediate_index = *value;
             continue;
         }
+        if (flag == "--buffer-sizes-offset" && index + 1 < argc) {
+            const auto value = ParseUInt32(argv[++index]);
+            if (!value) {
+                return std::nullopt;
+            }
+            arguments.buffer_sizes_offset = *value;
+            continue;
+        }
         if (flag == "--force-u32-div-mod-immediate") {
             arguments.force_u32_div_mod_immediate = true;
+            continue;
+        }
+        if (flag == "--expect-storage-buffer-sizes") {
+            arguments.expect_storage_buffer_sizes = true;
             continue;
         }
         return std::nullopt;
@@ -299,7 +304,6 @@ std::optional<std::string> MappingResourceClass(const Mapping& mapping) {
 }
 
 bool ValidateRequestedIntervals(const std::vector<Mapping>& requested,
-                                std::optional<uint32_t> storage_buffer_sizes_index,
                                 std::optional<uint32_t> immediate_index) {
     struct Interval {
         std::string resource_class;
@@ -316,10 +320,9 @@ bool ValidateRequestedIntervals(const std::vector<Mapping>& requested,
         }
         intervals.push_back(Interval{*resource_class, mapping.index, end});
     }
-    for (const auto index : {storage_buffer_sizes_index, immediate_index}) {
-        if (index) {
-            intervals.push_back(Interval{"buffer", *index, static_cast<uint64_t>(*index) + 1});
-        }
+    if (immediate_index) {
+        intervals.push_back(
+            Interval{"buffer", *immediate_index, static_cast<uint64_t>(*immediate_index) + 1});
     }
     std::sort(intervals.begin(), intervals.end(), [](const auto& left, const auto& right) {
         return std::tie(left.resource_class, left.start, left.end) <
@@ -345,7 +348,6 @@ struct EmittedSlot {
 std::optional<std::vector<EmittedSlot>> ValidateEmittedSlots(
     tint::core::ir::Module& ir,
     const std::vector<Mapping>& requested,
-    std::optional<uint32_t> storage_buffer_sizes_index,
     std::optional<uint32_t> immediate_index) {
     std::vector<EmittedSlot> emitted;
     for (auto* function : ir.functions) {
@@ -375,8 +377,7 @@ std::optional<std::vector<EmittedSlot>> ValidateEmittedSlots(
                 });
             const bool declared_internal =
                 *resource_class == "buffer" && *resource_count == 1 &&
-                (binding->binding == storage_buffer_sizes_index ||
-                 binding->binding == immediate_index);
+                immediate_index && binding->binding == *immediate_index;
             if (!declared_user && !declared_internal) {
                 std::cerr << "MSL lowering emitted an undeclared binding\n";
                 return std::nullopt;
@@ -419,8 +420,25 @@ int Run(const Arguments& arguments) {
         std::cerr << "could not read input or mapping\n";
         return 1;
     }
-    if (!ValidateRequestedIntervals(*requested, arguments.storage_buffer_sizes_index,
-                                    arguments.immediate_index)) {
+    if (arguments.buffer_sizes_offset && !arguments.immediate_index) {
+        std::cerr << "buffer-sizes offset requires the shared immediate-data binding\n";
+        return 1;
+    }
+    if (arguments.buffer_sizes_offset &&
+        *arguments.buffer_sizes_offset % sizeof(uint32_t) != 0) {
+        std::cerr << "buffer-sizes offset must be four-byte aligned\n";
+        return 1;
+    }
+    if (arguments.force_u32_div_mod_immediate && !arguments.immediate_index) {
+        std::cerr << "u32 div/mod workaround requires the shared immediate-data binding\n";
+        return 1;
+    }
+    if (arguments.force_u32_div_mod_immediate && arguments.buffer_sizes_offset &&
+        *arguments.buffer_sizes_offset < sizeof(uint32_t)) {
+        std::cerr << "buffer-sizes offset overlaps the ordinary immediate word\n";
+        return 1;
+    }
+    if (!ValidateRequestedIntervals(*requested, arguments.immediate_index)) {
         return 1;
     }
 
@@ -480,14 +498,22 @@ int Run(const Arguments& arguments) {
     }
     auto& ir = ir_result.Get();
     const auto runtime_storage = RuntimeStorageBindings(ir, arguments.entry_point);
-    if (!runtime_storage.empty() && !arguments.storage_buffer_sizes_index) {
-        std::cerr << "selected entry requires a storage-buffer-sizes slot\n";
+    if (!runtime_storage.empty() && !arguments.immediate_index) {
+        std::cerr << "runtime-sized storage requires shared immediate-data configuration\n";
+        return 1;
+    }
+    if (!runtime_storage.empty() && !arguments.buffer_sizes_offset) {
+        std::cerr << "runtime-sized storage requires a buffer-sizes offset\n";
+        return 1;
+    }
+    if (arguments.expect_storage_buffer_sizes && runtime_storage.empty()) {
+        std::cerr << "expected storage-buffer-size query has no runtime-sized storage binding\n";
         return 1;
     }
 
     tint::msl::writer::ArrayLengthOptions array_lengths;
+    array_lengths.buffer_sizes_offset = arguments.buffer_sizes_offset;
     if (!runtime_storage.empty()) {
-        array_lengths.ubo_binding = *arguments.storage_buffer_sizes_index;
         for (const auto& binding_point : runtime_storage) {
             const auto mapping =
                 std::find_if(requested->begin(), requested->end(), [&](const auto& item) {
@@ -516,6 +542,7 @@ int Run(const Arguments& arguments) {
                                                            .binding = *arguments.immediate_index,
                                                        })
                                                  : std::nullopt;
+    writer_options.non_constant_zero_offset = 0;
     if (arguments.force_u32_div_mod_immediate) {
         writer_options.workarounds.fix_u32_div_mod = true;
         writer_options.disable_polyfill_integer_div_mod = true;
@@ -526,9 +553,11 @@ int Run(const Arguments& arguments) {
         std::cerr << output.Failure() << '\n';
         return 1;
     }
-    const auto emitted_slots = ValidateEmittedSlots(ir, *requested,
-                                                    arguments.storage_buffer_sizes_index,
-                                                    arguments.immediate_index);
+    if (output->needs_storage_buffer_sizes != arguments.expect_storage_buffer_sizes) {
+        std::cerr << "storage-buffer-size metadata disagrees with the expected query result\n";
+        return 1;
+    }
+    const auto emitted_slots = ValidateEmittedSlots(ir, *requested, arguments.immediate_index);
     if (!emitted_slots) {
         return 1;
     }
@@ -537,10 +566,10 @@ int Run(const Arguments& arguments) {
                    return slot.resource_class == "buffer" && slot.index == *index;
                });
     };
-    const bool used_storage_buffer_sizes = uses_buffer_index(arguments.storage_buffer_sizes_index);
     const bool used_immediate = uses_buffer_index(arguments.immediate_index);
-    if (used_storage_buffer_sizes != output->needs_storage_buffer_sizes) {
-        std::cerr << "storage-buffer-size metadata disagrees with the lowered entry interface\n";
+    if (output->needs_storage_buffer_sizes &&
+        (!arguments.buffer_sizes_offset || !arguments.immediate_index || !used_immediate)) {
+        std::cerr << "storage-buffer-size metadata requires the shared immediate-data binding\n";
         return 1;
     }
     std::ofstream output_file(arguments.output_path, std::ios::binary);
@@ -561,15 +590,15 @@ int Run(const Arguments& arguments) {
     std::cout << "  \"stage\": " << JsonString(StageName(entry_point.stage)) << ",\n";
     std::cout << "  \"needsStorageBufferSizes\": "
               << (output->needs_storage_buffer_sizes ? "true" : "false") << ",\n";
-    if (arguments.storage_buffer_sizes_index) {
-        std::cout << "  \"storageBufferSizesIndex\": "
-                  << *arguments.storage_buffer_sizes_index << ",\n";
-    }
-    if (arguments.immediate_index) {
-        std::cout << "  \"immediateIndex\": " << *arguments.immediate_index << ",\n";
-    }
-    std::cout << "  \"usedStorageBufferSizes\": "
-              << (used_storage_buffer_sizes ? "true" : "false") << ",\n";
+    std::cout << "  \"runtimeStorageBindings\": " << runtime_storage.size() << ",\n";
+    std::cout << "  \"immediateIndex\": "
+              << (arguments.immediate_index ? std::to_string(*arguments.immediate_index) : "null")
+              << ",\n";
+    std::cout << "  \"bufferSizesOffset\": "
+              << (arguments.buffer_sizes_offset
+                      ? std::to_string(*arguments.buffer_sizes_offset)
+                      : "null")
+              << ",\n";
     std::cout << "  \"usedImmediate\": " << (used_immediate ? "true" : "false") << ",\n";
     std::cout << "  \"bindings\": [\n";
     for (size_t index = 0; index < ordered.size(); ++index) {
@@ -592,8 +621,8 @@ int main(int argc, char** argv) {
     if (!arguments) {
         std::cerr << "usage: wrapper <input.wgsl> <entry-point> <emitted-name> <output.metal> "
                      "<mapping.txt> [--sized-binding-array] "
-                     "[--storage-buffer-sizes-index <index>] [--immediate-index <index>] "
-                     "[--force-u32-div-mod-immediate]\n";
+                     "[--immediate-index <index>] [--buffer-sizes-offset <bytes>] "
+                     "[--expect-storage-buffer-sizes] [--force-u32-div-mod-immediate]\n";
         return 64;
     }
     tint::Initialize();

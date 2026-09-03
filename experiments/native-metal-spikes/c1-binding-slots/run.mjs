@@ -512,6 +512,17 @@ function compileWrapper(releaseRoot, compatInclude, scratch) {
   ) {
     fail("prototype must not call or include GenerateBindings");
   }
+  if (
+    sourceText.includes("ubo_binding") ||
+    !sourceText.includes(
+      "array_lengths.buffer_sizes_offset = arguments.buffer_sizes_offset"
+    ) ||
+    !sourceText.includes("writer_options.immediate_binding_point")
+  ) {
+    fail(
+      "prototype must route storage sizes through the shared immediate block"
+    );
+  }
   const args = [
     "clang++",
     "-std=c++20",
@@ -594,20 +605,55 @@ function selectedTintMappings(fixtures, tintCanary, allocation) {
       left.group - right.group ||
       left.binding - right.binding
   );
-  const internalIndices = {};
-  for (const role of tintCanary.internalRoles ?? []) {
-    const internal = projected.internalBindings.find(
-      (candidate) => candidate.role === role
-    );
-    const slots = internal?.slots.filter(
-      (slot) => slot.stage === tintCanary.stage
-    );
-    if (!slots || slots.length !== 1 || slots[0].resourceClass !== "buffer") {
-      fail(`${tintCanary.program} has no single buffer slot for ${role}`);
-    }
-    internalIndices[role] = slots[0].index;
+  const expectedInternalRoles = [...(tintCanary.internalRoles ?? [])].sort();
+  if (new Set(expectedInternalRoles).size !== expectedInternalRoles.length) {
+    fail(`${tintCanary.program} repeats an expected internal role`);
   }
-  return { mappings, internalIndices };
+  const projectedInternal = projected.internalBindings
+    .map((internal) => ({
+      role: internal.role,
+      slots: internal.slots.filter((slot) => slot.stage === tintCanary.stage),
+    }))
+    .filter((internal) => internal.slots.length > 0)
+    .sort((left, right) => left.role.localeCompare(right.role));
+  const projectedInternalRoles = projectedInternal.map(
+    (internal) => internal.role
+  );
+  if (!isDeepStrictEqual(projectedInternalRoles, expectedInternalRoles)) {
+    fail(`${tintCanary.program} projected a different internal role set`);
+  }
+  const internalIndices = {};
+  for (const internal of projectedInternal) {
+    if (
+      internal.slots.length !== 1 ||
+      internal.slots[0].resourceClass !== "buffer"
+    ) {
+      fail(
+        `${tintCanary.program} has no single buffer slot for ${internal.role}`
+      );
+    }
+    internalIndices[internal.role] = internal.slots[0].index;
+  }
+  let configuredImmediateIndex;
+  if (
+    (tintCanary.runtimeStorageBindings ?? 0) > 0 ||
+    internalIndices["immediate-data"] !== undefined
+  ) {
+    const reservations = fixtures.profile.internalReservations.filter(
+      (reservation) =>
+        reservation.role === "immediate-data" &&
+        reservation.stage === tintCanary.stage &&
+        reservation.resourceClass === "buffer" &&
+        reservation.count === 1
+    );
+    if (reservations.length !== 1) {
+      fail(
+        `${tintCanary.program} has no single profile immediate-data reservation`
+      );
+    }
+    configuredImmediateIndex = reservations[0].index;
+  }
+  return { mappings, internalIndices, configuredImmediateIndex };
 }
 
 function normalizeDiagnostic(value, releaseRoot, scratch) {
@@ -627,24 +673,57 @@ function hasNamedBufferBinding(msl, symbol, index) {
   );
 }
 
-function verifyRoleBindingMatcher() {
-  const swapped =
-    "tint_storage_buffer_sizes [[buffer(29)]], " +
+function hasDedicatedSizeTableBinding(msl) {
+  return /\btint_storage_buffer_sizes\s*\[\[buffer\(/.test(msl);
+}
+
+function hasSharedImmediateLayout(msl) {
+  return /struct\s+tint_immediate_data_struct\s*\{\s*\/\*\s*0x0000\s*\*\/\s*uint\s+tint_non_constant_zero;\s*\/\*\s*0x0004\s*\*\/\s*tint_array<uint,\s*\d+>\s+tint_storage_buffer_sizes;\s*\}/.test(
+    msl
+  );
+}
+
+function verifyInternalBindingMatchers() {
+  const distinct =
+    "tint_storage_buffer_sizes [[buffer(7)]], " +
     "tint_immediate_data [[buffer(30)]]";
   if (
-    hasNamedBufferBinding(swapped, "tint_storage_buffer_sizes", 30) ||
-    hasNamedBufferBinding(swapped, "tint_immediate_data", 29)
+    !hasDedicatedSizeTableBinding(distinct) ||
+    !hasNamedBufferBinding(distinct, "tint_immediate_data", 30) ||
+    hasNamedBufferBinding(distinct, "tint_immediate_data", 7)
   ) {
-    fail("internal-role matcher accepts swapped buffer indices");
+    fail(
+      "internal binding matchers do not distinguish dedicated and shared transport"
+    );
   }
 }
 
 function runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch) {
-  const { mappings, internalIndices } = selectedTintMappings(
-    fixtures,
-    tintCanary,
-    allocation
+  const { mappings, internalIndices, configuredImmediateIndex } =
+    selectedTintMappings(fixtures, tintCanary, allocation);
+  const expectsImmediate = internalIndices["immediate-data"] !== undefined;
+  const forcesOrdinaryImmediate = tintCanary.writerOptions?.includes(
+    "force-u32-div-mod-immediate"
   );
+  if (
+    typeof tintCanary.needsStorageBufferSizes !== "boolean" ||
+    !Number.isSafeInteger(tintCanary.runtimeStorageBindings ?? 0) ||
+    (tintCanary.runtimeStorageBindings ?? 0) < 0 ||
+    (tintCanary.bufferSizesOffset !== undefined &&
+      (!Number.isSafeInteger(tintCanary.bufferSizesOffset) ||
+        tintCanary.bufferSizesOffset < 0 ||
+        tintCanary.bufferSizesOffset % 4 !== 0)) ||
+    (tintCanary.needsStorageBufferSizes &&
+      tintCanary.bufferSizesOffset === undefined) ||
+    (tintCanary.bufferSizesOffset !== undefined &&
+      configuredImmediateIndex === undefined) ||
+    (tintCanary.needsStorageBufferSizes && !expectsImmediate) ||
+    (forcesOrdinaryImmediate && !expectsImmediate)
+  ) {
+    fail(
+      `${tintCanary.program}/${tintCanary.stage} has invalid Tint expectations`
+    );
+  }
   const safeName = `${tintCanary.program}-${tintCanary.stage}`;
   const mappingPath = join(scratch, `${safeName}.map`);
   writeFileSync(
@@ -667,15 +746,15 @@ function runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch) {
       ...(tintCanary.languageFeatures?.includes("sized_binding_array")
         ? ["--sized-binding-array"]
         : []),
-      ...(internalIndices["storage-buffer-sizes"] === undefined
+      ...(configuredImmediateIndex === undefined
         ? []
-        : [
-            "--storage-buffer-sizes-index",
-            String(internalIndices["storage-buffer-sizes"]),
-          ]),
-      ...(internalIndices["immediate-data"] === undefined
+        : ["--immediate-index", String(configuredImmediateIndex)]),
+      ...(tintCanary.bufferSizesOffset === undefined
         ? []
-        : ["--immediate-index", String(internalIndices["immediate-data"])]),
+        : ["--buffer-sizes-offset", String(tintCanary.bufferSizesOffset)]),
+      ...(tintCanary.needsStorageBufferSizes
+        ? ["--expect-storage-buffer-sizes"]
+        : []),
       ...(tintCanary.writerOptions?.includes("force-u32-div-mod-immediate")
         ? ["--force-u32-div-mod-immediate"]
         : []),
@@ -733,17 +812,12 @@ function runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch) {
     response.emittedEntryPoint !== tintCanary.emittedEntryPoint ||
     response.stage !== tintCanary.stage ||
     !isDeepStrictEqual(response.bindings, mappings) ||
-    response.needsStorageBufferSizes !==
-      (internalIndices["storage-buffer-sizes"] !== undefined) ||
-    response.usedStorageBufferSizes !==
-      (internalIndices["storage-buffer-sizes"] !== undefined) ||
-    response.usedImmediate !==
-      (internalIndices["immediate-data"] !== undefined) ||
-    (internalIndices["storage-buffer-sizes"] !== undefined &&
-      response.storageBufferSizesIndex !==
-        internalIndices["storage-buffer-sizes"]) ||
-    (internalIndices["immediate-data"] !== undefined &&
-      response.immediateIndex !== internalIndices["immediate-data"])
+    response.needsStorageBufferSizes !== tintCanary.needsStorageBufferSizes ||
+    response.runtimeStorageBindings !==
+      (tintCanary.runtimeStorageBindings ?? 0) ||
+    response.usedImmediate !== expectsImmediate ||
+    response.immediateIndex !== (configuredImmediateIndex ?? null) ||
+    response.bufferSizesOffset !== (tintCanary.bufferSizesOffset ?? null)
   ) {
     fail(`${safeName} returned a map different from the vgpu allocation`);
   }
@@ -761,14 +835,53 @@ function runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch) {
       fail(`${safeName} MSL omitted ${attribute}(${mapping.metalIndex})`);
     }
   }
-  for (const [role, index] of Object.entries(internalIndices)) {
-    const symbol =
-      role === "storage-buffer-sizes"
-        ? "tint_storage_buffer_sizes"
-        : "tint_immediate_data";
-    if (!hasNamedBufferBinding(attempts[0].msl, symbol, index)) {
-      fail(`${safeName} MSL omitted ${role} at buffer(${index})`);
-    }
+  const immediateIndex = internalIndices["immediate-data"];
+  if (
+    immediateIndex !== undefined &&
+    !hasNamedBufferBinding(
+      attempts[0].msl,
+      "tint_immediate_data",
+      immediateIndex
+    )
+  ) {
+    fail(`${safeName} MSL omitted immediate-data at buffer(${immediateIndex})`);
+  }
+  if (
+    immediateIndex === undefined &&
+    configuredImmediateIndex !== undefined &&
+    hasNamedBufferBinding(
+      attempts[0].msl,
+      "tint_immediate_data",
+      configuredImmediateIndex
+    )
+  ) {
+    fail(`${safeName} MSL emitted an undeclared immediate-data binding`);
+  }
+  if (hasDedicatedSizeTableBinding(attempts[0].msl)) {
+    fail(`${safeName} MSL emitted a dedicated storage-size binding`);
+  }
+  const sizeMemberReferences =
+    attempts[0].msl.match(/\btint_storage_buffer_sizes\b/g)?.length ?? 0;
+  if (
+    (tintCanary.needsStorageBufferSizes && sizeMemberReferences < 2) ||
+    (!tintCanary.needsStorageBufferSizes && sizeMemberReferences > 1)
+  ) {
+    fail(`${safeName} MSL storage-size reads disagree with Tint metadata`);
+  }
+  if (
+    forcesOrdinaryImmediate &&
+    !attempts[0].msl.includes("tint_non_constant_zero")
+  ) {
+    fail(`${safeName} MSL ordinary immediate member drifted`);
+  }
+  if (
+    tintCanary.needsStorageBufferSizes &&
+    forcesOrdinaryImmediate &&
+    !hasSharedImmediateLayout(attempts[0].msl)
+  ) {
+    fail(
+      `${safeName} MSL did not place ordinary and size immediates in one struct`
+    );
   }
   return {
     id: safeName,
@@ -777,6 +890,52 @@ function runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch) {
     msl: attempts[0].msl,
     resourceArrays: mappings.some((mapping) => mapping.count > 1),
   };
+}
+
+function verifySharedImmediateDataCanaries(fixtures, results) {
+  const runtimeCanaries = fixtures.tintCanaries.filter(
+    (canary) => (canary.runtimeStorageBindings ?? 0) > 0
+  );
+  const combinations = new Map([
+    ["size-only", { needsSizes: true, forcesOrdinary: false }],
+    ["ordinary-and-size", { needsSizes: true, forcesOrdinary: true }],
+    ["ordinary-only", { needsSizes: false, forcesOrdinary: true }],
+    ["neither", { needsSizes: false, forcesOrdinary: false }],
+  ]);
+  for (const [label, combination] of combinations) {
+    const matching = runtimeCanaries.filter((canary) => {
+      const forcesOrdinary =
+        canary.writerOptions?.includes("force-u32-div-mod-immediate") === true;
+      return (
+        canary.needsStorageBufferSizes === combination.needsSizes &&
+        forcesOrdinary === combination.forcesOrdinary
+      );
+    });
+    if (matching.length !== 1) {
+      fail(`shared immediate-data truth table requires one ${label} canary`);
+    }
+    const canary = matching[0];
+    const expectedRoles =
+      combination.needsSizes || combination.forcesOrdinary
+        ? ["immediate-data"]
+        : [];
+    if (
+      canary.bufferSizesOffset !== 4 ||
+      !isDeepStrictEqual(canary.internalRoles ?? [], expectedRoles)
+    ) {
+      fail(`${canary.program} has invalid ${label} transport expectations`);
+    }
+    const result = results.find(
+      (candidate) => candidate.id === `${canary.program}-${canary.stage}`
+    );
+    if (!result || result.status !== "passed") {
+      fail(`${canary.program} did not prove the ${label} combination`);
+    }
+  }
+  if (runtimeCanaries.length !== combinations.size) {
+    fail("shared immediate-data truth table contains an unexpected canary");
+  }
+  return "passed";
 }
 
 function runTintNegativeCanaries(wrapper, scratch) {
@@ -812,7 +971,7 @@ function runTintNegativeCanaries(wrapper, scratch) {
       source: "runtime-array.wgsl",
       entryPoint: "main",
       mapping: ["storage 0 0 30 1"],
-      flags: ["--storage-buffer-sizes-index", "30"],
+      flags: ["--immediate-index", "30", "--buffer-sizes-offset", "4"],
       diagnostic: "requested binding intervals collide",
     },
     {
@@ -868,12 +1027,30 @@ function runTintNegativeCanaries(wrapper, scratch) {
         "requested binding map differs from selected-entry reflection",
     },
     {
-      id: "runtime-array-without-size-table",
+      id: "buffer-sizes-offset-without-immediate-data",
+      source: "runtime-array.wgsl",
+      entryPoint: "main",
+      mapping: ["storage 0 0 0 1"],
+      flags: ["--buffer-sizes-offset", "4"],
+      diagnostic:
+        "buffer-sizes offset requires the shared immediate-data binding",
+    },
+    {
+      id: "runtime-size-query-without-buffer-sizes-offset",
+      source: "runtime-array.wgsl",
+      entryPoint: "main",
+      mapping: ["storage 0 0 0 1"],
+      flags: ["--immediate-index", "30"],
+      diagnostic: "runtime-sized storage requires a buffer-sizes offset",
+    },
+    {
+      id: "runtime-sized-storage-without-immediate-configuration",
       source: "runtime-array.wgsl",
       entryPoint: "main",
       mapping: ["storage 0 0 0 1"],
       flags: [],
-      diagnostic: "selected entry requires a storage-buffer-sizes slot",
+      diagnostic:
+        "runtime-sized storage requires shared immediate-data configuration",
     },
   ];
 
@@ -985,13 +1162,17 @@ function runTintIntegration(options, fixtures, allocations, scratch) {
     options.compatInclude,
     scratch
   );
-  verifyRoleBindingMatcher();
+  verifyInternalBindingMatchers();
   const negativeCanaries = runTintNegativeCanaries(wrapper, scratch);
   const results = fixtures.tintCanaries.map((tintCanary) => {
     const allocation = allocations.get(tintCanary.case)?.allocation;
     if (!allocation) fail(`missing allocation for ${tintCanary.case}`);
     return runTintCanary(wrapper, fixtures, tintCanary, allocation, scratch);
   });
+  const sharedImmediateDataCanary = verifySharedImmediateDataCanaries(
+    fixtures,
+    results
+  );
   const resourceArray = results.find(
     (result) => result.resourceArrays || result.id === "ResourceArrays-compute"
   );
@@ -1005,7 +1186,7 @@ function runTintIntegration(options, fixtures, allocations, scratch) {
       status: "passed",
       dawnCommit: expectedTintCommit,
       verifiedHashes: ["lib/libwebgpu_dawn.a", "src/utils/compiler.h"],
-      internalRoleAssociationCanary: "passed",
+      sharedImmediateDataCanary,
       canaries: results.length,
       deterministicCanaries: results.length,
       negativeCanaries,
