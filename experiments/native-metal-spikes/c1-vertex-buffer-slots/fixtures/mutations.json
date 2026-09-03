@@ -7,10 +7,8 @@
       "expected": { "status": "same-projection" }
     },
     {
-      "id": "interval-and-role-order-are-not-semantic",
+      "id": "interval-order-is-not-semantic",
       "operations": [
-        { "op": "reverse", "path": ["profile", "internalReservations"] },
-        { "op": "reverse", "path": ["pipelines", 0, "internalRoles"] },
         { "op": "reverse", "path": ["pipelines", 2, "shaderBufferIntervals"] }
       ],
       "expected": { "status": "same-projection" }
@@ -21,13 +19,13 @@
         {
           "op": "set",
           "path": ["pipelines", 1, "shaderBufferIntervals", 1, "start"],
-          "value": 29
+          "value": 30
         }
       ],
       "expected": {
         "status": "error",
         "code": "SHADER_INTERVAL_OVERFLOW",
-        "messageIncludes": "external ceiling is 29"
+        "messageIncludes": "external ceiling is 30"
       }
     },
     {
@@ -66,13 +64,13 @@
         {
           "op": "set",
           "path": ["pipelines", 2, "shaderBufferIntervals", 0, "start"],
-          "value": 28
+          "value": 29
         }
       ],
       "expected": {
         "status": "error",
         "code": "VERTEX_RANGE_OVERFLOW",
-        "messageIncludes": "shader end 29 plus 1 streams"
+        "messageIncludes": "shader end 30 plus 1 streams"
       }
     },
     {
@@ -96,13 +94,13 @@
         {
           "op": "append",
           "path": ["pipelines", 2, "internalRoles"],
-          "value": "unreserved-role"
+          "value": "storage-buffer-sizes"
         }
       ],
       "expected": {
         "status": "error",
         "code": "UNKNOWN_INTERNAL_ROLE",
-        "messageIncludes": "SparseSpan/unreserved-role"
+        "messageIncludes": "SparseSpan/storage-buffer-sizes"
       }
     },
     {
@@ -194,9 +192,9 @@
         {
           "op": "set",
           "path": ["profile", "externalBufferCeiling"],
-          "value": 30
+          "value": 31
         },
-        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 22 }
+        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 23 }
       ],
       "expected": {
         "status": "error",
@@ -207,7 +205,7 @@
     {
       "id": "static-baseline-does-not-end-at-ceiling",
       "operations": [
-        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 20 }
+        { "op": "set", "path": ["profile", "staticBaselineStart"], "value": 21 }
       ],
       "expected": {
         "status": "error",

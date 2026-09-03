@@ -3,12 +3,11 @@
   "candidate": "c1-metal-pipeline-local-vertex-partition",
   "profile": {
     "totalBufferSlots": 31,
-    "externalBufferCeiling": 29,
+    "externalBufferCeiling": 30,
     "maxVertexStreams": 8,
-    "staticBaselineStart": 21,
+    "staticBaselineStart": 22,
     "internalReservations": [
-      { "role": "immediate-data", "index": 29, "count": 1 },
-      { "role": "storage-buffer-sizes", "index": 30, "count": 1 }
+      { "role": "immediate-data", "index": 30, "count": 1 }
     ]
   },
   "pipelines": [
@@ -26,9 +25,9 @@
         "vertexLayoutFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
         "bindingProfileVersion": 1
       },
-      "shaderBufferIntervals": [{ "start": 0, "count": 21 }],
+      "shaderBufferIntervals": [{ "start": 0, "count": 22 }],
       "vertexStreamCount": 8,
-      "internalRoles": ["immediate-data", "storage-buffer-sizes"]
+      "internalRoles": ["immediate-data"]
     },
     {
       "id": "NoVertexStreams",
@@ -46,7 +45,7 @@
       },
       "shaderBufferIntervals": [
         { "start": 0, "count": 1 },
-        { "start": 28, "count": 1 }
+        { "start": 29, "count": 1 }
       ],
       "vertexStreamCount": 0,
       "internalRoles": []

@@ -16,10 +16,10 @@ stream[i] = shaderOccupiedEnd + i
 shaderOccupiedEnd + activeStreamCount <= externalBufferCeiling
 ```
 
-The fixed `0...20` shader plus `21...28` vertex partition remains in the snapshot as a comparison
-baseline. It is deterministic, but rejects a zero-stream program that uses shader buffer index 28.
-The hybrid accepts that program and still produces the same `21...28` mapping for the exact
-21-shader-buffer, eight-stream case. A sparse case with shader buffers at indices 0 and 11 maps its
+The fixed `0...21` shader plus `22...29` vertex partition remains in the snapshot as a comparison
+baseline. It is deterministic, but rejects a zero-stream program that uses shader buffer index 29.
+The hybrid accepts that program and still produces the same `22...29` mapping for the exact
+22-shader-buffer, eight-stream case. A sparse case with shader buffers at indices 0 and 11 maps its
 first stream to 12, proving that the calculation uses the occupied interval end rather than the
 number of bindings.
 
@@ -30,8 +30,12 @@ exact capacity; semantic and physical overflow; deterministic input reordering; 
 key reuse.
 
 The exact-capacity runtime canary binds all 31 fixture entries, not only reflects them. Eight
-vertex streams contribute red, twelve user constants plus two internal constants contribute green,
-and nine storage-style arguments contribute blue; the readback is `[128, 64, 191, 255]`.
+vertex streams contribute red, twelve user constants plus one shared immediate-data struct
+contribute green, and ten storage-style arguments contribute blue; the readback is
+`[128, 64, 191, 255]`. The immediate-data struct contains both an ordinary float and a runtime
+storage-size sentinel. Both fields affect the green channel, proving that one physical binding can
+carry the ordinary payload and size table together. The Swift harness also checks the corresponding
+eight-byte host layout: the ordinary value begins at byte 0 and the size table begins at byte 4.
 
 ## Why pipeline creation is not a collision check
 
@@ -57,8 +61,7 @@ The allocator combines versioned artifact data with pipeline-local vertex-layout
 - that record maps active logical `vertexStreams` contiguously from the range start.
 
 The runtime consumes that projected range; it does not reconstruct a ceiling from hardcoded role
-indices. The fixture reserves 29 and 30 for two internal roles, so its external ceiling is 29.
-Those indices, the static boundary at 21, and this profile's use of all indices `0...30` are fixture
+indices. The fixture reserves 30 for the single `immediate-data` role, so its external ceiling is 30. That index, the static boundary at 22, and this profile's use of all indices `0...30` are fixture
 values, not a stable ABI. Metal's 31-entry buffer argument table is a documented platform limit;
 how vgpu partitions that table remains versioned projection policy. See Apple's
 [Metal capability tables](https://developer.apple.com/metal/capabilities/).
@@ -85,17 +88,18 @@ stream cardinality, or internal requirements is rejected as a mapping-key collis
 
 The fixture's maximum of eight vertex streams follows the current geometry contract. Physical
 buffer-table capacity and semantic per-resource limits are intentionally separate. In particular,
-the exact-capacity Metal canary uses twelve user `constant` arguments, nine storage-style `device
-const` arguments, and two internal `constant` arguments. That keeps the canary at fourteen
-constant-buffer arguments while exercising 31 table entries. Fourteen is a conservative fixture
+the exact-capacity Metal canary uses twelve user `constant` arguments, ten storage-style `device
+const` arguments, and one internal `constant` argument. That keeps the canary at thirteen
+constant-buffer arguments while exercising 31 table entries. Thirteen is a conservative fixture
 budget, not a current Metal-family limit or evidence for the untested Intel and discrete-GPU paths.
 An alpha may still choose stricter semantic limits, such as twelve uniforms and eight storage
 buffers, after translator and device-matrix evidence; this spike does not decide those per-class
 caps.
 
 The runner parses the exact-capacity source before any native gate and requires precisely that
-12-user-constant, 9-storage-style, 2-internal-constant split. This deterministic guard catches an
-accidental all-`constant` rewrite even on a device that accepts more constant arguments.
+12-user-constant, 10-storage-style, 1-internal-constant split, including the ordinary field and
+size-table sentinel in the immediate-data struct. This deterministic guard catches an accidental
+all-`constant` rewrite even on a device that accepts more constant arguments.
 
 ## Pipeline-switch canary
 

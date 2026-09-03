@@ -294,7 +294,7 @@ function runAllocator(fixtures, mutationFixture, expectedSnapshot) {
       id: "candidate-range-crosses-ceiling",
       code: "PROJECTION_MISMATCH",
       mutate(projection) {
-        projection.pipelines[0].vertexInputRange.endExclusive = 30;
+        projection.pipelines[0].vertexInputRange.endExclusive = 31;
       },
     },
     {
@@ -420,54 +420,54 @@ function validateExactCapacitySource() {
   );
   const declarations = [
     ...source.matchAll(
-      /\b(constant\s+float&|device\s+const\s+float&)\s+([A-Za-z_][A-Za-z0-9_]*)\s+\[\[buffer\((\d+)\)\]\]/g
+      /\b(constant\s+(?:float|ExactImmediateData)&|device\s+const\s+float&)\s+([A-Za-z_][A-Za-z0-9_]*)\s+\[\[buffer\((\d+)\)\]\]/g
     ),
   ].map((match) => ({
-    addressSpace: match[1] === "constant float&" ? "constant" : "device",
+    declaration: match[1].replaceAll(/\s+/g, " "),
     symbol: match[2],
     index: Number(match[3]),
   }));
   const expected = [
     ...Array.from({ length: 12 }, (_, index) => ({
-      addressSpace: "constant",
+      declaration: "constant float&",
       symbol: `buffer${index}`,
       index,
     })),
-    ...Array.from({ length: 9 }, (_, offset) => ({
-      addressSpace: "device",
+    ...Array.from({ length: 10 }, (_, offset) => ({
+      declaration: "device const float&",
       symbol: `buffer${12 + offset}`,
       index: 12 + offset,
     })),
     {
-      addressSpace: "constant",
+      declaration: "constant ExactImmediateData&",
       symbol: "immediateData",
-      index: 29,
-    },
-    {
-      addressSpace: "constant",
-      symbol: "storageBufferSizes",
       index: 30,
     },
   ];
-  const identity = (item) =>
-    `${item.addressSpace}/${item.index}/${item.symbol}`;
+  const identity = (item) => `${item.declaration}/${item.index}/${item.symbol}`;
   const actualIdentities = declarations.map(identity).sort(compareText);
   const expectedIdentities = expected.map(identity).sort(compareText);
   const bufferAttributeCount = source.match(/\[\[buffer\(/g)?.length ?? 0;
   if (
     bufferAttributeCount !== expected.length ||
-    !isDeepStrictEqual(actualIdentities, expectedIdentities)
+    !isDeepStrictEqual(actualIdentities, expectedIdentities) ||
+    !/struct\s+ExactImmediateData\s*\{\s*float\s+ordinaryValue\s*;\s*uint\s+storageBufferSizes\s*\[\s*1\s*\]\s*;\s*\}\s*;/s.test(
+      source
+    ) ||
+    !/\bimmediateData\.ordinaryValue\b/.test(source) ||
+    !/\bimmediateData\.storageBufferSizes\s*\[\s*0\s*\]/.test(source)
   ) {
     fail(
-      "exact-capacity.metal must keep 12 user constant, 9 device const, and 2 internal constant buffer arguments"
+      "exact-capacity.metal must keep 12 user constant, 10 device const, and one shared immediate-data struct buffer argument"
     );
   }
   return {
     status: "passed",
     userConstantArguments: 12,
-    storageStyleArguments: 9,
-    internalConstantArguments: 2,
-    totalConstantArguments: 14,
+    storageStyleArguments: 10,
+    internalConstantArguments: 1,
+    totalConstantArguments: 13,
+    sharedImmediateFields: ["ordinaryValue", "storageBufferSizes[0]"],
   };
 }
 
@@ -529,11 +529,8 @@ function metalRuntimeInputs(projection) {
   const immediate = exact.internalBindings.find(
     (binding) => binding.role === "immediate-data"
   );
-  const sizes = exact.internalBindings.find(
-    (binding) => binding.role === "storage-buffer-sizes"
-  );
-  if (!immediate || !sizes) {
-    fail("exact-capacity projection is missing internal bindings");
+  if (!immediate || exact.internalBindings.length !== 1) {
+    fail("exact-capacity projection must emit only immediate-data");
   }
   return {
     switchAStream: switchA.vertexStreams[0].metalIndex,
@@ -544,7 +541,6 @@ function metalRuntimeInputs(projection) {
     exactVertexIndices: exact.vertexStreams.map((stream) => stream.metalIndex),
     exactShaderIndices: expandShaderIntervals(exact),
     immediateIndex: immediate.index,
-    sizesIndex: sizes.index,
   };
 }
 
@@ -587,6 +583,7 @@ function validateMetalRuntimeResult(result, inputs) {
       "renderSample",
       "renderExpected",
       "renderTolerance",
+      "immediateData",
     ],
     "Metal exact-capacity result"
   );
@@ -632,6 +629,18 @@ function validateMetalRuntimeResult(result, inputs) {
   );
   const exact = result.candidate.exactCapacity;
   const pipelineSwitch = result.candidate.pipelineSwitch;
+  exactKeys(
+    exact.immediateData,
+    [
+      "index",
+      "ordinaryValue",
+      "storageBufferSizeSentinel",
+      "ordinaryValueByteOffset",
+      "sizeTableByteOffset",
+      "byteLength",
+    ],
+    "Metal exact-capacity immediate-data result"
+  );
   if (
     result.languageVersion !== "2.4" ||
     result.collision.pipelineCreation !== "passed" ||
@@ -652,10 +661,15 @@ function validateMetalRuntimeResult(result, inputs) {
     result.candidate.pipelineCreation !== "passed" ||
     !isDeepStrictEqual(exact.shaderIndices, inputs.exactShaderIndices) ||
     !isDeepStrictEqual(exact.vertexStreamIndices, inputs.exactVertexIndices) ||
-    !isDeepStrictEqual(exact.internalIndices, [
-      inputs.immediateIndex,
-      inputs.sizesIndex,
-    ]) ||
+    !isDeepStrictEqual(exact.internalIndices, [inputs.immediateIndex]) ||
+    !isDeepStrictEqual(exact.immediateData, {
+      index: inputs.immediateIndex,
+      ordinaryValue: 0.03125,
+      storageBufferSizeSentinel: 8,
+      ordinaryValueByteOffset: 0,
+      sizeTableByteOffset: 4,
+      byteLength: 8,
+    }) ||
     exact.usedBufferBindingCount !== 31 ||
     exact.uniqueBufferIndexCount !== 31 ||
     !isDeepStrictEqual(exact.renderExpected, [128, 64, 191, 255]) ||
@@ -745,7 +759,6 @@ function runMetalRuntime(options, scratch, projection) {
     String(inputs.switchBStream),
     String(inputs.exactStreamStart),
     String(inputs.immediateIndex),
-    String(inputs.sizesIndex),
   ];
   const attempts = [0, 1].map(() => runCommand(executable, runtimeArguments));
   const parsed = attempts.map((attempt, index) => {

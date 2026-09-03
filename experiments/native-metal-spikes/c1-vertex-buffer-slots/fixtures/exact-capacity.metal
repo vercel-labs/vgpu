@@ -17,6 +17,11 @@ struct ExactVertexOut {
   float4 color;
 };
 
+struct ExactImmediateData {
+  float ordinaryValue;
+  uint storageBufferSizes[1];
+};
+
 float2 exactFullscreenPosition(uint vertexID) {
   if (vertexID == 0) return float2(-1.0, -1.0);
   if (vertexID == 1) return float2(3.0, -1.0);
@@ -47,18 +52,19 @@ vertex ExactVertexOut exactCapacityVertex(
   device const float& buffer18 [[buffer(18)]],
   device const float& buffer19 [[buffer(19)]],
   device const float& buffer20 [[buffer(20)]],
-  constant float& immediateData [[buffer(29)]],
-  constant float& storageBufferSizes [[buffer(30)]]) {
+  device const float& buffer21 [[buffer(21)]],
+  constant ExactImmediateData& immediateData [[buffer(30)]]) {
   float attributeSum =
     input.value0 + input.value1 + input.value2 + input.value3 +
     input.value4 + input.value5 + input.value6 + input.value7;
   float constantSum =
     buffer0 + buffer1 + buffer2 + buffer3 + buffer4 + buffer5 +
     buffer6 + buffer7 + buffer8 + buffer9 + buffer10 + buffer11 +
-    immediateData + storageBufferSizes;
+    immediateData.ordinaryValue +
+    float(immediateData.storageBufferSizes[0]) / 256.0;
   float deviceSum =
     buffer12 + buffer13 + buffer14 + buffer15 + buffer16 + buffer17 +
-    buffer18 + buffer19 + buffer20;
+    buffer18 + buffer19 + buffer20 + buffer21;
   ExactVertexOut output;
   output.position = float4(exactFullscreenPosition(vertexID), 0.0, 1.0);
   output.color = float4(attributeSum, constantSum, deviceSum, 1.0);

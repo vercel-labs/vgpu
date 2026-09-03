@@ -11,6 +11,11 @@ struct ReflectedBuffer: Equatable {
   let isArgument: Bool
 }
 
+struct ExactImmediateData {
+  let ordinaryValue: Float
+  let storageBufferSizes: UInt32
+}
+
 func fail(_ message: String) throws -> Never {
   throw SpikeFailure(description: message)
 }
@@ -349,8 +354,7 @@ func renderExactCapacity(
   device: MTLDevice,
   pipeline: MTLRenderPipelineState,
   exactStreamStart: Int,
-  immediateIndex: Int,
-  sizesIndex: Int
+  immediateIndex: Int
 ) throws -> [UInt8] {
   let texture = try makeRenderTarget(device: device, width: 1, height: 1)
   guard let queue = device.makeCommandQueue(),
@@ -373,8 +377,8 @@ func renderExactCapacity(
   for index in 0..<12 {
     try bindScalar(0.015625, index: index, label: "exact-constant-\(index)")
   }
-  for index in 12..<21 {
-    let value: Float = index == 20 ? 0.25 : 0.0625
+  for index in 12..<22 {
+    let value: Float = index >= 20 ? 0.125 : 0.0625
     try bindScalar(value, index: index, label: "exact-device-\(index)")
   }
   for stream in 0..<8 {
@@ -386,8 +390,18 @@ func renderExactCapacity(
     retainedBuffers.append(buffer)
     encoder.setVertexBuffer(buffer, offset: 0, index: exactStreamStart + stream)
   }
-  try bindScalar(0.03125, index: immediateIndex, label: "exact-immediate")
-  try bindScalar(0.03125, index: sizesIndex, label: "exact-sizes")
+  let immediateData = try makeBuffer(
+    device: device,
+    values: [
+      ExactImmediateData(
+        ordinaryValue: 0.03125,
+        storageBufferSizes: 8
+      )
+    ],
+    label: "exact-immediate-data"
+  )
+  retainedBuffers.append(immediateData)
+  encoder.setVertexBuffer(immediateData, offset: 0, index: immediateIndex)
   encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
   encoder.endEncoding()
 
@@ -410,18 +424,17 @@ func renderExactCapacity(
 }
 
 func run() throws {
-  guard CommandLine.arguments.count == 9 else {
+  guard CommandLine.arguments.count == 8 else {
     try fail(
       "usage: c1-vertex-buffer-slots <collision.metal> <partition.metal> "
         + "<exact-capacity.metal> <switch-a-stream> <switch-b-stream> "
-        + "<exact-stream-start> <immediate-index> <sizes-index>"
+        + "<exact-stream-start> <immediate-index>"
     )
   }
   let switchAStream = try argumentIndex(4, "switch-a-stream")
   let switchBStream = try argumentIndex(5, "switch-b-stream")
   let exactStreamStart = try argumentIndex(6, "exact-stream-start")
   let immediateIndex = try argumentIndex(7, "immediate-index")
-  let sizesIndex = try argumentIndex(8, "sizes-index")
   guard let device = MTLCreateSystemDefaultDevice() else {
     try emit([
       "schemaVersion": 1,
@@ -527,7 +540,7 @@ func run() throws {
     vertexDescriptor: exactDescriptor
   )
   let exactBindings = reflectedBuffers(exact.reflection)
-  let expectedArgumentIndices = Array(0...20) + [immediateIndex, sizesIndex]
+  let expectedArgumentIndices = Array(0...21) + [immediateIndex]
   let expectedVertexIndices = Array(exactStreamStart..<(exactStreamStart + 8))
   try require(
     exactBindings.filter(\.isArgument).map(\.index) == expectedArgumentIndices
@@ -535,12 +548,23 @@ func run() throws {
       && exactBindings.count == 31 && Set(exactBindings.map(\.index)).count == 31,
     "exact-capacity pipeline reflection drifted: \(exactBindings)"
   )
+  let ordinaryValueByteOffset = MemoryLayout<ExactImmediateData>.offset(
+    of: \ExactImmediateData.ordinaryValue
+  )
+  let sizeTableByteOffset = MemoryLayout<ExactImmediateData>.offset(
+    of: \ExactImmediateData.storageBufferSizes
+  )
+  try require(
+    ordinaryValueByteOffset == 0 && sizeTableByteOffset == 4
+      && MemoryLayout<ExactImmediateData>.size == 8
+      && MemoryLayout<ExactImmediateData>.stride == 8,
+    "immediate-data host layout drifted"
+  )
   let exactPixel = try renderExactCapacity(
     device: device,
     pipeline: exact.state,
     exactStreamStart: exactStreamStart,
-    immediateIndex: immediateIndex,
-    sizesIndex: sizesIndex
+    immediateIndex: immediateIndex
   )
 
   try emit([
@@ -563,11 +587,19 @@ func run() throws {
     "candidate": [
       "pipelineCreation": "passed",
       "exactCapacity": [
-        "shaderIndices": Array(0...20),
+        "shaderIndices": Array(0...21),
         "vertexStreamIndices": expectedVertexIndices,
-        "internalIndices": [immediateIndex, sizesIndex],
+        "internalIndices": [immediateIndex],
         "usedBufferBindingCount": exactBindings.count,
         "uniqueBufferIndexCount": Set(exactBindings.map(\.index)).count,
+        "immediateData": [
+          "index": immediateIndex,
+          "ordinaryValue": 0.03125,
+          "storageBufferSizeSentinel": 8,
+          "ordinaryValueByteOffset": ordinaryValueByteOffset!,
+          "sizeTableByteOffset": sizeTableByteOffset!,
+          "byteLength": MemoryLayout<ExactImmediateData>.size,
+        ],
         "renderSample": exactPixel,
         "renderExpected": [128, 64, 191, 255],
         "renderTolerance": 1,
