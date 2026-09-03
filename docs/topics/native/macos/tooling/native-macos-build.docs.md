@@ -103,6 +103,8 @@ Tint supplies the reflected type layout. It does not decide whether vgpu changes
 
 An unsupported static feature fails with `VGPU-NATIVE-FEATURE-UNSUPPORTED`. `check` cannot certify the Metal device on an end user's machine. The semantic contract records build-time language features separately from backend-neutral execution requirements, while the Metal projection records only device requirements fixed by shader semantics, such as a storage-texture format. Sampled texture formats, render targets, sample counts, and render state remain runtime inputs.
 
+WGSL resource binding arrays (`binding_array`) are unsupported in semantic contract v1 and fail with `VGPU-NATIVE-FEATURE-UNSUPPORTED` during `native check`, before semantic emission or Metal projection. Arrays inside uniform or storage-buffer values are a different feature and remain supported; their type layout belongs to semantic reflection rather than resource-binding cardinality.
+
 At runtime, effective capabilities are the intersection of what the runtime implements, what the selected compiler projection can express, and what the actual `MTLDevice` supports. Known family, format, sample-count, and limit checks provide early failures, but Metal has no universal query for every format-and-usage combination. Final resource and pipeline creation remain authoritative. Neither `check` nor the runtime removes a binding, changes a format, substitutes a shader stage, or silently chooses a different entry point.
 
 ## Build and develop
@@ -121,6 +123,8 @@ npx vgpu native dev
 
 The build invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, baked overrides, the explicit language-feature set, a stable emitted function name, and vgpu's versioned external and internal Metal slot map. It returns MSL plus structured entry-point, interface, workgroup, binding, slot, and intrinsic-layout metadata. Tint's automatic slot allocator is not used as the artifact contract.
 
+The map is deterministic per semantic program, selected stage, and Metal buffer, texture, or sampler namespace. Required backend-internal resources use explicit reservations and cannot shift a user slot silently. Both the compiler response and generated artifact retain the supplied map, so changing the slot ABI invalidates the build fingerprint.
+
 Apple's compiler then compiles that source with `metal -std=macos-metal2.4` to AIR, and `metallib` links the packaged library. The Apple compiler invocation is the MSL 2.4 gate; the Tint writer does not switch its output dialect from that flag. Node.js, `vgpu-tint-compiler`, Tint, source WGSL, generated MSL, and Apple build tools remain on the build machine and are not application runtime dependencies.
 
 The watcher tracks imported modules as well as entry files. Changing a shared module rebuilds every affected program but preserves unaffected generated files when their build fingerprints did not change. A native compiler, wrapper binary, pinned Dawn/Tint revision, SDK, target, language-feature set, layout model, slot ABI, or generated ABI change invalidates every affected fingerprint.
@@ -128,6 +132,10 @@ The watcher tracks imported modules as well as entry files. Changing a shared mo
 Generated MSL and compiler intermediates belong to an inspectable build cache, not the application package. Use `--keep-intermediates` for a failed build when a platform diagnostic needs the generated source.
 
 ## Understand the current validation status
+
+The C1 binding-slot fixture now passes a vgpu-owned map directly into Tint without calling its automatic allocator. It covers stage-local resources, sparse WGSL groups, multiple programs from one source, contiguous intervals, and simultaneous storage-size and immediate-data internals. An independent verifier and negative map canaries reject drift, collisions, overflow, missing or extra resources, and wrong resource classes. The sampled-texture resource binding-array canary is translator evidence only; resource binding arrays stay outside alpha because semantic v1 cannot carry their cardinality.
+
+C1 remains open for the direct-target macOS 14 arm64 and x86_64 compiler build, offline `metal` and `metallib`, the full shader corpus through that exact wrapper, vertex-stream versus shader-buffer index partitioning, and size-table packing with multiple runtime storage buffers.
 
 C3a passed the current structural artifact fixture. It assembles the generated package around intentionally invalid UTF-8 text whose filename ends in `.metallib`, then verifies deterministic output, schemas and hashes, compatibility checks, SwiftPM dependency and resource boundaries, clean consumer builds without invoking Node.js, Tint, or Apple Metal compiler tools after generation, and the positive generated-output allowlist. The test resolves and hashes that resource through `Bundle.module`, but it never passes the sentinel to Metal. C3a therefore validates the package boundary, not a Metal library or shader execution.
 

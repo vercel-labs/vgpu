@@ -165,9 +165,20 @@ The Metal projection records:
 - optional compare-runner metadata under `projection.testing`.
 
 The production native compiler constructs the binding map before translation, passes it to Tint,
-and records the same map returned with the generated MSL. The standalone spike used Tint's
-convenience allocator only to prove that structured slots can cross the wrapper boundary; that
-temporary allocation is evidence, not the artifact ABI.
+and records the same map returned with the generated MSL. The binding-slot follow-up now exercises
+that boundary without Tint's convenience allocator: within each semantic program and selected
+stage, active bindings are sorted by WGSL `(group, binding)` and assigned contiguous intervals in
+independent Metal buffer, texture, and sampler namespaces. Only explicitly required internal roles
+are emitted, from reservations at the high end of their namespace. An independent verifier
+reconstructs the same allocation and rejects non-canonical, colliding, or overflowing maps.
+
+This establishes the allocation shape, not the final numeric profile. Vertex-stage shader buffers
+still need an explicit partition from vertex-stream buffer indices, and runtime storage-buffer size
+metadata still needs a multi-buffer packing canary. The semantic v1 contract also carries no WGSL
+resource binding-array (`binding_array`) cardinality, so the first alpha rejects every resource
+binding array during `native check`.
+A sampled-texture array accepted by the pinned Tint writer remains future translator evidence, not
+a supported v1 binding.
 
 Render target formats, sampled texture formats, sample count, blend and depth state, and geometry
 remain instance or target state. Artifact format requirements include only formats fixed by shader

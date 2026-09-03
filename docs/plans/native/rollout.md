@@ -9,7 +9,7 @@ the boundaries these gates protect and [decisions](./decisions.md) for unresolve
 | Gate | Fixture | Exit condition |
 | --- | --- | --- |
 | C0: module and link boundaries | ABI-only, context-only, effect-only, low-level draw, scene-recipe, compute-only, view-integration, and full-runtime release applications | Declared dependency graphs and negative imports pass; public symbol graphs, final link maps, linked frameworks, stripped Mach-O payloads, and packaged resources contain no forbidden feature. If a protocol witness graph retains an unused backend capability, split that Metal implementation before freezing the package graph. |
-| C1: translation | Imports, explicit language features, multiple entry points, I/O built-ins and interpolation, typed overrides baked before translation, resolved override-backed workgroup sizes, external and internal binding slots, and deliberate failures | The vgpu-owned Tint wrapper validates only the declared language features, reflects intrinsic semantic layouts, applies the versioned vgpu slot map, and returns deterministic MSL plus emitted names, workgroup metadata, and the exact slots used. Resolved MSL compiles offline; diagnostics identify the authored span or clearly identify generated MSL when no mapping exists. |
+| C1: translation | Imports, explicit language features, multiple entry points, I/O built-ins and interpolation, typed overrides baked before translation, resolved override-backed workgroup sizes, external and internal binding slots, and deliberate failures | The vgpu-owned Tint wrapper validates only the declared language features, reflects intrinsic semantic layouts, applies the versioned vgpu slot map, and returns deterministic MSL plus emitted names, workgroup metadata, and the exact slots used. Unsupported WGSL resource binding arrays (`binding_array`) fail before projection. Resolved MSL compiles offline; diagnostics identify the authored span or clearly identify generated MSL when no mapping exists. |
 | C2: binding ABI | Scalars, vectors including `vec3`, matrices, fixed and runtime arrays, compact uniform layouts, explicit `@align`/`@size`, strict negative inputs, and f16 edge values | Tint reflection, Swift, and TypeScript agree on `wgsl-host-shareable-v1` layouts and valid packed bytes; invalid shapes, counts, integer ranges, and extents fail before mutation; f16 matches round-to-nearest-ties-even; Metal readback observes every value at the intrinsic offset. |
 | C3: artifact and SwiftPM | Generated package in a clean sample project | `swift build` and `swift test` need no Node.js after generation; `Bundle.module` loads the single `.metallib`; schema references resolve; unknown layout or binding models and incompatible semantic, Metal-projection, generated-Swift, binding-layout, or `VGPUABI` integers fail before pipeline creation; runner incompatibility blocks compare only. |
 | R1: effect parity | Existing UV-orientation fixture plus a uniform-driven effect | Top-origin UV, clear, alpha, blend, resize, and readback meet the fixture's declared tolerance. |
@@ -72,12 +72,21 @@ not implement the FFT library's `unrestricted_pointer_parameters`, and it reject
 
 The standalone follow-up proved a single vgpu-owned Tint executable can parse and reflect WGSL,
 choose stable emitted names, and return deterministic MSL with structured layouts, entry points,
-workgroup metadata, and slots selected by a temporary allocator. It did not yet apply the
-versioned vgpu map. Do not freeze its source pin until the wrapper is built from direct Tint targets
-for macOS 14 with arm64 and x86_64 slices, replaces the spike allocator with that map, and passes
-offline `metal` + `metallib`, authored-diagnostic provenance, artifact determinism, and pixel/buffer
-parity. The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators` and
-`experiments/native-metal-spikes/c1-tint-standalone`.
+workgroup metadata, and slots without a WebGPU device. The binding-slot follow-up then supplied a
+vgpu-owned map directly to Tint, checked exact intervals after lowering, and made external and
+internal collisions deterministic failures. Its candidate allocator is per semantic program,
+selected stage, and Metal resource class; active WGSL bindings use canonical `(group, binding)`
+order, while required internal roles use explicit high-end reservations.
+
+Do not freeze the source pin or numeric slot profile until the wrapper is built from direct Tint
+targets for macOS 14 with arm64 and x86_64 slices, vertex-stream and shader-buffer indices are
+partitioned, size-table packing for multiple runtime storage buffers is verified, and offline `metal` +
+`metallib`, authored-diagnostic provenance, artifact determinism, and pixel/buffer parity pass.
+Semantic v1 cannot represent WGSL resource binding-array (`binding_array`) cardinality, so alpha
+rejects all resource binding arrays.
+The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,
+`experiments/native-metal-spikes/c1-tint-standalone`, and
+`experiments/native-metal-spikes/c1-binding-slots`.
 
 The first canary must cover alignment traps rather than just a gradient:
 

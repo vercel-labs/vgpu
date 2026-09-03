@@ -541,6 +541,7 @@
       }
     },
     "binding": {
+      "description": "One singular WGSL resource binding. Semantic contract v1 does not encode WGSL resource binding-array (`binding_array`) cardinality; resource binding arrays are rejected before this contract is emitted.",
       "oneOf": [
         { "$ref": "#/$defs/bufferBinding" },
         { "$ref": "#/$defs/samplerBinding" },

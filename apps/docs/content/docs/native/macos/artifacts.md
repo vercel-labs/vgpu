@@ -105,6 +105,8 @@ The `projection` object records only the selected Metal result:
 
 vgpu supplies the complete external and internal slot map to Tint and records the result. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
 
+Slots are scoped by semantic program, selected stage, and Metal resource class. Within each namespace, active bindings are ordered by `(group, binding)`, projected components by stable component name, and each component occupies a contiguous interval. Only internal roles required by lowering or the versioned vgpu ABI appear in `internalBindings`. A slot `count` is projection width; it does not add WGSL resource binding-array semantics to semantic contract v1. The first alpha rejects WGSL resource binding arrays (`binding_array`) before projection.
+
 There is one `projection`, not a `projections` array. A future backend consumes the same semantic contract but defines its own separately versioned projection.
 
 ## Separate runtime compatibility from provenance

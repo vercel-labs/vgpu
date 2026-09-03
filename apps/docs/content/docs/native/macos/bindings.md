@@ -210,6 +210,10 @@ Generated code uses the Metal projection's vgpu-owned, versioned slot mapping. I
 
 The native compiler supplies that mapping to Tint and serializes the same result into the projection. Backend-only resources, such as storage-buffer-size metadata used for robust runtime-array access, occupy explicit internal slots in the artifact. They cannot silently displace a user binding. Tint's automatic binding allocation is useful compiler machinery, but it is not the vgpu ABI.
 
+Allocation is scoped to one generated semantic program, one selected shader stage, and one Metal resource class. Active WGSL bindings use canonical group-and-binding order within that scope. A binding visible to both vertex and fragment code is projected independently for each active stage, and the artifact records every resulting component and interval. Two configured programs may reuse the same numeric indices without sharing binding state. The runtime always consumes the recorded projection instead of recomputing it.
+
+The first alpha accepts one resource per WGSL binding. WGSL resource binding arrays (`binding_array`) are rejected by `native check` because semantic contract v1 does not record their cardinality. This is separate from arrays inside a host-shareable buffer type, which remain supported and use their reflected element layout and stride.
+
 Bind a `VGPUTarget` directly when the resource must follow resize. The runtime observes its texture generation and rebuilds only the affected argument state. `target.color` returns the current concrete texture; code that binds that snapshot must call `set` again after `target.resize` replaces it.
 
 ## Next steps

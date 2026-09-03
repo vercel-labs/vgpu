@@ -178,11 +178,21 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    C1 accepted all 223 expected-valid repository shaders; Naga 30.0.1 accepted 220 and fails the FFT
    pointer parameters plus `uniform_buffer_standard_layout`. The standalone follow-up proved that
    a vgpu-owned wrapper can return deterministic MSL, emitted names, reflected layouts, workgroup
-   metadata, and exact slots without a WebGPU device. Before freezing the dependency, build that
-   wrapper from direct Tint targets at the macOS 14 baseline with arm64 and x86_64 slices, replace
-   the spike allocator with the vgpu binding map, and pass offline Apple compilation,
-   authored-diagnostic provenance, artifact determinism, and pixel/buffer parity. Keep Naga only as
-   a differential oracle.
+   metadata, and exact slots without a WebGPU device. The binding-slot follow-up replaced Tint's
+   automatic allocator with a deterministic vgpu map, verified complete intervals after lowering,
+   kept buffer, texture, and sampler namespaces independent per program and stage, and proved that
+   the storage-size and immediate-data roles can coexist at distinct reserved indices.
+
+   The buffer indices `29` and `30`, and the resource ceilings used by this fixture, are test inputs
+   only. They are not public ABI constants or Metal device-limit claims.
+
+   Before freezing the dependency or slot ABI, build the wrapper from direct Tint targets at the
+   macOS 14 baseline with arm64 and x86_64 slices, partition vertex-stream indices from shader
+   buffers, prove the size-table packing for multiple runtime storage buffers, and pass offline
+   Apple compilation, authored-diagnostic provenance, artifact determinism, and pixel/buffer
+   parity. Semantic v1 has no WGSL resource binding-array (`binding_array`) cardinality, so the
+   alpha rejects all resource binding arrays; the sampled-texture writer canary is future evidence
+   only. Keep Naga only as a differential oracle.
 2. C3a passed its structural fixture: strict Ajv compilation and cross-schema resolution, artifact
    and fingerprint validation, deterministic assembly, Swift tools and language mode 6, macOS 14,
    clean SwiftPM consumption without invoking Node.js, Tint, or Apple Metal compiler tools after

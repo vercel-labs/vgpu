@@ -89,7 +89,7 @@
           "const": 1
         },
         "bindingModel": {
-          "description": "The deterministic mapping supplied by vgpu to Tint. Tint-generated binding allocation is not part of this contract.",
+          "description": "The deterministic mapping supplied by vgpu to Tint, with independent namespaces per containing semantic program, selected stage, and Metal resource class. Tint-generated binding allocation is not part of this contract.",
           "const": "vgpu-metal-binding-slots-v1"
         }
       }
@@ -188,6 +188,7 @@
       }
     },
     "directMetalSlot": {
+      "description": "One contiguous interval in the containing semantic program's selected-stage, Metal resource-class namespace. The count is the interval width of an explicitly projected backend component; it does not imply WGSL resource binding-array (`binding_array`) support in semantic v1.",
       "type": "object",
       "additionalProperties": false,
       "required": ["stage", "mode", "resourceClass", "component", "index", "count"],
@@ -204,6 +205,7 @@
       "$ref": "#/$defs/directMetalSlot"
     },
     "binding": {
+      "description": "All Metal components and intervals projected from one semantic WGSL binding. Allocation is scoped by containing semantic program, stage, and resource class.",
       "type": "object",
       "additionalProperties": false,
       "required": ["semanticBinding", "slots"],
@@ -213,7 +215,7 @@
       }
     },
     "internalBinding": {
-      "description": "A backend resource required by Metal lowering or by the versioned vgpu binding ABI. It has no semantic WGSL binding identity.",
+      "description": "A backend resource required by Metal lowering or the versioned vgpu binding ABI. Its role and slots are explicit in this projection; numeric indices are projection data governed by the versioned binding model, not global constants. It has no semantic WGSL binding identity.",
       "type": "object",
       "additionalProperties": false,
       "required": ["role", "slots"],
