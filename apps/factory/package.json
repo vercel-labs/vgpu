@@ -1,0 +1,27 @@
+{
+  "name": "@vgpu/factory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "triage": "node scripts/triage.ts triage",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check:agent-surface": "node scripts/check-agent-surface.ts",
+    "build": "eve build",
+    "evals": "node scripts/evals.ts"
+  },
+  "dependencies": {
+    "ai": "^7.0.38",
+    "eve": "0.29.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.7"
+  }
+}

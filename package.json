@@ -22,6 +22,7 @@
     "check-bundle-size": "node scripts/check-bundle-size.mjs --experiences",
     "check:filenames": "bash scripts/check-filenames.sh",
     "check:skill-drift": "node packages/vgpu/lib/docs/generate/check-drift.js",
+    "factory": "node scripts/factory.mjs",
     "agent-evals": "node scripts/agent-evals.mjs",
     "agent-evals:s2": "node scripts/agent-evals.mjs --task s2-gradient",
     "agent-evals:n1": "node scripts/agent-evals.mjs --task n1-hero-shader",
