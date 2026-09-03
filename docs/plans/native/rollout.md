@@ -54,16 +54,25 @@ linker, or package-graph changes.
 
 ### 1. Compiler and ABI
 
-Run C1 and C2 before choosing the translator or freezing generated Swift. Compare Tint and Naga
-against the existing shader corpus instead of choosing from isolated examples.
+Run C1 and C2 before freezing the translator or generated Swift. Compare candidates against the
+existing shader corpus instead of choosing from isolated examples.
 
 The translator spike runs every repository WGSL source plus explicit entry-point I/O, `vec3`,
 matrix, array, override, override-backed workgroup, and binding-slot canaries. Both candidates use
 the same slot-allocation policy and feed their MSL through Apple's `metal` and `metallib` tools. Hard
 gates are semantic coverage, compilable MSL, correct binding and entry-point metadata, deterministic
 output, actionable negative diagnostics, and pixel/buffer parity. Distribution size, startup cost,
-integration complexity, and license obligations break a tie only after those gates pass. Naga is
-the provisional integration candidate, not a decision that bypasses this spike.
+integration complexity, and license obligations break a tie only after those gates pass.
+
+The first C1 pass makes Tint the provisional semantic leader. Tint/Dawn accepted all 223
+expected-valid shaders and created real Metal pipelines for every applicable entry point. Naga
+30.0.1 accepted 220: it does not implement the FFT library's `unrestricted_pointer_parameters`,
+and it rejects the `uniform_buffer_standard_layout` canary that matches vgpu's current natural
+uniform-array stride. Retain Naga as a differential oracle. Do not freeze Tint until a standalone
+build pinned to the tested Dawn commit returns MSL and structured projection metadata, then passes
+offline `metal` + `metallib`, authored-diagnostic provenance, artifact determinism, and
+pixel/buffer parity. The reproducible fixture lives in
+`experiments/native-metal-spikes/c1-translators`.
 
 The first canary must cover alignment traps rather than just a gradient:
 

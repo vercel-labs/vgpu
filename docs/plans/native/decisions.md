@@ -138,10 +138,15 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 
 ## Open decisions and spike results
 
-1. Tint or Naga as the WGSL-to-MSL translator. This is an empirical C1 result, not an API choice:
-   run the complete shader corpus and alignment/entry-point/override canaries through both, compile
-   with Apple's tools, compare output and diagnostics, then measure deterministic integration and
-   distribution cost. Naga is the provisional integration candidate, not a frozen dependency.
+1. Tint is the provisional semantic leader for WGSL-to-MSL translation, not a frozen dependency.
+   C1 accepted all 223 expected-valid repository shaders through Tint/Dawn and real Metal pipeline
+   creation. Naga 30.0.1 accepted 220: it cannot translate the FFT library's
+   `unrestricted_pointer_parameters`, and it rejects the `uniform_buffer_standard_layout` canary
+   that matches vgpu's current natural uniform-array stride. Keep Naga as a differential oracle,
+   not the primary candidate. Before freezing Tint, build it standalone at a pinned Dawn commit,
+   return MSL plus structured entry-point and slot metadata, and pass offline Apple compilation,
+   authored-diagnostic provenance, determinism, and pixel/buffer parity. This remains an empirical
+   integration gate rather than an API choice.
 2. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.
