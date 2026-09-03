@@ -292,9 +292,14 @@ for (const test of tests) {
   });
 
   const exits = attempts.map((attempt) => attempt.status);
+  const signals = attempts.map((attempt) => attempt.signal);
+  const spawnErrors = attempts.map((attempt) => attempt.error?.code ?? null);
+  const completedNormally = attempts.every(
+    (attempt) => !attempt.error && attempt.signal === null
+  );
   const expectedOutcome = test.expectFailure
-    ? exits.every((status) => status !== 0)
-    : exits.every((status) => status === 0);
+    ? completedNormally && exits.every((status) => status === 1)
+    : completedNormally && exits.every((status) => status === 0);
   let deterministic = false;
   let outputSha256;
   let diagnosticSha256;
@@ -318,6 +323,8 @@ for (const test of tests) {
     id: test.id,
     expected: test.expectFailure ? "failure" : "success",
     exits,
+    signals,
+    spawnErrors,
     deterministic,
     outputSha256,
     diagnosticSha256,
