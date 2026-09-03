@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 1,
+  "bindingModel": "vgpu-metal-binding-slots-v1",
+  "cases": [
+    {
+      "id": "order-and-resource-classes",
+      "programs": [
+        {
+          "semanticProgram": "MixedResources",
+          "bindings": [
+            {
+              "semanticBinding": "g0b3",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g1b2",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g1b7",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "texture",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g2b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    },
+    {
+      "id": "stage-local-draw-and-shared-binding",
+      "programs": [
+        {
+          "semanticProgram": "SharedDraw",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "vertex",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                },
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b1",
+              "slots": [
+                {
+                  "stage": "vertex",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b2",
+              "slots": [
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "texture",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b3",
+              "slots": [
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b4",
+              "slots": [
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    },
+    {
+      "id": "two-programs-from-one-source",
+      "programs": [
+        {
+          "semanticProgram": "ClearKernel",
+          "bindings": [
+            {
+              "semanticBinding": "g3b9",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        },
+        {
+          "semanticProgram": "SampleKernel",
+          "bindings": [
+            {
+              "semanticBinding": "g7b5",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "texture",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g7b6",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g7b8",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    },
+    {
+      "id": "internal-storage-buffer-size-table",
+      "programs": [
+        {
+          "semanticProgram": "RuntimeArray",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": [
+            {
+              "role": "storage-buffer-sizes",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer-size-table",
+                  "index": 30,
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "buffer-capacity-exact",
+      "programs": [
+        {
+          "semanticProgram": "CapacityExact",
+          "bindings": [
+            {
+              "semanticBinding": "g1b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "capacity-probe",
+                  "index": 0,
+                  "count": 29
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    },
+    {
+      "id": "internal-bindings-coexist",
+      "programs": [
+        {
+          "semanticProgram": "InternalCoexistence",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": [
+            {
+              "role": "immediate-data",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "immediate-data",
+                  "index": 29,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "role": "storage-buffer-sizes",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer-size-table",
+                  "index": 30,
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sized-resource-arrays",
+      "status": "tint-writer-validated-sampled-texture-array",
+      "programs": [
+        {
+          "semanticProgram": "ResourceArrays",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "texture",
+                  "index": 0,
+                  "count": 3
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b1",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b2",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "texture",
+                  "index": 3,
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "semanticBinding": "g0b3",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 1,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    },
+    {
+      "id": "external-texture-expansion-representability",
+      "status": "projection-representability-only",
+      "programs": [
+        {
+          "semanticProgram": "ExternalTexture",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "conversion-parameters",
+                  "index": 0,
+                  "count": 1
+                },
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "texture",
+                  "component": "planes",
+                  "index": 0,
+                  "count": 2
+                },
+                {
+                  "stage": "compute",
+                  "mode": "direct",
+                  "resourceClass": "sampler",
+                  "component": "sampler",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": []
+        }
+      ]
+    }
+  ]
+}
