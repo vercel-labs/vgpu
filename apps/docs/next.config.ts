@@ -32,12 +32,25 @@ const config: NextConfig = {
         loaders: [wgslLoader],
         as: "*.js",
       },
+      "**/typegpu-liquid-glass/renderer.ts": {
+        loaders: [
+          {
+            loader: "babel-loader",
+            options: {
+              presets: ["@babel/preset-typescript"],
+              plugins: ["unplugin-typegpu/babel"],
+            },
+          },
+        ],
+        as: "*.js",
+      },
     },
   },
   // TGEIST-07 end.
 
   experimental: {
     turbopackFileSystemCacheForDev: true,
+    turbopackUseBuiltinBabel: false,
   },
 
   // ANCHOR TGEIST-06 (examples API transplant) -- this key is owned by that ticket alone; copied

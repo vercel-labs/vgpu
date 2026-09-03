@@ -27,6 +27,7 @@ import { meta as airPaintingMeta } from '../examples/air-painting/meta';
 import { meta as tslExportsMeta } from '../examples/tsl-exports/meta';
 import { meta as threeTslMeta } from '../examples/three-tsl/meta';
 import { meta as particleOrbitMeta } from '../examples/particle-orbit/meta';
+import { meta as typegpuLiquidGlassMeta } from '../examples/typegpu-liquid-glass/meta';
 import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
 
 const rawMetadata = {
@@ -55,6 +56,7 @@ const rawMetadata = {
   'tsl-exports': tslExportsMeta,
   'three-tsl': threeTslMeta,
   'particle-orbit': particleOrbitMeta,
+  'typegpu-liquid-glass': typegpuLiquidGlassMeta,
   'adaptive-quality': adaptiveQualityMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
@@ -92,6 +94,7 @@ export const exampleMetadataBySlug = {
   'tsl-exports': withThumbnails(rawMetadata['tsl-exports']),
   'three-tsl': withThumbnails(rawMetadata['three-tsl']),
   'particle-orbit': withThumbnails(rawMetadata['particle-orbit']),
+  'typegpu-liquid-glass': withThumbnails(rawMetadata['typegpu-liquid-glass']),
   'adaptive-quality': withThumbnails(rawMetadata['adaptive-quality']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
