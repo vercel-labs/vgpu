@@ -17,7 +17,7 @@ relatedSymbols:
 
 Resources created by one `VGPU` context have that context's identity. Bindings and encoders reject a resource from another context before touching Metal, even when both contexts use the same `MTLDevice`.
 
-The shared `VGPUResources` and `VGPURender` products expose backend-neutral buffers, textures, targets, samplers, and geometry. Add the opt-in `VGPUMetalInterop` product only where application-owned Metal objects cross that boundary.
+The shared `VGPUResources` and `VGPURender` modules expose backend-neutral buffers, textures, targets, samplers, and geometry. A Metal application selects `VGPUMetalResources`, `VGPUMetalRender`, or another backend-complete product that contains the modules it imports. Select the opt-in `VGPUMetalInterop` product only where application-owned Metal objects cross that boundary.
 
 > Warning: Native macOS support is a docs-first API proposal. The Swift APIs on this page are not implemented yet.
 

@@ -42,7 +42,7 @@ Generated/app-shaders/
         └── ArtifactCompatibilityTests.swift
 ```
 
-`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`, so generated code loads `AppShaders.metallib` through `Bundle.module`. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications still import only the runtime products they use.
+`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`, so generated code loads `AppShaders.metallib` through `Bundle.module`. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications select only the runtime products they use and import their public modules explicitly.
 
 The generated package is also the shader-payload boundary. Omitting `VGPUCompute` avoids linking the compute executor, but it does not remove compute functions already packaged in `AppShaders.metallib`. Put programs for independently distributed features in separate configurations and generated packages.
 

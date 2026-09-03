@@ -96,7 +96,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 - `VGPURender` contains Effect and Draw for the first implementation. `VGPUCompute` is a sibling
   product rather than a Render dependency.
 - `_VGPUBackendSPI` is package-only and separates core, resource, render, and compute capability
-  protocols even if the initial Metal implementation uses one target.
+  protocols. C0 proved that their Metal conformances must live in physical capability targets;
+  separate files in one target retain every witness graph even under full LTO.
+- Applications select additive, backend-complete SwiftPM products: `VGPUMetal` for Core,
+  `VGPUMetalResources`, `VGPUMetalRender`, and `VGPUMetalCompute`. These products contain multiple
+  targets but introduce no umbrella module. Selecting Render and Compute together forms their
+  union and deduplicates Core and Resources. `VGPUMetalInterop` incorporates the Resource stack;
+  `VGPUMetalKit` and `VGPUSwiftUI` incorporate the Render stack.
 - The negative-import matrix in [architecture](./architecture.md#negative-import-matrix) is a CI
   contract, independent of measured byte size.
 - `VGPUMetalInterop` is the opt-in leaf for `MTLBuffer` and `MTLTexture` import and inspection. It
@@ -117,9 +123,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 - One generated package and `.metallib` is the shader-payload boundary. Selecting fewer runtime
   products does not strip unused functions already packaged in that `.metallib`; independently
   distributed features use separate configurations.
-- C0 inspects release link maps and stripped binaries before the physical Metal implementation
-  graph is frozen. Capability-specific Metal targets are introduced only if that evidence requires
-  them.
+- The C0 release fixture is now a regression contract. A unified Metal target retained Core,
+  Resources, Render, and Compute even in a Core-only consumer; physical implementation targets
+  retained exactly Core for Context, Core + Resources + Render for Effect, and Core + Resources +
+  Compute for Compute. Runtime registration and `@_exported import` are unnecessary.
 - `VGPUScene` ports the pure CPU mesh generators to Swift, one primitive per source file. Generated
   mesh blobs are conformance goldens, not production payloads; this preserves runtime-parametric
   recipes and feature-level linking.
@@ -141,5 +148,3 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 3. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.
-4. Whether C0 demonstrates that one Metal implementation target strips correctly or requires
-   capability-specific implementation targets. This is an evidence result, not a public API choice.

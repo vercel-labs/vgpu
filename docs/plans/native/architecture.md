@@ -52,9 +52,11 @@ AIR/platform/deployment triple passed to Apple's Metal compiler. It is distinct 
 triples such as `arm64-apple-macosx...` or `x86_64-apple-macosx...` and does not identify the build
 host CPU or a supported GPU family.
 
-## Product graph
+## Module and product graph
 
-The runtime ships as one Swift package with independent library products and no umbrella module:
+The runtime ships as one Swift package with independent modules and no umbrella module. Backend-
+neutral modules remain available as individual products for libraries that do not select a
+platform backend:
 
 ```text
 AppShaders       -> VGPUABI
@@ -63,16 +65,25 @@ VGPUCore         -> VGPUABI + _VGPUBackendSPI
 VGPUResources    -> VGPUCore + VGPUABI
 VGPURender       -> VGPUCore + VGPUResources + VGPUABI
 VGPUCompute      -> VGPUCore + VGPUResources + VGPUABI
-VGPUMetal        -> VGPUCore + _VGPUBackendSPI
-VGPUMetalInterop -> VGPUMetal + VGPUResources
-VGPUMetalKit     -> VGPUMetal + VGPURender
-VGPUSwiftUI      -> VGPUMetalKit
 VGPUScene        -> VGPURender
 VGPUQueries      -> VGPURender + VGPUResources
 VGPUTesting      -> only the features exercised by its test runner
 ```
 
-`_VGPUBackendSPI` is package-only, and `VGPUTesting` is never an application dependency.
+The Metal implementation is physically split at the capability boundary proven by C0:
+
+```text
+VGPUMetal                  -> VGPUCore + _VGPUBackendSPI
+_VGPUMetalResourcesImpl    -> VGPUMetal + VGPUResources + _VGPUBackendSPI
+_VGPUMetalRenderImpl       -> _VGPUMetalResourcesImpl + VGPURender + _VGPUBackendSPI
+_VGPUMetalComputeImpl      -> _VGPUMetalResourcesImpl + VGPUCompute + _VGPUBackendSPI
+VGPUMetalInterop           -> VGPUMetal + VGPUResources
+VGPUMetalKit               -> VGPUMetal + VGPURender
+VGPUSwiftUI                -> VGPUMetalKit
+```
+
+`_VGPUBackendSPI` and the three `*Impl` targets are package-only. `VGPUTesting` is never an
+application dependency.
 
 `VGPUABI` contains only generated-program descriptors, binding wrappers, semantic layouts, and
 artifact references. It does not import Metal, MetalKit, SwiftUI, Render, or Compute. A generated
@@ -80,12 +91,30 @@ module can therefore describe effects, draws, and compute programs without linki
 
 `VGPUCore` owns context identity, ordered submission, the clock, errors, capabilities, and
 lifecycle. `VGPUResources`, `VGPURender`, and `VGPUCompute` add their `gpu.*` factories through
-extensions in their own modules. `VGPUMetal` implements the package-private backend SPI.
+extensions in their own modules. `VGPUMetal` owns the concrete backend, core conformance, and
+explicit constructors. Package-scoped extensions in the three capability implementation targets
+add the resource, render, and compute conformances to that same backend type.
 
-The SPI is one internal target but four protocol families from the start: core, resources, render,
-and compute. A single Metal driver may implement all four initially. Keeping the conformances
-separate lets the implementation move into capability-specific targets if the C0 link-map fixture
-shows that protocol witness tables retain code an application did not select.
+C0 showed that separate conformances in separate files of one Metal target still retain all four
+protocol witness graphs under Release WMO, `-Osize`, dead stripping, and full LTO. Physical targets
+retain exactly the selected graph, so source-file separation is not an implementation option.
+
+Applications select backend-complete, additive SwiftPM products:
+
+| Product selected by the application | Importable public modules | Metal capabilities linked |
+| --- | --- | --- |
+| `VGPUMetal` | `VGPUCore`, `VGPUMetal` | Core |
+| `VGPUMetalResources` | `VGPUCore`, `VGPUResources`, `VGPUMetal` | Core + Resources |
+| `VGPUMetalRender` | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUMetal` | Core + Resources + Render |
+| `VGPUMetalCompute` | `VGPUCore`, `VGPUResources`, `VGPUCompute`, `VGPUMetal` | Core + Resources + Compute |
+| `VGPUMetalInterop` | Resource stack + `VGPUMetalInterop` | Core + Resources |
+| `VGPUMetalKit` | Render stack + `VGPUMetalKit` | Core + Resources + Render |
+| `VGPUSwiftUI` | MetalKit stack + `VGPUSwiftUI` | Core + Resources + Render |
+
+These are multi-target selection products, not umbrella modules. Swift source still imports every
+module it names. Selecting both `VGPUMetalRender` and `VGPUMetalCompute` forms the union and links
+Core and Resources once; there is no combinatorial Render-and-Compute product. A future backend can
+mirror the same shape with products such as `VGPUVulkanRender` without changing neutral modules.
 
 The placement rule is strict: context identity, device access, queue ordering, cache use, or
 resource ownership justifies a `gpu.*` receiver. CPU-only math, geometry recipes, color helpers,
@@ -111,12 +140,16 @@ following dependencies even when their measured size is small:
 | `VGPURender` | `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing |
 | `VGPUCompute` | `VGPURender`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing |
 | `VGPUMetal` | `VGPUResources`, `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
+| `_VGPUMetalResourcesImpl` | `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
+| `_VGPUMetalRenderImpl` | `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
+| `_VGPUMetalComputeImpl` | `VGPURender`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
 | `VGPUMetalInterop` | `VGPURender`, `VGPUCompute`, MetalKit, SwiftUI, Scene, Queries, Testing |
 | `VGPUMetalKit` | SwiftUI, Scene, Queries, Testing |
 | `VGPUSwiftUI` | Scene, Queries, Testing |
 
-Products are imported explicitly. The package does not use `@_exported import` to make transitive
-modules appear to be part of another module's API.
+Modules are imported explicitly. Selecting a multi-target product makes its public modules
+available to the application target, but does not import them in source. The package does not use
+`@_exported import` to make transitive modules appear to be part of another module's API.
 
 ## Native Metal interop
 
@@ -180,6 +213,7 @@ but it does not remove compute functions already placed in that generated `.meta
 distributed as independent optional features belong in separate configurations and generated
 packages.
 
-The [C0 gate](./rollout.md#shipping-gates) decides whether the initially unified Metal driver can
-remain one implementation target. Public API products are not split further based on assumptions
-about Swift's linker.
+The C0 fixture in `experiments/native-metal-spikes/c0-linking` demonstrates why the Metal driver is
+split into capability implementation targets and verifies the exact payload retained by Context,
+Render, and Compute consumers. Keep that fixture as a regression gate for compiler and package-
+graph changes; public modules must not be split further merely because implementation targets are.

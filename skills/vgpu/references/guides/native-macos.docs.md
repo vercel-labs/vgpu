@@ -19,7 +19,7 @@ relatedSymbols:
 
 `vgpu native build` turns WGSL programs into a `.metallib` and generated Swift types. Your application creates effects, draws, targets, and frames with small Swift products implemented directly on Metal.
 
-Node.js, the WGSL translator, generated MSL, and vgpu's TypeScript runtime stay on the build machine. The application ships the compiled library, typed program descriptors, and only the Swift runtime products it imports. One generated configuration is also one shader-payload boundary: every program in its `.metallib` ships together even when the application omits an executor module.
+Node.js, the WGSL translator, generated MSL, and vgpu's TypeScript runtime stay on the build machine. The application ships the compiled library, typed program descriptors, and only the Swift runtime products it selects. One generated configuration is also one shader-payload boundary: every program in its `.metallib` ships together even when the application omits an executor module.
 
 > Warning: Native macOS support is a docs-first API proposal. The commands, `@vgpu/native` package, Swift runtime products, and generated Swift types below are not implemented yet.
 
@@ -160,9 +160,9 @@ npx vgpu native build
 
 `check` does not write generated files. `build` runs the platform compiler and writes a local Swift package to `Generated/app-shaders`.
 
-In Xcode, first add the vGPU Swift package URL and compatible version printed by `native build`. For this example, add `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUMetal`, and `VGPUMetalKit` directly to the application target. Products such as `VGPUCompute`, `VGPUMetalInterop`, `VGPUSwiftUI`, `VGPUScene`, and `VGPUQueries` remain opt-in. Next choose **File > Add Package Dependencies**, select **Add Local**, open `Generated/app-shaders`, and add `AppShaders`.
+In Xcode, first add the vGPU Swift package URL and compatible version printed by `native build`. For this example, select the single `VGPUMetalKit` product for the application target. It contains the Core, Resources, Render, Metal, and MetalKit modules plus only the Metal capability implementations that those modules require. Select `VGPUMetalRender` for offscreen rendering without MetalKit, `VGPUMetalCompute` for compute, or both when the same target uses both capabilities. `VGPUMetalInterop`, `VGPUSwiftUI`, `VGPUScene`, and `VGPUQueries` remain opt-in. Next choose **File > Add Package Dependencies**, select **Add Local**, open `Generated/app-shaders`, and add `AppShaders`.
 
-The generated package declares the compatible `VGPUABI` product from the same vGPU Swift package, so SwiftPM resolves one shared contract. Each module imported by the application is a direct target dependency; the setup does not rely on transitive imports or copy the runtime into every generated package.
+The generated package declares the compatible `VGPUABI` product from the same vGPU Swift package, so SwiftPM resolves one shared contract. Backend-complete products are selection units, not umbrella modules: Swift source still imports every module it names, and the setup does not rely on `@_exported import` or copy the runtime into every generated package.
 
 Use separate configurations for independently distributed shader features. [Generated artifacts](/native/macos/artifacts) explains the semantic contract, Metal projection, compatibility fingerprints, and `.metallib` payload boundary.
 

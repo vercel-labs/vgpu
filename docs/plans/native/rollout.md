@@ -46,10 +46,11 @@ effect-only application must not retain compute, Scene, Queries, Testing, MetalK
 a context-only application must not retain Resources or Render through the Metal backend's witness
 tables.
 
-Start with capability-separated SPI protocols in one package-private target and one Metal
-implementation. Split Metal implementation targets only when the link map proves that an unused
-capability remains live; do not add public constructors or runtime registration solely to satisfy a
-hypothetical linker problem.
+C0 established that capability-separated source files in one Metal target retain unused witness
+graphs, including under full LTO. Keep Core, Resources, Render, and Compute in physical Metal
+implementation targets. Backend-complete, per-capability SwiftPM products select those targets;
+they require neither runtime registration nor `@_exported import`. Re-run the fixture for compiler,
+linker, or package-graph changes.
 
 ### 1. Compiler and ABI
 
@@ -67,13 +68,19 @@ the provisional integration candidate, not a decision that bypasses this spike.
 The first canary must cover alignment traps rather than just a gradient:
 
 ```wgsl
+struct PaddedWeight {
+  @size(16) value: vec2f,
+}
+
 struct Params {
   scalar: f32,
   direction: vec3f,
   transform: mat4x4f,
-  weights: array<vec2f, 3>,
+  weights: array<PaddedWeight, 3>,
 }
 ```
+
+The wrapper makes the uniform-array stride explicit and valid.
 
 `native doctor` must compile and link a minimal shader. Finding `xcrun` or the `metal` executable is
 not sufficient because recent Xcode installations can omit the downloadable Metal toolchain.

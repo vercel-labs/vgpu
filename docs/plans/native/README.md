@@ -13,7 +13,7 @@ The goal is behavioral parity, not line-for-line syntax parity:
 - WGSL remains the authored shader language.
 - Node.js resolves, reflects, translates, and packages shaders at build time.
 - The application ships a `.metallib`, generated Swift program types, and only the vgpu Swift
-  products it imports.
+  products it selects. Source imports remain explicit at the module level.
 - The Swift runtime products implement the public primitives over Metal without a JavaScript
   runtime or shader translator in the application.
 - Generated shader types describe programs. They do not own views, frame loops, or renderers.
