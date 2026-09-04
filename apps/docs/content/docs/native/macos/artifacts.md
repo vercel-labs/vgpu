@@ -69,7 +69,8 @@ Every `artifact.json` starts with this identity and then embeds one semantic con
     "abi": {
       "projection": 1,
       "bindingSlots": 1,
-      "bindingModel": "vgpu-metal-binding-slots-v1"
+      "bindingModel": "vgpu-metal-binding-slots-v1",
+      "shaderInterfaceModel": "vgpu-metal-shader-interface-v1"
     },
     "storageBufferSizeModel": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"
   }
@@ -82,7 +83,8 @@ The `semantic` object is independent of Metal. It records:
 
 - the Swift module and public names;
 - effect, draw, and compute program kinds;
-- authored and resolved WGSL entry points and stage interfaces;
+- authored and resolved WGSL entry points and their complete portable stage interfaces, including
+  built-ins, exact user locations, semantic types, normalized interpolation, and invariance;
 - the fixed `wgsl-host-shareable-v1` layout model, host-shareable types, and intrinsic WGSL alignment, size, offset, and stride values reflected by Tint;
 - WGSL resource bindings, including their address space and access independently from the referenced intrinsic layout;
 - typed, evaluated override defaults and the exact selected values for overrides statically used by the selected entry points, baked before translation;
@@ -105,14 +107,60 @@ The `projection` object records only the selected Metal result:
 - the versioned vgpu mapping from semantic bindings to Metal buffer, texture, and sampler slots, plus every emitted backend-only internal slot;
 - the storage-buffer-size model and each compiler-emitted stage-local region within an `immediate-data` payload;
 - the versioned policy and exclusive external-buffer ceiling used to place pipeline-local vertex streams without colliding with vertex-stage shader buffers;
+- the versioned shader-interface model and exact vertex-location to Metal-attribute and
+  fragment-location to Metal-color mappings;
 - resolved compute workgroup dimensions;
 - static Metal-device requirements;
 - optional, separately produced WGSL-to-MSL source maps;
 - optional compare-runner metadata under `projection.testing`.
 
-The projection does not flatten every WGSL `@location` into one generic Metal interface index. A vertex input, an inter-stage value, and a fragment output occupy different Metal namespaces. A future interface projection must distinguish those roles explicitly instead of assigning the same meaning to one integer field.
+### Preserve shader interface locations
 
-vgpu supplies the external slot map and reserved internal profile to Tint. The translation worker checks the external map against Tint reflection and the lowered entry interface, returns that validated map unchanged, and reports only the internal bindings and size regions that the generated entry point actually uses. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
+The semantic contract is the shader-interface oracle. Before Metal projection, native build
+validates every fragment input location against a vertex output with the same semantic type and
+normalized interpolation. Additional vertex outputs are valid. Built-ins and user locations remain
+separate, and sparse locations are never compacted.
+
+Each projected entry point carries a stage-discriminated runtime interface. A vertex entry maps only
+its semantic input locations to Metal attribute indices. A fragment entry maps only its semantic
+output locations to Metal color indices. A compute entry carries only its kind. Built-ins,
+inter-stage varyings, interpolation, and invariance remain in the semantic contract instead of being
+duplicated as Metal ABI.
+
+```json
+{
+  "stage": "vertex",
+  "wgsl": "vs_particles",
+  "metal": "vgpu_vs_particles",
+  "interface": {
+    "kind": "vertex",
+    "attributes": [
+      {
+        "semantic": { "location": 3 },
+        "metal": { "attribute": 3 }
+      },
+      {
+        "semantic": { "location": 7 },
+        "metal": { "attribute": 7 }
+      }
+    ]
+  }
+}
+```
+
+Vertex attributes are ordered by semantic location. Fragment colors are ordered by semantic
+location and optional blend-source index. An independent validator requires an exact bijection with
+the relevant semantic user-location subset—vertex inputs or fragment outputs—plus v1 identity
+mappings and no physical collisions. The first alpha rejects `dual_source_blending`; blend-source
+fields remain reserved for a later capability profile.
+
+vgpu supplies the external slot map and reserved internal profile to Tint. The accepted worker
+contract requires it to compare the requested semantic interface with core IR before Metal lowering,
+validate the complete lowered interface privately, return the validated external map unchanged, and
+report only the minimal runtime interface map, internal bindings, and size regions that the generated
+entry point uses. Tint does not allocate the public ABI. The current compiler-protocol fixture still
+needs this exact interface handshake wired in. An internal resource introduced by lowering has an
+explicit role and slot but no invented WGSL binding identity.
 
 Slots are scoped by semantic program, selected stage, and Metal resource class. Within each namespace, active bindings are ordered by `(group, binding)`, projected components by stable component name, and each component occupies a contiguous interval. Only internal roles emitted for that program and stage appear in `internalBindings`. A slot `count` is projection width; it does not add WGSL resource binding-array semantics to semantic contract v1. The first alpha rejects WGSL resource binding arrays (`binding_array`) before projection.
 
@@ -157,9 +205,9 @@ The logical fingerprint covers canonical resolved WGSL and normalized program co
 
 When a compare runner is emitted, its separate runner-build fingerprint covers the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. Those inputs invalidate the runner cache without becoming application runtime-compatibility requirements.
 
-The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI and binding model, storage-buffer-size model and regions, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and ceiling, user and internal slots, resolved workgroup sizes, and static device requirements. It excludes compiler and toolchain provenance, inputs, source maps, generated Swift and test sources, dynamic buffer ranges and size words, and `projection.testing`.
+The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI, binding and shader-interface models, exact vertex-attribute and fragment-color maps, storage-buffer-size model and regions, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and ceiling, user and internal slots, resolved workgroup sizes, and static device requirements. Its projection-specific input does not directly add compiler and toolchain provenance, root inputs, source maps, generated Swift and test sources, dynamic buffer ranges and size words, or `projection.testing`. Because the semantic fingerprint covers the complete semantic object, semantic presentation and provenance still affect the runtime-projection fingerprint transitively.
 
-Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, `bindingModel`, and `vertexBufferPolicy.model` must all be understood before a program loads. The runtime additionally requires support for `storageBufferSizeModel` when the selected program and stage contain a size region; an unknown future model does not block a stage with no region. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
+Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, `bindingModel`, `shaderInterfaceModel`, and `vertexBufferPolicy.model` must all be understood before a program loads. Shader-interface-model support is unconditional. The runtime additionally requires support for `storageBufferSizeModel` when the selected program and stage contain a size region; an unknown future model does not block a stage with no region. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
 
 An incompatible Metal runner protocol blocks `native compare` only. It does not make the application artifact incompatible. Missing source maps reduce diagnostic precision without changing runtime compatibility.
 

@@ -81,6 +81,23 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `vgpu-native-semantic/v1` object and one selected `vgpu-native-metal-projection/v1` object. The
   root `files` entries contain only path, size, and hash. Metal toolchains, emitted names, slots,
   `.metallib`, and device requirements stay in the projection.
+- The semantic contract is the complete portable shader-interface oracle. It stores flattened
+  stage inputs and outputs with exact locations or built-ins, semantic types, normalized effective
+  interpolation, and invariance. It validates each fragment input against the corresponding vertex
+  output before a backend projection is created. Scalar returns do not receive fabricated names.
+- Metal projection ABI v1 uses `vgpu-metal-shader-interface-v1` and serializes only runtime-facing
+  maps: vertex user locations to Metal attributes, fragment user locations and optional blend
+  sources to Metal colors and indices, and an empty compute interface. Built-ins, inter-stage
+  varyings, interpolation, invariance, and Tint-generated names remain outside the Metal runtime
+  projection. Sparse indices are preserved exactly and never compacted.
+- The accepted compiler-worker contract requires the request to carry the exact semantic interface.
+  The worker must compare it against Tint core IR before Metal `Raise()`, validate the complete
+  lowered interface privately, and print MSL from that same raised IR. Its response returns only the
+  minimal Metal runtime map. Integrating this handshake into the existing worker remains a C1 gate.
+  [Native shader-interface contract](./compiler/shader-interfaces.md) owns the detailed boundary.
+- The first alpha rejects `dual_source_blending`. The semantic and Metal schemas retain paired
+  blend-source fields for future profiles and fixtures, but representability and current-device
+  acceptance do not enable the product feature.
 - The Metal projection names its storage-buffer-size model once and records a canonical
   `storageBufferSizeRegions` array for every program. A region contains only its stage and byte
   offset inside that stage's `immediate-data` internal binding. Programs without a required size
@@ -133,12 +150,12 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   interface.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
-- The runtime-projection fingerprint covers the storage-buffer-size model, every per-program stage
-  region, and the shared `immediate-data` physical slot. Concrete range bytes, packed table words,
-  derived word count, upload padding, and upload strategy are runtime state and stay outside the
-  artifact and fingerprints. Runtime support for the named model is required only when the selected
-  program stage has a size region; an unrelated stage with no region may execute from an otherwise
-  structurally understood artifact that names a future model.
+- The runtime-projection fingerprint covers the shader-interface model and exact vertex-attribute
+  and fragment-color maps, as well as the storage-buffer-size model, every per-program stage region,
+  and the shared `immediate-data` physical slot. Concrete range bytes, packed table words, derived
+  word count, upload padding, and upload strategy are runtime state and stay outside the artifact and
+  fingerprints. Shader-interface-model support is unconditional; storage-size-model support is
+  required only when the selected program stage has a size region.
 - Generated packages use `.upToNextMinor(from:)` for remote package dependencies during `0.x`.
   Runtime ABI integers remain authoritative for artifact compatibility; package version selection
   separately limits Swift source and binary drift.
@@ -210,7 +227,7 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 - The compiler distinguishes writer configuration from the effective projection. It supplies user
   slots and candidate internal reservations before Tint generation, including the shared immediate
   binding and size offset whenever reflection contains a runtime-sized storage type. Only Tint's
-  post-`Generate` emitted interface and `needs_storage_buffer_sizes` result cause the effective
+  final raised interface and writer result cause the effective
   `immediate-data` slot and size region to be serialized. This permits ordinary immediate data
   without a size region, runtime-sized storage without either emitted field, and both uses in one
   physical immediate block.
@@ -281,6 +298,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    universal executable, run natively and through Rosetta, and match the authenticated monolithic
    oracle byte for byte without linking WebGPU, runtime backends, or frameworks.
 
+   The shader-interface follow-up captures the portable view before Metal lowering and proves that
+   explicit `Raise()` plus `Print()` matches `Generate()`. Its live Apple-silicon gate preserves
+   sparse vertex attributes, inter-stage locations, sparse color outputs, and multiple render
+   targets. It also proves that Metal accepted the tested same-type interpolation mismatch and that
+   tested pipeline reflection did not reveal silently discarded fragment outputs. The production worker still needs the exact
+   semantic-interface request and private lowered-interface validation wired into its protocol.
+
    Before freezing the dependency or numeric slot profile, pass offline `metal` plus `metallib`
    compilation, authored spans beyond the current module-only diagnostic attribution, the full
    shader corpus through the exact direct worker, deterministic connected artifact output, and
@@ -302,10 +326,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    C3b was skipped because the optional offline Metal toolchain was not installed. When available,
    it links handwritten no-op and runtime-array Metal functions, but its fixture-local probe executes
    only the no-op path. It is not the compare runner, WGSL-to-MSL evidence, or evidence for runtime
-   size-table upload. C3 remains open until a real C1-connected artifact, production runtime and ABI
-   package, supported toolchain and hardware matrix, and newest-generator to oldest-runtime
-   consumption pass. One product decision also remains open: always emit the real compare runner,
-   or emit it only when compare testing is enabled.
+   size-table upload. C3a now also carries a synthetic `SparseDraw` program and proves locations
+   `3/7` and color indices `1/4` survive semantic/projection cross-validation, runtime
+   fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction. C3 remains
+   open until a real C1-connected artifact, production runtime and ABI package, supported toolchain
+   and hardware matrix, and newest-generator to oldest-runtime consumption pass. One product
+   decision also remains open: always emit the real compare runner, or emit it only when compare
+   testing is enabled.
 
 3. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
@@ -313,3 +340,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 4. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.
+5. The Swift representation for sparse color attachments. Indexed records make the semantic slot
+   explicit and remain extensible; a nullable positional array resembles WebGPU more closely. Both
+   preserve holes correctly, so this is a public API choice rather than a compiler question.
+6. The behavior when a shader writes a color location with no attachment. Metal silently discards
+   the result. The safer proposal fails by default and requires explicit discard intent, while the
+   permissive proposal follows Metal's omission behavior.

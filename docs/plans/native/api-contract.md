@@ -141,8 +141,10 @@ never retries failed source with an additional feature enabled.
 
 Semantic extraction is a separate build stage from Metal translation. It owns the backend-neutral
 entry interfaces, bindings, intrinsic layouts, override declarations, and evaluated defaults used
-to assemble this contract. The per-entry Metal translation response checks the relevant reflected
-facts against its request, but does not serialize that broad semantic reflection again.
+to assemble this contract. The accepted compiler contract requires each per-entry translation
+request to carry the exact semantic interface that the worker must match against Tint core IR before
+Metal lowering. The response does not serialize that broad semantic reflection again; integrating
+this extension into the current worker remains a C1 gate.
 
 Generated Swift and TypeScript packers consume the same semantic offsets. They require exact
 vector, matrix, and fixed-array shapes; reject non-integral or out-of-range integers and invalid
@@ -188,33 +190,44 @@ The Metal projection records:
 - the versioned storage-buffer-size model and any per-program, per-stage regions placed inside an
   `immediate-data` internal binding;
 - the versioned pipeline-local vertex-buffer policy and its exclusive external-buffer ceiling;
+- the versioned shader-interface model and exact vertex-location to Metal-attribute and
+  fragment-location to Metal-color mappings;
 - resolved positive integer workgroup sizes, checked against the semantic contract;
 - static Metal-device requirements;
 - optional source maps;
 - optional compare-runner metadata under `projection.testing`.
 
-The semantic contract retains WGSL entry inputs and outputs. Metal projection v1 does not yet
-serialize their backend indices: vertex attributes, inter-stage user locations, and fragment color
-outputs occupy different Metal namespaces, so one undifferentiated `metalIndex` would be ambiguous.
-A later gate must prove a discriminated interface projection before that data joins the artifact and
-its runtime-projection fingerprint.
+The semantic contract is the shader-interface oracle. It retains complete backend-neutral inputs
+and outputs, including built-ins, semantic types, normalized interpolation and sampling,
+invariance, and fragment-output roles. It validates vertex-to-fragment links before projection.
+
+Metal projection v1 serializes a smaller stage-discriminated runtime interface. Vertex entries map
+only user input locations to Metal attribute indices. Fragment entries map only user output
+locations and optional blend-source indices to Metal color and source indices. Compute entries need
+no physical I/O map. Built-ins, inter-stage varyings, interpolation, and invariance remain in the
+semantic contract. Sparse locations remain exact and are never compacted. The v1 schemas reserve
+the paired blend-source shape, but the first alpha rejects `dual_source_blending`. The complete
+contract and canonical validation rules are in
+[Native shader-interface contract](./compiler/shader-interfaces.md).
 
 The production native compiler constructs the user binding map and configures candidate internal
 reservations before translation, then passes that configuration to Tint. For every selected entry
 whose reflection contains a runtime-sized storage type, it configures the shared immediate binding
-and size-region offset before `Generate`; this is fail-closed writer input, not proof that either is
-part of the emitted interface. Tint's writer result after `Generate` is authoritative. The compiler
+and size-region offset before Metal lowering; this is fail-closed writer input, not proof that either
+is part of the emitted interface. Tint's final raised interface and writer result are authoritative. The compiler
 records an `immediate-data` internal binding only when the generated entry uses it, and records a
 `storageBufferSizeRegions` entry only when Tint's writer result reports that the selected stage
 needs the size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
 
-Each translation request contains one resolved virtual WGSL source, its module-precision origin map,
+The accepted production contract requires each translation request to contain one resolved virtual WGSL source, its module-precision origin map,
 one selected WGSL and vgpu-owned emitted entry name, the exact statically used typed override set
 after module-level configuration and required-value validation, declared language features, direct
-external slots, and the candidate internal profile. A success response is limited to MSL, that
-entry identity, the validated external slots, effective internal slots and size regions, and a
-resolved workgroup size for compute. Expected compiler failures use the structured error response
-rather than a process failure.
+external slots, the candidate internal profile, and the exact semantic interface. The worker
+compares the portable interface before `Raise()`, validates the complete lowered interface
+privately, and prints MSL from that same raised IR. A success response is limited to MSL, that entry
+identity, the validated external slots, effective internal slots and size regions, the minimal
+runtime shader-interface projection, and a resolved workgroup size for compute. Expected compiler
+failures use the structured error response rather than a process failure.
 
 The production worker framing is one UTF-8 JSON request on standard input terminated by EOF and one
 UTF-8 JSON response on standard output terminated by EOF. Any decoded response, including
@@ -299,18 +312,21 @@ resolution state, and build state are rejected.
 
 Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
 Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
-binding model, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and
-ceiling, external and internal slots, the storage-buffer-size model and stage regions, resolved
-workgroup sizes, and static device requirements. It excludes provenance, inputs, source maps,
-generated sources, tests, `projection.testing`, and every dynamic packed size value. An incompatible
+binding and shader-interface models, deployment target, `.metallib` hash, emitted names, exact
+vertex-attribute and fragment-color maps, vertex-buffer policy and ceiling, external and internal
+slots, the storage-buffer-size model and stage regions, resolved workgroup sizes, and static device
+requirements. Its projection-specific input does not directly add provenance, root inputs, source
+maps, generated sources, tests, `projection.testing`, or any dynamic packed size value. The complete
+semantic object still affects it transitively through the semantic fingerprint. An incompatible
 runner blocks `native compare` only; it does not block application use.
 
-Compatibility is determined by understood schemas, the named layout, binding, and vertex-buffer
-policy models, and integer ABI contracts. Support for a storage-buffer-size model is checked only
-when the selected program and stage has a size region; a structurally understood artifact with a
-future model can still load a program whose selected stage has no such region. The artifact
-requires the small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer
-range it supports rather than comparing package release versions for exact equality. During `0.x`, generated remote package dependencies use
+Compatibility is determined by understood schemas, the named layout, binding, shader-interface,
+and vertex-buffer policy models, and integer ABI contracts. Shader-interface-model support is
+required for every entry point. Support for a storage-buffer-size model is checked only when the
+selected program and stage has a size region; a structurally understood artifact with a future
+model can still load a program whose selected stage has no such region. The artifact requires the
+small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer range it
+supports rather than comparing package release versions for exact equality. During `0.x`, generated remote package dependencies use
 `.upToNextMinor(from:)` so compatible patch releases remain selectable without admitting
 minor-version source drift.
 

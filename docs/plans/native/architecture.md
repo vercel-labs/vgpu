@@ -42,11 +42,22 @@ belongs to the selected backend projection and compiler result.
 The Metal compiler configures deterministic user slots and candidate internal reservations before
 calling Tint. If reflection contains a runtime-sized storage type, it configures the shared
 immediate-data binding and size-region offset even when the selected entry may only use the fixed
-prefix. After `Generate`, the emitted entry interface and Tint's
-`needs_storage_buffer_sizes` result determine what is effective: the program records the
+prefix. After Metal lowering and printing, the emitted entry interface and Tint's storage-size
+result determine what is effective: the program records the
 `immediate-data` internal slot only when generated MSL uses it, and records a per-stage
 `storageBufferSizeRegions` offset only when the size transport is needed. There is no second
 storage-size binding and no redundant boolean in the artifact.
+
+The accepted shader-I/O contract uses a parallel but deliberately asymmetric handshake. Semantic
+extraction sends the exact backend-neutral interface expected for one selected entry. The worker
+must compare it with Tint core IR before Metal `Raise()`, then validate the complete lowered
+interface privately and print MSL from that same raised IR. Generated Metal structures, varyings,
+and built-ins remain compiler details. The artifact keeps only the stage-discriminated physical map
+the runtime consumes: vertex locations to Metal attributes, fragment locations and optional blend
+sources to Metal colors and indices, and an empty compute interface. The runtime fingerprint covers
+that exact map and its `vgpu-metal-shader-interface-v1` model. The existing worker still needs this
+handshake integrated. See
+[Native shader-interface contract](./compiler/shader-interfaces.md).
 
 At execution time, selecting a program and stage selects at most one size region. Its presence
 triggers conditional support validation for the projection's storage-buffer-size model. The runtime

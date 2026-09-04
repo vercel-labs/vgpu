@@ -14,9 +14,11 @@ The goal is behavioral parity, not line-for-line syntax parity:
 - Node.js resolves and packages shaders at build time. A backend-neutral semantic-extraction stage
   validates WGSL, reflects the selected program, and materializes typed override values before any
   backend translation request is constructed.
-- A pinned vgpu-owned Tint executable translates one fully resolved entry point at a time. Its
-  response contains only the MSL and effective Metal projection data needed by the artifact; it does
-  not duplicate the semantic contract.
+- The accepted compiler contract uses a pinned vgpu-owned Tint executable to translate one fully
+  resolved entry point at a time. Its request includes the exact semantic interface to validate
+  against Tint core IR. Its response contains only the MSL and effective Metal projection data
+  needed by the artifact; it does not duplicate the semantic contract. Wiring this interface
+  handshake into the existing worker is the next C1 gate.
 - The application ships a `.metallib`, generated Swift program types, and only the vgpu Swift
   products it selects. Source imports remain explicit at the module level.
 - The Swift runtime products implement the public primitives over Metal without a JavaScript
@@ -50,6 +52,8 @@ WGSL modules
 - [Rollout](./rollout.md) contains falsifiable gates, spike order, and the documentation gate.
 - [Decisions](./decisions.md) separates accepted contracts from questions that still require a
   spike or product decision.
+- [Shader interfaces](./compiler/shader-interfaces.md) defines the complete semantic view, the
+  compiler validation boundary, and the minimal Metal runtime projection.
 
 ## Compiler contracts
 
