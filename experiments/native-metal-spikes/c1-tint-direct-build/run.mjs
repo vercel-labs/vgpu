@@ -149,8 +149,10 @@ const inventoryOracleInputIds = [
 const currentOracleInputIds = [
   ...inventoryOracleInputIds,
   "semanticExtractionProtocol",
+  "semanticResourceGraph",
   "semanticExtractionRequestSchema",
   "semanticExtractionResponseSchema",
+  "semanticActiveResourceResponse",
 ];
 const oracleInputs = [
   {
@@ -214,6 +216,11 @@ const oracleInputs = [
     mutable: true,
   },
   {
+    id: "semanticResourceGraph",
+    path: "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
+    mutable: true,
+  },
+  {
     id: "semanticExtractionRequestSchema",
     path: "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
     mutable: true,
@@ -221,6 +228,11 @@ const oracleInputs = [
   {
     id: "semanticExtractionResponseSchema",
     path: "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "semanticActiveResourceResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json",
     mutable: true,
   },
 ];
@@ -280,7 +292,7 @@ const oracleFixtures = [
   },
   {
     id: "semantic-active-resource",
-    ok: false,
+    ok: true,
     path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-resource.json",
   },
   {
@@ -2850,7 +2862,7 @@ function verifyOracleBranchEvidence(id, response) {
               severity: "error",
               phase: "inspect",
               message:
-                "selected program uses overrides outside the interface-only profile",
+                "selected program uses overrides outside the fixed-resource profile",
             },
           ],
         },
@@ -2859,20 +2871,14 @@ function verifyOracleBranchEvidence(id, response) {
       break;
     case "semantic-active-resource":
       assertExactJSON(
-        { ok: response.ok, diagnostics: response.diagnostics },
-        {
-          ok: false,
-          diagnostics: [
-            {
-              code: "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED",
-              severity: "error",
-              phase: "inspect",
-              message:
-                "selected program uses resources outside the interface-only profile",
-            },
-          ],
-        },
-        `${id} exact active resource rejection evidence`
+        response,
+        readJSON(
+          resolve(
+            fixtureDirectory,
+            "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json"
+          )
+        ),
+        `${id} exact active resource graph evidence`
       );
       break;
     case "semantic-compute-interface":

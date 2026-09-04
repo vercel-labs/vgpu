@@ -12,6 +12,7 @@ import {
   INVENTORY_COMPILER,
   InventoryProtocolError,
 } from "./protocol.mjs";
+import { assertSemanticResourceGraph } from "./semantic-resource-graph.mjs";
 
 export const SEMANTIC_EXTRACTION_CONTRACT =
   "vgpu-native-tint-semantic-extraction/v1";
@@ -109,7 +110,7 @@ export function assertSemanticExtractionExecutableProfile(request) {
   if (request.overrideConfiguration.length !== 0) {
     semanticFail(
       "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED",
-      "configured overrides are outside the interface-only executable profile"
+      "configured overrides are outside the fixed-resource executable profile"
     );
   }
   return request;
@@ -183,7 +184,7 @@ export function assertSemanticExtractionResponseSemantics(
   if (request.overrideConfiguration.length !== 0) {
     semanticFail(
       "VGPU-C1-SEMANTIC-PROFILE",
-      "the interface-only profile cannot succeed with configured overrides"
+      "the fixed-resource profile cannot succeed with configured overrides"
     );
   }
 
@@ -211,14 +212,10 @@ export function assertSemanticExtractionResponseSemantics(
       extracted.semanticInterface,
       request.languageFeatures
     );
-    if (
-      extracted.bindings.length !== 0 ||
-      extracted.samplingPairs.length !== 0 ||
-      extracted.overrides.length !== 0
-    ) {
+    if (extracted.overrides.length !== 0) {
       semanticFail(
         "VGPU-C1-SEMANTIC-PROFILE",
-        "interface-only entry contains resources, sampling pairs, or overrides"
+        "fixed-resource entry contains overrides"
       );
     }
     if (
@@ -236,17 +233,13 @@ export function assertSemanticExtractionResponseSemantics(
       );
     }
   }
-  if (
-    result.bindings.length !== 0 ||
-    result.overrides.length !== 0 ||
-    Object.keys(result.types).length !== 0 ||
-    Object.keys(result.layouts).length !== 0
-  ) {
+  if (result.overrides.length !== 0) {
     semanticFail(
       "VGPU-C1-SEMANTIC-PROFILE",
-      "interface-only result contains resource, override, type, or layout facts"
+      "fixed-resource result contains overrides"
     );
   }
+  assertSemanticResourceGraph(result, { failWith: semanticFail });
   return response;
 }
 

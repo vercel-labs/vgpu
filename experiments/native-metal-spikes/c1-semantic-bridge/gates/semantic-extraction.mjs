@@ -27,6 +27,11 @@ import {
   semanticExtractionRequestIdentity,
 } from "../lib/semantic-extraction-protocol.mjs";
 import {
+  assertSemanticResourceGraph,
+  semanticLayoutId,
+  semanticTypeId,
+} from "../lib/semantic-resource-graph.mjs";
+import {
   encodeInventoryRequest,
   INVENTORY_COMPILER,
   INVENTORY_CONTRACT,
@@ -190,12 +195,7 @@ function finalizedForInterfaceRequest(request, kind) {
     compiler: INVENTORY_COMPILER,
     diagnostics: [],
     result: {
-      entryPoints: [
-        { stage: "vertex", wgsl: "vertex_main" },
-        { stage: "fragment", wgsl: "fragment_main" },
-        { stage: "fragment", wgsl: "scalar_fragment" },
-        { stage: "compute", wgsl: "compute_builtins" },
-      ],
+      entryPoints: structuredClone(request.entryPoints),
     },
   };
   const configSource = "Shaders/semantic-interface.wgsl";
@@ -218,8 +218,8 @@ function finalizedForInterfaceRequest(request, kind) {
           source: configSource,
           kind: "draw",
           entryPoints: {
-            vertex: "vertex_main",
-            fragment: "fragment_main",
+            vertex: request.entryPoints[0].wgsl,
+            fragment: request.entryPoints[1].wgsl,
           },
         },
     inventory
@@ -315,12 +315,21 @@ function runStaticGate(validators, requests, responses) {
     requests["compute-interface"],
     "compute"
   );
+  const resourceFinalized = finalizedForInterfaceRequest(
+    requests["active-resource"],
+    "draw"
+  );
   const finalizedByName = {
     "render-interface": renderFinalized,
     "compute-interface": computeFinalized,
+    "active-resource": resourceFinalized,
   };
   const authenticated = {};
-  for (const name of ["render-interface", "compute-interface"]) {
+  for (const name of [
+    "render-interface",
+    "compute-interface",
+    "active-resource",
+  ]) {
     const request = requests[name];
     const expected = semanticExtractionRequestForFinalizedCapsule(
       finalizedByName[name]
@@ -521,6 +530,241 @@ function runStaticGate(validators, requests, responses) {
       );
     }, name);
   }
+
+  const resourceResponseMutations = [
+    [
+      "resource-binding-order",
+      (value) => value.result.bindings.reverse(),
+      "VGPU-C1-SEMANTIC-BINDING-ORDER",
+    ],
+    [
+      "resource-entry-subset",
+      (value) => value.result.entryPoints[1].bindings.pop(),
+      "VGPU-C1-SEMANTIC-BINDING-UNION",
+    ],
+    [
+      "uniform-write-access",
+      (value) => (value.result.bindings[0].access = "read_write"),
+      "VGPU-C1-SEMANTIC-BINDING-SHAPE",
+    ],
+    [
+      "sampling-pair-roles",
+      (value) => {
+        const pair = value.result.entryPoints[1].samplingPairs[0];
+        [pair.texture, pair.sampler] = [pair.sampler, pair.texture];
+      },
+      "VGPU-C1-SEMANTIC-SAMPLING-PAIR",
+    ],
+    [
+      "sampling-pair-mode",
+      (value) =>
+        (value.result.entryPoints[1].samplingPairs[0].mode = "comparison"),
+      "VGPU-C1-SEMANTIC-SAMPLING-PAIR",
+    ],
+    [
+      "filtering-pair-with-unfilterable-texture",
+      (value) => (value.result.bindings[2].sampleType = "unfilterable-float"),
+      "VGPU-C1-SEMANTIC-SAMPLING-PAIR",
+    ],
+    [
+      "comparison-pair-with-color-texture",
+      (value) => {
+        value.result.bindings[3].samplerKind = "comparison";
+        value.result.entryPoints[1].samplingPairs[0].mode = "comparison";
+      },
+      "VGPU-C1-SEMANTIC-SAMPLING-PAIR",
+    ],
+    [
+      "type-content-address",
+      (value) => {
+        const id = Object.keys(value.result.types).find(
+          (candidate) => value.result.types[candidate].kind === "scalar"
+        );
+        value.result.types[id].scalar = "u32";
+      },
+      "VGPU-C1-SEMANTIC-TYPE-ID",
+    ],
+    [
+      "layout-content-address",
+      (value) => {
+        const id = value.result.bindings[0].layout;
+        value.result.layouts[id].size += 1;
+      },
+      "VGPU-C1-SEMANTIC-LAYOUT-ID",
+    ],
+    [
+      "minimum-binding-size",
+      (value) => (value.result.bindings[0].minimumBindingSize += 1),
+      "VGPU-C1-SEMANTIC-BUFFER-LAYOUT",
+    ],
+    [
+      "unreachable-type",
+      (value) => {
+        const descriptor = { kind: "scalar", scalar: "u32" };
+        value.result.types[semanticTypeId(descriptor)] = descriptor;
+        value.result.types = Object.fromEntries(
+          Object.entries(value.result.types).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0
+          )
+        );
+      },
+      "VGPU-C1-SEMANTIC-GRAPH-CLOSURE",
+    ],
+    [
+      "runtime-layout",
+      (value) => {
+        const root = value.result.bindings[0];
+        const oldRootId = root.layout;
+        const rootLayout = value.result.layouts[oldRootId];
+        const oldLeafId = rootLayout.members[0].layout;
+        const leaf = value.result.layouts[oldLeafId];
+        leaf.runtimeSized = true;
+        delete leaf.size;
+        const newLeafId = semanticLayoutId(leaf);
+        delete value.result.layouts[oldLeafId];
+        value.result.layouts[newLeafId] = leaf;
+        rootLayout.members[0].layout = newLeafId;
+        const newRootId = semanticLayoutId(rootLayout);
+        delete value.result.layouts[oldRootId];
+        value.result.layouts[newRootId] = rootLayout;
+        root.layout = newRootId;
+        value.result.layouts = Object.fromEntries(
+          Object.entries(value.result.layouts).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0
+          )
+        );
+      },
+      "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
+    ],
+    [
+      "fixed-layout-minimum-size",
+      (value) => {
+        const root = value.result.bindings[0];
+        const oldRootId = root.layout;
+        const rootLayout = value.result.layouts[oldRootId];
+        const oldLeafId = rootLayout.members[0].layout;
+        const leaf = value.result.layouts[oldLeafId];
+        leaf.minimumSize -= 1;
+        const newLeafId = semanticLayoutId(leaf);
+        delete value.result.layouts[oldLeafId];
+        value.result.layouts[newLeafId] = leaf;
+        rootLayout.members[0].layout = newLeafId;
+        const newRootId = semanticLayoutId(rootLayout);
+        delete value.result.layouts[oldRootId];
+        value.result.layouts[newRootId] = rootLayout;
+        root.layout = newRootId;
+        value.result.layouts = Object.fromEntries(
+          Object.entries(value.result.layouts).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0
+          )
+        );
+      },
+      "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
+    ],
+    [
+      "layout-member-child-type",
+      (value) => {
+        const root = value.result.bindings[0];
+        const oldRootId = root.layout;
+        const rootLayout = value.result.layouts[oldRootId];
+        rootLayout.members[0].layout = value.result.bindings[4].layout;
+        const newRootId = semanticLayoutId(rootLayout);
+        delete value.result.layouts[oldRootId];
+        value.result.layouts[newRootId] = rootLayout;
+        root.layout = newRootId;
+        value.result.layouts = Object.fromEntries(
+          Object.entries(value.result.layouts).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0
+          )
+        );
+      },
+      "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+    ],
+  ];
+  for (const [name, mutate, expectedCode] of resourceResponseMutations) {
+    const request = requests["active-resource"];
+    const response = structuredClone(responses["active-resource"]);
+    mutate(response);
+    expectRejected(
+      () => {
+        assertSchema(validators.response, response, `${name} response`);
+        assertSemanticExtractionResponseSemantics(
+          request,
+          encodeSemanticExtractionRequest(request),
+          response
+        );
+      },
+      name,
+      expectedCode
+    );
+  }
+  const excessivePairs = structuredClone(responses["active-resource"]);
+  excessivePairs.result.entryPoints[1].samplingPairs = Array.from(
+    { length: 4_097 },
+    () => ({ texture: "g0b2", sampler: "g0b3", mode: "filtering" })
+  );
+  expectRejected(
+    () =>
+      assertSemanticExtractionResponseSemantics(
+        requests["active-resource"],
+        encodeSemanticExtractionRequest(requests["active-resource"]),
+        excessivePairs
+      ),
+    "sampling-pair-resource-limit",
+    "VGPU-C1-SEMANTIC-RESOURCE-LIMIT"
+  );
+  const scalarDescriptor = { kind: "scalar", scalar: "f32" };
+  const scalarId = semanticTypeId(scalarDescriptor);
+  const runtimeArrayDescriptor = { kind: "array", element: scalarId };
+  const runtimeArrayId = semanticTypeId(runtimeArrayDescriptor);
+  const fixedPretenderLayout = {
+    type: runtimeArrayId,
+    alignment: 4,
+    minimumSize: 4,
+    size: 4,
+    runtimeSized: false,
+    arrayStride: 4,
+    members: [],
+  };
+  const fixedPretenderLayoutId = semanticLayoutId(fixedPretenderLayout);
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(
+        {
+          entryPoints: [{ bindings: ["g0b0"], samplingPairs: [] }],
+          bindings: [
+            {
+              id: "g0b0",
+              name: "values",
+              group: 0,
+              binding: 0,
+              kind: "buffer",
+              addressSpace: "storage",
+              access: "read",
+              type: runtimeArrayId,
+              layout: fixedPretenderLayoutId,
+              minimumBindingSize: 4,
+            },
+          ],
+          types: Object.fromEntries(
+            [
+              [scalarId, scalarDescriptor],
+              [runtimeArrayId, runtimeArrayDescriptor],
+            ].sort(([left], [right]) =>
+              left < right ? -1 : left > right ? 1 : 0
+            )
+          ),
+          layouts: { [fixedPretenderLayoutId]: fixedPretenderLayout },
+        },
+        {
+          failWith(code, message) {
+            throw Object.assign(new Error(message), { code });
+          },
+        }
+      ),
+    "runtime-array-type-with-fixed-layout",
+    "VGPU-C1-SEMANTIC-FIXED-LAYOUT"
+  );
   const computeWithoutWorkgroup = structuredClone(
     responses["compute-interface"]
   );
@@ -568,7 +812,8 @@ function runStaticGate(validators, requests, responses) {
     requests: Object.keys(requests).length,
     responses: Object.keys(responses).length,
     prelaunchMutations: prelaunchMutations.length,
-    responseMutations: responseMutations.length + 2,
+    responseMutations:
+      responseMutations.length + resourceResponseMutations.length + 4,
     authenticatedSuccesses: Object.keys(authenticated).length,
     workerLaunches: launches,
   };
@@ -693,6 +938,81 @@ async function runNativeGate(executable, validators, requests, responses) {
       ["fragment", fullscreenInterfaces.fragment],
     ]
   );
+
+  const authoredMemberSize = structuredClone(requests["active-resource"]);
+  replaceRequestSource(
+    authoredMemberSize,
+    `struct Padded {
+  @size(16) value: f32,
+}
+@group(0) @binding(0) var<uniform> padded: Padded;
+@vertex fn vs_main() -> @builtin(position) vec4f {
+  return vec4f(0.0);
+}
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(padded.value);
+}
+`
+  );
+  const authoredSizeRun = await invokeSemantic(
+    executable,
+    authoredMemberSize,
+    validators
+  );
+  invocations += 1;
+  assert.equal(authoredSizeRun.response.ok, true);
+  const authoredSizeBinding = authoredSizeRun.response.result.bindings[0];
+  const authoredSizeRoot =
+    authoredSizeRun.response.result.layouts[authoredSizeBinding.layout];
+  assert.deepEqual(
+    {
+      bindingMinimum: authoredSizeBinding.minimumBindingSize,
+      rootMinimum: authoredSizeRoot.minimumSize,
+      rootSize: authoredSizeRoot.size,
+      memberMinimum: authoredSizeRoot.members[0].minimumSize,
+      memberSize: authoredSizeRoot.members[0].size,
+    },
+    {
+      bindingMinimum: 16,
+      rootMinimum: 16,
+      rootSize: 16,
+      memberMinimum: 16,
+      memberSize: 16,
+    }
+  );
+
+  const storageTexture = structuredClone(requests["active-resource"]);
+  replaceRequestSource(
+    storageTexture,
+    `@group(0) @binding(0) var output_image: texture_storage_2d<rgba8unorm, write>;
+@vertex fn vs_main() -> @builtin(position) vec4f {
+  return vec4f(0.0);
+}
+@fragment fn fs_main() -> @location(0) vec4f {
+  textureStore(output_image, vec2i(0), vec4f(1.0));
+  return vec4f(1.0);
+}
+`
+  );
+  const storageTextureRun = await invokeSemantic(
+    executable,
+    storageTexture,
+    validators
+  );
+  invocations += 1;
+  assert.equal(storageTextureRun.response.ok, true);
+  assert.deepEqual(storageTextureRun.response.result.bindings, [
+    {
+      id: "g0b0",
+      name: "output_image",
+      group: 0,
+      binding: 0,
+      kind: "storage-texture",
+      dimension: "2d",
+      format: "rgba8unorm",
+      access: "write",
+    },
+  ]);
   const authenticatedFullscreen = authenticateSuccessfulSemanticExtraction({
     finalized: fullscreenFinalized,
     request: fullscreenRequest,
@@ -761,6 +1081,101 @@ override INACTIVE_SIZE: u32;
     overrides: [],
     workgroupSize: { x: 2, y: 3, z: 1 },
   });
+
+  const runtimeArray = structuredClone(requests["active-resource"]);
+  replaceRequestSource(
+    runtimeArray,
+    `struct Values {
+  values: array<vec4f>,
+}
+@group(0) @binding(0) var<storage, read> values: Values;
+@vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
+  return values.values[index];
+}
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(1.0);
+}
+`
+  );
+  const runtimeArrayRun = await invokeSemantic(
+    executable,
+    runtimeArray,
+    validators
+  );
+  invocations += 1;
+  assert.equal(runtimeArrayRun.response.ok, false);
+  assert.equal(
+    runtimeArrayRun.response.diagnostics[0].code,
+    "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED"
+  );
+
+  const bindingArray = structuredClone(requests["active-resource"]);
+  bindingArray.languageFeatures = ["sized_binding_array"];
+  replaceRequestSource(
+    bindingArray,
+    `@group(0) @binding(0) var images: binding_array<texture_2d<f32>, 2>;
+@vertex fn vs_main() -> @builtin(position) vec4f {
+  return vec4f(0.0);
+}
+@fragment fn fs_main() -> @location(0) vec4f {
+  return textureLoad(images[0], vec2i(0), 0);
+}
+`
+  );
+  const bindingArrayRun = await invokeSemantic(
+    executable,
+    bindingArray,
+    validators
+  );
+  invocations += 1;
+  assert.equal(bindingArrayRun.response.ok, false);
+  assert.equal(
+    bindingArrayRun.response.diagnostics[0].code,
+    "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED"
+  );
+
+  const crossStageSampling = structuredClone(requests["active-resource"]);
+  replaceRequestSource(
+    crossStageSampling,
+    `@group(0) @binding(0) var integer_image: texture_2d<i32>;
+@group(0) @binding(1) var color_image: texture_2d<f32>;
+@group(0) @binding(2) var shared_sampler: sampler;
+@vertex fn vs_main() -> @builtin(position) vec4f {
+  return textureSampleLevel(color_image, shared_sampler, vec2f(0.5), 0.0);
+}
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(textureGather(0, integer_image, shared_sampler, vec2f(0.5)));
+}
+`
+  );
+  const crossStageRun = await invokeSemantic(
+    executable,
+    crossStageSampling,
+    validators
+  );
+  invocations += 1;
+  assert.equal(
+    crossStageRun.response.ok,
+    true,
+    JSON.stringify(crossStageRun.response.diagnostics)
+  );
+  assert.deepEqual(
+    crossStageRun.response.result.bindings.map((binding) => [
+      binding.id,
+      binding.sampleType ?? binding.samplerKind,
+    ]),
+    [
+      ["g0b0", "sint"],
+      ["g0b1", "unfilterable-float"],
+      ["g0b2", "non-filtering"],
+    ]
+  );
+  assert.deepEqual(
+    crossStageRun.response.result.entryPoints.map((entry) =>
+      entry.samplingPairs.map((pair) => [pair.texture, pair.sampler, pair.mode])
+    ),
+    [[["g0b1", "g0b2", "filtering"]], [["g0b0", "g0b2", "filtering"]]]
+  );
 
   const configured = structuredClone(requests["compute-interface"]);
   configured.overrideConfiguration = [{ name: "VALUE", value: 1 }];
@@ -879,6 +1294,8 @@ override INACTIVE_SIZE: u32;
     fullscreenExtractionSuccesses: 1,
     authenticatedFullscreenSuccesses: 1,
     inactiveDeclarationsSuccesses: 1,
+    fixedResourceSuccesses: 4,
+    unsupportedResourceFailures: 2,
     interfaceLimitFailures: 1,
     workerProtocolFailures: 3,
     sourceLockedResponses: Object.keys(responses).length,

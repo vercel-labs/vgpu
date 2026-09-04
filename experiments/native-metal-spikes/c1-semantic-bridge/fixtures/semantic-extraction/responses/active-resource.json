@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "contractId": "vgpu-native-tint-semantic-extraction/v1",
-  "ok": false,
+  "ok": true,
   "requestIdentity": {
     "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
-    "sha256": "b7cf923b157ad3436b338ceb0d4bd8fee621eea33de74d000323eca4593969b5"
+    "sha256": "8845705c5f3f52266681fc5570f28a24e1b55fee101e6930f222ac23cf6e9d92"
   },
   "compiler": {
     "name": "vgpu-tint-compiler",
@@ -15,12 +15,258 @@
       "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
     }
   },
-  "diagnostics": [
-    {
-      "code": "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED",
-      "severity": "error",
-      "phase": "inspect",
-      "message": "selected program uses resources outside the interface-only profile"
+  "diagnostics": [],
+  "result": {
+    "entryPoints": [
+      {
+        "stage": "vertex",
+        "wgsl": "vs_main",
+        "semanticInterface": {
+          "kind": "vertex",
+          "inputs": [
+            {
+              "type": {
+                "scalar": "u32",
+                "width": 1
+              },
+              "invariant": false,
+              "builtin": "vertex_index"
+            }
+          ],
+          "outputs": [
+            {
+              "type": {
+                "scalar": "f32",
+                "width": 4
+              },
+              "invariant": false,
+              "builtin": "position"
+            }
+          ]
+        },
+        "bindings": ["g0b0", "g0b1"],
+        "samplingPairs": [],
+        "overrides": []
+      },
+      {
+        "stage": "fragment",
+        "wgsl": "fs_main",
+        "semanticInterface": {
+          "kind": "fragment",
+          "inputs": [],
+          "outputs": [
+            {
+              "type": {
+                "scalar": "f32",
+                "width": 4
+              },
+              "invariant": false,
+              "location": 0
+            }
+          ]
+        },
+        "bindings": ["g0b0", "g0b2", "g0b3", "g0b10"],
+        "samplingPairs": [
+          {
+            "texture": "g0b2",
+            "sampler": "g0b3",
+            "mode": "filtering"
+          }
+        ],
+        "overrides": []
+      }
+    ],
+    "bindings": [
+      {
+        "binding": 0,
+        "group": 0,
+        "id": "g0b0",
+        "kind": "buffer",
+        "name": "frame",
+        "addressSpace": "uniform",
+        "access": "read",
+        "layout": "l_67b48a57fbd42a1a380ff5b03eb66b54da8037f6e09ea3ab817d1541702fa3f5",
+        "minimumBindingSize": 8,
+        "type": "t_416e569492d90696e31673639330eb6700eb7e4bb4b8a2ee101ac8f43663b1b1"
+      },
+      {
+        "binding": 1,
+        "group": 0,
+        "id": "g0b1",
+        "kind": "buffer",
+        "name": "vertices",
+        "addressSpace": "storage",
+        "access": "read",
+        "layout": "l_7d462e87433898fd0cf9bf1758034c143726ab793893533b5c8ce64940d7784e",
+        "minimumBindingSize": 24,
+        "type": "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece"
+      },
+      {
+        "binding": 2,
+        "group": 0,
+        "id": "g0b2",
+        "kind": "texture",
+        "name": "albedo",
+        "dimension": "2d",
+        "sampleType": "float",
+        "multisampled": false
+      },
+      {
+        "binding": 3,
+        "group": 0,
+        "id": "g0b3",
+        "kind": "sampler",
+        "name": "albedo_sampler",
+        "samplerKind": "filtering"
+      },
+      {
+        "binding": 10,
+        "group": 0,
+        "id": "g0b10",
+        "kind": "buffer",
+        "name": "material",
+        "addressSpace": "uniform",
+        "access": "read",
+        "layout": "l_b4350ee6e958a516d064668aa339de2c2c4c6ca87207d3f21aec914127085ada",
+        "minimumBindingSize": 16,
+        "type": "t_663c622fffe4dc318c2c9857ed81b510848d973c3e982c30e9b06fb81e17f003"
+      }
+    ],
+    "overrides": [],
+    "types": {
+      "t_416e569492d90696e31673639330eb6700eb7e4bb4b8a2ee101ac8f43663b1b1": {
+        "kind": "struct",
+        "members": [
+          {
+            "name": "offset",
+            "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+          }
+        ],
+        "wgslName": "Frame"
+      },
+      "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429": {
+        "element": "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14",
+        "kind": "vector",
+        "width": 2
+      },
+      "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc": {
+        "element": "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14",
+        "kind": "vector",
+        "width": 4
+      },
+      "t_663c622fffe4dc318c2c9857ed81b510848d973c3e982c30e9b06fb81e17f003": {
+        "kind": "struct",
+        "members": [
+          {
+            "name": "tint",
+            "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+          }
+        ],
+        "wgslName": "Material"
+      },
+      "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece": {
+        "kind": "struct",
+        "members": [
+          {
+            "name": "values",
+            "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+          }
+        ],
+        "wgslName": "Vertices"
+      },
+      "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb": {
+        "count": 3,
+        "element": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429",
+        "kind": "array"
+      },
+      "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14": {
+        "kind": "scalar",
+        "scalar": "f32"
+      }
+    },
+    "layouts": {
+      "l_67b48a57fbd42a1a380ff5b03eb66b54da8037f6e09ea3ab817d1541702fa3f5": {
+        "alignment": 8,
+        "members": [
+          {
+            "alignment": 8,
+            "layout": "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039",
+            "minimumSize": 8,
+            "name": "offset",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 8,
+            "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+          }
+        ],
+        "minimumSize": 8,
+        "runtimeSized": false,
+        "size": 8,
+        "type": "t_416e569492d90696e31673639330eb6700eb7e4bb4b8a2ee101ac8f43663b1b1"
+      },
+      "l_7d462e87433898fd0cf9bf1758034c143726ab793893533b5c8ce64940d7784e": {
+        "alignment": 8,
+        "members": [
+          {
+            "alignment": 8,
+            "layout": "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3",
+            "minimumSize": 24,
+            "name": "values",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 24,
+            "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+          }
+        ],
+        "minimumSize": 24,
+        "runtimeSized": false,
+        "size": 24,
+        "type": "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece"
+      },
+      "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3": {
+        "alignment": 8,
+        "arrayStride": 8,
+        "members": [],
+        "minimumSize": 24,
+        "runtimeSized": false,
+        "size": 24,
+        "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+      },
+      "l_b4350ee6e958a516d064668aa339de2c2c4c6ca87207d3f21aec914127085ada": {
+        "alignment": 16,
+        "members": [
+          {
+            "alignment": 16,
+            "layout": "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f",
+            "minimumSize": 16,
+            "name": "tint",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 16,
+            "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+          }
+        ],
+        "minimumSize": 16,
+        "runtimeSized": false,
+        "size": 16,
+        "type": "t_663c622fffe4dc318c2c9857ed81b510848d973c3e982c30e9b06fb81e17f003"
+      },
+      "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039": {
+        "alignment": 8,
+        "members": [],
+        "minimumSize": 8,
+        "runtimeSized": false,
+        "size": 8,
+        "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+      },
+      "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f": {
+        "alignment": 16,
+        "members": [],
+        "minimumSize": 16,
+        "runtimeSized": false,
+        "size": 16,
+        "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+      }
     }
-  ]
+  }
 }

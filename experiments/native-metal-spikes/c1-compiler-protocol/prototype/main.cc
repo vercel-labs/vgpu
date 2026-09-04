@@ -7,7 +7,7 @@
 //
 // The inventory operation reports only canonical WGSL entry names and stages.
 // The semantic-extraction operation reports program-scoped compiler facts; its
-// first executable profile accepts interface-only programs.
+// current executable profile accepts fixed-size singular resources.
 // The translation operation owns the Metal ABI instead of accepting
 // translator-selected internals. External buffer intervals are restricted to
 // 0..<30. Tint receives one shared immediate-data binding at buffer(30), with
@@ -22,6 +22,7 @@
 #include <exception>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -38,13 +39,16 @@
 #include "src/tint/lang/core/ir/referenced_module_vars.h"
 #include "src/tint/lang/core/ir/transform/single_entry_point.h"
 #include "src/tint/lang/core/ir/transform/substitute_overrides.h"
+#include "src/tint/lang/core/ir/var.h"
 #include "src/tint/lang/core/type/array.h"
+#include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/bool.h"
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
 #include "src/tint/lang/core/type/memory_view.h"
+#include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/struct.h"
@@ -79,6 +83,8 @@ constexpr uint32_t kNonConstantZeroOffset = 0;
 constexpr size_t kDiagnosticMessageMaxBytes = 16384;
 constexpr size_t kDiagnosticMessagesTotalMaxBytes = 1024 * 1024;
 constexpr size_t kMaxInventoryEntryPoints = 65536;
+constexpr size_t kMaxSemanticRecords = 65536;
+constexpr size_t kMaxSemanticSamplingPairs = 4096;
 constexpr std::string_view kContractId = "vgpu-native-tint-compiler/v1";
 constexpr std::string_view kEntryInventoryContractId =
     "vgpu-native-tint-entry-inventory/v1";
@@ -139,7 +145,23 @@ struct InventoryEntryPoint {
 struct SemanticExtractionEntryResult {
   SelectedEntryPoint entry_point;
   SemanticInterface semantic_interface;
+  std::vector<std::string> bindings;
+  std::vector<std::string> sampling_pairs;
   std::optional<tint::inspector::WorkgroupSize> workgroup_size;
+};
+
+struct SemanticGraph {
+  std::map<std::string, std::string> types;
+  std::map<std::string, std::string> layouts;
+};
+
+struct SemanticBindingRecord {
+  tint::inspector::ResourceBinding reflected;
+  std::optional<std::string> type;
+  std::optional<std::string> layout;
+  std::optional<std::string> sample_type;
+  std::optional<std::string> sampler_kind;
+  std::optional<std::string> storage_format;
 };
 
 bool g_output_succeeded = true;
@@ -1606,10 +1628,462 @@ int Run(const EntryInventoryRequest &request) {
   return 0;
 }
 
+constexpr std::string_view kSemanticTypeIdDomain =
+    "vgpu-native-semantic-type/v1";
+constexpr std::string_view kSemanticLayoutIdDomain =
+    "vgpu-native-semantic-layout/v1";
+
+struct GraphIdResult {
+  std::optional<std::string> value;
+  std::string error;
+};
+
+std::string SemanticId(std::string_view prefix, std::string_view domain,
+                       std::string_view descriptor) {
+  return std::string(prefix) +
+         vgpu::native::DomainSeparatedSha256(domain, descriptor);
+}
+
+bool InsertGraphRecord(std::map<std::string, std::string> &records,
+                       const std::string &id, const std::string &descriptor) {
+  if (!records.contains(id) && records.size() >= kMaxSemanticRecords) {
+    return false;
+  }
+  const auto [item, inserted] = records.emplace(id, descriptor);
+  return inserted || item->second == descriptor;
+}
+
+GraphIdResult InternSemanticType(const tint::core::type::Type *type,
+                                 SemanticGraph &graph) {
+  std::string descriptor;
+  if (type->Is<tint::core::type::F16>()) {
+    descriptor = "{\"kind\":\"scalar\",\"scalar\":\"f16\"}";
+  } else if (type->Is<tint::core::type::F32>()) {
+    descriptor = "{\"kind\":\"scalar\",\"scalar\":\"f32\"}";
+  } else if (type->Is<tint::core::type::I32>()) {
+    descriptor = "{\"kind\":\"scalar\",\"scalar\":\"i32\"}";
+  } else if (type->Is<tint::core::type::U32>()) {
+    descriptor = "{\"kind\":\"scalar\",\"scalar\":\"u32\"}";
+  } else if (const auto *atomic = type->As<tint::core::type::Atomic>()) {
+    auto element = InternSemanticType(atomic->Type(), graph);
+    if (!element.value) return element;
+    descriptor = "{\"element\":" + JsonString(*element.value) +
+                 ",\"kind\":\"atomic\"}";
+  } else if (const auto *vector = type->As<tint::core::type::Vector>()) {
+    auto element = InternSemanticType(vector->Type(), graph);
+    if (!element.value) return element;
+    if (vector->Packed() || vector->Width() < 2 || vector->Width() > 4) {
+      return {.error = "buffer graph contains an unsupported vector"};
+    }
+    descriptor = "{\"element\":" + JsonString(*element.value) +
+                 ",\"kind\":\"vector\",\"width\":" +
+                 std::to_string(vector->Width()) + "}";
+  } else if (const auto *matrix = type->As<tint::core::type::Matrix>()) {
+    auto element = InternSemanticType(matrix->Type(), graph);
+    if (!element.value) return element;
+    if (matrix->Columns() < 2 || matrix->Columns() > 4 || matrix->Rows() < 2 ||
+        matrix->Rows() > 4) {
+      return {.error = "buffer graph contains an unsupported matrix"};
+    }
+    descriptor = "{\"columns\":" + std::to_string(matrix->Columns()) +
+                 ",\"element\":" + JsonString(*element.value) +
+                 ",\"kind\":\"matrix\",\"rows\":" +
+                 std::to_string(matrix->Rows()) + "}";
+  } else if (const auto *array = type->As<tint::core::type::Array>()) {
+    const auto count = array->ConstantCount();
+    if (!count || *count == 0) {
+      return {.error = "buffer graph contains a runtime-sized array"};
+    }
+    auto element = InternSemanticType(array->ElemType(), graph);
+    if (!element.value) return element;
+    descriptor = "{\"count\":" + std::to_string(*count) +
+                 ",\"element\":" + JsonString(*element.value) +
+                 ",\"kind\":\"array\"}";
+  } else if (const auto *structure = type->As<tint::core::type::Struct>()) {
+    if (structure->IsWgslInternal() ||
+        !IsInventoryIdentifier(structure->Name().Name())) {
+      return {.error = "buffer graph contains an unsupported structure name"};
+    }
+    std::ostringstream members;
+    members << '[';
+    for (size_t index = 0; index < structure->Members().Length(); ++index) {
+      const auto *member = structure->Members()[index];
+      if (!IsInventoryIdentifier(member->Name().Name())) {
+        return {.error = "buffer graph contains an unsupported member name"};
+      }
+      auto child = InternSemanticType(member->Type(), graph);
+      if (!child.value) return child;
+      if (index > 0) members << ',';
+      members << "{\"name\":" << JsonString(member->Name().Name())
+              << ",\"type\":" << JsonString(*child.value) << '}';
+    }
+    members << ']';
+    descriptor = "{\"kind\":\"struct\",\"members\":" + members.str() +
+                 ",\"wgslName\":" + JsonString(structure->Name().Name()) +
+                 "}";
+  } else {
+    return {.error = "buffer graph contains a type outside semantic v1"};
+  }
+  const auto id = SemanticId("t_", kSemanticTypeIdDomain, descriptor);
+  if (!InsertGraphRecord(graph.types, id, descriptor)) {
+    return {.error = "semantic type identity collision or collection limit"};
+  }
+  return {.value = id};
+}
+
+GraphIdResult InternSemanticLayout(const tint::core::type::Type *type,
+                                   SemanticGraph &graph) {
+  if (!type->IsHostShareable() || !type->HasFixedFootprint()) {
+    return {.error = "buffer graph contains a non-fixed host layout"};
+  }
+  auto type_id = InternSemanticType(type, graph);
+  if (!type_id.value) return type_id;
+  std::ostringstream descriptor;
+  descriptor << "{\"alignment\":" << type->Align();
+  if (const auto *array = type->As<tint::core::type::Array>()) {
+    descriptor << ",\"arrayStride\":" << array->ImplicitStride();
+  }
+  const auto *structure = type->As<tint::core::type::Struct>();
+  const auto *matrix = type->As<tint::core::type::Matrix>();
+  if (matrix) {
+    descriptor << ",\"matrixStride\":" << matrix->ColumnStride();
+  }
+  descriptor << ",\"members\":[";
+  if (structure) {
+    for (size_t index = 0; index < structure->Members().Length(); ++index) {
+      const auto *member = structure->Members()[index];
+      auto child_type = InternSemanticType(member->Type(), graph);
+      if (!child_type.value) return child_type;
+      auto child_layout = InternSemanticLayout(member->Type(), graph);
+      if (!child_layout.value) return child_layout;
+      if (index > 0) descriptor << ',';
+      descriptor << "{\"alignment\":" << member->Align()
+                 << ",\"layout\":" << JsonString(*child_layout.value)
+                 << ",\"minimumSize\":" << member->Size()
+                 << ",\"name\":" << JsonString(member->Name().Name())
+                 << ",\"offset\":" << member->Offset()
+                 << ",\"runtimeSized\":false,\"size\":" << member->Size()
+                 << ",\"type\":" << JsonString(*child_type.value) << '}';
+    }
+  }
+  descriptor << "],\"minimumSize\":" << type->Size()
+             << ",\"runtimeSized\":false,\"size\":" << type->Size()
+             << ",\"type\":" << JsonString(*type_id.value) << '}';
+  const auto json = descriptor.str();
+  const auto id = SemanticId("l_", kSemanticLayoutIdDomain, json);
+  if (!InsertGraphRecord(graph.layouts, id, json)) {
+    return {.error = "semantic layout identity collision or collection limit"};
+  }
+  return {.value = id};
+}
+
+std::string BindingId(uint32_t group, uint32_t binding) {
+  return "g" + std::to_string(group) + "b" + std::to_string(binding);
+}
+
+const char *TextureDimensionName(
+    tint::inspector::ResourceBinding::TextureDimension dimension) {
+  using Dimension = tint::inspector::ResourceBinding::TextureDimension;
+  switch (dimension) {
+  case Dimension::k1d: return "1d";
+  case Dimension::k2d: return "2d";
+  case Dimension::k2dArray: return "2d-array";
+  case Dimension::k3d: return "3d";
+  case Dimension::kCube: return "cube";
+  case Dimension::kCubeArray: return "cube-array";
+  case Dimension::kNone: break;
+  }
+  return nullptr;
+}
+
+std::optional<std::string> InitialSampleType(
+    const tint::inspector::ResourceBinding &resource) {
+  using Kind = tint::inspector::ResourceBinding::SampledKind;
+  switch (resource.sampled_kind) {
+  case Kind::kFloat:
+  case Kind::kFilterable: return "float";
+  case Kind::kUnfilterable: return "unfilterable-float";
+  case Kind::kUInt: return "uint";
+  case Kind::kSInt: return "sint";
+  case Kind::kUnknownFilterable: return "unknown";
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> InitialSamplerKind(
+    const tint::inspector::ResourceBinding &resource) {
+  using Kind = tint::inspector::ResourceBinding::SamplerType;
+  switch (resource.sampler_type) {
+  case Kind::kComparison: return "comparison";
+  case Kind::kFiltering: return "filtering";
+  case Kind::kNonFiltering: return "non-filtering";
+  case Kind::kUnknownFiltering: return "unknown";
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> StorageTextureFormat(
+    tint::inspector::ResourceBinding::TexelFormat format) {
+  using Format = tint::inspector::ResourceBinding::TexelFormat;
+  switch (format) {
+  case Format::kR8Snorm: return "r8snorm";
+  case Format::kR8Unorm: return "r8unorm";
+  case Format::kR8Uint: return "r8uint";
+  case Format::kR8Sint: return "r8sint";
+  case Format::kRg8Unorm: return "rg8unorm";
+  case Format::kRg8Snorm: return "rg8snorm";
+  case Format::kRg8Uint: return "rg8uint";
+  case Format::kRg8Sint: return "rg8sint";
+  case Format::kR16Unorm: return "r16unorm";
+  case Format::kR16Snorm: return "r16snorm";
+  case Format::kR16Uint: return "r16uint";
+  case Format::kR16Sint: return "r16sint";
+  case Format::kR16Float: return "r16float";
+  case Format::kRg16Unorm: return "rg16unorm";
+  case Format::kRg16Snorm: return "rg16snorm";
+  case Format::kRg16Uint: return "rg16uint";
+  case Format::kRg16Sint: return "rg16sint";
+  case Format::kRg16Float: return "rg16float";
+  case Format::kBgra8Unorm: return "bgra8unorm";
+  case Format::kRgba8Unorm: return "rgba8unorm";
+  case Format::kRgba8Snorm: return "rgba8snorm";
+  case Format::kRgba8Uint: return "rgba8uint";
+  case Format::kRgba8Sint: return "rgba8sint";
+  case Format::kRgba16Unorm: return "rgba16unorm";
+  case Format::kRgba16Snorm: return "rgba16snorm";
+  case Format::kRgba16Uint: return "rgba16uint";
+  case Format::kRgba16Sint: return "rgba16sint";
+  case Format::kRgba16Float: return "rgba16float";
+  case Format::kR32Uint: return "r32uint";
+  case Format::kR32Sint: return "r32sint";
+  case Format::kR32Float: return "r32float";
+  case Format::kRg32Uint: return "rg32uint";
+  case Format::kRg32Sint: return "rg32sint";
+  case Format::kRg32Float: return "rg32float";
+  case Format::kRgba32Uint: return "rgba32uint";
+  case Format::kRgba32Sint: return "rgba32sint";
+  case Format::kRgba32Float: return "rgba32float";
+  case Format::kRgb10A2Uint: return "rgb10a2uint";
+  case Format::kRgb10A2Unorm: return "rgb10a2unorm";
+  case Format::kRg11B10Ufloat: return "rg11b10ufloat";
+  case Format::kNone: return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+struct BufferStoreTypeResult {
+  const tint::core::type::Type *type = nullptr;
+  bool duplicate = false;
+};
+
+BufferStoreTypeResult BufferStoreType(
+    tint::core::ir::Module &ir, uint32_t group, uint32_t binding) {
+  BufferStoreTypeResult result;
+  for (const auto *instruction : *ir.root_block) {
+    const auto *variable = instruction->As<tint::core::ir::Var>();
+    if (!variable) continue;
+    const auto point = variable->BindingPoint();
+    const auto *pointer =
+        variable->Result()->Type()->As<tint::core::type::Pointer>();
+    if (point && point->group == group && point->binding == binding && pointer) {
+      if (result.type) {
+        result.duplicate = true;
+      } else {
+        result.type = pointer->StoreType();
+      }
+    }
+  }
+  return result;
+}
+
+bool SameSemanticBinding(const SemanticBindingRecord &left,
+                         const SemanticBindingRecord &right) {
+  const auto &a = left.reflected;
+  const auto &b = right.reflected;
+  return a.resource_type == b.resource_type && a.bind_group == b.bind_group &&
+         a.binding == b.binding && a.variable_name == b.variable_name &&
+         a.dim == b.dim &&
+         left.type == right.type && left.layout == right.layout &&
+         left.sample_type == right.sample_type &&
+         left.sampler_kind == right.sampler_kind &&
+         left.storage_format == right.storage_format;
+}
+
+std::optional<std::string> SemanticBindingJson(
+    const SemanticBindingRecord &binding) {
+  using Resource = tint::inspector::ResourceBinding;
+  const auto &value = binding.reflected;
+  const auto id = BindingId(value.bind_group, value.binding);
+  std::ostringstream output;
+  output << "{\"binding\":" << value.binding << ",\"group\":"
+         << value.bind_group << ",\"id\":" << JsonString(id);
+  switch (value.resource_type) {
+  case Resource::ResourceType::kUniformBuffer:
+  case Resource::ResourceType::kStorageBuffer:
+  case Resource::ResourceType::kReadOnlyStorageBuffer:
+    if (!binding.type || !binding.layout) return std::nullopt;
+    output << ",\"kind\":\"buffer\",\"name\":"
+           << JsonString(value.variable_name) << ",\"addressSpace\":"
+           << JsonString(value.resource_type == Resource::ResourceType::kUniformBuffer
+                             ? "uniform"
+                             : "storage")
+           << ",\"access\":"
+           << JsonString(value.resource_type == Resource::ResourceType::kStorageBuffer
+                             ? "read_write"
+                             : "read")
+           << ",\"layout\":" << JsonString(*binding.layout)
+           << ",\"minimumBindingSize\":" << value.size
+           << ",\"type\":" << JsonString(*binding.type) << '}';
+    return output.str();
+  case Resource::ResourceType::kSampler:
+    if (!binding.sampler_kind || *binding.sampler_kind == "unknown") {
+      return std::nullopt;
+    }
+    output << ",\"kind\":\"sampler\",\"name\":"
+           << JsonString(value.variable_name) << ",\"samplerKind\":"
+           << JsonString(*binding.sampler_kind) << '}';
+    return output.str();
+  case Resource::ResourceType::kSampledTexture:
+  case Resource::ResourceType::kMultisampledTexture:
+  case Resource::ResourceType::kDepthTexture:
+  case Resource::ResourceType::kDepthMultisampledTexture: {
+    const auto *dimension = TextureDimensionName(value.dim);
+    const bool depth = value.resource_type == Resource::ResourceType::kDepthTexture ||
+                       value.resource_type ==
+                           Resource::ResourceType::kDepthMultisampledTexture;
+    if (!dimension || (!depth &&
+                       (!binding.sample_type || *binding.sample_type == "unknown"))) {
+      return std::nullopt;
+    }
+    const bool multisampled =
+        value.resource_type == Resource::ResourceType::kMultisampledTexture ||
+        value.resource_type == Resource::ResourceType::kDepthMultisampledTexture;
+    output << ",\"kind\":\"texture\",\"name\":"
+           << JsonString(value.variable_name) << ",\"dimension\":"
+           << JsonString(dimension) << ",\"sampleType\":"
+           << JsonString(depth ? "depth" : *binding.sample_type)
+           << ",\"multisampled\":" << (multisampled ? "true" : "false")
+           << '}';
+    return output.str();
+  }
+  case Resource::ResourceType::kExternalTexture:
+    output << ",\"kind\":\"external-texture\",\"name\":"
+           << JsonString(value.variable_name) << '}';
+    return output.str();
+  case Resource::ResourceType::kWriteOnlyStorageTexture:
+  case Resource::ResourceType::kReadOnlyStorageTexture:
+  case Resource::ResourceType::kReadWriteStorageTexture: {
+    const auto *dimension = TextureDimensionName(value.dim);
+    if (!dimension || !binding.storage_format ||
+        std::string_view(dimension) == "cube" ||
+        std::string_view(dimension) == "cube-array") {
+      return std::nullopt;
+    }
+    const auto access =
+        value.resource_type == Resource::ResourceType::kWriteOnlyStorageTexture
+            ? "write"
+        : value.resource_type ==
+                  Resource::ResourceType::kReadOnlyStorageTexture
+            ? "read"
+            : "read_write";
+    output << ",\"kind\":\"storage-texture\",\"name\":"
+           << JsonString(value.variable_name) << ",\"dimension\":"
+           << JsonString(dimension) << ",\"format\":"
+           << JsonString(*binding.storage_format) << ",\"access\":"
+           << JsonString(access) << '}';
+    return output.str();
+  }
+  default:
+    return std::nullopt;
+  }
+}
+
+bool IsTextureBinding(const SemanticBindingRecord &binding) {
+  using Type = tint::inspector::ResourceBinding::ResourceType;
+  return binding.reflected.resource_type == Type::kSampledTexture ||
+         binding.reflected.resource_type == Type::kMultisampledTexture ||
+         binding.reflected.resource_type == Type::kDepthTexture ||
+         binding.reflected.resource_type == Type::kDepthMultisampledTexture ||
+         binding.reflected.resource_type == Type::kExternalTexture;
+}
+
+bool IsExternalTextureBinding(const SemanticBindingRecord &binding) {
+  return binding.reflected.resource_type ==
+         tint::inspector::ResourceBinding::ResourceType::kExternalTexture;
+}
+
+void ResolveUnknownBindingKinds(
+    std::map<std::string, SemanticBindingRecord> &bindings,
+    const std::vector<std::pair<std::string, std::string>> &pairs) {
+  for (const auto &[texture_id, sampler_id] : pairs) {
+    auto texture = bindings.find(texture_id);
+    auto sampler = bindings.find(sampler_id);
+    if (texture == bindings.end() || sampler == bindings.end() ||
+        IsExternalTextureBinding(texture->second)) {
+      continue;
+    }
+    if (sampler->second.sampler_kind == "unknown" &&
+        texture->second.sample_type &&
+        (*texture->second.sample_type == "unfilterable-float" ||
+         *texture->second.sample_type == "sint" ||
+         *texture->second.sample_type == "uint")) {
+      sampler->second.sampler_kind = "non-filtering";
+    }
+  }
+  for (auto &[id, binding] : bindings) {
+    if (binding.sampler_kind == "unknown") binding.sampler_kind = "filtering";
+  }
+  for (const auto &[texture_id, sampler_id] : pairs) {
+    auto texture = bindings.find(texture_id);
+    auto sampler = bindings.find(sampler_id);
+    if (texture != bindings.end() && sampler != bindings.end() &&
+        texture->second.sample_type == "unknown" &&
+        sampler->second.sampler_kind == "filtering") {
+      texture->second.sample_type = "float";
+    }
+  }
+  for (auto &[id, binding] : bindings) {
+    if (binding.sample_type == "unknown") {
+      binding.sample_type = "unfilterable-float";
+    }
+  }
+}
+
+bool ResolvedPairsAreCoherent(
+    const std::map<std::string, SemanticBindingRecord> &bindings,
+    const std::vector<std::pair<std::string, std::string>> &pairs) {
+  for (const auto &[texture_id, sampler_id] : pairs) {
+    const auto &texture = bindings.at(texture_id);
+    const auto &sampler = bindings.at(sampler_id);
+    if (sampler.sampler_kind == "comparison") {
+      using Type = tint::inspector::ResourceBinding::ResourceType;
+      if (texture.reflected.resource_type != Type::kDepthTexture &&
+          texture.reflected.resource_type != Type::kDepthMultisampledTexture) {
+        return false;
+      }
+    } else if (sampler.sampler_kind == "filtering") {
+      if (texture.sample_type == "unfilterable-float" ||
+          texture.sample_type == "sint" || texture.sample_type == "uint") {
+        return false;
+      }
+    } else if (sampler.sampler_kind == "non-filtering") {
+      if (texture.sample_type != "unfilterable-float" &&
+          texture.sample_type != "sint" && texture.sample_type != "uint") {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
 void WriteSemanticExtractionSuccess(
     const SemanticExtractionRequest &request,
     const std::vector<Diagnostic> &diagnostics,
-    const std::vector<SemanticExtractionEntryResult> &entry_points) {
+    const std::vector<SemanticExtractionEntryResult> &entry_points,
+    const std::map<std::string, SemanticBindingRecord> &bindings,
+    const SemanticGraph &graph) {
   std::ostringstream output;
   output << "{\n"
          << "  \"schemaVersion\": 1,\n"
@@ -1626,7 +2100,19 @@ void WriteSemanticExtractionSuccess(
            << ", \"wgsl\": " << JsonString(entry.entry_point.wgsl)
            << ", \"semanticInterface\": ";
     WriteSemanticInterface(output, entry.semantic_interface);
-    output << ", \"bindings\": [], \"samplingPairs\": [], \"overrides\": []";
+    output << ", \"bindings\": [";
+    for (size_t binding_index = 0; binding_index < entry.bindings.size();
+         ++binding_index) {
+      if (binding_index > 0) output << ", ";
+      output << JsonString(entry.bindings[binding_index]);
+    }
+    output << "], \"samplingPairs\": [";
+    for (size_t pair_index = 0; pair_index < entry.sampling_pairs.size();
+         ++pair_index) {
+      if (pair_index > 0) output << ", ";
+      output << entry.sampling_pairs[pair_index];
+    }
+    output << "], \"overrides\": []";
     if (entry.workgroup_size) {
       output << ", \"workgroupSize\": {\"x\": " << entry.workgroup_size->x
              << ", \"y\": " << entry.workgroup_size->y
@@ -1634,13 +2120,59 @@ void WriteSemanticExtractionSuccess(
     }
     output << '}' << (index + 1 == entry_points.size() ? "\n" : ",\n");
   }
-  output << "    ],\n"
-         << "    \"bindings\": [],\n"
-         << "    \"overrides\": [],\n"
-         << "    \"types\": {},\n"
-         << "    \"layouts\": {}\n"
-         << "  }\n"
-         << "}\n";
+  output << "    ],\n";
+  if (bindings.empty()) {
+    output << "    \"bindings\": [],\n";
+  } else {
+    output << "    \"bindings\": [";
+  }
+  bool first = true;
+  std::vector<const SemanticBindingRecord *> ordered_bindings;
+  ordered_bindings.reserve(bindings.size());
+  for (const auto &[id, binding] : bindings) ordered_bindings.push_back(&binding);
+  std::sort(ordered_bindings.begin(), ordered_bindings.end(),
+            [](const auto *left, const auto *right) {
+              return std::tie(left->reflected.bind_group,
+                              left->reflected.binding) <
+                     std::tie(right->reflected.bind_group,
+                              right->reflected.binding);
+            });
+  for (const auto *binding : ordered_bindings) {
+    const auto json = SemanticBindingJson(*binding);
+    if (!json) continue;
+    if (!first) output << ",";
+    output << "\n      " << *json;
+    first = false;
+  }
+  if (!bindings.empty()) {
+    output << '\n' << "    ],\n";
+  }
+  output << "    \"overrides\": [],\n";
+  if (graph.types.empty()) {
+    output << "    \"types\": {},\n";
+  } else {
+    output << "    \"types\": {";
+  }
+  first = true;
+  for (const auto &[id, descriptor] : graph.types) {
+    if (!first) output << ',';
+    output << "\n      " << JsonString(id) << ": " << descriptor;
+    first = false;
+  }
+  if (!graph.types.empty()) output << "\n    },\n";
+  if (graph.layouts.empty()) {
+    output << "    \"layouts\": {}\n";
+  } else {
+    output << "    \"layouts\": {";
+  }
+  first = true;
+  for (const auto &[id, descriptor] : graph.layouts) {
+    if (!first) output << ',';
+    output << "\n      " << JsonString(id) << ": " << descriptor;
+    first = false;
+  }
+  if (!graph.layouts.empty()) output << "\n    }\n";
+  output << "  }\n}\n";
   EmitResponse(output.str());
 }
 
@@ -1696,12 +2228,17 @@ int Run(const SemanticExtractionRequest &request) {
   if (!request.override_configuration.empty()) {
     diagnostics.push_back(Error(
         "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED", "inspect",
-        "selected program configures overrides outside the interface-only "
+        "selected program configures overrides outside the fixed-resource "
         "profile"));
     WriteSemanticExtractionFailure(request.identity, diagnostics);
     return 1;
   }
 
+  std::vector<std::vector<tint::inspector::ResourceBinding>> entry_resources;
+  std::vector<std::vector<tint::inspector::SamplerTexturePair>>
+      entry_pair_points;
+  entry_resources.reserve(selected.size());
+  entry_pair_points.reserve(selected.size());
   for (const auto *entry : selected) {
     const auto resources = inspector.GetResourceBindings(entry->name);
     if (inspector.has_error()) {
@@ -1710,21 +2247,41 @@ int Run(const SemanticExtractionRequest &request) {
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
-    if (!resources.empty()) {
-      diagnostics.push_back(Error(
-          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-          "selected program uses resources outside the interface-only "
-          "profile"));
+    for (const auto &resource : resources) {
+      if (resource.array_size ||
+          !IsInventoryIdentifier(resource.variable_name)) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+            "selected program uses a resource outside the singular-resource "
+            "profile"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+    }
+    auto pairs = inspector.GetSamplerTextureUses(entry->name);
+    if (inspector.has_error()) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INSPECT", "inspect", inspector.error()));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
+    if (resources.size() > kMaxSemanticRecords ||
+        pairs.size() > kMaxSemanticSamplingPairs) {
+      diagnostics.push_back(Error(
+          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+          "selected entry exceeds a semantic resource collection limit"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    entry_resources.push_back(resources);
+    entry_pair_points.push_back(std::move(pairs));
   }
   if (std::any_of(selected.begin(), selected.end(), [](const auto *entry) {
         return !entry->overrides.empty();
       })) {
     diagnostics.push_back(Error(
         "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED", "inspect",
-        "selected program uses overrides outside the interface-only profile"));
+        "selected program uses overrides outside the fixed-resource profile"));
     WriteSemanticExtractionFailure(request.identity, diagnostics);
     return 1;
   }
@@ -1737,13 +2294,16 @@ int Run(const SemanticExtractionRequest &request) {
       diagnostics.push_back(Error(
           "VGPU-NATIVE-TINT-SEMANTIC-WORKGROUP-UNSUPPORTED", "inspect",
           "selected compute entry requires a literal positive workgroup size "
-          "in the interface-only profile"));
+          "in the fixed-resource profile"));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
   }
 
   std::vector<SemanticExtractionEntryResult> results;
+  SemanticGraph graph;
+  std::map<std::string, SemanticBindingRecord> bindings;
+  std::vector<std::pair<std::string, std::string>> all_pairs;
   results.reserve(request.entry_points.size());
   for (size_t index = 0; index < request.entry_points.size(); ++index) {
     const auto &requested = request.entry_points[index];
@@ -1793,14 +2353,181 @@ int Run(const SemanticExtractionRequest &request) {
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
+
+    std::vector<std::string> active_bindings;
+    for (const auto &resource : entry_resources[index]) {
+      SemanticBindingRecord binding{.reflected = resource};
+      using ResourceType = tint::inspector::ResourceBinding::ResourceType;
+      if (resource.resource_type == ResourceType::kUniformBuffer ||
+          resource.resource_type == ResourceType::kStorageBuffer ||
+          resource.resource_type == ResourceType::kReadOnlyStorageBuffer) {
+        const auto store =
+            BufferStoreType(ir, resource.bind_group, resource.binding);
+        const auto *store_type = store.type;
+        if (!store_type || store.duplicate ||
+            !store_type->HasFixedFootprint()) {
+          diagnostics.push_back(Error(
+              "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+              "selected program uses a runtime-sized or unlowered buffer"));
+          WriteSemanticExtractionFailure(request.identity, diagnostics);
+          return 1;
+        }
+        auto type = InternSemanticType(store_type, graph);
+        auto layout = InternSemanticLayout(store_type, graph);
+        if (!type.value || !layout.value) {
+          diagnostics.push_back(Error(
+              "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+              type.value ? std::move(layout.error) : std::move(type.error)));
+          WriteSemanticExtractionFailure(request.identity, diagnostics);
+          return 1;
+        }
+        binding.type = std::move(*type.value);
+        binding.layout = std::move(*layout.value);
+        if (resource.size != store_type->Size()) {
+          diagnostics.push_back(Error(
+              "VGPU-NATIVE-TINT-INTERNAL", "internal",
+              "Inspector and IR disagree on fixed buffer size"));
+          WriteSemanticExtractionFailure(request.identity, diagnostics);
+          return 1;
+        }
+      } else if (resource.resource_type == ResourceType::kSampler) {
+        binding.sampler_kind = InitialSamplerKind(resource);
+      } else if (resource.resource_type == ResourceType::kSampledTexture ||
+                 resource.resource_type == ResourceType::kMultisampledTexture) {
+        binding.sample_type = InitialSampleType(resource);
+      } else if (
+          resource.resource_type == ResourceType::kWriteOnlyStorageTexture ||
+          resource.resource_type == ResourceType::kReadOnlyStorageTexture ||
+          resource.resource_type == ResourceType::kReadWriteStorageTexture) {
+        binding.storage_format = StorageTextureFormat(resource.image_format);
+      } else if (resource.resource_type != ResourceType::kDepthTexture &&
+                 resource.resource_type !=
+                     ResourceType::kDepthMultisampledTexture &&
+                 resource.resource_type != ResourceType::kExternalTexture) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+            "selected program uses a resource kind outside semantic v1"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+      const auto id = BindingId(resource.bind_group, resource.binding);
+      const auto [existing, inserted] = bindings.emplace(id, binding);
+      if (!inserted && !SameSemanticBinding(existing->second, binding)) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-INTERNAL", "internal",
+            "selected entries disagree on one resource binding"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+      if (!inserted) {
+        existing->second.reflected.size =
+            std::max(existing->second.reflected.size, resource.size);
+      }
+      if (bindings.size() > kMaxSemanticRecords) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+            "selected program exceeds the binding collection limit"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+      active_bindings.push_back(id);
+    }
+    std::sort(active_bindings.begin(), active_bindings.end(),
+              [&](const auto &left, const auto &right) {
+                const auto &a = bindings.at(left).reflected;
+                const auto &b = bindings.at(right).reflected;
+                return std::tie(a.bind_group, a.binding) <
+                       std::tie(b.bind_group, b.binding);
+              });
+    if (std::adjacent_find(active_bindings.begin(), active_bindings.end()) !=
+        active_bindings.end()) {
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                                  "Inspector repeated a resource binding"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+
+    auto pair_points = entry_pair_points[index];
+    std::sort(pair_points.begin(), pair_points.end(), [](const auto &a,
+                                                        const auto &b) {
+      return std::tie(a.texture_binding_point.group,
+                      a.texture_binding_point.binding,
+                      a.sampler_binding_point.group,
+                      a.sampler_binding_point.binding) <
+             std::tie(b.texture_binding_point.group,
+                      b.texture_binding_point.binding,
+                      b.sampler_binding_point.group,
+                      b.sampler_binding_point.binding);
+    });
+    std::vector<std::string> sampling_pairs;
+    for (const auto &pair : pair_points) {
+      const auto texture_id = BindingId(pair.texture_binding_point.group,
+                                        pair.texture_binding_point.binding);
+      const auto sampler_id = BindingId(pair.sampler_binding_point.group,
+                                        pair.sampler_binding_point.binding);
+      const auto texture = bindings.find(texture_id);
+      const auto sampler = bindings.find(sampler_id);
+      if (texture == bindings.end() || sampler == bindings.end() ||
+          std::find(active_bindings.begin(), active_bindings.end(),
+                    texture_id) == active_bindings.end() ||
+          std::find(active_bindings.begin(), active_bindings.end(),
+                    sampler_id) == active_bindings.end() ||
+          !IsTextureBinding(texture->second) ||
+          !sampler->second.sampler_kind) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-INTERNAL", "internal",
+            "Inspector returned an incoherent sampler-texture pair"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+      const auto mode = sampler->second.sampler_kind == "comparison"
+                            ? "comparison"
+                            : "filtering";
+      sampling_pairs.push_back(
+          "{\"texture\":" + JsonString(texture_id) +
+          ",\"sampler\":" + JsonString(sampler_id) +
+          ",\"mode\":" + JsonString(mode) + "}");
+      all_pairs.emplace_back(texture_id, sampler_id);
+      if (all_pairs.size() >
+          request.entry_points.size() * kMaxSemanticSamplingPairs) {
+        diagnostics.push_back(Error(
+            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+            "selected program exceeds the sampling-pair collection limit"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+    }
+    sampling_pairs.erase(
+        std::unique(sampling_pairs.begin(), sampling_pairs.end()),
+        sampling_pairs.end());
     results.push_back(SemanticExtractionEntryResult{
         .entry_point = requested,
         .semantic_interface = std::move(*semantic_interface.value),
+        .bindings = std::move(active_bindings),
+        .sampling_pairs = std::move(sampling_pairs),
         .workgroup_size = selected[index]->workgroup_size,
     });
   }
 
-  WriteSemanticExtractionSuccess(request, diagnostics, results);
+  ResolveUnknownBindingKinds(bindings, all_pairs);
+  if (!ResolvedPairsAreCoherent(bindings, all_pairs)) {
+    diagnostics.push_back(Error(
+        "VGPU-NATIVE-TINT-INTERNAL", "internal",
+        "resolved sampler and texture classes are incoherent"));
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+  for (const auto &[id, binding] : bindings) {
+    if (!SemanticBindingJson(binding)) {
+      diagnostics.push_back(Error(
+          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+          "selected program left an unsupported resource shape"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+  }
+  WriteSemanticExtractionSuccess(request, diagnostics, results, bindings,
+                                 graph);
   return 0;
 }
 

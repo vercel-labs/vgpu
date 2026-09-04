@@ -5,6 +5,7 @@
 #include <istream>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "request.h"
 
@@ -36,6 +37,12 @@ struct DecodedRequest {
 // are deliberately distinct from a decoded JSON value that does not implement
 // the selected protocol.
 DecodedRequest ReadRequest(std::istream &input);
+
+// Returns the lowercase SHA-256 digest of domain || 0x00 || payload. Semantic
+// graph identities share this implementation with request authentication so
+// the worker has only one cryptographic primitive to source-lock.
+std::string DomainSeparatedSha256(std::string_view domain,
+                                  std::string_view payload);
 
 } // namespace vgpu::native
 

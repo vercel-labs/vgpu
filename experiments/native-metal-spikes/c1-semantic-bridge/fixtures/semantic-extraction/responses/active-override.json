@@ -20,7 +20,7 @@
       "code": "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED",
       "severity": "error",
       "phase": "inspect",
-      "message": "selected program uses overrides outside the interface-only profile"
+      "message": "selected program uses overrides outside the fixed-resource profile"
     }
   ]
 }

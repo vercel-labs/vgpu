@@ -18,13 +18,17 @@ import {
 import { isFinalizedProgramCapsule } from "./fullscreen-injection.mjs";
 import { deterministicStringify } from "./protocol.mjs";
 import {
+  SEMANTIC_TYPE_ID_DOMAIN,
+  semanticTypeId,
+} from "./semantic-resource-graph.mjs";
+import {
   assertResolvedDeclarationsForFinalizedCapsule,
   isResolvedDeclarationIndex,
   resolvedDeclarationForSelectedEntry,
 } from "./resolved-declarations.mjs";
 
 export const SEMANTIC_CONTRACT = "vgpu-native-semantic/v1";
-export const SEMANTIC_TYPE_ID_DOMAIN = "vgpu-native-semantic-type/v1";
+export { SEMANTIC_TYPE_ID_DOMAIN, semanticTypeId };
 export const PROGRAM_FINGERPRINT_DOMAIN = "vgpu-native-program/v1";
 
 const assemblies = new WeakMap();
@@ -426,10 +430,6 @@ function createInterfaceTypeInterner() {
       );
     },
   };
-}
-
-export function semanticTypeId(definition) {
-  return `t_${hashDomainValue(SEMANTIC_TYPE_ID_DOMAIN, definition, false)}`;
 }
 
 function semanticInterfaceFromAssembly(entry, types) {

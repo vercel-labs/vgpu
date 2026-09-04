@@ -1647,6 +1647,15 @@ private:
 
 } // namespace
 
+std::string DomainSeparatedSha256(std::string_view domain,
+                                  std::string_view payload) {
+  Sha256 hash;
+  hash.Update(domain);
+  hash.Update(std::string_view("\0", 1));
+  hash.Update(payload);
+  return hash.Finish();
+}
+
 DecodedRequest ReadRequest(std::istream &input) {
   std::string bytes;
   bytes.reserve(64 * 1024);
