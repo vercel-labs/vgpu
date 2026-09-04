@@ -184,10 +184,10 @@ The current direct-source distribution proof covers this interface handshake. It
 authenticates an exact eighteen-canary request closure: ten translation requests covering sparse
 vertex and fragment interfaces, scalar fragment I/O, compute built-ins, internal dual-source
 lowering, a fail-closed interface mismatch, and the four legacy branches; four authenticated
-entry-inventory requests; and four interface-only program extractions covering exact render and
-compute interfaces plus fail-closed active-resource and active-override branches. The ordinary
-publication gate passes with byte-identical responses from eight direct variants spanning the
-arm64, x86_64, and universal executables against the arm64-native oracle.
+entry-inventory requests; and four semantic extraction requests covering successful render,
+successful compute, successful fixed-resource extraction, and fail-closed active-override
+extraction. The ordinary publication gate passes with byte-identical responses from eight direct
+variants spanning the arm64, x86_64, and universal executables against the arm64-native oracle.
 
 `experiments/native-metal-spikes/c3-artifact-swiftpm` now carries a synthetic `SparseDraw` program.
 It proves that locations `3/7` and colors `1/4` survive schema validation, canonical cross-checks,
@@ -196,9 +196,11 @@ runtime fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without
 These results do not expand the supported hardware matrix. The live gate ran only on Apple silicon;
 an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. All twelve
 isolated interface outputs now compile offline for `air64-apple-macos14.0` and link into a
-`.metallib`. Active resource and override extraction, the broader semantic-extractor-to-artifact
-integration, the exact direct worker's full corpus through that offline boundary, a real
-C1-connected artifact, and pixel/buffer parity remain open.
+`.metallib`. Fixed-size singular-resource extraction and semantic assembly now pass. Backend slot
+allocation, exact per-entry compiler-request projection and translation for that assembled resource
+graph, override extraction and assembly, the broader semantic-extractor-to-artifact integration,
+the exact direct worker's full corpus through that offline boundary, a real C1-connected artifact,
+and pixel/buffer parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

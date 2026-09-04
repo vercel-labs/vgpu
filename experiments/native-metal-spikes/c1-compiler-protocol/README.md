@@ -228,9 +228,16 @@ The override integration follow-up now connects the materializer's exact static 
 request, binds it to the resolved-source hash, and proves that missing, extra, or stale values fail
 before or inside the independently validating worker.
 
+The semantic-bridge follow-up now carries the authenticated fixed-size singular-resource union
+through semantic assembly. It preserves exact per-entry binding subsets and sampling pairs, derives
+per-binding stage visibility, joins resolver-owned authored names, retains the reachable type and layout
+graphs, and fingerprints those semantics. Compiler-request projection remains deliberately closed
+for that resourceful assembly until the backend slot allocator supplies its exact mapping.
+
 The remaining gates are:
 
-- carry the authenticated fixed-resource union through semantic assembly and slot allocation;
+- allocate backend slots for the assembled fixed-resource union, project its exact per-entry
+  compiler requests, and translate them;
 - connect exact-static override extraction and assembly;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.

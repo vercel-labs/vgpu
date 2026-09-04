@@ -140,9 +140,12 @@ runtime-relevant projection. Its direct-source gate reproduces that handshake ac
 and universal executables.
 
 The bridge now carries vgpu's resolved module graph and source map through authenticated selection,
-finalization, interface extraction, interface-only semantic assembly, and request projection. Fixed
-singular resources are also extracted as one authenticated program union. Remaining integration
-must carry that resource graph through semantic assembly and slot allocation, add exact-static
-overrides, and then run the full shader corpus through the direct worker into the deterministic
-artifact gate. The twelve isolated outputs have passed offline `metal` plus `metallib`; full-corpus
-output and pixel/buffer parity remain separate requirements.
+finalization, semantic extraction, resource-free semantic assembly, and request projection. It also
+carries fixed-size singular resources through semantic assembly as one authenticated program union,
+including exact entry subsets and sampling pairs, derived visibility, authored presentation names,
+and the reachable type and layout graphs. That resourceful path deliberately stops before compiler
+request projection. Remaining integration must allocate backend slots, project and translate the
+exact per-entry resource requests, add exact-static overrides, and then run the full shader corpus
+through the direct worker into the deterministic artifact gate. The twelve isolated outputs have
+passed offline `metal` plus `metallib`; full-corpus output and pixel/buffer parity remain separate
+requirements.

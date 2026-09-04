@@ -285,10 +285,10 @@ authored fragment span is exactly `6:1–9:2`; the generated vertex keeps no aut
 Tint processes preserve the existing translation, offline compilation/link, UV, and
 `front_facing` results. The checked-in interface JSON is only a static expected-value oracle.
 
-The remaining bridge gates are active-resource assembly, exact-static override
-extraction/assembly, versioned slot allocation and response combination, the authenticated
-repository corpus, and production artifact packaging. Resolver, inventory, compiler-protocol,
-direct-build, offline Metal, and corpus baselines must stay green while those pieces are connected.
+The remaining bridge gates are resource slot allocation and compiler-response combination,
+exact-static override extraction/assembly, the authenticated repository corpus, and production
+artifact packaging. Resolver, inventory, compiler-protocol, direct-build, offline Metal, and corpus
+baselines must stay green while those pieces are connected.
 Intel, AMD, and cross-machine hardware evidence also remain outside this run.
 
 The source-finalization gate still uses a second authenticated inventory invocation as an isolated

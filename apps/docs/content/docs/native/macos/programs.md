@@ -163,7 +163,31 @@ The generated package layout, semantic contract, Metal projection, payload integ
 
 ## Keep Swift names predictable
 
-`moduleName`, program names, bindings, structs, and fields must map to distinct Swift identifiers. `native check` rejects Swift keywords, generated API names, and case-insensitive collisions rather than silently renaming public symbols.
+Generated Swift ABI 1 preserves every authored public spelling exactly. The generator does not
+recase a name, add a suffix, or wrap it in backticks to make it compile.
+
+While assembling each program, `native check` requires every authored name to be an exact Swift
+identifier. It rejects `_`, the case-insensitive private prefix `_vgpu`, and the ABI-versioned set
+of Swift 6 names that cannot be used unescaped in every declaration position where vgpu emits an
+authored name. Contextual words that are safe in all of those positions, including `actor`, `get`,
+and `set`, remain valid. Nominal module, program, and struct names also cannot shadow `Swift`,
+`Foundation`, or `VGPUABI`. Bindings must be distinct under case-insensitive comparison, as must the
+fields within each struct.
+
+After all programs are assembled, the generator determines the actual type placement. A struct
+used by one program is nested under that program, while a struct used by several programs is
+emitted once at module scope. It then validates the resulting scopes: programs and shared structs
+at module scope; local structs plus the generated `Bindings` type and `artifact` property in each
+program; and the generated interleaved `Vertex` type when that draw needs one. A shared module-level
+struct named `Bindings`, for example, does not collide with `Gradient.Bindings`, but a local one
+does. Validation fails rather than moving a type, changing its spelling, or changing sharing to
+make a collision disappear.
+
+Bindings and fields live in separate member scopes, so they may use module and generated API names
+when the spelling is otherwise valid and does not collide with a peer in the same scope.
+
+Generated support symbols that do not come from WGSL are module-qualified. Private generated locals
+use the `_vgpu` namespace, which is why authored public names cannot use that prefix.
 
 Paths are relative to `vgpu.native.json`. Commands read that file from the current directory and do not search parent directories; pass `--config` explicitly in a monorepo:
 

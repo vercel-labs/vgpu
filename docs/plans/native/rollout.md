@@ -142,11 +142,20 @@ than public ABI or hardware-support claims.
 The current accepted direct-source revision builds the worker from Tint's `tint_api` root for macOS
 14 as byte-reproducible arm64, x86_64, and universal executables. Its ordinary publication gate
 authenticates eighteen branch-specific canaries—ten translations, four entry inventories, and four
-interface-only semantic extractions—and matches the arm64-native monolithic oracle across eight
-direct variants without linking WebGPU, runtime backends, or frameworks. This proof covers the exact
-semantic-interface handshake and the first program-scoped extraction profile. Rosetta validates the
-x86_64 compiler process, not Intel or AMD GPU behavior, and the paired dual-source canary remains
-internal evidence rather than alpha support.
+semantic extraction requests: successful render, successful compute, successful fixed-resource
+extraction, and fail-closed active-override extraction. It matches the arm64-native monolithic
+oracle across eight direct variants without linking WebGPU, runtime backends, or frameworks. This
+proof covers the exact semantic-interface handshake and both the resource-free and fixed-resource
+extraction profiles. Rosetta validates the x86_64 compiler process, not Intel or AMD GPU behavior,
+and the paired dual-source canary remains internal evidence rather than alpha support.
+
+The connected semantic bridge now assembles that authenticated fixed-size singular-resource union
+into semantic v1. It retains exact entry binding subsets and sampling pairs, derives stage
+visibility, joins resolver-owned authored presentation names without treating resolver layouts as
+authority, preserves the reachable Tint type and layout graphs, and fingerprints the complete
+program closure. It rejects compiler-request projection for resourceful programs until backend slot
+allocation is available; resource translation, exact-static override assembly, and runtime use
+remain open.
 
 The shader-interface follow-up proves the required split. Its isolated experiment extracts the
 complete portable interface from core IR before Metal lowering and established equivalent writer

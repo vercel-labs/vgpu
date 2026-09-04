@@ -76,14 +76,21 @@ reflection, Dawn-like cross-stage sampler/texture resolution, and explicit runti
 binding-array rejection. Configured and active overrides remain structured failures. This is
 partial evidence for conditions 3, 4, and 10.
 
-The executable assembly slice adds three interface-only programs and five projected compiler
-requests: effect, multi-module draw, and compute. It covers five nominal failures, five declaration
-failures, one retained-resolver-snapshot check, one profile failure, one render-link failure, two
-fingerprint checks, and three projection failures. Its six native invocations are two byte-identical
-semantic extractions for each fixture. It proves the resolver declaration join across authored
-modules, schema-valid interface type interning, program fingerprints, and extraction-derived
-interface-only projection with zero translator launches. This is partial evidence for conditions 3
-through 6 and 10.
+The executable assembly slice adds four programs: resource-free effect, multi-module draw, and
+compute fixtures plus one fixed singular-resource draw. Only the three resource-free programs
+produce compiler requests, for five requests total. The gate covers five nominal failures, five
+declaration failures, three resolver-symbol failures, three resolver-resource-join failures, two
+retained-resolver-snapshot checks, one profile failure, one render-link failure, five fingerprint
+checks, twelve Swift-name failures, and five projection failures. Its eight native invocations are
+two byte-identical semantic extractions for each fixture. It proves declaration v2 entry spans and
+binding, struct, and member symbol evidence; exact authored Swift presentation with Swift 6 and
+helper/generated-module namespace rejection plus binding-local and member-local collision checks;
+schema-valid interface interning and fixed resource graphs; program fingerprints; and exact
+extraction reprojection. Final aggregation still owns collisions created by local/shared type
+placement and generated program API names. The resource fixture retains numeric
+bindings `b0`, `b1`, `b2`, `b3`, and `b10`, exact entry subsets, sampling pair and visibility, seven
+extracted types expanded to eight semantic types, six layouts, and minimum buffer sizes of 8, 24,
+and 16 bytes. This is partial evidence for conditions 3 through 6 and 10.
 
 The integrated Metal companion adds nine one-shot Tint processes: one inventory, two byte-identical
 semantic extractions, four deterministic successful translations, and two byte-identical runs of one
@@ -91,11 +98,11 @@ structured interface rejection. It also performs two offline AIR compilations, o
 and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. Its compiler requests come from the nominal
 assembly; the interface JSON is only a static oracle. The authored fragment retains the exact
 resolver span `6:1–9:2`, and the selected generated vertex reaches Metal with top-origin UV and
-explicit counter-clockwise winding. This is executable evidence for the interface-only portions of
+explicit counter-clockwise winding. This is executable evidence for the resource-free portions of
 conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
 
-Resource assembly and projection, exact-static overrides, versioned slot allocation and
+Resource compiler projection, exact-static overrides, versioned slot allocation and
 translator-response combination, compute translation parity, the integrated repository corpus, and
-production artifact packaging remain open. Assembly still accepts only interface-only extraction
-results and rejects resources before translator launch. The recorded GPU evidence is not an Intel,
-AMD, or cross-machine result.
+production artifact packaging remain open. Fixed singular-resource assembly is complete, but its
+compiler projection remains fail-closed until slot allocation. The recorded GPU evidence is not an
+Intel, AMD, or cross-machine result.

@@ -1,7 +1,7 @@
 # Full-screen translation and Metal canary
 
 This companion gate carries the finalized full-screen source through authenticated semantic
-extraction, interface-only `semantic-v1` assembly, the accepted one-entry Tint translator, Apple's
+extraction, resource-free `semantic-v1` assembly, the accepted one-entry Tint translator, Apple's
 offline Metal tools, and a live render readback. The compiler requests are projections of the
 nominal assembly rather than handwritten semantic claims. The checked-in interface JSON remains an
 independent oracle for the static path and for comparing the native extraction; request construction
@@ -19,7 +19,7 @@ authored fragment fixture
   -> nominal effect selection
   -> vgpu-native-fullscreen-triangle/v1 finalization
   -> two authenticated semantic extractions
-  -> interface-only semantic-v1 assembly + vertex/fragment link
+  -> resource-free semantic-v1 assembly + vertex/fragment link
   -> one projected compiler request per selected entry
   -> two translations of each selected entry
   -> metal: two MSL files -> two AIR files
@@ -123,5 +123,6 @@ The recorded run used Apple M4 Pro. It performed nine one-shot Tint worker proce
 two byte-identical semantic extractions, four successful translations, and two byte-identical runs of
 one structured negative. It also performed two AIR compilations, one metallib link, and two
 byte-identical runtime executions. This is not Intel, AMD, or cross-machine evidence. The canary
-proves the interface-only assembly path; active-resource assembly and runtime binding, overrides,
-repository-corpus integration, and production artifact packaging remain open.
+proves the resource-free assembly and translation path; resource slot allocation, compiler
+projection and runtime binding, overrides, repository-corpus integration, and production artifact
+packaging remain open.

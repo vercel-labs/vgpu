@@ -1,10 +1,10 @@
 # Semantic program assembly
 
 Assembly is a pure TypeScript join. It consumes one authenticated extraction, the exact nominal
-selection/finalization objects that produced its request, resolver-owned authored declaration
-spans, and deterministic presentation policy. It does not parse WGSL or consult
-`ResolvedShader.reflection`. The executable first slice accepts only programs without active
-resources or overrides; broader assembly keeps the same ownership boundary.
+selection/finalization objects that produced its request, resolver-owned authored declaration and
+resource-symbol evidence, and deterministic presentation policy. It does not parse WGSL or consult
+mutable `ResolvedShader.reflection` after that evidence is minted. The executable profile accepts
+singular resources with fixed-size layouts and programs without overrides.
 
 ## Ownership of the join
 
@@ -15,7 +15,7 @@ The adapter adds facts that Tint cannot or should not own:
 - authored entry names and exact resolver-token declaration spans;
 - module, program, Swift, and emitted Metal names;
 - source IDs from the finalized origin map;
-- stage visibility and program-wide unions;
+- validation of program-wide unions and derived stage visibility;
 - backend-neutral capability policy;
 - fingerprints; and
 - later Metal slot allocation.
@@ -23,7 +23,7 @@ The adapter adds facts that Tint cannot or should not own:
 Tint remains authoritative for interfaces, active bindings, sampling pairs, exact-static
 overrides, types, layouts, and resolved workgroup size. Interning an authenticated inline interface
 shape into a content-addressed semantic type ID is adapter normalization, not type inference. The
-interface-only adapter uses the exact `vgpu-native-semantic-type/v1` hash domain. The adapter can
+adapter uses the exact `vgpu-native-semantic-type/v1` hash domain. The adapter can
 reject inconsistent facts but cannot repair or approximate them.
 
 ## Assembly invariants
@@ -50,12 +50,12 @@ The complete adapter must prove all of the following before producing `semantic-
    explicit request set; execution requirements come from versioned adapter policy applied only to
    authenticated facts.
 
-The executable interface-only profile applies the association, entry, source-span, link, canonical
-ordering, interface-type closure, capability, and fingerprint checks now. It requires extraction
-bindings, sampling pairs, overrides, semantic types, and layouts to be empty, and it rejects
-`dual_source_blending` before projection. Joining authenticated resource graphs into `semantic-v1`,
-exact-static override unions, and their slot policy remain later slices rather than partially
-populated successes.
+The executable profile applies the association, entry, source-span, resource-symbol join, link,
+canonical ordering, transitive type/layout closure, capability, exact reprojection, and fingerprint
+checks now. It copies the authenticated program binding union, entry subsets, sampling pairs, types,
+and layouts exactly, then derives only stage visibility and Swift presentation. It accepts singular
+fixed-size resources and rejects `dual_source_blending`. Exact-static override unions and the
+versioned slot policy remain later slices rather than partially populated successes.
 
 For semantic v1, `program.sources` contains every WGSL input listed by the finalized origin map.
 Module-level provenance cannot honestly claim a smaller entry-reachability set, so assembly does
@@ -78,8 +78,14 @@ fragment remains authored with `names.authored`, `names.wgsl`, and its resolver-
 
 ## Presentation and stable identity
 
-Swift identifiers are deterministic collision-resolved presentation names. They do not enter type
-or layout content IDs or program fingerprints. The arbitrary semantic override `id` is removed:
+Swift identifiers preserve their exact authored spelling. Assembly does not recase, suffix, or
+backtick an identifier. Per-program assembly rejects noncanonical names, Swift 6 reserved
+identifiers, the `_vgpu` helper namespace, `Swift`, `Foundation`, or `VGPUABI` in nominal
+positions, and case-insensitive collisions within the binding set or one struct's members. It
+deliberately does not compare module, program, and struct names with each other or reserve
+`Bindings`, `artifact`, and conditional `Vertex`: final aggregation owns those checks after it
+decides local versus shared type placement. Swift names do not enter type or layout content IDs or
+program fingerprints. The arbitrary semantic override `id` is removed:
 `names.wgsl` is its stable program-local identity, `names.authored` preserves public diagnostics,
 and optional `wgslId` preserves an authored numeric WGSL ID.
 
@@ -104,10 +110,12 @@ Only a validated assembled program can create compiler requests. Each selected e
   projected from the authenticated semantic graph; and
 - emitted Metal name plus external and candidate internal slots from versioned adapter policy.
 
-In the executable interface-only slice, selected overrides and external Metal bindings are both
-empty. The projector rejects a nonempty external binding policy and rehydrates every interface type
-from the assembled content IDs, then requires exact equality with the retained authenticated
-extraction before it can return a compiler request.
+In the executable resource-free projection slice, selected overrides and external Metal bindings
+are both empty. The projector rejects a nonempty external binding policy and rehydrates every
+interface type from the assembled content IDs, then requires exact equality with the retained
+authenticated extraction before it can return a compiler request. A resourceful semantic assembly
+is valid, but compiler-request projection fails closed until versioned slot allocation supplies its
+external Metal binding policy.
 
 For each interface leaf, projection resolves the semantic type ID, proves that it is a scalar or
 vector of one scalar, and emits the original authenticated inline `{ scalar, width }` shape. It
@@ -124,21 +132,31 @@ storage-size regions, and resolved compute dimensions. Broad extraction facts re
 
 ## Executable evidence
 
-The static assembly gate resolves effect, multi-module draw, and compute fixtures, mints declaration
-evidence only through those real resolver calls, authenticates reviewed extraction responses, and
-assembles three schema-valid programs. It projects five compiler requests and covers five nominal
-failures, five declaration failures including a cross-module span mutation, one
-retained-resolver-snapshot mutation, one rejected profile, one broken render link, two fingerprint
-rules, and three projection failures. None of those checks launches the translator. The draw case
+The static assembly gate resolves effect, multi-module draw, compute, and fixed-resource fixtures,
+mints declaration evidence only through those real resolver calls, authenticates reviewed
+extraction responses, and assembles four schema-valid programs. The resolved-declarations v2
+snapshot retains entry spans plus binding, struct, and member symbol evidence. The three resource-free programs
+project five compiler requests; the resource program remains fail-closed before projection. The
+gate covers five nominal failures, five declaration failures including a cross-module span
+mutation, three resolver-symbol failures, three resolver-resource-join failures, two retained
+resolver-snapshot checks, one rejected profile, one broken render link, five fingerprint checks,
+twelve Swift-name failures, and five projection failures. None of those checks launches the
+translator. The draw case
 also proves that the resolver preserves public entry names while mangling imported helpers and
 module-local types; `names.authored` and `names.wgsl` retain their separate authorities even when
 their current values are equal.
 
-With the accepted native worker, the gate performs six semantic-extraction invocations: two
-byte-identical runs for each fixture. The independently integrated full-screen companion then runs
-one inventory, two semantic extractions, four successful translations, and two structured-negative
-translations. Its compiler requests come from the nominal assembly, while the checked-in interface
-JSON remains a static oracle. The authored fragment's resolver-owned end-exclusive span is exactly
-`6:1–9:2`; the injected vertex omits authored provenance. Active-resource assembly, overrides,
-repository corpus integration, production artifact packaging, and Intel/AMD hardware evidence
-remain open.
+The resource fixture has the numeric binding union `b0`, `b1`, `b2`, `b3`, and `b10`, exact entry
+subsets, one filtering sampling pair, and visibility derived from those subsets. Its seven extracted
+types become eight semantic types after interface interning, while all six layouts remain exact;
+the three buffer minimum sizes are 8, 24, and 16 bytes. Reprojection removes only adapter-owned
+presentation and visibility and must reproduce the complete authenticated extraction exactly.
+
+With the accepted native worker, the gate performs eight semantic-extraction invocations: two
+byte-identical runs for each of four fixtures. The independently integrated full-screen companion
+then runs one inventory, two semantic extractions, four successful translations, and two
+structured-negative translations. Its compiler requests come from the nominal assembly, while the
+checked-in interface JSON remains a static oracle. The authored fragment's resolver-owned
+end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Resource slot allocation and compiler
+projection, overrides, repository corpus integration, production artifact packaging, and Intel/AMD
+hardware evidence remain open.
