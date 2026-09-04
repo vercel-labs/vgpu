@@ -178,9 +178,11 @@ of the selected entry points' static typed sets; a module override unused by all
 omitted. Each translation request receives the corresponding exact static per-entry subset. Tint
 may later prune initializer-only dependencies, but that optimization does not redefine either the
 required interface or semantic v1. Evaluated-default extraction, partial-configuration ordering,
-and the exact-static materializer-to-worker boundary have passed their C1 gates. Connecting the
-multi-entry semantic union and translation responses to the artifact remains a deterministic
-integration gate.
+and the exact-static materializer-to-worker boundary have passed their C1 gates. The program-scoped
+extraction wire and its first interface-only profile now also pass against the source-built worker,
+including generated full-screen I/O and literal workgroup dimensions. Active resource and override
+extraction, then connecting the complete semantic union and translation responses to the artifact,
+remain deterministic integration gates.
 
 The Metal projection records:
 

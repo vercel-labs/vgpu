@@ -15,44 +15,47 @@ Four clean Release builds passed: A and B for `arm64`, then A and B for `x86_64`
 builds were byte-identical within each architecture. Combining each pair with `lipo` also produced
 byte-identical universal executables.
 
-The accepted baseline includes both the exact shader-interface handshake and the authenticated
-entry-inventory contract. It passed the ordinary publication gate after an independently reviewed
-candidate rebaseline. Candidate generation remains a separate non-publishing mode described below;
-measurements do not become accepted provenance by themselves.
+The accepted baseline includes the exact shader-interface handshake, authenticated entry inventory,
+and the interface-only semantic-extraction contract. It passed the ordinary publication gate after
+an independently reviewed candidate rebaseline. Candidate generation remains a separate
+non-publishing mode described below; measurements do not become accepted provenance by themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  5,831,920 | `11294a44d01587759c699ed8922f1ccc78c7fa4db75b671dcccca1e81811aebf` |
-| x86_64    |  6,896,352 | `2bf6f6f6157d06bfa9c3c79e44d1dcba448430fa77686ad42b72c27aded9d3c1` |
-| universal | 12,745,968 | `12fb8ae89add85fc0908ba0155d7382180759170ead407264236e6a758a33fe7` |
+| arm64     |  5,872,240 | `9c968b1a49892eff972b0ca2b90a84907c716f13b2092e5b1f947474b9b41b48` |
+| x86_64    |  6,940,760 | `e99c269238340325122f5547ef900e1d2f7a0ce82565689e0f2031213a7abedf` |
+| universal | 12,819,056 | `d6454a851d31ad920f7ca59158a015734cc5c39df34898c7d72bf58f1d9e9f85` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
-against the previously verified monolithic release archive. The locked request closure contains ten
-translation canaries: the original `noop`, `runtime-array`, `wgsl-error`, and `generate-failure`
-cases plus checked-in vertex, fragment, scalar-fragment, compute-builtin, dual-source, and
-semantic-interface-mismatch requests. Four authenticated inventory canaries add an empty module, a
-library-only module, invalid WGSL, and a multi-stage module. They establish empty inventories,
-structured parse failure, canonical entry-point names and stages, and the request identity
+against the previously verified monolithic release archive. The locked request closure contains
+eighteen canaries. Ten translation canaries cover the original `noop`, `runtime-array`, `wgsl-error`,
+and `generate-failure` cases plus checked-in vertex, fragment, scalar-fragment, compute-builtin,
+dual-source, and semantic-interface-mismatch requests. Four authenticated inventory canaries add an
+empty module, a library-only module, invalid WGSL, and a multi-stage module. They establish empty
+inventories, structured parse failure, canonical entry-point names and stages, and the request identity
 `SHA-256(UTF-8("vgpu-native-tint-entry-inventory-request-bytes/v1") || 0x00 || exact encoded request bytes)`.
+Four semantic-extraction canaries add exact render and compute interfaces plus separate fail-closed
+rejections for active resources and overrides in the initial profile.
 Each response must match the same reference byte for byte across eight direct variants: both thin
 A/B builds, both universal A/B builds, and each applicable arm64-native or x86_64-Rosetta execution
 mode. The last original translation request retains a historical fixture name; the real worker
 successfully translates it, and all variants agree on that success. The monolithic executable is
 reference-only: it is neither copied into `.artifacts` nor a candidate for distribution.
 
-In normal mode, before loading the oracle helper, the gate authenticates all eleven local oracle
-inputs: both provenance manifests, the helper, the translation and origin-map protocol modules,
-both contract families' request and response schemas, the shared origin-map schema, and the
-inventory protocol module. It also authenticates the exact fourteen-request closure. It validates
-each request and response against its authenticated JSON Schema, then runs the corresponding
-JavaScript semantic validator in addition to the independent native decoder. Translation assertions
-require the exact sparse vertex attributes, sparse fragment colors, fragment and compute builtins,
-scalar locations, dual-source color/index pairs, and mismatch diagnostic. Inventory assertions
-require the empty-module and library-only results, invalid-WGSL diagnostic, canonical multi-stage
-names and stages, and request identity derived from the exact encoded bytes. Common byte parity
-therefore cannot bless a canary that stopped exercising its intended branch. Each oracle response
-must also match its locked byte count, SHA-256, and success state before any direct worker can use it
-as a reference.
+In normal mode, before loading the oracle helper, the gate authenticates all fourteen local oracle
+inputs: both provenance manifests, the helper, the translation and origin-map protocol modules, all
+three contract families' request and response schemas, the shared origin-map schema, and the
+inventory and semantic-extraction protocol modules. It also authenticates the exact eighteen-request
+closure. It validates each request and response against its authenticated JSON Schema, then runs the
+corresponding JavaScript semantic validator in addition to the independent native decoder.
+Translation assertions require the exact sparse vertex attributes, sparse fragment colors, fragment
+and compute builtins, scalar locations, dual-source color/index pairs, and mismatch diagnostic.
+Inventory assertions require the empty-module and library-only results, invalid-WGSL diagnostic,
+canonical multi-stage names and stages, and request identity derived from the exact encoded bytes.
+Semantic-extraction assertions require literal program-scoped interfaces and exact unsupported
+diagnostics. Common byte parity therefore cannot bless a canary that stopped exercising its intended
+branch. Each oracle response must also match its locked byte count, SHA-256, and success state before
+any direct worker can use it as a reference.
 
 Candidate mode does not treat changed helper, protocol, schema, or request bytes as authenticated
 by the stale lock. It measures their exact bytes before use, requires them to remain identical
