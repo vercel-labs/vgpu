@@ -28,6 +28,7 @@ import {
   attachDiagnosticOrigins,
   sha256Utf8,
 } from "../../c1-compiler-protocol/lib/protocol.mjs";
+import { authenticateSuccessfulCompilerTranslation } from "../lib/authenticated-compiler-translation.mjs";
 import { authenticateSuccessfulInventory } from "../lib/authenticated-inventory.mjs";
 import {
   authenticateSuccessfulSemanticExtraction,
@@ -39,6 +40,11 @@ import {
   finalizeProgramCapsule,
   inventoryRequestForFinalizedCapsule,
 } from "../lib/fullscreen-injection.mjs";
+import {
+  assembleMetalProgramProjection,
+  isMetalProgramProjection,
+  metalSourcesForProgramProjection,
+} from "../lib/metal-program-projection.mjs";
 import {
   assertInventoryRequestSemantics,
   encodeInventoryRequest,
@@ -166,7 +172,8 @@ const fixtureAssembly = assembleFixtureProgram(
   fixtureExtraction
 );
 assertFixtureAssembly(fixtureAssembly);
-const fixtureRequests = translationRequests(fixtureAssembly);
+const fixtureTranslationPlan = translationPlan(fixtureAssembly);
+const fixtureRequests = fixtureTranslationPlan.requests;
 assertFullscreenRenderLink(fixtureRequests);
 assertRequestSnapshots(fixtureRequests);
 const launchesBeforePreflightFailure = compilerWorkerLaunches;
@@ -225,7 +232,8 @@ if (options.worker) {
     semanticModuleForAssembly(assembly),
     semanticModuleForAssembly(fixtureAssembly)
   );
-  const requests = translationRequests(assembly);
+  const plan = translationPlan(assembly);
+  const requests = plan.requests;
   assertFullscreenRenderLink(requests);
   assertRequestSnapshots(requests);
   assert.deepEqual(requests, fixtureRequests);
@@ -243,6 +251,21 @@ if (options.worker) {
     options.worker,
     requests[0]
   );
+  const translations = translated.map(({ request, response }) =>
+    authenticateSuccessfulCompilerTranslation({ request, response })
+  );
+  const projection = assembleMetalProgramProjection({
+    assembly,
+    allocation: plan.allocation,
+    translations,
+  });
+  const sources = assertFullscreenMetalProjection({
+    assembly,
+    allocation: plan.allocation,
+    projection,
+    translations,
+    translated,
+  });
   result.translation = {
     status: "passed",
     inventoryInvocations: 1,
@@ -257,6 +280,8 @@ if (options.worker) {
     totalNativeProcesses: 1 + semanticWorkerLaunches + compilerWorkerLaunches,
     deterministic: true,
     structuredFailures: 1,
+    projectedPrograms: 1,
+    projectedSources: sources.length,
     rejectedInterface,
     finalizedSourceSha256: finalized.capsule.source.sha256,
     entries: translated.map(
@@ -273,13 +298,13 @@ if (options.worker) {
 
   const scratch = mkdtempSync(join(tmpdir(), "vgpu-fullscreen-metal-"));
   try {
-    const offline = compileOfflineMetal(translated, scratch, options);
+    const offline = compileOfflineMetal(projection, scratch, options);
     result.offlineMetal = offline.report;
     if (offline.libraryPath && !options.skipMetalRuntime) {
       result.metalRuntime = runMetalRuntime(
         offline.libraryPath,
         scratch,
-        translated,
+        projection,
         options.requireMetalRuntime
       );
     } else if (options.skipMetalRuntime) {
@@ -654,16 +679,19 @@ async function invokeSemanticExtraction(
   return { extraction, stdout: attempt.stdout };
 }
 
-function translationRequests(assembly) {
+function translationPlan(assembly) {
   const allocation = allocateMetalSlotsForAssembly({ assembly });
-  return ["vertex", "fragment"].map((stage) =>
-    compilerRequestForAssembledEntry({
-      assembly,
-      allocation,
-      stage,
-      metalEntryPoint: emittedNames[stage],
-    })
-  );
+  return {
+    allocation,
+    requests: ["vertex", "fragment"].map((stage) =>
+      compilerRequestForAssembledEntry({
+        assembly,
+        allocation,
+        stage,
+        metalEntryPoint: emittedNames[stage],
+      })
+    ),
+  };
 }
 
 async function translateTwice(executable, request) {
@@ -823,6 +851,72 @@ function assertResponseSnapshots(translated) {
   }
 }
 
+function assertFullscreenMetalProjection({
+  assembly,
+  allocation,
+  projection,
+  translations,
+  translated,
+}) {
+  const program = semanticModuleForAssembly(assembly).programs[0];
+  assert(isMetalProgramProjection(projection));
+  assert(Object.isFrozen(projection));
+  assert.deepEqual(projection, {
+    semanticProgram: program.name,
+    kind: "effect",
+    entryPoints: [
+      {
+        ...structuredClone(translated[0].request.entryPoint),
+        interface: { kind: "vertex", attributes: [] },
+      },
+      {
+        ...structuredClone(translated[1].request.entryPoint),
+        interface: {
+          kind: "fragment",
+          colorOutputs: [
+            {
+              semantic: { location: 0 },
+              metal: { color: 0 },
+            },
+          ],
+        },
+      },
+    ],
+    bindings: [],
+    internalBindings: [],
+    storageBufferSizeRegions: [],
+    deviceRequirements: { features: [], limits: [], formats: [] },
+  });
+  assert.equal(JSON.stringify(projection).includes('"index":30'), false);
+  assert.deepEqual(
+    assembleMetalProgramProjection({
+      assembly,
+      allocation,
+      translations: [...translations].reverse(),
+    }),
+    projection
+  );
+
+  const sources = metalSourcesForProgramProjection(projection);
+  assert(Object.isFrozen(sources));
+  assert.deepEqual(
+    sources,
+    translated.map(({ request, response }) => ({
+      stage: request.entryPoint.stage,
+      entryPoint: request.entryPoint.metal,
+      msl: response.result.msl,
+    }))
+  );
+  for (const source of sources) {
+    assert(Object.isFrozen(source));
+    assert.equal(
+      sha256Utf8(source.msl),
+      expectedSnapshots[source.stage].mslSha256
+    );
+  }
+  return sources;
+}
+
 function loadCompilerValidators() {
   const contractDirectory = resolve(
     spikeDirectory,
@@ -848,7 +942,8 @@ function assertSchema(validate, value, label) {
   return true;
 }
 
-function compileOfflineMetal(translated, scratch, settings) {
+function compileOfflineMetal(projection, scratch, settings) {
+  const sources = metalSourcesForProgramProjection(projection);
   if (process.platform !== "darwin") {
     return skippedOffline(settings, "host-is-not-macos");
   }
@@ -858,11 +953,10 @@ function compileOfflineMetal(translated, scratch, settings) {
   }
 
   const airFiles = [];
-  for (const item of translated) {
-    const stage = item.request.entryPoint.stage;
+  for (const { stage, msl } of sources) {
     const metalSource = join(scratch, `${stage}.metal`);
     const air = join(scratch, `${stage}.air`);
-    writeFileSync(metalSource, item.response.result.msl, "utf8");
+    writeFileSync(metalSource, msl, "utf8");
     checkedCommand(`offline Metal compilation for ${stage}`, "xcrun", [
       "-sdk",
       "macosx",
@@ -904,7 +998,7 @@ function compileOfflineMetal(translated, scratch, settings) {
     libraryPath,
     report: {
       status: "passed",
-      shaders: translated.length,
+      shaders: sources.length,
       target: metalTarget,
       libraryBytes: lstatSync(libraryPath).size,
     },
@@ -918,7 +1012,7 @@ function skippedOffline(settings, reason) {
   return { libraryPath: undefined, report: { status: "skipped", reason } };
 }
 
-function runMetalRuntime(libraryPath, scratch, translated, required) {
+function runMetalRuntime(libraryPath, scratch, projection, required) {
   if (process.platform !== "darwin") {
     if (required) fail("Metal runtime requires macOS");
     return { status: "skipped", reason: "host-is-not-macos" };
@@ -947,9 +1041,9 @@ function runMetalRuntime(libraryPath, scratch, translated, required) {
     executable,
   ]);
   const projectedNames = Object.fromEntries(
-    translated.map((item) => [
-      item.response.result.entryPoint.stage,
-      item.response.result.entryPoint.metal,
+    metalSourcesForProgramProjection(projection).map((source) => [
+      source.stage,
+      source.entryPoint,
     ])
   );
   const args = [libraryPath, projectedNames.vertex, projectedNames.fragment];
