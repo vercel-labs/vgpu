@@ -1,5 +1,4 @@
 const swiftIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/u;
-const generatedProgramMemberNames = new Set(["bindings", "artifact"]);
 const generatedModuleNamespaces = new Set(["swift", "foundation", "vgpuabi"]);
 
 // generatedSwift ABI 1 uses one conservative Swift 6 set: the union of names
@@ -72,22 +71,26 @@ const swift6ForbiddenIdentifiers = new Set([
 /**
  * Validates the exact public spellings selected for generated Swift. The
  * generator does not escape, recase, or suffix authored shader identifiers.
+ * Program aggregation owns collisions involving local versus shared type
+ * placement; this boundary validates only spelling and intrinsic member
+ * scopes that are already known.
  */
-export function assertSwiftPresentation(
+export function assertSwiftPresentationForProgramAssembly(
   { module, program, bindings, types },
   { failWith }
 ) {
   const fail = (message) => failWith("VGPU-C1-ASSEMBLY-PRESENTATION", message);
-  const moduleScope = [
+  const nominalNames = [
     ["module", module.swiftName],
     ["program", program.swiftName],
     ...Object.entries(types)
       .filter(([, type]) => type.kind === "struct")
       .map(([id, type]) => [`struct ${id}`, type.swiftName]),
   ];
-  assertScope(moduleScope, "generated module", fail);
-  assertGeneratedModuleNamespaces(moduleScope, fail);
-  assertGeneratedProgramMemberNames(types, program, fail);
+  for (const [label, name] of nominalNames) {
+    assertPublicName(name, label, fail);
+  }
+  assertGeneratedModuleNamespaces(nominalNames, fail);
 
   assertScope(
     bindings.map((binding) => [`binding ${binding.id}`, binding.swiftName]),
@@ -116,31 +119,6 @@ function assertGeneratedModuleNamespaces(entries, fail) {
     ) {
       fail(
         `${label} shadows generated module namespace ${JSON.stringify(name)}`
-      );
-    }
-  }
-}
-
-function assertGeneratedProgramMemberNames(types, program, fail) {
-  const reserved = new Set(generatedProgramMemberNames);
-  if (
-    program.kind === "draw" &&
-    program.entryPoints?.vertex?.inputs?.some((value) =>
-      Object.hasOwn(value, "location")
-    )
-  ) {
-    reserved.add("vertex");
-  }
-  for (const [id, type] of Object.entries(types)) {
-    if (
-      type.kind === "struct" &&
-      typeof type.swiftName === "string" &&
-      reserved.has(type.swiftName.toLowerCase())
-    ) {
-      fail(
-        `struct ${id} uses generated program API name ${JSON.stringify(
-          type.swiftName
-        )}`
       );
     }
   }

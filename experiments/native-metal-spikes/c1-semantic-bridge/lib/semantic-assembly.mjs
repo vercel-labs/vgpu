@@ -30,7 +30,7 @@ import {
   resolvedDeclarationForSelectedEntry,
   resolvedResourcePresentationForExtraction,
 } from "./resolved-declarations.mjs";
-import { assertSwiftPresentation } from "./swift-presentation.mjs";
+import { assertSwiftPresentationForProgramAssembly } from "./swift-presentation.mjs";
 
 export const SEMANTIC_CONTRACT = "vgpu-native-semantic/v1";
 export {
@@ -162,7 +162,7 @@ export function assembleSemanticProgram({
     programs: [program],
     capabilities,
   };
-  assertSwiftPresentation(
+  assertSwiftPresentationForProgramAssembly(
     {
       module: semantic.module,
       program,

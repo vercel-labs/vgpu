@@ -38,7 +38,7 @@ import {
   semanticModuleForAssembly,
   semanticTypeId,
 } from "../lib/semantic-assembly.mjs";
-import { assertSwiftPresentation } from "../lib/swift-presentation.mjs";
+import { assertSwiftPresentationForProgramAssembly } from "../lib/swift-presentation.mjs";
 import {
   encodeSemanticExtractionRequest,
   SEMANTIC_EXTRACTION_COMPILER,
@@ -415,7 +415,7 @@ process.stdout.write(
         profileFailures: 1,
         linkFailures: 1,
         fingerprintChecks: 5,
-        swiftNameFailures: 15,
+        swiftNameFailures: 12,
         projectionFailures: 5,
         translatorLaunches: 0,
       },
@@ -1148,12 +1148,6 @@ function assertSwiftNameFailures(fixture) {
       module: fixture.presentation.module,
       program: { swiftName: "_" },
     },
-    {
-      module: fixture.presentation.module,
-      program: {
-        swiftName: fixture.presentation.module.swiftName.toLowerCase(),
-      },
-    },
   ]) {
     expectCode(
       () =>
@@ -1169,7 +1163,7 @@ function assertSwiftNameFailures(fixture) {
 
   expectCode(
     () =>
-      assertSwiftPresentation(
+      assertSwiftPresentationForProgramAssembly(
         {
           module: { swiftName: "NameFixture" },
           program: { name: "NameFixtureProgram", swiftName: "NameProgram" },
@@ -1184,43 +1178,10 @@ function assertSwiftNameFailures(fixture) {
     "VGPU-C1-ASSEMBLY-PRESENTATION"
   );
 
-  for (const [swiftName, kind] of [
-    ["Bindings", "effect"],
-    ["Artifact", "compute"],
-    ["vErTeX", "draw"],
-  ]) {
-    expectCode(
-      () =>
-        assertSwiftPresentation(
-          {
-            module: { swiftName: "GeneratedNameFixture" },
-            program: {
-              name: "GeneratedNameProgram",
-              swiftName: "GeneratedNameProgram",
-              kind,
-              ...(swiftName === "vErTeX"
-                ? {
-                    entryPoints: {
-                      vertex: { inputs: [{ location: 0 }] },
-                    },
-                  }
-                : {}),
-            },
-            bindings: [],
-            types: {
-              fixture_type: { kind: "struct", swiftName, members: [] },
-            },
-          },
-          { failWith: throwCodedError }
-        ),
-      "VGPU-C1-ASSEMBLY-PRESENTATION"
-    );
-  }
-
   for (const swiftName of ["any", "each"]) {
     expectCode(
       () =>
-        assertSwiftPresentation(
+        assertSwiftPresentationForProgramAssembly(
           {
             module: { swiftName: "SwiftSixTypeFixture" },
             program: {
@@ -1245,7 +1206,7 @@ function assertSwiftNameFailures(fixture) {
   ]) {
     expectCode(
       () =>
-        assertSwiftPresentation(
+        assertSwiftPresentationForProgramAssembly(
           {
             module: { swiftName: "SwiftSixValueFixture" },
             program: {
@@ -1287,7 +1248,7 @@ function assertSwiftNameFailures(fixture) {
   ]) {
     expectCode(
       () =>
-        assertSwiftPresentation(
+        assertSwiftPresentationForProgramAssembly(
           {
             module: { swiftName: module },
             program: {
@@ -1307,7 +1268,7 @@ function assertSwiftNameFailures(fixture) {
   }
 
   assert.doesNotThrow(() =>
-    assertSwiftPresentation(
+    assertSwiftPresentationForProgramAssembly(
       {
         module: { swiftName: "GeneratedScopeFixture" },
         program: {
@@ -1332,26 +1293,64 @@ function assertSwiftNameFailures(fixture) {
   );
 
   assert.doesNotThrow(() =>
-    assertSwiftPresentation(
+    assertSwiftPresentationForProgramAssembly(
       {
-        module: { swiftName: "ProceduralDrawFixture" },
+        module: { swiftName: "DeferredScope" },
         program: {
-          name: "ProceduralDrawProgram",
-          swiftName: "ProceduralDrawProgram",
+          name: "DeferredScope",
+          swiftName: "DeferredScope",
           kind: "draw",
-          entryPoints: { vertex: { inputs: [{ builtin: "vertex_index" }] } },
         },
         bindings: [],
         types: {
-          fixture_type: {
+          bindings_type: {
+            kind: "struct",
+            swiftName: "Bindings",
+            members: [],
+          },
+          artifact_type: {
+            kind: "struct",
+            swiftName: "artifact",
+            members: [],
+          },
+          vertex_type: {
             kind: "struct",
             swiftName: "Vertex",
+            members: [],
+          },
+          duplicate_type: {
+            kind: "struct",
+            swiftName: "vertex",
             members: [],
           },
         },
       },
       { failWith: throwCodedError }
     )
+  );
+
+  expectCode(
+    () =>
+      assertSwiftPresentationForProgramAssembly(
+        {
+          module: { swiftName: "MemberScopeFixture" },
+          program: {
+            name: "MemberScopeProgram",
+            swiftName: "MemberScopeProgram",
+            kind: "effect",
+          },
+          bindings: [],
+          types: {
+            fixture_type: {
+              kind: "struct",
+              swiftName: "MemberScopeValue",
+              members: [{ swiftName: "color" }, { swiftName: "Color" }],
+            },
+          },
+        },
+        { failWith: throwCodedError }
+      ),
+    "VGPU-C1-ASSEMBLY-PRESENTATION"
   );
 }
 
