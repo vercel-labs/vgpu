@@ -17,8 +17,7 @@
     "entryPoint": {
       "stage": "compute",
       "wgsl": "main",
-      "metal": "vgpu_noop",
-      "interfaceLocations": []
+      "metal": "vgpu_noop"
     },
     "resolvedWorkgroupSize": {
       "x": 1,

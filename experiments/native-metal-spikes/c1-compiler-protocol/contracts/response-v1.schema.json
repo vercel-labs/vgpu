@@ -182,31 +182,10 @@
         }
       }
     },
-    "interfaceLocation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["direction", "semanticName", "location", "metalIndex"],
-      "properties": {
-        "direction": {
-          "enum": ["input", "output"]
-        },
-        "semanticName": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 1024
-        },
-        "location": {
-          "$ref": "#/$defs/uint32"
-        },
-        "metalIndex": {
-          "$ref": "#/$defs/uint32"
-        }
-      }
-    },
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "wgsl", "metal", "interfaceLocations"],
+      "required": ["stage", "wgsl", "metal"],
       "properties": {
         "stage": {
           "$ref": "#/$defs/stage"
@@ -216,13 +195,6 @@
         },
         "metal": {
           "$ref": "#/$defs/emittedIdentifier"
-        },
-        "interfaceLocations": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/interfaceLocation"
-          }
         }
       }
     },

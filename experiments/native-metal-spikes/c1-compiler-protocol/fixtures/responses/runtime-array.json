@@ -17,8 +17,7 @@
     "entryPoint": {
       "stage": "compute",
       "wgsl": "main",
-      "metal": "vgpu_runtime_array",
-      "interfaceLocations": []
+      "metal": "vgpu_runtime_array"
     },
     "resolvedWorkgroupSize": {
       "x": 1,
