@@ -16,6 +16,10 @@ import {
   isSemanticExtractionForFinalizedCapsule,
 } from "./authenticated-semantic-extraction.mjs";
 import { isFinalizedProgramCapsule } from "./fullscreen-injection.mjs";
+import {
+  allocateExternalMetalSlots,
+  compilerMetalPolicyForStage,
+} from "./metal-slot-allocation.mjs";
 import { deterministicStringify } from "./protocol.mjs";
 import {
   SEMANTIC_LAYOUT_ID_DOMAIN,
@@ -43,6 +47,7 @@ export {
 export const PROGRAM_FINGERPRINT_DOMAIN = "vgpu-native-program/v1";
 
 const assemblies = new WeakMap();
+const slotAllocations = new WeakMap();
 const validators = loadValidators();
 const stageOrder = ["vertex", "fragment", "compute"];
 const programStages = Object.freeze({
@@ -200,17 +205,56 @@ export function semanticModuleForAssembly(value) {
 }
 
 /**
- * Projects one existing compiler request from a nominal assembly. Backend
- * policy remains explicit, but no caller can supply semantic interface or
- * override facts independently from the authenticated extraction.
+ * Allocates the complete external Metal slot union for one nominal semantic
+ * assembly. Callers cannot supply or mutate physical slots independently.
+ */
+export function allocateMetalSlotsForAssembly({ assembly }) {
+  requireAssembly(assembly);
+  let projected;
+  try {
+    projected = allocateExternalMetalSlots(assembly.semantic.programs[0]);
+  } catch (cause) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-SLOTS",
+      `Metal slot allocation failed: ${cause?.message ?? String(cause)}`
+    );
+  }
+  const allocation = freezeJson(projected);
+  slotAllocations.set(allocation, { assembly });
+  return allocation;
+}
+
+export function isMetalSlotAllocation(value) {
+  return (
+    typeof value === "object" && value !== null && slotAllocations.has(value)
+  );
+}
+
+/**
+ * Projects one existing compiler request from a nominal assembly and its
+ * associated vgpu-owned slot allocation. No caller can supply semantic facts
+ * or physical Metal slots independently from the authenticated extraction.
  */
 export function compilerRequestForAssembledEntry({
   assembly,
+  allocation,
   stage,
   metalEntryPoint,
-  metal,
 }) {
   const record = requireAssembly(assembly);
+  const allocationRecord = slotAllocations.get(allocation);
+  if (!allocationRecord) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-SLOTS",
+      "compiler projection requires a nominal Metal slot allocation"
+    );
+  }
+  if (allocationRecord.assembly !== assembly) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-SLOTS",
+      "Metal slot allocation belongs to a different semantic assembly"
+    );
+  }
   const program = assembly.semantic.programs[0];
   const semanticEntry = program.entryPoints[stage];
   const rawEntry = record.rawEntriesByStage.get(stage);
@@ -218,24 +262,6 @@ export function compilerRequestForAssembledEntry({
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROJECTION",
       `assembled program has no ${quoted(stage)} entry`
-    );
-  }
-  if (program.bindings.length !== 0) {
-    assemblyFail(
-      "VGPU-C1-ASSEMBLY-PROFILE",
-      "resourceful assembly cannot project compiler requests before backend slot allocation"
-    );
-  }
-  if (!isPlainObject(metal) || !Array.isArray(metal.bindings)) {
-    assemblyFail(
-      "VGPU-C1-ASSEMBLY-PROJECTION",
-      "compiler projection requires one explicit Metal policy"
-    );
-  }
-  if (metal.bindings.length !== 0) {
-    assemblyFail(
-      "VGPU-C1-ASSEMBLY-PROFILE",
-      "resource-free assembly cannot project external Metal bindings"
     );
   }
   const rehydrated = semanticInterfaceFromAssembly(
@@ -246,6 +272,16 @@ export function compilerRequestForAssembledEntry({
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROJECTION",
       "assembled interface differs from its retained authenticated extraction"
+    );
+  }
+
+  let metal;
+  try {
+    metal = compilerMetalPolicyForStage(program, allocation, stage);
+  } catch (cause) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-SLOTS",
+      `compiler slot projection failed: ${cause?.message ?? String(cause)}`
     );
   }
 

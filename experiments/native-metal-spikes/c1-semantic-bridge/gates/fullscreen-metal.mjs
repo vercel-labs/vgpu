@@ -50,6 +50,7 @@ import {
 import { resolveVirtualShaderWithDeclarations } from "../lib/resolved-declarations.mjs";
 import { selectProgramEntries } from "../lib/program-selection.mjs";
 import {
+  allocateMetalSlotsForAssembly,
   assembleSemanticProgram,
   compilerRequestForAssembledEntry,
   semanticModuleForAssembly,
@@ -131,20 +132,6 @@ const expectedSnapshots = Object.freeze({
       "5e9309a88aaf82dff9e7d67d41b5446ac6df65f334fbeb29ac4750252d637128",
   }),
 });
-const expectedInternalReservations = Object.freeze([
-  Object.freeze({
-    role: "immediate-data",
-    slots: Object.freeze([
-      Object.freeze({
-        mode: "direct",
-        resourceClass: "buffer",
-        component: "buffer",
-        index: 30,
-        count: 1,
-      }),
-    ]),
-  }),
-]);
 let compilerWorkerLaunches = 0;
 let semanticWorkerLaunches = 0;
 
@@ -668,21 +655,13 @@ async function invokeSemanticExtraction(
 }
 
 function translationRequests(assembly) {
-  const metal = {
-    bindingModel: "vgpu-metal-binding-slots-v1",
-    bindings: [],
-    internalReservations: structuredClone(expectedInternalReservations),
-    storageBufferSizes: {
-      model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-      immediateDataByteOffset: 4,
-    },
-  };
+  const allocation = allocateMetalSlotsForAssembly({ assembly });
   return ["vertex", "fragment"].map((stage) =>
     compilerRequestForAssembledEntry({
       assembly,
+      allocation,
       stage,
       metalEntryPoint: emittedNames[stage],
-      metal,
     })
   );
 }

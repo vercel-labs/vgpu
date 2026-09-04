@@ -2,14 +2,27 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import Ajv2020 from "ajv/dist/2020.js";
+
 import {
   decodeTintWorkerResponse,
+  invokeRawTintPrototype,
+  runCommand,
   startTintWorker,
 } from "../../c1-compiler-protocol/lib/native-compiler.mjs";
+import { assertResponseSemantics } from "../../c1-compiler-protocol/lib/protocol.mjs";
 import { authenticateSuccessfulInventory } from "../lib/authenticated-inventory.mjs";
 import {
   authenticateSuccessfulSemanticExtraction,
@@ -31,8 +44,10 @@ import {
   validateResolvedDeclarationCandidate,
 } from "../lib/resolved-declarations.mjs";
 import {
+  allocateMetalSlotsForAssembly,
   assembleSemanticProgram,
   compilerRequestForAssembledEntry,
+  isMetalSlotAllocation,
   isSemanticProgramAssembly,
   semanticLayoutId,
   semanticModuleForAssembly,
@@ -48,7 +63,9 @@ import {
 
 const spikeDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirectory = join(spikeDirectory, "fixtures", "semantic-assembly");
+const compilerResponseValidator = loadCompilerResponseValidator();
 const generatedPath = "Intermediate/semantic-assembly.resolved.wgsl";
+const metalTarget = "air64-apple-macos14.0";
 const expectedSnapshots = Object.freeze({
   effect: Object.freeze({
     programFingerprint:
@@ -89,32 +106,29 @@ const expectedSnapshots = Object.freeze({
       "87b0038071d35f5cfe3d458d51ff7e786cf59d22fad99f04abebbdaf7583529a",
     nativeResponseSha256:
       "087864dfa7fb592686bb146469935235606d7b433deea804f938049a311124cb",
-  }),
-});
-const metalPolicy = Object.freeze({
-  bindingModel: "vgpu-metal-binding-slots-v1",
-  bindings: Object.freeze([]),
-  internalReservations: Object.freeze([
-    Object.freeze({
-      role: "immediate-data",
-      slots: Object.freeze([
-        Object.freeze({
-          mode: "direct",
-          resourceClass: "buffer",
-          component: "buffer",
-          index: 30,
-          count: 1,
-        }),
-      ]),
+    translations: Object.freeze({
+      vertex: Object.freeze({
+        requestSha256:
+          "6a7910a70cb21c137284dea08476a4d6d9658a087c36e50978a2af93ff935baf",
+        responseSha256:
+          "cfec82e2db84a13a8b37509779078e97e39e150a293bb38c8a43cd2bb1836c25",
+        mslSha256:
+          "09c3bd882d760973cec7c00e124fbce0804186ff174ec2955e4ce7154c223f56",
+      }),
+      fragment: Object.freeze({
+        requestSha256:
+          "9be658b82cd0bab6a8cbe05a14d6ed8a8da95b0e8cfbe8a8b84e4ff23cc10e11",
+        responseSha256:
+          "2c9cea9098c73ec00c14f695219e5b5f7342de28fe06bba239f68b1d15eb9ca0",
+        mslSha256:
+          "d5f73664b2feb9c9f693622cef7c76699b6f70d41e05f35156c8b47322f1c64b",
+      }),
     }),
-  ]),
-  storageBufferSizes: Object.freeze({
-    model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-    immediateDataByteOffset: 4,
   }),
 });
 const options = parseArguments(process.argv.slice(2));
-let workerLaunches = 0;
+let semanticWorkerLaunches = 0;
+let translationWorkerLaunches = 0;
 
 const effect = await makeFixture({
   label: "effect",
@@ -358,7 +372,6 @@ const resource = await makeFixture({
       readFileSync(join(fixtureDirectory, "resource-result.json"), "utf8")
     );
   },
-  projectCompiler: false,
 });
 
 for (const fixture of [effect, draw, compute, resource]) {
@@ -375,17 +388,27 @@ assertLinkFailure(effect);
 assertFingerprintRules(effect);
 assertResourceFingerprintRules(resource);
 assertSwiftNameFailures(resource);
+assertResourceSlotAllocation(resource);
+assertStageLocalSlotAllocation(resource);
+assertSlotAllocationFailures(effect, resource);
 assertProjectionFailures(effect);
-assertResourceProjectionFailures(resource);
 
 const native = options.worker
-  ? await assertNativeExtractions(options.worker, [
-      effect,
-      draw,
-      compute,
-      resource,
-    ])
-  : { status: "skipped", reason: "no semantic extraction worker supplied" };
+  ? {
+      status: "passed",
+      semanticExtraction: await assertNativeExtractions(options.worker, [
+        effect,
+        draw,
+        compute,
+        resource,
+      ]),
+      resourceTranslation: await assertNativeResourceTranslations(
+        options.worker,
+        resource,
+        options
+      ),
+    }
+  : { status: "skipped", reason: "no Tint worker supplied" };
 if (options.requireWorker && native.status !== "passed") {
   fail("a native semantic extraction worker was required");
 }
@@ -406,7 +429,8 @@ process.stdout.write(
       })),
       static: {
         assemblies: 4,
-        compilerRequests: 5,
+        slotAllocations: 4,
+        compilerRequests: 7,
         nominalFailures: 5,
         declarationFailures: 5,
         resolverSymbolFailures: 3,
@@ -416,7 +440,9 @@ process.stdout.write(
         linkFailures: 1,
         fingerprintChecks: 5,
         swiftNameFailures: 12,
-        projectionFailures: 5,
+        slotStageIsolationChecks: 1,
+        slotAllocationFailures: 4,
+        projectionFailures: 2,
         translatorLaunches: 0,
       },
       native,
@@ -436,7 +462,6 @@ async function makeFixture({
   selection,
   expectedInventory,
   result,
-  projectCompiler = true,
 }) {
   const authoredSources = sources ?? [
     { file, input, virtualPath: configSource },
@@ -494,16 +519,17 @@ async function makeFixture({
     extraction,
     declarations,
   });
-  const compilerRequests = projectCompiler
-    ? Object.keys(assembly.semantic.programs[0].entryPoints).map((stage) =>
-        compilerRequestForAssembledEntry({
-          assembly,
-          stage,
-          metalEntryPoint: `vgpu_assembly_${label}_${stage}`,
-          metal: metalPolicy,
-        })
-      )
-    : [];
+  const allocation = allocateMetalSlotsForAssembly({ assembly });
+  const compilerRequests = Object.keys(
+    assembly.semantic.programs[0].entryPoints
+  ).map((stage) =>
+    compilerRequestForAssembledEntry({
+      assembly,
+      allocation,
+      stage,
+      metalEntryPoint: `vgpu_assembly_${label}_${stage}`,
+    })
+  );
   return {
     label,
     resolverInput,
@@ -520,6 +546,7 @@ async function makeFixture({
     extraction,
     presentation,
     assembly,
+    allocation,
     compilerRequests,
   };
 }
@@ -528,8 +555,11 @@ function assertAcceptedFixture(fixture) {
   const snapshot = expectedSnapshots[fixture.label];
   assert(snapshot);
   assert(isSemanticProgramAssembly(fixture.assembly));
+  assert(isMetalSlotAllocation(fixture.allocation));
   assert(Object.isFrozen(fixture.assembly));
   assert(Object.isFrozen(fixture.assembly.semantic));
+  assert(Object.isFrozen(fixture.allocation));
+  assert(Object.isFrozen(fixture.allocation.bindings));
   assert.equal(
     semanticModuleForAssembly(fixture.assembly),
     fixture.assembly.semantic
@@ -550,6 +580,8 @@ function assertAcceptedFixture(fixture) {
   });
   const program = fixture.assembly.semantic.programs[0];
   assert.equal(program.name, fixture.plan.name);
+  assert.equal(fixture.allocation.semanticProgram, program.name);
+  assert.equal(fixture.allocation.bindingModel, "vgpu-metal-binding-slots-v1");
   if (fixture.label !== "resource") assert.deepEqual(program.bindings, []);
   assert.deepEqual(program.overrides, []);
   assert.match(program.fingerprint.sha256, /^[a-f0-9]{64}$/u);
@@ -636,6 +668,11 @@ function assertAcceptedFixture(fixture) {
   });
   assert.deepEqual(repeated, fixture.assembly);
   assert(isSemanticProgramAssembly(repeated));
+  const repeatedAllocation = allocateMetalSlotsForAssembly({
+    assembly: repeated,
+  });
+  assert.deepEqual(repeatedAllocation, fixture.allocation);
+  assert(isMetalSlotAllocation(repeatedAllocation));
 }
 
 function assertResourceAssembly(fixture, program) {
@@ -724,6 +761,116 @@ function assertResourceAssembly(fixture, program) {
     fixture.declarations.contractId,
     "vgpu-c1-resolved-declarations/v2"
   );
+}
+
+function assertResourceSlotAllocation(fixture) {
+  for (const binding of fixture.allocation.bindings) {
+    assert(Object.isFrozen(binding));
+    assert(Object.isFrozen(binding.slots));
+    for (const slot of binding.slots) assert(Object.isFrozen(slot));
+  }
+  assert.deepEqual(fixture.allocation, {
+    bindingModel: "vgpu-metal-binding-slots-v1",
+    semanticProgram: "AssemblyResources",
+    bindings: [
+      {
+        semanticBinding: "g0b0",
+        slots: [
+          directSlot("vertex", "buffer", 0),
+          directSlot("fragment", "buffer", 0),
+        ],
+      },
+      {
+        semanticBinding: "g0b1",
+        slots: [directSlot("vertex", "buffer", 1)],
+      },
+      {
+        semanticBinding: "g0b2",
+        slots: [directSlot("fragment", "texture", 0)],
+      },
+      {
+        semanticBinding: "g0b3",
+        slots: [directSlot("fragment", "sampler", 0)],
+      },
+      {
+        semanticBinding: "g0b10",
+        slots: [directSlot("fragment", "buffer", 1)],
+      },
+    ],
+  });
+
+  const requests = Object.fromEntries(
+    fixture.compilerRequests.map((request) => [
+      request.entryPoint.stage,
+      request,
+    ])
+  );
+  assert.deepEqual(requests.vertex.metal.bindings, [
+    compilerBinding(0, 0, "buffer", 0),
+    compilerBinding(0, 1, "buffer", 1),
+  ]);
+  assert.deepEqual(requests.fragment.metal.bindings, [
+    compilerBinding(0, 0, "buffer", 0),
+    compilerBinding(0, 2, "texture", 0),
+    compilerBinding(0, 3, "sampler", 0),
+    compilerBinding(0, 10, "buffer", 1),
+  ]);
+  for (const request of Object.values(requests)) {
+    assert.deepEqual(request.metal.internalReservations, [
+      {
+        role: "immediate-data",
+        slots: [
+          {
+            mode: "direct",
+            resourceClass: "buffer",
+            component: "buffer",
+            index: 30,
+            count: 1,
+          },
+        ],
+      },
+    ]);
+    assert.deepEqual(request.metal.storageBufferSizes, {
+      model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      immediateDataByteOffset: 4,
+    });
+  }
+}
+
+function assertStageLocalSlotAllocation(fixture) {
+  const stageLocal = assembleResourceMutation(fixture, (result) => {
+    result.entryPoints
+      .find((entry) => entry.stage === "vertex")
+      .bindings.push("g0b10");
+  });
+  const allocation = allocateMetalSlotsForAssembly({ assembly: stageLocal });
+  const shared = allocation.bindings.find(
+    (binding) => binding.semanticBinding === "g0b10"
+  );
+  assert.deepEqual(shared.slots, [
+    directSlot("vertex", "buffer", 2),
+    directSlot("fragment", "buffer", 1),
+  ]);
+}
+
+function directSlot(stage, resourceClass, index) {
+  return {
+    stage,
+    mode: "direct",
+    resourceClass,
+    component: resourceClass,
+    index,
+    count: 1,
+  };
+}
+
+function compilerBinding(group, binding, resourceClass, index) {
+  const { stage: _stage, ...slot } = directSlot(
+    "compiler-entry-stage",
+    resourceClass,
+    index
+  );
+  return { group, binding, slots: [slot] };
 }
 
 function assertNominalFailures(effectFixture, computeFixture) {
@@ -1376,9 +1523,9 @@ function assertProjectionFailures(fixture) {
     () =>
       compilerRequestForAssembledEntry({
         assembly: structuredClone(fixture.assembly),
+        allocation: fixture.allocation,
         stage: "vertex",
         metalEntryPoint: "vgpu_clone",
-        metal: metalPolicy,
       }),
     "VGPU-C1-ASSEMBLY-BRAND"
   );
@@ -1386,55 +1533,78 @@ function assertProjectionFailures(fixture) {
     () =>
       compilerRequestForAssembledEntry({
         assembly: fixture.assembly,
+        allocation: fixture.allocation,
         stage: "compute",
         metalEntryPoint: "vgpu_wrong_stage",
-        metal: metalPolicy,
       }),
     "VGPU-C1-ASSEMBLY-PROJECTION"
   );
-  const boundMetal = structuredClone(metalPolicy);
-  boundMetal.bindings.push({});
-  expectCode(
-    () =>
-      compilerRequestForAssembledEntry({
-        assembly: fixture.assembly,
-        stage: "vertex",
-        metalEntryPoint: "vgpu_bound",
-        metal: boundMetal,
-      }),
-    "VGPU-C1-ASSEMBLY-PROFILE"
-  );
 }
 
-function assertResourceProjectionFailures(fixture) {
+function assertSlotAllocationFailures(effect, resource) {
+  const clonedAllocation = structuredClone(effect.allocation);
+  assert.equal(isMetalSlotAllocation(clonedAllocation), false);
   expectCode(
     () =>
       compilerRequestForAssembledEntry({
-        assembly: fixture.assembly,
+        assembly: effect.assembly,
+        allocation: clonedAllocation,
         stage: "vertex",
-        metalEntryPoint: "vgpu_resource_without_slots",
-        metal: metalPolicy,
+        metalEntryPoint: "vgpu_cloned_slots",
       }),
-    "VGPU-C1-ASSEMBLY-PROFILE"
+    "VGPU-C1-ASSEMBLY-SLOTS"
   );
-  const invented = structuredClone(metalPolicy);
-  invented.bindings.push({
-    id: "g0b0",
-    group: 0,
-    binding: 0,
-    resourceClass: "buffer",
-    index: 0,
-    count: 1,
+
+  const equivalentAssembly = assembleSemanticProgram({
+    presentation: effect.presentation,
+    finalized: effect.finalized,
+    extraction: effect.extraction,
+    declarations: effect.declarations,
+  });
+  const equivalentAllocation = allocateMetalSlotsForAssembly({
+    assembly: equivalentAssembly,
+  });
+  assert.deepEqual(equivalentAssembly, effect.assembly);
+  assert.deepEqual(equivalentAllocation, effect.allocation);
+  expectCode(
+    () =>
+      compilerRequestForAssembledEntry({
+        assembly: effect.assembly,
+        allocation: equivalentAllocation,
+        stage: "vertex",
+        metalEntryPoint: "vgpu_crossed_slots",
+      }),
+    "VGPU-C1-ASSEMBLY-SLOTS"
+  );
+  expectCode(
+    () =>
+      compilerRequestForAssembledEntry({
+        assembly: effect.assembly,
+        stage: "vertex",
+        metalEntryPoint: "vgpu_missing_slots",
+      }),
+    "VGPU-C1-ASSEMBLY-SLOTS"
+  );
+
+  const externalTexture = assembleResourceMutation(resource, (result) => {
+    const position = result.bindings.findIndex(
+      (binding) => binding.id === "g0b2"
+    );
+    const { id, group, binding, name } = result.bindings[position];
+    result.bindings[position] = {
+      id,
+      group,
+      binding,
+      name,
+      kind: "external-texture",
+    };
+    result.entryPoints.find(
+      (entry) => entry.stage === "fragment"
+    ).samplingPairs = [];
   });
   expectCode(
-    () =>
-      compilerRequestForAssembledEntry({
-        assembly: fixture.assembly,
-        stage: "fragment",
-        metalEntryPoint: "vgpu_resource_with_invented_slots",
-        metal: invented,
-      }),
-    "VGPU-C1-ASSEMBLY-PROFILE"
+    () => allocateMetalSlotsForAssembly({ assembly: externalTexture }),
+    "VGPU-C1-ASSEMBLY-SLOTS"
   );
 }
 
@@ -1459,6 +1629,10 @@ async function assertNativeExtractions(workerPath, fixtures) {
       declarations: fixture.declarations,
     });
     assert.deepEqual(assembly, fixture.assembly);
+    assert.deepEqual(
+      allocateMetalSlotsForAssembly({ assembly }),
+      fixture.allocation
+    );
     observed.push({
       label: fixture.label,
       deterministicRuns: attempts.length,
@@ -1470,15 +1644,14 @@ async function assertNativeExtractions(workerPath, fixtures) {
     );
   }
   return {
-    status: "passed",
-    invocations: workerLaunches,
+    invocations: semanticWorkerLaunches,
     deterministicFixtures: fixtures.length,
     observed,
   };
 }
 
 async function invokeSemantic(workerPath, fixture) {
-  workerLaunches += 1;
+  semanticWorkerLaunches += 1;
   const worker = startTintWorker({ executable: workerPath });
   try {
     await worker.write(Buffer.from(fixture.semanticRequestBytes, "utf8"));
@@ -1499,6 +1672,180 @@ async function invokeSemantic(workerPath, fixture) {
   });
   assert(extraction);
   return { extraction, stdout: attempt.stdout };
+}
+
+async function assertNativeResourceTranslations(workerPath, fixture, settings) {
+  const observed = [];
+  const translated = [];
+  for (const request of fixture.compilerRequests) {
+    const attempts = await Promise.all([
+      invokeTranslation(workerPath, request),
+      invokeTranslation(workerPath, request),
+    ]);
+    assert.equal(attempts[0].stdout, attempts[1].stdout);
+    const responses = attempts.map((attempt) =>
+      decodeTintWorkerResponse(attempt, (response) => {
+        if (!compilerResponseValidator(response)) {
+          fail(
+            `compiler response schema: ${JSON.stringify(
+              compilerResponseValidator.errors
+            )}`
+          );
+        }
+        return true;
+      })
+    );
+    for (const response of responses) {
+      assertResponseSemantics(request, response);
+      assert.equal(response.ok, true);
+      assert.deepEqual(response.result.bindings, request.metal.bindings);
+      assert.deepEqual(response.result.internalBindings, []);
+      assert.deepEqual(response.result.storageBufferSizeRegions, []);
+    }
+    assert.deepEqual(responses[0], responses[1]);
+    const result = {
+      stage: request.entryPoint.stage,
+      deterministicRuns: attempts.length,
+      requestSha256: sha256(JSON.stringify(request)),
+      responseSha256: sha256(attempts[0].stdout),
+      mslSha256: sha256(responses[0].result.msl),
+    };
+    assert.deepEqual(
+      {
+        requestSha256: result.requestSha256,
+        responseSha256: result.responseSha256,
+        mslSha256: result.mslSha256,
+      },
+      expectedSnapshots.resource.translations[request.entryPoint.stage]
+    );
+    observed.push(result);
+    translated.push({ request, response: responses[0] });
+  }
+  return {
+    invocations: translationWorkerLaunches,
+    deterministicEntries: fixture.compilerRequests.length,
+    observed,
+    offlineMetal: compileOfflineResourceTranslations(translated, settings),
+  };
+}
+
+function invokeTranslation(workerPath, request) {
+  translationWorkerLaunches += 1;
+  return invokeRawTintPrototype({ executable: workerPath, request });
+}
+
+function compileOfflineResourceTranslations(translated, settings) {
+  if (process.platform !== "darwin") {
+    return skippedOfflineMetal(settings, "host-is-not-macos");
+  }
+  const missing = ["metal", "metallib"].filter((tool) => !xcrunToolWorks(tool));
+  if (missing.length > 0) {
+    return skippedOfflineMetal(
+      settings,
+      `missing-xcrun-tools:${missing.join(",")}`
+    );
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), "vgpu-resource-metal-"));
+  try {
+    const airFiles = translated.map(({ request, response }) => {
+      const stage = request.entryPoint.stage;
+      const metalSource = join(scratch, `${stage}.metal`);
+      const air = join(scratch, `${stage}.air`);
+      writeFileSync(metalSource, response.result.msl, "utf8");
+      checkedCommand(`offline Metal compilation for ${stage}`, "xcrun", [
+        "-sdk",
+        "macosx",
+        "metal",
+        "-c",
+        metalSource,
+        "-o",
+        air,
+        "-std=macos-metal2.4",
+        "-target",
+        metalTarget,
+      ]);
+      assertNonEmptyFile(air, `${stage} AIR`);
+      return air;
+    });
+    const libraryPath = join(scratch, "resource.metallib");
+    checkedCommand("offline Metal resource link", "xcrun", [
+      "-sdk",
+      "macosx",
+      "metallib",
+      ...airFiles,
+      "-o",
+      libraryPath,
+    ]);
+    assertNonEmptyFile(libraryPath, "resource metallib");
+    return {
+      status: "passed",
+      shaders: translated.length,
+      target: metalTarget,
+      libraryBytes: lstatSync(libraryPath).size,
+    };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function skippedOfflineMetal(settings, reason) {
+  if (settings.requireOfflineMetal) {
+    fail(`offline Metal is required: ${reason}`);
+  }
+  return { status: "skipped", reason };
+}
+
+function xcrunToolWorks(tool) {
+  const lookup = runCommand("xcrun", ["--find", tool]);
+  if (
+    lookup.error ||
+    lookup.signal ||
+    lookup.status !== 0 ||
+    lookup.stdout.trim() === ""
+  ) {
+    return false;
+  }
+  const version = runCommand("xcrun", [tool, "--version"]);
+  return !version.error && !version.signal && version.status === 0;
+}
+
+function checkedCommand(owner, command, args) {
+  const attempt = runCommand(command, args, { timeout: 120_000 });
+  if (attempt.error || attempt.signal || attempt.status !== 0) {
+    const diagnostic = `${attempt.stdout}${attempt.stderr}`.trim();
+    fail(
+      `${owner} failed with ${
+        attempt.signal ? `signal ${attempt.signal}` : `status ${attempt.status}`
+      }${diagnostic ? `: ${diagnostic}` : ""}`
+    );
+  }
+  if (attempt.stderr !== "") {
+    fail(`${owner} wrote stderr: ${attempt.stderr.trim()}`);
+  }
+}
+
+function assertNonEmptyFile(path, label) {
+  if (
+    !existsSync(path) ||
+    !lstatSync(path).isFile() ||
+    lstatSync(path).size === 0
+  ) {
+    fail(`offline Metal did not produce a non-empty ${label}`);
+  }
+}
+
+function loadCompilerResponseValidator() {
+  const schema = JSON.parse(
+    readFileSync(
+      resolve(
+        spikeDirectory,
+        "../c1-compiler-protocol/contracts/response-v1.schema.json"
+      ),
+      "utf8"
+    )
+  );
+  return new Ajv2020({ allErrors: true, strict: true }).compile(schema);
 }
 
 function inventoryRequest(graph, languageFeatures = []) {
@@ -1542,20 +1889,30 @@ function semanticSuccess(requestBytes, result) {
 }
 
 function parseArguments(argv) {
-  const parsed = { worker: undefined, requireWorker: false };
+  const parsed = {
+    worker: undefined,
+    requireWorker: false,
+    requireOfflineMetal: false,
+  };
   const seen = new Set();
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (["--help", "-h"].includes(argument)) {
       process.stdout.write(
-        "Usage: node gates/semantic-assembly.mjs [--worker <Tint executable>] [--require-worker]\n"
+        "Usage: node gates/semantic-assembly.mjs [--worker <Tint executable>] " +
+          "[--require-worker] [--require-offline-metal]\n"
       );
       process.exit(0);
     }
-    if (argument === "--require-worker") {
+    if (["--require-worker", "--require-offline-metal"].includes(argument)) {
       if (seen.has(argument)) fail(`${argument} may appear only once`);
       seen.add(argument);
-      parsed.requireWorker = true;
+      parsed[
+        {
+          "--require-worker": "requireWorker",
+          "--require-offline-metal": "requireOfflineMetal",
+        }[argument]
+      ] = true;
       continue;
     }
     if (argument === "--worker") {
@@ -1574,8 +1931,9 @@ function parseArguments(argv) {
   ) {
     fail(`worker is not a regular file: ${parsed.worker}`);
   }
+  if (parsed.requireOfflineMetal) parsed.requireWorker = true;
   if (parsed.requireWorker && !parsed.worker) {
-    fail("--require-worker requires --worker");
+    fail("required native gates need --worker");
   }
   return parsed;
 }
