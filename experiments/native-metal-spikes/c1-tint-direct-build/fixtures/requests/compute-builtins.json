@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/direct-compute-builtins.wgsl",
+    "sha256": "2c01f5be4242789ddaf288a1a593de7ad7538d948d167353de20cae8380ebadc",
+    "text": "@compute @workgroup_size(1)\nfn main(\n  @builtin(local_invocation_id) local_id: vec3u,\n  @builtin(local_invocation_index) local_index: u32,\n  @builtin(global_invocation_id) global_id: vec3u,\n  @builtin(workgroup_id) workgroup_id: vec3u,\n  @builtin(num_workgroups) workgroup_count: vec3u,\n) {\n  _ = local_id;\n  _ = local_index;\n  _ = global_id;\n  _ = workgroup_id;\n  _ = workgroup_count;\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/direct-compute-builtins.wgsl",
+      "sha256": "2c01f5be4242789ddaf288a1a593de7ad7538d948d167353de20cae8380ebadc"
+    },
+    "sources": [
+      {
+        "input": "direct-compute-builtins-wgsl",
+        "sha256": "2c01f5be4242789ddaf288a1a593de7ad7538d948d167353de20cae8380ebadc"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 388
+        },
+        "origin": {
+          "input": "direct-compute-builtins-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "compute",
+    "wgsl": "main",
+    "metal": "vgpu_direct_compute_builtins"
+  },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 3
+        },
+        "invariant": false,
+        "builtin": "global_invocation_id"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 3
+        },
+        "invariant": false,
+        "builtin": "local_invocation_id"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "local_invocation_index"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 3
+        },
+        "invariant": false,
+        "builtin": "num_workgroups"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 3
+        },
+        "invariant": false,
+        "builtin": "workgroup_id"
+      }
+    ],
+    "outputs": []
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}

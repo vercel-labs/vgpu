@@ -5,31 +5,49 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
-  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const fixtureDirectory = dirname(fileURLToPath(import.meta.url));
 const artifactsDirectory = join(fixtureDirectory, ".artifacts");
+const repositoryRoot = resolve(fixtureDirectory, "..", "..", "..");
+const contextDirectory = join(repositoryRoot, ".context");
 const compilerProtocolDirectory = resolve(
   fixtureDirectory,
   "..",
   "c1-compiler-protocol"
 );
 let lock;
+let baseLockSha256;
+let localHeadCommit;
+let candidateMode = false;
+const candidateMeasurements = new Map();
+let candidateCanaries;
+let baselineLockShape;
+let invocationLockDirectory;
 let requestDirectory;
 let defaultWorkerRoot;
+let Ajv2020;
 const maxCommandBuffer = 256 * 1024 * 1024;
 const systemTools = {
   arch: "/usr/bin/arch",
@@ -100,6 +118,128 @@ const expectedCache = {
   TINT_ENABLE_IR_VALIDATION_ASSERTS: "OFF",
   TINT_RANDOMIZE_HASHES: "OFF",
 };
+const legacyOracleInputIds = [
+  "releasesManifest",
+  "jsoncppProvenance",
+  "nativeCompiler",
+  "protocol",
+];
+const oracleInputs = [
+  {
+    id: "releasesManifest",
+    path: "../c1-tint-standalone/provenance/releases.json",
+    mutable: false,
+  },
+  {
+    id: "jsoncppProvenance",
+    path: "../c1-compiler-protocol/provenance/jsoncpp-1.9.8.json",
+    mutable: false,
+  },
+  {
+    id: "nativeCompiler",
+    path: "../c1-compiler-protocol/lib/native-compiler.mjs",
+    mutable: true,
+  },
+  {
+    id: "protocol",
+    path: "../c1-compiler-protocol/lib/protocol.mjs",
+    mutable: true,
+  },
+  {
+    id: "originSchema",
+    path: "../c1-compiler-protocol/contracts/origin-map-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "requestSchema",
+    path: "../c1-compiler-protocol/contracts/request-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "responseSchema",
+    path: "../c1-compiler-protocol/contracts/response-v1.schema.json",
+    mutable: true,
+  },
+];
+const oracleInputIds = oracleInputs.map(({ id }) => id);
+const legacyOracleRequestRoot = "../c1-compiler-protocol/fixtures/requests";
+const legacyOracleRequestPaths = [
+  "generate-failure.json",
+  "noop.json",
+  "runtime-array.json",
+  "wgsl-error.json",
+];
+const oracleRequestRoot = "..";
+const oracleFixtures = [
+  {
+    id: "generate-failure",
+    ok: true,
+    path: "c1-compiler-protocol/fixtures/requests/generate-failure.json",
+  },
+  {
+    id: "noop",
+    ok: true,
+    path: "c1-compiler-protocol/fixtures/requests/noop.json",
+  },
+  {
+    id: "runtime-array",
+    ok: true,
+    path: "c1-compiler-protocol/fixtures/requests/runtime-array.json",
+  },
+  {
+    id: "wgsl-error",
+    ok: false,
+    path: "c1-compiler-protocol/fixtures/requests/wgsl-error.json",
+  },
+  {
+    id: "compute-builtins",
+    ok: true,
+    path: "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
+  },
+  {
+    id: "dual-source",
+    ok: true,
+    path: "c1-tint-direct-build/fixtures/requests/dual-source.json",
+  },
+  {
+    id: "fragment-sparse",
+    ok: true,
+    path: "c1-tint-direct-build/fixtures/requests/fragment-sparse.json",
+  },
+  {
+    id: "interface-mismatch",
+    ok: false,
+    path: "c1-tint-direct-build/fixtures/requests/interface-mismatch.json",
+  },
+  {
+    id: "scalar-fragment",
+    ok: true,
+    path: "c1-tint-direct-build/fixtures/requests/scalar-fragment.json",
+  },
+  {
+    id: "vertex-sparse",
+    ok: true,
+    path: "c1-tint-direct-build/fixtures/requests/vertex-sparse.json",
+  },
+];
+const oracleFixtureIds = oracleFixtures.map(({ id }) => id);
+const oracleRequestPaths = oracleFixtures.map(({ path }) => path);
+const mutableCompiledRepositories = ["dawn", "abseil", "jsoncpp", "worker"];
+const valuedArguments = new Map([
+  ["--dawn-root", "dawnRoot"],
+  ["--jsoncpp-root", "jsoncppRoot"],
+  ["--release-root", "releaseRoot"],
+  ["--compat-include", "compatInclude"],
+  ["--sdk-root", "sdkRoot"],
+  ["--cmake", "cmake"],
+  ["--ninja", "ninja"],
+  ["--c-compiler", "cCompiler"],
+  ["--cxx-compiler", "cxxCompiler"],
+  ["--python", "python"],
+  ["--jobs", "jobs"],
+  ["--scratch-root", "scratchRoot"],
+  ["--emit-lock-candidate", "emitLockCandidate"],
+]);
 
 function fail(message) {
   throw new Error(`C1 direct Tint build: ${message}`);
@@ -117,7 +257,8 @@ function usage(stream = process.stderr) {
       "--compat-include <release header overlay> --sdk-root <macOS SDK> " +
       "[--cmake <cmake>] [--ninja <ninja>] [--c-compiler <clang>] " +
       "[--cxx-compiler <clang++>] [--python <python3>] [--jobs <count>] " +
-      "[--scratch-root <directory>] [--keep-builds]\n"
+      "[--scratch-root <directory>] [--keep-builds] " +
+      "[--emit-lock-candidate <path-under-.context>]\n"
   );
 }
 
@@ -137,23 +278,9 @@ function parseArguments(argv) {
     python: process.env.C1_TINT_DIRECT_BUILD_PYTHON ?? "/usr/bin/python3",
     jobs: Number.parseInt(process.env.C1_TINT_DIRECT_BUILD_JOBS ?? "8", 10),
     scratchRoot: process.env.C1_TINT_DIRECT_BUILD_SCRATCH_ROOT,
+    emitLockCandidate: process.env.C1_TINT_DIRECT_BUILD_EMIT_LOCK_CANDIDATE,
     keepBuilds: false,
   };
-  const valued = new Map([
-    ["--dawn-root", "dawnRoot"],
-    ["--jsoncpp-root", "jsoncppRoot"],
-    ["--release-root", "releaseRoot"],
-    ["--compat-include", "compatInclude"],
-    ["--sdk-root", "sdkRoot"],
-    ["--cmake", "cmake"],
-    ["--ninja", "ninja"],
-    ["--c-compiler", "cCompiler"],
-    ["--cxx-compiler", "cxxCompiler"],
-    ["--python", "python"],
-    ["--jobs", "jobs"],
-    ["--scratch-root", "scratchRoot"],
-  ]);
-
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h")
@@ -162,7 +289,7 @@ function parseArguments(argv) {
       options.keepBuilds = true;
       continue;
     }
-    const key = valued.get(argument);
+    const key = valuedArguments.get(argument);
     if (!key) {
       usage();
       fail(`unknown argument ${argument}`);
@@ -196,7 +323,30 @@ function parseArguments(argv) {
   ) {
     fail("--jobs must be an integer from 1 through 64");
   }
+  if (options.emitLockCandidate !== undefined) {
+    if (!options.emitLockCandidate) {
+      fail("--emit-lock-candidate requires a non-empty path");
+    }
+    options.emitLockCandidate = resolveLockCandidatePath(
+      options.emitLockCandidate
+    );
+  }
   return options;
+}
+
+function detectCandidateIntent(argv) {
+  if (process.env.C1_TINT_DIRECT_BUILD_EMIT_LOCK_CANDIDATE !== undefined) {
+    return true;
+  }
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--emit-lock-candidate") return true;
+    if (argument === "--keep-builds") continue;
+    if (!valuedArguments.has(argument)) return false;
+    if (!argv[index + 1]) return false;
+    index += 1;
+  }
+  return false;
 }
 
 function command(command, args, options = {}) {
@@ -263,6 +413,68 @@ function sha256File(path) {
   return sha256Buffer(readFileSync(path));
 }
 
+function pathEntryExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function resolveProspectivePath(path, label) {
+  let cursor = resolve(path);
+  const missing = [];
+  while (true) {
+    let metadata;
+    try {
+      metadata = lstatSync(cursor);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = dirname(cursor);
+      if (parent === cursor) fail(`${label} has no resolvable ancestor`);
+      missing.unshift(basename(cursor));
+      cursor = parent;
+      continue;
+    }
+    let canonical;
+    try {
+      canonical = realpathSync(cursor);
+    } catch {
+      fail(`${label} has an unresolvable existing ancestor: ${cursor}`);
+    }
+    if (missing.length > 0 && !statSync(canonical).isDirectory()) {
+      fail(`${label} has a non-directory ancestor: ${cursor}`);
+    }
+    return resolve(canonical, ...missing);
+  }
+}
+
+function validateScratchRoot(options) {
+  const configured = Boolean(options.scratchRoot);
+  const scratchRoot = resolveProspectivePath(
+    configured ? options.scratchRoot : tmpdir(),
+    "scratch root"
+  );
+  const artifactDestination = resolveProspectivePath(
+    artifactsDirectory,
+    "artifact destination"
+  );
+  if (isWithinRootIgnoringAsciiCase(scratchRoot, artifactDestination)) {
+    fail("the effective scratch root may not target .artifacts");
+  }
+  if (
+    invocationLockDirectory &&
+    isWithinRoot(scratchRoot, invocationLockDirectory)
+  ) {
+    fail(
+      "the effective scratch root may not target the invocation-lock directory"
+    );
+  }
+  options.effectiveScratchRoot = scratchRoot;
+}
+
 function validateRelativePath(relativePath, label) {
   if (
     typeof relativePath !== "string" ||
@@ -296,44 +508,98 @@ function sha256SelectedFiles(root, paths, label) {
   return { files: paths.length, bytes, sha256: hash.digest("hex") };
 }
 
-function verifyLockedFile(expected, label) {
+function verifyLockedFile(expected, label, mutablePointer) {
   const path = resolve(fixtureDirectory, expected.path);
   const metadata = lstatSync(path);
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     fail(`${label} is not a regular file: ${path}`);
   }
-  assertEqual(metadata.size, expected.bytes, `${label} size`);
-  assertEqual(sha256File(path), expected.sha256, `${label} SHA-256`);
+  assertOrMeasure(
+    metadata.size,
+    expected.bytes,
+    `${label} size`,
+    mutablePointer ? `${mutablePointer}/bytes` : undefined
+  );
+  assertOrMeasure(
+    sha256File(path),
+    expected.sha256,
+    `${label} SHA-256`,
+    mutablePointer ? `${mutablePointer}/sha256` : undefined
+  );
   return realpathSync(path);
 }
 
 function verifyOracleInputs() {
-  const files = Object.fromEntries(
-    Object.entries(lock.oracle.inputs).map(([name, expected]) => [
-      name,
-      verifyLockedFile(expected, `oracle ${name}`),
-    ])
-  );
-  const expectedRequests = lock.oracle.requests;
-  const sortedPaths = [...expectedRequests.paths].sort(compareUtf8);
+  const lockedIds = Object.keys(lock.oracle.inputs);
+  const expectedIds =
+    baselineLockShape === "legacy" ? legacyOracleInputIds : oracleInputIds;
   assertEqual(
-    JSON.stringify(expectedRequests.paths),
-    JSON.stringify(sortedPaths),
-    "oracle request path order"
+    JSON.stringify(lockedIds),
+    JSON.stringify(expectedIds),
+    `${baselineLockShape} oracle input IDs`
   );
-  const requests = sha256SelectedFiles(
-    requestDirectory,
-    expectedRequests.paths,
-    "oracle request closure"
-  );
-  for (const key of ["files", "bytes", "sha256"]) {
-    assertEqual(
-      requests[key],
-      expectedRequests[key],
-      `oracle request closure ${key}`
+  const files = {};
+  for (const input of oracleInputs) {
+    const expected = lock.oracle.inputs[input.id];
+    if (!expected && baselineLockShape !== "legacy") {
+      fail(`oracle input ${input.id} is not locked`);
+    }
+    if (expected) {
+      assertEqual(expected.path, input.path, `oracle ${input.id} path`);
+    }
+    files[input.id] = verifyLockedFile(
+      expected ?? { path: input.path },
+      `oracle ${input.id}`,
+      input.mutable ? `/oracle/inputs/${input.id}` : undefined
     );
   }
-  return { files, requests };
+  const expectedRequests = lock.oracle.requests;
+  const requests = sha256SelectedFiles(
+    requestDirectory,
+    oracleRequestPaths,
+    "oracle request closure"
+  );
+  assertEqual(
+    requests.files,
+    oracleFixtures.length,
+    "oracle request closure intended file count"
+  );
+  for (const key of ["files", "bytes", "sha256"]) {
+    assertOrMeasure(
+      requests[key],
+      expectedRequests[key],
+      `oracle request closure ${key}`,
+      `/oracle/requests/${key}`
+    );
+  }
+  verifyFilesMatchGitHead(
+    repositoryRoot,
+    [
+      ...oracleInputs
+        .filter((input) => input.mutable)
+        .map((input) => files[input.id]),
+      ...oracleRequestPaths.map((path) =>
+        realpathSync(join(requestDirectory, ...path.split("/")))
+      ),
+    ],
+    "candidate local oracle inputs",
+    localHeadCommit
+  );
+  const schemas = [
+    readJSON(files.originSchema),
+    readJSON(files.requestSchema),
+    readJSON(files.responseSchema),
+  ];
+  const ajv = new Ajv2020({ allErrors: true, strict: true });
+  for (const schema of schemas) ajv.addSchema(schema);
+  const validators = {
+    request: ajv.getSchema(schemas[1].$id),
+    response: ajv.getSchema(schemas[2].$id),
+  };
+  if (!validators.request || !validators.response) {
+    fail("oracle schemas did not register request and response validators");
+  }
+  return { files, requests, validators };
 }
 
 function assertEqual(actual, expected, label) {
@@ -344,6 +610,91 @@ function assertEqual(actual, expected, label) {
       )}`
     );
   }
+}
+
+function assertOrMeasure(actual, expected, label, jsonPointer) {
+  if (!candidateMode || !jsonPointer) {
+    assertEqual(actual, expected, label);
+    return;
+  }
+  if (candidateMeasurements.has(jsonPointer)) {
+    assertEqual(
+      actual,
+      candidateMeasurements.get(jsonPointer),
+      `${label} across candidate measurements`
+    );
+    return;
+  }
+  candidateMeasurements.set(jsonPointer, actual);
+}
+
+function assertOracleFixtureDefinitions() {
+  assertEqual(
+    new Set(oracleFixtureIds).size,
+    oracleFixtureIds.length,
+    "oracle fixture ID uniqueness"
+  );
+  assertEqual(
+    new Set(oracleRequestPaths).size,
+    oracleRequestPaths.length,
+    "oracle fixture path uniqueness"
+  );
+  assertEqual(
+    JSON.stringify(oracleRequestPaths),
+    JSON.stringify([...oracleRequestPaths].sort(compareUtf8)),
+    "oracle fixture path order"
+  );
+  for (const fixture of oracleFixtures) {
+    validateRelativePath(fixture.path, `oracle fixture ${fixture.id}`);
+  }
+  verifyMslMaskSelfCanary();
+}
+
+function selectOracleRequestRoot() {
+  assertOracleFixtureDefinitions();
+  const expected = lock.oracle.requests;
+  assertEqual(
+    expected.algorithm,
+    "relative-path-nul-file-sha256-lines-v1",
+    "oracle request closure algorithm"
+  );
+  if (candidateMode) {
+    const hasLegacyShape =
+      expected.root === legacyOracleRequestRoot &&
+      JSON.stringify(expected.paths) ===
+        JSON.stringify(legacyOracleRequestPaths);
+    const hasCurrentShape =
+      expected.root === oracleRequestRoot &&
+      JSON.stringify(expected.paths) === JSON.stringify(oracleRequestPaths);
+    if (!hasLegacyShape && !hasCurrentShape) {
+      fail(
+        "source lock has neither the recognized legacy nor current oracle request shape"
+      );
+    }
+    baselineLockShape = hasLegacyShape ? "legacy" : "current";
+    const expectedCanaryIds = hasLegacyShape
+      ? legacyOracleRequestPaths.map((path) => path.slice(0, -5))
+      : oracleFixtureIds;
+    assertEqual(
+      JSON.stringify(Object.keys(lock.oracle.canaries).sort(compareUtf8)),
+      JSON.stringify([...expectedCanaryIds].sort(compareUtf8)),
+      "recognized source-lock oracle canary IDs"
+    );
+  } else {
+    baselineLockShape = "current";
+    assertEqual(expected.root, oracleRequestRoot, "oracle request root");
+    assertEqual(
+      JSON.stringify(expected.paths),
+      JSON.stringify(oracleRequestPaths),
+      "oracle request paths"
+    );
+    assertEqual(
+      JSON.stringify(Object.keys(lock.oracle.canaries)),
+      JSON.stringify(oracleFixtureIds),
+      "oracle canary IDs"
+    );
+  }
+  return resolve(fixtureDirectory, oracleRequestRoot);
 }
 
 function verifyPinnedCheckout(root, expected, label) {
@@ -532,9 +883,23 @@ function verifySourceInputs(options) {
     "worker closure files"
   );
   assertEqual(
+    JSON.stringify(lock.worker.closure.paths),
+    JSON.stringify([...lock.worker.closure.paths].sort(compareUtf8)),
+    "worker closure path order"
+  );
+  assertOrMeasure(
     workerClosure.sha256,
     lock.worker.closure.sha256,
-    "worker closure SHA-256"
+    "worker closure SHA-256",
+    "/worker/closure/sha256"
+  );
+  verifyFilesMatchGitHead(
+    repositoryRoot,
+    lock.worker.closure.paths.map((path) =>
+      realpathSync(join(workerRoot, ...path.split("/")))
+    ),
+    "candidate worker closure",
+    localHeadCommit
   );
 
   const configuration = verifyConfigurationManifest({
@@ -589,11 +954,462 @@ function isWithinRoot(path, root) {
   );
 }
 
+function foldAsciiCase(value) {
+  return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
+}
+
+function isWithinRootIgnoringAsciiCase(path, root) {
+  return isWithinRoot(foldAsciiCase(path), foldAsciiCase(root));
+}
+
+function acquireInvocationLock() {
+  const contextRoot = resolveExisting(
+    contextDirectory,
+    ".context root",
+    "directory"
+  );
+  const path = join(contextRoot, ".c1-tint-direct-build.invocation-lock");
+  try {
+    mkdirSync(path, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      fail(
+        `another invocation is active or left a stale lock at ${path}; verify no gate is running before removing it`
+      );
+    }
+    throw error;
+  }
+  invocationLockDirectory = path;
+}
+
+function releaseInvocationLock() {
+  if (!invocationLockDirectory) return;
+  const path = invocationLockDirectory;
+  invocationLockDirectory = undefined;
+  rmdirSync(path);
+}
+
+function resolveLockCandidatePath(candidate) {
+  const contextRoot = resolveExisting(
+    contextDirectory,
+    ".context root",
+    "directory"
+  );
+  const absolute = resolve(candidate);
+  if (
+    absolute === contextDirectory ||
+    !isWithinRoot(absolute, contextDirectory)
+  ) {
+    fail(
+      "--emit-lock-candidate must name a file below the repository .context directory"
+    );
+  }
+  const parent = resolveExisting(
+    dirname(absolute),
+    "lock candidate parent",
+    "directory"
+  );
+  if (!isWithinRoot(parent, contextRoot)) {
+    fail(
+      "--emit-lock-candidate parent escapes the repository .context directory"
+    );
+  }
+  const canonical = join(parent, basename(absolute));
+  if (
+    invocationLockDirectory &&
+    isWithinRoot(canonical, invocationLockDirectory)
+  ) {
+    fail("--emit-lock-candidate may not target the invocation-lock directory");
+  }
+  let metadata;
+  try {
+    metadata = lstatSync(canonical);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (metadata) {
+    fail(
+      `--emit-lock-candidate refuses to overwrite existing ${
+        metadata.isSymbolicLink() ? "symlink" : "path"
+      }: ${canonical}`
+    );
+  }
+  return canonical;
+}
+
+function escapeJsonPointer(value) {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+function setJsonPointer(target, pointer, value) {
+  const parts = pointer
+    .slice(1)
+    .split("/")
+    .map((part) => part.replaceAll("~1", "/").replaceAll("~0", "~"));
+  const key = parts.pop();
+  let parent = target;
+  for (const part of parts) {
+    if (
+      parent === null ||
+      typeof parent !== "object" ||
+      !Object.hasOwn(parent, part)
+    ) {
+      fail(`candidate measurement targets missing JSON pointer ${pointer}`);
+    }
+    parent = parent[part];
+  }
+  if (parent === null || typeof parent !== "object" || key === undefined) {
+    fail(`candidate measurement targets invalid JSON pointer ${pointer}`);
+  }
+  parent[key] = value;
+}
+
+function diffJsonPointers(before, after, pointer = "") {
+  if (Object.is(before, after)) return [];
+  if (Array.isArray(before) || Array.isArray(after)) {
+    if (!Array.isArray(before) || !Array.isArray(after)) return [pointer];
+    if (before.length !== after.length) return [pointer];
+    return before.flatMap((value, index) =>
+      diffJsonPointers(value, after[index], `${pointer}/${index}`)
+    );
+  }
+  const beforeObject =
+    before !== null && typeof before === "object" ? before : undefined;
+  const afterObject =
+    after !== null && typeof after === "object" ? after : undefined;
+  if (!beforeObject || !afterObject) return [pointer];
+  const keys = [
+    ...new Set([...Object.keys(beforeObject), ...Object.keys(afterObject)]),
+  ].sort(compareUtf8);
+  return keys.flatMap((key) => {
+    const child = `${pointer}/${escapeJsonPointer(key)}`;
+    if (!Object.hasOwn(beforeObject, key) || !Object.hasOwn(afterObject, key)) {
+      return [child];
+    }
+    return diffJsonPointers(beforeObject[key], afterObject[key], child);
+  });
+}
+
+function isAllowedCandidateChange(pointer) {
+  const exact = new Set([
+    "/worker/closure/sha256",
+    "/oracle/requests/root",
+    "/oracle/requests/files",
+    "/oracle/requests/bytes",
+    "/oracle/requests/sha256",
+    "/oracle/requests/paths",
+    "/closures/compiled/files",
+    "/closures/compiled/bytes",
+    "/closures/compiled/sha256",
+    "/build/outputs/arm64/bytes",
+    "/build/outputs/arm64/sha256",
+    "/build/outputs/x86_64/bytes",
+    "/build/outputs/x86_64/sha256",
+    "/build/outputs/universal/bytes",
+    "/build/outputs/universal/sha256",
+  ]);
+  if (exact.has(pointer)) return true;
+  for (const input of oracleInputs.filter((candidate) => candidate.mutable)) {
+    const inputPointer = `/oracle/inputs/${input.id}`;
+    if (
+      pointer === `${inputPointer}/bytes` ||
+      pointer === `${inputPointer}/sha256`
+    ) {
+      return true;
+    }
+    if (
+      baselineLockShape === "legacy" &&
+      !legacyOracleInputIds.includes(input.id) &&
+      pointer === inputPointer
+    ) {
+      return true;
+    }
+  }
+  for (const repository of mutableCompiledRepositories) {
+    for (const field of ["files", "bytes", "sha256"]) {
+      if (
+        pointer === `/closures/compiled/repositories/${repository}/${field}`
+      ) {
+        return true;
+      }
+    }
+  }
+  for (const id of oracleFixtureIds) {
+    const canary = `/oracle/canaries/${escapeJsonPointer(id)}`;
+    if (
+      pointer === `${canary}/requestSha256` ||
+      pointer === `${canary}/responseBytes` ||
+      pointer === `${canary}/responseSha256`
+    ) {
+      return true;
+    }
+    if (
+      !legacyOracleRequestPaths.includes(`${id}.json`) &&
+      pointer === canary
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function createLockCandidate() {
+  const requiredMeasurements = [
+    "/worker/closure/sha256",
+    "/oracle/requests/files",
+    "/oracle/requests/bytes",
+    "/oracle/requests/sha256",
+    "/closures/compiled/files",
+    "/closures/compiled/bytes",
+    "/closures/compiled/sha256",
+    "/build/outputs/arm64/bytes",
+    "/build/outputs/arm64/sha256",
+    "/build/outputs/x86_64/bytes",
+    "/build/outputs/x86_64/sha256",
+    "/build/outputs/universal/bytes",
+    "/build/outputs/universal/sha256",
+  ];
+  for (const input of oracleInputs.filter((candidate) => candidate.mutable)) {
+    requiredMeasurements.push(
+      `/oracle/inputs/${input.id}/bytes`,
+      `/oracle/inputs/${input.id}/sha256`
+    );
+  }
+  for (const repository of mutableCompiledRepositories) {
+    for (const field of ["files", "bytes", "sha256"]) {
+      requiredMeasurements.push(
+        `/closures/compiled/repositories/${repository}/${field}`
+      );
+    }
+  }
+  assertEqual(
+    JSON.stringify([...candidateMeasurements.keys()].sort(compareUtf8)),
+    JSON.stringify([...requiredMeasurements].sort(compareUtf8)),
+    "complete candidate measurement set"
+  );
+  assertEqual(
+    JSON.stringify(Object.keys(candidateCanaries ?? {})),
+    JSON.stringify(oracleFixtureIds),
+    "candidate oracle canary IDs"
+  );
+
+  const proposed = structuredClone(lock);
+  proposed.oracle.inputs = Object.fromEntries(
+    oracleInputs.map((input) => [
+      input.id,
+      structuredClone(lock.oracle.inputs[input.id] ?? { path: input.path }),
+    ])
+  );
+  proposed.oracle.requests.root = oracleRequestRoot;
+  proposed.oracle.requests.paths = [...oracleRequestPaths];
+  proposed.oracle.canaries = structuredClone(candidateCanaries);
+  for (const [pointer, value] of candidateMeasurements) {
+    setJsonPointer(proposed, pointer, value);
+  }
+  const changes = diffJsonPointers(lock, proposed);
+  const forbidden = changes.filter(
+    (pointer) => !isAllowedCandidateChange(pointer)
+  );
+  if (forbidden.length > 0) {
+    fail(`lock candidate changed forbidden fields: ${forbidden.join(", ")}`);
+  }
+  return { proposed, changes };
+}
+
+function verifySourceLockIdentity() {
+  assertEqual(
+    sha256File(join(fixtureDirectory, "provenance", "source-lock.json")),
+    baseLockSha256,
+    "source lock identity across gate"
+  );
+}
+
+function writeLockCandidate(path) {
+  const verifiedPath = resolveLockCandidatePath(path);
+  if (pathEntryExists(artifactsDirectory)) {
+    fail(
+      "lock candidate refuses to coexist with a published .artifacts directory"
+    );
+  }
+  verifySourceLockIdentity();
+  const { proposed, changes } = createLockCandidate();
+  const contents = Buffer.from(
+    `${JSON.stringify(proposed, null, 2)}\n`,
+    "utf8"
+  );
+  verifyFilesMatchGitHead(
+    repositoryRoot,
+    [
+      fileURLToPath(import.meta.url),
+      join(fixtureDirectory, "provenance", "source-lock.json"),
+    ],
+    "candidate runner and source lock final check",
+    localHeadCommit
+  );
+  verifySourceLockIdentity();
+  if (pathEntryExists(artifactsDirectory)) {
+    fail("lock candidate publication raced with a .artifacts directory");
+  }
+  writeFileSync(verifiedPath, contents, { flag: "wx" });
+  return {
+    path: verifiedPath,
+    bytes: contents.length,
+    sha256: sha256Buffer(contents),
+    baseLockSha256,
+    changedPointers: changes,
+  };
+}
+
 function portableRelative(root, path, label) {
   if (!isWithinRoot(path, root)) fail(`${label} escaped its source root`);
   const portable = relative(root, path).split(sep).join("/");
   validateRelativePath(portable, label);
   return portable;
+}
+
+function verifyFilesMatchGitHead(root, paths, label, revision) {
+  if (!candidateMode) return;
+  if (!revision || !/^[a-f0-9]{40,64}$/u.test(revision)) {
+    fail(`${label} omitted an exact Git revision`);
+  }
+  const canonicalRoot = realpathSync(root);
+  const gitOptions = {
+    env: {
+      ...process.env,
+      GIT_LITERAL_PATHSPECS: "1",
+      GIT_NO_LAZY_FETCH: "1",
+    },
+  };
+  const repository = resolveExisting(
+    stdoutText(
+      systemTools.git,
+      ["-C", canonicalRoot, "rev-parse", "--show-toplevel"],
+      `${label} Git root`,
+      gitOptions
+    ),
+    `${label} Git root`,
+    "directory"
+  );
+  assertEqual(repository, canonicalRoot, `${label} exact Git root`);
+  assertEqual(
+    stdoutText(
+      systemTools.git,
+      ["-C", canonicalRoot, "rev-parse", "HEAD^{commit}"],
+      `${label} current Git revision`,
+      gitOptions
+    ),
+    revision,
+    `${label} stable Git revision`
+  );
+  const relativePaths = [...new Set(paths)]
+    .map((path) => {
+      const metadata = lstatSync(path);
+      if (!metadata.isFile() || metadata.isSymbolicLink()) {
+        fail(`${label} contains a non-regular worktree path: ${path}`);
+      }
+      const relativePath = portableRelative(canonicalRoot, path, label);
+      if (/[\0\r\n]/u.test(relativePath)) {
+        fail(`${label} contains a control character in ${relativePath}`);
+      }
+      return relativePath;
+    })
+    .sort(compareUtf8);
+  if (relativePaths.length === 0) {
+    fail(`${label} omitted every path from its scoped Git check`);
+  }
+  const indexResult = checkedCommand(
+    systemTools.git,
+    [
+      "-C",
+      canonicalRoot,
+      "ls-files",
+      "--stage",
+      "-z",
+      "--error-unmatch",
+      "--",
+      ...relativePaths,
+    ],
+    `${label} index entries`,
+    gitOptions
+  );
+  const entries = new Map();
+  for (const rawEntry of indexResult.stdout.toString("utf8").split("\0")) {
+    if (!rawEntry) continue;
+    const tab = rawEntry.indexOf("\t");
+    const header = rawEntry.slice(0, tab).split(" ");
+    const path = rawEntry.slice(tab + 1);
+    if (
+      tab < 0 ||
+      header.length !== 3 ||
+      !["100644", "100755"].includes(header[0]) ||
+      !/^[a-f0-9]{40,64}$/u.test(header[1]) ||
+      header[2] !== "0" ||
+      entries.has(path)
+    ) {
+      fail(`${label} has an invalid, unmerged, or duplicate index entry`);
+    }
+    entries.set(path, { mode: header[0], oid: header[1] });
+  }
+  assertEqual(
+    JSON.stringify([...entries.keys()].sort(compareUtf8)),
+    JSON.stringify(relativePaths),
+    `${label} exact stage-zero regular-file index paths`
+  );
+  checkedCommand(
+    systemTools.git,
+    [
+      "-C",
+      canonicalRoot,
+      "diff-index",
+      "--cached",
+      "--quiet",
+      revision,
+      "--",
+      ...relativePaths,
+    ],
+    `${label} index against HEAD`,
+    gitOptions
+  );
+  checkedCommand(
+    systemTools.git,
+    ["-C", canonicalRoot, "diff-files", "--quiet", "--", ...relativePaths],
+    `${label} worktree against index`,
+    gitOptions
+  );
+  const observed = checkedCommand(
+    systemTools.git,
+    ["-C", canonicalRoot, "hash-object", "--no-filters", "--stdin-paths"],
+    `${label} worktree blob hashes`,
+    {
+      ...gitOptions,
+      input: Buffer.from(`${relativePaths.join("\n")}\n`, "utf8"),
+    }
+  )
+    .stdout.toString("utf8")
+    .trim()
+    .split("\n");
+  assertEqual(
+    observed.length,
+    relativePaths.length,
+    `${label} worktree blob count`
+  );
+  for (let index = 0; index < relativePaths.length; index += 1) {
+    const relativePath = relativePaths[index];
+    assertEqual(
+      observed[index],
+      entries.get(relativePath).oid,
+      `${label} ${relativePath} bytes at HEAD`
+    );
+    const executable =
+      (lstatSync(join(canonicalRoot, ...relativePath.split("/"))).mode &
+        0o111) !==
+      0;
+    assertEqual(
+      executable,
+      entries.get(relativePath).mode === "100755",
+      `${label} ${relativePath} executable mode at HEAD`
+    );
+  }
 }
 
 function compareUtf8(left, right) {
@@ -721,7 +1537,13 @@ function verifyConfigurationManifest(inputs) {
   return { absolutePaths, closure };
 }
 
-function verifyClosure(paths, inputs, expected, label) {
+function verifyClosure(
+  paths,
+  inputs,
+  expected,
+  label,
+  { mutableRepositories = [], mutableCombined = false, pointer } = {}
+) {
   const byRepository = new Map();
   for (const path of paths) {
     const group = classifySourcePath(path, inputs);
@@ -740,16 +1562,35 @@ function verifyClosure(paths, inputs, expected, label) {
       fail(`${label} unexpectedly includes ${group.name}`);
     }
     if (!expectedRepository) continue;
+    if (candidateMode && mutableRepositories.includes(group.name)) {
+      const gitRoot = group.name === "worker" ? repositoryRoot : group.root;
+      const revision =
+        group.name === "worker"
+          ? localHeadCommit
+          : {
+              dawn: lock.dawn.commit,
+              abseil: lock.dependencies.abseil.chromiumCheckoutCommit,
+              jsoncpp: lock.dependencies.jsoncpp.commit,
+            }[group.name];
+      verifyFilesMatchGitHead(
+        gitRoot,
+        repositoryPaths,
+        `${label} ${group.name}`,
+        revision
+      );
+    }
     const summary = summarizeAbsoluteFiles(
       group.root,
       repositoryPaths,
       `${label} ${group.name}`
     );
     for (const key of ["files", "bytes", "sha256"]) {
-      assertEqual(
+      const mutable = mutableRepositories.includes(group.name);
+      assertOrMeasure(
         summary[key],
         expectedRepository[key],
-        `${label} ${group.name} ${key}`
+        `${label} ${group.name} ${key}`,
+        mutable ? `${pointer}/repositories/${group.name}/${key}` : undefined
       );
     }
     summaries[group.name] = {
@@ -783,7 +1624,12 @@ function verifyClosure(paths, inputs, expected, label) {
     sha256: combinedHash.digest("hex"),
   };
   for (const key of ["files", "bytes", "sha256"]) {
-    assertEqual(combined[key], expected[key], `${label} combined ${key}`);
+    assertOrMeasure(
+      combined[key],
+      expected[key],
+      `${label} combined ${key}`,
+      mutableCombined ? `${pointer}/${key}` : undefined
+    );
   }
   return { repositories: summaries, ...combined };
 }
@@ -940,7 +1786,12 @@ function verifyBuildInputClosures(buildDirectory, inputs) {
     compiledInputs(buildDirectory, inputs),
     inputs,
     lock.closures.compiled,
-    "compiled closure"
+    "compiled closure",
+    {
+      mutableRepositories: mutableCompiledRepositories,
+      mutableCombined: true,
+      pointer: "/closures/compiled",
+    }
   );
   return { configuration, compiled };
 }
@@ -1391,15 +2242,17 @@ function inspectThinBinary(executable, architecture, inputs, buildDirectory) {
     frameworks: [],
   };
   const expectedOutput = lock.build.outputs[architecture];
-  assertEqual(
+  assertOrMeasure(
     observed.bytes,
     expectedOutput.bytes,
-    `${architecture} binary bytes`
+    `${architecture} binary bytes`,
+    `/build/outputs/${architecture}/bytes`
   );
-  assertEqual(
+  assertOrMeasure(
     observed.sha256,
     expectedOutput.sha256,
-    `${architecture} binary SHA-256`
+    `${architecture} binary SHA-256`,
+    `/build/outputs/${architecture}/sha256`
   );
   return observed;
 }
@@ -1486,15 +2339,331 @@ function runWorker(executable, execution, request, label) {
   return { bytes: result.stdout, decoded };
 }
 
-function verifyRequestParity(builds, universal, oracle) {
-  const fixtureIds = [
-    "noop",
-    "runtime-array",
-    "wgsl-error",
-    // This checked-in request retains a historical fixture name, but the real
-    // worker does not inject failures and successfully translates it.
-    "generate-failure",
-  ];
+function assertExactJSON(actual, expected, label) {
+  assertEqual(JSON.stringify(actual), JSON.stringify(expected), label);
+}
+
+function assertSchema(validate, value, label) {
+  if (!validate(value)) {
+    fail(
+      `${label} failed schema validation: ${JSON.stringify(validate.errors)}`
+    );
+  }
+}
+
+function maskMslNonCode(source) {
+  let state = "code";
+  let quote;
+  let output = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (state === "code") {
+      if (character === "/" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "line-comment";
+      } else if (character === "/" && next === "*") {
+        output += "  ";
+        index += 1;
+        state = "block-comment";
+      } else if (character === '"' || character === "'") {
+        output += " ";
+        quote = character;
+        state = "quoted";
+      } else {
+        output += character;
+      }
+      continue;
+    }
+    if (state === "line-comment") {
+      output += character === "\n" ? "\n" : " ";
+      if (character === "\n") state = "code";
+      continue;
+    }
+    if (state === "block-comment") {
+      if (character === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "code";
+      } else {
+        output += character === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+    if (character === "\\" && next !== undefined) {
+      output += next === "\n" ? " \n" : "  ";
+      index += 1;
+    } else if (character === quote) {
+      output += " ";
+      state = "code";
+      quote = undefined;
+    } else {
+      output += character === "\n" ? "\n" : " ";
+    }
+  }
+  return output;
+}
+
+function verifyMslMaskSelfCanary() {
+  const source =
+    "// VGPU_LINE_DECOY\n" +
+    "/* VGPU_BLOCK_DECOY */\n" +
+    'constant char* text = "VGPU_STRING_DECOY";\n' +
+    "constant char value = 'Q';\n" +
+    "[[VGPU_REAL_ATTRIBUTE]]\n";
+  const masked = maskMslNonCode(source);
+  for (const decoy of [
+    "VGPU_LINE_DECOY",
+    "VGPU_BLOCK_DECOY",
+    "VGPU_STRING_DECOY",
+  ]) {
+    if (masked.includes(decoy)) fail(`MSL lexical mask exposed ${decoy}`);
+  }
+  const characterOffset = source.indexOf("'Q'") + 1;
+  if (
+    masked[characterOffset] !== " " ||
+    !masked.includes("[[VGPU_REAL_ATTRIBUTE]]")
+  ) {
+    fail("MSL lexical mask hid code or exposed a character literal");
+  }
+}
+
+function assertMslIncludes(response, fragments, label) {
+  if (typeof response?.result?.msl !== "string") {
+    fail(`${label} omitted successful MSL output`);
+  }
+  const code = maskMslNonCode(response.result.msl);
+  for (const fragment of fragments) {
+    if (!code.includes(fragment)) {
+      fail(`${label} MSL omitted ${JSON.stringify(fragment)}`);
+    }
+  }
+}
+
+function verifyOracleBranchEvidence(id, response) {
+  switch (id) {
+    case "noop":
+    case "generate-failure":
+      assertExactJSON(
+        {
+          interface: response.result?.interface,
+          workgroup: response.result?.resolvedWorkgroupSize,
+          bindings: response.result?.bindings,
+          internalBindings: response.result?.internalBindings,
+          sizeRegions: response.result?.storageBufferSizeRegions,
+        },
+        {
+          interface: { kind: "compute" },
+          workgroup: { x: 1, y: 1, z: 1 },
+          bindings: [],
+          internalBindings: [],
+          sizeRegions: [],
+        },
+        `${id} empty compute evidence`
+      );
+      assertMslIncludes(
+        response,
+        [
+          `kernel void ${
+            id === "noop" ? "vgpu_noop" : "vgpu_writer_failure"
+          }() {`,
+        ],
+        id
+      );
+      break;
+    case "runtime-array":
+      assertExactJSON(
+        {
+          interface: response.result?.interface,
+          workgroup: response.result?.resolvedWorkgroupSize,
+          bindings: response.result?.bindings,
+          internalBindings: response.result?.internalBindings,
+          sizeRegions: response.result?.storageBufferSizeRegions,
+        },
+        {
+          interface: { kind: "compute" },
+          workgroup: { x: 1, y: 1, z: 1 },
+          bindings: [
+            {
+              group: 0,
+              binding: 0,
+              slots: [
+                {
+                  mode: "direct",
+                  resourceClass: "buffer",
+                  component: "buffer",
+                  index: 0,
+                  count: 1,
+                },
+              ],
+            },
+          ],
+          internalBindings: [
+            {
+              role: "immediate-data",
+              slots: [
+                {
+                  mode: "direct",
+                  resourceClass: "buffer",
+                  component: "buffer",
+                  index: 30,
+                  count: 1,
+                },
+              ],
+            },
+          ],
+          sizeRegions: [{ stage: "compute", immediateDataByteOffset: 4 }],
+        },
+        `${id} runtime-array transport evidence`
+      );
+      assertMslIncludes(
+        response,
+        ["[[buffer(0)]]", "[[buffer(30)]]", "tint_storage_buffer_sizes"],
+        id
+      );
+      break;
+    case "wgsl-error": {
+      const diagnostic = response.diagnostics?.find(
+        (candidate) =>
+          candidate.code === "VGPU-NATIVE-WGSL-INVALID" &&
+          candidate.phase === "wgsl" &&
+          candidate.severity === "error"
+      );
+      if (!diagnostic) fail(`${id} omitted its WGSL validation diagnostic`);
+      assertExactJSON(
+        diagnostic.location,
+        {
+          kind: "generated-wgsl",
+          virtualPath: "resolved/imported-error.wgsl",
+          start: { line: 3, column: 10 },
+          end: { line: 3, column: 13 },
+          origin: { input: "helper-wgsl", precision: "module" },
+        },
+        `${id} attributed diagnostic location`
+      );
+      break;
+    }
+    case "vertex-sparse":
+      assertExactJSON(
+        response.result?.interface,
+        {
+          kind: "vertex",
+          attributes: [
+            { semantic: { location: 3 }, metal: { attribute: 3 } },
+            { semantic: { location: 7 }, metal: { attribute: 7 } },
+          ],
+        },
+        `${id} minimal Metal interface map`
+      );
+      assertMslIncludes(
+        response,
+        [
+          "[[attribute(3)]]",
+          "[[attribute(7)]]",
+          "[[vertex_id]]",
+          "[[instance_id]]",
+          "[[user(locn2)]] [[centroid_no_perspective]]",
+          "[[invariant]]",
+        ],
+        id
+      );
+      break;
+    case "fragment-sparse":
+      assertExactJSON(
+        response.result?.interface,
+        {
+          kind: "fragment",
+          colorOutputs: [
+            { semantic: { location: 1 }, metal: { color: 1 } },
+            { semantic: { location: 4 }, metal: { color: 4 } },
+          ],
+        },
+        `${id} minimal Metal interface map`
+      );
+      assertMslIncludes(
+        response,
+        [
+          "[[color(1)]]",
+          "[[color(4)]]",
+          "[[front_facing]]",
+          "[[sample_id]]",
+          "[[sample_mask]]",
+          "[[depth(any)]]",
+          "[[user(locn2)]] [[centroid_no_perspective]]",
+        ],
+        id
+      );
+      break;
+    case "compute-builtins":
+      assertExactJSON(
+        response.result?.interface,
+        { kind: "compute" },
+        `${id} minimal Metal interface map`
+      );
+      assertMslIncludes(
+        response,
+        [
+          "[[thread_position_in_grid]]",
+          "[[thread_position_in_threadgroup]]",
+          "[[thread_index_in_threadgroup]]",
+          "[[threadgroups_per_grid]]",
+          "[[threadgroup_position_in_grid]]",
+        ],
+        id
+      );
+      break;
+    case "dual-source":
+      assertExactJSON(
+        response.result?.interface,
+        {
+          kind: "fragment",
+          colorOutputs: [
+            {
+              semantic: { location: 0, blendSource: 0 },
+              metal: { color: 0, index: 0 },
+            },
+            {
+              semantic: { location: 0, blendSource: 1 },
+              metal: { color: 0, index: 1 },
+            },
+          ],
+        },
+        `${id} minimal Metal interface map`
+      );
+      assertMslIncludes(
+        response,
+        ["[[color(0)]] [[index(0)]]", "[[color(0)]] [[index(1)]]"],
+        id
+      );
+      break;
+    case "scalar-fragment":
+      assertExactJSON(
+        response.result?.interface,
+        {
+          kind: "fragment",
+          colorOutputs: [{ semantic: { location: 3 }, metal: { color: 3 } }],
+        },
+        `${id} minimal Metal interface map`
+      );
+      assertMslIncludes(response, ["[[user(locn9)]]", "[[color(3)]]"], id);
+      break;
+    case "interface-mismatch": {
+      const mismatch = response.diagnostics?.find(
+        (diagnostic) =>
+          diagnostic.code === "VGPU-NATIVE-TINT-INTERFACE" &&
+          diagnostic.phase === "inspect" &&
+          diagnostic.severity === "error"
+      );
+      if (!mismatch) {
+        fail(`${id} omitted the expected semantic-interface diagnostic`);
+      }
+      break;
+    }
+  }
+}
+
+function verifyRequestParity(builds, universal, oracle, protocol, validators) {
   const directVariants = [
     ["arm64/a", builds.arm64.a.executable, "native"],
     ["arm64/b", builds.arm64.b.executable, "native"],
@@ -1506,12 +2675,43 @@ function verifyRequestParity(builds, universal, oracle) {
     ["universal/b-x86_64", universal.b, "rosetta"],
   ];
   const results = {};
-  for (const id of fixtureIds) {
+  const measuredCanaries = {};
+  const requestHashes = new Set();
+  const emittedNames = new Set();
+  for (const fixture of oracleFixtures) {
+    const { id } = fixture;
     const expected = lock.oracle.canaries[id];
-    if (!expected) fail(`oracle canary ${id} is not locked`);
-    const request = readFileSync(join(requestDirectory, `${id}.json`));
+    if (!candidateMode && !expected) {
+      fail(`oracle canary ${id} is not locked`);
+    }
+    if (!candidateMode) {
+      assertEqual(expected.ok, fixture.ok, `${id} locked success state`);
+    }
+    const request = readFileSync(join(requestDirectory, fixture.path));
+    let decodedRequest;
+    try {
+      decodedRequest = JSON.parse(request.toString("utf8"));
+    } catch (error) {
+      fail(`${id} request is not valid JSON: ${error.message}`);
+    }
+    assertSchema(validators.request, decodedRequest, `${id} request`);
+    protocol.assertRequestSemantics(decodedRequest);
     const requestSha256 = sha256Buffer(request);
-    assertEqual(requestSha256, expected.requestSha256, `${id} request SHA-256`);
+    if (requestHashes.has(requestSha256)) {
+      fail(`${id} duplicates another oracle request byte for byte`);
+    }
+    requestHashes.add(requestSha256);
+    if (emittedNames.has(decodedRequest.entryPoint.metal)) {
+      fail(`${id} duplicates another oracle emitted entry-point name`);
+    }
+    emittedNames.add(decodedRequest.entryPoint.metal);
+    if (!candidateMode) {
+      assertEqual(
+        requestSha256,
+        expected.requestSha256,
+        `${id} request SHA-256`
+      );
+    }
     const reference = runWorker(
       oracle.executable,
       "native",
@@ -1519,17 +2719,35 @@ function verifyRequestParity(builds, universal, oracle) {
       `${id} monolithic oracle`
     );
     const responseSha256 = sha256Buffer(reference.bytes);
-    assertEqual(
-      reference.bytes.length,
-      expected.responseBytes,
-      `${id} response bytes`
+    if (!candidateMode) {
+      assertEqual(
+        reference.bytes.length,
+        expected.responseBytes,
+        `${id} response bytes`
+      );
+      assertEqual(
+        responseSha256,
+        expected.responseSha256,
+        `${id} response SHA-256`
+      );
+    }
+    assertEqual(reference.decoded.ok, fixture.ok, `${id} oracle ok`);
+    assertSchema(
+      validators.response,
+      reference.decoded,
+      `${id} raw oracle response`
     );
-    assertEqual(
-      responseSha256,
-      expected.responseSha256,
-      `${id} response SHA-256`
+    const referenceWithOrigins = protocol.attachDiagnosticOrigins(
+      decodedRequest,
+      reference.decoded
     );
-    assertEqual(reference.decoded.ok, expected.ok, `${id} oracle ok`);
+    assertSchema(
+      validators.response,
+      referenceWithOrigins,
+      `${id} enriched oracle response`
+    );
+    protocol.assertResponseSemantics(decodedRequest, referenceWithOrigins);
+    verifyOracleBranchEvidence(id, referenceWithOrigins);
     for (const [variant, executable, execution] of directVariants) {
       const result = runWorker(
         executable,
@@ -1542,7 +2760,28 @@ function verifyRequestParity(builds, universal, oracle) {
           `${id} response from ${variant} differs from the monolithic oracle canary`
         );
       }
+      assertSchema(
+        validators.response,
+        result.decoded,
+        `${id} ${variant} raw response`
+      );
+      const resultWithOrigins = protocol.attachDiagnosticOrigins(
+        decodedRequest,
+        result.decoded
+      );
+      assertSchema(
+        validators.response,
+        resultWithOrigins,
+        `${id} ${variant} enriched response`
+      );
+      protocol.assertResponseSemantics(decodedRequest, resultWithOrigins);
     }
+    measuredCanaries[id] = {
+      requestSha256,
+      responseBytes: reference.bytes.length,
+      responseSha256,
+      ok: fixture.ok,
+    };
     results[id] = {
       requestSha256,
       responseBytes: reference.bytes.length,
@@ -1552,6 +2791,7 @@ function verifyRequestParity(builds, universal, oracle) {
       ok: reference.decoded.ok,
     };
   }
+  candidateCanaries = measuredCanaries;
   return results;
 }
 
@@ -1596,15 +2836,17 @@ function createUniversal(builds, buildRoot) {
   const aHash = sha256File(output.a);
   const bHash = sha256File(output.b);
   assertEqual(bHash, aHash, "universal A/B binary SHA-256");
-  assertEqual(
+  assertOrMeasure(
     statSync(output.a).size,
     lock.build.outputs.universal.bytes,
-    "universal binary bytes"
+    "universal binary bytes",
+    "/build/outputs/universal/bytes"
   );
-  assertEqual(
+  assertOrMeasure(
     aHash,
     lock.build.outputs.universal.sha256,
-    "universal binary SHA-256"
+    "universal binary SHA-256",
+    "/build/outputs/universal/sha256"
   );
   return {
     ...output,
@@ -1664,7 +2906,7 @@ function publishArtifacts(builds, universal, report, notices) {
   );
   let published = false;
   try {
-    if (existsSync(artifactsDirectory)) {
+    if (pathEntryExists(artifactsDirectory)) {
       fail("artifact destination reappeared while the gate was running");
     }
     const binaryDirectory = join(stagingDirectory, "bin");
@@ -1700,6 +2942,7 @@ function publishArtifacts(builds, universal, report, notices) {
       join(stagingDirectory, "observed.json"),
       `${JSON.stringify(report, null, 2)}\n`
     );
+    verifySourceLockIdentity();
     renameSync(stagingDirectory, artifactsDirectory);
     published = true;
   } finally {
@@ -1749,11 +2992,13 @@ function buildMonolithicOracle(inputs, buildRoot, compileTintPrototype) {
 
 function createScratch(options) {
   if (options.scratchRoot) {
-    const parent = resolve(options.scratchRoot);
+    const parent = options.effectiveScratchRoot;
     mkdirSync(parent, { recursive: true });
     return mkdtempSync(join(parent, "c1-tint-direct-build-"));
   }
-  return mkdtempSync(join(tmpdir(), "vgpu-c1-tint-direct-build-"));
+  return mkdtempSync(
+    join(options.effectiveScratchRoot, "vgpu-c1-tint-direct-build-")
+  );
 }
 
 function compactBuildEvidence(builds) {
@@ -1772,6 +3017,19 @@ function compactBuildEvidence(builds) {
   );
 }
 
+function verifyBuildClosureParity(builds) {
+  const reference = builds.arm64.a.graph.sourceInputs;
+  for (const architecture of ["arm64", "x86_64"]) {
+    for (const copy of ["a", "b"]) {
+      assertEqual(
+        JSON.stringify(builds[architecture][copy].graph.sourceInputs),
+        JSON.stringify(reference),
+        `${architecture}/${copy} source closure parity`
+      );
+    }
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const pureHelp =
@@ -1780,18 +3038,65 @@ async function main() {
     usage(process.stdout);
     return;
   }
-  // A failed or interrupted gate must never leave an older PASS visible.
-  rmSync(artifactsDirectory, { recursive: true, force: true });
-  lock = readJSON(join(fixtureDirectory, "provenance", "source-lock.json"));
-  requestDirectory = resolve(fixtureDirectory, lock.oracle.requests.root);
+  acquireInvocationLock();
+  const candidateIntent = detectCandidateIntent(argv);
+  if (candidateIntent) {
+    localHeadCommit = stdoutText(
+      systemTools.git,
+      ["-C", repositoryRoot, "rev-parse", "HEAD^{commit}"],
+      "candidate repository HEAD",
+      { env: { ...process.env, GIT_NO_LAZY_FETCH: "1" } }
+    );
+  }
+  if (candidateIntent) {
+    if (pathEntryExists(artifactsDirectory)) {
+      fail(
+        "--emit-lock-candidate requires .artifacts to be absent and never deletes it"
+      );
+    }
+  } else {
+    // Any invalid, failed, or interrupted publication invocation must invalidate an older PASS.
+    rmSync(artifactsDirectory, { recursive: true, force: true });
+  }
+  const lockPath = join(fixtureDirectory, "provenance", "source-lock.json");
+  const lockBytes = readFileSync(lockPath);
+  baseLockSha256 = sha256Buffer(lockBytes);
+  lock = JSON.parse(lockBytes.toString("utf8"));
   defaultWorkerRoot = resolve(fixtureDirectory, lock.worker.defaultRoot);
   const options = parseArguments(argv);
+  candidateMode = options.emitLockCandidate !== undefined;
+  assertEqual(candidateMode, candidateIntent, "lock candidate invocation mode");
+  validateScratchRoot(options);
+  candidateMeasurements.clear();
+  candidateCanaries = undefined;
+  verifyFilesMatchGitHead(
+    repositoryRoot,
+    [fileURLToPath(import.meta.url), lockPath],
+    "candidate runner and source lock",
+    localHeadCommit
+  );
+  const ajvModule = await import("ajv/dist/2020.js");
+  if (typeof ajvModule.default !== "function") {
+    fail("Ajv 2020 module omitted its default constructor");
+  }
+  Ajv2020 = ajvModule.default;
+  requestDirectory = selectOracleRequestRoot();
   const inputs = verifySourceInputs(options);
   const compilerModule = await import(
     pathToFileURL(inputs.oracle.files.nativeCompiler).href
   );
   if (typeof compilerModule.compileTintPrototype !== "function") {
     fail("locked native compiler helper omitted compileTintPrototype");
+  }
+  const protocolModule = await import(
+    pathToFileURL(inputs.oracle.files.protocol).href
+  );
+  if (
+    typeof protocolModule.attachDiagnosticOrigins !== "function" ||
+    typeof protocolModule.assertRequestSemantics !== "function" ||
+    typeof protocolModule.assertResponseSemantics !== "function"
+  ) {
+    fail("locked protocol helper omitted semantic validators");
   }
   const toolchain = verifyToolchain(inputs);
   const buildRoot = createScratch(options);
@@ -1819,12 +3124,19 @@ async function main() {
         `${architecture} A/B binary SHA-256`
       );
     }
+    verifyBuildClosureParity(builds);
 
     const universal = createUniversal(builds, buildRoot);
     process.stderr.write(
       "C1 direct Tint build: compare direct workers with monolithic oracle\n"
     );
-    const requests = verifyRequestParity(builds, universal, oracle);
+    const requests = verifyRequestParity(
+      builds,
+      universal,
+      oracle,
+      protocolModule,
+      inputs.oracle.validators
+    );
     const finalInputs = verifySourceInputs(options);
     assertEqual(
       JSON.stringify({
@@ -1853,7 +3165,7 @@ async function main() {
     const notices = binaryNotices();
     const report = {
       schemaVersion: 1,
-      status: "passed",
+      status: candidateMode ? "lock-candidate-generated" : "passed",
       profile: lock.profile,
       source: {
         dawn: inputs.revisions.dawn,
@@ -1896,7 +3208,12 @@ async function main() {
         spirvHeaders: "configure-only; source license is not a binary notice",
       },
     };
-    publishArtifacts(builds, universal, report, notices);
+    if (candidateMode) {
+      report.lockCandidate = writeLockCandidate(options.emitLockCandidate);
+    } else {
+      verifySourceLockIdentity();
+      publishArtifacts(builds, universal, report, notices);
+    }
     completed = true;
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } finally {
@@ -1917,5 +3234,16 @@ try {
   await main();
 } catch (error) {
   process.stderr.write(`${error.stack ?? error.message ?? String(error)}\n`);
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  try {
+    releaseInvocationLock();
+  } catch (error) {
+    process.stderr.write(
+      `C1 direct Tint build: failed to release invocation lock: ${
+        error.stack ?? error.message ?? String(error)
+      }\n`
+    );
+    process.exitCode = 1;
+  }
 }

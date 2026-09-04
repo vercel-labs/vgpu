@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/direct-fragment-sparse.wgsl",
+    "sha256": "59641f978e7eb8677ca1a8da0c4873d1193d6564ab8ec5bd551dc31898a3b106",
+    "text": "struct FragmentInputs {\n  @builtin(position) position: vec4f,\n  @builtin(front_facing) front_facing: bool,\n  @builtin(sample_index) sample_index: u32,\n  @builtin(sample_mask) sample_mask: u32,\n  @location(2) @interpolate(linear, centroid) uv: vec2f,\n  @location(5) @interpolate(flat) tag: u32,\n  @location(6) weight: f32,\n}\n\nstruct FragmentOutputs {\n  @location(1) first: vec4f,\n  @location(4) second: vec4f,\n  @builtin(frag_depth) depth: f32,\n  @builtin(sample_mask) sample_mask: u32,\n}\n\n@fragment\nfn main(input: FragmentInputs) -> FragmentOutputs {\n  return FragmentOutputs(\n    vec4f(input.uv, input.weight, select(0.0, 1.0, input.front_facing)),\n    vec4f(f32(input.tag), f32(input.sample_index), input.position.z, 1.0),\n    input.position.z,\n    input.sample_mask,\n  );\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/direct-fragment-sparse.wgsl",
+      "sha256": "59641f978e7eb8677ca1a8da0c4873d1193d6564ab8ec5bd551dc31898a3b106"
+    },
+    "sources": [
+      {
+        "input": "direct-fragment-sparse-wgsl",
+        "sha256": "59641f978e7eb8677ca1a8da0c4873d1193d6564ab8ec5bd551dc31898a3b106"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 777
+        },
+        "origin": {
+          "input": "direct-fragment-sparse-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "fragment",
+    "wgsl": "main",
+    "metal": "vgpu_direct_fragment_sparse"
+  },
+  "semanticInterface": {
+    "kind": "fragment",
+    "inputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 2
+        },
+        "invariant": false,
+        "location": 2,
+        "interpolation": {
+          "type": "linear",
+          "sampling": "centroid"
+        }
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "location": 5,
+        "interpolation": {
+          "type": "flat",
+          "sampling": "first"
+        }
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 1
+        },
+        "invariant": false,
+        "location": 6,
+        "interpolation": {
+          "type": "perspective",
+          "sampling": "center"
+        }
+      },
+      {
+        "type": {
+          "scalar": "bool",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "front_facing"
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "builtin": "position"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "sample_index"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "sample_mask"
+      }
+    ],
+    "outputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 1
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 4
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "frag_depth"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "sample_mask"
+      }
+    ]
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}

@@ -15,6 +15,12 @@ Four clean Release builds passed: A and B for `arm64`, then A and B for `x86_64`
 builds were byte-identical within each architecture. Combining each pair with `lipo` also produced
 byte-identical universal executables.
 
+The measurements below are the last accepted baseline. The neighboring worker has since gained the
+exact shader-interface handshake, so the tracked lock is intentionally stale until a newly measured
+candidate is reviewed, copied into place, and the ordinary publication gate passes again. Candidate
+generation is a separate non-publishing mode described below; it does not turn new measurements into
+accepted provenance by itself.
+
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
 | arm64     |  5,749,456 | `3fbd9831d8d8f5e98e64b163d516384159a38884e86290b201fb8dde9cffcf6b` |
@@ -22,17 +28,29 @@ byte-identical universal executables.
 | universal | 12,565,200 | `8fb3a3c38e30f6121170bd159546066c53f7130a3b30026fb6927be63694903a` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
-against the previously verified monolithic release archive, then requires `noop`, `runtime-array`,
-`wgsl-error`, and `generate-failure` to match that reference byte for byte across eight direct
-variants: both thin A/B builds, both universal A/B builds, and each applicable arm64-native or
-x86_64-Rosetta execution mode. The last request retains a historical fixture name; the real worker
+against the previously verified monolithic release archive. The intended request closure contains
+the original `noop`, `runtime-array`, `wgsl-error`, and `generate-failure` cases plus checked-in
+vertex, fragment, scalar-fragment, compute-builtin, dual-source, and semantic-interface-mismatch
+requests. Each response must match that reference byte for byte across eight direct variants: both
+thin A/B builds, both universal A/B builds, and each applicable arm64-native or x86_64-Rosetta
+execution mode. The last original request retains a historical fixture name; the real worker
 successfully translates it, and all variants agree on that success. The monolithic executable is
 reference-only: it is neither copied into `.artifacts` nor a candidate for distribution.
 
-Before loading that oracle helper, the gate authenticates the helper and its local protocol module,
-both provenance manifests it consumes, and the exact four-request closure. Each oracle response
-must also match its locked byte count, SHA-256, and success state before any direct worker can use
-it as a reference.
+In normal mode, before loading that oracle helper, the gate authenticates the helper and its local
+protocol module, the origin/request/response schemas, both provenance manifests it consumes, and the
+exact ten-request closure. It validates each request and raw plus origin-enriched response against
+the authenticated JSON Schemas, then runs the JavaScript semantic validators in addition to the
+independent native decoder. Branch-specific assertions require the exact sparse vertex attributes,
+sparse fragment colors, fragment and compute builtins, scalar locations, dual-source color/index
+pairs, and mismatch diagnostic, so common byte parity cannot bless a canary that stopped exercising
+its intended path. Each oracle response must also match its locked byte count, SHA-256, and success
+state before any direct worker can use it as a reference.
+
+Candidate mode does not treat changed helper, protocol, schema, or request bytes as authenticated
+by the stale lock. It measures their exact bytes before use, requires them to remain identical
+through the final input recheck, and emits those measurements only for human review. Hard-coded
+fixture expectations and immutable provenance checks remain independent constraints.
 
 ## Build boundary
 
@@ -74,6 +92,69 @@ bash experiments/native-metal-spikes/c1-tint-direct-build/run.sh \
   --jobs 8
 ```
 
+### Measure a lock candidate
+
+When the tracked lock is stale because the previously locked worker, protocol helper, schemas, or
+intended request set changed, run the same command with a new output path below `.context`:
+
+```bash
+bash experiments/native-metal-spikes/c1-tint-direct-build/run.sh \
+  --dawn-root .context/native-spikes/dawn-8f25-source \
+  --jsoncpp-root .context/native-spikes/jsoncpp-1.9.8 \
+  --release-root .context/native-spikes/c1-tint-standalone/extracted/Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release \
+  --compat-include .context/native-spikes/c1-tint-standalone/wrapper-prototype/include \
+  --sdk-root /Library/Developer/CommandLineTools/SDKs/MacOSX14.5.sdk \
+  --cmake .context/native-spikes/c1-tint-direct-build/tools/bin/cmake \
+  --ninja .context/native-spikes/c1-tint-direct-build/tools/bin/ninja \
+  --python /usr/bin/python3 \
+  --jobs 8 \
+  --emit-lock-candidate .context/c1-tint-direct-build-source-lock.candidate.json
+```
+
+Candidate mode still builds the monolithic oracle, both A/B thin workers, and both universal
+workers; executes native and Rosetta parity; validates the exact semantic evidence; and rechecks
+all source and closure inputs at the end. It keeps commits, trees, DEPS, licenses, the configuration
+manifest and closure, toolchain, SDK, target, flags, architectures, object count, archive order,
+dynamic-library boundary, and configure-only SPIRV-Headers closure strict. It may measure only the
+current worker, helper, protocol, and schema bytes; the hard-coded request migration; canary
+response goldens; direct binary goldens; and the compiled source closure reached from pinned
+repositories. All four builds must report the same compiled closure before those measurements can
+become a candidate.
+
+Candidate generation requires the runner, base lock, local worker, helper, protocol, schemas, and
+request files to be committed: their worktree bytes and executable modes must match their exact
+stage-zero `HEAD` entries. Every worker file discovered by the compiled closure receives that same
+check, so a new dirty or untracked header cannot enter a candidate through Ninja. Every selected
+Dawn/Tint, Abseil, and JsonCpp compile input is likewise checked against its pinned checkout. This
+allows the selected compiled path set to evolve without allowing dirty dependency bytes to enter a
+new aggregate. The checks disable lazy fetches and use explicit literal paths rather than a broad
+status scan, preserving the partial-clone boundary.
+
+The lock stores only compiled-closure aggregates. If a candidate changes the Dawn/Tint, Abseil, or
+JsonCpp aggregate rather than only the worker aggregate, rerun with `--keep-builds` and inspect the
+Ninja input paths before approving it; the candidate JSON alone is not sufficient human-review
+evidence for that dependency-closure change.
+
+The output must not already exist, its real parent must be below this repository's `.context`, and
+`.artifacts` must be absent. Candidate mode never deletes or publishes `.artifacts` and never edits
+the tracked lock. It also verifies that the tracked lock did not change while the run was in
+progress, constructs the proposed lock, and rejects any JSON-pointer diff outside the explicit
+mutable allowlist before creating the candidate with exclusive-write semantics.
+
+In either mode, the effective scratch parent—an explicit `--scratch-root` or the platform temporary
+directory—must be outside `.artifacts` and the invocation-lock directory. This keeps retained build
+trees from colliding with publication state or preventing sentinel cleanup.
+
+Candidate and publication runs share an atomic invocation-lock directory below `.context`, acquired
+before either mode inspects `.artifacts` or reads the source lock. A concurrent run fails without
+touching the other run's state. A process crash can intentionally leave this sentinel stale; verify
+that no gate is still running before removing the path named by the error and trying again.
+
+The candidate is review material, not a passing gate. Review its diff against
+`provenance/source-lock.json`, copy it there explicitly only after the changes are understood, then
+rerun the command without `--emit-lock-candidate`. Only that ordinary run can publish a new
+`.artifacts` result.
+
 The accepted profile is CMake 3.31.6, Ninja 1.13.2, Python 3.9.6, Apple Clang 17.0.0 build
 1700.6.3.2, C++20, the macOS 14.5 SDK, and a `14.0` deployment target. The direct workers therefore
 target macOS 14 even though this complete gate currently requires an arm64 macOS 26 host: the
@@ -97,11 +178,12 @@ inputs are materialized neither changes the output nor discloses the local check
 
 It also verifies the CMake cache, all compile commands, the five direct worker objects, the exact
 order and hash of 54 static archives, Mach-O load commands, dynamic libraries, native/Rosetta
-execution, rebuild hashes, and request/response bytes. It invalidates `.artifacts/` before beginning
-a non-help invocation, so an interrupted or failed run cannot leave an older PASS visible. On
-success it writes the three binaries, `observed.json`, and the Dawn/Tint, Abseil, and JsonCpp license
-notices to a sibling staging directory, then publishes the whole directory with one rename. Use
-`--keep-builds` to retain all four temporary build trees for inspection.
+execution, rebuild hashes, and request/response bytes. An ordinary publication run invalidates
+`.artifacts/` before beginning, so an interrupted or failed run cannot leave an older PASS visible.
+On success it writes the three binaries, `observed.json`, and the Dawn/Tint, Abseil, and JsonCpp
+license notices to a sibling staging directory, then publishes the whole directory with one rename.
+Candidate mode instead requires `.artifacts` to be absent and leaves it absent. Use `--keep-builds`
+to retain all four temporary build trees for inspection.
 
 [`provenance/source-lock.json`](./provenance/source-lock.json) is the source-of-truth lock. Dawn's
 Chromium Abseil checkout is part of the static link. SPIRV-Headers is required by Dawn's CMake
