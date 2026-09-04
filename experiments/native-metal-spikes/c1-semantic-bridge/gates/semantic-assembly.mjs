@@ -57,6 +57,16 @@ const expectedSnapshots = Object.freeze({
     nativeResponseSha256:
       "52531cfe25ec126e724adb03e0e44759bfa8da66488a9b28b9b3c112256c3dcb",
   }),
+  draw: Object.freeze({
+    programFingerprint:
+      "8bb06404a2c4f490e5a959b58b4f9abfc4c583caff76c226bc950f745d858810",
+    resolvedSourceSha256:
+      "78ac180f55f95c1ed894fade30eb14ab0ad3d9a5c8075241addf0c55d39c735f",
+    semanticRequestSha256:
+      "db2d6d0cfc87ef29ac161bbea0510c22590435149e647c3b8a5d7bbbcab28f2e",
+    nativeResponseSha256:
+      "2b5a709642f2e0677a54ac9ad153f5d5f764b5b1f9dbc960e470929d311495e9",
+  }),
   compute: Object.freeze({
     programFingerprint:
       "21c4ce880f30b107e8540c9c977f9425e628057a365ecd8775ea456ad1824a3b",
@@ -213,16 +223,109 @@ const compute = await makeFixture({
   },
 });
 
-for (const fixture of [effect, compute]) assertAcceptedFixture(fixture);
+const draw = await makeFixture({
+  label: "draw",
+  configSource: "Shaders/draw/main.wgsl",
+  generatedVirtualPath: "Intermediate/semantic-draw.resolved.wgsl",
+  sources: [
+    {
+      file: "draw/main.wgsl",
+      input: "draw-main-wgsl",
+      virtualPath: "Shaders/draw/main.wgsl",
+    },
+    {
+      file: "draw/fragment.wgsl",
+      input: "draw-fragment-wgsl",
+      virtualPath: "Shaders/draw/fragment.wgsl",
+    },
+  ],
+  selection: {
+    name: "AssemblyDraw",
+    source: "Shaders/draw/main.wgsl",
+    kind: "draw",
+  },
+  expectedInventory: [
+    { stage: "vertex", wgsl: "draw_vertex" },
+    { stage: "fragment", wgsl: "draw_fragment" },
+  ],
+  result() {
+    return {
+      entryPoints: [
+        {
+          stage: "vertex",
+          wgsl: "draw_vertex",
+          semanticInterface: {
+            kind: "vertex",
+            inputs: [
+              {
+                type: { scalar: "u32", width: 1 },
+                invariant: false,
+                builtin: "vertex_index",
+              },
+            ],
+            outputs: [
+              {
+                type: { scalar: "f32", width: 2 },
+                invariant: false,
+                location: 0,
+                interpolation: { type: "perspective", sampling: "center" },
+              },
+              {
+                type: { scalar: "f32", width: 4 },
+                invariant: false,
+                builtin: "position",
+              },
+            ],
+          },
+          bindings: [],
+          samplingPairs: [],
+          overrides: [],
+        },
+        {
+          stage: "fragment",
+          wgsl: "draw_fragment",
+          semanticInterface: {
+            kind: "fragment",
+            inputs: [
+              {
+                type: { scalar: "f32", width: 2 },
+                invariant: false,
+                location: 0,
+                interpolation: { type: "perspective", sampling: "center" },
+              },
+            ],
+            outputs: [
+              {
+                type: { scalar: "f32", width: 4 },
+                invariant: false,
+                location: 0,
+              },
+            ],
+          },
+          bindings: [],
+          samplingPairs: [],
+          overrides: [],
+        },
+      ],
+      bindings: [],
+      overrides: [],
+      types: {},
+      layouts: {},
+    };
+  },
+});
+
+for (const fixture of [effect, draw, compute]) assertAcceptedFixture(fixture);
 assertNominalFailures(effect, compute);
 assertDeclarationFailures(effect);
+assertCrossModuleDeclarationFailure(draw);
 assertProfileFailures(effect);
 assertLinkFailure(effect);
 assertFingerprintRules(effect);
 assertProjectionFailures(effect);
 
 const native = options.worker
-  ? await assertNativeExtractions(options.worker, [effect, compute])
+  ? await assertNativeExtractions(options.worker, [effect, draw, compute])
   : { status: "skipped", reason: "no semantic extraction worker supplied" };
 if (options.requireWorker && native.status !== "passed") {
   fail("a native semantic extraction worker was required");
@@ -233,7 +336,7 @@ process.stdout.write(
     {
       gate: "semantic-assembly",
       status: options.worker ? "passed" : "static-passed",
-      fixtures: [effect, compute].map((fixture) => ({
+      fixtures: [effect, draw, compute].map((fixture) => ({
         label: fixture.label,
         programFingerprint:
           fixture.assembly.semantic.programs[0].fingerprint.sha256,
@@ -243,10 +346,10 @@ process.stdout.write(
         projectedEntries: fixture.compilerRequests.length,
       })),
       static: {
-        assemblies: 2,
-        compilerRequests: 3,
+        assemblies: 3,
+        compilerRequests: 5,
         nominalFailures: 5,
-        declarationFailures: 4,
+        declarationFailures: 5,
         retainedResolverSnapshotChecks: 1,
         profileFailures: 1,
         linkFailures: 1,
@@ -266,22 +369,30 @@ async function makeFixture({
   file,
   input,
   configSource,
+  generatedVirtualPath = generatedPath,
+  sources,
   selection,
   expectedInventory,
   result,
 }) {
-  const text = readFileSync(join(fixtureDirectory, "authored", file), "utf8");
+  const authoredSources = sources ?? [
+    { file, input, virtualPath: configSource },
+  ];
   const resolverInput = {
     entry: configSource,
-    generatedVirtualPath: generatedPath,
-    sources: [
-      {
-        id: input,
-        virtualPath: configSource,
+    generatedVirtualPath,
+    sources: authoredSources.map((source) => {
+      const text = readFileSync(
+        join(fixtureDirectory, "authored", source.file),
+        "utf8"
+      );
+      return {
+        id: source.input,
+        virtualPath: source.virtualPath,
         text,
         sha256: sha256(text),
-      },
-    ],
+      };
+    }),
   };
   const { graph, declarations } = await resolveVirtualShaderWithDeclarations(
     resolverInput
@@ -403,6 +514,35 @@ function assertAcceptedFixture(fixture) {
     assert.equal(fragment.source.input, "semantic-assembly-effect-wgsl");
     assert.deepEqual(fragment.source.start, { line: 5, column: 1 });
     assert.deepEqual(fragment.source.end, { line: 8, column: 2 });
+    assert.equal(Object.keys(fixture.assembly.semantic.types).length, 4);
+  } else if (fixture.label === "draw") {
+    const { vertex, fragment } = program.entryPoints;
+    assert.equal(fixture.finalized.injection, undefined);
+    assert.deepEqual(program.sources, ["draw-fragment-wgsl", "draw-main-wgsl"]);
+    assert.equal(vertex.origin, "authored");
+    assert.deepEqual(vertex.names, {
+      authored: "draw_vertex",
+      wgsl: "draw_vertex",
+    });
+    assert.deepEqual(vertex.source, {
+      input: "draw-main-wgsl",
+      start: { line: 8, column: 1 },
+      end: { line: 14, column: 2 },
+    });
+    assert.equal(fragment.origin, "authored");
+    assert.deepEqual(fragment.names, {
+      authored: "draw_fragment",
+      wgsl: "draw_fragment",
+    });
+    assert.deepEqual(fragment.source, {
+      input: "draw-fragment-wgsl",
+      start: { line: 5, column: 1 },
+      end: { line: 8, column: 2 },
+    });
+    assert.match(fixture.graph.resolved.wgsl, /_vgsl_0c4135c9__VertexOutput/u);
+    assert.match(fixture.graph.resolved.wgsl, /_vgsl_b2a98c8f__shade/u);
+    assert.match(fixture.graph.resolved.wgsl, /fn draw_vertex\(/u);
+    assert.match(fixture.graph.resolved.wgsl, /fn draw_fragment\(/u);
     assert.equal(Object.keys(fixture.assembly.semantic.types).length, 4);
   } else {
     const { compute: entry } = program.entryPoints;
@@ -561,6 +701,26 @@ function assertDeclarationFailures(fixture) {
     fixture.graph.resolved.ast.modules[0].entryPointDeclarations[0].span =
       originalSpan;
   }
+}
+
+function assertCrossModuleDeclarationFailure(fixture) {
+  const crossed = structuredClone(fixture.graph);
+  const main = crossed.resolved.ast.modules.find(
+    (module) => module.path === "Shaders/draw/main.wgsl"
+  );
+  const fragment = crossed.resolved.ast.modules.find(
+    (module) => module.path === "Shaders/draw/fragment.wgsl"
+  );
+  assert(main);
+  assert(fragment);
+  [main.entryPointDeclarations, fragment.entryPointDeclarations] = [
+    fragment.entryPointDeclarations,
+    main.entryPointDeclarations,
+  ];
+  expectCode(
+    () => validateResolvedDeclarationCandidate(crossed),
+    "VGPU-C1-DECLARATIONS-SPAN"
+  );
 }
 
 function assertProfileFailures(fixture) {
