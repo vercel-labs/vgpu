@@ -165,10 +165,30 @@ const REMEDIES: { label: string; command: string }[] = [
   },
   {
     label: "distro Vulkan loader + Mesa ICD (doctor's 'Alternative (system packages)')",
-    command:
+    command: asRoot(
       "apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers",
+    ),
   },
 ];
+
+/**
+ * Runs a package-manager command as root whether or not the sandbox user is.
+ *
+ * `ghcr.io/vercel/eve:latest` is a floating tag, and the revision published on
+ * 2026-09-03 switched the container user from root to `vercel-sandbox` (uid
+ * 1001, passwordless sudo). Every bare `apt-get` here then failed with
+ * "Permission denied", the `|| true` that keeps the remedy ladder moving
+ * swallowed it, and bootstrap ended on an honest but misleading "doctor is
+ * unhealthy after applying its prescriptions" — the prescriptions had never
+ * applied. `sudo -n` (never prompt) keeps a missing sudo or a password prompt
+ * a loud failure instead of a hang.
+ *
+ * `command` must not contain single quotes; every caller passes a literal.
+ */
+function asRoot(command: string): string {
+  if (command.includes("'")) throw new Error(`asRoot: command must not contain single quotes: ${command}`);
+  return `if [ "$(id -u)" = 0 ]; then ${command}; else sudo -n sh -c '${command}'; fi`;
+}
 
 /**
  * Content key for the RUNNING TASK's seed tree (`agent/sandbox/tasks/<id>/`).
@@ -250,7 +270,7 @@ const TASK_EXTRAS: Record<string, { label: string; command: string }[]> = {
   "n1-hero-shader": [
     {
       label: "browser runtime libraries (Vulkan loader, Mesa, virtual X server)",
-      command: "apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth",
+      command: asRoot("apt-get update && apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth"),
     },
     {
       // PR #272 review (P1-9): `curl`, `pgrep` and `setsid` are behind hard
@@ -266,7 +286,7 @@ const TASK_EXTRAS: Record<string, { label: string; command: string }[]> = {
       // the base image today, so this line is a declaration of a real
       // dependency, not a workaround for a real gap.
       label: "verify-pass dependencies (curl for the port/nonce poll, pgrep/setsid for process control)",
-      command: "apt-get update && apt-get install -y curl procps util-linux",
+      command: asRoot("apt-get update && apt-get install -y curl procps util-linux"),
     },
     {
       label: "playwright's chromium + its system libraries (Chrome for Testing publishes no arm64 build)",

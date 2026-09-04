@@ -4,6 +4,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { snapshotDir, snapshotTarPath } from "../lib/paths.ts";
 import { requireTaskId } from "../lib/task.ts";
 import { verifyN1HeroShader } from "../lib/verify/n1-hero-shader.mjs";
+import { verifyNextBuild } from "../lib/verify/next-build.mjs";
 
 const WORKSPACE = "/workspace";
 const TAR_IN_SANDBOX = "/tmp/vgpu-agent-evals-workspace.tar";
@@ -43,8 +44,14 @@ export default defineHook({
       // Task-specific verification first, so its artifacts are inside the
       // workspace before the tar is taken. It never throws: a failed build is a
       // gate the eval reports, not an exception that loses the whole run.
-      if (requireTaskId() === "n1-hero-shader") {
+      const taskId = requireTaskId();
+      if (taskId === "n1-hero-shader") {
         await verifyN1HeroShader(sandbox);
+      } else if (taskId === "n2-ship-hero" || taskId === "n3-explore-hero") {
+        // Build + `vgpu check` only: these two tasks grade what the agent does at
+        // the finishing moment, so no browser pass is needed and each run stays
+        // in the minutes rather than n1's half hour.
+        await verifyNextBuild(sandbox);
       }
 
       await exportWorkspaceTar(sandbox, sessionId);
