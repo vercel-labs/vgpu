@@ -149,10 +149,15 @@ export function assembleMetalProgramProjection({
       msl: response.result.msl,
     }))
   );
+  const semanticResourceEvidence = Object.freeze({
+    program,
+    layouts: assembly.semantic.layouts,
+  });
   metalProgramProjections.set(frozenProjection, {
     allocation,
     assembly,
     compiler,
+    semanticResourceEvidence,
     sources,
   });
   return frozenProjection;
@@ -167,14 +172,18 @@ export function isMetalProgramProjection(value) {
 }
 
 export function metalSourcesForProgramProjection(value) {
-  const record = metalProgramProjections.get(value);
-  if (!record) {
-    projectionFail(
-      "VGPU-C1-METAL-PROJECTION-BRAND",
-      "Metal sources require a nominal program projection"
-    );
-  }
-  return record.sources;
+  return requireProgramProjection(value, "Metal sources").sources;
+}
+
+/**
+ * @internal
+ * Exposes only the semantic program and layout graph needed to derive a
+ * runtime resource layout. Callers cannot substitute semantic evidence or an
+ * allocation for a nominal program projection.
+ */
+export function semanticResourceEvidenceForMetalProgramProjection(value) {
+  return requireProgramProjection(value, "Semantic resource evidence")
+    .semanticResourceEvidence;
 }
 
 function assertExactStageSet(records, expectedStages) {
@@ -276,6 +285,17 @@ function freezeJson(value) {
     Object.freeze(value);
   }
   return value;
+}
+
+function requireProgramProjection(value, owner) {
+  const record = metalProgramProjections.get(value);
+  if (!record) {
+    projectionFail(
+      "VGPU-C1-METAL-PROJECTION-BRAND",
+      `${owner} requires a nominal program projection`
+    );
+  }
+  return record;
 }
 
 function projectionFail(code, message) {
