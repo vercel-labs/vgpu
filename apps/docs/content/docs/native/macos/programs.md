@@ -67,12 +67,12 @@ List every program exported by the generated Swift module:
 | `program.name`        |       Yes | —                       | Generated Swift namespace and stable artifact identifier.                                                                       |
 | `program.kind`        |        No | `"effect"`              | `"effect"`, `"draw"`, or `"compute"`.                                                                                           |
 | `program.source`      |       Yes | —                       | Entry WGSL file, relative to the configuration file.                                                                            |
-| `program.entryPoints` | Sometimes | Inferred                | Required when the resolved source has more than one compatible entry point.                                                     |
+| `program.entryPoints` | Sometimes | Inferred                | Required when the resolved source has more than one entry point in a required stage.                                            |
 | `program.overrides`   |        No | Evaluated WGSL defaults | Typed WGSL override values fixed for this native program. A statically used override without an initializer must be configured. |
 
 An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
 
-When exactly one compatible entry point exists for a required stage, omit it from `entryPoints`. Multiple compatible entry points are never chosen by source order: `native check` requires an explicit selection. The artifact records whether an effect's vertex stage was authored or injected.
+When exactly one entry point exists in a required stage, omit it from `entryPoints`. Multiple entries in that stage are never chosen by source order: `native check` requires an explicit selection. Entries in stages the program does not use do not create ambiguity. Interface compatibility is validated after selection against Tint's semantic result. The artifact records whether an effect's vertex stage was authored or injected.
 
 Render target formats, blend state, culling, depth state, sample count, geometry, and dispatch dimensions do not belong in this file. They are properties of targets and program instances at runtime.
 

@@ -65,23 +65,23 @@ List every program exported by the generated Swift module:
 }
 ```
 
-| Field                 |  Required | Default         | Description                                                                                |
-| --------------------- | --------: | --------------- | ------------------------------------------------------------------------------------------ |
-| `moduleName`          |       Yes | —               | Swift module, library, and product name.                                                   |
-| `platform`            |       Yes | —               | Native compiler target; currently `"macos"`.                                               |
-| `minimumOSVersion`    |        No | `"14.0"`        | Deployment target for the Swift package and Metal compiler.                                |
-| `languageFeatures`    |        No | `[]`            | WGSL environment features explicitly enabled for every program in this configuration.      |
-| `programs`            |       Yes | —               | Programs exported by this module.                                                          |
-| `output`              |       Yes | —               | Dedicated generated directory; replacement requires this configuration's ownership marker. |
-| `program.name`        |       Yes | —               | Generated Swift namespace and stable artifact identifier.                                  |
-| `program.kind`        |        No | `"effect"`      | `"effect"`, `"draw"`, or `"compute"`.                                                      |
-| `program.source`      |       Yes | —               | Entry WGSL file, relative to the configuration file.                                       |
-| `program.entryPoints` | Sometimes | Inferred        | Required when the resolved source has more than one compatible entry point.                |
+| Field                 |  Required | Default                 | Description                                                                                                                     |
+| --------------------- | --------: | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `moduleName`          |       Yes | —                       | Swift module, library, and product name.                                                                                        |
+| `platform`            |       Yes | —                       | Native compiler target; currently `"macos"`.                                                                                    |
+| `minimumOSVersion`    |        No | `"14.0"`                | Deployment target for the Swift package and Metal compiler.                                                                     |
+| `languageFeatures`    |        No | `[]`                    | WGSL environment features explicitly enabled for every program in this configuration.                                           |
+| `programs`            |       Yes | —                       | Programs exported by this module.                                                                                               |
+| `output`              |       Yes | —                       | Dedicated generated directory; replacement requires this configuration's ownership marker.                                      |
+| `program.name`        |       Yes | —                       | Generated Swift namespace and stable artifact identifier.                                                                       |
+| `program.kind`        |        No | `"effect"`              | `"effect"`, `"draw"`, or `"compute"`.                                                                                           |
+| `program.source`      |       Yes | —                       | Entry WGSL file, relative to the configuration file.                                                                            |
+| `program.entryPoints` | Sometimes | Inferred                | Required when the resolved source has more than one entry point in a required stage.                                            |
 | `program.overrides`   |        No | Evaluated WGSL defaults | Typed WGSL override values fixed for this native program. A statically used override without an initializer must be configured. |
 
 An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
 
-When exactly one compatible entry point exists for a required stage, omit it from `entryPoints`. Multiple compatible entry points are never chosen by source order: `native check` requires an explicit selection. The artifact records whether an effect's vertex stage was authored or injected.
+When exactly one entry point exists in a required stage, omit it from `entryPoints`. Multiple entries in that stage are never chosen by source order: `native check` requires an explicit selection. Entries in stages the program does not use do not create ambiguity. Interface compatibility is validated after selection against Tint's semantic result. The artifact records whether an effect's vertex stage was authored or injected.
 
 Render target formats, blend state, culling, depth state, sample count, geometry, and dispatch dimensions do not belong in this file. They are properties of targets and program instances at runtime.
 
@@ -91,7 +91,7 @@ Native artifacts use one semantic layout model, `wgsl-host-shareable-v1`; it is 
 
 List any WGSL environment feature that validation depends on in `languageFeatures`. For example, a uniform whose intrinsic array or nested-struct layout would violate the default uniform constraints needs `"uniform_buffer_standard_layout"`. This is a build-time language feature, not a Metal device capability. `native check` fails if the selected compiler does not support it, and it also fails when source requires a feature that the configuration did not select. The compiler never infers a missing feature from a failed validation and never retries with a broader environment.
 
-`languageFeatures` cannot opt a program into a resource shape that semantic contract v1 cannot encode. In particular, the first alpha rejects WGSL resource binding arrays (`binding_array`) even if the pinned translator has an experimental parser or writer feature for one array class. This restriction does not apply to arrays inside buffer value types.
+`languageFeatures` cannot opt a program into a resource shape that semantic contract v1 cannot encode or the alpha profile does not support. In particular, the first alpha rejects WGSL resource binding arrays (`binding_array`) and `dual_source_blending`, even though internal compiler-protocol canaries prove that the pinned translator can lower them. This restriction does not apply to arrays inside buffer value types.
 
 ```json
 {
@@ -131,16 +131,19 @@ Generated types, complete initialization, typed updates, resource ownership, and
 
 ## Programs compile for target signatures
 
-The `.metallib` contains functions, not complete render pipelines. The runtime creates and caches pipeline state for the target where an effect or draw is used:
+Before Metal projection, native build validates the complete portable shader interface. Every
+fragment user-location input must have a vertex output with the same type and normalized
+interpolation. The Metal artifact then preserves vertex-attribute and fragment-color locations
+exactly, including sparse indices; generated names are never used as semantic identity.
 
-```swift
-public struct VGPURenderTargetSignature: Hashable, Sendable {
-  public let colorFormats: [VGPUTextureFormat]
-  public let depthFormat: VGPUTextureFormat?
-  public let stencilFormat: VGPUTextureFormat?
-  public let sampleCount: Int
-}
-```
+The `.metallib` contains functions, not complete render pipelines. The runtime creates and caches
+pipeline state for the target where an effect or draw is used. Its target signature records exact
+color slots, depth and stencil formats, and sample count.
+
+> Warning: The public target-signature shape is not frozen yet. Sparse color attachments can use
+> indexed records or a nullable positional array; both preserve holes. The behavior for a shader
+> output whose slot has no attachment is also open: fail by default and require explicit discard
+> intent, or follow Metal's silent discard. These are Swift API decisions, not compiler mappings.
 
 `VGPUTarget.signature` and `VGPUSurface.signature` return snapshots of this value. A target convenience overload reads the offscreen signature directly; a surface must be reduced to its signature before pre-warming outside a frame:
 
