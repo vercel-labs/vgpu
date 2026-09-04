@@ -79,7 +79,10 @@ With the accepted native worker, the resource entry pair is translated twice per
 response, and MSL bytes are deterministic snapshots. Each response reproduces the exact validated
 external map and returns empty effective internal bindings and size regions, as expected for this
 fixed-size fixture. Both MSL sources compile with Metal 2.4 for
-`air64-apple-macos14.0`; their two AIR files link into one non-empty metallib.
+`air64-apple-macos14.0`; their two AIR files link into one non-empty metallib. The connected runtime
+derives semantic constraints plus these exact slots from the nominal program projection. Two Swift
+processes each prepare six commands for five logical resources and validate two renders against the
+exact readback.
 
 Run the strong gate from the repository root after building the direct worker:
 
@@ -87,9 +90,13 @@ Run the strong gate from the repository root after building the direct worker:
 node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.mjs \
   --worker experiments/native-metal-spikes/c1-tint-direct-build/.artifacts/bin/vgpu-tint-worker-arm64 \
   --require-worker \
-  --require-offline-metal
+  --require-offline-metal \
+  --require-metal-runtime
 ```
 
-This evidence stops before runtime resource binding, pipeline creation, readback, artifact
-packaging, exact-static override assembly, runtime-sized storage integration, the repository
-corpus, and additional hardware. The numeric canary ceilings are not a supported-device profile.
+This evidence includes pipeline creation, direct fixed-resource binding, and readback for the one
+render fixture. It stops before artifact packaging, exact-static override assembly, runtime-sized
+storage integration, compute-resource encoding, the repository corpus, production Swift runtime,
+and additional hardware. The numeric canary ceilings are not a supported-device profile. See
+[`runtime-resource-binding.md`](./runtime-resource-binding.md) for the runtime ownership and
+limitations.

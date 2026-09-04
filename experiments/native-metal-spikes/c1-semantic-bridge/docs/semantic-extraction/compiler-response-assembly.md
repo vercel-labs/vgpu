@@ -31,6 +31,8 @@ const projection = assembleMetalProgramProjection({
 });
 
 const sources = metalSourcesForProgramProjection(projection);
+const runtimeLayout =
+  runtimeResourceLayoutForMetalProgramProjection(projection);
 ```
 
 The compiler request, translation, allocation, assembly, and returned projection are all nominal
@@ -148,6 +150,10 @@ The resource-free full-screen gate crosses the same boundary before execution. B
 compilation and live function lookup read MSL and emitted names only through the nominal projection
 accessor; two deterministic 2x2 readbacks pass on the available Apple M4 Pro.
 
-This slice precedes runtime resource binding. The runtime must consume one validated program
-projection rather than recreate a slot union from per-entry responses. Exact-static overrides can
-join request construction later without changing this combination boundary.
+The fixed-resource gate now crosses the boundary too. It derives one frozen resource layout from
+the nominal program projection, combines the retained semantic constraints with the exact projected
+slots, and binds only through a program that owns that layout and its pipeline. The runtime never
+recreates a slot union from per-entry responses. See
+[`runtime-resource-binding.md`](./runtime-resource-binding.md) for the executable proof and its
+fixed-profile limits. Exact-static overrides can join request construction later without changing
+this combination boundary.

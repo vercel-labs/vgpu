@@ -1,6 +1,6 @@
 # Runtime resource binding
 
-Status: design selected; executable fixed-resource binding is the next C1 slice.
+Status: executable for the fixed direct render fixture; the production Swift runtime remains open.
 
 This slice connects one nominal Metal program projection to concrete runtime resources without
 letting application code restate the physical slot map. It is an internal spike contract, not the
@@ -17,8 +17,8 @@ and its constraints:
 - sampler kind; and
 - per-entry texture/sampler compatibility.
 
-`assembleMetalProgramProjection` already retains the exact nominal semantic assembly behind the
-program projection. The runtime boundary therefore derives its layout from the projection alone:
+`assembleMetalProgramProjection` retains the exact nominal semantic assembly behind the program
+projection. The runtime boundary therefore derives its layout from the projection alone:
 
 ```js
 const layout = runtimeResourceLayoutForMetalProgramProjection(projection);
@@ -43,8 +43,22 @@ joined runtime facts:
         runtimeSized: false
       },
       slots: [
-        { stage: "vertex", resourceClass: "buffer", index: 0, count: 1 },
-        { stage: "fragment", resourceClass: "buffer", index: 0, count: 1 }
+        {
+          stage: "vertex",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 0,
+          count: 1
+        },
+        {
+          stage: "fragment",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 0,
+          count: 1
+        }
       ]
     }
   ],
@@ -55,87 +69,131 @@ joined runtime facts:
 ```
 
 Bindings preserve semantic `(group, binding)` order. Slots preserve canonical stage and resource
-class order. The layout omits authored and Swift names, MSL, compiler candidates, runtime objects,
-buffer ranges, and derived storage-size words. Those facts have different owners.
+class order. Apart from the selected semantic program identity, the layout omits authored and
+Swift-facing binding or type names, MSL, compiler candidates, runtime objects, buffer ranges, and
+derived storage-size words. Those facts have different owners.
 
-## Prepare before encoding
+## Bind through one nominal program
 
-Resource binding has two phases:
-
-```js
-const prepared = prepareMetalResourceBindings({ layout, resources });
-encodeMetalResourceBindings(prepared, encoder);
-```
-
-The production Swift core follows the same boundary:
+The executable Swift probe models the prepare/encode boundary with these internal types:
 
 ```swift
-let prepared = try binder.prepare(layout: layout, resources: resources)
+let program = try MetalRenderProgram(
+  context: context,
+  layout: layout,
+  pipeline: pipeline
+)
+let binder = MetalResourceBinder(program: program)
+let prepared = try binder.prepare(resources: resources)
 try binder.encode(prepared, into: encoder)
 ```
 
+`MetalRenderProgram` is the nominal owner of the exact context, runtime layout, and
+`MTLRenderPipelineState`. `MetalResourceBinder` accepts that program rather than three independently
+replaceable values. A prepared plan retains the exact program identity: another binder over the
+same program may encode it, while a structurally equivalent program wrapping the same pipeline may
+not. The binder validates the encoder's device and installs its retained pipeline before issuing
+resource calls.
+
 `prepare` requires exactly one logical value for every semantic binding. Generated Swift binding
-sets provide those values; callers never provide a stage, Metal index, or resource class. The
-binder validates the complete set, context identity, value variant, access and usage, buffer slice,
-texture properties, sampler descriptor, and every sampling pair before producing a frozen or
-otherwise immutable prepared value. A failure occurs before the first `setVertex*`,
-`setFragment*`, or `setCompute*` call.
+sets will provide those values; callers never provide a stage, Metal index, or resource class. The
+binder revalidates the layout, then validates the complete set, context and device identity, value
+variant, access and usage, buffer slice, texture properties, sampler facts, and sampling pairs. It
+may assemble local command records while checking the set, but a failure returns no plan and occurs
+before the first Metal `set*` call.
 
-`encode` accepts only that prepared value and fans one logical resource out to all of its verified
-stage-local slots. For example, one `frame` buffer may be encoded at both vertex `buffer(0)` and
-fragment `buffer(0)`. Metal buffer, texture, and sampler indices remain independent namespaces in
-each stage. The direct binding model in this slice requires `count: 1`; argument buffers and
-resource arrays need a new binding model rather than an implicit branch here.
+`encode` fans one logical resource out to every verified stage-local slot. In the fixture, one
+`frame` buffer reaches both vertex `buffer(0)` and fragment `buffer(0)`, while vertex and fragment
+`buffer(1)` refer to different logical resources. Metal buffer, texture, and sampler indices remain
+independent namespaces in each stage. This direct model requires `count: 1`; argument buffers and
+resource arrays need a new binding model.
 
-## Keep resource state with the resource
+## Keep authoritative facts with the resource
 
-A buffer resource contributes its context identity, Metal object, logical byte length, usage,
-offset, and explicit bound range. The range is validated against `minimumBindingSize`, the logical
-length after the offset, the current integer ceilings, and the storage alignment rules. It is not
-inferred from `MTLBuffer.length`, because a resource can expose only a logical slice of a larger
-allocation.
+A sealed buffer wrapper retains the context that minted it, the Metal object, logical byte length,
+vgpu usage, offset, and explicit bound range. Preparation checks the actual `MTLBuffer.device` and
+length as well as the retained logical allocation. It rejects ranges below `minimumBindingSize`,
+ranges outside the logical allocation, values above the current integer ceiling, and offsets or
+storage ranges that are not multiples of four bytes. This is the current profile rule, not a claim
+about every future Metal ABI alignment.
 
-A texture resource contributes its dimension, sample count, format classification, usage, and
-Metal object. A sampler wrapper retains the descriptor facts required to prove filtering,
-non-filtering, or comparison compatibility; `MTLSamplerState` alone does not expose enough state to
-reconstruct that proof reliably. All wrappers retain the creating context identity.
+A texture wrapper retains only its context and `MTLTexture`. Dimension, sample count, pixel-format
+classification, usage, and framebuffer-only state come from the Metal object itself rather than
+caller-declared metadata. The live profile fails closed unless the resource is a shader-readable,
+non-framebuffer-only, single-sample `texture2d` with `rgba8Unorm` format.
+
+`MTLSamplerState` does not expose enough state to reconstruct its descriptor. The probe's resource
+factory therefore mints a sealed sampler wrapper and snapshots the facts this profile needs: minification,
+magnification, and mip filters; comparison function; maximum anisotropy; and normalized-coordinate
+mode. Preparation derives filtering, non-filtering, or comparison kind from those retained facts.
 
 Instance-owned uniform uploads remain resources at this internal boundary. Their frame-slot and
-lifetime policy is upstream of `prepare`; the binder sees the already selected buffer slice and
-does not decide which in-flight upload allocation wins.
+lifetime policy is upstream of `prepare`; the binder sees an already selected buffer slice and does
+not decide which in-flight upload allocation wins.
 
 ## Runtime-sized storage remains projection-driven
 
-This first live gate uses only fixed-size buffers, so its projection has no effective
-`internalBindings` and no `storageBufferSizeRegions`. The candidate `immediate-data` reservation in
-compiler requests must never be encoded.
+The live fixture uses only fixed-size buffers. Its program projection has no effective
+`internalBindings` and no `storageBufferSizeRegions`; the compiler request's candidate
+`immediate-data` reservation never becomes an encode command. The binder explicitly rejects a
+runtime-sized descriptor rather than silently treating it as fixed-size.
 
-When runtime-sized storage joins this path, `prepare` derives size words from the effective bound
-ranges and the program projection's emitted regions. It does not accept caller-authored words or
+When runtime-sized storage joins this path, `prepare` must derive size words from effective bound
+ranges and the program projection's emitted regions. It must not accept caller-authored words or
 promote unused candidate reservations. The existing C1 buffer-size spike remains the range and
 word-layout oracle for that later integration.
 
-## Executable proof
+## Executable evidence
 
-The connected gate will:
+Run the complete gate from the repository root after building the direct worker:
 
-1. obtain MSL and emitted entry names only from the nominal program projection;
-2. derive the runtime layout through the nominal join above;
-3. validate all five logical resources before creating binding commands;
-4. prove stage-local namespaces, including different resources at vertex and fragment
-   `buffer(1)`, and prove that one shared uniform fans out to both stages;
-5. use pipeline reflection only as an independent test oracle, never as runtime slot authority;
-6. bind buffers, a sampled texture, and a filtering sampler through the prepared plan;
-7. draw and compare an exact readback whose value depends on every logical resource; and
-8. run static negatives for cloned ownership, incomplete or extra sets, incorrect resource kinds,
-   invalid buffer ranges, incompatible texture/sampler facts, post-prepare mutation, and attempted
-   use of the inactive `buffer(30)` candidate.
+```sh
+node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.mjs \
+  --worker experiments/native-metal-spikes/c1-tint-direct-build/.artifacts/bin/vgpu-tint-worker-arm64 \
+  --require-worker \
+  --require-offline-metal \
+  --require-metal-runtime
+```
 
-The test process may serialize a deterministic snapshot of the already validated layout to its
-Swift probe. That file is test transport only: it is not an artifact format and does not turn raw
-JSON into trusted runtime authority. The Swift probe decodes it strictly and independently checks
-the fixture invariants before touching Metal.
+`passed` now requires the runtime execution. An intentional or environmental runtime omission
+reports `runtime-skipped`, even when native extraction, translation, and offline Metal compilation
+pass.
 
-No API decision in this fixed direct-binding slice is tied. Direct encoder calls follow the
-accepted binding model; logical resources are keyed by semantic identity rather than stage; and
-prepare/encode separation is required to preserve atomic validation.
+The recorded Apple M4 Pro run proves:
+
+- 27 static runtime-layout checks and loss of authority after cloning;
+- eight semantic extractions and four resource translations, each operation repeated twice;
+- two retained MSL sources compiled to AIR and linked into one metallib;
+- exact vertex reflection for `frame` and `vertices`, and exact fragment reflection for `frame`,
+  `material`, `albedo`, and `albedo_sampler`;
+- six prepared commands, including shared-buffer fan-out and independent stage-local `buffer(1)`
+  resources;
+- 15 named preparation failures for set shape, resource kind, buffer bounds, context, usage, actual
+  texture properties, sampler kind, alignment, and runtime-sized rejection;
+- two ownership failures crossing prepared plans between distinct nominal programs, even though
+  they share one layout and pipeline;
+- four strict test-manifest failures for extra root or descriptor data, candidate `buffer(30)`, and
+  an invalid emitted Metal name; and
+- two byte-identical Swift processes, each validating two renders against exact row-major readback
+  `[99, 115, 32, 128, 255, 0, 255, 255, 99, 115, 32, 128, 99, 115, 32, 128]`.
+
+The locked runtime hashes are:
+
+| Evidence       | SHA-256                                                            |
+| -------------- | ------------------------------------------------------------------ |
+| Runtime layout | `6bcc46e2f24801df346251b6d6bab34d3de95e3a044b54aae8159a5577826e1d` |
+| Test manifest  | `c4f09a9c78724bf1ccb4e236c41897c4652f0a99efb4c5894152c33224aa2752` |
+| Swift probe    | `d6386e348c6d58096b4541240dda625b694207e83857d5b6b75e9c5752f10c15` |
+| Readback bytes | `63fc8fde01e08ea5d0018df376c5faed96f2f74bac8cb94af998a9d1bd2331d5` |
+
+The manifest is deterministic test transport for an already derived projection. It is not an
+artifact format, public API, or new serializable authority. The Swift probe decodes it strictly and
+checks this exact fixture before touching Metal. Pipeline reflection is an independent oracle, not
+slot authority.
+
+This is not general resource-runtime evidence. Compute encoding, runtime-sized buffers, binding
+arrays, argument buffers, storage or external textures, broader texture formats, production
+resource factories, and the supported hardware matrix remain open. The machine exposed one Metal
+device, so device guards exist but no crossed-device negative ran; `conditionalDeviceChecks` was
+zero. Replacing one dictionary entry after `prepare` also proves only that the prepared plan retains
+the selected resource identities, not that arbitrary mutation of underlying Metal objects is safe.

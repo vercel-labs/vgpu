@@ -107,9 +107,14 @@ The fixed-resource companion adds four deterministic translation processes after
 extractions. Four nominal program allocations project seven total compiler requests; the resource
 pair preserves its exact stage subsets and external slots, reports no effective internals or size
 regions, combines the exact stage set into `$defs/program`, compiles the retained sources to two AIR
-files, and links one metallib. This closes fixed singular-resource allocation, request projection,
-response authentication, program projection, and offline compilation for that fixture.
+files, and links one metallib. From that nominal projection it derives one frozen runtime layout,
+prepares five logical resources into six stage-local commands, and runs two byte-identical Swift
+processes on Apple M4 Pro, each validating two renders/readbacks. Twenty-seven static layout checks,
+fifteen preparation failures, two crossed-program encoding failures, and four malformed manifests
+cover the current fixed direct profile. This closes fixed singular-resource allocation, request
+projection, response authentication, program projection, offline compilation, and runtime
+binding/readback for that fixture.
 
-Exact-static overrides, resource runtime binding and readback, compute-resource translation parity,
-broader resource shapes, the integrated repository corpus, and production artifact packaging remain
-open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.
+Exact-static overrides, compute-resource translation and runtime parity, broader resource shapes,
+the integrated repository corpus, production artifact packaging, and the production Swift runtime
+remain open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.

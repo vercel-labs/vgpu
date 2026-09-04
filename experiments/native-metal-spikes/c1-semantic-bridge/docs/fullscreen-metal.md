@@ -127,5 +127,6 @@ proves the resource-free assembly, translation, program-projection, and runtime 
 authenticates one compiler result per selected stage and both offline compilation and runtime
 function lookup consume only the frozen `{ stage, entryPoint, msl }` records retained by that
 nominal projection. The sibling semantic-assembly gate proves fixed singular-resource allocation,
-translation, exact program projection, and offline linking; resource runtime binding/readback,
-overrides, repository-corpus integration, and production artifact packaging remain open.
+translation, exact program projection, offline linking, and one fixed direct-resource
+binding/readback path. Broader resource runtime coverage, overrides, repository-corpus integration,
+and production artifact packaging remain open.

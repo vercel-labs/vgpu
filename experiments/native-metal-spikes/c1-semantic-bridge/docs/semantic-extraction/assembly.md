@@ -163,12 +163,17 @@ schema-valid program projections, with nineteen authentication/combination failu
 slot, runtime-region, workgroup, and requirements canaries. It then translates the resource vertex
 and fragment twice each, authenticates one result per stage, compiles two AIR files for the macOS 14
 target through the projection source accessor, and links one metallib. The resulting program
-preserves the requested external slots and reports no effective internal binding or size region.
+preserves the requested external slots and reports no effective internal binding or size region. A
+nominal join derives its runtime layout from that program alone; two Swift processes then prepare
+five logical resources into six stage-local commands and each validate two renders against the
+exact expected readback. Pipeline reflection remains an independent oracle rather than binding
+authority. The complete fixed-resource evidence is recorded in
+[`runtime-resource-binding.md`](./runtime-resource-binding.md).
 The independently integrated full-screen companion runs one
 inventory, two semantic extractions, four successful translations, two structured-negative
 translations, combines a resource-free program projection, and performs live readback. Its compiler
 requests come from the nominal assembly, while the checked-in interface JSON remains a static
 oracle. The authored fragment's resolver-owned
 end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Exact-static
-overrides, resource runtime binding/readback, repository corpus integration, production artifact
+overrides, broader resource runtime coverage, repository corpus integration, production artifact
 packaging, and Intel/AMD hardware evidence remain open.

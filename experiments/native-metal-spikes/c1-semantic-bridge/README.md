@@ -4,8 +4,9 @@ This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint co
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
 source finalization, authenticated fixed-resource semantic extraction, fixed singular-resource
 `semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry projection, native
-translation, and offline Metal compilation. The same one-shot Tint worker supplies inventory,
-extraction, and translation without turning TypeScript into a second WGSL compiler.
+translation, offline Metal compilation, and fixed direct-resource binding through an exact live
+Metal readback path. The same one-shot Tint worker supplies inventory, extraction, and translation without
+turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -24,7 +25,7 @@ non-authoritative corpus oracle.
 
 ## Boundaries
 
-The spike has five explicit owners:
+The spike has six explicit owners:
 
 1. `@vgpu/wgsl` resolves imports, emits relocatable WGSL, owns module-level provenance, and reports
    exact authored entry-declaration spans from its tokens.
@@ -37,9 +38,12 @@ The spike has five explicit owners:
    membership and values for every selected entry in the finalized capsule.
 5. The existing Tint translator validates one request, generates MSL, and returns only the minimal
    Metal runtime projection.
+6. The runtime derives one resource layout from the nominal program projection, validates a complete
+   logical resource set, and encodes only through the context, layout, and pipeline owned by one
+   nominal render program.
 
-Apple's offline `metal` and `metallib` tools remain a sixth, independent acceptance boundary. See
-[`docs/boundary.md`](./docs/boundary.md) for the data flow and trust rules.
+Apple's offline `metal` and `metallib` tools and the live Metal device remain independent acceptance
+boundaries. See [`docs/boundary.md`](./docs/boundary.md) for the data flow and trust rules.
 
 ## Current executable evidence
 
@@ -136,16 +140,23 @@ authenticated compiler translations assemble four exact `metal-projection-v1` pr
 under nominal ownership. Their permutations remain canonical. Nineteen response/combination
 failures, six independent verifier canaries, and four device-requirement checks cover response
 association, stage closure, compiler identity, internal reservations, slot collisions, runtime-size
-regions, compute dimensions, and fail-closed requirements.
+regions, compute dimensions, and fail-closed requirements. Twenty-seven runtime-resource-layout
+checks cover nominal ownership, canonical projection, exact fixed-resource descriptors and slots,
+and exclusion of MSL, presentation names, and inactive candidate bindings.
 
 With the native worker the gate performs eight semantic-extraction invocations, then translates the
 fixed-resource vertex and fragment entries twice each. It authenticates and combines one response
-per entry, then compiles both retained MSL sources to AIR and links one metallib exclusively through
-the nominal program-projection accessor. See
+per entry, compiles both retained MSL sources to AIR, and links one metallib exclusively through the
+nominal program-projection accessor. It then derives the joined runtime layout from that same
+projection, prepares five logical resources into six stage-local commands, and runs two
+byte-identical Swift/Metal processes that each validate two renders against the exact readback.
+Fifteen preparation failures, two crossed-program encoding failures, and four malformed test
+manifests fail at their named boundaries. See
 [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) and
 [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md),
+[`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md),
 and
-[`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md).
+[`docs/semantic-extraction/runtime-resource-binding.md`](./docs/semantic-extraction/runtime-resource-binding.md).
 
 The integrated full-screen canary carries one real resolved and finalized resource-free effect
 through two native semantic extractions, semantic assembly, two deterministic translations per
@@ -181,8 +192,8 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
   records the executable nominal response-to-program-projection boundary; and
 - [`docs/semantic-extraction/runtime-resource-binding.md`](./docs/semantic-extraction/runtime-resource-binding.md)
-  selects the nominal semantic/slot join and atomic prepare/encode boundary for the next live
-  resource gate.
+  records the executable nominal semantic/slot join, program ownership, and prepare/encode boundary
+  for the fixed direct-resource gate.
 
 ## Implementation order
 
@@ -205,15 +216,15 @@ The semantic work is split by responsibility so the growing design remains revie
 8. Compile and link every accepted MSL source offline. The fixed-resource pair is executable; the
    authenticated repository corpus remains open.
 9. Join semantic resource constraints to projected slots, prepare a complete logical resource set,
-   and bind the fixed-resource render pair at runtime. This slice is designed but not yet
-   executable.
+   and bind the fixed-resource render pair at runtime. This fixed direct-resource slice is
+   executable; general resources and the production Swift runtime remain open.
 10. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
 This spike does not yet connect overrides, runtime-sized resources, or the broader resource profile
-through nominal assembly and translation. It also does not bind the fixed-resource fixture at runtime, run
-the integrated repository corpus, package a production artifact, implement the production Swift runtime, freeze a
+through nominal assembly, translation, and runtime binding. It also does not run the integrated
+repository corpus, package a production artifact, implement the production Swift runtime, freeze a
 Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not recover general
 authored diagnostic spans from the current module-only origin map. Exact authored entry-declaration
 spans come from resolver tokens and use 1-based locations, UTF-16-code-unit columns, and an

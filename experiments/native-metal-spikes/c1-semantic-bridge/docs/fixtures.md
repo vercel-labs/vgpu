@@ -126,7 +126,10 @@ accepted arm64 worker, two deterministic native extractions per fixture add eigh
 invocations and must assemble to the same reviewed semantic objects and fingerprints. The resource
 graph must also reproject exactly to its authenticated extraction. Its two entries then run twice
 each through translation; exact request, response, and MSL hashes are frozen before both sources
-compile and link offline.
+compile and link offline. The same nominal program projection supplies the runtime layout and MSL to
+a Swift probe. Five logical resources prepare into six commands; two processes must each validate
+two renders against the same exact 2x2 readback. The fixed-resource runtime matrix and limitations are recorded in
+[`semantic-extraction/runtime-resource-binding.md`](./semantic-extraction/runtime-resource-binding.md).
 
 ## Integrated full-screen Metal canary
 
@@ -166,9 +169,9 @@ initial closure must contain:
 Expected semantic objects, fingerprints, and request hashes remain reviewed oracles rather than
 being regenerated from translator responses. Actual compiler requests must be derived from the
 authenticated assembly. Fixed singular-resource extraction, assembly, nominal slot allocation,
-exact per-entry projection, translation, and offline compilation now establish the connected
-build-time path. Overrides, broader resource shapes, runtime resource binding, corpus, and
-packaging fixtures remain to be connected.
+exact per-entry projection, translation, offline compilation, and one fixed direct runtime readback
+now establish the connected path. Overrides, broader resource shapes and runtime behavior, corpus,
+and packaging fixtures remain to be connected.
 
 ## Repository corpus
 

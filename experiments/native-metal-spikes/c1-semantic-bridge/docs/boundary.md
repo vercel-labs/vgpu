@@ -23,7 +23,13 @@ authored virtual modules + package map
   -> fresh Tint translation process per request
   -> validated compiler response-v1
   -> program-level metal-projection-v1
-  -> metal -> AIR -> metallib
+       -> retained MSL -> metal -> AIR -> metallib
+       -> retained semantic evidence + projected slots
+            -> nominal runtime resource layout
+            -> MetalRenderProgram { context + layout + pipeline }
+            -> prepare complete logical resource set
+            -> encode retained pipeline and physical slots
+            -> fixed-fixture readback
 ```
 
 Resolved WGSL, its SHA-256, its versioned origin map and canonical origin-map SHA-256, and its proven
@@ -62,14 +68,15 @@ worker callers therefore inherit the NFC precondition for virtual paths and inpu
 
 ## Ownership
 
-| Boundary                 | Owns                                                                                                                                                                                                                                      | Must not own                                                        |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Resolver                 | Virtual module graph, imports, mangled WGSL, source hash, module provenance, exact authored entry-declaration spans                                                                                                                       | WGSL type semantics or Metal slots                                  |
-| Tint inventory           | Authenticated entry-point names and stages for one authored capsule and language-feature set                                                                                                                                              | Program selection, WGSL type reflection, or Metal policy            |
-| TypeScript adapter       | Program selection from the authenticated inventory, versioned full-screen injection, render linking, semantic unions, canonical ordering, emitted-name policy, slot allocation, projection                                                | Parsing WGSL types, evaluating overrides, or inferring MSL output   |
-| Semantic Tint extraction | Entry interfaces, full binding declarations and per-entry active sets, sampling pairs, reachable semantic types and intrinsic layouts, exact-static override membership and values, resolved workgroup sizes, language-feature validation | Program grouping, Metal names, Metal slots, runtime artifact policy |
-| Tint translator          | One-entry request validation, independent semantic comparison, override materialization, Metal lowering, generated MSL, effective internal resources                                                                                      | Program-wide policy or broad semantic artifact generation           |
-| Apple tools              | Acceptance of generated MSL for the exact language version and deployment target                                                                                                                                                          | WGSL semantics or source provenance                                 |
+| Boundary                 | Owns                                                                                                                                                                                                                                      | Must not own                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Resolver                 | Virtual module graph, imports, mangled WGSL, source hash, module provenance, exact authored entry-declaration spans                                                                                                                       | WGSL type semantics or Metal slots                                   |
+| Tint inventory           | Authenticated entry-point names and stages for one authored capsule and language-feature set                                                                                                                                              | Program selection, WGSL type reflection, or Metal policy             |
+| TypeScript adapter       | Program selection from the authenticated inventory, versioned full-screen injection, render linking, semantic unions, canonical ordering, emitted-name policy, slot allocation, projection                                                | Parsing WGSL types, evaluating overrides, or inferring MSL output    |
+| Semantic Tint extraction | Entry interfaces, full binding declarations and per-entry active sets, sampling pairs, reachable semantic types and intrinsic layouts, exact-static override membership and values, resolved workgroup sizes, language-feature validation | Program grouping, Metal names, Metal slots, runtime artifact policy  |
+| Tint translator          | One-entry request validation, independent semantic comparison, override materialization, Metal lowering, generated MSL, effective internal resources                                                                                      | Program-wide policy or broad semantic artifact generation            |
+| Apple tools              | Acceptance of generated MSL for the exact language version and deployment target                                                                                                                                                          | WGSL semantics or source provenance                                  |
+| Runtime binder           | Nominal join of semantic constraints and projected slots; context, pipeline, resource validation, and direct encode plan                                                                                                                  | Parsing WGSL, reallocating slots, or trusting caller-authored layout |
 
 The adapter may verify and canonically copy Tint's exact-static sets, but it never recomputes their
 membership or values. It builds each program union from those authenticated per-entry records.
@@ -170,6 +177,14 @@ The executable combiner requires nominal request, response, assembly, and alloca
 normalizes input order, independently verifies the exact `metal-projection-v1` program fragment,
 and exposes retained `{ stage, entryPoint, msl }` records only from the resulting nominal
 projection.
+
+The fixed-resource runtime takes that same nominal projection as its only layout authority. One
+accessor joins its retained semantic descriptors to its exact physical slots and returns a frozen
+nominal runtime layout. The Swift probe binds that layout to one context and pipeline through a
+`MetalRenderProgram`; preparation receives logical resources but no stage or Metal index. A strict
+JSON representation transports the layout only inside the test. It is neither an artifact nor an
+independent or production authority; its provenance remains fixed by the projection and the fixture
+oracle.
 
 The artifact retains complete backend-neutral semantics separately from its minimal Metal runtime
 projection. Synthesized Tint structures, raised member names, generated MSL, and broad compiler
