@@ -270,5 +270,7 @@ emergency operation, never the normal release path.
 
 Publishing uses OIDC, not a token — the repository must not retain an `NPM_TOKEN` secret. Each published package
 has a Trusted Publisher configured on npm (provider GitHub Actions, owner `vercel-labs`,
-repository `vgpu`, workflow `release.yml`, no environment). A **new** package has to be
-published manually once before Trusted Publishing can be configured for it.
+repository `vgpu`, workflow `release.yml`, no environment) with direct `npm publish` included
+in its allowed actions. New Trusted Publishers may otherwise default to staged publishing only,
+but this repository's release workflow invokes `npm publish`, not `npm stage publish`. A **new**
+package has to be published manually once before Trusted Publishing can be configured for it.
