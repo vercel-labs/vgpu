@@ -152,8 +152,8 @@
       },
       "semanticResourceGraph": {
         "path": "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
-        "bytes": 9860,
-        "sha256": "cd73bbbfc11b670d541fdaa5bb8dfa587f955b9dfbebc950124226eeb1e00341"
+        "bytes": 10747,
+        "sha256": "bea356cffd70c9e2e9302e67554dee2fc2cc3bde4d639865d4dd13912ac2114a"
       },
       "semanticExtractionRequestSchema": {
         "path": "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
