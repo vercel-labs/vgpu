@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json",
   "title": "vGPU Native Tint Compiler Request v1",
-  "description": "One resolved WGSL entry-point translation request. The process transport carries one UTF-8 JSON value terminated by EOF.",
+  "description": "One resolved WGSL entry-point translation request. The intended process transport carries one UTF-8 JSON value terminated by EOF; this feasibility fixture validates the envelope in Node before adapting it to typed prototype arguments.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -76,7 +76,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4096,
-      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^\\u0000]+$"
+      "pattern": "^(?!/)(?![A-Za-z]:)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//).+$"
     },
     "uint32": {
       "type": "integer",

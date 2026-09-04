@@ -243,6 +243,12 @@ export function canonicalVirtualId(value, label = "virtual path") {
       `${label} exceeds 4096 characters`
     );
   }
+  if (!value.isWellFormed()) {
+    throw new VirtualResolverError(
+      "VGPU-C1-RESOLVER-ID-UNICODE",
+      `${label} contains an isolated UTF-16 surrogate`
+    );
+  }
   if (value.includes("\\")) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-ID-BACKSLASH",
@@ -260,7 +266,7 @@ export function canonicalVirtualId(value, label = "virtual path") {
   if (
     posix.isAbsolute(canonical) ||
     /^[A-Za-z]:/u.test(canonical) ||
-    canonical.startsWith("file://")
+    /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(canonical)
   ) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-ID-ABSOLUTE",
@@ -332,6 +338,14 @@ function normalizeSource(source, index) {
       `source ${JSON.stringify(virtualPath)} text must be a string`
     );
   }
+  if (!source.text.isWellFormed()) {
+    throw new VirtualResolverError(
+      "VGPU-C1-RESOLVER-SOURCE-UNICODE",
+      `source ${JSON.stringify(
+        virtualPath
+      )} contains an isolated UTF-16 surrogate`
+    );
+  }
   if (source.text.includes("\u0000")) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-SOURCE-NUL",
@@ -382,17 +396,23 @@ function canonicalInputId(value, label) {
       `${label} must be a non-empty string of at most 1024 characters`
     );
   }
-  if (/[\u0000-\u001f\u007f]/u.test(value)) {
+  if (!value.isWellFormed()) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-INPUT-ID",
-      `${label} contains a control character`
+      `${label} contains an isolated UTF-16 surrogate`
+    );
+  }
+  if (value.includes("\\") || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new VirtualResolverError(
+      "VGPU-C1-RESOLVER-INPUT-ID",
+      `${label} contains a backslash or control character`
     );
   }
   const id = value.normalize("NFC");
   if (
     posix.isAbsolute(id) ||
     /^[A-Za-z]:[\\/]/u.test(id) ||
-    id.startsWith("file://")
+    /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(id)
   ) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-INPUT-ID",
@@ -409,6 +429,12 @@ function canonicalPackagePrefix(value, label) {
       `${label} must be a non-empty string`
     );
   }
+  if (!value.isWellFormed()) {
+    throw new VirtualResolverError(
+      "VGPU-C1-RESOLVER-PACKAGE-PREFIX",
+      `${label} contains an isolated UTF-16 surrogate`
+    );
+  }
   if (value.includes("\\") || /[\u0000-\u001f\u007f]/u.test(value)) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-PACKAGE-PREFIX",
@@ -422,7 +448,7 @@ function canonicalPackagePrefix(value, label) {
     prefix.startsWith("../") ||
     prefix.startsWith("@/") ||
     /^[A-Za-z]:/u.test(prefix) ||
-    prefix.startsWith("file://")
+    /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(prefix)
   ) {
     throw new VirtualResolverError(
       "VGPU-C1-RESOLVER-PACKAGE-PREFIX",
@@ -497,7 +523,15 @@ function assertResolvedPathsAreVirtual(resolved, inputByVirtualPath) {
 function canonicalValue(value, seen) {
   if (value === null || typeof value === "boolean")
     return JSON.stringify(value);
-  if (typeof value === "string") return JSON.stringify(value.normalize("NFC"));
+  if (typeof value === "string") {
+    if (!value.isWellFormed()) {
+      throw new VirtualResolverError(
+        "VGPU-C1-RESOLVER-HASH-UNICODE",
+        "canonical requests cannot contain isolated UTF-16 surrogates"
+      );
+    }
+    return JSON.stringify(value.normalize("NFC"));
+  }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
       throw new VirtualResolverError(
@@ -531,10 +565,15 @@ function canonicalValue(value, seen) {
         "canonical requests may contain only arrays and plain objects"
       );
     }
-    const normalizedKeys = Object.keys(value).map((key) => ({
-      raw: key,
-      normalized: key.normalize("NFC"),
-    }));
+    const normalizedKeys = Object.keys(value).map((key) => {
+      if (!key.isWellFormed()) {
+        throw new VirtualResolverError(
+          "VGPU-C1-RESOLVER-HASH-UNICODE",
+          "canonical request keys cannot contain isolated UTF-16 surrogates"
+        );
+      }
+      return { raw: key, normalized: key.normalize("NFC") };
+    });
     normalizedKeys.sort((left, right) =>
       compareCodeUnits(left.normalized, right.normalized)
     );

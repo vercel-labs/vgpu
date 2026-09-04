@@ -133,6 +133,9 @@ for (const invalid of [
   "/absolute.wgsl",
   "C:/absolute.wgsl",
   "file://host/shader.wgsl",
+  "file:/host/shader.wgsl",
+  "HTTPS://host/shader.wgsl",
+  "bad-\ud800.wgsl",
   "a\\b.wgsl",
   "a/./b.wgsl",
   "a/../b.wgsl",
@@ -177,6 +180,27 @@ assert.throws(
     ]),
   { code: "VGPU-C1-RESOLVER-SOURCE-HASH-MISMATCH" }
 );
+for (const id of [
+  "\\\\server\\share\\shader.wgsl",
+  "\\\\?\\C:\\shader.wgsl",
+  "file:/host/shader.wgsl",
+  "bad-\ud800",
+]) {
+  assert.throws(
+    () => createVirtualModules([source(id, "Shaders/id.wgsl", "fn f() {}")]),
+    { code: "VGPU-C1-RESOLVER-INPUT-ID" }
+  );
+}
+assert.throws(
+  () =>
+    createVirtualModules([
+      source("invalid-unicode", "Shaders/unicode.wgsl", "\ud800"),
+    ]),
+  { code: "VGPU-C1-RESOLVER-SOURCE-UNICODE" }
+);
+assert.throws(() => canonicalRequestHash({ value: "\ud800" }), {
+  code: "VGPU-C1-RESOLVER-HASH-UNICODE",
+});
 
 await assert.rejects(
   resolveVirtualShader({

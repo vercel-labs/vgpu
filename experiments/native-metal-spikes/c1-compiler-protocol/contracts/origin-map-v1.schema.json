@@ -41,10 +41,12 @@
     }
   },
   "$defs": {
-    "nonEmptyString": {
+    "logicalInputId": {
+      "description": "NFC-normalized logical source identity, never an absolute host path.",
       "type": "string",
       "minLength": 1,
-      "maxLength": 1024
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f]).+$"
     },
     "sha256": {
       "type": "string",
@@ -55,7 +57,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4096,
-      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^\\u0000]+$"
+      "pattern": "^(?!/)(?![A-Za-z]:)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//).+$"
     },
     "byteOffset": {
       "type": "integer",
@@ -81,7 +83,7 @@
       "required": ["input", "sha256"],
       "properties": {
         "input": {
-          "$ref": "#/$defs/nonEmptyString"
+          "$ref": "#/$defs/logicalInputId"
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
@@ -108,7 +110,7 @@
       "required": ["input"],
       "properties": {
         "input": {
-          "$ref": "#/$defs/nonEmptyString"
+          "$ref": "#/$defs/logicalInputId"
         }
       }
     },

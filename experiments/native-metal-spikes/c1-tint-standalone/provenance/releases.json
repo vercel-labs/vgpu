@@ -51,6 +51,11 @@
         "architecture": "arm64",
         "minimumMacOS": "26.0"
       },
+      "includeTree": {
+        "algorithm": "relative-path-nul-file-sha256-lines-v1",
+        "files": 608,
+        "sha256": "9b9b189f2e7ecef26d9daa20f56aebe7be9499259bc209c9b6c20670c4490be3"
+      },
       "files": {
         "bin/tint": {
           "bytes": 5636200,
