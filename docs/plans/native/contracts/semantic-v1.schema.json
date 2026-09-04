@@ -174,7 +174,7 @@
           "maximum": 9007199254740991
         },
         "minimumSize": {
-          "description": "Minimum member footprint after any authored @size attribute. For a statically sized member this equals size.",
+          "description": "Minimum member footprint after any authored @size attribute. For a statically sized member this equals size. For a runtime-sized trailing array this is the zero-element footprint and does not include the element required by a buffer binding's minimumBindingSize.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
@@ -199,7 +199,7 @@
       ]
     },
     "layout": {
-      "description": "Intrinsic WGSL AlignOf/SizeOf layout for one host-shareable type use. Address-space constraints are validated separately from these offsets, alignments, sizes, and strides.",
+      "description": "Intrinsic WGSL AlignOf/SizeOf layout for one host-shareable type use. For a runtime-sized layout, minimumSize is its fixed zero-element prefix; a buffer binding's minimumBindingSize additionally includes one trailing array element. Address-space constraints are validated separately from these offsets, alignments, sizes, and strides.",
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "alignment", "minimumSize", "runtimeSized", "members"],
@@ -469,7 +469,7 @@
         "type": { "$ref": "#/$defs/typeId" },
         "layout": { "$ref": "#/$defs/layoutId" },
         "minimumBindingSize": {
-          "description": "Minimum range required for this binding from its intrinsic WGSL layout. Address-space validation may reject a layout but MUST NOT add padding or rewrite this size.",
+          "description": "Minimum range required for this binding. For a fixed-size layout this equals layout.minimumSize. For a runtime-sized layout it is computed as if the trailing runtime array were replaced by an array of one element, so it includes one complete element stride and any enclosing-structure padding rather than equaling the zero-element layout.minimumSize. Address-space validation may reject a layout but MUST NOT add unrelated padding or rewrite this size.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991

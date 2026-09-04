@@ -3,7 +3,12 @@ import AppShaders
 let payloadHash = try AppShadersArtifact.verifyPackagedPayload()
 var pipelineCalls = 0
 
-try AppShadersArtifact.validateApplicationCompatibility {
+try AppShadersArtifact.validateApplicationCompatibility(
+  selection: AppShadersArtifact.noopComputeSelection
+) { selection in
+  guard selection == AppShadersArtifact.noopComputeSelection else {
+    fatalError("Compatibility gate returned a different pipeline selection")
+  }
   pipelineCalls += 1
 }
 

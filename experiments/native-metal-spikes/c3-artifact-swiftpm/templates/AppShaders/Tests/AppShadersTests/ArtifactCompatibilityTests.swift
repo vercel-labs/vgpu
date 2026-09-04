@@ -10,9 +10,74 @@ final class ArtifactCompatibilityTests: XCTestCase {
 
   func testCompatibleArtifactReachesPipelineBoundaryOnce() throws {
     var pipelineCalls = 0
-    try AppShadersArtifact.validateApplicationCompatibility {
+    try AppShadersArtifact.validateApplicationCompatibility(
+      selection: AppShadersArtifact.noopComputeSelection
+    ) { selection in
+      XCTAssertEqual(selection, AppShadersArtifact.noopComputeSelection)
       pipelineCalls += 1
     }
     XCTAssertEqual(pipelineCalls, 1)
+  }
+
+  func testStorageBufferSizeDescriptorsKeepDynamicStateOut() throws {
+    XCTAssertTrue(AppShadersArtifact.noopProgram.storageBufferSizeRegions.isEmpty)
+    XCTAssertTrue(AppShadersArtifact.noopProgram.internalBufferSlots.isEmpty)
+
+    let runtimeProgram = AppShadersArtifact.runtimeArrayProgram
+    XCTAssertEqual(runtimeProgram.storageBufferSizeRegions.count, 1)
+    XCTAssertEqual(
+      runtimeProgram.storageBufferSizeRegion(for: .compute),
+      AppShadersStorageBufferSizeRegion(stage: .compute, immediateDataByteOffset: 4)
+    )
+    XCTAssertEqual(
+      runtimeProgram.internalBufferSlots,
+      [
+        AppShadersInternalBufferSlot(
+          role: "immediate-data",
+          stage: .compute,
+          index: 30,
+          count: 1
+        )
+      ]
+    )
+    XCTAssertEqual(
+      AppShadersArtifact.runtimeArrayComputeSelection.program,
+      runtimeProgram
+    )
+    XCTAssertEqual(
+      AppShadersArtifact.runtimeArrayComputeSelection.stage,
+      .compute
+    )
+  }
+
+  func testUnknownStorageBufferSizeModelDoesNotBlockStageWithoutRegion() throws {
+    var descriptor = AppShadersArtifact.descriptor
+    descriptor.storageBufferSizeModel =
+      "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2"
+    var pipelineCalls = 0
+
+    try AppShadersArtifact.validateApplicationCompatibility(
+      descriptor: descriptor,
+      selection: AppShadersArtifact.noopComputeSelection,
+      payloadSHA256: descriptor.librarySHA256
+    ) { selection in
+      XCTAssertEqual(selection, AppShadersArtifact.noopComputeSelection)
+      pipelineCalls += 1
+    }
+
+    XCTAssertEqual(pipelineCalls, 1)
+  }
+
+  func testPipelineClosureReceivesTheValidatedRuntimeSelection() throws {
+    var observed: AppShadersPipelineSelection?
+
+    try AppShadersArtifact.validateApplicationCompatibility(
+      selection: AppShadersArtifact.runtimeArrayComputeSelection,
+      payloadSHA256: AppShadersArtifact.descriptor.librarySHA256
+    ) { selection in
+      observed = selection
+    }
+
+    XCTAssertEqual(observed, AppShadersArtifact.runtimeArrayComputeSelection)
   }
 }

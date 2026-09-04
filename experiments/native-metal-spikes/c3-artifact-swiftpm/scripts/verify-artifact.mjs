@@ -9,6 +9,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = resolve(scriptDirectory, "..");
 const defaultRepository = resolve(fixtureDirectory, "..", "..", "..");
+const runtimeSupportedStorageBufferSizeModel =
+  "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 
 function fail(message) {
   throw new Error(`C3 verify: ${message}`);
@@ -18,6 +20,7 @@ function parseArguments(argv) {
   const options = {
     repository: defaultRepository,
     inputsRoot: fixtureDirectory,
+    expectedStorageBufferSizeModel: runtimeSupportedStorageBufferSizeModel,
   };
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
@@ -29,14 +32,18 @@ function parseArguments(argv) {
       "--package": "packageRoot",
       "--repository": "repository",
       "--inputs-root": "inputsRoot",
+      "--expected-storage-buffer-size-model": "expectedStorageBufferSizeModel",
     }[name];
     if (!key) fail(`unknown option ${name}`);
     options[key] = value;
   }
   if (!options.packageRoot) fail("--package is required");
-  return Object.fromEntries(
-    Object.entries(options).map(([key, value]) => [key, resolve(value)])
-  );
+  return {
+    ...options,
+    packageRoot: resolve(options.packageRoot),
+    repository: resolve(options.repository),
+    inputsRoot: resolve(options.inputsRoot),
+  };
 }
 
 function clone(value) {
@@ -79,6 +86,105 @@ function assertEqual(actual, expected, label) {
 
 function assertIncludes(contents, expected, label) {
   if (!contents.includes(expected)) fail(`${label}: missing ${expected}`);
+}
+
+function sourcePositionOffset(contents, position, owner) {
+  const lineStarts = [0];
+  for (let index = 0; index < contents.length; index += 1) {
+    if (contents[index] === "\n") lineStarts.push(index + 1);
+  }
+  if (
+    !Number.isSafeInteger(position.line) ||
+    !Number.isSafeInteger(position.column) ||
+    position.line < 1 ||
+    position.line > lineStarts.length ||
+    position.column < 1
+  ) {
+    fail(`${owner} has an invalid source position`);
+  }
+  const lineStart = lineStarts[position.line - 1];
+  const nextLineStart = lineStarts[position.line];
+  const lineEnd =
+    nextLineStart === undefined ? contents.length : nextLineStart - 1;
+  const offset = lineStart + position.column - 1;
+  if (offset > lineEnd) fail(`${owner} source column is outside its line`);
+  return offset;
+}
+
+function validateSourceSpans(semantic, inputs, inputsRoot) {
+  const sourceById = new Map(
+    inputs.map((input) => [
+      input.id,
+      {
+        input,
+        contents: readFileSync(
+          join(inputsRoot, ...input.path.split("/")),
+          "utf8"
+        ),
+      },
+    ])
+  );
+
+  for (const program of semantic.programs) {
+    for (const entry of Object.values(program.entryPoints)) {
+      if (!entry.source) continue;
+      const owner = `${program.name}/${entry.stage}/${entry.names.wgsl}`;
+      const source = sourceById.get(entry.source.input);
+      if (
+        !source ||
+        source.input.role !== "wgsl" ||
+        !program.sources.includes(entry.source.input)
+      ) {
+        fail(`${owner} source span does not reference a declared WGSL input`);
+      }
+      const start = sourcePositionOffset(
+        source.contents,
+        entry.source.start,
+        `${owner} start`
+      );
+      const end = sourcePositionOffset(
+        source.contents,
+        entry.source.end,
+        `${owner} end`
+      );
+      if (end <= start) fail(`${owner} source span is empty or reversed`);
+      const snippet = source.contents.slice(start, end);
+      const escapedName = entry.names.wgsl.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+      const declaration = new RegExp(
+        `@${entry.stage}\\b[\\s\\S]*?\\bfn\\s+${escapedName}\\s*\\(`
+      );
+      if (!declaration.test(snippet)) {
+        fail(
+          `${owner} source span does not contain its WGSL entry declaration`
+        );
+      }
+    }
+  }
+}
+
+function requireSourceSpanMutationFailure(
+  semantic,
+  inputs,
+  inputsRoot,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const candidate = clone(semantic);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    validateSourceSpans(candidate, inputs, inputsRoot);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
 }
 
 function stripPresentationAndProvenance(value) {
@@ -213,6 +319,55 @@ function fingerprintProgram(program, semantic, inputs) {
   return sha256Canonical(programFingerprintInput(program, semantic, inputs));
 }
 
+function roundUp(alignment, value) {
+  return Math.ceil(value / alignment) * alignment;
+}
+
+function minimumBindingSizeForLayout(layoutId, semantic, visiting = new Set()) {
+  if (visiting.has(layoutId)) fail(`layout cycle at ${layoutId}`);
+  const layout = semantic.layouts[layoutId];
+  const type = semantic.types[layout?.type];
+  if (!layout || !type)
+    fail(`cannot derive minimum binding size for ${layoutId}`);
+  if (!layout.runtimeSized) return layout.minimumSize;
+
+  const nextVisiting = new Set(visiting).add(layoutId);
+  if (type.kind === "array" && type.count === undefined) {
+    if (!Number.isSafeInteger(layout.arrayStride)) {
+      fail(`runtime array layout ${layoutId} has no safe array stride`);
+    }
+    return layout.arrayStride;
+  }
+  if (type.kind === "struct") {
+    const runtimeMembers = layout.members.filter(
+      (member) => member.runtimeSized
+    );
+    if (runtimeMembers.length !== 1) {
+      fail(
+        `runtime struct layout ${layoutId} needs one trailing runtime member`
+      );
+    }
+    const runtimeMember = runtimeMembers[0];
+    if (layout.members.at(-1) !== runtimeMember) {
+      fail(
+        `runtime struct layout ${layoutId} has a non-trailing runtime member`
+      );
+    }
+    const memberEnd =
+      runtimeMember.offset +
+      minimumBindingSizeForLayout(runtimeMember.layout, semantic, nextVisiting);
+    const size = roundUp(
+      layout.alignment,
+      Math.max(layout.minimumSize, memberEnd)
+    );
+    if (!Number.isSafeInteger(size)) {
+      fail(`runtime struct layout ${layoutId} minimum binding size overflows`);
+    }
+    return size;
+  }
+  fail(`runtime-sized layout ${layoutId} is neither an array nor a struct`);
+}
+
 function assertProgramFingerprintSensitivity(program, semantic, inputs) {
   const baseline = fingerprintProgram(program, semantic, inputs);
   const assertChanged = (actual, label) => {
@@ -318,6 +473,7 @@ function runtimeProjectionInput(projection, librarySHA256) {
     target: projection.target,
     abi: projection.abi,
     vertexBufferPolicy: projection.vertexBufferPolicy,
+    storageBufferSizeModel: projection.storageBufferSizeModel,
     library: {
       path: projection.library.path,
       sha256: librarySHA256,
@@ -360,6 +516,171 @@ function validateVertexBufferPolicy(projection) {
       }
     }
   }
+}
+
+const canonicalStageOrder = ["vertex", "fragment", "compute"];
+
+function validateStorageBufferSizeContract(semantic, projection) {
+  const semanticPrograms = new Map(
+    semantic.programs.map((program) => [program.name, program])
+  );
+  const ceiling = projection.vertexBufferPolicy.externalBufferCeiling;
+
+  for (const program of projection.programs) {
+    const semanticProgram = semanticPrograms.get(program.semanticProgram);
+    if (!semanticProgram) {
+      fail(
+        `storage-size contract references unknown program ${program.semanticProgram}`
+      );
+    }
+    if (!Array.isArray(program.storageBufferSizeRegions)) {
+      fail(
+        `${program.semanticProgram} has no canonical storage-buffer-size region array`
+      );
+    }
+
+    let previousStageRank = -1;
+    const observedStages = new Set();
+    for (const region of program.storageBufferSizeRegions) {
+      const stageRank = canonicalStageOrder.indexOf(region.stage);
+      if (observedStages.has(region.stage)) {
+        fail(
+          `${program.semanticProgram} repeats storage-buffer-size stage ${region.stage}`
+        );
+      }
+      if (stageRank < 0 || stageRank <= previousStageRank) {
+        fail(
+          `${program.semanticProgram} storage-buffer-size regions are not canonically stage ordered`
+        );
+      }
+      observedStages.add(region.stage);
+      previousStageRank = stageRank;
+
+      if (
+        !Number.isSafeInteger(region.immediateDataByteOffset) ||
+        region.immediateDataByteOffset < 0 ||
+        region.immediateDataByteOffset > 0xffffffff ||
+        region.immediateDataByteOffset % 4 !== 0
+      ) {
+        fail(
+          `${program.semanticProgram}/${region.stage} has an invalid immediate-data byte offset`
+        );
+      }
+
+      const activeBindingIds = new Set(
+        Object.values(semanticProgram.entryPoints)
+          .filter((entry) => entry.stage === region.stage)
+          .flatMap((entry) => entry.bindings)
+      );
+      const hasActiveRuntimeStorage = semanticProgram.bindings.some(
+        (binding) => {
+          if (
+            !activeBindingIds.has(binding.id) ||
+            binding.kind !== "buffer" ||
+            binding.addressSpace !== "storage" ||
+            !binding.visibility.includes(region.stage) ||
+            semantic.layouts[binding.layout]?.runtimeSized !== true
+          ) {
+            return false;
+          }
+          return program.bindings.some(
+            (projected) =>
+              projected.semanticBinding === binding.id &&
+              projected.slots.some(
+                (slot) =>
+                  slot.stage === region.stage &&
+                  slot.mode === "direct" &&
+                  slot.resourceClass === "buffer" &&
+                  slot.component === "buffer" &&
+                  slot.count === 1
+              )
+          );
+        }
+      );
+      if (!hasActiveRuntimeStorage) {
+        fail(
+          `${program.semanticProgram}/${region.stage} region has no active runtime-sized storage binding`
+        );
+      }
+
+      const matchingImmediateSlots = program.internalBindings
+        .filter((binding) => binding.role === "immediate-data")
+        .flatMap((binding) => binding.slots)
+        .filter((slot) => slot.stage === region.stage);
+      if (matchingImmediateSlots.length !== 1) {
+        fail(
+          `${program.semanticProgram}/${region.stage} region needs exactly one immediate-data slot`
+        );
+      }
+      const [slot] = matchingImmediateSlots;
+      if (
+        slot.mode !== "direct" ||
+        slot.resourceClass !== "buffer" ||
+        slot.component !== "immediate-data" ||
+        slot.count !== 1
+      ) {
+        fail(
+          `${program.semanticProgram}/${region.stage} has an incompatible immediate-data slot`
+        );
+      }
+      if (region.stage === "vertex" && slot.index < ceiling) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data starts below the vertex-buffer ceiling`
+        );
+      }
+      const overlapsExternalBuffer = program.bindings.some((binding) =>
+        binding.slots.some(
+          (external) =>
+            external.stage === region.stage &&
+            external.resourceClass === "buffer" &&
+            slot.index < external.index + external.count &&
+            external.index < slot.index + slot.count
+        )
+      );
+      if (overlapsExternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data overlaps an external buffer slot`
+        );
+      }
+      const overlapsInternalBuffer = program.internalBindings.some((binding) =>
+        binding.slots.some(
+          (other) =>
+            other !== slot &&
+            other.stage === region.stage &&
+            other.resourceClass === "buffer" &&
+            slot.index < other.index + other.count &&
+            other.index < slot.index + slot.count
+        )
+      );
+      if (overlapsInternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data overlaps another internal buffer slot`
+        );
+      }
+    }
+  }
+}
+
+function requireStorageContractMutationFailure(
+  semantic,
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const semanticCandidate = clone(semantic);
+  const projectionCandidate = clone(projection);
+  mutate(semanticCandidate, projectionCandidate);
+  let rejected = false;
+  try {
+    validateStorageBufferSizeContract(semanticCandidate, projectionCandidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
 }
 
 function requireVertexPolicyMutationFailure(
@@ -503,6 +824,72 @@ if (!validateArtifact(artifact)) {
     })}`
   );
 }
+const futureStorageSizeModelArtifact = clone(artifact);
+futureStorageSizeModelArtifact.projection.storageBufferSizeModel =
+  artifact.projection.storageBufferSizeModel.endsWith("-v999")
+    ? "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v998"
+    : "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v999";
+if (!validateArtifact(futureStorageSizeModelArtifact)) {
+  fail(
+    `future storage-buffer-size model must remain structurally valid for conditional runtime checks:\n${ajv.errorsText(
+      validateArtifact.errors,
+      { separator: "\n" }
+    )}`
+  );
+}
+for (const [label, mutate] of [
+  [
+    "missing storage-buffer-size model",
+    (candidate) => {
+      delete candidate.projection.storageBufferSizeModel;
+    },
+  ],
+  [
+    "missing canonical region array",
+    (candidate) => {
+      delete candidate.projection.programs[0].storageBufferSizeRegions;
+    },
+  ],
+  [
+    "misaligned immediate-data offset",
+    (candidate) => {
+      candidate.projection.programs[1].storageBufferSizeRegions[0].immediateDataByteOffset = 2;
+    },
+  ],
+  [
+    "duplicate storage-buffer-size stage",
+    (candidate) => {
+      candidate.projection.programs[1].storageBufferSizeRegions.push({
+        stage: "compute",
+        immediateDataByteOffset: 8,
+      });
+    },
+  ],
+  [
+    "serialized storage-buffer-size word count",
+    (candidate) => {
+      candidate.projection.programs[1].storageBufferSizeRegions[0].wordCount = 1;
+    },
+  ],
+  [
+    "serialized dynamic storage-buffer range",
+    (candidate) => {
+      candidate.projection.programs[1].storageBufferSizeRegions[0].rangeBytes = 4;
+    },
+  ],
+  [
+    "redundant storage-buffer-size boolean",
+    (candidate) => {
+      candidate.projection.programs[1].needsStorageBufferSizes = true;
+    },
+  ],
+]) {
+  const candidate = clone(artifact);
+  mutate(candidate);
+  if (validateArtifact(candidate)) {
+    fail(`artifact schema accepted ${label}`);
+  }
+}
 if ("testing" in artifact.projection) {
   fail("C3 projection must not claim a compare runner");
 }
@@ -608,6 +995,35 @@ for (const input of artifact.inputs) {
   if (inputIds.has(input.id)) fail(`duplicate input id ${input.id}`);
   inputIds.set(input.id, input);
 }
+validateSourceSpans(artifact.semantic, artifact.inputs, options.inputsRoot);
+requireSourceSpanMutationFailure(
+  artifact.semantic,
+  artifact.inputs,
+  options.inputsRoot,
+  (semantic) => {
+    const noop = semantic.programs.find((program) => program.name === "Noop");
+    const runtimeArray = semantic.programs.find(
+      (program) => program.name === "RuntimeArray"
+    );
+    noop.sources = [...runtimeArray.sources];
+    noop.entryPoints.compute.source = clone(
+      runtimeArray.entryPoints.compute.source
+    );
+  },
+  "source span does not contain its WGSL entry declaration",
+  "crossed program source span"
+);
+requireSourceSpanMutationFailure(
+  artifact.semantic,
+  artifact.inputs,
+  options.inputsRoot,
+  (semantic) => {
+    const noop = semantic.programs.find((program) => program.name === "Noop");
+    noop.entryPoints.compute.source.start.line = 999;
+  },
+  "has an invalid source position",
+  "out-of-range source span"
+);
 const typeIds = new Set(Object.keys(artifact.semantic.types));
 const layoutIds = new Set(Object.keys(artifact.semantic.layouts));
 const requireType = (type, owner) => {
@@ -657,9 +1073,21 @@ for (const program of artifact.semantic.programs) {
       requireType(binding.type, `${program.name} binding ${binding.id}`);
       requireLayout(binding.layout, `${program.name} binding ${binding.id}`);
       const layout = artifact.semantic.layouts[binding.layout];
-      if (binding.minimumBindingSize !== layout.minimumSize) {
+      const expectedMinimumBindingSize = minimumBindingSizeForLayout(
+        binding.layout,
+        artifact.semantic
+      );
+      if (binding.minimumBindingSize !== expectedMinimumBindingSize) {
         fail(
-          `${program.name} binding ${binding.id} minimum size disagrees with its layout`
+          `${program.name} binding ${binding.id} minimum size must be ${expectedMinimumBindingSize}, received ${binding.minimumBindingSize}`
+        );
+      }
+      if (
+        layout.runtimeSized &&
+        binding.minimumBindingSize === layout.minimumSize
+      ) {
+        fail(
+          `${program.name} binding ${binding.id} collapsed runtime minimumBindingSize to the zero-element layout minimumSize`
         );
       }
     }
@@ -747,6 +1175,29 @@ for (const program of artifact.semantic.programs) {
   );
 }
 
+const runtimeArraySemantic = artifact.semantic.programs.find(
+  (program) => program.name === "RuntimeArray"
+);
+const runtimeArraySemanticBinding = runtimeArraySemantic?.bindings.find(
+  (binding) => binding.id === "g0b0"
+);
+const runtimeArrayLayout =
+  artifact.semantic.layouts[runtimeArraySemanticBinding?.layout];
+if (
+  !runtimeArraySemanticBinding ||
+  runtimeArrayLayout?.runtimeSized !== true ||
+  runtimeArrayLayout.minimumSize !== 4 ||
+  runtimeArraySemanticBinding.minimumBindingSize !== 8 ||
+  minimumBindingSizeForLayout(
+    runtimeArraySemanticBinding.layout,
+    artifact.semantic
+  ) !== 8
+) {
+  fail(
+    "RuntimeArray must distinguish the zero-element layout minimum from the one-element binding minimum"
+  );
+}
+
 const semanticSHA256 = sha256Canonical(artifact.semantic);
 assertEqual(
   artifact.fingerprints.semantic.sha256,
@@ -774,6 +1225,25 @@ const runtimeSHA256 = sha256Canonical(
   runtimeProjectionInput(artifact.projection, libraries[0].sha256)
 );
 validateVertexBufferPolicy(artifact.projection);
+validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
+const runtimeArrayFixtureProjection = artifact.projection.programs.find(
+  (program) => program.semanticProgram === "RuntimeArray"
+);
+const runtimeArrayFixtureImmediateSlots =
+  runtimeArrayFixtureProjection?.internalBindings
+    .filter((binding) => binding.role === "immediate-data")
+    .flatMap((binding) => binding.slots) ?? [];
+if (
+  artifact.projection.storageBufferSizeModel !==
+    options.expectedStorageBufferSizeModel ||
+  artifact.projection.vertexBufferPolicy.externalBufferCeiling !== 30 ||
+  runtimeArrayFixtureImmediateSlots.length !== 1 ||
+  runtimeArrayFixtureImmediateSlots[0].index !== 30
+) {
+  fail(
+    "C3 fixture must cover the selected storage-size model, external vertex ceiling 30, and immediate-data buffer(30)"
+  );
+}
 requireVertexPolicyMutationFailure(
   artifact.projection,
   (projection) => {
@@ -782,7 +1252,7 @@ requireVertexPolicyMutationFailure(
     slot.index = projection.vertexBufferPolicy.externalBufferCeiling;
   },
   "external vertex buffer interval ends",
-  "external vertex interval crossing ceiling"
+  "external vertex buffer interval crossing ceiling"
 );
 requireVertexPolicyMutationFailure(
   artifact.projection,
@@ -804,6 +1274,140 @@ requireVertexPolicyMutationFailure(
   "internal vertex buffer interval starts",
   "internal vertex interval below ceiling"
 );
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.storageBufferSizeRegions[0].immediateDataByteOffset = 2;
+  },
+  "invalid immediate-data byte offset",
+  "misaligned storage-size region"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.storageBufferSizeRegions.push({
+      stage: "compute",
+      immediateDataByteOffset: 8,
+    });
+  },
+  "repeats storage-buffer-size stage",
+  "duplicate storage-size stage"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    const program = semantic.programs.find(
+      (candidate) => candidate.name === "RuntimeArray"
+    );
+    program.entryPoints.compute.bindings = [];
+  },
+  "no active runtime-sized storage binding",
+  "region without active runtime storage"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.internalBindings = [];
+  },
+  "needs exactly one immediate-data slot",
+  "region without immediate data"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.internalBindings[0].slots[0].component = "wrong-immediate-data";
+  },
+  "incompatible immediate-data slot",
+  "region with incompatible immediate-data slot"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.internalBindings[0].slots[0].index = 0;
+  },
+  "overlaps an external buffer slot",
+  "region with overlapping immediate-data slot"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.internalBindings.push({
+      role: "fixture-other-internal",
+      slots: [
+        {
+          stage: "compute",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 30,
+          count: 1,
+        },
+      ],
+    });
+  },
+  "overlaps another internal buffer slot",
+  "region with overlapping internal slot"
+);
+
+const runtimeWithoutRegionProjection = clone(artifact.projection);
+const runtimeWithoutRegion = runtimeWithoutRegionProjection.programs.find(
+  (candidate) => candidate.semanticProgram === "RuntimeArray"
+);
+runtimeWithoutRegion.storageBufferSizeRegions = [];
+runtimeWithoutRegion.internalBindings = [];
+validateStorageBufferSizeContract(
+  artifact.semantic,
+  runtimeWithoutRegionProjection
+);
+
+const immediateWithoutRegionProjection = clone(artifact.projection);
+const noopWithImmediate = immediateWithoutRegionProjection.programs.find(
+  (candidate) => candidate.semanticProgram === "Noop"
+);
+noopWithImmediate.internalBindings.push({
+  role: "immediate-data",
+  slots: [
+    {
+      stage: "compute",
+      mode: "direct",
+      resourceClass: "buffer",
+      component: "immediate-data",
+      index:
+        immediateWithoutRegionProjection.vertexBufferPolicy
+          .externalBufferCeiling,
+      count: 1,
+    },
+  ],
+});
+validateStorageBufferSizeContract(
+  artifact.semantic,
+  immediateWithoutRegionProjection
+);
 assertEqual(
   artifact.projection.runtimeFingerprint.sha256,
   runtimeSHA256,
@@ -817,6 +1421,42 @@ if (
   ) === runtimeSHA256
 ) {
   fail("runtime projection fingerprint excludes vertex-buffer policy");
+}
+const changedStorageBufferSizeModel = clone(artifact.projection);
+changedStorageBufferSizeModel.storageBufferSizeModel =
+  artifact.projection.storageBufferSizeModel.endsWith("-v2")
+    ? "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v3"
+    : "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2";
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedStorageBufferSizeModel, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes storage-buffer-size model");
+}
+const changedStorageBufferSizeRegion = clone(artifact.projection);
+changedStorageBufferSizeRegion.programs.find(
+  (program) => program.semanticProgram === "RuntimeArray"
+).storageBufferSizeRegions[0].immediateDataByteOffset += 4;
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedStorageBufferSizeRegion, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes storage-buffer-size regions");
+}
+const changedImmediateDataSlot = clone(artifact.projection);
+changedImmediateDataSlot.programs
+  .find((program) => program.semanticProgram === "RuntimeArray")
+  .internalBindings.find(
+    (binding) => binding.role === "immediate-data"
+  ).slots[0].index -= 1;
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedImmediateDataSlot, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes immediate-data slot");
 }
 
 const semanticPrograms = new Map(
@@ -1052,6 +1692,14 @@ for (const [label, expected] of [
     "external buffer ceiling",
     `externalBufferCeiling: ${artifact.projection.vertexBufferPolicy.externalBufferCeiling}`,
   ],
+  [
+    "storage-buffer-size model",
+    `storageBufferSizeModel: "${artifact.projection.storageBufferSizeModel}"`,
+  ],
+  [
+    "supported storage-buffer-size model",
+    `storageBufferSizeModels: ["${runtimeSupportedStorageBufferSizeModel}"]`,
+  ],
   ["semantic fingerprint", `semanticFingerprint: "${semanticSHA256}"`],
   [
     "projection semantic fingerprint",
@@ -1074,11 +1722,56 @@ for (const [label, expected] of [
 ]) {
   assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
 }
+for (const [label, expected] of [
+  [
+    "generated pipeline selection",
+    "public struct AppShadersPipelineSelection: Equatable, Sendable",
+  ],
+  [
+    "non-public selection initializer",
+    "fileprivate init(\n    program: AppShadersProgramDescriptor,",
+  ],
+  [
+    "required coupled compatibility selection",
+    "selection: AppShadersPipelineSelection,",
+  ],
+  [
+    "coupled pipeline closure",
+    "createPipeline: (AppShadersPipelineSelection) throws -> Void",
+  ],
+  ["validated closure argument", "try createPipeline(selection)"],
+]) {
+  assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
+}
+if (
+  generatedSwift.includes(
+    "public init(\n    program: AppShadersProgramDescriptor,"
+  ) ||
+  generatedSwift.includes("program: AppShadersProgramDescriptor =") ||
+  generatedSwift.includes("stage: AppShadersShaderStage =") ||
+  generatedSwift.includes(
+    "selection: AppShadersPipelineSelection = noopComputeSelection"
+  )
+) {
+  fail(
+    "generated Swift exposes a fabricable, defaulted, or decoupled pipeline selection"
+  );
+}
 
 const noopProjection = artifact.projection.programs.find(
   (program) => program.semanticProgram === "Noop"
 );
 if (!noopProjection) fail("projection has no Noop program for the C3 probe");
+if (
+  noopProjection.storageBufferSizeRegions.length !== 0 ||
+  noopProjection.internalBindings.some(
+    (binding) => binding.role === "immediate-data"
+  )
+) {
+  fail(
+    "Noop must remain free of storage-size regions and immediate-data slots"
+  );
+}
 const noopSemantic = semanticPrograms.get(noopProjection.semanticProgram);
 const noopComputeEntries = noopProjection.entryPoints.filter(
   (entry) => entry.stage === "compute"
@@ -1129,8 +1822,57 @@ for (const [label, expected] of [
 ]) {
   assertIncludes(generatedSwift, expected, `generated Swift C3 probe ${label}`);
 }
+const runtimeArrayProjection = artifact.projection.programs.find(
+  (program) => program.semanticProgram === "RuntimeArray"
+);
+const runtimeArrayRegion = runtimeArrayProjection?.storageBufferSizeRegions[0];
+const runtimeArrayEntry = runtimeArrayProjection?.entryPoints.find(
+  (entry) => entry.stage === runtimeArrayRegion?.stage
+);
+const runtimeArrayImmediateSlot = runtimeArrayProjection?.internalBindings
+  .filter((binding) => binding.role === "immediate-data")
+  .flatMap((binding) => binding.slots)[0];
+if (!runtimeArrayRegion || !runtimeArrayEntry || !runtimeArrayImmediateSlot) {
+  fail("RuntimeArray descriptor inputs are incomplete");
+}
 for (const [label, expected] of [
-  ["entry", "library.makeFunction(name: projection.metalEntryPoint)"],
+  [
+    "Noop empty regions",
+    "public static let noopProgram = AppShadersProgramDescriptor(",
+  ],
+  [
+    "runtime program",
+    "public static let runtimeArrayProgram = AppShadersProgramDescriptor(",
+  ],
+  ["runtime Metal entry", `metalName: "${runtimeArrayEntry.metal}"`],
+  ["runtime region stage", `stage: .${runtimeArrayRegion.stage}`],
+  [
+    "runtime region offset",
+    `immediateDataByteOffset: ${runtimeArrayRegion.immediateDataByteOffset}`,
+  ],
+  [
+    "runtime immediate role",
+    `role: "${runtimeArrayProjection.internalBindings[0].role}"`,
+  ],
+  ["runtime immediate index", `index: ${runtimeArrayImmediateSlot.index}`],
+  ["runtime immediate count", `count: ${runtimeArrayImmediateSlot.count}`],
+  [
+    "runtime pipeline selection",
+    "public static let runtimeArrayComputeSelection = AppShadersPipelineSelection(",
+  ],
+]) {
+  assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
+}
+for (const [label, expected] of [
+  [
+    "validated selection",
+    "selection == AppShadersArtifact.noopComputeSelection",
+  ],
+  [
+    "entry from validated selection",
+    "selection.program.metalEntryPoint(for: selection.stage)",
+  ],
+  ["entry", "library.makeFunction(name: metalEntryPoint)"],
   ["buffer size", "length: projection.minimumBufferByteCount"],
   ["buffer slot", "index: projection.bufferIndex"],
   ["workgroup width", "width: projection.workgroupWidth"],

@@ -13,6 +13,7 @@
     "target",
     "abi",
     "vertexBufferPolicy",
+    "storageBufferSizeModel",
     "toolchain",
     "runtimeFingerprint",
     "library",
@@ -27,6 +28,12 @@
     "target": { "$ref": "#/$defs/target" },
     "abi": { "$ref": "#/$defs/abi" },
     "vertexBufferPolicy": { "$ref": "#/$defs/vertexBufferPolicy" },
+    "storageBufferSizeModel": {
+      "description": "Versioned rule for packing effective runtime-sized storage-buffer binding ranges into the stage-local immediate-data region. A runtime validates support for this model only when loading a program stage that declares a storageBufferSizeRegions entry.",
+      "type": "string",
+      "pattern": "^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$",
+      "maxLength": 256
+    },
     "toolchain": { "$ref": "#/$defs/toolchain" },
     "runtimeFingerprint": { "$ref": "#/$defs/runtimeProjectionFingerprint" },
     "library": { "$ref": "#/$defs/library" },
@@ -209,7 +216,7 @@
       }
     },
     "runtimeProjectionFingerprint": {
-      "description": "Hash of the semantic fingerprint, Metal ABI and binding model, deployment target, referenced metallib hash, emitted names, vertex-buffer policy, external and internal slots, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, and testing metadata are excluded.",
+      "description": "Hash of the semantic fingerprint, Metal ABI and binding model, storage-buffer-size model, deployment target, referenced metallib hash, emitted names, vertex-buffer policy, external and internal slots, per-stage storage-buffer-size regions, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, dynamic buffer ranges and size-table words, and testing metadata are excluded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],
@@ -313,6 +320,58 @@
         "z": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
       }
     },
+    "storageBufferSizeRegion": {
+      "description": "Compiler-emitted location of the slot-indexed storage-buffer-size words within one stage's immediate-data payload. The physical Metal buffer slot is recorded separately by the program's immediate-data internal binding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "immediateDataByteOffset"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stage" },
+        "immediateDataByteOffset": {
+          "description": "Four-byte-aligned UInt32 byte offset from the beginning of this stage's immediate-data payload.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "multipleOf": 4
+        }
+      }
+    },
+    "storageBufferSizeRegions": {
+      "description": "Canonical stage-ordered regions (vertex, fragment, compute), with at most one entry per stage. Each entry requires at least one active runtime-sized storage binding and exactly one compatible immediate-data internal buffer slot in that stage, disjoint from every other external or internal buffer interval in the stage. The converses do not hold: a runtime-sized binding or immediate-data slot alone does not require a region. An empty array means no selected stage needs storage-buffer-size transport. wordCount, bound ranges, and packed words are derived runtime state and are not serialized.",
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/storageBufferSizeRegion" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": ["stage"],
+            "properties": { "stage": { "const": "vertex" } }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["stage"],
+            "properties": { "stage": { "const": "fragment" } }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["stage"],
+            "properties": { "stage": { "const": "compute" } }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    },
     "capabilityId": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)*/v[1-9][0-9]*$"
@@ -375,6 +434,7 @@
         "entryPoints",
         "bindings",
         "internalBindings",
+        "storageBufferSizeRegions",
         "deviceRequirements"
       ],
       "properties": {
@@ -389,6 +449,9 @@
         "internalBindings": {
           "type": "array",
           "items": { "$ref": "#/$defs/internalBinding" }
+        },
+        "storageBufferSizeRegions": {
+          "$ref": "#/$defs/storageBufferSizeRegions"
         },
         "resolvedWorkgroupSize": { "$ref": "#/$defs/resolvedWorkgroupSize" },
         "deviceRequirements": { "$ref": "#/$defs/deviceRequirements" }

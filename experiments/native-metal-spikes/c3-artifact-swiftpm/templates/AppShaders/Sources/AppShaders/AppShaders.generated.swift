@@ -12,6 +12,7 @@ public struct AppShadersRuntimeSupport: Sendable {
   public var layoutModels: Set<String>
   public var bindingModels: Set<String>
   public var vertexBufferPolicyModels: Set<String>
+  public var storageBufferSizeModels: Set<String>
 
   public init(
     semanticSchemaVersions: ClosedRange<Int>,
@@ -22,7 +23,8 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingSlotsABIs: ClosedRange<Int>,
     layoutModels: Set<String>,
     bindingModels: Set<String>,
-    vertexBufferPolicyModels: Set<String>
+    vertexBufferPolicyModels: Set<String>,
+    storageBufferSizeModels: Set<String>
   ) {
     self.semanticSchemaVersions = semanticSchemaVersions
     self.metalProjectionABIs = metalProjectionABIs
@@ -33,6 +35,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     self.layoutModels = layoutModels
     self.bindingModels = bindingModels
     self.vertexBufferPolicyModels = vertexBufferPolicyModels
+    self.storageBufferSizeModels = storageBufferSizeModels
   }
 
   public static let fixtureSupported = AppShadersRuntimeSupport(
@@ -44,7 +47,8 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingSlotsABIs: 1...1,
     layoutModels: ["wgsl-host-shareable-v1"],
     bindingModels: ["vgpu-metal-binding-slots-v1"],
-    vertexBufferPolicyModels: ["vgpu-metal-pipeline-local-vertex-buffer-slots-v1"]
+    vertexBufferPolicyModels: ["vgpu-metal-pipeline-local-vertex-buffer-slots-v1"],
+    storageBufferSizeModels: ["vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"]
   )
 }
 
@@ -59,6 +63,7 @@ public struct AppShadersDescriptor: Sendable {
   public var bindingModel: String
   public var vertexBufferPolicyModel: String
   public var externalBufferCeiling: Int
+  public var storageBufferSizeModel: String
   public var semanticFingerprint: String
   public var projectionSemanticFingerprint: String
   public var runtimeFingerprint: String
@@ -77,6 +82,7 @@ public struct AppShadersDescriptor: Sendable {
     bindingModel: String,
     vertexBufferPolicyModel: String,
     externalBufferCeiling: Int,
+    storageBufferSizeModel: String,
     semanticFingerprint: String,
     projectionSemanticFingerprint: String,
     runtimeFingerprint: String,
@@ -94,6 +100,7 @@ public struct AppShadersDescriptor: Sendable {
     self.bindingModel = bindingModel
     self.vertexBufferPolicyModel = vertexBufferPolicyModel
     self.externalBufferCeiling = externalBufferCeiling
+    self.storageBufferSizeModel = storageBufferSizeModel
     self.semanticFingerprint = semanticFingerprint
     self.projectionSemanticFingerprint = projectionSemanticFingerprint
     self.runtimeFingerprint = runtimeFingerprint
@@ -114,6 +121,88 @@ public struct AppShadersCompatibilityError: Error, Equatable, CustomStringConver
 
   public var description: String {
     "\(code): \(message)"
+  }
+}
+
+public enum AppShadersShaderStage: String, Equatable, Sendable {
+  case vertex
+  case fragment
+  case compute
+}
+
+public struct AppShadersStorageBufferSizeRegion: Equatable, Sendable {
+  public let stage: AppShadersShaderStage
+  public let immediateDataByteOffset: UInt32
+
+  public init(stage: AppShadersShaderStage, immediateDataByteOffset: UInt32) {
+    self.stage = stage
+    self.immediateDataByteOffset = immediateDataByteOffset
+  }
+}
+
+public struct AppShadersInternalBufferSlot: Equatable, Sendable {
+  public let role: String
+  public let stage: AppShadersShaderStage
+  public let index: Int
+  public let count: Int
+
+  public init(role: String, stage: AppShadersShaderStage, index: Int, count: Int) {
+    self.role = role
+    self.stage = stage
+    self.index = index
+    self.count = count
+  }
+}
+
+public struct AppShadersEntryPointDescriptor: Equatable, Sendable {
+  public let stage: AppShadersShaderStage
+  public let metalName: String
+
+  fileprivate init(stage: AppShadersShaderStage, metalName: String) {
+    self.stage = stage
+    self.metalName = metalName
+  }
+}
+
+public struct AppShadersProgramDescriptor: Equatable, Sendable {
+  public let semanticProgram: String
+  public let entryPoints: [AppShadersEntryPointDescriptor]
+  public let storageBufferSizeRegions: [AppShadersStorageBufferSizeRegion]
+  public let internalBufferSlots: [AppShadersInternalBufferSlot]
+
+  fileprivate init(
+    semanticProgram: String,
+    entryPoints: [AppShadersEntryPointDescriptor],
+    storageBufferSizeRegions: [AppShadersStorageBufferSizeRegion],
+    internalBufferSlots: [AppShadersInternalBufferSlot]
+  ) {
+    self.semanticProgram = semanticProgram
+    self.entryPoints = entryPoints
+    self.storageBufferSizeRegions = storageBufferSizeRegions
+    self.internalBufferSlots = internalBufferSlots
+  }
+
+  public func storageBufferSizeRegion(
+    for stage: AppShadersShaderStage
+  ) -> AppShadersStorageBufferSizeRegion? {
+    storageBufferSizeRegions.first { $0.stage == stage }
+  }
+
+  public func metalEntryPoint(for stage: AppShadersShaderStage) -> String? {
+    entryPoints.first { $0.stage == stage }?.metalName
+  }
+}
+
+public struct AppShadersPipelineSelection: Equatable, Sendable {
+  public let program: AppShadersProgramDescriptor
+  public let stage: AppShadersShaderStage
+
+  fileprivate init(
+    program: AppShadersProgramDescriptor,
+    stage: AppShadersShaderStage
+  ) {
+    self.program = program
+    self.stage = stage
   }
 }
 
@@ -164,6 +253,52 @@ public enum AppShadersArtifact {
     elementCount: __NOOP_ELEMENT_COUNT__
   )
 
+  public static let noopProgram = AppShadersProgramDescriptor(
+    semanticProgram: "__NOOP_SEMANTIC_PROGRAM__",
+    entryPoints: [
+      AppShadersEntryPointDescriptor(
+        stage: .compute,
+        metalName: "__NOOP_METAL_ENTRY_POINT__"
+      )
+    ],
+    storageBufferSizeRegions: [],
+    internalBufferSlots: []
+  )
+
+  public static let runtimeArrayProgram = AppShadersProgramDescriptor(
+    semanticProgram: "__RUNTIME_ARRAY_SEMANTIC_PROGRAM__",
+    entryPoints: [
+      AppShadersEntryPointDescriptor(
+        stage: .compute,
+        metalName: "__RUNTIME_ARRAY_METAL_ENTRY_POINT__"
+      )
+    ],
+    storageBufferSizeRegions: [
+      AppShadersStorageBufferSizeRegion(
+        stage: .__RUNTIME_ARRAY_REGION_STAGE__,
+        immediateDataByteOffset: __RUNTIME_ARRAY_REGION_OFFSET__
+      )
+    ],
+    internalBufferSlots: [
+      AppShadersInternalBufferSlot(
+        role: "__RUNTIME_ARRAY_INTERNAL_ROLE__",
+        stage: .__RUNTIME_ARRAY_INTERNAL_STAGE__,
+        index: __RUNTIME_ARRAY_INTERNAL_INDEX__,
+        count: __RUNTIME_ARRAY_INTERNAL_COUNT__
+      )
+    ]
+  )
+
+  public static let noopComputeSelection = AppShadersPipelineSelection(
+    program: noopProgram,
+    stage: .compute
+  )
+
+  public static let runtimeArrayComputeSelection = AppShadersPipelineSelection(
+    program: runtimeArrayProgram,
+    stage: .compute
+  )
+
   public static let descriptor = AppShadersDescriptor(
     semanticSchemaVersion: 1,
     metalProjectionABI: 1,
@@ -175,6 +310,7 @@ public enum AppShadersArtifact {
     bindingModel: "vgpu-metal-binding-slots-v1",
     vertexBufferPolicyModel: "__VERTEX_BUFFER_POLICY_MODEL__",
     externalBufferCeiling: __EXTERNAL_BUFFER_CEILING__,
+    storageBufferSizeModel: "__STORAGE_BUFFER_SIZE_MODEL__",
     semanticFingerprint: "__SEMANTIC_SHA256__",
     projectionSemanticFingerprint: "__SEMANTIC_SHA256__",
     runtimeFingerprint: "__RUNTIME_SHA256__",
@@ -233,9 +369,10 @@ public enum AppShadersArtifact {
 
   public static func validateApplicationCompatibility(
     descriptor candidate: AppShadersDescriptor = descriptor,
+    selection: AppShadersPipelineSelection,
     runtime: AppShadersRuntimeSupport = .fixtureSupported,
     payloadSHA256: String? = nil,
-    createPipeline: () throws -> Void
+    createPipeline: (AppShadersPipelineSelection) throws -> Void
   ) throws {
     try require(
       runtime.semanticSchemaVersions.contains(candidate.semanticSchemaVersion),
@@ -293,6 +430,14 @@ public enum AppShadersArtifact {
       field: "vertex-buffer policy model",
       value: candidate.vertexBufferPolicyModel
     )
+    if selection.program.storageBufferSizeRegion(for: selection.stage) != nil {
+      try require(
+        runtime.storageBufferSizeModels.contains(candidate.storageBufferSizeModel),
+        code: "unsupported-storage-buffer-size-model",
+        field: "storage-buffer-size model",
+        value: candidate.storageBufferSizeModel
+      )
+    }
     try require(
       candidate.semanticFingerprint == candidate.projectionSemanticFingerprint,
       code: "semantic-fingerprint-mismatch",
@@ -320,7 +465,7 @@ public enum AppShadersArtifact {
       value: observedPayloadSHA256
     )
 
-    try createPipeline()
+    try createPipeline(selection)
   }
 
   private static func require<T>(

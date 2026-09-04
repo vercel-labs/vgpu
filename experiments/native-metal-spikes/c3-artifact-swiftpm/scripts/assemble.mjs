@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = resolve(scriptDirectory, "..");
+const runtimeSupportedStorageBufferSizeModel =
+  "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 
 function fail(message) {
   throw new Error(`C3 assemble: ${message}`);
@@ -36,6 +38,7 @@ function parseArguments(argv) {
     swiftVersion: "6.0",
     sdkVersion: "0.0",
     sdkBuild: "synthetic-c3a",
+    storageBufferSizeModel: runtimeSupportedStorageBufferSizeModel,
   };
 
   for (let index = 0; index < argv.length; index += 2) {
@@ -57,6 +60,7 @@ function parseArguments(argv) {
       "--swift-version": "swiftVersion",
       "--sdk-version": "sdkVersion",
       "--sdk-build": "sdkBuild",
+      "--storage-buffer-size-model": "storageBufferSizeModel",
     }[name];
     if (!key) fail(`unknown option ${name}`);
     options[key] = value;
@@ -65,6 +69,13 @@ function parseArguments(argv) {
   if (!options.output) fail("--output is required");
   if (!/^[a-z][a-z0-9-]*$/.test(options.payloadKind)) {
     fail(`invalid payload kind ${options.payloadKind}`);
+  }
+  if (
+    !/^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$/.test(
+      options.storageBufferSizeModel
+    )
+  ) {
+    fail(`invalid storage-buffer-size model ${options.storageBufferSizeModel}`);
   }
   return options;
 }
@@ -240,6 +251,7 @@ function runtimeProjectionInput(projection, librarySHA256) {
     target: projection.target,
     abi: projection.abi,
     vertexBufferPolicy: projection.vertexBufferPolicy,
+    storageBufferSizeModel: projection.storageBufferSizeModel,
     library: {
       path: projection.library.path,
       sha256: librarySHA256,
@@ -279,6 +291,149 @@ function validateVertexBufferPolicy(projection) {
             `${program.semanticProgram}/${internal.role} internal vertex buffer interval starts at ${slot.index}, below ceiling ${ceiling}`
           );
         }
+      }
+    }
+  }
+}
+
+const canonicalStageOrder = ["vertex", "fragment", "compute"];
+
+function validateStorageBufferSizeContract(semantic, projection) {
+  const semanticPrograms = new Map(
+    semantic.programs.map((program) => [program.name, program])
+  );
+  const ceiling = projection.vertexBufferPolicy.externalBufferCeiling;
+
+  for (const program of projection.programs) {
+    const semanticProgram = semanticPrograms.get(program.semanticProgram);
+    if (!semanticProgram) {
+      fail(
+        `storage-size contract references unknown program ${program.semanticProgram}`
+      );
+    }
+    if (!Array.isArray(program.storageBufferSizeRegions)) {
+      fail(
+        `${program.semanticProgram} has no canonical storage-buffer-size region array`
+      );
+    }
+
+    let previousStageRank = -1;
+    const observedStages = new Set();
+    for (const region of program.storageBufferSizeRegions) {
+      const stageRank = canonicalStageOrder.indexOf(region.stage);
+      if (observedStages.has(region.stage)) {
+        fail(
+          `${program.semanticProgram} repeats storage-buffer-size stage ${region.stage}`
+        );
+      }
+      if (stageRank < 0 || stageRank <= previousStageRank) {
+        fail(
+          `${program.semanticProgram} storage-buffer-size regions are not canonically stage ordered`
+        );
+      }
+      observedStages.add(region.stage);
+      previousStageRank = stageRank;
+
+      if (
+        !Number.isSafeInteger(region.immediateDataByteOffset) ||
+        region.immediateDataByteOffset < 0 ||
+        region.immediateDataByteOffset > 0xffffffff ||
+        region.immediateDataByteOffset % 4 !== 0
+      ) {
+        fail(
+          `${program.semanticProgram}/${region.stage} has an invalid immediate-data byte offset`
+        );
+      }
+
+      const activeBindingIds = new Set(
+        Object.values(semanticProgram.entryPoints)
+          .filter((entry) => entry.stage === region.stage)
+          .flatMap((entry) => entry.bindings)
+      );
+      const hasActiveRuntimeStorage = semanticProgram.bindings.some(
+        (binding) => {
+          if (
+            !activeBindingIds.has(binding.id) ||
+            binding.kind !== "buffer" ||
+            binding.addressSpace !== "storage" ||
+            !binding.visibility.includes(region.stage) ||
+            semantic.layouts[binding.layout]?.runtimeSized !== true
+          ) {
+            return false;
+          }
+          return program.bindings.some(
+            (projected) =>
+              projected.semanticBinding === binding.id &&
+              projected.slots.some(
+                (slot) =>
+                  slot.stage === region.stage &&
+                  slot.mode === "direct" &&
+                  slot.resourceClass === "buffer" &&
+                  slot.component === "buffer" &&
+                  slot.count === 1
+              )
+          );
+        }
+      );
+      if (!hasActiveRuntimeStorage) {
+        fail(
+          `${program.semanticProgram}/${region.stage} region has no active runtime-sized storage binding`
+        );
+      }
+
+      const matchingImmediateSlots = program.internalBindings
+        .filter((binding) => binding.role === "immediate-data")
+        .flatMap((binding) => binding.slots)
+        .filter((slot) => slot.stage === region.stage);
+      if (matchingImmediateSlots.length !== 1) {
+        fail(
+          `${program.semanticProgram}/${region.stage} region needs exactly one immediate-data slot`
+        );
+      }
+      const [slot] = matchingImmediateSlots;
+      if (
+        slot.mode !== "direct" ||
+        slot.resourceClass !== "buffer" ||
+        slot.component !== "immediate-data" ||
+        slot.count !== 1
+      ) {
+        fail(
+          `${program.semanticProgram}/${region.stage} has an incompatible immediate-data slot`
+        );
+      }
+      if (region.stage === "vertex" && slot.index < ceiling) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data starts below the vertex-buffer ceiling`
+        );
+      }
+      const overlapsExternalBuffer = program.bindings.some((binding) =>
+        binding.slots.some(
+          (external) =>
+            external.stage === region.stage &&
+            external.resourceClass === "buffer" &&
+            slot.index < external.index + external.count &&
+            external.index < slot.index + slot.count
+        )
+      );
+      if (overlapsExternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data overlaps an external buffer slot`
+        );
+      }
+      const overlapsInternalBuffer = program.internalBindings.some((binding) =>
+        binding.slots.some(
+          (other) =>
+            other !== slot &&
+            other.stage === region.stage &&
+            other.resourceClass === "buffer" &&
+            slot.index < other.index + other.count &&
+            other.index < slot.index + slot.count
+        )
+      );
+      if (overlapsInternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${region.stage} immediate-data overlaps another internal buffer slot`
+        );
       }
     }
   }
@@ -329,6 +484,7 @@ function mutationStatement(mutation) {
     "layoutModel",
     "bindingModel",
     "vertexBufferPolicyModel",
+    "storageBufferSizeModel",
     "semanticFingerprint",
     "projectionSemanticFingerprint",
     "runtimeFingerprint",
@@ -387,6 +543,14 @@ function generateMutationTests(mutations) {
     }
 
     const statement = mutationStatement(mutation);
+    const selectionExpression = {
+      "noop-compute": "AppShadersArtifact.noopComputeSelection",
+      "runtime-array-compute":
+        "AppShadersArtifact.runtimeArrayComputeSelection",
+    }[mutation.selection ?? "noop-compute"];
+    if (!selectionExpression || "program" in mutation || "stage" in mutation) {
+      fail(`mutation ${mutation.name} has an unsupported pipeline selection`);
+    }
     const descriptorBinding = mutation.kind === "supportRange" ? "let" : "var";
     const supportBinding = mutation.kind === "supportRange" ? "var" : "let";
     return `    do {
@@ -398,9 +562,10 @@ function generateMutationTests(mutations) {
       do {
         try AppShadersArtifact.validateApplicationCompatibility(
           descriptor: descriptor,
+          selection: ${selectionExpression},
           runtime: support,
           payloadSHA256: descriptor.librarySHA256
-        ) {
+        ) { _ in
           pipelineCalls += 1
         }
       } catch let error as AppShadersCompatibilityError {
@@ -520,25 +685,30 @@ const librarySHA256 = sha256Bytes(payloadBytes);
 const artifact = JSON.parse(
   readFileSync(join(fixtureDirectory, "fixtures", "artifact.base.json"), "utf8")
 );
+artifact.projection.storageBufferSizeModel = options.storageBufferSizeModel;
 validateVertexBufferPolicy(artifact.projection);
-const sourcePath = join(fixtureDirectory, "fixtures", "noop.wgsl");
-const sourceBytes = readFileSync(sourcePath);
+validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
 artifact.inputs = [
-  {
-    id: "noop-wgsl",
-    path: "fixtures/noop.wgsl",
+  ["noop-wgsl", "fixtures/noop.wgsl"],
+  ["runtime-array-wgsl", "fixtures/runtime-array.wgsl"],
+].map(([id, path]) => {
+  const bytes = readFileSync(join(fixtureDirectory, ...path.split("/")));
+  return {
+    id,
+    path,
     role: "wgsl",
-    size: sourceBytes.byteLength,
-    sha256: sha256Bytes(sourceBytes),
-  },
-];
+    size: bytes.byteLength,
+    sha256: sha256Bytes(bytes),
+  };
+});
 
-const program = artifact.semantic.programs[0];
-program.fingerprint.sha256 = fingerprintProgram(
-  program,
-  artifact.semantic,
-  artifact.inputs
-);
+for (const program of artifact.semantic.programs) {
+  program.fingerprint.sha256 = fingerprintProgram(
+    program,
+    artifact.semantic,
+    artifact.inputs
+  );
+}
 const semanticSHA256 = sha256Canonical(artifact.semantic);
 artifact.projection.semantic.sha256 = semanticSHA256;
 artifact.projection.target.metalCompilerTargetTriple = options.metalTarget;
@@ -594,6 +764,28 @@ if (
   fail("Noop projected buffer must reference one fixed semantic array binding");
 }
 
+const runtimeArrayProjection = artifact.projection.programs.find(
+  (candidate) => candidate.semanticProgram === "RuntimeArray"
+);
+const runtimeArrayRegions = runtimeArrayProjection?.storageBufferSizeRegions;
+const runtimeArrayEntries = runtimeArrayProjection?.entryPoints.filter(
+  (entry) => entry.stage === "compute"
+);
+const runtimeArrayImmediateSlots = runtimeArrayProjection?.internalBindings
+  .filter((binding) => binding.role === "immediate-data")
+  .flatMap((binding) => binding.slots);
+if (
+  runtimeArrayRegions?.length !== 1 ||
+  runtimeArrayEntries?.length !== 1 ||
+  runtimeArrayImmediateSlots?.length !== 1
+) {
+  fail(
+    "RuntimeArray must have one storage-size region and one immediate-data slot"
+  );
+}
+const [runtimeArrayRegion] = runtimeArrayRegions;
+const [runtimeArrayImmediateSlot] = runtimeArrayImmediateSlots;
+
 const generatedSourcePath = join(
   shadersOutput,
   "Sources",
@@ -614,6 +806,22 @@ for (const [placeholder, replacement] of [
     "__EXTERNAL_BUFFER_CEILING__",
     String(artifact.projection.vertexBufferPolicy.externalBufferCeiling),
   ],
+  ["__STORAGE_BUFFER_SIZE_MODEL__", artifact.projection.storageBufferSizeModel],
+  ["__NOOP_SEMANTIC_PROGRAM__", noopProjection.semanticProgram],
+  [
+    "__RUNTIME_ARRAY_SEMANTIC_PROGRAM__",
+    runtimeArrayProjection.semanticProgram,
+  ],
+  ["__RUNTIME_ARRAY_REGION_STAGE__", runtimeArrayRegion.stage],
+  ["__RUNTIME_ARRAY_METAL_ENTRY_POINT__", runtimeArrayEntries[0].metal],
+  [
+    "__RUNTIME_ARRAY_REGION_OFFSET__",
+    String(runtimeArrayRegion.immediateDataByteOffset),
+  ],
+  ["__RUNTIME_ARRAY_INTERNAL_ROLE__", "immediate-data"],
+  ["__RUNTIME_ARRAY_INTERNAL_STAGE__", runtimeArrayImmediateSlot.stage],
+  ["__RUNTIME_ARRAY_INTERNAL_INDEX__", String(runtimeArrayImmediateSlot.index)],
+  ["__RUNTIME_ARRAY_INTERNAL_COUNT__", String(runtimeArrayImmediateSlot.count)],
   ["__NOOP_METAL_ENTRY_POINT__", noopEntries[0].metal],
   ["__NOOP_BUFFER_INDEX__", String(noopBufferIndex)],
   ["__NOOP_WORKGROUP_WIDTH__", String(noopWorkgroup.x)],

@@ -186,6 +186,17 @@ diff -qr "$C3_FIRST" "$C3_SECOND"
   --package "$C3_FIRST/AppShaders" \
   --repository "$C3_REPOSITORY" \
   --inputs-root "$C3_DIR"
+C3_FUTURE_MODEL="$C3_SCRATCH/assembly-future-storage-size-model"
+"$C3_NODE" "$C3_DIR/scripts/assemble.mjs" \
+  --output "$C3_FUTURE_MODEL" \
+  --storage-buffer-size-model vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2
+"$C3_NODE" "$C3_DIR/scripts/verify-artifact.mjs" \
+  --package "$C3_FUTURE_MODEL/AppShaders" \
+  --repository "$C3_REPOSITORY" \
+  --inputs-root "$C3_DIR" \
+  --expected-storage-buffer-size-model vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2
+assert_clean_tree "$C3_FUTURE_MODEL"
+printf 'Future descriptor model did not add itself to fixed runtime support.\n'
 printf 'must never be copied by the fixture assembler\n' >"$C3_SECOND/AppShaders/.env"
 C3_ALLOWLIST_NEGATIVE_LOG="$C3_SCRATCH/allowlist-negative.log"
 if "$C3_NODE" "$C3_DIR/scripts/verify-artifact.mjs" \
@@ -246,15 +257,24 @@ if ! xcrun --find metallib >/dev/null 2>&1; then
   exit 0
 fi
 
-C3_AIR="$C3_SCRATCH/noop.air"
+C3_NOOP_AIR="$C3_SCRATCH/noop.air"
+C3_RUNTIME_ARRAY_AIR="$C3_SCRATCH/runtime-array.air"
 C3_METALLIB="$C3_SCRATCH/AppShaders.metallib"
 printf 'Metal target: %s\n' "$C3_METAL_TARGET"
 xcrun -sdk macosx metal \
   -std=macos-metal2.4 \
   -target "$C3_METAL_TARGET" \
   -c "$C3_DIR/fixtures/noop.metal" \
-  -o "$C3_AIR"
-xcrun -sdk macosx metallib "$C3_AIR" -o "$C3_METALLIB"
+  -o "$C3_NOOP_AIR"
+xcrun -sdk macosx metal \
+  -std=macos-metal2.4 \
+  -target "$C3_METAL_TARGET" \
+  -c "$C3_DIR/fixtures/runtime-array.metal" \
+  -o "$C3_RUNTIME_ARRAY_AIR"
+xcrun -sdk macosx metallib \
+  "$C3_NOOP_AIR" \
+  "$C3_RUNTIME_ARRAY_AIR" \
+  -o "$C3_METALLIB"
 
 C3_XCODE_VERSION="$(xcodebuild -version | sed -n '1s/^Xcode //p')"
 C3_XCODE_BUILD="$(xcodebuild -version | sed -n '2s/^Build version //p')"

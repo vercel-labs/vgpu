@@ -73,6 +73,15 @@
     "expectedPipelineCalls": 0
   },
   {
+    "name": "storage-buffer-size-model",
+    "kind": "descriptorString",
+    "field": "storageBufferSizeModel",
+    "value": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2",
+    "selection": "runtime-array-compute",
+    "expectedApplicationCode": "unsupported-storage-buffer-size-model",
+    "expectedPipelineCalls": 0
+  },
+  {
     "name": "semantic-fingerprint",
     "kind": "descriptorString",
     "field": "projectionSemanticFingerprint",

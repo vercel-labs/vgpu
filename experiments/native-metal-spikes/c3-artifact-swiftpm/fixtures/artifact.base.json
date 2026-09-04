@@ -32,6 +32,27 @@
         "kind": "array",
         "element": "u32",
         "count": 4
+      },
+      "runtime-u32": {
+        "kind": "array",
+        "element": "u32"
+      },
+      "runtime-values": {
+        "kind": "struct",
+        "wgslName": "RuntimeValues",
+        "swiftName": "RuntimeValues",
+        "members": [
+          {
+            "name": "prefix",
+            "swiftName": "prefix",
+            "type": "u32"
+          },
+          {
+            "name": "values",
+            "swiftName": "values",
+            "type": "runtime-u32"
+          }
+        ]
       }
     },
     "layouts": {
@@ -51,6 +72,41 @@
         "runtimeSized": false,
         "arrayStride": 4,
         "members": []
+      },
+      "runtime-u32": {
+        "type": "runtime-u32",
+        "alignment": 4,
+        "minimumSize": 0,
+        "runtimeSized": true,
+        "arrayStride": 4,
+        "members": []
+      },
+      "runtime-values": {
+        "type": "runtime-values",
+        "alignment": 4,
+        "minimumSize": 4,
+        "runtimeSized": true,
+        "members": [
+          {
+            "name": "prefix",
+            "type": "u32",
+            "layout": "u32",
+            "offset": 0,
+            "alignment": 4,
+            "minimumSize": 4,
+            "size": 4,
+            "runtimeSized": false
+          },
+          {
+            "name": "values",
+            "type": "runtime-u32",
+            "layout": "runtime-u32",
+            "offset": 4,
+            "alignment": 4,
+            "minimumSize": 0,
+            "runtimeSized": true
+          }
+        ]
       }
     },
     "programs": [
@@ -109,6 +165,62 @@
           "languageFeatures": [],
           "features": []
         }
+      },
+      {
+        "name": "RuntimeArray",
+        "swiftName": "RuntimeArray",
+        "kind": "compute",
+        "sources": ["runtime-array-wgsl"],
+        "fingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "__RUNTIME_ARRAY_PROGRAM_SHA256__"
+        },
+        "entryPoints": {
+          "compute": {
+            "stage": "compute",
+            "origin": "authored",
+            "names": {
+              "authored": "c3_runtime_array",
+              "wgsl": "c3_runtime_array"
+            },
+            "source": {
+              "input": "runtime-array-wgsl",
+              "start": { "line": 9, "column": 1 },
+              "end": { "line": 12, "column": 2 }
+            },
+            "inputs": [],
+            "outputs": [],
+            "bindings": ["g0b0"],
+            "samplingPairs": [],
+            "workgroupSize": {
+              "x": { "kind": "literal", "value": 1 },
+              "y": { "kind": "literal", "value": 1 },
+              "z": { "kind": "literal", "value": 1 }
+            }
+          }
+        },
+        "bindings": [
+          {
+            "id": "g0b0",
+            "name": "runtimeValues",
+            "swiftName": "runtimeValues",
+            "group": 0,
+            "binding": 0,
+            "kind": "buffer",
+            "visibility": ["compute"],
+            "addressSpace": "storage",
+            "access": "read",
+            "type": "runtime-values",
+            "layout": "runtime-values",
+            "minimumBindingSize": 8
+          }
+        ],
+        "overrides": [],
+        "capabilities": {
+          "vocabulary": 1,
+          "languageFeatures": [],
+          "features": []
+        }
       }
     ],
     "capabilities": {
@@ -138,8 +250,9 @@
     },
     "vertexBufferPolicy": {
       "model": "vgpu-metal-pipeline-local-vertex-buffer-slots-v1",
-      "externalBufferCeiling": 29
+      "externalBufferCeiling": 30
     },
+    "storageBufferSizeModel": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
     "toolchain": {
       "translator": {
         "name": "vgpu-tint-compiler",
@@ -198,7 +311,62 @@
           }
         ],
         "internalBindings": [],
+        "storageBufferSizeRegions": [],
         "resolvedWorkgroupSize": { "x": 4, "y": 1, "z": 1 },
+        "deviceRequirements": {
+          "features": [],
+          "limits": [],
+          "formats": []
+        }
+      },
+      {
+        "semanticProgram": "RuntimeArray",
+        "kind": "compute",
+        "entryPoints": [
+          {
+            "stage": "compute",
+            "wgsl": "c3_runtime_array",
+            "metal": "c3_runtime_array",
+            "interfaceLocations": []
+          }
+        ],
+        "bindings": [
+          {
+            "semanticBinding": "g0b0",
+            "slots": [
+              {
+                "stage": "compute",
+                "mode": "direct",
+                "resourceClass": "buffer",
+                "component": "buffer",
+                "index": 0,
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "internalBindings": [
+          {
+            "role": "immediate-data",
+            "slots": [
+              {
+                "stage": "compute",
+                "mode": "direct",
+                "resourceClass": "buffer",
+                "component": "immediate-data",
+                "index": 30,
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "storageBufferSizeRegions": [
+          {
+            "stage": "compute",
+            "immediateDataByteOffset": 4
+          }
+        ],
+        "resolvedWorkgroupSize": { "x": 1, "y": 1, "z": 1 },
         "deviceRequirements": {
           "features": [],
           "limits": [],

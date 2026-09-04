@@ -23,12 +23,22 @@ guard let device = MTLCreateSystemDefaultDevice() else {
 }
 
 var readback: [UInt32] = []
-try AppShadersArtifact.validateApplicationCompatibility(payloadSHA256: payloadHash) {
+try AppShadersArtifact.validateApplicationCompatibility(
+  selection: AppShadersArtifact.noopComputeSelection,
+  payloadSHA256: payloadHash
+) { selection in
+  guard selection == AppShadersArtifact.noopComputeSelection,
+    let metalEntryPoint = selection.program.metalEntryPoint(for: selection.stage)
+  else {
+    throw C3MetalProbeError(description: "Unexpected validated pipeline selection.")
+  }
   let library = try device.makeLibrary(URL: payloadURL)
   let projection = AppShadersArtifact.noopProjection
-  guard let function = library.makeFunction(name: projection.metalEntryPoint) else {
+  guard projection.metalEntryPoint == metalEntryPoint,
+    let function = library.makeFunction(name: metalEntryPoint)
+  else {
     throw C3MetalProbeError(
-      description: "The packaged library has no \(projection.metalEntryPoint) function."
+      description: "The packaged library has no \(metalEntryPoint) function."
     )
   }
 
