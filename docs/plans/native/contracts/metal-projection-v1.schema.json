@@ -119,7 +119,12 @@
     "abi": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["projection", "bindingSlots", "bindingModel"],
+      "required": [
+        "projection",
+        "bindingSlots",
+        "bindingModel",
+        "shaderInterfaceModel"
+      ],
       "properties": {
         "projection": { "const": 1 },
         "bindingSlots": {
@@ -129,6 +134,10 @@
         "bindingModel": {
           "description": "The deterministic mapping supplied by vgpu to Tint, with independent namespaces per containing semantic program, selected stage, and Metal resource class. Tint-generated binding allocation is not part of this contract.",
           "const": "vgpu-metal-binding-slots-v1"
+        },
+        "shaderInterfaceModel": {
+          "description": "The minimal runtime-facing mapping from backend-neutral shader locations to their physical Metal attribute and color namespaces.",
+          "const": "vgpu-metal-shader-interface-v1"
         }
       }
     },
@@ -222,7 +231,7 @@
       }
     },
     "runtimeProjectionFingerprint": {
-      "description": "Hash of the semantic fingerprint, Metal ABI and binding model, storage-buffer-size model, deployment target, referenced metallib hash, emitted names, vertex-buffer policy, external and internal slots, per-stage storage-buffer-size regions, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, dynamic buffer ranges and size-table words, and testing metadata are excluded.",
+      "description": "Hash of the semantic fingerprint, Metal ABI, binding and shader-interface models, storage-buffer-size model, deployment target, referenced metallib hash, emitted names, exact vertex-attribute and fragment-color maps, vertex-buffer policy, external and internal slots, per-stage storage-buffer-size regions, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, dynamic buffer ranges and size-table words, and testing metadata are excluded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],
@@ -238,15 +247,173 @@
       "required": ["path"],
       "properties": { "path": { "$ref": "#/$defs/relativePath" } }
     },
+    "vertexAttributeSemantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "type": "integer", "minimum": 0, "maximum": 30 }
+      }
+    },
+    "vertexAttributeMetal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attribute"],
+      "properties": {
+        "attribute": { "type": "integer", "minimum": 0, "maximum": 30 }
+      }
+    },
+    "vertexAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "metal"],
+      "properties": {
+        "semantic": { "$ref": "#/$defs/vertexAttributeSemantic" },
+        "metal": { "$ref": "#/$defs/vertexAttributeMetal" }
+      }
+    },
+    "fragmentColorSemantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "blendSource": { "enum": [0, 1] }
+      }
+    },
+    "fragmentColorMetal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color"],
+      "properties": {
+        "color": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "index": { "enum": [0, 1] }
+      }
+    },
+    "fragmentColorOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "metal"],
+      "properties": {
+        "semantic": { "$ref": "#/$defs/fragmentColorSemantic" },
+        "metal": { "$ref": "#/$defs/fragmentColorMetal" }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "semantic": {
+              "type": "object",
+              "properties": { "blendSource": false }
+            },
+            "metal": { "type": "object", "properties": { "index": false } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["semantic", "metal"],
+          "properties": {
+            "semantic": {
+              "type": "object",
+              "required": ["blendSource"],
+              "properties": { "blendSource": true }
+            },
+            "metal": {
+              "type": "object",
+              "required": ["index"],
+              "properties": { "index": true }
+            }
+          }
+        }
+      ]
+    },
+    "vertexInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "attributes"],
+      "properties": {
+        "kind": { "const": "vertex" },
+        "attributes": {
+          "type": "array",
+          "maxItems": 31,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/vertexAttribute" }
+        }
+      }
+    },
+    "fragmentInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "colorOutputs"],
+      "properties": {
+        "kind": { "const": "fragment" },
+        "colorOutputs": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fragmentColorOutput" }
+        }
+      }
+    },
+    "computeInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "const": "compute" } }
+    },
+    "shaderInterface": {
+      "oneOf": [
+        { "$ref": "#/$defs/vertexInterface" },
+        { "$ref": "#/$defs/fragmentInterface" },
+        { "$ref": "#/$defs/computeInterface" }
+      ]
+    },
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "wgsl", "metal"],
+      "required": ["stage", "wgsl", "metal", "interface"],
       "properties": {
         "stage": { "$ref": "#/$defs/stage" },
         "wgsl": { "$ref": "#/$defs/nonEmptyString" },
-        "metal": { "$ref": "#/$defs/emittedIdentifier" }
-      }
+        "metal": { "$ref": "#/$defs/emittedIdentifier" },
+        "interface": { "$ref": "#/$defs/shaderInterface" }
+      },
+      "allOf": [
+        {
+          "type": "object",
+          "if": {
+            "properties": { "stage": { "const": "vertex" } },
+            "required": ["stage"]
+          },
+          "then": {
+            "properties": { "interface": { "$ref": "#/$defs/vertexInterface" } }
+          }
+        },
+        {
+          "type": "object",
+          "if": {
+            "properties": { "stage": { "const": "fragment" } },
+            "required": ["stage"]
+          },
+          "then": {
+            "properties": {
+              "interface": { "$ref": "#/$defs/fragmentInterface" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "if": {
+            "properties": { "stage": { "const": "compute" } },
+            "required": ["stage"]
+          },
+          "then": {
+            "properties": {
+              "interface": { "$ref": "#/$defs/computeInterface" }
+            }
+          }
+        }
+      ]
     },
     "directMetalSlot": {
       "description": "One contiguous interval in the containing semantic program's selected-stage, Metal resource-class namespace. The component names that physical namespace rather than a binding or internal role. The count is the interval width and does not imply WGSL resource binding-array (`binding_array`) support in semantic v1.",

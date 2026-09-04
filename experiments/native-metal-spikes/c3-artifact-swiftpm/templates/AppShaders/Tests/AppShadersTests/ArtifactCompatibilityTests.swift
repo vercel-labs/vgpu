@@ -50,6 +50,40 @@ final class ArtifactCompatibilityTests: XCTestCase {
     )
   }
 
+  func testEntryInterfacesPreserveSparseMetalNamespaces() throws {
+    XCTAssertEqual(
+      AppShadersArtifact.noopProgram.entryPoints.first?.interface,
+      .compute
+    )
+
+    let entries = AppShadersArtifact.sparseDrawProgram.entryPoints
+    XCTAssertEqual(entries.count, 2)
+    XCTAssertEqual(
+      entries[0].interface,
+      .vertex(attributes: [
+        AppShadersMetalVertexAttribute(semanticLocation: 3, metalAttribute: 3),
+        AppShadersMetalVertexAttribute(semanticLocation: 7, metalAttribute: 7),
+      ])
+    )
+    XCTAssertEqual(
+      entries[1].interface,
+      .fragment(colorOutputs: [
+        AppShadersMetalColorOutput(
+          semanticLocation: 1,
+          blendSource: nil,
+          metalColor: 1,
+          metalIndex: nil
+        ),
+        AppShadersMetalColorOutput(
+          semanticLocation: 4,
+          blendSource: nil,
+          metalColor: 4,
+          metalIndex: nil
+        ),
+      ])
+    )
+  }
+
   func testUnknownStorageBufferSizeModelDoesNotBlockStageWithoutRegion() throws {
     var descriptor = AppShadersArtifact.descriptor
     descriptor.storageBufferSizeModel =

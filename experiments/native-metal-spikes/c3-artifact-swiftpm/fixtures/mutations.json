@@ -65,6 +65,14 @@
     "expectedPipelineCalls": 0
   },
   {
+    "name": "shader-interface-model",
+    "kind": "descriptorString",
+    "field": "shaderInterfaceModel",
+    "value": "vgpu-metal-shader-interface-v2",
+    "expectedApplicationCode": "unsupported-shader-interface-model",
+    "expectedPipelineCalls": 0
+  },
+  {
     "name": "vertex-buffer-policy-model",
     "kind": "descriptorString",
     "field": "vertexBufferPolicyModel",

@@ -268,12 +268,29 @@
       "properties": {
         "type": { "enum": ["perspective", "linear", "flat"] },
         "sampling": { "enum": ["center", "centroid", "sample", "first", "either"] }
-      }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "enum": ["perspective", "linear"] },
+            "sampling": { "enum": ["center", "centroid", "sample"] }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "flat" },
+            "sampling": { "enum": ["first", "either"] }
+          }
+        }
+      ]
     },
     "interfaceValue": {
+      "description": "One flattened entry-point leaf. Its location or builtin, stage role, and type are semantic identity; name is optional authored diagnostic context and must not be reconstructed from Tint-generated symbols.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type", "invariant"],
+      "required": ["type", "invariant"],
       "properties": {
         "name": { "$ref": "#/$defs/nonEmptyString" },
         "type": { "$ref": "#/$defs/typeId" },
@@ -296,6 +313,111 @@
           "properties": {
             "builtin": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
             "location": false,
+            "interpolation": false,
+            "blendSource": false
+          }
+        }
+      ]
+    },
+    "vertexInputValue": {
+      "allOf": [
+        { "$ref": "#/$defs/interfaceValue" },
+        {
+          "type": "object",
+          "properties": {
+            "invariant": { "const": false },
+            "builtin": { "enum": ["vertex_index", "instance_index"] },
+            "interpolation": false,
+            "blendSource": false
+          }
+        }
+      ]
+    },
+    "vertexOutputValue": {
+      "allOf": [
+        { "$ref": "#/$defs/interfaceValue" },
+        {
+          "type": "object",
+          "properties": {
+            "builtin": { "const": "position" },
+            "blendSource": false
+          }
+        },
+        {
+          "type": "object",
+          "if": { "required": ["location"], "properties": { "location": true } },
+          "then": {
+            "required": ["interpolation"],
+            "properties": {
+              "invariant": { "const": false },
+              "interpolation": true
+            }
+          },
+          "else": { "properties": { "interpolation": false } }
+        }
+      ]
+    },
+    "fragmentInputValue": {
+      "allOf": [
+        { "$ref": "#/$defs/interfaceValue" },
+        {
+          "type": "object",
+          "properties": {
+            "invariant": { "const": false },
+            "builtin": { "enum": ["position", "front_facing", "sample_index", "sample_mask"] },
+            "blendSource": false
+          }
+        },
+        {
+          "type": "object",
+          "if": { "required": ["location"], "properties": { "location": true } },
+          "then": {
+            "required": ["interpolation"],
+            "properties": { "interpolation": true }
+          },
+          "else": { "properties": { "interpolation": false } }
+        }
+      ]
+    },
+    "fragmentOutputValue": {
+      "allOf": [
+        { "$ref": "#/$defs/interfaceValue" },
+        {
+          "type": "object",
+          "properties": {
+            "invariant": { "const": false },
+            "builtin": { "enum": ["frag_depth", "sample_mask"] },
+            "interpolation": false
+          }
+        },
+        {
+          "type": "object",
+          "if": { "required": ["blendSource"], "properties": { "blendSource": true } },
+          "then": {
+            "required": ["location"],
+            "properties": { "location": { "const": 0 } }
+          }
+        }
+      ]
+    },
+    "computeInputValue": {
+      "allOf": [
+        { "$ref": "#/$defs/interfaceValue" },
+        {
+          "type": "object",
+          "properties": {
+            "invariant": { "const": false },
+            "location": false,
+            "builtin": {
+              "enum": [
+                "local_invocation_id",
+                "local_invocation_index",
+                "global_invocation_id",
+                "workgroup_id",
+                "num_workgroups"
+              ]
+            },
+            "interpolation": false,
             "blendSource": false
           }
         }
@@ -311,8 +433,12 @@
         "mode": { "enum": ["filtering", "comparison"] }
       }
     },
-    "entryInputs": { "type": "array", "items": { "$ref": "#/$defs/interfaceValue" } },
-    "entryOutputs": { "type": "array", "items": { "$ref": "#/$defs/interfaceValue" } },
+    "vertexInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/vertexInputValue" } },
+    "vertexOutputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/vertexOutputValue" } },
+    "fragmentInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/fragmentInputValue" } },
+    "fragmentOutputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/fragmentOutputValue" } },
+    "computeInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/computeInputValue" } },
+    "computeOutputs": { "type": "array", "maxItems": 0 },
     "entryBindings": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/bindingId" } },
     "entrySamplingPairs": { "type": "array", "items": { "$ref": "#/$defs/samplingPair" } },
     "effectVertexEntry": {
@@ -324,8 +450,8 @@
         "origin": { "enum": ["authored", "injected"] },
         "names": { "$ref": "#/$defs/entryPointNames" },
         "source": { "$ref": "#/$defs/sourceSpan" },
-        "inputs": { "$ref": "#/$defs/entryInputs" },
-        "outputs": { "$ref": "#/$defs/entryOutputs" },
+        "inputs": { "$ref": "#/$defs/vertexInputs" },
+        "outputs": { "$ref": "#/$defs/vertexOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
       },
@@ -363,8 +489,8 @@
         "origin": { "const": "authored" },
         "names": { "$ref": "#/$defs/authoredEntryPointNames" },
         "source": { "$ref": "#/$defs/sourceSpan" },
-        "inputs": { "$ref": "#/$defs/entryInputs" },
-        "outputs": { "$ref": "#/$defs/entryOutputs" },
+        "inputs": { "$ref": "#/$defs/vertexInputs" },
+        "outputs": { "$ref": "#/$defs/vertexOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
       }
@@ -378,8 +504,8 @@
         "origin": { "const": "authored" },
         "names": { "$ref": "#/$defs/authoredEntryPointNames" },
         "source": { "$ref": "#/$defs/sourceSpan" },
-        "inputs": { "$ref": "#/$defs/entryInputs" },
-        "outputs": { "$ref": "#/$defs/entryOutputs" },
+        "inputs": { "$ref": "#/$defs/fragmentInputs" },
+        "outputs": { "$ref": "#/$defs/fragmentOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
       }
@@ -405,8 +531,8 @@
         "origin": { "const": "authored" },
         "names": { "$ref": "#/$defs/authoredEntryPointNames" },
         "source": { "$ref": "#/$defs/sourceSpan" },
-        "inputs": { "$ref": "#/$defs/entryInputs" },
-        "outputs": { "$ref": "#/$defs/entryOutputs" },
+        "inputs": { "$ref": "#/$defs/computeInputs" },
+        "outputs": { "$ref": "#/$defs/computeOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
         "workgroupSize": { "$ref": "#/$defs/workgroupSize" }

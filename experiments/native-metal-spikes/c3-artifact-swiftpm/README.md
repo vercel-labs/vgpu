@@ -45,33 +45,39 @@ The runner:
 2. compiles all five native JSON Schemas in strict mode, resolves their external references, and
    validates `artifact.json`, then assembles and verifies a future-model descriptor without adding
    that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
-   `interfaceLocations`, workgroup-axis provenance objects and zero dimensions, emitted names
-   outside the `vgpu_` domain, non-finite override constants, multiple direct components for one
-   semantic binding, and components that disagree with their Metal resource class;
+   `interfaceLocations`, missing or mismatched stage-discriminated interfaces, invalid interpolation
+   roles, workgroup-axis provenance objects and zero dimensions, emitted names outside the `vgpu_`
+   domain, non-finite override constants, multiple direct components for one semantic binding, and
+   components that disagree with their Metal resource class;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
    the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size
-   model, stage-local regions, and immediate-data slots change runtime compatibility;
+   model, shader-interface model and maps, stage-local regions, and immediate-data slots change
+   runtime compatibility;
 4. distinguishes a runtime-array structure's four-byte fixed-prefix `layout.minimumSize` from its
    eight-byte, prefix-plus-one-element `minimumBindingSize`, requires canonical per-stage size
    regions, rejects invalid region-to-slot relationships, and proves that runtime-sized bindings
    or immediate data alone do not imply a region; it rejects overlaps with external and other
    internal buffers, plus vertex-stage intervals that violate the independently recorded
    vertex-buffer ceiling;
-5. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
+5. preserves `SparseDraw` locations `3` and `7` as Metal vertex attributes and locations `1` and
+   `4` as Metal fragment colors, requires a complete canonical bijection with the semantic
+   interface, validates vertex-to-fragment linking, and rejects missing, reordered, compacted,
+   colliding, or invalid dual-source maps;
+6. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
    dependency, and the `AppShaders` target's single ABI product dependency;
-6. tests the generated package for the native architecture, builds the generated package and clean
+7. tests the generated package for the native architecture, builds the generated package and clean
    consumer for both `arm64` and `x86_64`, then runs the native consumer and the `x86_64` consumer
    through Rosetta when available;
-7. puts failing `node`, `npx`, `pnpm`, Tint, `metal`, and `metallib` shims first on `PATH` for every
+8. puts failing `node`, `npx`, `pnpm`, Tint, `metal`, and `metallib` shims first on `PATH` for every
    post-generation SwiftPM command and requires that no shim was invoked;
-8. resolves exactly one `.metallib` through `Bundle.module`, checks its SHA-256, and confirms its
+9. resolves exactly one `.metallib` through `Bundle.module`, checks its SHA-256, and confirms its
    bytes begin with `VGPU-C3-STRUCTURAL-SENTINEL-NOT-A-METALLIB`;
-9. rejects crossed or out-of-range WGSL source provenance, and rejects the mutation matrix before a
-   pipeline-factory closure runs, including ABI, model, fingerprint, and payload-hash mismatches;
-   the pipeline selection has no public initializer, determines the conditional region check, and
-   is passed unchanged into that closure; and
-10. checks the generated package and clean consumer contain no WGSL, MSL, Metal source, AIR,
+10. rejects crossed or out-of-range WGSL source provenance, and rejects the mutation matrix before a
+    pipeline-factory closure runs, including ABI, model, fingerprint, and payload-hash mismatches;
+    the pipeline selection has no public initializer, determines the conditional region check, and
+    is passed unchanged into that closure; and
+11. checks the generated package and clean consumer contain no WGSL, MSL, Metal source, AIR,
     JavaScript, translator executable, build directory, or package-resolution residue, and proves
     the package allowlist rejects an injected `.env` file.
 
@@ -93,14 +99,22 @@ Neither word counts nor dynamic range bytes are serialized. The runtime checks s
 model only when the selected program stage has a region, so a future model can remain structurally
 readable without blocking unrelated programs.
 
-Runtime support is owned by runtime code and remains fixed to model v1; generation never derives
-it from the artifact's requested model. A second C3a assembly emits a v2 descriptor and verifies
-that its generated support set still contains only v1. `Noop` can cross the compatibility boundary
-with that unknown model because its selected compute stage has no region, while the generated
-`RuntimeArray` compute selection is rejected before pipeline creation. Generated selections couple
-the program and stage behind a non-public initializer. Every compatibility call must name one of
-those selections explicitly, and the pipeline closure receives that same validated value instead
-of independently choosing them again.
+The projection ABI also requires `vgpu-metal-shader-interface-v1`. Its entry-point interface is
+stage-discriminated: vertex entries contain only semantic-location to Metal-attribute mappings,
+fragment entries contain only semantic-location and optional blend-source to Metal-color mappings,
+and compute entries carry only their kind. Built-ins, inter-stage varyings, normalized
+interpolation, and invariance remain in the semantic contract. `SparseDraw` proves that sparse
+indices survive schema validation, runtime fingerprinting, generated Swift, and SwiftPM builds
+without compaction. Cross-validation requires the exact semantic set, canonical order, v1 identity
+mapping, and a compatible vertex-to-fragment link before a fingerprint is accepted.
+
+Runtime support is owned by runtime code. Generation never derives a support set from the
+artifact's requested model. Storage-buffer-size support is conditional on the selected stage using
+a region, so `Noop` can cross that boundary with an unknown size model while `RuntimeArray` is
+rejected. Shader-interface-model support is unconditional because every pipeline selection carries
+an interface contract. Generated selections couple the program and stage behind a non-public
+initializer. Every compatibility call must name one of those selections explicitly, and the
+pipeline closure receives that same validated value instead of independently choosing them again.
 
 Source spans remain excluded from semantic fingerprints as provenance, but they are not trusted
 blindly: the verifier bounds-checks each span against its declared WGSL input and requires the

@@ -412,9 +412,16 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
   if (reachableLayouts.length === 0) {
     fail(`${program.name} fingerprint sensitivity needs a reachable layout`);
   }
-  const directlyReachableLayoutId = program.bindings
-    .map((binding) => binding.layout)
-    .find((id) => id !== undefined && reachableLayouts.includes(id));
+  const directlyReachableTypeIds = new Set([
+    ...program.bindings.map((binding) => binding.type),
+    ...Object.values(program.entryPoints).flatMap((entry) => [
+      ...entry.inputs.map((value) => value.type),
+      ...entry.outputs.map((value) => value.type),
+    ]),
+  ]);
+  const directlyReachableLayoutId = reachableLayouts.find((id) =>
+    directlyReachableTypeIds.has(semantic.layouts[id]?.type)
+  );
   if (!directlyReachableLayoutId) {
     fail(
       `${program.name} fingerprint sensitivity needs a directly reachable layout`
@@ -563,6 +570,255 @@ function requireWorkgroupSizeMutationFailure(
 }
 
 const canonicalStageOrder = ["vertex", "fragment", "compute"];
+
+function shaderInterfaceValueKey(value, includeBlendSource) {
+  if (Object.hasOwn(value, "location")) {
+    const blendSource =
+      includeBlendSource && Object.hasOwn(value, "blendSource")
+        ? value.blendSource
+        : "none";
+    return `location:${value.location}:blend-source:${blendSource}`;
+  }
+  return `builtin:${value.builtin}`;
+}
+
+function validateSemanticInterfaceValues(values, owner, includeBlendSource) {
+  const keys = new Set();
+  for (const value of values) {
+    const key = shaderInterfaceValueKey(value, includeBlendSource);
+    if (keys.has(key)) fail(`${owner} repeats shader interface value ${key}`);
+    keys.add(key);
+  }
+}
+
+function validateSemanticStageLink(program) {
+  const entries = Object.values(program.entryPoints);
+  for (const entry of entries) {
+    validateSemanticInterfaceValues(
+      entry.inputs,
+      `${program.name}/${entry.stage} inputs`,
+      false
+    );
+    validateSemanticInterfaceValues(
+      entry.outputs,
+      `${program.name}/${entry.stage} outputs`,
+      entry.stage === "fragment"
+    );
+  }
+
+  const fragment = entries.find((entry) => entry.stage === "fragment");
+  if (!fragment) return;
+  const vertex = entries.find((entry) => entry.stage === "vertex");
+  if (!vertex) fail(`${program.name} fragment entry has no vertex entry`);
+
+  const vertexOutputs = new Map(
+    vertex.outputs
+      .filter((value) => Object.hasOwn(value, "location"))
+      .map((value) => [value.location, value])
+  );
+  for (const input of fragment.inputs.filter((value) =>
+    Object.hasOwn(value, "location")
+  )) {
+    const output = vertexOutputs.get(input.location);
+    if (!output) {
+      fail(
+        `${program.name} fragment location ${input.location} has no vertex output`
+      );
+    }
+    if (
+      output.type !== input.type ||
+      canonicalize(output.interpolation) !== canonicalize(input.interpolation)
+    ) {
+      fail(
+        `${program.name} location ${input.location} has an incompatible stage link`
+      );
+    }
+  }
+
+  const colors = fragment.outputs.filter((value) =>
+    Object.hasOwn(value, "location")
+  );
+  const dualSourceColors = colors.filter((value) =>
+    Object.hasOwn(value, "blendSource")
+  );
+  if (dualSourceColors.length === 0) return;
+  const sources = dualSourceColors.map((value) => value.blendSource).sort();
+  if (
+    colors.length !== 2 ||
+    dualSourceColors.length !== 2 ||
+    dualSourceColors.some((value) => value.location !== 0) ||
+    sources[0] !== 0 ||
+    sources[1] !== 1 ||
+    dualSourceColors[0].type !== dualSourceColors[1].type
+  ) {
+    fail(`${program.name} has an invalid dual-source fragment interface`);
+  }
+}
+
+function validateShaderInterfaceContract(semantic, projection) {
+  if (
+    projection.abi?.shaderInterfaceModel !== "vgpu-metal-shader-interface-v1"
+  ) {
+    fail("unsupported shader-interface model");
+  }
+
+  const semanticPrograms = new Map(
+    semantic.programs.map((program) => [program.name, program])
+  );
+  for (const semanticProgram of semantic.programs) {
+    validateSemanticStageLink(semanticProgram);
+  }
+
+  for (const program of projection.programs) {
+    const semanticProgram = semanticPrograms.get(program.semanticProgram);
+    if (!semanticProgram) {
+      fail(
+        `shader-interface contract references unknown program ${program.semanticProgram}`
+      );
+    }
+    const semanticEntries = Object.values(semanticProgram.entryPoints);
+    if (program.entryPoints.length !== semanticEntries.length) {
+      fail(`${program.semanticProgram} has an incomplete projected entry set`);
+    }
+
+    let previousStageRank = -1;
+    const projectedEntries = new Set();
+    for (const entry of program.entryPoints) {
+      const stageRank = canonicalStageOrder.indexOf(entry.stage);
+      if (stageRank < 0 || stageRank <= previousStageRank) {
+        fail(
+          `${program.semanticProgram} entry points are not canonically stage ordered`
+        );
+      }
+      previousStageRank = stageRank;
+      const entryKey = `${entry.stage}:${entry.wgsl}`;
+      if (projectedEntries.has(entryKey)) {
+        fail(`${program.semanticProgram} repeats projected entry ${entryKey}`);
+      }
+      projectedEntries.add(entryKey);
+
+      const semanticEntry = semanticEntries.find(
+        (candidate) =>
+          candidate.stage === entry.stage && candidate.names.wgsl === entry.wgsl
+      );
+      if (!semanticEntry) {
+        fail(
+          `${program.semanticProgram} projects unknown entry ${entry.stage}/${entry.wgsl}`
+        );
+      }
+      if (entry.interface?.kind !== entry.stage) {
+        fail(
+          `${program.semanticProgram}/${entry.wgsl} interface kind disagrees with its stage`
+        );
+      }
+
+      if (entry.stage === "vertex") {
+        const expected = semanticEntry.inputs
+          .filter((value) => Object.hasOwn(value, "location"))
+          .sort((left, right) => left.location - right.location);
+        const actual = entry.interface.attributes;
+        if (actual.length !== expected.length) {
+          fail(
+            `${program.semanticProgram}/${entry.wgsl} vertex attribute map is not bijective`
+          );
+        }
+        const metalAttributes = new Set();
+        for (let index = 0; index < expected.length; index += 1) {
+          const expectedLocation = expected[index].location;
+          const projected = actual[index];
+          if (projected.semantic.location !== expectedLocation) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} vertex attributes are not canonical or exact`
+            );
+          }
+          if (projected.metal.attribute !== expectedLocation) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} remaps vertex location ${expectedLocation} in interface model v1`
+            );
+          }
+          if (metalAttributes.has(projected.metal.attribute)) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} repeats Metal attribute ${projected.metal.attribute}`
+            );
+          }
+          metalAttributes.add(projected.metal.attribute);
+        }
+      } else if (entry.stage === "fragment") {
+        const rank = (value) =>
+          value.location * 3 +
+          (Object.hasOwn(value, "blendSource") ? value.blendSource + 1 : 0);
+        const expected = semanticEntry.outputs
+          .filter((value) => Object.hasOwn(value, "location"))
+          .sort((left, right) => rank(left) - rank(right));
+        const actual = entry.interface.colorOutputs;
+        if (actual.length !== expected.length) {
+          fail(
+            `${program.semanticProgram}/${entry.wgsl} fragment color map is not bijective`
+          );
+        }
+        const metalColors = new Set();
+        for (let index = 0; index < expected.length; index += 1) {
+          const expectedValue = expected[index];
+          const projected = actual[index];
+          const expectedHasSource = Object.hasOwn(expectedValue, "blendSource");
+          const projectedHasSource = Object.hasOwn(
+            projected.semantic,
+            "blendSource"
+          );
+          const metalHasIndex = Object.hasOwn(projected.metal, "index");
+          if (
+            projected.semantic.location !== expectedValue.location ||
+            expectedHasSource !== projectedHasSource ||
+            expectedHasSource !== metalHasIndex ||
+            (expectedHasSource &&
+              (projected.semantic.blendSource !== expectedValue.blendSource ||
+                projected.metal.index !== expectedValue.blendSource))
+          ) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} fragment colors are not canonical or exact`
+            );
+          }
+          if (projected.metal.color !== expectedValue.location) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} remaps fragment location ${expectedValue.location} in interface model v1`
+            );
+          }
+          const physicalKey = `${projected.metal.color}:${
+            projected.metal.index ?? 0
+          }`;
+          if (metalColors.has(physicalKey)) {
+            fail(
+              `${program.semanticProgram}/${entry.wgsl} repeats Metal color ${physicalKey}`
+            );
+          }
+          metalColors.add(physicalKey);
+        }
+      }
+    }
+  }
+}
+
+function requireShaderInterfaceMutationFailure(
+  semantic,
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const semanticCandidate = clone(semantic);
+  const projectionCandidate = clone(projection);
+  mutate(semanticCandidate, projectionCandidate);
+  let rejected = false;
+  try {
+    validateShaderInterfaceContract(semanticCandidate, projectionCandidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
+}
 
 function validateStorageBufferSizeContract(semantic, projection) {
   const semanticPrograms = new Map(
@@ -913,6 +1169,86 @@ for (const [label, mutate] of [
     "missing storage-buffer-size model",
     (candidate) => {
       delete candidate.projection.storageBufferSizeModel;
+    },
+  ],
+  [
+    "missing shader-interface model",
+    (candidate) => {
+      delete candidate.projection.abi.shaderInterfaceModel;
+    },
+  ],
+  [
+    "unknown shader-interface model",
+    (candidate) => {
+      candidate.projection.abi.shaderInterfaceModel =
+        "vgpu-metal-shader-interface-v2";
+    },
+  ],
+  [
+    "missing entry interface",
+    (candidate) => {
+      delete candidate.projection.programs[0].entryPoints[0].interface;
+    },
+  ],
+  [
+    "entry interface kind mismatch",
+    (candidate) => {
+      candidate.projection.programs[0].entryPoints[0].interface = {
+        kind: "vertex",
+        attributes: [],
+      };
+    },
+  ],
+  [
+    "compute entry with vertex attributes",
+    (candidate) => {
+      candidate.projection.programs[0].entryPoints[0].interface.attributes = [];
+    },
+  ],
+  [
+    "vertex input interpolation",
+    (candidate) => {
+      candidate.semantic.programs[2].entryPoints.vertex.inputs[0].interpolation =
+        {
+          type: "perspective",
+          sampling: "center",
+        };
+    },
+  ],
+  [
+    "missing normalized vertex output interpolation",
+    (candidate) => {
+      delete candidate.semantic.programs[2].entryPoints.vertex.outputs[1]
+        .interpolation;
+    },
+  ],
+  [
+    "invalid flat interpolation sampling",
+    (candidate) => {
+      candidate.semantic.programs[2].entryPoints.fragment.inputs[2].interpolation.sampling =
+        "center";
+    },
+  ],
+  [
+    "fragment blend source outside location zero",
+    (candidate) => {
+      candidate.semantic.programs[2].entryPoints.fragment.outputs[0].blendSource = 0;
+    },
+  ],
+  [
+    "fragment projection with unmatched blend source",
+    (candidate) => {
+      candidate.projection.programs[2].entryPoints[1].interface.colorOutputs[0].semantic.blendSource = 0;
+    },
+  ],
+  [
+    "compute output value",
+    (candidate) => {
+      candidate.semantic.programs[0].entryPoints.compute.outputs.push({
+        type: "u32",
+        invariant: false,
+        builtin: "sample_mask",
+      });
     },
   ],
   [
@@ -1369,6 +1705,115 @@ const runtimeSHA256 = sha256Canonical(
 validateVertexBufferPolicy(artifact.projection);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
 validateResolvedWorkgroupSizes(artifact.semantic, artifact.projection);
+validateShaderInterfaceContract(artifact.semantic, artifact.projection);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.find((entry) => entry.stage === "vertex")
+      .interface.attributes.pop();
+  },
+  "vertex attribute map is not bijective",
+  "missing vertex attribute projection"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.find((entry) => entry.stage === "vertex")
+      .interface.attributes.reverse();
+  },
+  "vertex attributes are not canonical or exact",
+  "reordered sparse vertex attributes"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.find(
+        (entry) => entry.stage === "vertex"
+      ).interface.attributes[0].metal.attribute = 0;
+  },
+  "remaps vertex location 3",
+  "compacted sparse vertex attribute"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.find((entry) => entry.stage === "fragment")
+      .interface.colorOutputs.pop();
+  },
+  "fragment color map is not bijective",
+  "missing fragment color projection"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.find(
+        (entry) => entry.stage === "fragment"
+      ).interface.colorOutputs[1].metal.color = 2;
+  },
+  "remaps fragment location 4",
+  "compacted sparse fragment color"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.fragment.inputs[1].type = "f32";
+  },
+  "location 2 has an incompatible stage link",
+  "stage-link type mismatch"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.inputs[1].location = 3;
+  },
+  "repeats shader interface value location:3",
+  "duplicate semantic vertex location"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    const outputs = semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.fragment.outputs;
+    outputs[0].location = 0;
+    outputs[0].blendSource = 1;
+  },
+  "invalid dual-source fragment interface",
+  "dual-source one without source zero"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs
+      .find((program) => program.semanticProgram === "SparseDraw")
+      .entryPoints.reverse();
+  },
+  "entry points are not canonically stage ordered",
+  "reordered projected stages"
+);
 requireWorkgroupSizeMutationFailure(
   artifact.semantic,
   artifact.projection,
@@ -1576,6 +2021,29 @@ if (
   ) === runtimeSHA256
 ) {
   fail("runtime projection fingerprint excludes vertex-buffer policy");
+}
+const changedShaderInterfaceModel = clone(artifact.projection);
+changedShaderInterfaceModel.abi.shaderInterfaceModel =
+  "vgpu-metal-shader-interface-v2";
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedShaderInterfaceModel, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes shader-interface model");
+}
+const changedShaderInterfaceMap = clone(artifact.projection);
+changedShaderInterfaceMap.programs
+  .find((program) => program.semanticProgram === "SparseDraw")
+  .entryPoints.find(
+    (entry) => entry.stage === "vertex"
+  ).interface.attributes[0].metal.attribute = 0;
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedShaderInterfaceMap, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes shader-interface maps");
 }
 const changedStorageBufferSizeModel = clone(artifact.projection);
 changedStorageBufferSizeModel.storageBufferSizeModel =
@@ -1825,6 +2293,14 @@ for (const [label, expected] of [
   ["layout model", `layoutModel: "${artifact.semantic.layoutModel}"`],
   ["binding model", `bindingModel: "${artifact.projection.abi.bindingModel}"`],
   [
+    "shader-interface model",
+    `shaderInterfaceModel: "${artifact.projection.abi.shaderInterfaceModel}"`,
+  ],
+  [
+    "supported shader-interface model",
+    `shaderInterfaceModels: ["${artifact.projection.abi.shaderInterfaceModel}"]`,
+  ],
+  [
     "vertex-buffer policy model",
     `vertexBufferPolicyModel: "${artifact.projection.vertexBufferPolicy.model}"`,
   ],
@@ -1866,6 +2342,14 @@ for (const [label, expected] of [
   [
     "generated pipeline selection",
     "public struct AppShadersPipelineSelection: Equatable, Sendable",
+  ],
+  [
+    "generated Metal entry interface",
+    "public enum AppShadersMetalEntryInterface: Equatable, Sendable",
+  ],
+  [
+    "entry interface descriptor",
+    "public let interface: AppShadersMetalEntryInterface",
   ],
   [
     "non-public selection initializer",
@@ -2002,6 +2486,37 @@ for (const [label, expected] of [
   ],
 ]) {
   assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
+}
+const sparseDrawProjection = artifact.projection.programs.find(
+  (program) => program.semanticProgram === "SparseDraw"
+);
+const sparseVertexEntry = sparseDrawProjection?.entryPoints.find(
+  (entry) => entry.stage === "vertex"
+);
+const sparseFragmentEntry = sparseDrawProjection?.entryPoints.find(
+  (entry) => entry.stage === "fragment"
+);
+if (!sparseDrawProjection || !sparseVertexEntry || !sparseFragmentEntry) {
+  fail("SparseDraw generated descriptor inputs are incomplete");
+}
+assertIncludes(
+  generatedSwift,
+  `semanticProgram: "${sparseDrawProjection.semanticProgram}"`,
+  "generated Swift sparse program"
+);
+for (const attribute of sparseVertexEntry.interface.attributes) {
+  assertIncludes(
+    generatedSwift,
+    `semanticLocation: ${attribute.semantic.location},\n            metalAttribute: ${attribute.metal.attribute}`,
+    `generated Swift sparse vertex attribute ${attribute.semantic.location}`
+  );
+}
+for (const color of sparseFragmentEntry.interface.colorOutputs) {
+  assertIncludes(
+    generatedSwift,
+    `semanticLocation: ${color.semantic.location},\n            blendSource: nil,\n            metalColor: ${color.metal.color},\n            metalIndex: nil`,
+    `generated Swift sparse fragment color ${color.semantic.location}`
+  );
 }
 for (const [label, expected] of [
   [

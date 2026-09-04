@@ -28,6 +28,20 @@
         "kind": "scalar",
         "scalar": "u32"
       },
+      "f32": {
+        "kind": "scalar",
+        "scalar": "f32"
+      },
+      "vec2f": {
+        "kind": "vector",
+        "width": 2,
+        "element": "f32"
+      },
+      "vec4f": {
+        "kind": "vector",
+        "width": 4,
+        "element": "f32"
+      },
       "u32x4": {
         "kind": "array",
         "element": "u32",
@@ -61,6 +75,30 @@
         "alignment": 4,
         "minimumSize": 4,
         "size": 4,
+        "runtimeSized": false,
+        "members": []
+      },
+      "f32": {
+        "type": "f32",
+        "alignment": 4,
+        "minimumSize": 4,
+        "size": 4,
+        "runtimeSized": false,
+        "members": []
+      },
+      "vec2f": {
+        "type": "vec2f",
+        "alignment": 8,
+        "minimumSize": 8,
+        "size": 8,
+        "runtimeSized": false,
+        "members": []
+      },
+      "vec4f": {
+        "type": "vec4f",
+        "alignment": 16,
+        "minimumSize": 16,
+        "size": 16,
         "runtimeSized": false,
         "members": []
       },
@@ -221,6 +259,127 @@
           "languageFeatures": [],
           "features": []
         }
+      },
+      {
+        "name": "SparseDraw",
+        "swiftName": "SparseDraw",
+        "kind": "draw",
+        "sources": ["shader-interface-wgsl"],
+        "fingerprint": {
+          "domain": "vgpu-native-program/v1",
+          "sha256": "__SHADER_INTERFACE_PROGRAM_SHA256__"
+        },
+        "entryPoints": {
+          "vertex": {
+            "stage": "vertex",
+            "origin": "authored",
+            "names": {
+              "authored": "c3_sparse_vertex",
+              "wgsl": "c3_sparse_vertex"
+            },
+            "source": {
+              "input": "shader-interface-wgsl",
+              "start": { "line": 17, "column": 1 },
+              "end": { "line": 24, "column": 2 }
+            },
+            "inputs": [
+              {
+                "name": "position",
+                "type": "vec2f",
+                "invariant": false,
+                "location": 3
+              },
+              {
+                "name": "intensity",
+                "type": "f32",
+                "invariant": false,
+                "location": 7
+              }
+            ],
+            "outputs": [
+              {
+                "name": "position",
+                "type": "vec4f",
+                "invariant": false,
+                "builtin": "position"
+              },
+              {
+                "name": "uv",
+                "type": "vec2f",
+                "invariant": false,
+                "location": 2,
+                "interpolation": { "type": "linear", "sampling": "centroid" }
+              },
+              {
+                "name": "tag",
+                "type": "u32",
+                "invariant": false,
+                "location": 5,
+                "interpolation": { "type": "flat", "sampling": "first" }
+              }
+            ],
+            "bindings": [],
+            "samplingPairs": []
+          },
+          "fragment": {
+            "stage": "fragment",
+            "origin": "authored",
+            "names": {
+              "authored": "c3_sparse_fragment",
+              "wgsl": "c3_sparse_fragment"
+            },
+            "source": {
+              "input": "shader-interface-wgsl",
+              "start": { "line": 26, "column": 1 },
+              "end": { "line": 32, "column": 2 }
+            },
+            "inputs": [
+              {
+                "name": "position",
+                "type": "vec4f",
+                "invariant": false,
+                "builtin": "position"
+              },
+              {
+                "name": "uv",
+                "type": "vec2f",
+                "invariant": false,
+                "location": 2,
+                "interpolation": { "type": "linear", "sampling": "centroid" }
+              },
+              {
+                "name": "tag",
+                "type": "u32",
+                "invariant": false,
+                "location": 5,
+                "interpolation": { "type": "flat", "sampling": "first" }
+              }
+            ],
+            "outputs": [
+              {
+                "name": "low",
+                "type": "vec4f",
+                "invariant": false,
+                "location": 1
+              },
+              {
+                "name": "high",
+                "type": "vec4f",
+                "invariant": false,
+                "location": 4
+              }
+            ],
+            "bindings": [],
+            "samplingPairs": []
+          }
+        },
+        "bindings": [],
+        "overrides": [],
+        "capabilities": {
+          "vocabulary": 1,
+          "languageFeatures": [],
+          "features": []
+        }
       }
     ],
     "capabilities": {
@@ -246,7 +405,8 @@
     "abi": {
       "projection": 1,
       "bindingSlots": 1,
-      "bindingModel": "vgpu-metal-binding-slots-v1"
+      "bindingModel": "vgpu-metal-binding-slots-v1",
+      "shaderInterfaceModel": "vgpu-metal-shader-interface-v1"
     },
     "vertexBufferPolicy": {
       "model": "vgpu-metal-pipeline-local-vertex-buffer-slots-v1",
@@ -291,7 +451,8 @@
           {
             "stage": "compute",
             "wgsl": "c3_noop",
-            "metal": "vgpu_c3_noop"
+            "metal": "vgpu_c3_noop",
+            "interface": { "kind": "compute" }
           }
         ],
         "bindings": [
@@ -325,7 +486,8 @@
           {
             "stage": "compute",
             "wgsl": "c3_runtime_array",
-            "metal": "vgpu_c3_runtime_array"
+            "metal": "vgpu_c3_runtime_array",
+            "interface": { "kind": "compute" }
           }
         ],
         "bindings": [
@@ -365,6 +527,56 @@
           }
         ],
         "resolvedWorkgroupSize": { "x": 1, "y": 1, "z": 1 },
+        "deviceRequirements": {
+          "features": [],
+          "limits": [],
+          "formats": []
+        }
+      },
+      {
+        "semanticProgram": "SparseDraw",
+        "kind": "draw",
+        "entryPoints": [
+          {
+            "stage": "vertex",
+            "wgsl": "c3_sparse_vertex",
+            "metal": "vgpu_c3_sparse_vertex",
+            "interface": {
+              "kind": "vertex",
+              "attributes": [
+                {
+                  "semantic": { "location": 3 },
+                  "metal": { "attribute": 3 }
+                },
+                {
+                  "semantic": { "location": 7 },
+                  "metal": { "attribute": 7 }
+                }
+              ]
+            }
+          },
+          {
+            "stage": "fragment",
+            "wgsl": "c3_sparse_fragment",
+            "metal": "vgpu_c3_sparse_fragment",
+            "interface": {
+              "kind": "fragment",
+              "colorOutputs": [
+                {
+                  "semantic": { "location": 1 },
+                  "metal": { "color": 1 }
+                },
+                {
+                  "semantic": { "location": 4 },
+                  "metal": { "color": 4 }
+                }
+              ]
+            }
+          }
+        ],
+        "bindings": [],
+        "internalBindings": [],
+        "storageBufferSizeRegions": [],
         "deviceRequirements": {
           "features": [],
           "limits": [],

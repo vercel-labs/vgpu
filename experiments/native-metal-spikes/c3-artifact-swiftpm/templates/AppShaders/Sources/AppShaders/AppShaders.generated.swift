@@ -11,6 +11,7 @@ public struct AppShadersRuntimeSupport: Sendable {
   public var bindingSlotsABIs: ClosedRange<Int>
   public var layoutModels: Set<String>
   public var bindingModels: Set<String>
+  public var shaderInterfaceModels: Set<String>
   public var vertexBufferPolicyModels: Set<String>
   public var storageBufferSizeModels: Set<String>
 
@@ -23,6 +24,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingSlotsABIs: ClosedRange<Int>,
     layoutModels: Set<String>,
     bindingModels: Set<String>,
+    shaderInterfaceModels: Set<String>,
     vertexBufferPolicyModels: Set<String>,
     storageBufferSizeModels: Set<String>
   ) {
@@ -34,6 +36,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     self.bindingSlotsABIs = bindingSlotsABIs
     self.layoutModels = layoutModels
     self.bindingModels = bindingModels
+    self.shaderInterfaceModels = shaderInterfaceModels
     self.vertexBufferPolicyModels = vertexBufferPolicyModels
     self.storageBufferSizeModels = storageBufferSizeModels
   }
@@ -47,6 +50,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingSlotsABIs: 1...1,
     layoutModels: ["wgsl-host-shareable-v1"],
     bindingModels: ["vgpu-metal-binding-slots-v1"],
+    shaderInterfaceModels: ["vgpu-metal-shader-interface-v1"],
     vertexBufferPolicyModels: ["vgpu-metal-pipeline-local-vertex-buffer-slots-v1"],
     storageBufferSizeModels: ["vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"]
   )
@@ -61,6 +65,7 @@ public struct AppShadersDescriptor: Sendable {
   public var bindingSlotsABI: Int
   public var layoutModel: String
   public var bindingModel: String
+  public var shaderInterfaceModel: String
   public var vertexBufferPolicyModel: String
   public var externalBufferCeiling: Int
   public var storageBufferSizeModel: String
@@ -80,6 +85,7 @@ public struct AppShadersDescriptor: Sendable {
     bindingSlotsABI: Int,
     layoutModel: String,
     bindingModel: String,
+    shaderInterfaceModel: String,
     vertexBufferPolicyModel: String,
     externalBufferCeiling: Int,
     storageBufferSizeModel: String,
@@ -98,6 +104,7 @@ public struct AppShadersDescriptor: Sendable {
     self.bindingSlotsABI = bindingSlotsABI
     self.layoutModel = layoutModel
     self.bindingModel = bindingModel
+    self.shaderInterfaceModel = shaderInterfaceModel
     self.vertexBufferPolicyModel = vertexBufferPolicyModel
     self.externalBufferCeiling = externalBufferCeiling
     self.storageBufferSizeModel = storageBufferSizeModel
@@ -154,13 +161,54 @@ public struct AppShadersInternalBufferSlot: Equatable, Sendable {
   }
 }
 
+public struct AppShadersMetalVertexAttribute: Equatable, Sendable {
+  public let semanticLocation: Int
+  public let metalAttribute: Int
+
+  public init(semanticLocation: Int, metalAttribute: Int) {
+    self.semanticLocation = semanticLocation
+    self.metalAttribute = metalAttribute
+  }
+}
+
+public struct AppShadersMetalColorOutput: Equatable, Sendable {
+  public let semanticLocation: Int
+  public let blendSource: Int?
+  public let metalColor: Int
+  public let metalIndex: Int?
+
+  public init(
+    semanticLocation: Int,
+    blendSource: Int?,
+    metalColor: Int,
+    metalIndex: Int?
+  ) {
+    self.semanticLocation = semanticLocation
+    self.blendSource = blendSource
+    self.metalColor = metalColor
+    self.metalIndex = metalIndex
+  }
+}
+
+public enum AppShadersMetalEntryInterface: Equatable, Sendable {
+  case vertex(attributes: [AppShadersMetalVertexAttribute])
+  case fragment(colorOutputs: [AppShadersMetalColorOutput])
+  case compute
+}
+
 public struct AppShadersEntryPointDescriptor: Equatable, Sendable {
   public let stage: AppShadersShaderStage
   public let metalName: String
+  public let interface: AppShadersMetalEntryInterface
 
-  fileprivate init(stage: AppShadersShaderStage, metalName: String) {
+  fileprivate init(
+    stage: AppShadersShaderStage,
+    metalName: String,
+    interface: AppShadersMetalEntryInterface
+  ) {
     self.stage = stage
     self.metalName = metalName
+    self.interface = interface
   }
 }
 
@@ -258,7 +306,8 @@ public enum AppShadersArtifact {
     entryPoints: [
       AppShadersEntryPointDescriptor(
         stage: .compute,
-        metalName: "__NOOP_METAL_ENTRY_POINT__"
+        metalName: "__NOOP_METAL_ENTRY_POINT__",
+        interface: .compute
       )
     ],
     storageBufferSizeRegions: [],
@@ -270,7 +319,8 @@ public enum AppShadersArtifact {
     entryPoints: [
       AppShadersEntryPointDescriptor(
         stage: .compute,
-        metalName: "__RUNTIME_ARRAY_METAL_ENTRY_POINT__"
+        metalName: "__RUNTIME_ARRAY_METAL_ENTRY_POINT__",
+        interface: .compute
       )
     ],
     storageBufferSizeRegions: [
@@ -287,6 +337,46 @@ public enum AppShadersArtifact {
         count: __RUNTIME_ARRAY_INTERNAL_COUNT__
       )
     ]
+  )
+
+  public static let sparseDrawProgram = AppShadersProgramDescriptor(
+    semanticProgram: "__SPARSE_DRAW_SEMANTIC_PROGRAM__",
+    entryPoints: [
+      AppShadersEntryPointDescriptor(
+        stage: .vertex,
+        metalName: "__SPARSE_VERTEX_METAL_ENTRY_POINT__",
+        interface: .vertex(attributes: [
+          AppShadersMetalVertexAttribute(
+            semanticLocation: __SPARSE_VERTEX_LOCATION_0__,
+            metalAttribute: __SPARSE_METAL_ATTRIBUTE_0__
+          ),
+          AppShadersMetalVertexAttribute(
+            semanticLocation: __SPARSE_VERTEX_LOCATION_1__,
+            metalAttribute: __SPARSE_METAL_ATTRIBUTE_1__
+          ),
+        ])
+      ),
+      AppShadersEntryPointDescriptor(
+        stage: .fragment,
+        metalName: "__SPARSE_FRAGMENT_METAL_ENTRY_POINT__",
+        interface: .fragment(colorOutputs: [
+          AppShadersMetalColorOutput(
+            semanticLocation: __SPARSE_FRAGMENT_LOCATION_0__,
+            blendSource: nil,
+            metalColor: __SPARSE_METAL_COLOR_0__,
+            metalIndex: nil
+          ),
+          AppShadersMetalColorOutput(
+            semanticLocation: __SPARSE_FRAGMENT_LOCATION_1__,
+            blendSource: nil,
+            metalColor: __SPARSE_METAL_COLOR_1__,
+            metalIndex: nil
+          ),
+        ])
+      ),
+    ],
+    storageBufferSizeRegions: [],
+    internalBufferSlots: []
   )
 
   public static let noopComputeSelection = AppShadersPipelineSelection(
@@ -308,6 +398,7 @@ public enum AppShadersArtifact {
     bindingSlotsABI: 1,
     layoutModel: "wgsl-host-shareable-v1",
     bindingModel: "vgpu-metal-binding-slots-v1",
+    shaderInterfaceModel: "__SHADER_INTERFACE_MODEL__",
     vertexBufferPolicyModel: "__VERTEX_BUFFER_POLICY_MODEL__",
     externalBufferCeiling: __EXTERNAL_BUFFER_CEILING__,
     storageBufferSizeModel: "__STORAGE_BUFFER_SIZE_MODEL__",
@@ -423,6 +514,12 @@ public enum AppShadersArtifact {
       code: "unsupported-binding-model",
       field: "binding model",
       value: candidate.bindingModel
+    )
+    try require(
+      runtime.shaderInterfaceModels.contains(candidate.shaderInterfaceModel),
+      code: "unsupported-shader-interface-model",
+      field: "shader-interface model",
+      value: candidate.shaderInterfaceModel
     )
     try require(
       runtime.vertexBufferPolicyModels.contains(candidate.vertexBufferPolicyModel),
