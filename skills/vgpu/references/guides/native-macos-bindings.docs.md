@@ -98,7 +98,7 @@ Packing is strict and deterministic:
 - a failure identifies the complete value path, including member names and array indices, before any GPU-visible state changes;
 - conversion from `Float` to WGSL `f16` uses IEEE 754 binary16 round-to-nearest, ties-to-even; a NaN stays a quiet NaN, but its payload bits are not portable.
 
-A runtime-sized array keeps its fixed prefix and reflected element stride in the layout. Its element count and checked byte length belong to the resource instance and bound buffer range instead, so allocating a larger buffer never changes the program's semantic layout. See [Resources and Metal interop](/native/macos/resources) for the runtime extent rules.
+A runtime-sized array keeps its reflected element stride in the layout. For a containing struct, `layout.minimumSize` is the fixed zero-element prefix while the binding's `minimumBindingSize` includes one complete trailing element and any enclosing padding. The allocation-specific element count and checked byte length belong to the resource instance and bound buffer range, so allocating a larger buffer never changes the program's semantic layout. See [Resources and Metal interop](/native/macos/resources) for the runtime extent rules.
 
 ## Initialize every binding
 
@@ -219,9 +219,11 @@ let present = try gpu.effect(
 
 Generated code uses the Metal projection's vgpu-owned, versioned slot mapping. It never assumes that WGSL `@binding(1)` means Metal texture, buffer, or sampler index `1`; Metal keeps independent buffer, texture, and sampler namespaces, and the mapping may also differ by stage.
 
-The native compiler supplies that mapping to Tint and serializes the same result into the projection. Backend-only resources, such as storage-buffer-size metadata used for robust runtime-array access, occupy explicit internal slots in the artifact. They cannot silently displace a user binding. Tint's automatic binding allocation is useful compiler machinery, but it is not the vgpu ABI.
+The native compiler supplies Tint with that external mapping and a reserved internal profile, then serializes the effective result into the projection. Backend-only resources cannot silently displace a user binding. Tint's automatic binding allocation is useful compiler machinery, but it is not the vgpu ABI.
 
 Allocation is scoped to one generated semantic program, one selected shader stage, and one Metal resource class. Active WGSL bindings use canonical group-and-binding order within that scope. A binding visible to both vertex and fragment code is projected independently for each active stage, and the artifact records every resulting component and interval. Two configured programs may reuse the same numeric indices without sharing binding state. The runtime consumes those recorded shader and internal slots; it never reallocates them.
+
+When Tint needs storage-buffer sizes for a selected stage, the artifact records a region inside the stage's shared `immediate-data` payload rather than a separate buffer binding. The physical slot appears once in `internalBindings`; ordinary immediates and size words may share it. A runtime-sized binding does not by itself require that region, and an immediate-data slot does not imply one. The compiler records a region only from Tint's generated result.
 
 Metal vertex streams use the vertex stage's same buffer-index namespace but remain runtime geometry rather than generated bindings. At draw-pipeline creation, the backend applies the projection's versioned `vertexBufferPolicy`: logical stream zero starts after the highest occupied external shader-buffer interval, later streams remain contiguous, and the complete range must end at or before the artifact's exclusive external-buffer ceiling. This derivation cannot move a WGSL binding or infer capacity from a hard-coded internal slot.
 

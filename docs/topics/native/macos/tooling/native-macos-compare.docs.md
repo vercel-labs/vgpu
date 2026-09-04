@@ -95,7 +95,7 @@ Before writing the request, the CLI validates the author-facing fixture, materia
 
 The runner returns either a typed error or the Metal-device identity, a hashed top-origin RGBA8 image encoded inline, and a versioned logical-command trace. Runner transport and harness failures use `VGPU-NATIVE-METAL-RUNNER-*` codes; semantic failures shared with the runtime keep their existing codes.
 
-The current C3 artifact fixture does not implement or validate this runner. Its `AppShadersC3MetalProbe` is a fixture-local executable around a handwritten Metal shader and has no JSON transport or `projection.testing` entry. C3b could not execute that probe because the separate Apple Metal toolchain was unavailable. When enabled, the probe checks only the packaged resource and Metal execution path; it cannot establish WGSL-to-MSL translation or compare-runner compatibility.
+The current C3 artifact fixture does not implement or validate this runner. Its `AppShadersC3MetalProbe` is a fixture-local executable around a library of handwritten Metal canaries and has no JSON transport or `projection.testing` entry. C3b could not execute that probe because the separate Apple Metal toolchain was unavailable. When enabled, the probe executes only its no-op path and checks the packaged resource and basic Metal pipeline path; it cannot establish WGSL-to-MSL translation, runtime storage-size upload, or compare-runner compatibility.
 
 ## Read the results
 

@@ -124,6 +124,9 @@ The semantic contract records:
   sample and storage types, and sampler kinds;
 - the `wgsl-host-shareable-v1` layout model and Tint-reflected intrinsic WGSL minimum sizes,
   alignments, field offsets, array strides, and matrix strides, independently of address space;
+  `layout.minimumSize` covers the fixed prefix of a runtime-sized value, while a buffer binding's
+  `minimumBindingSize` additionally covers one complete trailing element and any enclosing
+  structure padding;
 - typed override declarations, defaults, and selected values;
 - literal or override-backed workgroup dimensions;
 - explicitly enabled WGSL environment language features, separately from backend-neutral execution
@@ -159,19 +162,29 @@ The Metal projection records:
 - emitted function names and interface indices;
 - the exact direct Metal buffer, texture, and sampler slots allocated by the versioned vgpu
   binding policy, including backend-internal bindings required by Metal lowering or the vgpu ABI;
+- the versioned storage-buffer-size model and any per-program, per-stage regions placed inside an
+  `immediate-data` internal binding;
 - the versioned pipeline-local vertex-buffer policy and its exclusive external-buffer ceiling;
 - literal resolved workgroup sizes;
 - static Metal-device requirements;
 - optional source maps;
 - optional compare-runner metadata under `projection.testing`.
 
-The production native compiler constructs the binding map before translation, passes it to Tint,
-and records the same map returned with the generated MSL. The binding-slot follow-up now exercises
-that boundary without Tint's convenience allocator: within each semantic program and selected
-stage, active bindings are sorted by WGSL `(group, binding)` and assigned contiguous intervals in
-independent Metal buffer, texture, and sampler namespaces. Only explicitly required internal roles
-are emitted, from reservations at the high end of their namespace. An independent verifier
-reconstructs the same allocation and rejects non-canonical, colliding, or overflowing maps.
+The production native compiler constructs the user binding map and configures candidate internal
+reservations before translation, then passes that configuration to Tint. For every selected entry
+whose reflection contains a runtime-sized storage type, it configures the shared immediate binding
+and size-region offset before `Generate`; this is fail-closed writer input, not proof that either is
+part of the emitted interface. Tint's writer result after `Generate` is authoritative. The compiler
+records an `immediate-data` internal binding only when the generated entry uses it, and records a
+`storageBufferSizeRegions` entry only when Tint's writer result reports that the selected stage
+needs the size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
+
+The binding-slot follow-up exercises that boundary without Tint's convenience allocator. Within
+each semantic program and selected stage, active bindings are sorted by WGSL `(group, binding)` and
+assigned contiguous intervals in independent Metal buffer, texture, and sampler namespaces.
+Effective internal roles are emitted from reservations at the high end of their namespace. An
+independent verifier reconstructs the same allocation and rejects non-canonical, colliding, or
+overflowing maps.
 
 Vertex-stage shader buffers and runtime vertex streams share one Metal buffer namespace. The
 selected policy keeps shader and internal slots exact in the artifact, records an exclusive
@@ -179,8 +192,19 @@ external-buffer ceiling, and derives only the vertex-stream map with the active 
 stream zero starts at the maximum end of the vertex-stage shader-buffer intervals, later streams
 are contiguous, and the complete range must not cross the ceiling. This uses interval ends rather
 than binding count, so sparse shader slots remain deterministic without reserving a fixed vertex
-partition. Runtime storage-buffer size metadata still needs a multi-buffer packing canary. The
-semantic v1 contract also carries no WGSL resource binding-array (`binding_array`) cardinality, so
+partition.
+
+`runtimeSized` remains a semantic layout fact and does not imply a size region. When a selected
+program stage does contain such a region, the runtime derives its word count as one past the
+highest Metal buffer index of every runtime-sized storage binding projected into that stage. Word
+`i` contains the concrete byte range bound at Metal `buffer(i)`; holes and non-runtime bindings are
+zero, and higher fixed-size buffer slots do not extend the region. The region shares the stage's
+single `immediate-data` slot at the artifact-recorded byte offset. Binding ranges, packed words,
+derived word count, upload alignment, and upload strategy are dynamic runtime state and are not
+serialized or fingerprinted. The multi-buffer allocator and Metal readback canaries have verified
+this sparse slot-indexed rule, rebinding to new ranges, and equivalence with Tint's legacy UBO path.
+
+The semantic v1 contract carries no WGSL resource binding-array (`binding_array`) cardinality, so
 the first alpha rejects every resource binding array during `native check`.
 A sampled-texture array accepted by the pinned Tint writer remains future translator evidence, not
 a supported v1 binding.
@@ -234,14 +258,17 @@ resolution state, and build state are rejected.
 Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
 Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
 binding model, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and
-ceiling, external and internal slots, resolved workgroup sizes, and static device requirements. It
-excludes provenance, inputs, source maps, generated sources, tests, and `projection.testing`. An incompatible runner blocks
-`native compare` only; it does not block application use.
+ceiling, external and internal slots, the storage-buffer-size model and stage regions, resolved
+workgroup sizes, and static device requirements. It excludes provenance, inputs, source maps,
+generated sources, tests, `projection.testing`, and every dynamic packed size value. An incompatible
+runner blocks `native compare` only; it does not block application use.
 
 Compatibility is determined by understood schemas, the named layout, binding, and vertex-buffer
-policy models, and integer ABI contracts. The artifact requires the small shared `VGPUABI` product and one ABI integer; the
-runtime advertises the integer range it supports rather than comparing package release versions for
-exact equality. During `0.x`, generated remote package dependencies use
+policy models, and integer ABI contracts. Support for a storage-buffer-size model is checked only
+when the selected program and stage has a size region; a structurally understood artifact with a
+future model can still load a program whose selected stage has no such region. The artifact
+requires the small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer
+range it supports rather than comparing package release versions for exact equality. During `0.x`, generated remote package dependencies use
 `.upToNextMinor(from:)` so compatible patch releases remain selectable without admitting
 minor-version source drift.
 

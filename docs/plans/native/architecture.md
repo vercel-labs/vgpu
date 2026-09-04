@@ -32,6 +32,31 @@ stream map. A pipeline switch that changes the map invalidates the implementatio
 vertex-buffer cache and rebinds every active logical stream. This keeps backend slot policy out of
 the shared rendering API.
 
+## Generated projection and runtime handshake
+
+The semantic contract describes whether a host-shareable layout is runtime-sized and keeps its
+fixed-prefix `minimumSize` distinct from the binding's prefix-plus-one-element
+`minimumBindingSize`. It does not predict which backend lowering needs a length query. That choice
+belongs to the selected backend projection and compiler result.
+
+The Metal compiler configures deterministic user slots and candidate internal reservations before
+calling Tint. If reflection contains a runtime-sized storage type, it configures the shared
+immediate-data binding and size-region offset even when the selected entry may only use the fixed
+prefix. After `Generate`, the emitted entry interface and Tint's
+`needs_storage_buffer_sizes` result determine what is effective: the program records the
+`immediate-data` internal slot only when generated MSL uses it, and records a per-stage
+`storageBufferSizeRegions` offset only when the size transport is needed. There is no second
+storage-size binding and no redundant boolean in the artifact.
+
+At execution time, selecting a program and stage selects at most one size region. Its presence
+triggers conditional support validation for the projection's storage-buffer-size model. The runtime
+derives a sparse table from all runtime-sized storage bindings projected into that stage, placing
+each concrete binding range at the word matching its Metal buffer index, and writes that table into
+the shared immediate block at the recorded offset. Word count, range bytes, zero-filled holes,
+upload padding, and the upload mechanism remain transient runtime state. The projection fingerprint
+covers the model, regions, and physical immediate slot, but not those transient values. A program
+stage without a region does not require runtime support for the projection's size-table model.
+
 The first implementation supports macOS and Metal only. Shared public contracts must still avoid
 making Metal part of the generated-program ABI or the meaning of rendering primitives. This keeps
 a future backend possible without designing speculative Vulkan queues, barriers, or swapchains.

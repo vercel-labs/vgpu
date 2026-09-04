@@ -81,10 +81,21 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `vgpu-native-semantic/v1` object and one selected `vgpu-native-metal-projection/v1` object. The
   root `files` entries contain only path, size, and hash. Metal toolchains, emitted names, slots,
   `.metallib`, and device requirements stay in the projection.
+- The Metal projection names its storage-buffer-size model once and records a canonical
+  `storageBufferSizeRegions` array for every program. A region contains only its stage and byte
+  offset inside that stage's `immediate-data` internal binding. Programs without a required size
+  transport keep the array empty. There is no dedicated size-table binding, serialized word count,
+  or `needsStorageBufferSizes` boolean, and the model string versions the algorithm without another
+  integer ABI.
 - `wgsl-host-shareable-v1` is the canonical semantic layout model. Tint semantic types are the
   oracle for intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride. A
   layout carries no address space; each buffer binding carries `uniform` or `storage`, and the
   compiler validates that use separately without inserting address-space-dependent padding.
+- For a runtime-sized layout, `layout.minimumSize` is the fixed prefix with zero trailing elements;
+  the buffer binding's `minimumBindingSize` adds one complete element stride and any enclosing
+  structure padding. The runtime validates the effective binding range against the latter, the
+  backing allocation and `UInt32`, and Metal's four-byte storage-buffer alignment. The range need
+  not be a multiple of the runtime element stride.
 - WGSL environment language features are explicit semantic capabilities and are validated before
   reflection. `uniform_buffer_standard_layout` participates in logical, program, and semantic
   fingerprints, but never in Metal device requirements. The compiler does not infer it by retrying
@@ -114,6 +125,12 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   function-constant or runtime-specialization contract.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
+- The runtime-projection fingerprint covers the storage-buffer-size model, every per-program stage
+  region, and the shared `immediate-data` physical slot. Concrete range bytes, packed table words,
+  derived word count, upload padding, and upload strategy are runtime state and stay outside the
+  artifact and fingerprints. Runtime support for the named model is required only when the selected
+  program stage has a size region; an unrelated stage with no region may execute from an otherwise
+  structurally understood artifact that names a future model.
 - Generated packages use `.upToNextMinor(from:)` for remote package dependencies during `0.x`.
   Runtime ABI integers remain authoritative for artifact compatibility; package version selection
   separately limits Swift source and binary drift.
@@ -171,6 +188,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   Metal slot map allocated by vgpu, emits the selected MSL entry point, and returns structured
   metadata including every external and internal slot. Stock `tint`/`tint_info`, `dump_shaders`,
   and Tint's convenience binding allocator are not production interfaces.
+- The compiler distinguishes writer configuration from the effective projection. It supplies user
+  slots and candidate internal reservations before Tint generation, including the shared immediate
+  binding and size offset whenever reflection contains a runtime-sized storage type. Only Tint's
+  post-`Generate` emitted interface and `needs_storage_buffer_sizes` result cause the effective
+  `immediate-data` slot and size region to be serialized. This permits ordinary immediate data
+  without a size region, runtime-sized storage without either emitted field, and both uses in one
+  physical immediate block.
+- When a selected stage has a size region, its sparse table places each runtime-sized storage
+  binding's effective byte range at the word matching that binding's Metal buffer index. Fixed
+  buffers leave zero holes and do not extend the table. Its derived word count is one past the
+  highest runtime-sized projected slot. C1 verified multiple runtime buffers, sparse and
+  deliberately dense counterexamples, range rebinding, shared backing buffers with different
+  offsets, stage-local maps, and identical Metal readback through immediate and legacy UBO
+  transports; immediate data is the accepted transport.
 - Metal vertex streams use a versioned pipeline-local hybrid mapping. Shader and internal slots
   stay exact projection data; logical stream zero follows the highest occupied vertex-stage
   shader-buffer interval, and the full stream range must fit below the projection's exclusive
@@ -185,11 +216,17 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    a vgpu-owned wrapper can return deterministic MSL, emitted names, reflected layouts, workgroup
    metadata, and exact slots without a WebGPU device. The binding-slot follow-up replaced Tint's
    automatic allocator with a deterministic vgpu map, verified complete intervals after lowering,
-   kept buffer, texture, and sampler namespaces independent per program and stage, and proved that
-   the storage-size and immediate-data roles can coexist at distinct reserved indices.
+   and kept buffer, texture, and sampler namespaces independent per program and stage. The shared
+   immediate-binding follow-up then proved ordinary immediates and the storage-size region can
+   coexist in one physical binding, while post-generation output distinguishes the cases that emit
+   only ordinary immediate data or no internal binding at all.
 
-   The buffer indices `29` and `30`, and the resource ceilings used by this fixture, are test inputs
-   only. They are not public ABI constants or Metal device-limit claims.
+   The runtime-size follow-up proved sparse slot-indexed packing for multiple runtime storage
+   buffers, concrete binding ranges rather than backing-buffer lengths, derived extents, stage-local
+   indices, range rebinding, immediate/UBO equivalence, and exact Metal readback on the available
+   Apple-silicon machine. The buffer indices `29` and `30`, region offset `4`, and resource ceilings
+   used by these fixtures are test inputs only. They are not public ABI constants or Metal
+   device-limit claims.
 
    The vertex-buffer follow-up rejected a fixed partition in favor of the pipeline-local hybrid.
    It proved that Metal accepts a colliding vertex stream and shader argument, used readback to
@@ -198,24 +235,32 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    fixture's numeric indices and conservative constant-argument budget are not public ABI or
    device-limit claims.
 
-   Before freezing the dependency or slot ABI, build the wrapper from direct Tint targets at the
-   macOS 14 baseline with arm64 and x86_64 slices, prove the size-table packing for multiple runtime storage buffers, and pass offline
-   Apple compilation, authored-diagnostic provenance, artifact determinism, and pixel/buffer
-   parity. Semantic v1 has no WGSL resource binding-array (`binding_array`) cardinality, so the
-   alpha rejects all resource binding arrays; the sampled-texture writer canary is future evidence
-   only. Keep Naga only as a differential oracle.
+   Before freezing the dependency or numeric slot profile, build the wrapper from direct Tint
+   targets at the macOS 14 baseline with arm64 and x86_64 slices, and pass offline `metal` plus
+   `metallib` compilation, authored-diagnostic provenance, deterministic connected translator and
+   artifact output, and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
+   (`binding_array`) cardinality, so the alpha rejects all resource binding arrays; the
+   sampled-texture writer canary is future evidence only. Keep Naga only as a differential oracle.
 
-2. C3a passed its structural fixture: strict Ajv compilation and cross-schema resolution, artifact
-   and fingerprint validation, deterministic assembly, Swift tools and language mode 6, macOS 14,
-   clean SwiftPM consumption without invoking Node.js, Tint, or Apple Metal compiler tools after
-   generation, exact dependency and resource checks, compatibility mutations, and rejection of
-   files outside the positive generated-output allowlist. C3b was skipped because the optional
-   offline Metal toolchain was not installed. Its handwritten Metal probe is only a fixture-local
-   package/resource/pipeline canary, not the compare runner and not WGSL-to-MSL evidence. C3
-   remains open until a real C1-connected artifact, production runtime and ABI package, supported
-   toolchain and hardware matrix, and
-   newest-generator to oldest-runtime consumption pass. One product decision also remains open:
-   always emit the real compare runner, or emit it only when compare testing is enabled.
+2. C3a passed its hardened structural fixture: strict Ajv compilation and cross-schema resolution,
+   deterministic assembly, every artifact and fingerprint relation, Swift tools and language mode
+   6, macOS 14, clean native and `x86_64` SwiftPM builds without invoking Node.js, Tint, or Apple
+   Metal compiler tools after generation, exact dependency and resource checks, and rejection of
+   files outside the positive generated-output allowlist. Its runtime-array program additionally
+   distinguishes layout and binding minima, records one shared immediate slot and stage region,
+   keeps dynamic size data out of the artifact, fingerprints the complete static projection, and
+   rejects malformed region-to-slot relationships and incompatible models before pipeline
+   creation. A no-region program proves that storage-size model support is conditional on the
+   selected program and stage.
+
+   C3b was skipped because the optional offline Metal toolchain was not installed. When available,
+   it links handwritten no-op and runtime-array Metal functions, but its fixture-local probe executes
+   only the no-op path. It is not the compare runner, WGSL-to-MSL evidence, or evidence for runtime
+   size-table upload. C3 remains open until a real C1-connected artifact, production runtime and ABI
+   package, supported toolchain and hardware matrix, and newest-generator to oldest-runtime
+   consumption pass. One product decision also remains open: always emit the real compare runner,
+   or emit it only when compare testing is enabled.
+
 3. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.
