@@ -146,6 +146,12 @@ const inventoryOracleInputIds = [
   "inventoryRequestSchema",
   "inventoryResponseSchema",
 ];
+const fixedInterfaceOracleInputIds = [
+  ...inventoryOracleInputIds,
+  "semanticExtractionProtocol",
+  "semanticExtractionRequestSchema",
+  "semanticExtractionResponseSchema",
+];
 const currentOracleInputIds = [
   ...inventoryOracleInputIds,
   "semanticExtractionProtocol",
@@ -863,8 +869,17 @@ function oracleInputIdsForLockShape(shape) {
       return compilerOracleInputIds;
     case "inventory":
       return inventoryOracleInputIds;
-    case "current":
+    case "current": {
+      const lockedIds = Object.keys(lock?.oracle?.inputs ?? {});
+      if (
+        candidateMode &&
+        JSON.stringify(lockedIds) ===
+          JSON.stringify(fixedInterfaceOracleInputIds)
+      ) {
+        return fixedInterfaceOracleInputIds;
+      }
       return currentOracleInputIds;
+    }
     default:
       fail(`unknown oracle input lock shape ${String(shape)}`);
   }
