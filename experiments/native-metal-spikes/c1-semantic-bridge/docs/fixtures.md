@@ -93,18 +93,20 @@ resolver-span join are now exercised by the assembly and companion gates.
 
 ## Executable interface-only assembly slice
 
-The assembly gate resolves two authored fixtures and captures their declaration evidence in the same
-real-resolver call. One effect exercises generated full-screen vertex injection, render linking, and
-an authored fragment; one compute program exercises an authored compute entry and resolved
-`4 x 2 x 1` workgroup dimensions. Both produce schema-valid interface-only `semantic-v1` programs,
-content-addressed scalar/vector types, fixed program fingerprints, and three projected compiler
-requests.
+The assembly gate resolves three authored fixtures and captures their declaration evidence in the
+same real-resolver call. One effect exercises generated full-screen vertex injection, render
+linking, and an authored fragment. One draw imports its fragment from a second module, proving
+auxiliary-symbol mangling, preserved public entry names, and exact spans in separate authored inputs.
+One compute program exercises an authored compute entry and resolved `4 x 2 x 1` workgroup
+dimensions. They produce schema-valid interface-only `semantic-v1` programs, content-addressed
+scalar/vector types, fixed program fingerprints, and five projected compiler requests.
 
-The static matrix covers five nominal-association failures, four malformed declaration candidates,
-one retained-resolver-snapshot mutation, one unsupported-profile failure, one broken render link,
-two fingerprint rules, and three projection failures. Pre-translation failures launch no translator.
-With the accepted arm64 worker, two deterministic native extractions per fixture add four one-shot
-invocations and must assemble to the same reviewed semantic objects and fingerprints.
+The static matrix covers five nominal-association failures, five declaration failures including a
+cross-module span mutation, one retained-resolver-snapshot mutation, one unsupported-profile
+failure, one broken render link, two fingerprint rules, and three projection failures.
+Pre-translation failures launch no translator. With the accepted arm64 worker, two deterministic
+native extractions per fixture add six one-shot invocations and must assemble to the same reviewed
+semantic objects and fingerprints.
 
 ## Integrated full-screen Metal canary
 

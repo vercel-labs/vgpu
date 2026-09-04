@@ -74,13 +74,14 @@ association, inactive-declaration pruning, deterministic successes, diagnostic p
 canonical number and dual-source validation, the 64-leaf response boundary, and distinct temporary
 profile failures. This is partial evidence for conditions 3, 4, and 10.
 
-The executable assembly slice adds two interface-only programs, three projected compiler requests,
-five nominal failures, four declaration failures, one retained-resolver-snapshot check, one profile
-failure, one render-link failure, two fingerprint checks, and three projection failures. Its four
-native invocations are two byte-identical semantic extractions each for effect and compute. It proves
-the resolver declaration join, schema-valid interface type interning, program fingerprints, and
-extraction-derived interface-only projection with zero translator launches. This is partial evidence
-for conditions 3 through 6 and 10.
+The executable assembly slice adds three interface-only programs and five projected compiler
+requests: effect, multi-module draw, and compute. It covers five nominal failures, five declaration
+failures, one retained-resolver-snapshot check, one profile failure, one render-link failure, two
+fingerprint checks, and three projection failures. Its six native invocations are two byte-identical
+semantic extractions for each fixture. It proves the resolver declaration join across authored
+modules, schema-valid interface type interning, program fingerprints, and extraction-derived
+interface-only projection with zero translator launches. This is partial evidence for conditions 3
+through 6 and 10.
 
 The integrated Metal companion adds nine one-shot Tint processes: one inventory, two byte-identical
 semantic extractions, four deterministic successful translations, and two byte-identical runs of one

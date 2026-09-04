@@ -109,11 +109,11 @@ extracts even though assembly will later reject its render link, the generated f
 inactive resource and override declarations, the interface-size boundary, malformed protocol
 requests, and request-specific adapter authentication.
 
-The interface-only assembly gate resolves authored effect and compute fixtures, retains nominal
-resolver declaration evidence, authenticates extraction, emits schema-valid `semantic-v1`, checks
-render linking and fingerprints, and projects three compiler requests without launching the
-translator. With the native worker it performs four semantic-extraction invocations: two
-byte-identical runs for each fixture. Active resources and overrides remain outside this first
+The interface-only assembly gate resolves authored effect, multi-module draw, and compute fixtures,
+retains nominal resolver declaration evidence, authenticates extraction, emits schema-valid
+`semantic-v1`, checks render linking and fingerprints, and projects five compiler requests without
+launching the translator. With the native worker it performs six semantic-extraction invocations:
+two byte-identical runs for each fixture. Active resources and overrides remain outside this first
 profile. See
 [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md).
 
@@ -129,10 +129,10 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
-interfaces, and generated full-screen source. The interface-only effect and compute requests are now
-derived; resources, overrides, and program-level slot allocation remain. Once every request is
-derived, run the repository corpus through the same bridge and compile every successful MSL result
-for the `air64-apple-macos14.0` target.
+interfaces, and generated full-screen source. The interface-only effect, draw, and compute requests
+are now derived; resources, overrides, and program-level slot allocation remain. Once every request
+is derived, run the repository corpus through the same bridge and compile every successful MSL
+result for the `air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
@@ -157,7 +157,8 @@ The semantic work is split by responsibility so the growing design remains revie
 4. Add a multi-entry semantic-extraction operation. The interface-only profile is executable;
    active resource extraction and the existing exact-static override materializer remain next.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
-   proven declaration spans. The interface-only effect and compute slice is executable.
+   proven declaration spans. The interface-only effect, multi-module draw, and compute slice is
+   executable.
 6. Allocate program-level slots and derive one existing compiler request per entry point. Projection
    with empty external bindings and overrides is executable; allocation remains open.
 7. Validate and combine translator responses into `metal-projection-v1` without compacting indices.

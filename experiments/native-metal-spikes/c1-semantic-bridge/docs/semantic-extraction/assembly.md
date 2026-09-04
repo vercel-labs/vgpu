@@ -123,14 +123,17 @@ storage-size regions, and resolved compute dimensions. Broad extraction facts re
 
 ## Executable evidence
 
-The static assembly gate resolves one effect and one compute fixture, mints declaration evidence only
-through that real resolver call, authenticates reviewed extraction responses, and assembles two
-schema-valid programs. It projects three compiler requests and covers five nominal failures, four
-declaration failures, one retained-resolver-snapshot mutation, one rejected profile, one broken
-render link, two fingerprint rules, and three projection failures. None of those checks launches the
-translator.
+The static assembly gate resolves effect, multi-module draw, and compute fixtures, mints declaration
+evidence only through those real resolver calls, authenticates reviewed extraction responses, and
+assembles three schema-valid programs. It projects five compiler requests and covers five nominal
+failures, five declaration failures including a cross-module span mutation, one
+retained-resolver-snapshot mutation, one rejected profile, one broken render link, two fingerprint
+rules, and three projection failures. None of those checks launches the translator. The draw case
+also proves that the resolver preserves public entry names while mangling imported helpers and
+module-local types; `names.authored` and `names.wgsl` retain their separate authorities even when
+their current values are equal.
 
-With the accepted native worker, the gate performs four semantic-extraction invocations: two
+With the accepted native worker, the gate performs six semantic-extraction invocations: two
 byte-identical runs for each fixture. The independently integrated full-screen companion then runs
 one inventory, two semantic extractions, four successful translations, and two structured-negative
 translations. Its compiler requests come from the nominal assembly, while the checked-in interface
