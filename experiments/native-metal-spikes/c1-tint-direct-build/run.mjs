@@ -2652,8 +2652,8 @@ function verifyOracleBranchEvidence(id, response) {
               location: {
                 kind: "generated-wgsl",
                 virtualPath: "Intermediate/inventory-invalid.wgsl",
-                start: { line: 1, column: 61 },
-                end: { line: 1, column: 64 },
+                start: { line: 1, column: 60 },
+                end: { line: 1, column: 63 },
               },
             },
           ],
