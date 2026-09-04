@@ -474,6 +474,53 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
   );
 }
 
+function assertShaderInterfaceProgramFingerprintSensitivity(semantic, inputs) {
+  const programName = "SparseDraw";
+  const originalProgram = semantic.programs.find(
+    (program) => program.name === programName
+  );
+  if (!originalProgram)
+    fail(`${programName} fingerprint sensitivity is missing`);
+  const baseline = fingerprintProgram(originalProgram, semantic, inputs);
+  const assertMutationChangesFingerprint = (label, mutate) => {
+    const candidate = clone(semantic);
+    const program = candidate.programs.find(
+      (current) => current.name === programName
+    );
+    mutate(program);
+    if (fingerprintProgram(program, candidate, inputs) === baseline) {
+      fail(`${programName} fingerprint ignored shader-interface ${label}`);
+    }
+  };
+
+  assertMutationChangesFingerprint("location", (program) => {
+    const value = program.entryPoints.vertex.inputs.find(
+      (input) => input.location === 3
+    );
+    if (!value) fail(`${programName} location sensitivity input is missing`);
+    value.location = 4;
+  });
+  assertMutationChangesFingerprint("type", (program) => {
+    const value = program.entryPoints.vertex.inputs.find(
+      (input) => input.location === 7
+    );
+    if (!value) fail(`${programName} type sensitivity input is missing`);
+    value.type = "u32";
+  });
+  assertMutationChangesFingerprint("interpolation", (program) => {
+    for (const entry of [
+      program.entryPoints.vertex.outputs,
+      program.entryPoints.fragment.inputs,
+    ]) {
+      const value = entry.find((item) => item.location === 2);
+      if (!value) {
+        fail(`${programName} interpolation sensitivity value is missing`);
+      }
+      value.interpolation.sampling = "center";
+    }
+  });
+}
+
 function runtimeProjectionInput(projection, librarySHA256) {
   return {
     semantic: projection.semantic,
@@ -571,6 +618,12 @@ function requireWorkgroupSizeMutationFailure(
 
 const canonicalStageOrder = ["vertex", "fragment", "compute"];
 
+function compareCanonicalStrings(left, right) {
+  left = left.normalize("NFC");
+  right = right.normalize("NFC");
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function shaderInterfaceValueKey(value, includeBlendSource) {
   if (Object.hasOwn(value, "location")) {
     const blendSource =
@@ -582,28 +635,102 @@ function shaderInterfaceValueKey(value, includeBlendSource) {
   return `builtin:${value.builtin}`;
 }
 
-function validateSemanticInterfaceValues(values, owner, includeBlendSource) {
+function resolveShaderInterfaceType(semantic, value, owner) {
+  const type = semantic.types[value.type];
+  if (!type) {
+    fail(`${owner} references unknown shader interface type ${value.type}`);
+  }
+  if (type.kind === "scalar") {
+    return { component: type.scalar, width: 1 };
+  }
+  if (type.kind === "vector") {
+    const element = semantic.types[type.element];
+    if (element?.kind === "scalar") {
+      return { component: element.scalar, width: type.width };
+    }
+  }
+  fail(
+    `${owner} type ${value.type} must resolve to a scalar or vector of scalars`
+  );
+}
+
+function shaderInterfaceTypeKey(shape) {
+  return `${shape.component}x${shape.width}`;
+}
+
+const requiredBuiltinTypeKeys = new Map([
+  ["vertex:inputs:vertex_index", "u32x1"],
+  ["vertex:inputs:instance_index", "u32x1"],
+  ["vertex:outputs:position", "f32x4"],
+  ["fragment:inputs:position", "f32x4"],
+  ["fragment:inputs:front_facing", "boolx1"],
+  ["fragment:inputs:sample_index", "u32x1"],
+  ["fragment:inputs:sample_mask", "u32x1"],
+  ["fragment:outputs:frag_depth", "f32x1"],
+  ["fragment:outputs:sample_mask", "u32x1"],
+  ["compute:inputs:local_invocation_id", "u32x3"],
+  ["compute:inputs:local_invocation_index", "u32x1"],
+  ["compute:inputs:global_invocation_id", "u32x3"],
+  ["compute:inputs:workgroup_id", "u32x3"],
+  ["compute:inputs:num_workgroups", "u32x3"],
+]);
+
+function validateSemanticInterfaceValues(semantic, program, entry, direction) {
+  const values = entry[direction];
+  const owner = `${program.name}/${entry.stage} ${direction}`;
+  const includeBlendSource =
+    entry.stage === "fragment" && direction === "outputs";
   const keys = new Set();
   for (const value of values) {
     const key = shaderInterfaceValueKey(value, includeBlendSource);
     if (keys.has(key)) fail(`${owner} repeats shader interface value ${key}`);
     keys.add(key);
+
+    const shape = resolveShaderInterfaceType(semantic, value, owner);
+    const shapeKey = shaderInterfaceTypeKey(shape);
+    if (Object.hasOwn(value, "location")) {
+      if (shape.component === "bool") {
+        fail(`${owner} user location ${value.location} cannot use bool`);
+      }
+      const isInterStageValue =
+        (entry.stage === "vertex" && direction === "outputs") ||
+        (entry.stage === "fragment" && direction === "inputs");
+      if (
+        isInterStageValue &&
+        ["i32", "u32"].includes(shape.component) &&
+        value.interpolation?.type !== "flat"
+      ) {
+        fail(
+          `${owner} integer user location ${value.location} requires flat interpolation`
+        );
+      }
+      continue;
+    }
+
+    const builtinKey = `${entry.stage}:${direction}:${value.builtin}`;
+    const requiredTypeKey = requiredBuiltinTypeKeys.get(builtinKey);
+    if (!requiredTypeKey) {
+      fail(`${owner} has unsupported builtin ${value.builtin}`);
+    }
+    if (shapeKey !== requiredTypeKey) {
+      fail(
+        `${owner} builtin ${value.builtin} requires ${requiredTypeKey}, received ${shapeKey}`
+      );
+    }
   }
 }
 
-function validateSemanticStageLink(program) {
+function validateSemanticStageLink(semantic, program) {
   const entries = Object.values(program.entryPoints);
   for (const entry of entries) {
-    validateSemanticInterfaceValues(
-      entry.inputs,
-      `${program.name}/${entry.stage} inputs`,
-      false
-    );
-    validateSemanticInterfaceValues(
-      entry.outputs,
-      `${program.name}/${entry.stage} outputs`,
-      entry.stage === "fragment"
-    );
+    validateSemanticInterfaceValues(semantic, program, entry, "inputs");
+    validateSemanticInterfaceValues(semantic, program, entry, "outputs");
+    if (
+      entry.stage === "vertex" &&
+      entry.outputs.filter((value) => value.builtin === "position").length !== 1
+    ) {
+      fail(`${program.name} vertex entry requires exactly one position output`);
+    }
   }
 
   const fragment = entries.find((entry) => entry.stage === "fragment");
@@ -625,8 +752,22 @@ function validateSemanticStageLink(program) {
         `${program.name} fragment location ${input.location} has no vertex output`
       );
     }
+    const outputType = shaderInterfaceTypeKey(
+      resolveShaderInterfaceType(
+        semantic,
+        output,
+        `${program.name}/vertex outputs`
+      )
+    );
+    const inputType = shaderInterfaceTypeKey(
+      resolveShaderInterfaceType(
+        semantic,
+        input,
+        `${program.name}/fragment inputs`
+      )
+    );
     if (
-      output.type !== input.type ||
+      outputType !== inputType ||
       canonicalize(output.interpolation) !== canonicalize(input.interpolation)
     ) {
       fail(
@@ -649,7 +790,20 @@ function validateSemanticStageLink(program) {
     dualSourceColors.some((value) => value.location !== 0) ||
     sources[0] !== 0 ||
     sources[1] !== 1 ||
-    dualSourceColors[0].type !== dualSourceColors[1].type
+    shaderInterfaceTypeKey(
+      resolveShaderInterfaceType(
+        semantic,
+        dualSourceColors[0],
+        `${program.name}/fragment outputs`
+      )
+    ) !==
+      shaderInterfaceTypeKey(
+        resolveShaderInterfaceType(
+          semantic,
+          dualSourceColors[1],
+          `${program.name}/fragment outputs`
+        )
+      )
   ) {
     fail(`${program.name} has an invalid dual-source fragment interface`);
   }
@@ -662,15 +816,60 @@ function validateShaderInterfaceContract(semantic, projection) {
     fail("unsupported shader-interface model");
   }
 
-  const semanticPrograms = new Map(
-    semantic.programs.map((program) => [program.name, program])
-  );
+  const semanticPrograms = new Map();
+  let previousSemanticProgramName;
   for (const semanticProgram of semantic.programs) {
-    validateSemanticStageLink(semanticProgram);
+    const canonicalProgramName = semanticProgram.name.normalize("NFC");
+    if (semanticPrograms.has(canonicalProgramName)) {
+      fail(`semantic contract repeats program ${semanticProgram.name}`);
+    }
+    if (
+      previousSemanticProgramName !== undefined &&
+      compareCanonicalStrings(
+        previousSemanticProgramName,
+        semanticProgram.name
+      ) >= 0
+    ) {
+      fail("semantic programs are not canonically name ordered");
+    }
+    previousSemanticProgramName = semanticProgram.name;
+    semanticPrograms.set(canonicalProgramName, semanticProgram);
+    validateSemanticStageLink(semantic, semanticProgram);
+  }
+
+  const projectedProgramNames = new Set();
+  let previousProgramName;
+  for (const program of projection.programs) {
+    const canonicalProgramName = program.semanticProgram.normalize("NFC");
+    if (projectedProgramNames.has(canonicalProgramName)) {
+      fail(`Metal projection repeats program ${program.semanticProgram}`);
+    }
+    projectedProgramNames.add(canonicalProgramName);
+    if (
+      previousProgramName !== undefined &&
+      compareCanonicalStrings(previousProgramName, program.semanticProgram) >= 0
+    ) {
+      fail("Metal projection programs are not canonically name ordered");
+    }
+    previousProgramName = program.semanticProgram;
+  }
+  const semanticProgramNames = [...semanticPrograms.keys()].sort(
+    compareCanonicalStrings
+  );
+  const canonicalProjectedProgramNames = [...projectedProgramNames].sort(
+    compareCanonicalStrings
+  );
+  if (
+    canonicalize(semanticProgramNames) !==
+    canonicalize(canonicalProjectedProgramNames)
+  ) {
+    fail("semantic and Metal projection program sets are not bijective");
   }
 
   for (const program of projection.programs) {
-    const semanticProgram = semanticPrograms.get(program.semanticProgram);
+    const semanticProgram = semanticPrograms.get(
+      program.semanticProgram.normalize("NFC")
+    );
     if (!semanticProgram) {
       fail(
         `shader-interface contract references unknown program ${program.semanticProgram}`
@@ -1652,6 +1851,10 @@ for (const program of artifact.semantic.programs) {
     artifact.inputs
   );
 }
+assertShaderInterfaceProgramFingerprintSensitivity(
+  artifact.semantic,
+  artifact.inputs
+);
 
 const runtimeArraySemantic = artifact.semantic.programs.find(
   (program) => program.name === "RuntimeArray"
@@ -1706,6 +1909,155 @@ validateVertexBufferPolicy(artifact.projection);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
 validateResolvedWorkgroupSizes(artifact.semantic, artifact.projection);
 validateShaderInterfaceContract(artifact.semantic, artifact.projection);
+const equivalentStageLinkTypes = clone(artifact.semantic);
+equivalentStageLinkTypes.types.c3_vec2f_alias = clone(
+  equivalentStageLinkTypes.types.vec2f
+);
+equivalentStageLinkTypes.programs
+  .find((program) => program.name === "SparseDraw")
+  .entryPoints.fragment.inputs.find((value) => value.location === 2).type =
+  "c3_vec2f_alias";
+validateShaderInterfaceContract(equivalentStageLinkTypes, artifact.projection);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.push(clone(semantic.programs[0]));
+  },
+  "semantic contract repeats program Noop",
+  "duplicate semantic program name"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs[0].name = "\u00e9";
+    semantic.programs[1].name = "e\u0301";
+  },
+  "semantic contract repeats program",
+  "NFC-equivalent semantic program names"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs[0].name = "e\u0301";
+    semantic.programs[1].name = "f";
+    semantic.programs[2].name = "z";
+  },
+  "semantic programs are not canonically name ordered",
+  "NFC-normalized semantic program order"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.reverse();
+  },
+  "semantic programs are not canonically name ordered",
+  "reordered semantic programs"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs.pop();
+  },
+  "program sets are not bijective",
+  "missing projected program"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs.push(clone(projection.programs[0]));
+  },
+  "Metal projection repeats program Noop",
+  "duplicate projected program name"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.programs.reverse();
+  },
+  "programs are not canonically name ordered",
+  "reordered projected programs"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.inputs[0].type = "c3_missing_interface_type";
+  },
+  "references unknown shader interface type c3_missing_interface_type",
+  "unknown shader-interface type"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.inputs[0].type = "u32x4";
+  },
+  "must resolve to a scalar or vector of scalars",
+  "composite shader-interface leaf"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.types.c3_bool = { kind: "scalar", scalar: "bool" };
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.inputs[0].type = "c3_bool";
+  },
+  "user location 3 cannot use bool",
+  "boolean user location"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.outputs[0].type = "vec2f";
+  },
+  "builtin position requires f32x4, received f32x2",
+  "wrong vertex-position builtin type"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    const vertex = semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex;
+    vertex.outputs = vertex.outputs.filter(
+      (value) => value.builtin !== "position"
+    );
+  },
+  "vertex entry requires exactly one position output",
+  "vertex entry without position output"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs
+      .find((program) => program.name === "Noop")
+      .entryPoints.compute.inputs.push({
+        type: "u32",
+        invariant: false,
+        builtin: "global_invocation_id",
+      });
+  },
+  "builtin global_invocation_id requires u32x3, received u32x1",
+  "wrong compute builtin type"
+);
 requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
@@ -1778,6 +2130,39 @@ requireShaderInterfaceMutationFailure(
   },
   "location 2 has an incompatible stage link",
   "stage-link type mismatch"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.fragment.inputs.find(
+        (value) => value.location === 2
+      ).interpolation.sampling = "sample";
+  },
+  "location 2 has an incompatible stage link",
+  "stage-link interpolation mismatch"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    const program = semantic.programs.find(
+      (candidate) => candidate.name === "SparseDraw"
+    );
+    for (const values of [
+      program.entryPoints.vertex.outputs,
+      program.entryPoints.fragment.inputs,
+    ]) {
+      values.find((value) => value.location === 5).interpolation = {
+        type: "linear",
+        sampling: "center",
+      };
+    }
+  },
+  "integer user location 5 requires flat interpolation",
+  "linear integer stage link"
 );
 requireShaderInterfaceMutationFailure(
   artifact.semantic,
@@ -2554,5 +2939,5 @@ if (
 }
 
 console.log(
-  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, 6 program-fingerprint sensitivity checks per program, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
+  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, 6 base program-fingerprint sensitivity checks per program, 3 SparseDraw interface-fingerprint checks, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
 );

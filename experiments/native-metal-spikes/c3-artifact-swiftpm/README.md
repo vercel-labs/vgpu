@@ -61,9 +61,13 @@ The runner:
    internal buffers, plus vertex-stage intervals that violate the independently recorded
    vertex-buffer ceiling;
 5. preserves `SparseDraw` locations `3` and `7` as Metal vertex attributes and locations `1` and
-   `4` as Metal fragment colors, requires a complete canonical bijection with the semantic
-   interface, validates vertex-to-fragment linking, and rejects missing, reordered, compacted,
-   colliding, or invalid dual-source maps;
+   `4` as Metal fragment colors, requires unique and exactly matching semantic and projected
+   program names after NFC normalization, orders semantic programs by ascending `name` and projected
+   programs by ascending `semanticProgram` under the same normalization, resolves every interface
+   type to a legal scalar or vector shape, requires exactly one vertex `position` output, checks
+   required builtin shapes and flat interpolation for integer inter-stage values, validates
+   vertex-to-fragment linking, and rejects missing, duplicated, reordered, compacted, colliding, or
+   invalid dual-source maps;
 6. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
    dependency, and the `AppShaders` target's single ABI product dependency;
 7. tests the generated package for the native architecture, builds the generated package and clean
@@ -88,7 +92,9 @@ closure reachable from that program's bindings and interfaces. Capabilities rema
 Arrays declared as unordered unique sets by the schema are sorted before hashing; semantically
 ordered arrays retain their order. Executable self-checks require referenced WGSL, layout-model,
 language-feature, directly reachable layout, and transitively reachable elemental-layout changes
-to change the fingerprint, while an unreachable type/layout addition must not change it.
+to change the fingerprint, while an unreachable type/layout addition must not change it. Separate
+canaries prove that changing an interface location, type, or normalized interpolation also changes
+the owning program fingerprint.
 
 The projection requires a versioned `storageBufferSizeModel` string and every projected program
 contains a canonical `storageBufferSizeRegions` array. `Noop` uses an empty array. `RuntimeArray`
@@ -116,10 +122,12 @@ an interface contract. Generated selections couple the program and stage behind 
 initializer. Every compatibility call must name one of those selections explicitly, and the
 pipeline closure receives that same validated value instead of independently choosing them again.
 
-Source spans remain excluded from semantic fingerprints as provenance, but they are not trusted
-blindly: the verifier bounds-checks each span against its declared WGSL input and requires the
-selected stage and exact WGSL entry name inside it. A crossed `Noop`/`RuntimeArray` span is an
-executable negative canary.
+Source spans remain excluded from each `vgpu-native-program/v1` fingerprint as provenance, but they
+are not trusted blindly: the verifier bounds-checks each span against its declared WGSL input and
+requires the selected stage and exact WGSL entry name inside it. The root semantic fingerprint
+hashes the complete semantic object, so it still commits to those spans and the runtime-projection
+fingerprint commits to them transitively through that root hash. A crossed `Noop`/`RuntimeArray`
+span is an executable negative canary.
 
 The sentinel deliberately has a `.metallib` filename so the same SwiftPM resource path is tested
 in C3a and C3b. Its content is ordinary UTF-8 text and is never passed to Metal in C3a.
@@ -132,6 +140,12 @@ links them into one library. It invokes Apple's tools with an explicit
 temporary artifact, packages the resulting library, revalidates the artifact, and executes the
 generated C3 Metal probe. The probe loads the exact `Bundle.module` URL and recorded SHA before it
 creates `vgpu_c3_noop` and dispatches.
+
+The current handwritten C3b library contains and validates only the `Noop` and `RuntimeArray`
+compute functions. It does not contain or look up the synthetic `SparseDraw` vertex and fragment
+entries recorded by the structural fixture. C3b therefore does not yet prove that every projected
+entry point exists in the packaged library or that the generated sparse render interface can create
+a Metal render pipeline.
 
 The target spelling is a fixture-local hypothesis until this gate runs on the supported Xcode
 matrix. To keep the payload deployment target consistent with the projection and Swift package,
