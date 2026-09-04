@@ -15,20 +15,19 @@ Four clean Release builds passed: A and B for `arm64`, then A and B for `x86_64`
 builds were byte-identical within each architecture. Combining each pair with `lipo` also produced
 byte-identical universal executables.
 
-The measurements below are the last accepted baseline. The neighboring worker has since gained the
-exact shader-interface handshake, so the tracked lock is intentionally stale until a newly measured
-candidate is reviewed, copied into place, and the ordinary publication gate passes again. Candidate
-generation is a separate non-publishing mode described below; it does not turn new measurements into
-accepted provenance by itself.
+The accepted baseline includes the exact shader-interface handshake. It passed the ordinary
+publication gate after an independently reviewed candidate rebaseline. Candidate generation remains
+a separate non-publishing mode described below; measurements do not become accepted provenance by
+themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  5,749,456 | `3fbd9831d8d8f5e98e64b163d516384159a38884e86290b201fb8dde9cffcf6b` |
-| x86_64    |  6,806,016 | `6607174522af09bde5da877925ab6d2e9fe73e1599320b03b019f6c9d779a380` |
-| universal | 12,565,200 | `8fb3a3c38e30f6121170bd159546066c53f7130a3b30026fb6927be63694903a` |
+| arm64     |  5,805,296 | `5692b813b029613709a73e2eced5d707f7626bbb6424f156f20b4dfb62b4bc85` |
+| x86_64    |  6,853,048 | `ad10a8f886cc0f607cc7fcb24a34cf1eb29339a24933d9e8a2ce60c4eb3c41ca` |
+| universal | 12,670,192 | `9bdebe32d0e713d0934decbc114e241d84277e61ac27643a8d36bd3f2e4fa0d8` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
-against the previously verified monolithic release archive. The intended request closure contains
+against the previously verified monolithic release archive. The locked request closure contains
 the original `noop`, `runtime-array`, `wgsl-error`, and `generate-failure` cases plus checked-in
 vertex, fragment, scalar-fragment, compute-builtin, dual-source, and semantic-interface-mismatch
 requests. Each response must match that reference byte for byte across eight direct variants: both

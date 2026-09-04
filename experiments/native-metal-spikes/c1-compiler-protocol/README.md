@@ -38,9 +38,11 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
   mismatches.
 
 This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
-`libwebgpu_dawn.a`. The separate direct-source lock covers the worker revision before this interface
-change and is intentionally stale. This cut therefore makes no current arm64, x86_64, or universal
-distribution claim until that proof is deliberately rebaselined.
+`libwebgpu_dawn.a`. The companion direct-source gate now covers this exact worker revision and
+semantic-interface handshake. Its ordinary publication gate passes with an authenticated
+ten-canary request closure, byte-reproducible arm64, x86_64, and universal executables, and response
+parity with the arm64-native monolithic oracle across eight direct variants. The x86_64 executions
+run through Rosetta and establish compiler-process behavior, not Intel or AMD GPU support.
 
 ## Boundary
 
@@ -216,10 +218,10 @@ location-0 blend sources become Metal color 0 indices 0 and 1. This translator e
 enable dual-source blending in the higher-level product alpha, whose capability policy continues to
 reject it.
 
-The direct-build follow-up owns the distribution proof for these same worker sources and pins their
-complete source, request, response, and binary hashes. Its proof must be deliberately rebaselined
-after this protocol change; that separate refresh keeps distribution provenance out of the logical
-interface-handshake commit.
+The direct-build follow-up now provides current source-build and compiler-process distribution
+evidence for these same worker sources. Its accepted lock pins their complete source, authenticated
+request and response closure, and binary hashes, while its ordinary publication gate reproduces all
+eight direct variants.
 
 The override integration follow-up now connects the materializer's exact static view to this
 request, binds it to the resolved-source hash, and proves that missing, extra, or stale values fail
@@ -228,7 +230,6 @@ before or inside the independently validating worker.
 The remaining gates are:
 
 - connect the broader semantic extractor and multi-entry union to artifact construction;
-- rebaseline the direct Tint build proof against this exact worker revision;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 

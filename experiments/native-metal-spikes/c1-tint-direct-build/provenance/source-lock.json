@@ -84,7 +84,7 @@
     "closure": {
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
       "files": 4,
-      "sha256": "0d1cdbab647f2c8172c3cbb79e5deb8a38a885b98be8da46be19b31dcd04bd65",
+      "sha256": "e2138904d6ce7d907e37b628b9f3ebea4c68d3a4996a151ff005ebe495e8bbb6",
       "paths": ["json-codec.cc", "json-codec.h", "main.cc", "request.h"]
     }
   },
@@ -102,51 +102,108 @@
       },
       "nativeCompiler": {
         "path": "../c1-compiler-protocol/lib/native-compiler.mjs",
-        "bytes": 15016,
-        "sha256": "6bccb8d4fe1bf563aa39381d4681db4e65883fc25c23d4583611e2fb80323bf9"
+        "bytes": 15110,
+        "sha256": "1c8ce0f698a99927d28e7805e5f50f5d87a216f3ae3d94838b06f50daaa73b91"
       },
       "protocol": {
         "path": "../c1-compiler-protocol/lib/protocol.mjs",
-        "bytes": 15366,
-        "sha256": "5bd7b424bcad612c083a4335a0f241b39c013d9e29128683430b5ce80717f589"
+        "bytes": 23875,
+        "sha256": "0992a2962310d8d5948227b71fc9a8008ca421b133f91efc8aa3d14a20397657"
+      },
+      "originSchema": {
+        "path": "../c1-compiler-protocol/contracts/origin-map-v1.schema.json",
+        "bytes": 3647,
+        "sha256": "b2aa495e0749fa598baf77bb4bf04577c71610d0169d4032bef59f75cce8724c"
+      },
+      "requestSchema": {
+        "path": "../c1-compiler-protocol/contracts/request-v1.schema.json",
+        "bytes": 20161,
+        "sha256": "42a4b32269727218bb6eb8796d49bcc9352594d3e5b0da80640ecf81bba43783"
+      },
+      "responseSchema": {
+        "path": "../c1-compiler-protocol/contracts/response-v1.schema.json",
+        "bytes": 17412,
+        "sha256": "33c66b3673602fe16fcc0eea57d0b37b5a3ba669000e04cb025441b8b7b82fc1"
       }
     },
     "requests": {
-      "root": "../c1-compiler-protocol/fixtures/requests",
+      "root": "..",
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
-      "files": 4,
-      "bytes": 7346,
-      "sha256": "ba0d7256fdb0fc685871fe1c7f72ba33441adfe537589619cbccb3f4e789f3be",
+      "files": 10,
+      "bytes": 25526,
+      "sha256": "b3ee3340b701f8e280408f998e1a270bec771513e4a23eceb8b6bd94d029d05b",
       "paths": [
-        "generate-failure.json",
-        "noop.json",
-        "runtime-array.json",
-        "wgsl-error.json"
+        "c1-compiler-protocol/fixtures/requests/generate-failure.json",
+        "c1-compiler-protocol/fixtures/requests/noop.json",
+        "c1-compiler-protocol/fixtures/requests/runtime-array.json",
+        "c1-compiler-protocol/fixtures/requests/wgsl-error.json",
+        "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
+        "c1-tint-direct-build/fixtures/requests/dual-source.json",
+        "c1-tint-direct-build/fixtures/requests/fragment-sparse.json",
+        "c1-tint-direct-build/fixtures/requests/interface-mismatch.json",
+        "c1-tint-direct-build/fixtures/requests/scalar-fragment.json",
+        "c1-tint-direct-build/fixtures/requests/vertex-sparse.json"
       ]
     },
     "canaries": {
+      "generate-failure": {
+        "requestSha256": "98f5f8d12e1e4b7750f7810eda8de2a6913871ddaf672d12b0ced504069d5156",
+        "responseBytes": 727,
+        "responseSha256": "5a0806780795409fa41af770c97ee66165482c5104c07a4d8ce1d9bc61c4c163",
+        "ok": true
+      },
       "noop": {
-        "requestSha256": "a4e46d2605376e6dacf6e1433cd40a5c22b9bd9e9f4eb28d6cc22c0821a09c30",
-        "responseBytes": 659,
-        "responseSha256": "4c8bd42627a40a4ebf743243c9e87569f4e91734f090a0841c8807bd2740dc1f",
+        "requestSha256": "24d0a4dbcad74de0886ad9b25997d417cf02313f59c90a24f80647669b9b3f50",
+        "responseBytes": 697,
+        "responseSha256": "a1cd2c1a58ef9ad3099c55c9c11096931d7603e3403d3d9e768cae778d4b82bb",
         "ok": true
       },
       "runtime-array": {
-        "requestSha256": "6e25492b0daeb06e20270bed332cf26b21554867d20b581ca1562a17319cd2eb",
-        "responseBytes": 2562,
-        "responseSha256": "9f233318b9c6a8bf6f893a4c45192629dce7876d9936262d6ac4c2ef8430cfac",
+        "requestSha256": "8c7539f074ad87cd5a50ca56204c1e0cc25ecc1078b11f7d2b036a7e8cff6539",
+        "responseBytes": 2600,
+        "responseSha256": "198f4e322a4a30a25a512df3ee1386a05a864e820cd82351de903f0c6e20cd50",
         "ok": true
       },
       "wgsl-error": {
-        "requestSha256": "1738906d0f41bae8baa6c5a6851e57608dfd69a0079ade65936c6e74e08985bd",
+        "requestSha256": "09d842dd4c9323a55495d425dccd628b86de16b745431781890b8596ff57ed43",
         "responseBytes": 594,
         "responseSha256": "43832f679fad7f320b70ef39ca1fc5ebacb7bc190ab1b89f131bf1973b8ad756",
         "ok": false
       },
-      "generate-failure": {
-        "requestSha256": "1596dd2699ec449918d451484ea7f57d32fcc8253100b88d74d2c2f2272cfab1",
-        "responseBytes": 689,
-        "responseSha256": "b2c21f4eb080c5ebd5f4ea57c4f77e2d7c336407d9750f5b6c68a636c2692a3c",
+      "compute-builtins": {
+        "requestSha256": "b3d4501f3abb19c07a14de990dcbc9651507831661eb5a00b348957d60e2d929",
+        "responseBytes": 1348,
+        "responseSha256": "42b361e3d45273987c43ab76f0b6017a5e7168f831d6e9439f553671c3e91306",
+        "ok": true
+      },
+      "dual-source": {
+        "requestSha256": "93f3b4b36392a430af86145ed47233a1dc777afd1030ab9021b071a9ae142e53",
+        "responseBytes": 1404,
+        "responseSha256": "c19dc495fa14723def7631bd0a286963f412892f5667a5b6fd20a5d040240c94",
+        "ok": true
+      },
+      "fragment-sparse": {
+        "requestSha256": "23e2af0e989debe22ae61cc6adfadb0ecf484c0a746c775d31ca4a8d3e79ff32",
+        "responseBytes": 2680,
+        "responseSha256": "1533b89635b7847acac3117b30669bdd61a5f25d97bc42eb900201a67238a06b",
+        "ok": true
+      },
+      "interface-mismatch": {
+        "requestSha256": "7e6811bb193732a870d2e5da686b42f83e89cf59d500bea22ecfcec4fa307164",
+        "responseBytes": 445,
+        "responseSha256": "5e9309a88aaf82dff9e7d67d41b5446ac6df65f334fbeb29ac4750252d637128",
+        "ok": false
+      },
+      "scalar-fragment": {
+        "requestSha256": "99748d5ccd35d138f88ff2857186b1c86bbe3b30d81b7c6f280f37fe9a36541e",
+        "responseBytes": 1080,
+        "responseSha256": "81e567fafe0e643e5e6bb25af5878368d341d0c9a9fd88daa24f88b92aed9776",
+        "ok": true
+      },
+      "vertex-sparse": {
+        "requestSha256": "f35c021fb18900455578222de7673832eb53fb440a354b41d101fd423c606ea5",
+        "responseBytes": 2322,
+        "responseSha256": "a23e8061afdae31dca9cc87388c6f4eda08cba5fae4397ea6f3b29f7f7482d6e",
         "ok": true
       }
     }
@@ -179,8 +236,8 @@
       "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
       "objects": 407,
       "files": 920,
-      "bytes": 8696180,
-      "sha256": "e15cac4eeb9fc101dd586bbb4c5c0ae075fb20d127155f10f3d2009abc979955",
+      "bytes": 8720765,
+      "sha256": "b5f0a0bfa2738687ac1d1670b128ca409e0661c3897ba5cb530e77af01a93ecd",
       "repositories": {
         "dawn": {
           "files": 804,
@@ -204,8 +261,8 @@
         },
         "worker": {
           "files": 4,
-          "bytes": 85217,
-          "sha256": "0d1cdbab647f2c8172c3cbb79e5deb8a38a885b98be8da46be19b31dcd04bd65"
+          "bytes": 109802,
+          "sha256": "e2138904d6ce7d907e37b628b9f3ebea4c68d3a4996a151ff005ebe495e8bbb6"
         }
       }
     }
@@ -229,16 +286,16 @@
     },
     "outputs": {
       "arm64": {
-        "bytes": 5749456,
-        "sha256": "3fbd9831d8d8f5e98e64b163d516384159a38884e86290b201fb8dde9cffcf6b"
+        "bytes": 5805296,
+        "sha256": "5692b813b029613709a73e2eced5d707f7626bbb6424f156f20b4dfb62b4bc85"
       },
       "x86_64": {
-        "bytes": 6806016,
-        "sha256": "6607174522af09bde5da877925ab6d2e9fe73e1599320b03b019f6c9d779a380"
+        "bytes": 6853048,
+        "sha256": "ad10a8f886cc0f607cc7fcb24a34cf1eb29339a24933d9e8a2ce60c4eb3c41ca"
       },
       "universal": {
-        "bytes": 12565200,
-        "sha256": "8fb3a3c38e30f6121170bd159546066c53f7130a3b30026fb6927be63694903a"
+        "bytes": 12670192,
+        "sha256": "9bdebe32d0e713d0934decbc114e241d84277e61ac27643a8d36bd3f2e4fa0d8"
       }
     },
     "architectures": ["arm64", "x86_64"]
