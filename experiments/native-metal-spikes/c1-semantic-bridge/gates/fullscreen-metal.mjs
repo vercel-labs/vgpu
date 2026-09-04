@@ -50,7 +50,7 @@ import {
 import { resolveVirtualShaderWithDeclarations } from "../lib/resolved-declarations.mjs";
 import { selectProgramEntries } from "../lib/program-selection.mjs";
 import {
-  assembleInterfaceOnlySemanticProgram,
+  assembleSemanticProgram,
   compilerRequestForAssembledEntry,
   semanticModuleForAssembly,
 } from "../lib/semantic-assembly.mjs";
@@ -553,7 +553,7 @@ function authenticateFixtureSemanticExtraction(finalized) {
 }
 
 function assembleFixtureProgram(finalized, extraction) {
-  return assembleInterfaceOnlySemanticProgram({
+  return assembleSemanticProgram({
     presentation: {
       module: {
         name: "FullscreenMetalShaders",

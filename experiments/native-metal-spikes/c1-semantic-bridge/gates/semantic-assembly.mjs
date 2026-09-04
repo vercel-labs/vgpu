@@ -26,16 +26,19 @@ import {
 import { selectProgramEntries } from "../lib/program-selection.mjs";
 import {
   isResolvedDeclarationIndex,
+  resolvedResourcePresentationForExtraction,
   resolveVirtualShaderWithDeclarations,
   validateResolvedDeclarationCandidate,
 } from "../lib/resolved-declarations.mjs";
 import {
-  assembleInterfaceOnlySemanticProgram,
+  assembleSemanticProgram,
   compilerRequestForAssembledEntry,
-  isInterfaceOnlySemanticAssembly,
+  isSemanticProgramAssembly,
+  semanticLayoutId,
   semanticModuleForAssembly,
   semanticTypeId,
 } from "../lib/semantic-assembly.mjs";
+import { assertSwiftPresentation } from "../lib/swift-presentation.mjs";
 import {
   encodeSemanticExtractionRequest,
   SEMANTIC_EXTRACTION_COMPILER,
@@ -76,6 +79,16 @@ const expectedSnapshots = Object.freeze({
       "83f6298c4b2ce7f0bcfddac99c0455f0208d3d24303332a25712b7476169f664",
     nativeResponseSha256:
       "b5546fbc7111ac9565268c726027113b0d3ee6cea00b67531af636f6a44b4f6e",
+  }),
+  resource: Object.freeze({
+    programFingerprint:
+      "49b77712d6d6a5f3a0011fd132149f4aa9a1b6c5a3a991384c6ebaacd8ec7e85",
+    resolvedSourceSha256:
+      "e60666167ae415d142aaaac8789abb65f4ceb93b213649e551202193fe3b5ba3",
+    semanticRequestSha256:
+      "87b0038071d35f5cfe3d458d51ff7e786cf59d22fad99f04abebbdaf7583529a",
+    nativeResponseSha256:
+      "087864dfa7fb592686bb146469935235606d7b433deea804f938049a311124cb",
   }),
 });
 const metalPolicy = Object.freeze({
@@ -315,17 +328,63 @@ const draw = await makeFixture({
   },
 });
 
-for (const fixture of [effect, draw, compute]) assertAcceptedFixture(fixture);
+const resource = await makeFixture({
+  label: "resource",
+  configSource: "Shaders/resource/main.wgsl",
+  generatedVirtualPath: "Intermediate/semantic-resource.resolved.wgsl",
+  sources: [
+    {
+      file: "resource/main.wgsl",
+      input: "resource-main-wgsl",
+      virtualPath: "Shaders/resource/main.wgsl",
+    },
+    {
+      file: "resource/types.wgsl",
+      input: "resource-types-wgsl",
+      virtualPath: "Shaders/resource/types.wgsl",
+    },
+  ],
+  selection: {
+    name: "AssemblyResources",
+    source: "Shaders/resource/main.wgsl",
+    kind: "draw",
+  },
+  expectedInventory: [
+    { stage: "vertex", wgsl: "resource_vertex" },
+    { stage: "fragment", wgsl: "resource_fragment" },
+  ],
+  result() {
+    return JSON.parse(
+      readFileSync(join(fixtureDirectory, "resource-result.json"), "utf8")
+    );
+  },
+  projectCompiler: false,
+});
+
+for (const fixture of [effect, draw, compute, resource]) {
+  assertAcceptedFixture(fixture);
+}
 assertNominalFailures(effect, compute);
 assertDeclarationFailures(effect);
 assertCrossModuleDeclarationFailure(draw);
+assertResolverSymbolFailures(resource);
+assertRetainedResolverResourceSymbols(resource);
+assertResolverResourceJoinFailures(resource);
 assertProfileFailures(effect);
 assertLinkFailure(effect);
 assertFingerprintRules(effect);
+assertResourceFingerprintRules(resource);
+assertSwiftNameFailures(resource);
 assertProjectionFailures(effect);
+assertResourceProjectionFailures(resource);
 
 const native = options.worker
-  ? await assertNativeExtractions(options.worker, [effect, draw, compute])
+  ? await assertNativeExtractions(options.worker, [
+      effect,
+      draw,
+      compute,
+      resource,
+    ])
   : { status: "skipped", reason: "no semantic extraction worker supplied" };
 if (options.requireWorker && native.status !== "passed") {
   fail("a native semantic extraction worker was required");
@@ -336,7 +395,7 @@ process.stdout.write(
     {
       gate: "semantic-assembly",
       status: options.worker ? "passed" : "static-passed",
-      fixtures: [effect, draw, compute].map((fixture) => ({
+      fixtures: [effect, draw, compute, resource].map((fixture) => ({
         label: fixture.label,
         programFingerprint:
           fixture.assembly.semantic.programs[0].fingerprint.sha256,
@@ -346,15 +405,18 @@ process.stdout.write(
         projectedEntries: fixture.compilerRequests.length,
       })),
       static: {
-        assemblies: 3,
+        assemblies: 4,
         compilerRequests: 5,
         nominalFailures: 5,
         declarationFailures: 5,
-        retainedResolverSnapshotChecks: 1,
+        resolverSymbolFailures: 3,
+        resolverResourceJoinFailures: 3,
+        retainedResolverSnapshotChecks: 2,
         profileFailures: 1,
         linkFailures: 1,
-        fingerprintChecks: 2,
-        projectionFailures: 3,
+        fingerprintChecks: 5,
+        swiftNameFailures: 15,
+        projectionFailures: 5,
         translatorLaunches: 0,
       },
       native,
@@ -374,6 +436,7 @@ async function makeFixture({
   selection,
   expectedInventory,
   result,
+  projectCompiler = true,
 }) {
   const authoredSources = sources ?? [
     { file, input, virtualPath: configSource },
@@ -425,22 +488,22 @@ async function makeFixture({
     module: { name: "AssemblyFixtures", swiftName: "AssemblyFixtures" },
     program: { swiftName: selection.name },
   };
-  const assembly = assembleInterfaceOnlySemanticProgram({
+  const assembly = assembleSemanticProgram({
     presentation,
     finalized,
     extraction,
     declarations,
   });
-  const compilerRequests = Object.keys(
-    assembly.semantic.programs[0].entryPoints
-  ).map((stage) =>
-    compilerRequestForAssembledEntry({
-      assembly,
-      stage,
-      metalEntryPoint: `vgpu_assembly_${label}_${stage}`,
-      metal: metalPolicy,
-    })
-  );
+  const compilerRequests = projectCompiler
+    ? Object.keys(assembly.semantic.programs[0].entryPoints).map((stage) =>
+        compilerRequestForAssembledEntry({
+          assembly,
+          stage,
+          metalEntryPoint: `vgpu_assembly_${label}_${stage}`,
+          metal: metalPolicy,
+        })
+      )
+    : [];
   return {
     label,
     resolverInput,
@@ -464,7 +527,7 @@ async function makeFixture({
 function assertAcceptedFixture(fixture) {
   const snapshot = expectedSnapshots[fixture.label];
   assert(snapshot);
-  assert(isInterfaceOnlySemanticAssembly(fixture.assembly));
+  assert(isSemanticProgramAssembly(fixture.assembly));
   assert(Object.isFrozen(fixture.assembly));
   assert(Object.isFrozen(fixture.assembly.semantic));
   assert.equal(
@@ -472,7 +535,14 @@ function assertAcceptedFixture(fixture) {
     fixture.assembly.semantic
   );
   assert.equal(fixture.assembly.semantic.contractId, "vgpu-native-semantic/v1");
-  assert.deepEqual(fixture.assembly.semantic.layouts, {});
+  if (fixture.label === "resource") {
+    assert.deepEqual(
+      fixture.assembly.semantic.layouts,
+      fixture.expectedResult.layouts
+    );
+  } else {
+    assert.deepEqual(fixture.assembly.semantic.layouts, {});
+  }
   assert.deepEqual(fixture.assembly.semantic.capabilities, {
     vocabulary: 1,
     languageFeatures: [],
@@ -480,7 +550,7 @@ function assertAcceptedFixture(fixture) {
   });
   const program = fixture.assembly.semantic.programs[0];
   assert.equal(program.name, fixture.plan.name);
-  assert.deepEqual(program.bindings, []);
+  if (fixture.label !== "resource") assert.deepEqual(program.bindings, []);
   assert.deepEqual(program.overrides, []);
   assert.match(program.fingerprint.sha256, /^[a-f0-9]{64}$/u);
   assert.equal(program.fingerprint.sha256, snapshot.programFingerprint);
@@ -544,7 +614,7 @@ function assertAcceptedFixture(fixture) {
     assert.match(fixture.graph.resolved.wgsl, /fn draw_vertex\(/u);
     assert.match(fixture.graph.resolved.wgsl, /fn draw_fragment\(/u);
     assert.equal(Object.keys(fixture.assembly.semantic.types).length, 4);
-  } else {
+  } else if (fixture.label === "compute") {
     const { compute: entry } = program.entryPoints;
     assert.equal(entry.origin, "authored");
     assert.equal(entry.names.authored, "step");
@@ -555,15 +625,105 @@ function assertAcceptedFixture(fixture) {
     });
     assert.deepEqual(entry.workgroupSize, { x: 4, y: 2, z: 1 });
     assert.equal(Object.keys(fixture.assembly.semantic.types).length, 2);
+  } else {
+    assertResourceAssembly(fixture, program);
   }
-  const repeated = assembleInterfaceOnlySemanticProgram({
+  const repeated = assembleSemanticProgram({
     presentation: fixture.presentation,
     finalized: fixture.finalized,
     extraction: fixture.extraction,
     declarations: fixture.declarations,
   });
   assert.deepEqual(repeated, fixture.assembly);
-  assert(isInterfaceOnlySemanticAssembly(repeated));
+  assert(isSemanticProgramAssembly(repeated));
+}
+
+function assertResourceAssembly(fixture, program) {
+  assert.deepEqual(program.sources, [
+    "resource-main-wgsl",
+    "resource-types-wgsl",
+  ]);
+  assert.deepEqual(
+    program.bindings.map((binding) => binding.id),
+    ["g0b0", "g0b1", "g0b2", "g0b3", "g0b10"]
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      program.bindings.map((binding) => [binding.id, binding.visibility])
+    ),
+    {
+      g0b0: ["vertex", "fragment"],
+      g0b1: ["vertex"],
+      g0b2: ["fragment"],
+      g0b3: ["fragment"],
+      g0b10: ["fragment"],
+    }
+  );
+  assert.deepEqual(
+    program.bindings.map(({ name, swiftName }) => [name, swiftName]),
+    [
+      ["frame", "frame"],
+      ["vertices", "vertices"],
+      ["albedo", "albedo"],
+      ["albedo_sampler", "albedo_sampler"],
+      ["material", "material"],
+    ]
+  );
+  assert.deepEqual(program.entryPoints.vertex.bindings, ["g0b0", "g0b1"]);
+  assert.deepEqual(program.entryPoints.vertex.samplingPairs, []);
+  assert.deepEqual(program.entryPoints.fragment.bindings, [
+    "g0b0",
+    "g0b2",
+    "g0b3",
+    "g0b10",
+  ]);
+  assert.deepEqual(program.entryPoints.fragment.samplingPairs, [
+    { texture: "g0b2", sampler: "g0b3", mode: "filtering" },
+  ]);
+  assert.deepEqual(program.entryPoints.vertex.source, {
+    input: "resource-main-wgsl",
+    start: { line: 9, column: 1 },
+    end: { line: 12, column: 2 },
+  });
+  assert.deepEqual(program.entryPoints.fragment.source, {
+    input: "resource-main-wgsl",
+    start: { line: 14, column: 1 },
+    end: { line: 18, column: 2 },
+  });
+
+  assert.equal(Object.keys(fixture.expectedResult.types).length, 7);
+  assert.equal(Object.keys(fixture.assembly.semantic.types).length, 8);
+  assert.equal(Object.keys(fixture.assembly.semantic.layouts).length, 6);
+  const structs = Object.values(fixture.assembly.semantic.types).filter(
+    (type) => type.kind === "struct"
+  );
+  assert.deepEqual(structs.map((type) => type.swiftName).sort(), [
+    "Frame",
+    "Material",
+    "Vertices",
+  ]);
+  for (const type of structs) {
+    assert.match(type.wgslName, /^_vgsl_[a-f0-9]{8}__/u);
+    assert.equal(type.wgslName.endsWith(type.swiftName), true);
+    for (const member of type.members) {
+      assert.equal(member.swiftName, member.name);
+    }
+  }
+  assert.deepEqual(
+    program.bindings
+      .filter((binding) => binding.kind === "buffer")
+      .map((binding) => binding.minimumBindingSize),
+    [8, 24, 16]
+  );
+  assert.deepEqual(
+    fixture.declarations.structs.map((type) => type.names.authored).sort(),
+    ["Frame", "Material", "Vertices"]
+  );
+  assert.equal(fixture.declarations.schemaVersion, 2);
+  assert.equal(
+    fixture.declarations.contractId,
+    "vgpu-c1-resolved-declarations/v2"
+  );
 }
 
 function assertNominalFailures(effectFixture, computeFixture) {
@@ -573,7 +733,7 @@ function assertNominalFailures(effectFixture, computeFixture) {
   );
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: effectFixture.presentation,
         finalized: effectFixture.finalized,
         extraction: structuredClone(effectFixture.extraction),
@@ -583,7 +743,7 @@ function assertNominalFailures(effectFixture, computeFixture) {
   );
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: effectFixture.presentation,
         finalized: effectFixture.finalized,
         extraction: effectFixture.extraction,
@@ -593,7 +753,7 @@ function assertNominalFailures(effectFixture, computeFixture) {
   );
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: effectFixture.presentation,
         finalized: effectFixture.finalized,
         extraction: computeFixture.extraction,
@@ -628,7 +788,7 @@ function assertNominalFailures(effectFixture, computeFixture) {
   });
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: effectFixture.presentation,
         finalized: nonNfcFinalized,
         extraction: nonNfcExtraction,
@@ -688,7 +848,7 @@ function assertDeclarationFailures(fixture) {
     column: 1,
   };
   try {
-    const repeated = assembleInterfaceOnlySemanticProgram({
+    const repeated = assembleSemanticProgram({
       presentation: fixture.presentation,
       finalized: fixture.finalized,
       extraction: fixture.extraction,
@@ -721,6 +881,109 @@ function assertCrossModuleDeclarationFailure(fixture) {
     () => validateResolvedDeclarationCandidate(crossed),
     "VGPU-C1-DECLARATIONS-SPAN"
   );
+}
+
+function assertResolverSymbolFailures(fixture) {
+  const unorderedBindings = structuredClone(fixture.graph);
+  unorderedBindings.resolved.reflection.bindings.reverse();
+  expectCode(
+    () => validateResolvedDeclarationCandidate(unorderedBindings),
+    "VGPU-C1-DECLARATIONS-RESOLVER"
+  );
+
+  const duplicateStruct = structuredClone(fixture.graph);
+  duplicateStruct.resolved.reflection.structs.push(
+    structuredClone(duplicateStruct.resolved.reflection.structs[0])
+  );
+  expectCode(
+    () => validateResolvedDeclarationCandidate(duplicateStruct),
+    "VGPU-C1-DECLARATIONS-RESOLVER"
+  );
+
+  const duplicateMember = structuredClone(fixture.graph);
+  duplicateMember.resolved.reflection.structs[0].members.push(
+    structuredClone(duplicateMember.resolved.reflection.structs[0].members[0])
+  );
+  expectCode(
+    () => validateResolvedDeclarationCandidate(duplicateMember),
+    "VGPU-C1-DECLARATIONS-RESOLVER"
+  );
+}
+
+function assertRetainedResolverResourceSymbols(fixture) {
+  const originalBindings = structuredClone(
+    fixture.graph.resolved.reflection.bindings
+  );
+  const originalStructs = structuredClone(
+    fixture.graph.resolved.reflection.structs
+  );
+  fixture.graph.resolved.reflection.bindings[0].name = "post_mint_binding";
+  fixture.graph.resolved.reflection.bindings.reverse();
+  fixture.graph.resolved.reflection.structs[0].name = "PostMintStruct";
+  fixture.graph.resolved.reflection.structs[0].members[0].name =
+    "post_mint_member";
+  try {
+    const repeated = assembleSemanticProgram({
+      presentation: fixture.presentation,
+      finalized: fixture.finalized,
+      extraction: fixture.extraction,
+      declarations: fixture.declarations,
+    });
+    assert.deepEqual(repeated, fixture.assembly);
+  } finally {
+    fixture.graph.resolved.reflection.bindings = originalBindings;
+    fixture.graph.resolved.reflection.structs = originalStructs;
+  }
+}
+
+function assertResolverResourceJoinFailures(fixture) {
+  const result = structuredClone(fixture.expectedResult);
+  result.bindings[0].name = "renamed_frame";
+  const extraction = authenticateSuccessfulSemanticExtraction({
+    finalized: fixture.finalized,
+    request: fixture.semanticRequest,
+    requestBytes: fixture.semanticRequestBytes,
+    response: semanticSuccess(fixture.semanticRequestBytes, result),
+  });
+  expectCode(
+    () =>
+      assembleSemanticProgram({
+        presentation: fixture.presentation,
+        finalized: fixture.finalized,
+        extraction,
+        declarations: fixture.declarations,
+      }),
+    "VGPU-C1-ASSEMBLY-DECLARATIONS"
+  );
+
+  const structs = Object.values(fixture.expectedResult.types).filter(
+    (type) => type.kind === "struct"
+  );
+  assert(structs.length > 0);
+  for (const mutate of [
+    (resourceGraph) => {
+      Object.values(resourceGraph.types).find(
+        (type) => type.kind === "struct"
+      ).wgslName = "renamed_struct";
+    },
+    (resourceGraph) => {
+      Object.values(resourceGraph.types).find(
+        (type) => type.kind === "struct"
+      ).members[0].name = "renamed_member";
+    },
+  ]) {
+    const resourceGraph = structuredClone(fixture.expectedResult);
+    mutate(resourceGraph);
+    expectCode(
+      () =>
+        resolvedResourcePresentationForExtraction(
+          fixture.declarations,
+          fixture.finalized,
+          resourceGraph
+        ),
+      "VGPU-C1-DECLARATIONS-RESOURCE"
+    );
+  }
 }
 
 function assertProfileFailures(fixture) {
@@ -757,7 +1020,7 @@ function assertProfileFailures(fixture) {
   });
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: fixture.presentation,
         finalized,
         extraction,
@@ -778,7 +1041,7 @@ function assertLinkFailure(fixture) {
   });
   expectCode(
     () =>
-      assembleInterfaceOnlySemanticProgram({
+      assembleSemanticProgram({
         presentation: fixture.presentation,
         finalized: fixture.finalized,
         extraction,
@@ -790,7 +1053,7 @@ function assertLinkFailure(fixture) {
 
 function assertFingerprintRules(fixture) {
   const baseline = fixture.assembly.semantic.programs[0].fingerprint.sha256;
-  const renamed = assembleInterfaceOnlySemanticProgram({
+  const renamed = assembleSemanticProgram({
     presentation: {
       module: { name: "OtherModule", swiftName: "OtherModule" },
       program: { swiftName: "OtherEffect" },
@@ -814,13 +1077,299 @@ function assertFingerprintRules(fixture) {
     requestBytes: fixture.semanticRequestBytes,
     response: semanticSuccess(fixture.semanticRequestBytes, result),
   });
-  const changed = assembleInterfaceOnlySemanticProgram({
+  const changed = assembleSemanticProgram({
     presentation: fixture.presentation,
     finalized: fixture.finalized,
     extraction,
     declarations: fixture.declarations,
   });
   assert.notEqual(changed.semantic.programs[0].fingerprint.sha256, baseline);
+}
+
+function assertResourceFingerprintRules(fixture) {
+  const baseline = fixture.assembly.semantic.programs[0].fingerprint.sha256;
+
+  const changedVisibility = assembleResourceMutation(fixture, (result) => {
+    result.entryPoints.find((entry) => entry.stage === "vertex").bindings = [
+      "g0b1",
+    ];
+  });
+  assert.notEqual(
+    changedVisibility.semantic.programs[0].fingerprint.sha256,
+    baseline
+  );
+
+  const changedSampling = assembleResourceMutation(fixture, (result) => {
+    result.entryPoints.find(
+      (entry) => entry.stage === "fragment"
+    ).samplingPairs = [];
+  });
+  assert.notEqual(
+    changedSampling.semantic.programs[0].fingerprint.sha256,
+    baseline
+  );
+
+  const changedLayout = assembleResourceMutation(fixture, (result) => {
+    const binding = result.bindings.find(
+      (candidate) => candidate.id === "g0b0"
+    );
+    const previousId = binding.layout;
+    const layout = structuredClone(result.layouts[previousId]);
+    layout.minimumSize = 16;
+    layout.size = 16;
+    const nextId = semanticLayoutId(layout);
+    binding.layout = nextId;
+    binding.minimumBindingSize = 16;
+    delete result.layouts[previousId];
+    result.layouts[nextId] = layout;
+    result.layouts = Object.fromEntries(
+      Object.entries(result.layouts).sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0
+      )
+    );
+  });
+  assert.notEqual(
+    changedLayout.semantic.programs[0].fingerprint.sha256,
+    baseline
+  );
+}
+
+function assertSwiftNameFailures(fixture) {
+  for (const presentation of [
+    {
+      module: fixture.presentation.module,
+      program: { swiftName: "class" },
+    },
+    {
+      module: fixture.presentation.module,
+      program: { swiftName: "_vgpuGenerated" },
+    },
+    {
+      module: fixture.presentation.module,
+      program: { swiftName: "_" },
+    },
+    {
+      module: fixture.presentation.module,
+      program: {
+        swiftName: fixture.presentation.module.swiftName.toLowerCase(),
+      },
+    },
+  ]) {
+    expectCode(
+      () =>
+        assembleSemanticProgram({
+          presentation,
+          finalized: fixture.finalized,
+          extraction: fixture.extraction,
+          declarations: fixture.declarations,
+        }),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
+  expectCode(
+    () =>
+      assertSwiftPresentation(
+        {
+          module: { swiftName: "NameFixture" },
+          program: { name: "NameFixtureProgram", swiftName: "NameProgram" },
+          bindings: [
+            { id: "g0b0", swiftName: "color" },
+            { id: "g0b1", swiftName: "Color" },
+          ],
+          types: {},
+        },
+        { failWith: throwCodedError }
+      ),
+    "VGPU-C1-ASSEMBLY-PRESENTATION"
+  );
+
+  for (const [swiftName, kind] of [
+    ["Bindings", "effect"],
+    ["Artifact", "compute"],
+    ["vErTeX", "draw"],
+  ]) {
+    expectCode(
+      () =>
+        assertSwiftPresentation(
+          {
+            module: { swiftName: "GeneratedNameFixture" },
+            program: {
+              name: "GeneratedNameProgram",
+              swiftName: "GeneratedNameProgram",
+              kind,
+              ...(swiftName === "vErTeX"
+                ? {
+                    entryPoints: {
+                      vertex: { inputs: [{ location: 0 }] },
+                    },
+                  }
+                : {}),
+            },
+            bindings: [],
+            types: {
+              fixture_type: { kind: "struct", swiftName, members: [] },
+            },
+          },
+          { failWith: throwCodedError }
+        ),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
+  for (const swiftName of ["any", "each"]) {
+    expectCode(
+      () =>
+        assertSwiftPresentation(
+          {
+            module: { swiftName: "SwiftSixTypeFixture" },
+            program: {
+              name: "SwiftSixTypeProgram",
+              swiftName: "SwiftSixTypeProgram",
+              kind: "effect",
+            },
+            bindings: [],
+            types: {
+              fixture_type: { kind: "struct", swiftName, members: [] },
+            },
+          },
+          { failWith: throwCodedError }
+        ),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
+  for (const { binding, member } of [
+    { binding: "await", member: "allowedMember" },
+    { binding: "allowedBinding", member: "Type" },
+  ]) {
+    expectCode(
+      () =>
+        assertSwiftPresentation(
+          {
+            module: { swiftName: "SwiftSixValueFixture" },
+            program: {
+              name: "SwiftSixValueProgram",
+              swiftName: "SwiftSixValueProgram",
+              kind: "effect",
+            },
+            bindings: [{ id: "g0b0", swiftName: binding }],
+            types: {
+              fixture_type: {
+                kind: "struct",
+                swiftName: "SwiftSixValue",
+                members: [{ swiftName: member }],
+              },
+            },
+          },
+          { failWith: throwCodedError }
+        ),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
+  for (const { module, program, type } of [
+    {
+      module: "ImportedNamespaceFixture",
+      program: "Swift",
+      type: "ImportedNamespaceValue",
+    },
+    {
+      module: "ImportedNamespaceFixture",
+      program: "ImportedNamespaceProgram",
+      type: "foundation",
+    },
+    {
+      module: "VGPUABI",
+      program: "ImportedNamespaceProgram",
+      type: "ImportedNamespaceValue",
+    },
+  ]) {
+    expectCode(
+      () =>
+        assertSwiftPresentation(
+          {
+            module: { swiftName: module },
+            program: {
+              name: "ImportedNamespaceProgram",
+              swiftName: program,
+              kind: "effect",
+            },
+            bindings: [],
+            types: {
+              fixture_type: { kind: "struct", swiftName: type, members: [] },
+            },
+          },
+          { failWith: throwCodedError }
+        ),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
+  assert.doesNotThrow(() =>
+    assertSwiftPresentation(
+      {
+        module: { swiftName: "GeneratedScopeFixture" },
+        program: {
+          name: "GeneratedScopeProgram",
+          swiftName: "actor",
+          kind: "effect",
+        },
+        bindings: [
+          { id: "g0b0", swiftName: "artifact" },
+          { id: "g0b1", swiftName: "Swift" },
+        ],
+        types: {
+          fixture_type: {
+            kind: "struct",
+            swiftName: "AllowedValue",
+            members: [{ swiftName: "Bindings" }, { swiftName: "VGPUABI" }],
+          },
+        },
+      },
+      { failWith: throwCodedError }
+    )
+  );
+
+  assert.doesNotThrow(() =>
+    assertSwiftPresentation(
+      {
+        module: { swiftName: "ProceduralDrawFixture" },
+        program: {
+          name: "ProceduralDrawProgram",
+          swiftName: "ProceduralDrawProgram",
+          kind: "draw",
+          entryPoints: { vertex: { inputs: [{ builtin: "vertex_index" }] } },
+        },
+        bindings: [],
+        types: {
+          fixture_type: {
+            kind: "struct",
+            swiftName: "Vertex",
+            members: [],
+          },
+        },
+      },
+      { failWith: throwCodedError }
+    )
+  );
+}
+
+function assembleResourceMutation(fixture, mutate) {
+  const result = structuredClone(fixture.expectedResult);
+  mutate(result);
+  const extraction = authenticateSuccessfulSemanticExtraction({
+    finalized: fixture.finalized,
+    request: fixture.semanticRequest,
+    requestBytes: fixture.semanticRequestBytes,
+    response: semanticSuccess(fixture.semanticRequestBytes, result),
+  });
+  return assembleSemanticProgram({
+    presentation: fixture.presentation,
+    finalized: fixture.finalized,
+    extraction,
+    declarations: fixture.declarations,
+  });
 }
 
 function assertProjectionFailures(fixture) {
@@ -858,6 +1407,38 @@ function assertProjectionFailures(fixture) {
   );
 }
 
+function assertResourceProjectionFailures(fixture) {
+  expectCode(
+    () =>
+      compilerRequestForAssembledEntry({
+        assembly: fixture.assembly,
+        stage: "vertex",
+        metalEntryPoint: "vgpu_resource_without_slots",
+        metal: metalPolicy,
+      }),
+    "VGPU-C1-ASSEMBLY-PROFILE"
+  );
+  const invented = structuredClone(metalPolicy);
+  invented.bindings.push({
+    id: "g0b0",
+    group: 0,
+    binding: 0,
+    resourceClass: "buffer",
+    index: 0,
+    count: 1,
+  });
+  expectCode(
+    () =>
+      compilerRequestForAssembledEntry({
+        assembly: fixture.assembly,
+        stage: "fragment",
+        metalEntryPoint: "vgpu_resource_with_invented_slots",
+        metal: invented,
+      }),
+    "VGPU-C1-ASSEMBLY-PROFILE"
+  );
+}
+
 async function assertNativeExtractions(workerPath, fixtures) {
   const observed = [];
   for (const fixture of fixtures) {
@@ -872,7 +1453,7 @@ async function assertNativeExtractions(workerPath, fixtures) {
       fixture.expectedResult,
       `${fixture.label} native semantic result`
     );
-    const assembly = assembleInterfaceOnlySemanticProgram({
+    const assembly = assembleSemanticProgram({
       presentation: fixture.presentation,
       finalized: fixture.finalized,
       extraction: attempts[0].extraction,
@@ -1009,6 +1590,12 @@ function expectCode(run, code) {
   }
   assert(received instanceof Error);
   assert.equal(received.code, code, received.stack);
+}
+
+function throwCodedError(code, message) {
+  const error = new Error(`${code}: ${message}`);
+  error.code = code;
+  throw error;
 }
 
 function sha256(value) {

@@ -1,0 +1,253 @@
+{
+  "entryPoints": [
+    {
+      "stage": "vertex",
+      "wgsl": "resource_vertex",
+      "semanticInterface": {
+        "kind": "vertex",
+        "inputs": [
+          {
+            "type": {
+              "scalar": "u32",
+              "width": 1
+            },
+            "invariant": false,
+            "builtin": "vertex_index"
+          }
+        ],
+        "outputs": [
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 4
+            },
+            "invariant": false,
+            "builtin": "position"
+          }
+        ]
+      },
+      "bindings": ["g0b0", "g0b1"],
+      "samplingPairs": [],
+      "overrides": []
+    },
+    {
+      "stage": "fragment",
+      "wgsl": "resource_fragment",
+      "semanticInterface": {
+        "kind": "fragment",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 4
+            },
+            "invariant": false,
+            "location": 0
+          }
+        ]
+      },
+      "bindings": ["g0b0", "g0b2", "g0b3", "g0b10"],
+      "samplingPairs": [
+        {
+          "texture": "g0b2",
+          "sampler": "g0b3",
+          "mode": "filtering"
+        }
+      ],
+      "overrides": []
+    }
+  ],
+  "bindings": [
+    {
+      "binding": 0,
+      "group": 0,
+      "id": "g0b0",
+      "kind": "buffer",
+      "name": "frame",
+      "addressSpace": "uniform",
+      "access": "read",
+      "layout": "l_b4b3506169d48389caa7f1ab98128f703469e23a8285b3fce25945b5ac70f2b3",
+      "minimumBindingSize": 8,
+      "type": "t_5d8d2584cd2b213d035b8bfe6b0fb70fc7f32ef25860d4da21c6551b9031cfd4"
+    },
+    {
+      "binding": 1,
+      "group": 0,
+      "id": "g0b1",
+      "kind": "buffer",
+      "name": "vertices",
+      "addressSpace": "storage",
+      "access": "read",
+      "layout": "l_f1c6be1c7f92a5361a53e32323213b67ea87bb3491958659bb80956c3f48cb62",
+      "minimumBindingSize": 24,
+      "type": "t_0259a75c102aa4b57ddf860dfc6e8e1582643e9ea9d8828a520be5efa4b19d9c"
+    },
+    {
+      "binding": 2,
+      "group": 0,
+      "id": "g0b2",
+      "kind": "texture",
+      "name": "albedo",
+      "dimension": "2d",
+      "sampleType": "float",
+      "multisampled": false
+    },
+    {
+      "binding": 3,
+      "group": 0,
+      "id": "g0b3",
+      "kind": "sampler",
+      "name": "albedo_sampler",
+      "samplerKind": "filtering"
+    },
+    {
+      "binding": 10,
+      "group": 0,
+      "id": "g0b10",
+      "kind": "buffer",
+      "name": "material",
+      "addressSpace": "uniform",
+      "access": "read",
+      "layout": "l_6ab3533fac89577cebf0be0677b255b42d581cb9b6db65e036f1a113c3a0fad9",
+      "minimumBindingSize": 16,
+      "type": "t_a0fb55445e460843c38556ca99c0a1815f55b13791f7c6f78d86c196c84fd37b"
+    }
+  ],
+  "overrides": [],
+  "types": {
+    "t_0259a75c102aa4b57ddf860dfc6e8e1582643e9ea9d8828a520be5efa4b19d9c": {
+      "kind": "struct",
+      "members": [
+        {
+          "name": "values",
+          "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+        }
+      ],
+      "wgslName": "_vgsl_0f548af5__Vertices"
+    },
+    "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429": {
+      "element": "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14",
+      "kind": "vector",
+      "width": 2
+    },
+    "t_5d8d2584cd2b213d035b8bfe6b0fb70fc7f32ef25860d4da21c6551b9031cfd4": {
+      "kind": "struct",
+      "members": [
+        {
+          "name": "offset",
+          "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+        }
+      ],
+      "wgslName": "_vgsl_0f548af5__Frame"
+    },
+    "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc": {
+      "element": "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14",
+      "kind": "vector",
+      "width": 4
+    },
+    "t_a0fb55445e460843c38556ca99c0a1815f55b13791f7c6f78d86c196c84fd37b": {
+      "kind": "struct",
+      "members": [
+        {
+          "name": "tint",
+          "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+        }
+      ],
+      "wgslName": "_vgsl_0f548af5__Material"
+    },
+    "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb": {
+      "count": 3,
+      "element": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429",
+      "kind": "array"
+    },
+    "t_c2661b92ecd093bb290b348f4865d4d6e447f16eaed7e23c1f79749027842d14": {
+      "kind": "scalar",
+      "scalar": "f32"
+    }
+  },
+  "layouts": {
+    "l_6ab3533fac89577cebf0be0677b255b42d581cb9b6db65e036f1a113c3a0fad9": {
+      "alignment": 16,
+      "members": [
+        {
+          "alignment": 16,
+          "layout": "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f",
+          "minimumSize": 16,
+          "name": "tint",
+          "offset": 0,
+          "runtimeSized": false,
+          "size": 16,
+          "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+        }
+      ],
+      "minimumSize": 16,
+      "runtimeSized": false,
+      "size": 16,
+      "type": "t_a0fb55445e460843c38556ca99c0a1815f55b13791f7c6f78d86c196c84fd37b"
+    },
+    "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3": {
+      "alignment": 8,
+      "arrayStride": 8,
+      "members": [],
+      "minimumSize": 24,
+      "runtimeSized": false,
+      "size": 24,
+      "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+    },
+    "l_b4b3506169d48389caa7f1ab98128f703469e23a8285b3fce25945b5ac70f2b3": {
+      "alignment": 8,
+      "members": [
+        {
+          "alignment": 8,
+          "layout": "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039",
+          "minimumSize": 8,
+          "name": "offset",
+          "offset": 0,
+          "runtimeSized": false,
+          "size": 8,
+          "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+        }
+      ],
+      "minimumSize": 8,
+      "runtimeSized": false,
+      "size": 8,
+      "type": "t_5d8d2584cd2b213d035b8bfe6b0fb70fc7f32ef25860d4da21c6551b9031cfd4"
+    },
+    "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039": {
+      "alignment": 8,
+      "members": [],
+      "minimumSize": 8,
+      "runtimeSized": false,
+      "size": 8,
+      "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
+    },
+    "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f": {
+      "alignment": 16,
+      "members": [],
+      "minimumSize": 16,
+      "runtimeSized": false,
+      "size": 16,
+      "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+    },
+    "l_f1c6be1c7f92a5361a53e32323213b67ea87bb3491958659bb80956c3f48cb62": {
+      "alignment": 8,
+      "members": [
+        {
+          "alignment": 8,
+          "layout": "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3",
+          "minimumSize": 24,
+          "name": "values",
+          "offset": 0,
+          "runtimeSized": false,
+          "size": 24,
+          "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+        }
+      ],
+      "minimumSize": 24,
+      "runtimeSized": false,
+      "size": 24,
+      "type": "t_0259a75c102aa4b57ddf860dfc6e8e1582643e9ea9d8828a520be5efa4b19d9c"
+    }
+  }
+}

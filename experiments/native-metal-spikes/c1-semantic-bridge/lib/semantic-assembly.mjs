@@ -18,17 +18,28 @@ import {
 import { isFinalizedProgramCapsule } from "./fullscreen-injection.mjs";
 import { deterministicStringify } from "./protocol.mjs";
 import {
+  SEMANTIC_LAYOUT_ID_DOMAIN,
   SEMANTIC_TYPE_ID_DOMAIN,
+  semanticLayoutId,
   semanticTypeId,
+  semanticTypeIdentityDescriptor,
 } from "./semantic-resource-graph.mjs";
 import {
   assertResolvedDeclarationsForFinalizedCapsule,
   isResolvedDeclarationIndex,
   resolvedDeclarationForSelectedEntry,
+  resolvedResourcePresentationForExtraction,
 } from "./resolved-declarations.mjs";
+import { assertSwiftPresentation } from "./swift-presentation.mjs";
 
 export const SEMANTIC_CONTRACT = "vgpu-native-semantic/v1";
-export { SEMANTIC_TYPE_ID_DOMAIN, semanticTypeId };
+export {
+  SEMANTIC_LAYOUT_ID_DOMAIN,
+  SEMANTIC_TYPE_ID_DOMAIN,
+  semanticLayoutId,
+  semanticTypeId,
+  semanticTypeIdentityDescriptor,
+};
 export const PROGRAM_FINGERPRINT_DOMAIN = "vgpu-native-program/v1";
 
 const assemblies = new WeakMap();
@@ -50,11 +61,11 @@ export class SemanticAssemblyError extends Error {
 }
 
 /**
- * Assembles one complete semantic-v1 module containing one interface-only
- * program. Later slices widen the accepted extraction profile; they do not
- * change the nominal association or translator-projection boundary.
+ * Assembles one complete semantic-v1 module containing one selected program.
+ * The current profile accepts singular fixed-size resources but keeps
+ * overrides and backend slot projection fail-closed.
  */
-export function assembleInterfaceOnlySemanticProgram({
+export function assembleSemanticProgram({
   presentation,
   finalized,
   extraction,
@@ -63,9 +74,25 @@ export function assembleInterfaceOnlySemanticProgram({
   assertPresentation(presentation, finalized);
   assertAssemblyAssociations(finalized, extraction, declarations);
   const extractionRequest = retainedExtractionRequest(extraction);
-  assertInterfaceOnlyProfile(extractionRequest, extraction.result);
+  assertFixedResourceAssemblyProfile(extractionRequest, extraction.result);
+  let resourcePresentation;
+  try {
+    resourcePresentation = resolvedResourcePresentationForExtraction(
+      declarations,
+      finalized,
+      extraction.result
+    );
+  } catch (cause) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-DECLARATIONS",
+      cause?.message ?? String(cause)
+    );
+  }
 
-  const typeInterner = createInterfaceTypeInterner();
+  const typeInterner = createSemanticTypeInterner(
+    extraction.result.types,
+    resourcePresentation.types
+  );
   const entries = {};
   const rawEntriesByStage = new Map();
   for (const stage of programStages[finalized.selection.kind]) {
@@ -102,6 +129,11 @@ export function assembleInterfaceOnlySemanticProgram({
     languageFeatures: [...extractionRequest.languageFeatures],
     features: [],
   };
+  const bindings = assembleBindings(
+    extraction.result.bindings,
+    rawEntriesByStage,
+    resourcePresentation.bindings
+  );
   const program = {
     name: finalized.selection.name,
     swiftName: presentation.program.swiftName,
@@ -111,7 +143,7 @@ export function assembleInterfaceOnlySemanticProgram({
       .sort(compare),
     fingerprint: { domain: PROGRAM_FINGERPRINT_DOMAIN, sha256: "0".repeat(64) },
     entryPoints: entries,
-    bindings: [],
+    bindings,
     overrides: [],
     capabilities: structuredClone(capabilities),
   };
@@ -126,17 +158,27 @@ export function assembleInterfaceOnlySemanticProgram({
     },
     layoutModel: "wgsl-host-shareable-v1",
     types: typeInterner.types(),
-    layouts: {},
+    layouts: sortedRecord(extraction.result.layouts),
     programs: [program],
     capabilities,
   };
+  assertSwiftPresentation(
+    {
+      module: semantic.module,
+      program,
+      bindings,
+      types: semantic.types,
+    },
+    { failWith: assemblyFail }
+  );
   program.fingerprint.sha256 = fingerprintProgram(
     program,
     semantic,
     finalized.capsule.originMap.sources
   );
   assertSchema(validators.semantic, semantic, "assembled semantic-v1");
-  assertInterfaceTypeClosure(semantic);
+  assertSemanticProgramClosure(semantic, program);
+  assertExtractionProjection(semantic, extraction.result);
 
   const assembly = freezeJson({ semantic });
   assemblies.set(assembly, {
@@ -148,7 +190,7 @@ export function assembleInterfaceOnlySemanticProgram({
   return assembly;
 }
 
-export function isInterfaceOnlySemanticAssembly(value) {
+export function isSemanticProgramAssembly(value) {
   return typeof value === "object" && value !== null && assemblies.has(value);
 }
 
@@ -178,6 +220,12 @@ export function compilerRequestForAssembledEntry({
       `assembled program has no ${quoted(stage)} entry`
     );
   }
+  if (program.bindings.length !== 0) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-PROFILE",
+      "resourceful assembly cannot project compiler requests before backend slot allocation"
+    );
+  }
   if (!isPlainObject(metal) || !Array.isArray(metal.bindings)) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROJECTION",
@@ -187,7 +235,7 @@ export function compilerRequestForAssembledEntry({
   if (metal.bindings.length !== 0) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROFILE",
-      "interface-only assembly cannot project external Metal bindings"
+      "resource-free assembly cannot project external Metal bindings"
     );
   }
   const rehydrated = semanticInterfaceFromAssembly(
@@ -275,31 +323,21 @@ function retainedExtractionRequest(extraction) {
   return request;
 }
 
-function assertInterfaceOnlyProfile(request, result) {
+function assertFixedResourceAssemblyProfile(request, result) {
   if (request.languageFeatures.includes("dual_source_blending")) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROFILE",
       "the first-alpha assembly profile rejects dual_source_blending"
     );
   }
-  const emptyObjects = [result.types, result.layouts];
   if (
     request.overrideConfiguration.length !== 0 ||
-    result.bindings.length !== 0 ||
     result.overrides.length !== 0 ||
-    emptyObjects.some(
-      (value) => !isPlainObject(value) || Object.keys(value).length !== 0
-    ) ||
-    result.entryPoints.some(
-      (entry) =>
-        entry.bindings.length !== 0 ||
-        entry.samplingPairs.length !== 0 ||
-        entry.overrides.length !== 0
-    )
+    result.entryPoints.some((entry) => entry.overrides.length !== 0)
   ) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROFILE",
-      "this assembly slice accepts only interface-only semantic extractions"
+      "this assembly slice accepts fixed resources but not overrides"
     );
   }
 }
@@ -326,8 +364,8 @@ function assembleEntry({ stage, raw, finalized, declarations, typeInterner }) {
     outputs: raw.semanticInterface.outputs.map((value) =>
       assembleInterfaceValue(value, typeInterner)
     ),
-    bindings: [],
-    samplingPairs: [],
+    bindings: [...raw.bindings],
+    samplingPairs: structuredClone(raw.samplingPairs),
     ...(stage === "compute"
       ? { workgroupSize: structuredClone(raw.workgroupSize) }
       : {}),
@@ -363,6 +401,32 @@ function assembleInterfaceValue(value, typeInterner) {
   return assembled;
 }
 
+function assembleBindings(extracted, rawEntriesByStage, presentation) {
+  return extracted.map((raw) => {
+    const names = presentation[raw.id];
+    if (!names || typeof names.authoredName !== "string") {
+      assemblyFail(
+        "VGPU-C1-ASSEMBLY-PRESENTATION",
+        `binding ${quoted(raw.id)} has no exact authored presentation`
+      );
+    }
+    const visibility = stageOrder.filter((stage) =>
+      rawEntriesByStage.get(stage)?.bindings.includes(raw.id)
+    );
+    if (visibility.length === 0) {
+      assemblyFail(
+        "VGPU-C1-ASSEMBLY-BINDING",
+        `binding ${quoted(raw.id)} is inactive in every selected entry`
+      );
+    }
+    return {
+      ...structuredClone(raw),
+      swiftName: names.authoredName,
+      visibility,
+    };
+  });
+}
+
 function assertRenderLink(vertex, fragment) {
   const outputs = new Map(
     vertex.outputs
@@ -386,10 +450,16 @@ function assertRenderLink(vertex, fragment) {
   }
 }
 
-function createInterfaceTypeInterner() {
+function createSemanticTypeInterner(extractedTypes, presentation) {
   const definitions = new Map();
-  const internDefinition = (definition) => {
+  const internDefinition = (definition, expectedId) => {
     const id = semanticTypeId(definition);
+    if (expectedId !== undefined && id !== expectedId) {
+      assemblyFail(
+        "VGPU-C1-ASSEMBLY-TYPE",
+        `semantic type ${quoted(expectedId)} changed identity during assembly`
+      );
+    }
     const previous = definitions.get(id);
     if (previous && !isDeepStrictEqual(previous, definition)) {
       assemblyFail(
@@ -400,6 +470,37 @@ function createInterfaceTypeInterner() {
     definitions.set(id, freezeJson(structuredClone(definition)));
     return id;
   };
+  for (const [id, extracted] of Object.entries(extractedTypes)) {
+    const definition = structuredClone(extracted);
+    if (definition.kind === "struct") {
+      const names = presentation[id];
+      if (
+        !names ||
+        names.members.length !== definition.members.length ||
+        names.authoredName.length === 0
+      ) {
+        assemblyFail(
+          "VGPU-C1-ASSEMBLY-PRESENTATION",
+          `struct type ${quoted(id)} has no exact authored presentation`
+        );
+      }
+      definition.swiftName = names.authoredName;
+      for (let index = 0; index < definition.members.length; index += 1) {
+        const member = definition.members[index];
+        const authored = names.members[index]?.authoredName;
+        if (typeof authored !== "string") {
+          assemblyFail(
+            "VGPU-C1-ASSEMBLY-PRESENTATION",
+            `member ${index} of struct ${quoted(
+              id
+            )} has no authored presentation`
+          );
+        }
+        member.swiftName = authored;
+      }
+    }
+    internDefinition(definition, id);
+  }
   return {
     intern(inline) {
       if (
@@ -481,40 +582,120 @@ function inlineType(types, id, visiting) {
   );
 }
 
-function assertInterfaceTypeClosure(semantic) {
-  const reachable = new Set();
-  const pending = semantic.programs.flatMap((program) =>
-    Object.values(program.entryPoints).flatMap((entry) =>
-      [...entry.inputs, ...entry.outputs].map((value) => value.type)
-    )
+function assertSemanticProgramClosure(semantic, program) {
+  const reachableTypes = new Set();
+  const reachableLayouts = new Set();
+  const pendingTypes = Object.values(program.entryPoints).flatMap((entry) =>
+    [...entry.inputs, ...entry.outputs].map((value) => value.type)
   );
-  while (pending.length > 0) {
-    const id = pending.pop();
-    if (reachable.has(id)) continue;
-    const definition = semantic.types[id];
-    if (!definition || semanticTypeId(definition) !== id) {
-      assemblyFail(
-        "VGPU-C1-ASSEMBLY-TYPE",
-        `semantic type closure contains invalid ID ${quoted(id)}`
-      );
-    }
-    reachable.add(id);
-    if (definition.element) pending.push(definition.element);
+  const pendingLayouts = [];
+  for (const binding of program.bindings) {
+    if (binding.kind !== "buffer") continue;
+    pendingTypes.push(binding.type);
+    pendingLayouts.push(binding.layout);
   }
+
+  while (pendingTypes.length > 0 || pendingLayouts.length > 0) {
+    while (pendingTypes.length > 0) {
+      const id = pendingTypes.pop();
+      if (reachableTypes.has(id)) continue;
+      const definition = semantic.types[id];
+      if (!definition || semanticTypeId(definition) !== id) {
+        assemblyFail(
+          "VGPU-C1-ASSEMBLY-TYPE",
+          `semantic type closure contains invalid ID ${quoted(id)}`
+        );
+      }
+      reachableTypes.add(id);
+      if (definition.element) pendingTypes.push(definition.element);
+      if (definition.kind === "struct") {
+        for (const member of definition.members) pendingTypes.push(member.type);
+      }
+    }
+
+    while (pendingLayouts.length > 0) {
+      const id = pendingLayouts.pop();
+      if (reachableLayouts.has(id)) continue;
+      const layout = semantic.layouts[id];
+      if (!layout || semanticLayoutId(layout) !== id) {
+        assemblyFail(
+          "VGPU-C1-ASSEMBLY-LAYOUT",
+          `semantic layout closure contains invalid ID ${quoted(id)}`
+        );
+      }
+      reachableLayouts.add(id);
+      pendingTypes.push(layout.type);
+      for (const member of layout.members) {
+        pendingTypes.push(member.type);
+        pendingLayouts.push(member.layout);
+      }
+    }
+  }
+
   if (
     !isDeepStrictEqual(
-      [...reachable].sort(compare),
+      [...reachableTypes].sort(compare),
       Object.keys(semantic.types).sort(compare)
     )
   ) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-TYPE",
-      "semantic module contains an unreachable interface type"
+      "semantic module contains an unreachable type"
+    );
+  }
+  if (
+    !isDeepStrictEqual(
+      [...reachableLayouts].sort(compare),
+      Object.keys(semantic.layouts).sort(compare)
+    )
+  ) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-LAYOUT",
+      "semantic module contains an unreachable layout"
+    );
+  }
+  return { types: reachableTypes, layouts: reachableLayouts };
+}
+
+function assertExtractionProjection(semantic, extracted) {
+  const program = semantic.programs[0];
+  const projected = {
+    entryPoints: extracted.entryPoints.map((raw) => {
+      const entry = program.entryPoints[raw.stage];
+      return {
+        stage: entry.stage,
+        wgsl: entry.names.wgsl,
+        semanticInterface: semanticInterfaceFromAssembly(entry, semantic.types),
+        bindings: [...entry.bindings],
+        samplingPairs: structuredClone(entry.samplingPairs),
+        overrides: [],
+        ...(raw.stage === "compute"
+          ? { workgroupSize: structuredClone(entry.workgroupSize) }
+          : {}),
+      };
+    }),
+    bindings: program.bindings.map(({ swiftName, visibility, ...binding }) =>
+      structuredClone(binding)
+    ),
+    overrides: [],
+    types: Object.fromEntries(
+      Object.keys(extracted.types).map((id) => [
+        id,
+        structuredClone(semanticTypeIdentityDescriptor(semantic.types[id])),
+      ])
+    ),
+    layouts: structuredClone(semantic.layouts),
+  };
+  if (!isDeepStrictEqual(projected, extracted)) {
+    assemblyFail(
+      "VGPU-C1-ASSEMBLY-PROJECTION",
+      "assembled resource graph differs from its retained authenticated extraction"
     );
   }
 }
 
 function fingerprintProgram(program, semantic, originSources) {
+  const closure = assertSemanticProgramClosure(semantic, program);
   const normalizedProgram = structuredClone(program);
   delete normalizedProgram.fingerprint;
   delete normalizedProgram.sources;
@@ -535,13 +716,22 @@ function fingerprintProgram(program, semantic, originSources) {
     ),
     types: Object.fromEntries(
       Object.entries(semantic.types)
+        .filter(([id]) => closure.types.has(id))
         .sort(([left], [right]) => compare(left, right))
         .map(([id, definition]) => [
           id,
           stripPresentationAndProvenance(definition),
         ])
     ),
-    layouts: {},
+    layouts: Object.fromEntries(
+      Object.entries(semantic.layouts)
+        .filter(([id]) => closure.layouts.has(id))
+        .sort(([left], [right]) => compare(left, right))
+        .map(([id, definition]) => [
+          id,
+          stripPresentationAndProvenance(definition),
+        ])
+    ),
   };
   if (value.sources.some((source) => source.sha256 === undefined)) {
     assemblyFail(
@@ -750,7 +940,7 @@ function requireAssembly(value) {
   if (!record) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-BRAND",
-      "value is not a nominal interface-only semantic assembly"
+      "value is not a nominal semantic program assembly"
     );
   }
   return record;
@@ -770,6 +960,14 @@ function isPlainObject(value) {
 
 function compare(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sortedRecord(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => compare(left, right))
+      .map(([key, child]) => [key, structuredClone(child)])
+  );
 }
 
 function quoted(value) {

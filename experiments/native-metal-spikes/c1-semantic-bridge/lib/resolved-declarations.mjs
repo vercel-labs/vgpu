@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { resolveVirtualShader } from "../../c1-compiler-protocol/lib/virtual-resolver.mjs";
 
 export const RESOLVED_DECLARATIONS_CONTRACT =
-  "vgpu-c1-resolved-entry-declarations/v1";
+  "vgpu-c1-resolved-declarations/v2";
 
 const declarationIndexes = new WeakMap();
 const stages = new Set(["vertex", "fragment", "compute"]);
@@ -14,6 +14,7 @@ const stageOrder = new Map([
   ["compute", 2],
 ]);
 const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const uint32Maximum = 4_294_967_295;
 
 export class ResolvedDeclarationsError extends Error {
   constructor(code, message) {
@@ -79,6 +80,8 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
   }
 
   const reflectedEntries = graph.resolved.reflection.entryPoints;
+  const bindings = captureBindings(graph.resolved.reflection.bindings);
+  const structs = captureStructs(graph.resolved.reflection.structs);
   const entries = [];
   const seen = new Set();
   for (const module of graph.resolved.ast.modules) {
@@ -176,7 +179,7 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
       compare(left.names.wgsl, right.names.wgsl)
   );
   const snapshot = freezeJson({
-    schemaVersion: 1,
+    schemaVersion: 2,
     contractId: RESOLVED_DECLARATIONS_CONTRACT,
     resolvedSource: {
       virtualPath: graph.originMap.generatedSource.virtualPath,
@@ -184,6 +187,8 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
     },
     sources: graph.originMap.sources.map((source) => ({ ...source })),
     entries,
+    bindings,
+    structs,
   });
   const record = {
     resolvedText: graph.resolved.wgsl,
@@ -194,6 +199,12 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
         entryKey(entry.stage, entry.names.wgsl),
         entry,
       ])
+    ),
+    bindingsById: new Map(
+      snapshot.bindings.map((binding) => [binding.id, binding])
+    ),
+    structsByWgslName: new Map(
+      snapshot.structs.map((struct) => [struct.names.wgsl, struct])
     ),
   };
   if (authorize) declarationIndexes.set(snapshot, record);
@@ -316,6 +327,207 @@ export function resolvedDeclarationForSelectedEntry(
   return entry;
 }
 
+/**
+ * Resolves presentation-only authored names for an authenticated resource
+ * graph. Resource types and layouts remain owned by semantic extraction; the
+ * resolver evidence is used only to prove symbol identity.
+ */
+export function resolvedResourcePresentationForExtraction(
+  declarations,
+  finalized,
+  resourceGraph
+) {
+  const record = requireIndex(declarations);
+  assertResolvedDeclarationsForFinalizedCapsule(declarations, finalized);
+  if (
+    typeof resourceGraph !== "object" ||
+    resourceGraph === null ||
+    !Array.isArray(resourceGraph.bindings) ||
+    !isPlainObject(resourceGraph.types)
+  ) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-RESOURCE",
+      "resource presentation requires one extracted binding and type graph"
+    );
+  }
+
+  const bindings = {};
+  let previousBinding;
+  for (const binding of resourceGraph.bindings) {
+    assertExtractedBindingIdentity(binding);
+    const coordinate = [binding.group, binding.binding];
+    if (previousBinding && compareTuple(previousBinding, coordinate) >= 0) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOURCE",
+        "extracted bindings repeat a coordinate or are not canonically ordered"
+      );
+    }
+    previousBinding = coordinate;
+
+    const reflected = record.bindingsById.get(binding.id);
+    if (!reflected || reflected.names.wgsl !== binding.name) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOURCE",
+        `extracted binding ${quoted(binding.id)} has no exact resolver symbol`
+      );
+    }
+    bindings[binding.id] = { authoredName: reflected.names.authored };
+  }
+
+  const types = {};
+  const typeIds = Object.keys(resourceGraph.types);
+  if (!isStrictlyOrdered(typeIds)) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-RESOURCE",
+      "extracted type identities are not canonically ordered"
+    );
+  }
+  const usedStructs = new Set();
+  for (const id of typeIds) {
+    const type = resourceGraph.types[id];
+    if (type?.kind !== "struct") continue;
+    if (
+      !/^t_[a-f0-9]{64}$/u.test(id) ||
+      !wgslIdentifier.test(type.wgslName ?? "") ||
+      !Array.isArray(type.members)
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOURCE",
+        `extracted struct type ${quoted(id)} has malformed symbol evidence`
+      );
+    }
+
+    const reflected = record.structsByWgslName.get(type.wgslName);
+    if (
+      !reflected ||
+      usedStructs.has(type.wgslName) ||
+      reflected.members.length !== type.members.length
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOURCE",
+        `extracted struct type ${quoted(id)} has no exact resolver symbol`
+      );
+    }
+    usedStructs.add(type.wgslName);
+
+    const members = [];
+    for (let index = 0; index < type.members.length; index += 1) {
+      const extractedMember = type.members[index];
+      const reflectedMember = reflected.members[index];
+      if (
+        !wgslIdentifier.test(extractedMember?.name ?? "") ||
+        reflectedMember.names.wgsl !== extractedMember.name
+      ) {
+        declarationFail(
+          "VGPU-C1-DECLARATIONS-RESOURCE",
+          `extracted struct type ${quoted(
+            id
+          )} disagrees with its resolver member names`
+        );
+      }
+      members.push({ authoredName: reflectedMember.names.authored });
+    }
+    types[id] = {
+      authoredName: reflected.names.authored,
+      members,
+    };
+  }
+
+  return freezeJson({ bindings, types });
+}
+
+function captureBindings(reflectedBindings) {
+  const bindings = [];
+  const resolvedNames = new Set();
+  let previousCoordinate;
+  for (const reflected of reflectedBindings) {
+    if (
+      !isUint32(reflected?.group) ||
+      !isUint32(reflected?.binding) ||
+      !wgslIdentifier.test(reflected?.name ?? "") ||
+      !wgslIdentifier.test(reflected?.mangledName ?? "")
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOLVER",
+        "resolver reflection contains a malformed binding symbol"
+      );
+    }
+    const coordinate = [reflected.group, reflected.binding];
+    if (
+      (previousCoordinate &&
+        compareTuple(previousCoordinate, coordinate) >= 0) ||
+      resolvedNames.has(reflected.mangledName)
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOLVER",
+        "resolver binding symbols repeat or are not canonically ordered"
+      );
+    }
+    previousCoordinate = coordinate;
+    resolvedNames.add(reflected.mangledName);
+    bindings.push({
+      id: bindingId(reflected.group, reflected.binding),
+      group: reflected.group,
+      binding: reflected.binding,
+      names: {
+        authored: reflected.name,
+        wgsl: reflected.mangledName,
+      },
+    });
+  }
+  return bindings;
+}
+
+function captureStructs(reflectedStructs) {
+  const structs = [];
+  const resolvedNames = new Set();
+  for (const reflected of reflectedStructs) {
+    if (
+      !wgslIdentifier.test(reflected?.name ?? "") ||
+      !wgslIdentifier.test(reflected?.mangledName ?? "") ||
+      !Array.isArray(reflected?.members) ||
+      resolvedNames.has(reflected.mangledName)
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOLVER",
+        "resolver reflection contains a malformed or duplicated struct symbol"
+      );
+    }
+    resolvedNames.add(reflected.mangledName);
+
+    const memberNames = new Set();
+    const members = reflected.members.map((member) => {
+      if (
+        !wgslIdentifier.test(member?.name ?? "") ||
+        memberNames.has(member.name)
+      ) {
+        declarationFail(
+          "VGPU-C1-DECLARATIONS-RESOLVER",
+          `resolver struct ${quoted(
+            reflected.mangledName
+          )} has a malformed or duplicated member symbol`
+        );
+      }
+      memberNames.add(member.name);
+      return {
+        names: {
+          authored: member.name,
+          wgsl: member.name,
+        },
+      };
+    });
+    structs.push({
+      names: {
+        authored: reflected.name,
+        wgsl: reflected.mangledName,
+      },
+      members,
+    });
+  }
+  structs.sort((left, right) => compare(left.names.wgsl, right.names.wgsl));
+  return structs;
+}
+
 function assertResolverGraph(graph) {
   if (
     typeof graph !== "object" ||
@@ -324,6 +536,8 @@ function assertResolverGraph(graph) {
     typeof graph.resolved?.wgsl !== "string" ||
     !Array.isArray(graph.resolved?.ast?.modules) ||
     !Array.isArray(graph.resolved?.reflection?.entryPoints) ||
+    !Array.isArray(graph.resolved?.reflection?.bindings) ||
+    !Array.isArray(graph.resolved?.reflection?.structs) ||
     !Array.isArray(graph.originMap?.sources) ||
     !Array.isArray(graph.originMap?.segments)
   ) {
@@ -442,6 +656,51 @@ function requireIndex(value) {
 
 function entryKey(stage, wgsl) {
   return `${stage}\u0000${wgsl}`;
+}
+
+function bindingId(group, binding) {
+  return `g${group}b${binding}`;
+}
+
+function assertExtractedBindingIdentity(binding) {
+  if (
+    !isUint32(binding?.group) ||
+    !isUint32(binding?.binding) ||
+    binding?.id !== bindingId(binding.group, binding.binding) ||
+    !wgslIdentifier.test(binding?.name ?? "")
+  ) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-RESOURCE",
+      "extracted binding has a malformed symbol identity"
+    );
+  }
+}
+
+function isUint32(value) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= uint32Maximum;
+}
+
+function isPlainObject(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isStrictlyOrdered(values) {
+  for (let index = 1; index < values.length; index += 1) {
+    if (compare(values[index - 1], values[index]) >= 0) return false;
+  }
+  return true;
+}
+
+function compareTuple(left, right) {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    if (left[index] < right[index]) return -1;
+    if (left[index] > right[index]) return 1;
+  }
+  return left.length - right.length;
 }
 
 function compare(left, right) {

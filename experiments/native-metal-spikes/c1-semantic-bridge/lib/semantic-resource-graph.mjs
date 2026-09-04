@@ -7,7 +7,34 @@ export const SEMANTIC_TYPE_ID_DOMAIN = "vgpu-native-semantic-type/v1";
 export const SEMANTIC_LAYOUT_ID_DOMAIN = "vgpu-native-semantic-layout/v1";
 
 export function semanticTypeId(descriptor) {
-  return `t_${domainHash(SEMANTIC_TYPE_ID_DOMAIN, descriptor)}`;
+  return `t_${domainHash(
+    SEMANTIC_TYPE_ID_DOMAIN,
+    semanticTypeIdentityDescriptor(descriptor)
+  )}`;
+}
+
+/**
+ * Projects a semantic type onto its backend-neutral identity. Struct and
+ * member Swift names are presentation added after extraction and therefore
+ * cannot change the content-addressed type ID. Unknown fields remain in the
+ * projection so this helper never hides an unrecognized semantic extension.
+ */
+export function semanticTypeIdentityDescriptor(descriptor) {
+  if (descriptor?.kind !== "struct") return descriptor;
+  return Object.fromEntries(
+    Object.entries(descriptor)
+      .filter(([key]) => key !== "swiftName")
+      .map(([key, value]) => [
+        key,
+        key === "members" && Array.isArray(value)
+          ? value.map((member) =>
+              Object.fromEntries(
+                Object.entries(member).filter(([name]) => name !== "swiftName")
+              )
+            )
+          : value,
+      ])
+  );
 }
 
 export function semanticLayoutId(descriptor) {
