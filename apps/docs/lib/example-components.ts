@@ -34,6 +34,7 @@ export const exampleComponentLoaders = {
   'three-tsl': () => import('../examples/three-tsl/index'),
   'particle-orbit': () => import('../examples/particle-orbit/index'),
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
+  'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {
