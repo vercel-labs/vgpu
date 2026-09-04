@@ -824,7 +824,7 @@ function runOfflineMetal(options, scratch) {
       "-sdk",
       "macosx",
       "metal",
-      "-std=metal2.4",
+      "-std=macos-metal2.4",
       "-mmacosx-version-min=14.0",
       "-c",
       source,

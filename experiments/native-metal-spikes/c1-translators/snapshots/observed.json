@@ -4,7 +4,9 @@
     "tint": "embedded in webgpu@0.4.0 / Dawn c5d549e250b9225744929ae860b369cb4304a767",
     "naga": "30.0.1",
     "nagaMslVersion": "2.4",
-    "runtimeMetalLanguageVersion": "2.4"
+    "runtimeMetalLanguageVersion": "2.4",
+    "offlineMetalToolchainBuild": "17C7003j",
+    "offlineMetalCompilerVersion": "32023.864"
   },
   "corpus": {
     "files": 226,
@@ -112,8 +114,14 @@
       "nagaCanarySourcesSucceeded": 4
     },
     "offline": {
-      "status": "skipped",
-      "reason": "Xcode MetalToolchain is not installed; metallib is unavailable"
+      "status": "completed",
+      "compiler": "xcrun metal + metallib",
+      "languageVersion": "2.4",
+      "deploymentTarget": "macOS 14.0",
+      "nagaCorpusSourcesAttempted": 220,
+      "nagaCorpusSourcesSucceeded": 220,
+      "nagaCanarySourcesAttempted": 4,
+      "nagaCanarySourcesSucceeded": 4
     }
   },
   "decision": {
@@ -121,12 +129,11 @@
     "frozen": false,
     "c1Complete": false,
     "remaining": [
-      "standalone Tint MSL and structured projection",
-      "offline metal and metallib validation",
-      "authored diagnostic provenance",
-      "artifact determinism",
+      "direct Tint worker corpus through offline metal and metallib",
+      "authored spans beyond module-only diagnostic provenance",
+      "connected artifact determinism",
       "pixel and buffer parity",
-      "distribution and license evaluation"
+      "final distribution and license packaging"
     ]
   }
 }

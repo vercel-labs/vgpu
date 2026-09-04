@@ -27,6 +27,11 @@ esac
 export C1_FIXTURE_DIR="$FIXTURE_DIR"
 export C1_REPO_ROOT="$REPO_ROOT"
 export C1_ARTIFACTS_DIR="$ARTIFACTS_DIR"
+
+for output in prepared naga tint runtime-metal offline-metal logs bin; do
+  rm -rf -- "$ARTIFACTS_DIR/$output"
+done
+rm -f -- "$ARTIFACTS_DIR/manifest.json" "$ARTIFACTS_DIR/summary.json"
 mkdir -p "$ARTIFACTS_DIR/logs" "$ARTIFACTS_DIR/bin"
 
 for tool in git node; do
@@ -127,4 +132,4 @@ if [[ ${C1_REQUIRE_OFFLINE_METAL:-0} == 1 ]] && (( ! offline_available )); then
   print -u2 "Offline Metal validation was required but MetalToolchain is unavailable."
   exit 1
 fi
-print "Translator comparison reproduced. C1 remains open until the standalone and offline gates in README.md are satisfied."
+print "Translator comparison reproduced. C1 remains open for the integrated direct-worker corpus and downstream gates in README.md."
