@@ -21,7 +21,9 @@ The prototype deliberately emits a local evidence format. It does not decide the
 for initializer presence or defaults, and this spike does not change any public schema. The format
 keeps two views with different jobs: `staticOverrides` is the exact Inspector-authorized interface
 that feeds semantic artifacts and compiler requests, while `overrides` is the post-configuration,
-post-folding closure retained as diagnostic evidence.
+post-folding closure retained as diagnostic evidence. Every success also carries `sourceSha256`,
+computed from the exact WGSL bytes read by the materializer, so the serialized result cannot be
+reused with different source text that happens to have the same virtual name.
 
 ## Materialization procedure
 

@@ -14,11 +14,13 @@
 // output uses them.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -28,7 +30,11 @@
 
 #include "src/tint/api/common/bindings.h"
 #include "src/tint/api/tint.h"
+#include "src/tint/lang/core/ir/builder.h"
+#include "src/tint/lang/core/ir/override.h"
 #include "src/tint/lang/core/ir/referenced_module_vars.h"
+#include "src/tint/lang/core/ir/transform/single_entry_point.h"
+#include "src/tint/lang/core/ir/transform/substitute_overrides.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/memory_view.h"
@@ -256,6 +262,42 @@ const char *OverrideTypeName(tint::inspector::Override::Type type) {
     return "f32";
   }
   return "unknown";
+}
+
+tint::core::ir::Constant *
+MakeOverrideConstant(tint::core::ir::Builder &builder,
+                     const tint::core::type::Type *type, double value) {
+  // The decoder widens finite f32 values to double and reconstructs finite f16
+  // values as exact binary rationals. Both conversions are lossless (including
+  // subnormals), so narrowing to the reflected type recovers the request bits;
+  // Tint's f16 quantizer also preserves the sign of zero.
+  if (type->Is<tint::core::type::Bool>()) {
+    return builder.Constant(value != 0.0);
+  }
+  if (type->Is<tint::core::type::I32>()) {
+    return builder.Constant(tint::core::i32{static_cast<int32_t>(value)});
+  }
+  if (type->Is<tint::core::type::U32>()) {
+    return builder.Constant(tint::core::u32{static_cast<uint32_t>(value)});
+  }
+  if (type->Is<tint::core::type::F16>()) {
+    const tint::core::f16 narrowed(value);
+    const float roundtrip = static_cast<float>(narrowed);
+    if (static_cast<double>(roundtrip) != value ||
+        std::signbit(roundtrip) != std::signbit(value)) {
+      return nullptr;
+    }
+    return builder.Constant(narrowed);
+  }
+  if (type->Is<tint::core::type::F32>()) {
+    const float narrowed = static_cast<float>(value);
+    if (static_cast<double>(narrowed) != value ||
+        std::signbit(narrowed) != std::signbit(value)) {
+      return nullptr;
+    }
+    return builder.Constant(tint::core::f32{narrowed});
+  }
+  return nullptr;
 }
 
 std::vector<Diagnostic>
@@ -839,6 +881,79 @@ int Run(const Arguments &arguments) {
     return 1;
   }
   auto &ir = ir_result.Get();
+
+  // Replace the materialized exact-static values before pruning. Their
+  // declared initializers are not evaluated, and replacing them here lets
+  // SingleEntryPoint remove both inactive overrides and initializer-only
+  // dependencies before constant evaluation.
+  tint::core::ir::Builder override_builder(ir);
+  std::set<uint16_t> materialized_override_ids;
+  for (auto *instruction : *ir.root_block) {
+    auto *item = instruction->As<tint::core::ir::Override>();
+    if (item == nullptr || !item->OverrideId()) {
+      continue;
+    }
+    const auto selection = override_config.map.find(*item->OverrideId());
+    if (selection == override_config.map.end()) {
+      continue;
+    }
+    auto *constant = MakeOverrideConstant(
+        override_builder, item->Result()->Type(), selection->second);
+    if (constant == nullptr) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                "exact-static override could not be represented exactly in "
+                "its IR scalar type"));
+      WriteFailure(diagnostics);
+      return 1;
+    }
+    item->SetInitializer(constant);
+    if (!materialized_override_ids.insert(item->OverrideId()->value).second) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                "Tint IR contains a duplicate exact-static override ID"));
+      WriteFailure(diagnostics);
+      return 1;
+    }
+  }
+  for (const auto &[id, value] : override_config.map) {
+    static_cast<void>(value);
+    if (!materialized_override_ids.contains(id.value)) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                "exact-static override could not be materialized in Tint IR"));
+      WriteFailure(diagnostics);
+      return 1;
+    }
+  }
+
+  auto single_entry =
+      tint::core::ir::transform::SingleEntryPoint(ir, arguments.entry_point);
+  if (single_entry != tint::Success) {
+    diagnostics.push_back(Error("VGPU-NATIVE-MSL-GENERATE", "generate",
+                                single_entry.Failure().reason));
+    WriteFailure(diagnostics);
+    return 1;
+  }
+
+  tint::SubstituteOverridesConfig empty_override_config;
+  auto substituted =
+      tint::core::ir::transform::SubstituteOverrides(ir, empty_override_config);
+  if (substituted != tint::Success) {
+    diagnostics.push_back(Error("VGPU-NATIVE-MSL-GENERATE", "generate",
+                                substituted.Failure().reason));
+    WriteFailure(diagnostics);
+    return 1;
+  }
+  for (const auto *instruction : ir.Instructions()) {
+    if (instruction->Is<tint::core::ir::Override>()) {
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                                  "SubstituteOverrides left a live override"));
+      WriteFailure(diagnostics);
+      return 1;
+    }
+  }
+
   const auto runtime_storage =
       RuntimeStorageBindings(ir, arguments.entry_point);
 
@@ -870,8 +985,6 @@ int Run(const Arguments &arguments) {
   writer_options.immediate_binding_point =
       tint::BindingPoint{.group = 0, .binding = kImmediateDataIndex};
   writer_options.non_constant_zero_offset = kNonConstantZeroOffset;
-  writer_options.substitute_overrides_config = std::move(override_config);
-
   auto generated = tint::msl::writer::Generate(ir, writer_options);
   if (generated != tint::Success) {
     diagnostics.push_back(Error("VGPU-NATIVE-MSL-GENERATE", "generate",

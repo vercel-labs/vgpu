@@ -405,6 +405,13 @@ function runCase({
       (result.ok === false && attempt.status === 1),
     `${id} status disagrees with result.ok`
   );
+  if (result.ok === true) {
+    assert(
+      result.sourceName === sourceName &&
+        result.sourceSha256 === sha256File(sourcePath),
+      `${id} result is not bound to its exact source bytes`
+    );
+  }
   return { result, stdout: attempt.stdout, invocations: attempts.length };
 }
 

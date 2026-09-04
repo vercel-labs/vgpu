@@ -17,9 +17,9 @@ byte-identical universal executables.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  5,747,504 | `ec5206089bc08c602af46ae4d329559647c37e9f622359f86b97cefe2a0d9ef3` |
-| x86_64    |  6,795,880 | `c3ca7647b9ae54e434365042c6d87ff3760cb76c5f50b6d40ca549488327af71` |
-| universal | 12,563,248 | `78fd48a856bbb50b57fd0c16d421f999f78dfd6c364665bfa9b2db623ab72382` |
+| arm64     |  5,749,456 | `3fbd9831d8d8f5e98e64b163d516384159a38884e86290b201fb8dde9cffcf6b` |
+| x86_64    |  6,806,016 | `6607174522af09bde5da877925ab6d2e9fe73e1599320b03b019f6c9d779a380` |
+| universal | 12,565,200 | `8fb3a3c38e30f6121170bd159546066c53f7130a3b30026fb6927be63694903a` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
 against the previously verified monolithic release archive, then requires `noop`, `runtime-array`,

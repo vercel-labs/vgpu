@@ -30,6 +30,8 @@
 #include <utility>
 #include <vector>
 
+#include <CommonCrypto/CommonDigest.h>
+
 #include "src/tint/api/tint.h"
 #include "src/tint/lang/core/constant/eval.h"
 #include "src/tint/lang/core/constant/scalar.h"
@@ -148,6 +150,25 @@ std::string ReadFile(const std::string &path) {
   std::ostringstream contents;
   contents << stream.rdbuf();
   return contents.str();
+}
+
+std::optional<std::string> Sha256Hex(std::string_view value) {
+  if (value.size() > std::numeric_limits<CC_LONG>::max()) {
+    return std::nullopt;
+  }
+  std::array<unsigned char, CC_SHA256_DIGEST_LENGTH> digest{};
+  if (CC_SHA256(value.data(), static_cast<CC_LONG>(value.size()),
+                digest.data()) == nullptr) {
+    return std::nullopt;
+  }
+  constexpr char kHex[] = "0123456789abcdef";
+  std::string encoded;
+  encoded.reserve(digest.size() * 2);
+  for (const auto byte : digest) {
+    encoded.push_back(kHex[byte >> 4]);
+    encoded.push_back(kHex[byte & 0x0f]);
+  }
+  return encoded;
 }
 
 std::string JsonString(std::string_view value) {
@@ -813,6 +834,7 @@ void WriteMaterializedOverrides(
 
 void WriteSuccess(
     const Arguments &arguments, tint::inspector::PipelineStage stage,
+    std::string_view source_sha256,
     const std::vector<MaterializedOverride> &static_materialized,
     const std::vector<MaterializedOverride> &effective_materialized,
     const std::optional<std::array<WorkgroupAxisEvidence, 3>> &workgroup_axes) {
@@ -823,6 +845,7 @@ void WriteSuccess(
          << "  \"ok\": true,\n"
          << "  \"upstreamRevision\": " << JsonString(kTintRevision) << ",\n"
          << "  \"sourceName\": " << JsonString(arguments.source_name) << ",\n"
+         << "  \"sourceSha256\": " << JsonString(source_sha256) << ",\n"
          << "  \"entryPoint\": {\"name\": " << JsonString(arguments.entry_point)
          << ", \"stage\": " << JsonString(PipelineStageName(stage)) << "},\n"
          << "  \"staticOverrides\": ";
@@ -878,6 +901,12 @@ int Run(int argc, char **argv) {
   if (source_text.empty()) {
     WriteFailure(Error("VGPU-C1-OVERRIDE-REQUEST", "request",
                        "the WGSL source is empty or unreadable"));
+    return 2;
+  }
+  const auto source_sha256 = Sha256Hex(source_text);
+  if (!source_sha256) {
+    WriteFailure(Error("VGPU-C1-OVERRIDE-REQUEST", "request",
+                       "the WGSL source is too large to hash"));
     return 2;
   }
 
@@ -1698,8 +1727,8 @@ int Run(int argc, char **argv) {
     return 1;
   }
 
-  WriteSuccess(arguments, entry.stage, static_materialized, materialized,
-               workgroup_axes);
+  WriteSuccess(arguments, entry.stage, *source_sha256, static_materialized,
+               materialized, workgroup_axes);
   return 0;
 }
 

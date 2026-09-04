@@ -84,7 +84,7 @@
     "closure": {
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
       "files": 4,
-      "sha256": "0081726410136549fdcef7ced8ac3462d1e4346af1bc2017734cde60568794e0",
+      "sha256": "0d1cdbab647f2c8172c3cbb79e5deb8a38a885b98be8da46be19b31dcd04bd65",
       "paths": ["json-codec.cc", "json-codec.h", "main.cc", "request.h"]
     }
   },
@@ -179,8 +179,8 @@
       "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
       "objects": 407,
       "files": 920,
-      "bytes": 8691753,
-      "sha256": "ffd134b06776d56a4c7e340d3b2d374c3fc4973dc7ac9ee3565119ae90a2eec9",
+      "bytes": 8696180,
+      "sha256": "e15cac4eeb9fc101dd586bbb4c5c0ae075fb20d127155f10f3d2009abc979955",
       "repositories": {
         "dawn": {
           "files": 804,
@@ -204,8 +204,8 @@
         },
         "worker": {
           "files": 4,
-          "bytes": 80790,
-          "sha256": "0081726410136549fdcef7ced8ac3462d1e4346af1bc2017734cde60568794e0"
+          "bytes": 85217,
+          "sha256": "0d1cdbab647f2c8172c3cbb79e5deb8a38a885b98be8da46be19b31dcd04bd65"
         }
       }
     }
@@ -229,16 +229,16 @@
     },
     "outputs": {
       "arm64": {
-        "bytes": 5747504,
-        "sha256": "ec5206089bc08c602af46ae4d329559647c37e9f622359f86b97cefe2a0d9ef3"
+        "bytes": 5749456,
+        "sha256": "3fbd9831d8d8f5e98e64b163d516384159a38884e86290b201fb8dde9cffcf6b"
       },
       "x86_64": {
-        "bytes": 6795880,
-        "sha256": "c3ca7647b9ae54e434365042c6d87ff3760cb76c5f50b6d40ca549488327af71"
+        "bytes": 6806016,
+        "sha256": "6607174522af09bde5da877925ab6d2e9fe73e1599320b03b019f6c9d779a380"
       },
       "universal": {
-        "bytes": 12563248,
-        "sha256": "78fd48a856bbb50b57fd0c16d421f999f78dfd6c364665bfa9b2db623ab72382"
+        "bytes": 12565200,
+        "sha256": "8fb3a3c38e30f6121170bd159546066c53f7130a3b30026fb6927be63694903a"
       }
     },
     "architectures": ["arm64", "x86_64"]

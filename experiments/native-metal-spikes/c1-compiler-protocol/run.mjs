@@ -775,9 +775,59 @@ fn main() {
 }
 `,
   });
+  const requiredAndSubsets = singleSourceRequest({
+    input: "required-and-subsets-wgsl",
+    virtualPath: "resolved/required-and-subsets.wgsl",
+    entryPoint: "needs_required",
+    emittedName: "vgpu_required_and_subsets",
+    overrides: [
+      { name: "DEP", value: { type: "u32", value: 9 } },
+      { name: "REQUIRED", value: { type: "u32", value: 4 } },
+    ],
+    text: readFileSync(
+      join(
+        fixtureDirectory,
+        "..",
+        "c1-override-defaults",
+        "canaries",
+        "required-and-subsets.wgsl"
+      ),
+      "utf8"
+    ),
+  });
+  const inactiveRequired = singleSourceRequest({
+    input: "required-and-subsets-wgsl",
+    virtualPath: "resolved/required-and-subsets.wgsl",
+    entryPoint: "first",
+    emittedName: "vgpu_inactive_required",
+    overrides: [{ name: "FIRST", value: { type: "u32", value: 2 } }],
+    text: requiredAndSubsets.source.text,
+  });
+  const invalidInitializer = singleSourceRequest({
+    input: "invalid-initializer-wgsl",
+    virtualPath: "resolved/invalid-initializer.wgsl",
+    emittedName: "vgpu_invalid_initializer",
+    overrides: [
+      { name: "A", value: { type: "u32", value: 7 } },
+      { name: "X", value: { type: "u32", value: 0 } },
+    ],
+    text: readFileSync(
+      join(
+        fixtureDirectory,
+        "..",
+        "c1-override-defaults",
+        "canaries",
+        "invalid-initializer.wgsl"
+      ),
+      "utf8"
+    ),
+  });
   return {
     boundedDiagnostic,
     fixedPrefix,
+    inactiveRequired,
+    invalidInitializer,
+    requiredAndSubsets,
     typedOverrides,
     resources,
     resourceArray,
@@ -1374,6 +1424,21 @@ async function runTintGate(options, validators, contractRequests, scratch) {
       },
     ],
     [
+      "required-and-subsets-exact",
+      requests.requiredAndSubsets,
+      { ok: true, workgroupX: 9 },
+    ],
+    [
+      "invalid-initializer-exact",
+      requests.invalidInitializer,
+      { ok: true, workgroupX: 7 },
+    ],
+    [
+      "inactive-required-exact",
+      requests.inactiveRequired,
+      { ok: true, workgroupX: 2 },
+    ],
+    [
       "resource-namespaces",
       requests.resources,
       {
@@ -1523,6 +1588,26 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     "inspect",
     true,
     "request override type differs"
+  );
+  addNegative(
+    "invalid-initializer-missing-exact-override",
+    requests.invalidInitializer,
+    (request) => request.overrides.pop(),
+    "inspect",
+    true,
+    "request override set differs"
+  );
+  addNegative(
+    "inactive-required-extra-overrides",
+    requests.inactiveRequired,
+    (request) =>
+      request.overrides.push(
+        { name: "REQUIRED", value: { type: "u32", value: 4 } },
+        { name: "SECOND", value: { type: "u32", value: 3 } }
+      ),
+    "inspect",
+    true,
+    "request override set differs"
   );
   addNegative(
     "unknown-language-feature",
