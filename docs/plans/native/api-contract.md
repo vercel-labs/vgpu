@@ -128,7 +128,7 @@ The semantic contract records:
   `minimumBindingSize` additionally covers one complete trailing element and any enclosing
   structure padding;
 - typed override declarations, defaults, and selected values;
-- literal or override-backed workgroup dimensions;
+- positive integer compute workgroup dimensions resolved after override selection;
 - explicitly enabled WGSL environment language features, separately from backend-neutral execution
   requirements;
 - integer binding-layout, generated-Swift, and required `VGPUABI` contract versions.
@@ -152,9 +152,11 @@ round-to-nearest, ties-to-even. A NaN must remain a quiet NaN, but its payload i
 value contract.
 
 Selected override values are substituted before WGSL-to-MSL translation. The semantic contract
-preserves the declaration, default, selected value, and any override-backed workgroup origin, but it
-does not describe Metal function constants. Runtime specialization requires a future explicit API
-and artifact revision.
+preserves each override declaration, default, and selected value. A compute entry's `workgroupSize`
+contains only the resolved positive integer `x`, `y`, and `z`; whether an axis was authored as a
+literal, constant expression, or override expression remains in the referenced WGSL inputs and is
+not duplicated as dependency metadata. The contract does not describe Metal function constants.
+Runtime specialization requires a future explicit API and artifact revision.
 
 Before translation, semantic extraction must produce the exact active override set in canonical
 declaration-name order with typed values. An omitted configured value uses its evaluated WGSL
@@ -176,7 +178,7 @@ The Metal projection records:
 - the versioned storage-buffer-size model and any per-program, per-stage regions placed inside an
   `immediate-data` internal binding;
 - the versioned pipeline-local vertex-buffer policy and its exclusive external-buffer ceiling;
-- literal resolved workgroup sizes;
+- resolved positive integer workgroup sizes, checked against the semantic contract;
 - static Metal-device requirements;
 - optional source maps;
 - optional compare-runner metadata under `projection.testing`.

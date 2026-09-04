@@ -121,10 +121,12 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `wgsl-host-shareable-v1` is an implementation prerequisite, not an alternative native contract;
   no compatibility alias is planned.
 - WGSL overrides are selected and substituted before WGSL-to-MSL translation. V1 records their
-  declarations, evaluated defaults, selected values, and resolved workgroup dimensions but exposes
-  no Metal function-constant or runtime-specialization contract. The translation request contains
-  the exact active typed set in canonical declaration-name order; an active declaration without a
-  WGSL default must be supplied by configuration.
+  declarations, evaluated defaults, selected values, and compute workgroup dimensions only as
+  resolved positive integer `x`, `y`, and `z`. Literal-versus-expression provenance and override
+  dependency lists remain in the referenced WGSL inputs instead of becoming runtime contract data.
+  V1 exposes no Metal function-constant or runtime-specialization contract. The translation request
+  contains the exact active typed set in canonical declaration-name order; an active declaration
+  without a WGSL default must be supplied by configuration.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
 - The runtime-projection fingerprint covers the storage-buffer-size model, every per-program stage

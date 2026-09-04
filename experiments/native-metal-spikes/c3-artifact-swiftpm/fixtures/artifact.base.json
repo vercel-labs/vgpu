@@ -137,9 +137,9 @@
             "bindings": ["g0b0"],
             "samplingPairs": [],
             "workgroupSize": {
-              "x": { "kind": "literal", "value": 4 },
-              "y": { "kind": "literal", "value": 1 },
-              "z": { "kind": "literal", "value": 1 }
+              "x": 4,
+              "y": 1,
+              "z": 1
             }
           }
         },
@@ -193,9 +193,9 @@
             "bindings": ["g0b0"],
             "samplingPairs": [],
             "workgroupSize": {
-              "x": { "kind": "literal", "value": 1 },
-              "y": { "kind": "literal", "value": 1 },
-              "z": { "kind": "literal", "value": 1 }
+              "x": 1,
+              "y": 1,
+              "z": 1
             }
           }
         },

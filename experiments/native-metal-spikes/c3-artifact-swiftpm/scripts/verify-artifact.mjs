@@ -518,6 +518,50 @@ function validateVertexBufferPolicy(projection) {
   }
 }
 
+function validateResolvedWorkgroupSizes(semantic, projection) {
+  const semanticPrograms = new Map(
+    semantic.programs.map((program) => [program.name, program])
+  );
+  for (const program of projection.programs) {
+    const semanticProgram = semanticPrograms.get(program.semanticProgram);
+    if (!semanticProgram) {
+      fail(
+        `workgroup-size contract references unknown program ${program.semanticProgram}`
+      );
+    }
+    if (semanticProgram.kind !== "compute") continue;
+    for (const axis of ["x", "y", "z"]) {
+      assertEqual(
+        program.resolvedWorkgroupSize?.[axis],
+        semanticProgram.entryPoints.compute.workgroupSize[axis],
+        `${program.semanticProgram} resolved workgroup size ${axis}`
+      );
+    }
+  }
+}
+
+function requireWorkgroupSizeMutationFailure(
+  semantic,
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const semanticCandidate = clone(semantic);
+  const projectionCandidate = clone(projection);
+  mutate(semanticCandidate, projectionCandidate);
+  let rejected = false;
+  try {
+    validateResolvedWorkgroupSizes(semanticCandidate, projectionCandidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
+}
+
 const canonicalStageOrder = ["vertex", "fragment", "compute"];
 
 function validateStorageBufferSizeContract(semantic, projection) {
@@ -917,6 +961,31 @@ for (const [label, mutate] of [
     },
   ],
   [
+    "legacy literal workgroup component provenance",
+    (candidate) => {
+      candidate.semantic.programs[0].entryPoints.compute.workgroupSize.x = {
+        kind: "literal",
+        value: 4,
+      };
+    },
+  ],
+  [
+    "legacy override workgroup component provenance",
+    (candidate) => {
+      candidate.semantic.programs[0].entryPoints.compute.workgroupSize.x = {
+        kind: "override",
+        override: "fixture_workgroup_x",
+        value: 4,
+      };
+    },
+  ],
+  [
+    "zero resolved semantic workgroup axis",
+    (candidate) => {
+      candidate.semantic.programs[0].entryPoints.compute.workgroupSize.x = 0;
+    },
+  ],
+  [
     "emitted entry name outside the vgpu domain",
     (candidate) => {
       candidate.projection.programs[0].entryPoints[0].metal = "thread";
@@ -1219,18 +1288,6 @@ for (const program of artifact.semantic.programs) {
         );
       }
     }
-    if (entry.workgroupSize) {
-      for (const component of Object.values(entry.workgroupSize)) {
-        if (
-          component.kind === "override" &&
-          !overrideIds.has(component.override)
-        ) {
-          fail(
-            `${program.name} workgroup references unknown override ${component.override}`
-          );
-        }
-      }
-    }
   }
   const programFeatures = new Set(program.capabilities.features);
   const rootFeatures = new Set(artifact.semantic.capabilities.features);
@@ -1311,6 +1368,19 @@ const runtimeSHA256 = sha256Canonical(
 );
 validateVertexBufferPolicy(artifact.projection);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
+validateResolvedWorkgroupSizes(artifact.semantic, artifact.projection);
+requireWorkgroupSizeMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "Noop"
+    );
+    program.resolvedWorkgroupSize.x += 1;
+  },
+  "resolved workgroup size",
+  "semantic and projection workgroup mismatch"
+);
 const runtimeArrayFixtureProjection = artifact.projection.programs.find(
   (program) => program.semanticProgram === "RuntimeArray"
 );
@@ -1608,21 +1678,6 @@ for (const program of artifact.projection.programs) {
     ),
     `${program.semanticProgram} projected entry set`
   );
-  if (semanticProgram.kind === "compute") {
-    const semanticSize = semanticProgram.entryPoints.compute.workgroupSize;
-    const resolvedSemanticSize = Object.fromEntries(
-      Object.entries(semanticSize).map(([axis, component]) => [
-        axis,
-        component.value,
-      ])
-    );
-    assertEqual(
-      JSON.stringify(program.resolvedWorkgroupSize),
-      JSON.stringify(resolvedSemanticSize),
-      `${program.semanticProgram} resolved workgroup size`
-    );
-  }
-
   const rootDeviceFeatures = new Set(
     artifact.projection.deviceRequirements.features
   );

@@ -94,7 +94,7 @@ It verifies:
 - JSON Schema and safe output boundaries;
 - WGSL parsing, imports, pure modules, and reflection;
 - explicit selection when a source has multiple compatible entry points;
-- typed overrides and workgroup sizes;
+- typed overrides and resolved positive integer workgroup sizes;
 - intrinsic `wgsl-host-shareable-v1` layouts and generated Swift identifiers;
 - address-space constraints under the explicitly selected WGSL language features;
 - stage interfaces and active resources;
@@ -123,7 +123,7 @@ Keep it current while editing WGSL:
 npx vgpu native dev
 ```
 
-The build first derives backend-neutral semantics from the resolved source. That stage owns entry-point interfaces, intrinsic layouts, resource declarations, and typed override defaults. It evaluates defaults and materializes the exact active override set before translation; raw WGSL initializer text is provenance, not a value parser input.
+The build first derives backend-neutral semantics from the resolved source. That stage owns entry-point interfaces, intrinsic layouts, resource declarations, typed override defaults, and resolved compute workgroup dimensions. It evaluates defaults and materializes the exact active override set before translation; raw WGSL initializer text is provenance, not a value parser input. Workgroup axes are stored only as resolved `x`, `y`, and `z` values, without duplicating their authored expressions or override dependency lists.
 
 The build then invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, the materialized typed overrides, the explicit language-feature set, a stable emitted function name, vgpu's versioned external Metal slot map, and its reserved internal profile. It returns either a structured compiler error or MSL with the selected entry point, the unchanged validated external slot map, effective internal slots, storage-buffer-size regions, and resolved compute workgroup dimensions. It does not return semantic layouts, override declarations, defaults, or broad interface reflection. Tint's automatic slot allocator is not used as the artifact contract.
 

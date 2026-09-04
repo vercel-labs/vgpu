@@ -45,13 +45,13 @@ The runner:
 2. compiles all five native JSON Schemas in strict mode, resolves their external references, and
    validates `artifact.json`, then assembles and verifies a future-model descriptor without adding
    that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
-   `interfaceLocations`, emitted names outside the `vgpu_` domain, non-finite override constants,
-   multiple direct components for one semantic binding, and components that disagree with their
-   Metal resource class;
+   `interfaceLocations`, workgroup-axis provenance objects and zero dimensions, emitted names
+   outside the `vgpu_` domain, non-finite override constants, multiple direct components for one
+   semantic binding, and components that disagree with their Metal resource class;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
-   hashes, checks every cross-reference, and proves that the vertex-buffer policy,
-   storage-buffer-size model, stage-local regions, and immediate-data slots change runtime
-   compatibility;
+   hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
+   the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size
+   model, stage-local regions, and immediate-data slots change runtime compatibility;
 4. distinguishes a runtime-array structure's four-byte fixed-prefix `layout.minimumSize` from its
    eight-byte, prefix-plus-one-element `minimumBindingSize`, requires canonical per-stage size
    regions, rejects invalid region-to-slot relationships, and proves that runtime-sized bindings

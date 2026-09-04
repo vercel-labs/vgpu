@@ -384,37 +384,16 @@
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
       }
     },
-    "literalWorkgroupComponent": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "value"],
-      "properties": { "kind": { "const": "literal" }, "value": { "type": "integer", "minimum": 1, "maximum": 4294967295 } }
-    },
-    "overrideWorkgroupComponent": {
-      "description": "The selected override value is baked before backend translation. This reference preserves how it was chosen; it is not a runtime specialization point.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "override", "value"],
-      "properties": {
-        "kind": { "const": "override" },
-        "override": { "$ref": "#/$defs/overrideId" },
-        "value": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
-      }
-    },
-    "workgroupComponent": {
-      "oneOf": [
-        { "$ref": "#/$defs/literalWorkgroupComponent" },
-        { "$ref": "#/$defs/overrideWorkgroupComponent" }
-      ]
-    },
+    "positiveUint32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
     "workgroupSize": {
+      "description": "Positive integer workgroup dimensions resolved after the selected WGSL override values have been substituted. Authored literal or expression provenance stays in the referenced WGSL inputs and is not duplicated here.",
       "type": "object",
       "additionalProperties": false,
       "required": ["x", "y", "z"],
       "properties": {
-        "x": { "$ref": "#/$defs/workgroupComponent" },
-        "y": { "$ref": "#/$defs/workgroupComponent" },
-        "z": { "$ref": "#/$defs/workgroupComponent" }
+        "x": { "$ref": "#/$defs/positiveUint32" },
+        "y": { "$ref": "#/$defs/positiveUint32" },
+        "z": { "$ref": "#/$defs/positiveUint32" }
       }
     },
     "computeEntry": {

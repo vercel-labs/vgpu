@@ -121,7 +121,7 @@ Before translation, `native check` materializes the exact override set used by e
 
 Unknown names, conflicting IDs, wrong types, non-finite floats, and integers outside their WGSL range fail validation. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
 
-The compiler substitutes the fully materialized values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. The typed selected values and resolved workgroup dimensions become part of the program fingerprint. Omitting an override and configuring it explicitly to the same evaluated default therefore produce the same normalized program semantics.
+The compiler substitutes the fully materialized values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. A compute entry records its workgroup size only as resolved positive integer `x`, `y`, and `z` values, whether the WGSL attribute used a literal, a constant expression, or an expression such as `X + Y`. The artifact does not duplicate that expression or its override dependency list; the referenced WGSL hashes preserve changes to the authored source. The typed selected values and resolved workgroup dimensions become part of the program fingerprint. Omitting an override and configuring it explicitly to the same evaluated default therefore produce the same normalized program semantics.
 
 Runtime specialization would require a separate artifact and API contract. It is not implicit in this proposal.
 
