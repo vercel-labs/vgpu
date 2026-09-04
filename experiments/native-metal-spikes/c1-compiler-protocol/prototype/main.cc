@@ -1,37 +1,9 @@
 // Feasibility prototype for the vgpu-owned Tint compiler protocol.
 //
-// JSON decoding intentionally lives in the Node adapter for this spike. This
-// executable accepts a typed, single-entry-point request:
-//
-//   wrapper --source <input.wgsl> --source-name <virtual-path> \
-//     --stage <vertex|fragment|compute> --entry-point <wgsl-name> \
-//     --emitted-name <metal-name> --mapping <mapping.txt> \
-//     [--feature
-//     <f16|uniform_buffer_standard_layout|unrestricted_pointer_parameters|sized_binding_array>]
-//     \
-//     [--override <name> <bool|i32|u32|f16|f32> <payload>]...
-//
-// Overrides are exhaustive for the selected entry point. Boolean payloads are
-// true/false, integer payloads are decimal, and f16/f32 payloads are lowercase
-// IEEE 754 bits (four/eight hexadecimal digits). NaN and infinity are rejected.
-//
-// Each non-comment mapping line is:
-//
-//   <group> <binding> <buffer|texture|sampler> <buffer|texture|sampler>
-//   <metal-index> <count>
-//
-// The two string fields are the vgpu resource class and component. This v1
-// prototype only accepts direct, single-component resources, so they must
-// agree. The exact Tint binding kind (uniform, storage, sampled texture,
-// storage texture, or sampler) is derived from Inspector, never supplied by
-// the adapter.
-//
-// The executable writes exactly one JSON value to stdout. Exit 0 is a
-// successful translation, exit 1 is a valid request with a negative compiler
-// result, and exit 2 is an invalid invocation or typed request. Controlled
-// failures are reported in JSON, not stderr. These are prototype-worker exit
-// codes, not the final JSON transport contract: the Node adapter treats any
-// trustworthy decoded response as handled and reads `ok` for the outcome.
+// This one-shot worker reads exactly one UTF-8 JSON request from stdin through
+// EOF and writes exactly one JSON response to stdout. A decoded request always
+// exits zero, including protocol and compiler failures; framing, I/O, or a
+// process failure exits nonzero and makes stdout untrustworthy.
 //
 // This prototype owns the Metal ABI instead of accepting translator-selected
 // internals. External buffer intervals are restricted to 0..<30. Tint receives
@@ -42,17 +14,11 @@
 // output uses them.
 
 #include <algorithm>
-#include <bit>
-#include <charconv>
-#include <cmath>
 #include <cstdint>
 #include <exception>
-#include <fstream>
 #include <iostream>
 #include <limits>
-#include <map>
 #include <optional>
-#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -74,6 +40,14 @@
 #include "src/tint/lang/wgsl/reader/reader.h"
 #include "src/tint/utils/diagnostic/diagnostic.h"
 
+#include "json-codec.h"
+#include "request.h"
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 namespace {
 
 constexpr uint32_t kExternalBufferCeiling = 30;
@@ -81,6 +55,7 @@ constexpr uint32_t kImmediateDataIndex = 30;
 constexpr uint32_t kStorageBufferSizesOffset = 4;
 constexpr uint32_t kNonConstantZeroOffset = 0;
 constexpr size_t kDiagnosticMessageMaxBytes = 16384;
+constexpr size_t kDiagnosticMessagesTotalMaxBytes = 1024 * 1024;
 constexpr std::string_view kContractId = "vgpu-native-tint-compiler/v1";
 constexpr std::string_view kTintRevision =
     "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
@@ -88,40 +63,8 @@ constexpr std::string_view kTintRevision =
 static_assert(sizeof(float) == sizeof(uint32_t));
 static_assert(std::numeric_limits<float>::is_iec559);
 
-struct Mapping {
-  std::string kind;
-  tint::BindingPoint source;
-  std::string resource_class;
-  std::string component;
-  uint32_t index;
-  uint32_t count;
-};
-
-struct OverrideValue {
-  std::string type;
-  double value;
-};
-
-struct Arguments {
-  std::string source_path;
-  std::string source_name;
-  std::string stage;
-  std::string entry_point;
-  std::string emitted_name;
-  std::string mapping_path;
-  std::set<std::string> features;
-  std::map<std::string, OverrideValue> overrides;
-};
-
-struct ParsedArguments {
-  std::optional<Arguments> value;
-  std::string error;
-};
-
-struct ParsedMappings {
-  std::optional<std::vector<Mapping>> value;
-  std::string error;
-};
+using Arguments = vgpu::native::CompilerRequest;
+using Mapping = vgpu::native::Mapping;
 
 struct Location {
   std::string virtual_path;
@@ -147,6 +90,19 @@ struct EmittedSlotsResult {
   std::optional<std::vector<EmittedSlot>> value;
   std::string error;
 };
+
+bool g_output_succeeded = true;
+
+void EmitResponse(const std::string &response) {
+  if (response.size() > vgpu::native::kMaxResponseBytes) {
+    g_output_succeeded = false;
+    return;
+  }
+  std::cout.write(response.data(),
+                  static_cast<std::streamsize>(response.size()));
+  std::cout.flush();
+  g_output_succeeded = std::cout.good();
+}
 
 std::string JsonString(std::string_view value) {
   constexpr char kHex[] = "0123456789abcdef";
@@ -248,7 +204,7 @@ void WriteFailure(const std::vector<Diagnostic> &diagnostics) {
   WriteCompilerIdentity(output);
   WriteDiagnostics(output, diagnostics);
   output << "\n}\n";
-  std::cout << output.str();
+  EmitResponse(output.str());
 }
 
 Diagnostic Error(std::string code, std::string phase, std::string message) {
@@ -259,290 +215,6 @@ Diagnostic Error(std::string code, std::string phase, std::string message) {
       .message = BoundedDiagnosticMessage(std::move(message)),
       .location = std::nullopt,
   };
-}
-
-std::optional<uint64_t> ParseUnsignedInteger(std::string_view value,
-                                             int base = 10) {
-  if (value.empty()) {
-    return std::nullopt;
-  }
-  uint64_t parsed = 0;
-  const auto result =
-      std::from_chars(value.data(), value.data() + value.size(), parsed, base);
-  if (result.ec != std::errc{} || result.ptr != value.data() + value.size()) {
-    return std::nullopt;
-  }
-  return parsed;
-}
-
-std::optional<int64_t> ParseSignedInteger(std::string_view value) {
-  if (value.empty()) {
-    return std::nullopt;
-  }
-  int64_t parsed = 0;
-  const auto result =
-      std::from_chars(value.data(), value.data() + value.size(), parsed, 10);
-  if (result.ec != std::errc{} || result.ptr != value.data() + value.size()) {
-    return std::nullopt;
-  }
-  return parsed;
-}
-
-bool IsLowerHex(std::string_view value, size_t length) {
-  return value.size() == length &&
-         std::all_of(value.begin(), value.end(),
-                     [](const unsigned char character) {
-                       return (character >= '0' && character <= '9') ||
-                              (character >= 'a' && character <= 'f');
-                     });
-}
-
-std::optional<OverrideValue> ParseOverrideValue(std::string type,
-                                                std::string_view payload) {
-  if (type == "bool") {
-    if (payload == "true") {
-      return OverrideValue{.type = std::move(type), .value = 1.0};
-    }
-    if (payload == "false") {
-      return OverrideValue{.type = std::move(type), .value = 0.0};
-    }
-    return std::nullopt;
-  }
-  if (type == "i32") {
-    const auto parsed = ParseSignedInteger(payload);
-    if (!parsed || *parsed < std::numeric_limits<int32_t>::min() ||
-        *parsed > std::numeric_limits<int32_t>::max()) {
-      return std::nullopt;
-    }
-    return OverrideValue{.type = std::move(type),
-                         .value = static_cast<double>(*parsed)};
-  }
-  if (type == "u32") {
-    const auto parsed = ParseUnsignedInteger(payload);
-    if (!parsed || *parsed > std::numeric_limits<uint32_t>::max()) {
-      return std::nullopt;
-    }
-    return OverrideValue{.type = std::move(type),
-                         .value = static_cast<double>(*parsed)};
-  }
-  if (type == "f32") {
-    if (!IsLowerHex(payload, 8)) {
-      return std::nullopt;
-    }
-    const auto parsed = ParseUnsignedInteger(payload, 16);
-    if (!parsed || *parsed > std::numeric_limits<uint32_t>::max()) {
-      return std::nullopt;
-    }
-    const float value = std::bit_cast<float>(static_cast<uint32_t>(*parsed));
-    if (!std::isfinite(value)) {
-      return std::nullopt;
-    }
-    return OverrideValue{.type = std::move(type),
-                         .value = static_cast<double>(value)};
-  }
-  if (type == "f16") {
-    if (!IsLowerHex(payload, 4)) {
-      return std::nullopt;
-    }
-    const auto parsed = ParseUnsignedInteger(payload, 16);
-    if (!parsed || *parsed > std::numeric_limits<uint16_t>::max()) {
-      return std::nullopt;
-    }
-    const uint16_t bits = static_cast<uint16_t>(*parsed);
-    const uint16_t exponent = (bits >> 10) & 0x1f;
-    const uint16_t fraction = bits & 0x03ff;
-    if (exponent == 0x1f) {
-      return std::nullopt;
-    }
-    double value = exponent == 0
-                       ? std::ldexp(static_cast<double>(fraction), -24)
-                       : std::ldexp(static_cast<double>(1024 + fraction),
-                                    static_cast<int>(exponent) - 25);
-    if ((bits & 0x8000) != 0) {
-      value = -value;
-    }
-    return OverrideValue{.type = std::move(type), .value = value};
-  }
-  return std::nullopt;
-}
-
-bool SetOnce(std::string &destination, std::string value) {
-  if (!destination.empty() || value.empty()) {
-    return false;
-  }
-  destination = std::move(value);
-  return true;
-}
-
-bool IsVgpuEmittedName(std::string_view value) {
-  constexpr std::string_view kPrefix = "vgpu_";
-  if (!value.starts_with(kPrefix) || value.size() == kPrefix.size() ||
-      value.size() > 256) {
-    return false;
-  }
-  const auto suffix = value.substr(kPrefix.size());
-  return std::all_of(
-      suffix.begin(), suffix.end(), [](const unsigned char character) {
-        return (character >= 'a' && character <= 'z') ||
-               (character >= 'A' && character <= 'Z') ||
-               (character >= '0' && character <= '9') || character == '_';
-      });
-}
-
-ParsedArguments ParseArguments(int argc, char **argv) {
-  Arguments arguments;
-  for (int index = 1; index < argc; ++index) {
-    const std::string_view flag = argv[index];
-    const auto take_one = [&](std::string &destination) -> bool {
-      if (index + 1 >= argc) {
-        return false;
-      }
-      return SetOnce(destination, argv[++index]);
-    };
-    if (flag == "--source") {
-      if (!take_one(arguments.source_path)) {
-        return {
-            .error =
-                "--source requires one non-empty value and may appear once"};
-      }
-    } else if (flag == "--source-name") {
-      if (!take_one(arguments.source_name)) {
-        return {.error = "--source-name requires one non-empty value and may "
-                         "appear once"};
-      }
-    } else if (flag == "--stage") {
-      if (!take_one(arguments.stage)) {
-        return {.error =
-                    "--stage requires one non-empty value and may appear once"};
-      }
-    } else if (flag == "--entry-point") {
-      if (!take_one(arguments.entry_point)) {
-        return {.error = "--entry-point requires one non-empty value and may "
-                         "appear once"};
-      }
-    } else if (flag == "--emitted-name") {
-      if (!take_one(arguments.emitted_name)) {
-        return {.error = "--emitted-name requires one non-empty value and may "
-                         "appear once"};
-      }
-    } else if (flag == "--mapping") {
-      if (!take_one(arguments.mapping_path)) {
-        return {
-            .error =
-                "--mapping requires one non-empty value and may appear once"};
-      }
-    } else if (flag == "--feature") {
-      if (index + 1 >= argc) {
-        return {.error = "--feature requires one value"};
-      }
-      std::string feature = argv[++index];
-      if (feature.empty() ||
-          !arguments.features.insert(std::move(feature)).second) {
-        return {.error = "language features must be non-empty and unique"};
-      }
-    } else if (flag == "--override") {
-      if (index + 3 >= argc) {
-        return {.error =
-                    "--override requires a name, scalar type, and payload"};
-      }
-      std::string name = argv[++index];
-      std::string type = argv[++index];
-      const auto value = ParseOverrideValue(std::move(type), argv[++index]);
-      if (name.empty() || !value ||
-          !arguments.overrides.emplace(std::move(name), *value).second) {
-        return {.error = "overrides must have unique non-empty names, matching "
-                         "scalar types, and valid finite payloads"};
-      }
-    } else {
-      return {.error = "unknown argument"};
-    }
-  }
-
-  if (arguments.source_path.empty() || arguments.source_name.empty() ||
-      arguments.stage.empty() || arguments.entry_point.empty() ||
-      arguments.emitted_name.empty() || arguments.mapping_path.empty()) {
-    return {.error = "missing required compiler argument"};
-  }
-  if (arguments.stage != "vertex" && arguments.stage != "fragment" &&
-      arguments.stage != "compute") {
-    return {.error = "--stage must be vertex, fragment, or compute"};
-  }
-  if (!IsVgpuEmittedName(arguments.emitted_name)) {
-    return {.error =
-                "--emitted-name must use the reserved vgpu_ identifier domain"};
-  }
-  static const std::set<std::string> kAllowedFeatures{
-      "f16",
-      "sized_binding_array",
-      "uniform_buffer_standard_layout",
-      "unrestricted_pointer_parameters",
-  };
-  for (const auto &feature : arguments.features) {
-    if (!kAllowedFeatures.contains(feature)) {
-      return {.error = "unsupported language feature"};
-    }
-  }
-  return {.value = std::move(arguments)};
-}
-
-std::optional<std::string> ReadFile(const std::string &path) {
-  std::ifstream stream(path, std::ios::binary);
-  if (!stream) {
-    return std::nullopt;
-  }
-  std::ostringstream contents;
-  contents << stream.rdbuf();
-  if (!stream.good() && !stream.eof()) {
-    return std::nullopt;
-  }
-  return contents.str();
-}
-
-ParsedMappings ReadMappings(const std::string &path) {
-  std::ifstream stream(path);
-  if (!stream) {
-    return {.error = "could not read the binding mapping"};
-  }
-  std::vector<Mapping> mappings;
-  std::string line;
-  size_t line_number = 0;
-  while (std::getline(stream, line)) {
-    ++line_number;
-    const auto first = line.find_first_not_of(" \t\r");
-    if (first == std::string::npos || line[first] == '#') {
-      continue;
-    }
-    std::istringstream fields(line);
-    uint64_t group = 0;
-    uint64_t binding = 0;
-    std::string resource_class;
-    std::string component;
-    uint64_t index = 0;
-    uint64_t count = 0;
-    if (!(fields >> group >> binding >> resource_class >> component >> index >>
-          count) ||
-        (fields >> std::ws && !fields.eof()) ||
-        group > std::numeric_limits<uint32_t>::max() ||
-        binding > std::numeric_limits<uint32_t>::max() ||
-        index > std::numeric_limits<uint32_t>::max() || count == 0 ||
-        count > std::numeric_limits<uint32_t>::max()) {
-      return {.error = "invalid binding mapping at line " +
-                       std::to_string(line_number)};
-    }
-    mappings.push_back(Mapping{
-        .kind = {},
-        .source = tint::BindingPoint{.group = static_cast<uint32_t>(group),
-                                     .binding = static_cast<uint32_t>(binding)},
-        .resource_class = std::move(resource_class),
-        .component = std::move(component),
-        .index = static_cast<uint32_t>(index),
-        .count = static_cast<uint32_t>(count),
-    });
-  }
-  if (!stream.eof()) {
-    return {.error = "could not finish reading the binding mapping"};
-  }
-  return {.value = std::move(mappings)};
 }
 
 const char *StageName(tint::inspector::PipelineStage stage) {
@@ -591,7 +263,10 @@ ConvertDiagnostics(const tint::diag::List &source,
                    const tint::Source::File &authored_file,
                    const std::string &virtual_path) {
   std::vector<Diagnostic> diagnostics;
-  diagnostics.reserve(source.size());
+  diagnostics.reserve(std::min(source.size(), kDiagnosticMessagesTotalMaxBytes /
+                                                  kDiagnosticMessageMaxBytes));
+  size_t message_bytes = 0;
+  bool retained_error = false;
   for (const auto &item : source) {
     std::optional<Location> location;
     const auto &range = item.source.range;
@@ -604,13 +279,27 @@ ConvertDiagnostics(const tint::diag::List &source,
           .end = range.end,
       };
     }
-    diagnostics.push_back(Diagnostic{
+    Diagnostic diagnostic{
         .code = "VGPU-NATIVE-WGSL-INVALID",
         .severity = SeverityName(item.severity),
         .phase = "wgsl",
         .message = BoundedDiagnosticMessage(item.message.Plain()),
         .location = std::move(location),
-    });
+    };
+    if (message_bytes + diagnostic.message.size() >
+        kDiagnosticMessagesTotalMaxBytes) {
+      if (diagnostic.severity != "error" || retained_error) {
+        continue;
+      }
+      while (!diagnostics.empty() && message_bytes + diagnostic.message.size() >
+                                         kDiagnosticMessagesTotalMaxBytes) {
+        message_bytes -= diagnostics.back().message.size();
+        diagnostics.pop_back();
+      }
+    }
+    message_bytes += diagnostic.message.size();
+    retained_error = retained_error || diagnostic.severity == "error";
+    diagnostics.push_back(std::move(diagnostic));
   }
   return diagnostics;
 }
@@ -901,6 +590,11 @@ void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
                   const std::vector<Diagnostic> &diagnostics,
                   const tint::msl::writer::Output &generated,
                   bool used_immediate) {
+  if (generated.msl.size() > vgpu::native::kMaxMslBytes) {
+    WriteFailure({Error("VGPU-NATIVE-MSL-GENERATE", "generate",
+                        "generated MSL exceeds the UTF-8 byte limit")});
+    return;
+  }
   std::sort(mappings.begin(), mappings.end(),
             [](const auto &left, const auto &right) {
               return std::tie(left.source.group, left.source.binding, left.kind,
@@ -958,30 +652,18 @@ void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
   output << "]\n"
          << "  }\n"
          << "}\n";
-  std::cout << output.str();
+  EmitResponse(output.str());
 }
 
 int Run(const Arguments &arguments) {
-  const auto source_text = ReadFile(arguments.source_path);
-  if (!source_text) {
-    WriteFailure({Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol",
-                        "could not read WGSL input")});
-    return 2;
-  }
-  const auto parsed_mappings = ReadMappings(arguments.mapping_path);
-  if (!parsed_mappings.value) {
-    WriteFailure({Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol",
-                        parsed_mappings.error)});
-    return 2;
-  }
-  auto mappings = std::move(*parsed_mappings.value);
+  auto mappings = arguments.mappings;
   if (const auto mapping_error = ValidateRequestedMappings(mappings)) {
     WriteFailure(
         {Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol", *mapping_error)});
     return 2;
   }
 
-  tint::Source::File source_file(arguments.source_name, *source_text);
+  tint::Source::File source_file(arguments.source_name, arguments.source_text);
   tint::wgsl::reader::Options reader_options;
   for (const auto &feature : arguments.features) {
     if (feature == "f16") {
@@ -1224,27 +906,57 @@ int Run(const Arguments &arguments) {
 
 } // namespace
 
-int main(int argc, char **argv) {
-  const auto parsed = ParseArguments(argc, argv);
-  if (!parsed.value) {
-    WriteFailure(
-        {Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol", parsed.error)});
-    return 2;
+int main(int argc, char **) {
+  constexpr int kExitUsage = 64;
+  constexpr int kExitFraming = 65;
+  constexpr int kExitInternal = 70;
+  constexpr int kExitIo = 74;
+  if (argc != 1) {
+    std::cerr << "vgpu-tint-compiler: this worker accepts no arguments\n";
+    return kExitUsage;
+  }
+#ifdef _WIN32
+  if (_setmode(_fileno(stdin), _O_BINARY) == -1 ||
+      _setmode(_fileno(stdout), _O_BINARY) == -1) {
+    std::cerr << "vgpu-tint-compiler: could not configure binary pipes\n";
+    return kExitIo;
+  }
+#endif
+
+  vgpu::native::DecodedRequest decoded;
+  try {
+    decoded = vgpu::native::ReadRequest(std::cin);
+  } catch (const std::exception &) {
+    std::cerr << "vgpu-tint-compiler: request decoder raised an exception\n";
+    return kExitInternal;
+  } catch (...) {
+    std::cerr << "vgpu-tint-compiler: request decoder failed\n";
+    return kExitInternal;
+  }
+  if (!decoded.value) {
+    if (decoded.failure == vgpu::native::RequestFailureKind::kProtocol) {
+      WriteFailure(
+          {Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol", decoded.error)});
+      return g_output_succeeded ? 0 : kExitIo;
+    }
+    std::cerr << (decoded.failure == vgpu::native::RequestFailureKind::kIo
+                      ? "vgpu-tint-compiler: stdin read failed\n"
+                      : "vgpu-tint-compiler: invalid request framing\n");
+    return decoded.failure == vgpu::native::RequestFailureKind::kIo
+               ? kExitIo
+               : kExitFraming;
   }
 
   tint::Initialize();
-  int result = 1;
   try {
-    result = Run(*parsed.value);
+    Run(*decoded.value);
   } catch (const std::exception &) {
     WriteFailure({Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
                         "compiler raised an internal exception")});
-    result = 1;
   } catch (...) {
     WriteFailure({Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
                         "compiler failed with an unknown exception")});
-    result = 1;
   }
   tint::Shutdown();
-  return result;
+  return g_output_succeeded ? 0 : kExitIo;
 }

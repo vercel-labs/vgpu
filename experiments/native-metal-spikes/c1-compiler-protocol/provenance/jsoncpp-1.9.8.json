@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "dependency": "JsonCpp",
+  "version": "1.9.8",
+  "repository": "https://github.com/open-source-parsers/jsoncpp",
+  "tag": "1.9.8",
+  "commit": "8519b8381f3c741ad1421f88237b1deda0b11412",
+  "released": "2026-06-14",
+  "archive": {
+    "url": "https://github.com/open-source-parsers/jsoncpp/archive/8519b8381f3c741ad1421f88237b1deda0b11412.tar.gz",
+    "bytes": 220192,
+    "sha256": "d9008556c83a4be2827e126643e5037a09dede2f6c312bd6a8da7a7d3b1d0298"
+  },
+  "license": {
+    "spdx": "MIT",
+    "upstreamOffering": "Public Domain or MIT",
+    "sourcePath": "LICENSE",
+    "trackedPath": "jsoncpp-LICENSE.txt",
+    "bytes": 2714,
+    "sha256": "cec0db5f6d7ed6b3a72647bd50aed02e13c3377fd44382b96dc2915534c042ad"
+  },
+  "compiledClosure": {
+    "algorithm": "relative-path-nul-file-sha256-lines-v1",
+    "files": 15,
+    "sha256": "06d06c5919c219af43813049af0585b743f60518ab806e315babe0150bd245c0",
+    "paths": [
+      "include/json/allocator.h",
+      "include/json/assertions.h",
+      "include/json/config.h",
+      "include/json/forwards.h",
+      "include/json/json.h",
+      "include/json/json_features.h",
+      "include/json/reader.h",
+      "include/json/value.h",
+      "include/json/version.h",
+      "include/json/writer.h",
+      "src/lib_json/json_reader.cpp",
+      "src/lib_json/json_tool.h",
+      "src/lib_json/json_value.cpp",
+      "src/lib_json/json_valueiterator.inl",
+      "src/lib_json/json_writer.cpp"
+    ]
+  }
+}

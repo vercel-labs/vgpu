@@ -7,14 +7,17 @@ objects to the rest of the toolchain.
 
 ## Result
 
-Yes, for the covered compiler boundary. The candidate protocol owns its JSON schema, validates the
-request before Tint runs, derives resource kinds from Tint Inspector, applies the vgpu-owned Metal
-slot mapping, and returns either a structured compiler failure or MSL plus the effective binding
-metadata.
+Yes, for the covered one-shot compiler boundary. The candidate protocol owns its JSON schema, the
+Node caller validates requests before launch, and the C++ worker independently decodes the complete
+typed request before Tint runs. It derives resource kinds from Tint Inspector, applies the
+vgpu-owned Metal slot mapping, and returns either a structured compiler failure or MSL plus the
+effective binding metadata.
 
 The full gate passes seven positive and fourteen negative native canaries. Every native case is run
-twice, for 21 deterministic cases, and produces byte-identical status and output. The covered cases
-include:
+twice, for 21 deterministic cases, and produces byte-identical status and output. A separate codec
+gate covers 25 fatal framing/complexity faults, eleven decoded protocol failures, the 64/65 nesting
+boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a known SHA-256
+vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
 
 - a resolver-to-compiler request made entirely from relocatable virtual paths;
 - module-attributed WGSL diagnostics without invented authored line or column positions;
@@ -52,11 +55,36 @@ contains MSL, the selected entry point, the unchanged external slot map, effecti
 bindings, storage-size regions, and resolved workgroup dimensions for compute entries. It does not
 duplicate broad semantic reflection that belongs upstream of translation.
 
-The production worker transport should treat one decoded JSON response as a handled request and
-reserve nonzero process exits for transport failure or a crash. The C++ prototype's `0`, `1`, and
-`2` exits are only a convenient typed-CLI convention for this spike; the response's `ok` field is
-the compiler outcome. This fixture validates the JSON envelopes and then adapts them to files and
-typed arguments; it does not yet exercise the final stdin/EOF JSON codec in the C++ process.
+The worker transport carries one UTF-8 JSON request on stdin and uses EOF as its only frame. It is
+therefore deliberately one process per request. A decoded JSON request produces exactly one UTF-8
+JSON response and exits `0`, whether `ok` is `true` or `false`. Empty input, malformed JSON, invalid
+UTF-8, duplicate keys, a second value, excessive depth or complexity, and an oversized frame exit
+`65` with empty stdout. Invalid argv exits `64`, a caught worker-internal transport failure exits
+`70`, and I/O failure exits `74`. A signal is also fatal. The caller discards every stdout byte
+unless exit is `0` and the channel contains exactly one schema-valid response. These exit values are
+an experimental process convention, not a portable protocol ABI. The gate directly covers the
+usage (`64`) and framing (`65`) exits; the internal (`70`) and I/O (`74`) branches are not
+fault-injected yet.
+
+JsonCpp is configured fail-closed for comments, trailing commas, duplicate keys, extra values,
+single quotes, special floats, BOMs, and a bounded stack. JsonCpp does not itself guarantee strict
+raw UTF-8, strict JSON numbers, or valid UTF-16 surrogate escapes, so a bounded lexical preflight
+checks those properties and limits allocation units before the parser allocates its DOM. This is
+lexical validation, not a second JSON parser. A representable JSON scalar or array that passes
+those framing policies is still a decoded request and therefore returns a structured protocol
+failure instead of being misclassified as broken framing.
+
+The experimental resource policy is 128 MiB for the stdin frame, 64 JSON containers, 262,144 JSON
+allocation units, 16 MiB of decoded UTF-8 source, 64 MiB of decoded UTF-8 MSL, 160 MiB of captured
+stdout, and 64 KiB of captured stderr. Diagnostics are limited to 16 KiB per message and 1 MiB of
+message text in aggregate. Origin sources and overrides are limited to 4,096 entries each, origin
+segments and bindings to 65,536 each, and language features to the four supported values. These
+numbers are feasibility policy to measure against a real corpus, not frozen v1 ABI. JSON Schema's
+`source.text.maxLength` counts Unicode code points; the worker adds the stricter 16 MiB UTF-8 byte
+limit for memory control. One allocation unit means one JSON value or one object-member name; the
+Node caller computes that same recursive metric from its typed value, while the C++ lexical pass
+counts it before constructing the DOM. Boundary canaries require 262,144 to reach the decoder and
+262,145 to fail framing with empty stdout.
 
 ## Diagnostics and virtual sources
 
@@ -72,21 +100,30 @@ module identity when that range falls wholly inside one module segment. Gaps and
 ranges remain unattributed.
 
 Virtual paths and logical input identities must already be NFC-normalized and cannot be absolute
-host paths. Origin segments are canonical, non-overlapping UTF-8 byte intervals: a boundary cannot
-split a code point, and adjacent segments with the same origin must be merged. Canonically ordered
-strings use ascending UTF-16 code-unit order, matching RFC 8785 property ordering and remaining
-implementable by non-JavaScript consumers.
+host paths. NFC remains an explicit caller precondition in this spike: the Node caller rejects NFD,
+but the standalone C++ worker has no Unicode normalization dependency and does not prove NFC. It
+does independently validate strict UTF-8 and every other path constraint. Origin segments are
+canonical, non-overlapping UTF-8 byte intervals: a boundary cannot split a code point, and adjacent
+segments with the same origin must be merged. Canonically ordered strings use ascending UTF-16
+code-unit order; a non-BMP/BMP canary verifies that the C++ comparator agrees with JavaScript.
 
 ## Compiler prototype
 
-[`prototype/main.cc`](./prototype/main.cc) exercises the direct Tint API used by this contract. The
-Node adapter owns JSON decoding and schema checks for the spike; the C++ process accepts typed
-arguments and independently rejects unsafe slot intervals, duplicate binding points, unsupported
-features, incoherent resource components, and emitted names outside the `vgpu_` domain.
+[`prototype/main.cc`](./prototype/main.cc) exercises the direct Tint API used by this contract.
+[`prototype/json-codec.cc`](./prototype/json-codec.cc) owns stdin framing, strict lexical checks,
+SHA-256 verification, JsonCpp configuration, exact object shapes, and typed decoding. The Node side
+is only the schema/semantic-validating caller. Its raw invocation helper is named accordingly, and
+`decodeTintWorkerResponse` rejects any nonzero exit, signal, stderr, invalid JSON, or response that
+does not pass the supplied schema validator before returning a value. There are no temporary WGSL
+or mapping files and no typed CLI adaptation. The C++ process independently rejects unknown fields,
+crossed hashes and origin maps, noncanonical collection order, unsafe slot intervals, duplicate
+binding points, unsupported features, incoherent resource components, and emitted names outside
+the `vgpu_` domain.
 
 Compiler diagnostics are bounded to 16,384 UTF-8 bytes at a code-point boundary before JSON
-serialization. Only the WGSL parse and validation phase may attach a Tint source range; later
-phases cannot claim a location they do not have.
+serialization, with a 1 MiB aggregate message budget that preserves at least one error. Only the
+WGSL parse and validation phase may attach a Tint source range; later phases cannot claim a
+location they do not have.
 
 The prototype does not call Tint's `GenerateBindings`. It obtains selected-entry resources and
 override types from Inspector, builds `tint::Bindings` from the request, lowers WGSL to IR, and
@@ -116,17 +153,21 @@ exact supplemental-header overlay recorded by
 ./experiments/native-metal-spikes/c1-compiler-protocol/run.sh \
   --release-root ../Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release \
   --compat-include ../tint-8f25-compat-include \
+  --jsoncpp-root ../jsoncpp-1.9.8 \
   --require-tint
 ```
 
 The equivalent environment variables are `C1_COMPILER_PROTOCOL_TINT_RELEASE_ROOT`,
-`C1_COMPILER_PROTOCOL_TINT_COMPAT_INCLUDE`, and `C1_COMPILER_PROTOCOL_REQUIRE_TINT=1`. The runner
-downloads and installs nothing. It verifies the 608-file include tree, library, and exact
-single-file supplemental header overlay, builds the prototype twice with warnings as errors, and
-requires identical executable hashes. It uses a temporary directory and removes all generated
-inputs and binaries on exit. These hashes are feasibility provenance derived from the recorded
-official archive; a production source build still needs its own complete manifest and reproducible
-binary identity across clean machines.
+`C1_COMPILER_PROTOCOL_TINT_COMPAT_INCLUDE`, `C1_COMPILER_PROTOCOL_JSONCPP_ROOT`, and
+`C1_COMPILER_PROTOCOL_REQUIRE_TINT=1`. The JsonCpp root must be an exact checkout of official tag
+`1.9.8` at commit `8519b8381f3c741ad1421f88237b1deda0b11412` and match its compiled-source
+closure. The runner downloads and installs nothing. It verifies the Dawn 608-file include tree,
+library, exact single-file supplemental header overlay, JsonCpp compiled-source closure, and
+license. It compiles JsonCpp's
+three official translation units directly, builds the worker twice with warnings as errors, and
+requires identical executable hashes. The tracked provenance includes the official archive URL,
+size and SHA-256 plus the selected MIT license text; source is not vendored. Distribution and
+productization of that dependency remain a later decision.
 
 ## Scope and next gates
 
@@ -142,9 +183,9 @@ integer projection.
 
 The remaining gates are:
 
-- extract and type-check evaluated WGSL override defaults before constructing this request;
+- connect the proven override-default materializer and the broader semantic extractor to request
+  construction;
 - define the vertex-input, inter-stage, and fragment-output interface projection;
-- implement and fault-test the final JSON stdin/EOF worker codec;
 - build the wrapper from direct Tint targets for macOS 14 on arm64 and x86_64;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.

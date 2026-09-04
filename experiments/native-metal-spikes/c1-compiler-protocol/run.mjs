@@ -15,14 +15,17 @@ import Ajv2020 from "ajv/dist/2020.js";
 
 import {
   compileTintPrototype,
-  invokeTintPrototype,
+  decodeTintWorkerResponse,
+  invokeRawTintPrototype,
   runCommand,
+  startTintWorker,
 } from "./lib/native-compiler.mjs";
 import {
   assertRequestSemantics,
   assertResponseSemantics,
   attachDiagnosticOrigins,
   COMPILER_CONTRACT,
+  jsonAllocationUnits,
   sha256Utf8,
   TINT_REVISION,
 } from "./lib/protocol.mjs";
@@ -58,6 +61,7 @@ function parseArguments(argv) {
   const options = {
     releaseRoot: process.env.C1_COMPILER_PROTOCOL_TINT_RELEASE_ROOT,
     compatInclude: process.env.C1_COMPILER_PROTOCOL_TINT_COMPAT_INCLUDE,
+    jsoncppRoot: process.env.C1_COMPILER_PROTOCOL_JSONCPP_ROOT,
     requireTint: process.env.C1_COMPILER_PROTOCOL_REQUIRE_TINT === "1",
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -65,7 +69,8 @@ function parseArguments(argv) {
     if (argument === "--help" || argument === "-h") {
       process.stdout.write(
         "Usage: node run.mjs [--release-root <Dawn release>] " +
-          "[--compat-include <header overlay>] [--require-tint]\n"
+          "[--compat-include <header overlay>] " +
+          "[--jsoncpp-root <JsonCpp checkout>] [--require-tint]\n"
       );
       process.exit(0);
     }
@@ -73,11 +78,19 @@ function parseArguments(argv) {
       options.requireTint = true;
       continue;
     }
-    if (argument === "--release-root" || argument === "--compat-include") {
+    if (
+      argument === "--release-root" ||
+      argument === "--compat-include" ||
+      argument === "--jsoncpp-root"
+    ) {
       const value = argv[++index];
       if (!value) fail(`${argument} requires a value`);
-      options[argument === "--release-root" ? "releaseRoot" : "compatInclude"] =
-        resolve(value);
+      const key = {
+        "--release-root": "releaseRoot",
+        "--compat-include": "compatInclude",
+        "--jsoncpp-root": "jsoncppRoot",
+      }[argument];
+      options[key] = resolve(value);
       continue;
     }
     fail(`unknown argument ${argument}`);
@@ -85,6 +98,7 @@ function parseArguments(argv) {
   if (options.releaseRoot) options.releaseRoot = resolve(options.releaseRoot);
   if (options.compatInclude)
     options.compatInclude = resolve(options.compatInclude);
+  if (options.jsoncppRoot) options.jsoncppRoot = resolve(options.jsoncppRoot);
   return options;
 }
 
@@ -846,12 +860,11 @@ function assertExpectedNativeResult(id, response, expectation) {
   }
 }
 
-function runOneNativeCase({
+async function runOneNativeCase({
   id,
   request,
   expectation,
   executable,
-  scratch,
   validators,
   physicalPaths,
   validateRequest = true,
@@ -860,37 +873,28 @@ function runOneNativeCase({
     assertSchema(validators.request, request, `${id} request`);
     assertRequestSemantics(request);
   }
-  const attempts = ["first", "second"].map((suffix) =>
-    invokeTintPrototype({ executable, request, scratch, id: `${id}-${suffix}` })
-  );
-  for (const attempt of attempts) {
-    if (attempt.error || attempt.signal || attempt.status === null) {
-      fail(`${id} prototype crashed: ${attempt.error ?? attempt.signal}`);
+  const attempts = await Promise.all([
+    invokeRawTintPrototype({ executable, request }),
+    invokeRawTintPrototype({ executable, request }),
+  ]);
+  const rawResponses = attempts.map((attempt, index) => {
+    try {
+      return decodeTintWorkerResponse(attempt, (response) =>
+        assertSchema(
+          validators.response,
+          response,
+          `${id} raw response ${index + 1}`
+        )
+      );
+    } catch (error) {
+      fail(`${id} returned untrusted worker output: ${error.message}`);
     }
-    if (attempt.stderr !== "")
-      fail(`${id} wrote outside the JSON channel: ${attempt.stderr}`);
-  }
+  });
   if (
     attempts[0].status !== attempts[1].status ||
     attempts[0].stdout !== attempts[1].stdout
   ) {
     fail(`${id} prototype response is nondeterministic`);
-  }
-  let raw;
-  try {
-    raw = JSON.parse(attempts[0].stdout);
-  } catch (error) {
-    fail(
-      `${id} did not return exactly one trustworthy JSON value: ${error.message}`
-    );
-  }
-  if (
-    (raw.ok && attempts[0].status !== 0) ||
-    (!raw.ok && attempts[0].status === 0)
-  ) {
-    fail(
-      `${id} prototype exit code disagrees with its temporary typed-CLI convention`
-    );
   }
   for (const physicalPath of physicalPaths) {
     if (physicalPath && attempts[0].stdout.includes(physicalPath)) {
@@ -904,18 +908,408 @@ function runOneNativeCase({
   ) {
     fail(`${id} leaked an absolute host path`);
   }
-  assertSchema(validators.response, raw, `${id} raw response`);
-  const response = attachDiagnosticOrigins(request, raw);
+  const response = attachDiagnosticOrigins(request, rawResponses[0]);
   assertSchema(validators.response, response, `${id} response`);
   assertResponseSemantics(request, response);
   assertExpectedNativeResult(id, response, expectation);
   return { response, exitCode: attempts[0].status };
 }
 
+async function invokeRawWorker(executable, input, options = {}) {
+  const worker = startTintWorker({
+    executable,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+  });
+  let writeResult;
+  let writeError;
+  try {
+    writeResult = await worker.write(input);
+    if (options.closeStdin !== false) worker.end();
+  } catch (error) {
+    writeError = error;
+  }
+  return {
+    worker,
+    writeResult,
+    writeError,
+    result: options.closeStdin === false ? undefined : await worker.result,
+  };
+}
+
+function parseHandledWorkerResponse(attempt, validators, label) {
+  try {
+    return decodeTintWorkerResponse(attempt, (response) =>
+      assertSchema(validators.response, response, `${label} response`)
+    );
+  } catch (error) {
+    fail(`${label} was not a handled worker response: ${error.message}`);
+  }
+}
+
+function assertFramingFailure(attempt, label) {
+  if (
+    attempt.status !== 65 ||
+    attempt.signal ||
+    attempt.stdout !== "" ||
+    Buffer.byteLength(attempt.stderr, "utf8") > 64 * 1024 ||
+    attempt.stderr !== "vgpu-tint-compiler: invalid request framing\n"
+  ) {
+    fail(
+      `${label} did not fail closed as framing: ${JSON.stringify({
+        status: attempt.status,
+        signal: attempt.signal,
+        stdoutBytes: Buffer.byteLength(attempt.stdout, "utf8"),
+        stderr: attempt.stderr,
+      })}`
+    );
+  }
+}
+
+function withRehashedSource(request, text) {
+  const updated = structuredClone(request);
+  const sha256 = sha256Utf8(text);
+  updated.source.text = text;
+  updated.source.sha256 = sha256;
+  updated.originMap.generatedSource.sha256 = sha256;
+  updated.originMap.sources[0].sha256 = sha256;
+  updated.originMap.segments = [
+    {
+      generated: { startByte: 0, endByte: Buffer.byteLength(text, "utf8") },
+      origin: { input: updated.originMap.sources[0].input },
+      precision: "module",
+    },
+  ];
+  return updated;
+}
+
+async function runWorkerCodecGate({ executable, requests, validators }) {
+  const validBytes = Buffer.from(JSON.stringify(requests.noop), "utf8");
+  const usage = runCommand(executable, ["unexpected-argument"]);
+  if (
+    usage.error ||
+    usage.signal ||
+    usage.status !== 64 ||
+    usage.stdout !== "" ||
+    usage.stderr !== "vgpu-tint-compiler: this worker accepts no arguments\n"
+  ) {
+    fail("worker did not reject argv with the documented usage exit");
+  }
+  const allocationLimitValue = Array(262_143).fill(null);
+  const allocationLimitBytes = Buffer.from(
+    JSON.stringify(allocationLimitValue)
+  );
+  const allocationOverLimitBytes = Buffer.from(
+    JSON.stringify([...allocationLimitValue, null])
+  );
+  if (
+    jsonAllocationUnits(allocationLimitValue) !== 262_144 ||
+    jsonAllocationUnits([...allocationLimitValue, null]) !== 262_145
+  ) {
+    fail("Node allocation-unit metric drifted at its boundary");
+  }
+  const framingInputs = [
+    ["empty", Buffer.alloc(0)],
+    ["whitespace", Buffer.from(" \n\t\r")],
+    ["truncated", Buffer.from("{")],
+    ["two-values", Buffer.from("{} {}")],
+    ["invalid-utf8", Buffer.from([0xff])],
+    ["overlong-utf8", Buffer.from([0xc0, 0xaf])],
+    ["lone-continuation-utf8", Buffer.from([0x80])],
+    ["truncated-utf8", Buffer.from([0xe2, 0x82])],
+    ["surrogate-scalar-utf8", Buffer.from([0xed, 0xa0, 0x80])],
+    ["out-of-range-utf8", Buffer.from([0xf4, 0x90, 0x80, 0x80])],
+    ["bom", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), validBytes])],
+    ["nul", Buffer.from("{}\0")],
+    ["trailing-comma", Buffer.from('{"x":1,}')],
+    ["comment", Buffer.from("{/*x*/}")],
+    ["leading-plus", Buffer.from("+1")],
+    ["leading-zero", Buffer.from("01")],
+    ["missing-fraction", Buffer.from("1.")],
+    ["missing-exponent", Buffer.from("1e")],
+    ["non-finite-exponent", Buffer.from("1e999")],
+    ["lone-low-surrogate", Buffer.from(String.raw`{"x":"\uDC00"}`)],
+    ["high-non-low-surrogate", Buffer.from(String.raw`{"x":"\uD800\u0041"}`)],
+    [
+      "duplicate-key",
+      Buffer.from(
+        JSON.stringify(requests.noop).replace(
+          '"schemaVersion":1',
+          '"schemaVersion":1,"schemaVersion":1'
+        )
+      ),
+    ],
+    ["depth-65", Buffer.from(`${"[".repeat(65)}0${"]".repeat(65)}`)],
+    ["allocation-unit-plus-one", allocationOverLimitBytes],
+  ];
+  for (const [label, input] of framingInputs) {
+    const { result } = await invokeRawWorker(executable, input);
+    assertFramingFailure(result, label);
+  }
+
+  const depth64 = await invokeRawWorker(
+    executable,
+    Buffer.from(`${"[".repeat(64)}0${"]".repeat(64)}`)
+  );
+  const depth64Response = parseHandledWorkerResponse(
+    depth64.result,
+    validators,
+    "depth-64"
+  );
+  if (
+    depth64Response.ok ||
+    !depth64Response.diagnostics.some(
+      (diagnostic) => diagnostic.phase === "protocol"
+    )
+  ) {
+    fail("depth-64 was not classified as a decoded protocol failure");
+  }
+
+  const validEscapedPair = await invokeRawWorker(
+    executable,
+    Buffer.from(String.raw`{"x":"\uD83D\uDE00"}`)
+  );
+  const escapedPairResponse = parseHandledWorkerResponse(
+    validEscapedPair.result,
+    validators,
+    "valid-surrogate-pair"
+  );
+  if (escapedPairResponse.ok) {
+    fail("valid-surrogate-pair unexpectedly implemented the request contract");
+  }
+
+  const nonObject = await invokeRawWorker(executable, Buffer.from("[]"));
+  const nonObjectResponse = parseHandledWorkerResponse(
+    nonObject.result,
+    validators,
+    "non-object-root"
+  );
+  if (nonObjectResponse.ok) {
+    fail("non-object JSON root escaped the protocol decoder");
+  }
+
+  const sha256Vector =
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+  if (sha256Utf8("abc") !== sha256Vector) {
+    fail("Node SHA-256 test-vector precondition drifted");
+  }
+  const sha256Request = withRehashedSource(requests.noop, "abc");
+  sha256Request.source.sha256 = sha256Vector;
+  sha256Request.originMap.generatedSource.sha256 = sha256Vector;
+  sha256Request.originMap.sources[0].sha256 = sha256Vector;
+  assertRequestSemantics(sha256Request);
+  const sha256Response = parseHandledWorkerResponse(
+    await invokeRawTintPrototype({ executable, request: sha256Request }),
+    validators,
+    "SHA-256 abc vector"
+  );
+  if (
+    sha256Response.ok ||
+    !sha256Response.diagnostics.some(
+      (diagnostic) => diagnostic.phase === "wgsl"
+    )
+  ) {
+    fail("worker SHA-256 implementation rejected the abc test vector");
+  }
+
+  const allocationLimit = await invokeRawWorker(
+    executable,
+    allocationLimitBytes
+  );
+  const allocationLimitResponse = parseHandledWorkerResponse(
+    allocationLimit.result,
+    validators,
+    "allocation-unit-limit"
+  );
+  if (allocationLimitResponse.ok) {
+    fail(
+      "allocation-unit boundary unexpectedly implemented the request contract"
+    );
+  }
+
+  const protocolMutations = [
+    ["unknown-field", (request) => (request.unknown = true)],
+    ["nested-unknown-field", (request) => (request.source.unknown = true)],
+    ["source-hash", (request) => (request.source.sha256 = "0".repeat(64))],
+    [
+      "crossed-origin",
+      (request) => (request.originMap.generatedSource.sha256 = "0".repeat(64)),
+    ],
+    [
+      "origin-order",
+      (request) => request.originMap.sources.reverse(),
+      requests["wgsl-error"],
+    ],
+    [
+      "override-order",
+      (request) => request.overrides.reverse(),
+      requests.typedOverrides,
+    ],
+    [
+      "binding-order",
+      (request) => request.metal.bindings.reverse(),
+      requests.fixedPrefix,
+    ],
+  ];
+  for (const [label, mutate, base = requests.noop] of protocolMutations) {
+    const request = structuredClone(base);
+    mutate(request);
+    const attempt = await invokeRawTintPrototype({ executable, request });
+    const response = parseHandledWorkerResponse(attempt, validators, label);
+    if (
+      response.ok ||
+      !response.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "VGPU-NATIVE-TINT-PROTOCOL" &&
+          diagnostic.phase === "protocol"
+      )
+    ) {
+      fail(`${label} escaped the typed protocol decoder`);
+    }
+  }
+
+  const utf16Ordered = structuredClone(requests.noop);
+  const nonBmp = "\u{10000}";
+  const bmp = "\ue000";
+  utf16Ordered.originMap.sources = [
+    { input: nonBmp, sha256: utf16Ordered.source.sha256 },
+    { input: bmp, sha256: utf16Ordered.source.sha256 },
+  ];
+  utf16Ordered.originMap.segments[0].origin.input = nonBmp;
+  assertRequestSemantics(utf16Ordered);
+  const utf16Response = parseHandledWorkerResponse(
+    await invokeRawTintPrototype({ executable, request: utf16Ordered }),
+    validators,
+    "utf16-origin-order"
+  );
+  if (!utf16Response.ok) fail("UTF-16 origin ordering diverged in the worker");
+
+  const emojiRequest = withRehashedSource(
+    requests.noop,
+    `// 😀 codec fragmentation\n${requests.noop.source.text}`
+  );
+  assertSchema(validators.request, emojiRequest, "fragmented UTF-8 request");
+  assertRequestSemantics(emojiRequest);
+  const encodedEmoji = Buffer.from(JSON.stringify(emojiRequest), "utf8");
+  const emojiOffset = encodedEmoji.indexOf(Buffer.from("😀"));
+  if (emojiOffset < 0) fail("fragmentation fixture omitted its UTF-8 scalar");
+  const fragmented = startTintWorker({ executable });
+  for (const chunk of [
+    encodedEmoji.subarray(0, emojiOffset + 1),
+    encodedEmoji.subarray(emojiOffset + 1, emojiOffset + 3),
+    encodedEmoji.subarray(emojiOffset + 3),
+  ]) {
+    await fragmented.write(chunk);
+  }
+  fragmented.end();
+  const fragmentedResult = await fragmented.result;
+  const ordinaryResult = await invokeRawTintPrototype({
+    executable,
+    request: emojiRequest,
+  });
+  parseHandledWorkerResponse(fragmentedResult, validators, "fragmented UTF-8");
+  parseHandledWorkerResponse(ordinaryResult, validators, "ordinary UTF-8");
+  if (fragmentedResult.stdout !== ordinaryResult.stdout) {
+    fail("fragmented UTF-8 changed the deterministic worker response");
+  }
+
+  const eofWorker = startTintWorker({ executable });
+  let outputBeforeEof = false;
+  eofWorker.child.stdout.once("data", () => {
+    outputBeforeEof = true;
+  });
+  await eofWorker.write(validBytes);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  if (
+    outputBeforeEof ||
+    eofWorker.child.exitCode !== null ||
+    eofWorker.child.signalCode !== null
+  ) {
+    fail("worker produced output or exited before request EOF");
+  }
+  eofWorker.end();
+  parseHandledWorkerResponse(
+    await eofWorker.result,
+    validators,
+    "stdin EOF framing"
+  );
+
+  const largeRequest = withRehashedSource(
+    requests.noop,
+    `// ${"x".repeat(1024 * 1024)}\n${requests.noop.source.text}`
+  );
+  assertRequestSemantics(largeRequest);
+  const largeWorker = startTintWorker({ executable });
+  const largeWrite = await largeWorker.write(
+    Buffer.from(JSON.stringify(largeRequest), "utf8")
+  );
+  largeWorker.end();
+  const largeResponse = parseHandledWorkerResponse(
+    await largeWorker.result,
+    validators,
+    "backpressured request"
+  );
+  if (!largeWrite.backpressured || !largeResponse.ok) {
+    fail("large request did not exercise pipe backpressure successfully");
+  }
+
+  const cancellation = new AbortController();
+  const cancelledWorker = startTintWorker({
+    executable,
+    signal: cancellation.signal,
+  });
+  await cancelledWorker.write(Buffer.from("{"));
+  cancellation.abort();
+  const cancelled = await cancelledWorker.result;
+  if (!cancelled.error || (cancelled.status === 0 && !cancelled.signal)) {
+    fail("cancelled pre-EOF worker was treated as a handled response");
+  }
+
+  const timedOutWorker = startTintWorker({ executable, timeoutMs: 100 });
+  const timedOut = await timedOutWorker.result;
+  if (
+    !timedOut.error?.message.includes("timed out") ||
+    (timedOut.status === 0 && !timedOut.signal) ||
+    timedOut.stdout !== ""
+  ) {
+    fail("pre-EOF worker timeout was not fatal and output-free");
+  }
+
+  const oversized = startTintWorker({ executable, timeoutMs: 120_000 });
+  let oversizedWriteFailed = false;
+  try {
+    await oversized.write(Buffer.alloc(128 * 1024 * 1024 + 1, 0x20));
+    oversized.end();
+  } catch {
+    oversizedWriteFailed = true;
+  }
+  const oversizedResult = await oversized.result;
+  assertFramingFailure(oversizedResult, "request-cap-plus-one");
+
+  return {
+    status: "passed",
+    usageExit: "passed",
+    framingFaults: framingInputs.length + 1,
+    protocolFaults: protocolMutations.length + 4,
+    depthBoundary: "64/65",
+    utf8Fragmentation: "passed",
+    eofRequired: "passed",
+    inputBackpressure: "passed",
+    cancellation: "passed",
+    timeout: "passed",
+    sha256Vector: "abc",
+    oversizedWriteObserved: oversizedWriteFailed,
+    nfcBoundary: "caller-precondition",
+  };
+}
+
 async function runTintGate(options, validators, contractRequests, scratch) {
   if (!options.releaseRoot) {
     if (options.requireTint) fail("Tint gate requires --release-root");
     return { status: "skipped", reason: "release-root-not-provided" };
+  }
+  if (!options.jsoncppRoot) {
+    fail("Tint gate requires --jsoncpp-root for the pinned worker codec");
   }
   if (process.platform !== "darwin" || process.arch !== "arm64") {
     if (options.requireTint)
@@ -929,6 +1323,7 @@ async function runTintGate(options, validators, contractRequests, scratch) {
       fixtureDirectory,
       releaseRoot: options.releaseRoot,
       compatInclude: options.compatInclude,
+      jsoncppRoot: options.jsoncppRoot,
       scratch: buildDirectory,
     });
   });
@@ -939,6 +1334,11 @@ async function runTintGate(options, validators, contractRequests, scratch) {
   const requests = nativeFixtureRequests(contractRequests);
   const integrated = await resolverCompilerRequest();
   requests.resolverIntegrated = integrated.request;
+  const workerCodec = await runWorkerCodecGate({
+    executable,
+    requests,
+    validators,
+  });
 
   const positives = [
     ["noop", requests.noop, { ok: true }],
@@ -1010,19 +1410,24 @@ async function runTintGate(options, validators, contractRequests, scratch) {
   for (const [id, request, expectation] of positives) {
     results.set(
       id,
-      runOneNativeCase({
+      await runOneNativeCase({
         id,
         request,
         expectation,
         executable,
         scratch,
         validators,
-        physicalPaths: [options.releaseRoot, options.compatInclude, scratch],
+        physicalPaths: [
+          options.releaseRoot,
+          options.compatInclude,
+          options.jsoncppRoot,
+          scratch,
+        ],
       })
     );
   }
 
-  const invalidWgsl = runOneNativeCase({
+  const invalidWgsl = await runOneNativeCase({
     id: "wgsl-error",
     request: requests["wgsl-error"],
     expectation: {
@@ -1041,13 +1446,18 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     executable,
     scratch,
     validators,
-    physicalPaths: [options.releaseRoot, options.compatInclude, scratch],
+    physicalPaths: [
+      options.releaseRoot,
+      options.compatInclude,
+      options.jsoncppRoot,
+      scratch,
+    ],
   });
   results.set("wgsl-error", invalidWgsl);
 
   results.set(
     "bounded-diagnostic",
-    runOneNativeCase({
+    await runOneNativeCase({
       id: "bounded-diagnostic",
       request: requests.boundedDiagnostic,
       expectation: {
@@ -1059,7 +1469,12 @@ async function runTintGate(options, validators, contractRequests, scratch) {
       executable,
       scratch,
       validators,
-      physicalPaths: [options.releaseRoot, options.compatInclude, scratch],
+      physicalPaths: [
+        options.releaseRoot,
+        options.compatInclude,
+        options.jsoncppRoot,
+        scratch,
+      ],
     })
   );
 
@@ -1123,7 +1538,7 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     (request) => (request.entryPoint.metal = "thread"),
     "protocol",
     false,
-    "--emitted-name must use the reserved vgpu_ identifier domain"
+    "emitted name must use the reserved vgpu_ identifier domain"
   );
   addNegative(
     "internal-slot-collision-core-guard",
@@ -1139,7 +1554,7 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     (request) => (request.metal.bindings[1].binding = 0),
     "protocol",
     false,
-    "binding mapping repeats a WGSL binding point"
+    "WGSL binding points are duplicated"
   );
   addNegative(
     "incoherent-component-core-guard",
@@ -1192,14 +1607,19 @@ async function runTintGate(options, validators, contractRequests, scratch) {
   for (const [id, request, expectation, validateRequest] of negativeCases) {
     results.set(
       id,
-      runOneNativeCase({
+      await runOneNativeCase({
         id,
         request,
         expectation,
         executable,
         scratch,
         validators,
-        physicalPaths: [options.releaseRoot, options.compatInclude, scratch],
+        physicalPaths: [
+          options.releaseRoot,
+          options.compatInclude,
+          options.jsoncppRoot,
+          scratch,
+        ],
         validateRequest,
       })
     );
@@ -1266,10 +1686,13 @@ async function runTintGate(options, validators, contractRequests, scratch) {
       "include/**",
       "lib/libwebgpu_dawn.a",
       "src/utils/compiler.h",
+      "JsonCpp 1.9.8 compiled closure",
+      "JsonCpp LICENSE",
     ],
     positiveCanaries: positives.length,
     negativeCanaries: negativeCases.length + 2,
     deterministicCanaries: results.size,
+    workerCodec,
     moduleAttributedDiagnostics: "passed",
     sharedImmediateData: "passed",
     typedOverrides: 5,

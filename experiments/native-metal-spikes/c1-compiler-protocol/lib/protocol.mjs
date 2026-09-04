@@ -43,6 +43,23 @@ export function assertRequestSemantics(request) {
   if (request.contractId !== COMPILER_CONTRACT || request.schemaVersion !== 1) {
     fail("VGPU-C1-PROTOCOL-CONTRACT", "request selects another contract");
   }
+  const collectionSizes = [
+    ["origin sources", request.originMap.sources.length, 4_096],
+    ["origin segments", request.originMap.segments.length, 65_536],
+    ["overrides", request.overrides.length, 4_096],
+    ["language features", request.languageFeatures.length, 4],
+    ["bindings", request.metal.bindings.length, 65_536],
+  ];
+  if (
+    Buffer.byteLength(request.source.text, "utf8") > 16 * 1024 * 1024 ||
+    collectionSizes.some(([, size, maximum]) => size > maximum) ||
+    jsonAllocationUnits(request) > 262_144
+  ) {
+    fail(
+      "VGPU-C1-PROTOCOL-RESOURCE-LIMIT",
+      "request exceeds an experimental worker resource limit"
+    );
+  }
   if (sha256Utf8(request.source.text) !== request.source.sha256) {
     fail(
       "VGPU-C1-PROTOCOL-SOURCE-HASH",
@@ -200,6 +217,21 @@ export function assertRequestSemantics(request) {
     }
   }
   return request;
+}
+
+export function jsonAllocationUnits(value) {
+  if (Array.isArray(value)) {
+    return (
+      1 + value.reduce((total, item) => total + jsonAllocationUnits(item), 0)
+    );
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).reduce(
+      (total, [, item]) => total + 1 + jsonAllocationUnits(item),
+      1
+    );
+  }
+  return 1;
 }
 
 /** Attaches only module-level provenance when a Tint range is wholly inside one segment. */
