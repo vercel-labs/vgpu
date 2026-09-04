@@ -137,10 +137,12 @@ pipeline closure receives that same validated value instead of independently cho
 
 Source spans remain excluded from each `vgpu-native-program/v1` fingerprint as provenance, but they
 are not trusted blindly: the verifier bounds-checks each span against its declared WGSL input and
-requires the selected stage and exact WGSL entry name inside it. The root semantic fingerprint
-hashes the complete semantic object, so it still commits to those spans and the runtime-projection
-fingerprint commits to them transitively through that root hash. A crossed `Noop`/`RuntimeArray`
-span is an executable negative canary.
+requires the selected stage and exact authored entry name inside it. `Noop` deliberately gives that
+authored name a different resolved WGSL identity, while the projection continues to link by the
+resolved name. The root semantic fingerprint hashes the complete semantic object, so it still
+commits to those spans and the runtime-projection fingerprint commits to them transitively through
+that root hash. Crossed `Noop`/`RuntimeArray` and mismatched-authored-name spans are executable
+negative canaries.
 
 The sentinel deliberately has a `.metallib` filename so the same SwiftPM resource path is tested
 in C3a and C3b. Its content is ordinary UTF-8 text and is never passed to Metal in C3a.

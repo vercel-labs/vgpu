@@ -128,7 +128,11 @@ function validateSourceSpans(semantic, inputs, inputsRoot) {
   for (const program of semantic.programs) {
     for (const entry of Object.values(program.entryPoints)) {
       if (!entry.source) continue;
-      const owner = `${program.name}/${entry.stage}/${entry.names.wgsl}`;
+      const entryName =
+        entry.names.authored === entry.names.wgsl
+          ? entry.names.authored
+          : `${entry.names.authored} -> ${entry.names.wgsl}`;
+      const owner = `${program.name}/${entry.stage}/${entryName}`;
       const source = sourceById.get(entry.source.input);
       if (
         !source ||
@@ -149,7 +153,7 @@ function validateSourceSpans(semantic, inputs, inputsRoot) {
       );
       if (end <= start) fail(`${owner} source span is empty or reversed`);
       const snippet = source.contents.slice(start, end);
-      const escapedName = entry.names.wgsl.replace(
+      const escapedName = entry.names.authored.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
@@ -158,7 +162,7 @@ function validateSourceSpans(semantic, inputs, inputsRoot) {
       );
       if (!declaration.test(snippet)) {
         fail(
-          `${owner} source span does not contain its WGSL entry declaration`
+          `${owner} source span does not contain its authored WGSL entry declaration`
         );
       }
     }
@@ -2139,16 +2143,14 @@ requireSourceSpanMutationFailure(
   artifact.inputs,
   options.inputsRoot,
   (semantic) => {
-    const noop = semantic.programs.find((program) => program.name === "Noop");
-    const runtimeArray = semantic.programs.find(
-      (program) => program.name === "RuntimeArray"
-    );
+    const noop = requireSemanticProgram(semantic, "Noop");
+    const runtimeArray = requireSemanticProgram(semantic, "RuntimeArray");
     noop.sources = [...runtimeArray.sources];
     noop.entryPoints.compute.source = clone(
       runtimeArray.entryPoints.compute.source
     );
   },
-  "source span does not contain its WGSL entry declaration",
+  "source span does not contain its authored WGSL entry declaration",
   "crossed program source span"
 );
 requireSourceSpanMutationFailure(
@@ -2156,7 +2158,18 @@ requireSourceSpanMutationFailure(
   artifact.inputs,
   options.inputsRoot,
   (semantic) => {
-    const noop = semantic.programs.find((program) => program.name === "Noop");
+    const noop = requireSemanticProgram(semantic, "Noop");
+    noop.entryPoints.compute.names.authored = "c3_missing_authored_noop";
+  },
+  "source span does not contain its authored WGSL entry declaration",
+  "mismatched authored entry name"
+);
+requireSourceSpanMutationFailure(
+  artifact.semantic,
+  artifact.inputs,
+  options.inputsRoot,
+  (semantic) => {
+    const noop = requireSemanticProgram(semantic, "Noop");
     noop.entryPoints.compute.source.start.line = 999;
   },
   "has an invalid source position",

@@ -163,7 +163,7 @@
             "origin": "authored",
             "names": {
               "authored": "c3_noop",
-              "wgsl": "c3_noop"
+              "wgsl": "c3_resolved_noop"
             },
             "source": {
               "input": "noop-wgsl",
@@ -462,7 +462,7 @@
         "entryPoints": [
           {
             "stage": "compute",
-            "wgsl": "c3_noop",
+            "wgsl": "c3_resolved_noop",
             "metal": "vgpu_c3_noop",
             "interface": { "kind": "compute" }
           }
