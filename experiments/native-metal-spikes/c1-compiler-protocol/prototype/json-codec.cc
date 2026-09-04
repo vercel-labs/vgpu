@@ -29,6 +29,10 @@ constexpr std::string_view kEntryInventoryContract =
     "vgpu-native-tint-entry-inventory/v1";
 constexpr std::string_view kEntryInventoryRequestIdentityDomain =
     "vgpu-native-tint-entry-inventory-request-bytes/v1";
+constexpr std::string_view kSemanticExtractionContract =
+    "vgpu-native-tint-semantic-extraction/v1";
+constexpr std::string_view kSemanticExtractionRequestIdentityDomain =
+    "vgpu-native-tint-semantic-extraction-request-bytes/v1";
 constexpr std::string_view kOriginMapContract = "vgpu-native-origin-map/v1";
 constexpr std::string_view kBindingModel = "vgpu-metal-binding-slots-v1";
 constexpr std::string_view kStorageSizeModel =
@@ -759,6 +763,18 @@ RequestIdentity EntryInventoryRequestIdentity(std::string_view request_bytes) {
   };
 }
 
+RequestIdentity
+SemanticExtractionRequestIdentity(std::string_view request_bytes) {
+  Sha256 hash;
+  hash.Update(kSemanticExtractionRequestIdentityDomain);
+  hash.Update(std::string_view("\0", 1));
+  hash.Update(request_bytes);
+  return RequestIdentity{
+      .domain = std::string(kSemanticExtractionRequestIdentityDomain),
+      .sha256 = hash.Finish(),
+  };
+}
+
 class Decoder final {
 public:
   std::optional<CompilerRequest> DecodeCompiler(const Json::Value &root) {
@@ -827,6 +843,52 @@ public:
           "origin map hash does not match its canonical v1 JSON");
     }
     if (!DecodeFeatures(root["languageFeatures"], request)) {
+      return std::nullopt;
+    }
+    return request;
+  }
+
+  std::optional<SemanticExtractionRequest>
+  DecodeSemanticExtraction(const Json::Value &root,
+                           const RequestIdentity &identity) {
+    if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
+                                "originMap", "originMapSha256",
+                                "entryPoints", "overrideConfiguration",
+                                "languageFeatures"})) {
+      return Reject<SemanticExtractionRequest>(
+          "semantic extraction request has missing or unknown top-level "
+          "fields");
+    }
+    const auto schema_version = ReadUnsignedInteger(root["schemaVersion"], 1);
+    if (!schema_version || *schema_version != 1 ||
+        !root["contractId"].isString() ||
+        root["contractId"].asString() != kSemanticExtractionContract) {
+      return Reject<SemanticExtractionRequest>(
+          "request selects an unsupported semantic extraction contract");
+    }
+
+    SemanticExtractionRequest request;
+    request.identity = identity;
+    std::string source_hash;
+    if (!DecodeSource(root["source"], request, source_hash) ||
+        !DecodeOriginMap(root["originMap"], request.source_name, source_hash,
+                         request.source_text)) {
+      return std::nullopt;
+    }
+    if (request.source_text.find('\0') != std::string::npos) {
+      return Reject<SemanticExtractionRequest>(
+          "semantic extraction source text contains a NUL byte");
+    }
+    if (!root["originMapSha256"].isString() ||
+        !IsLowerHex(root["originMapSha256"].asString(), 64) ||
+        Sha256Hex(CanonicalOriginMap(root["originMap"])) !=
+            root["originMapSha256"].asString()) {
+      return Reject<SemanticExtractionRequest>(
+          "origin map hash does not match its canonical v1 JSON");
+    }
+    if (!DecodeSemanticEntryPoints(root["entryPoints"], request) ||
+        !DecodeOverrideConfiguration(root["overrideConfiguration"], request) ||
+        !DecodeFeatures(root["languageFeatures"], request)) {
       return std::nullopt;
     }
     return request;
@@ -984,6 +1046,72 @@ private:
     }
     if (!IsEmittedIdentifier(request.emitted_name)) {
       return Fail("emitted name must use the reserved vgpu_ identifier domain");
+    }
+    return true;
+  }
+
+  bool DecodeSemanticEntryPoints(const Json::Value &value,
+                                 SemanticExtractionRequest &request) {
+    if (!value.isArray() || (value.size() != 1 && value.size() != 2)) {
+      return Fail("semantic extraction must select one compute entry or one "
+                  "vertex and one fragment entry");
+    }
+    for (const auto &item : value) {
+      if (!HasExactMembers(item, {"stage", "wgsl"}) ||
+          !item["stage"].isString() || !item["wgsl"].isString()) {
+        return Fail("semantic extraction entry does not implement the v1 "
+                    "shape");
+      }
+      const std::string stage = item["stage"].asString();
+      const std::string wgsl = item["wgsl"].asString();
+      if (!IsAsciiIdentifier(wgsl, 256)) {
+        return Fail("semantic extraction WGSL entry name is not an "
+                    "identifier");
+      }
+      request.entry_points.push_back(
+          SelectedEntryPoint{.stage = stage, .wgsl = wgsl});
+    }
+    const bool compute = request.entry_points.size() == 1 &&
+                         request.entry_points[0].stage == "compute";
+    const bool render =
+        request.entry_points.size() == 2 &&
+        request.entry_points[0].stage == "vertex" &&
+        request.entry_points[1].stage == "fragment";
+    if (!compute && !render) {
+      return Fail("semantic extraction entry tuple is not compute or "
+                  "vertex-fragment order");
+    }
+    return true;
+  }
+
+  bool DecodeOverrideConfiguration(const Json::Value &value,
+                                   SemanticExtractionRequest &request) {
+    if (!value.isArray() || value.size() > kMaxOverrides) {
+      return Fail("semantic extraction override configuration exceeds the "
+                  "collection limit");
+    }
+    std::optional<std::string> previous_name;
+    for (const auto &item : value) {
+      if (!HasExactMembers(item, {"name", "value"}) ||
+          !item["name"].isString() ||
+          (!item["value"].isBool() && !item["value"].isNumeric())) {
+        return Fail("semantic extraction override configuration does not "
+                    "implement the v1 shape");
+      }
+      const std::string name = item["name"].asString();
+      if (!IsAsciiIdentifier(name, 256) ||
+          (previous_name && !Utf16Less(*previous_name, name))) {
+        return Fail("semantic extraction override names are duplicated or "
+                    "not strictly sorted");
+      }
+      previous_name = name;
+      ConfiguredOverride configured{.name = name};
+      if (item["value"].isBool()) {
+        configured.value = item["value"].asBool();
+      } else {
+        configured.value = item["value"].asDouble();
+      }
+      request.override_configuration.push_back(std::move(configured));
     }
     return true;
   }
@@ -1582,6 +1710,25 @@ DecodedRequest ReadRequest(std::istream &input) {
             .error = "JSON contains invalid Unicode or a non-finite number"};
   }
   Decoder decoder;
+  const bool is_semantic_extraction =
+      root.isObject() && root["contractId"].isString() &&
+      root["contractId"].asString() == kSemanticExtractionContract;
+  if (is_semantic_extraction) {
+    const auto identity = SemanticExtractionRequestIdentity(bytes);
+    auto request = decoder.DecodeSemanticExtraction(root, identity);
+    if (!request) {
+      return {.failure = RequestFailureKind::kProtocol,
+              .error = decoder.error(),
+              .operation = RequestOperation::kSemanticExtraction,
+              .request_identity = identity};
+    }
+    return {
+        .value = WorkerRequest(std::in_place_type<SemanticExtractionRequest>,
+                               std::move(*request)),
+        .operation = RequestOperation::kSemanticExtraction,
+        .request_identity = identity,
+    };
+  }
   const bool is_entry_inventory =
       root.isObject() && root["contractId"].isString() &&
       root["contractId"].asString() == kEntryInventoryContract;

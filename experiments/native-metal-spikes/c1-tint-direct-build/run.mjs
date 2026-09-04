@@ -39,6 +39,7 @@ const compilerProtocolDirectory = resolve(
 );
 const compilerContractId = "vgpu-native-tint-compiler/v1";
 const inventoryContractId = "vgpu-native-tint-entry-inventory/v1";
+const semanticExtractionContractId = "vgpu-native-tint-semantic-extraction/v1";
 let lock;
 let baseLockSha256;
 let localHeadCommit;
@@ -132,6 +133,25 @@ const compilerOracleInputIds = [
   "requestSchema",
   "responseSchema",
 ];
+const inventoryOracleInputIds = [
+  "releasesManifest",
+  "jsoncppProvenance",
+  "nativeCompiler",
+  "protocol",
+  "originMapProtocol",
+  "originSchema",
+  "requestSchema",
+  "responseSchema",
+  "inventoryProtocol",
+  "inventoryRequestSchema",
+  "inventoryResponseSchema",
+];
+const currentOracleInputIds = [
+  ...inventoryOracleInputIds,
+  "semanticExtractionProtocol",
+  "semanticExtractionRequestSchema",
+  "semanticExtractionResponseSchema",
+];
 const oracleInputs = [
   {
     id: "releasesManifest",
@@ -188,8 +208,22 @@ const oracleInputs = [
     path: "../c1-semantic-bridge/contracts/inventory-response-v1.schema.json",
     mutable: true,
   },
+  {
+    id: "semanticExtractionProtocol",
+    path: "../c1-semantic-bridge/lib/semantic-extraction-protocol.mjs",
+    mutable: true,
+  },
+  {
+    id: "semanticExtractionRequestSchema",
+    path: "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "semanticExtractionResponseSchema",
+    path: "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
+    mutable: true,
+  },
 ];
-const oracleInputIds = oracleInputs.map(({ id }) => id);
 const legacyOracleRequestRoot = "../c1-compiler-protocol/fixtures/requests";
 const legacyOracleRequestPaths = [
   "generate-failure.json",
@@ -240,6 +274,26 @@ const oracleFixtures = [
     path: "c1-semantic-bridge/fixtures/requests/multi-stage.json",
   },
   {
+    id: "semantic-active-override",
+    ok: false,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-override.json",
+  },
+  {
+    id: "semantic-active-resource",
+    ok: false,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-resource.json",
+  },
+  {
+    id: "semantic-compute-interface",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/compute-interface.json",
+  },
+  {
+    id: "semantic-render-interface",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
+  },
+  {
     id: "compute-builtins",
     ok: true,
     path: "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
@@ -272,12 +326,63 @@ const oracleFixtures = [
 ];
 const oracleFixtureIds = oracleFixtures.map(({ id }) => id);
 const oracleRequestPaths = oracleFixtures.map(({ path }) => path);
-const compilerOracleFixtureIds = oracleFixtures
-  .filter(({ id }) => !id.startsWith("inventory-"))
-  .map(({ id }) => id);
-const compilerOracleRequestPaths = oracleFixtures
-  .filter(({ id }) => !id.startsWith("inventory-"))
-  .map(({ path }) => path);
+const compilerOracleFixtureIds = [
+  "generate-failure",
+  "noop",
+  "runtime-array",
+  "wgsl-error",
+  "compute-builtins",
+  "dual-source",
+  "fragment-sparse",
+  "interface-mismatch",
+  "scalar-fragment",
+  "vertex-sparse",
+];
+const inventoryOracleFixtureIds = [
+  "generate-failure",
+  "noop",
+  "runtime-array",
+  "wgsl-error",
+  "inventory-empty-module",
+  "inventory-invalid-wgsl",
+  "inventory-library-only",
+  "inventory-multi-stage",
+  "compute-builtins",
+  "dual-source",
+  "fragment-sparse",
+  "interface-mismatch",
+  "scalar-fragment",
+  "vertex-sparse",
+];
+const currentOracleFixtureIds = [
+  "generate-failure",
+  "noop",
+  "runtime-array",
+  "wgsl-error",
+  "inventory-empty-module",
+  "inventory-invalid-wgsl",
+  "inventory-library-only",
+  "inventory-multi-stage",
+  "semantic-active-override",
+  "semantic-active-resource",
+  "semantic-compute-interface",
+  "semantic-render-interface",
+  "compute-builtins",
+  "dual-source",
+  "fragment-sparse",
+  "interface-mismatch",
+  "scalar-fragment",
+  "vertex-sparse",
+];
+const compilerOracleRequestPaths = oracleRequestPathsForFixtureIds(
+  compilerOracleFixtureIds
+);
+const inventoryOracleRequestPaths = oracleRequestPathsForFixtureIds(
+  inventoryOracleFixtureIds
+);
+const currentOracleRequestPaths = oracleRequestPathsForFixtureIds(
+  currentOracleFixtureIds
+);
 const mutableCompiledRepositories = ["dawn", "abseil", "jsoncpp", "worker"];
 const valuedArguments = new Map([
   ["--dawn-root", "dawnRoot"],
@@ -301,6 +406,15 @@ function fail(message) {
 
 function readJSON(path) {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function oracleRequestPathsForFixtureIds(fixtureIds) {
+  const pathsById = new Map(oracleFixtures.map(({ id, path }) => [id, path]));
+  return fixtureIds.map((id) => {
+    const path = pathsById.get(id);
+    if (!path) fail(`oracle fixture cohort references unknown ID ${id}`);
+    return path;
+  });
 }
 
 function usage(stream = process.stderr) {
@@ -644,6 +758,8 @@ function verifyOracleInputs() {
     readJSON(files.responseSchema),
     readJSON(files.inventoryRequestSchema),
     readJSON(files.inventoryResponseSchema),
+    readJSON(files.semanticExtractionRequestSchema),
+    readJSON(files.semanticExtractionResponseSchema),
   ];
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   for (const schema of schemas) ajv.addSchema(schema);
@@ -655,6 +771,10 @@ function verifyOracleInputs() {
     [inventoryContractId]: {
       request: ajv.getSchema(schemas[3].$id),
       response: ajv.getSchema(schemas[4].$id),
+    },
+    [semanticExtractionContractId]: {
+      request: ajv.getSchema(schemas[5].$id),
+      response: ajv.getSchema(schemas[6].$id),
     },
   };
   for (const [contractId, contractValidators] of Object.entries(validators)) {
@@ -693,6 +813,16 @@ function assertOrMeasure(actual, expected, label, jsonPointer) {
 
 function assertOracleFixtureDefinitions() {
   assertEqual(
+    JSON.stringify(oracleInputs.map(({ id }) => id)),
+    JSON.stringify(currentOracleInputIds),
+    "current oracle input cohort"
+  );
+  assertEqual(
+    JSON.stringify(oracleFixtureIds),
+    JSON.stringify(currentOracleFixtureIds),
+    "current oracle fixture cohort"
+  );
+  assertEqual(
     new Set(oracleFixtureIds).size,
     oracleFixtureIds.length,
     "oracle fixture ID uniqueness"
@@ -719,8 +849,10 @@ function oracleInputIdsForLockShape(shape) {
       return legacyOracleInputIds;
     case "compiler":
       return compilerOracleInputIds;
+    case "inventory":
+      return inventoryOracleInputIds;
     case "current":
-      return oracleInputIds;
+      return currentOracleInputIds;
     default:
       fail(`unknown oracle input lock shape ${String(shape)}`);
   }
@@ -732,8 +864,10 @@ function oracleFixtureIdsForLockShape(shape) {
       return legacyOracleRequestPaths.map((path) => path.slice(0, -5));
     case "compiler":
       return compilerOracleFixtureIds;
+    case "inventory":
+      return inventoryOracleFixtureIds;
     case "current":
-      return oracleFixtureIds;
+      return currentOracleFixtureIds;
     default:
       fail(`unknown oracle fixture lock shape ${String(shape)}`);
   }
@@ -759,7 +893,16 @@ function selectOracleRequestRoot() {
         root: oracleRequestRoot,
         paths: compilerOracleRequestPaths,
       },
-      { id: "current", root: oracleRequestRoot, paths: oracleRequestPaths },
+      {
+        id: "inventory",
+        root: oracleRequestRoot,
+        paths: inventoryOracleRequestPaths,
+      },
+      {
+        id: "current",
+        root: oracleRequestRoot,
+        paths: currentOracleRequestPaths,
+      },
     ];
     const recognized = shapes.find(
       (shape) =>
@@ -768,7 +911,7 @@ function selectOracleRequestRoot() {
     );
     if (!recognized) {
       fail(
-        "source lock has no recognized legacy, compiler-only, or current oracle request shape"
+        "source lock has no recognized legacy, compiler-only, inventory, or current oracle request shape"
       );
     }
     baselineLockShape = recognized.id;
@@ -2696,6 +2839,266 @@ function verifyOracleBranchEvidence(id, response) {
         `${id} exact multi-stage inventory evidence`
       );
       break;
+    case "semantic-active-override":
+      assertExactJSON(
+        { ok: response.ok, diagnostics: response.diagnostics },
+        {
+          ok: false,
+          diagnostics: [
+            {
+              code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED",
+              severity: "error",
+              phase: "inspect",
+              message:
+                "selected program uses overrides outside the interface-only profile",
+            },
+          ],
+        },
+        `${id} exact active override rejection evidence`
+      );
+      break;
+    case "semantic-active-resource":
+      assertExactJSON(
+        { ok: response.ok, diagnostics: response.diagnostics },
+        {
+          ok: false,
+          diagnostics: [
+            {
+              code: "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED",
+              severity: "error",
+              phase: "inspect",
+              message:
+                "selected program uses resources outside the interface-only profile",
+            },
+          ],
+        },
+        `${id} exact active resource rejection evidence`
+      );
+      break;
+    case "semantic-compute-interface":
+      assertExactJSON(
+        {
+          ok: response.ok,
+          diagnostics: response.diagnostics,
+          result: response.result,
+        },
+        {
+          ok: true,
+          diagnostics: [],
+          result: {
+            entryPoints: [
+              {
+                stage: "compute",
+                wgsl: "compute_builtins",
+                semanticInterface: {
+                  kind: "compute",
+                  inputs: [
+                    {
+                      type: { scalar: "u32", width: 3 },
+                      invariant: false,
+                      builtin: "global_invocation_id",
+                    },
+                    {
+                      type: { scalar: "u32", width: 3 },
+                      invariant: false,
+                      builtin: "local_invocation_id",
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "local_invocation_index",
+                    },
+                    {
+                      type: { scalar: "u32", width: 3 },
+                      invariant: false,
+                      builtin: "num_workgroups",
+                    },
+                    {
+                      type: { scalar: "u32", width: 3 },
+                      invariant: false,
+                      builtin: "workgroup_id",
+                    },
+                  ],
+                  outputs: [],
+                },
+                bindings: [],
+                samplingPairs: [],
+                overrides: [],
+                workgroupSize: { x: 1, y: 1, z: 1 },
+              },
+            ],
+            bindings: [],
+            overrides: [],
+            types: {},
+            layouts: {},
+          },
+        },
+        `${id} exact compute extraction evidence`
+      );
+      break;
+    case "semantic-render-interface":
+      assertExactJSON(
+        {
+          ok: response.ok,
+          diagnostics: response.diagnostics,
+          result: response.result,
+        },
+        {
+          ok: true,
+          diagnostics: [],
+          result: {
+            entryPoints: [
+              {
+                stage: "vertex",
+                wgsl: "vertex_main",
+                semanticInterface: {
+                  kind: "vertex",
+                  inputs: [
+                    {
+                      type: { scalar: "f32", width: 2 },
+                      invariant: false,
+                      location: 3,
+                    },
+                    {
+                      type: { scalar: "f32", width: 4 },
+                      invariant: false,
+                      location: 7,
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "instance_index",
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "vertex_index",
+                    },
+                  ],
+                  outputs: [
+                    {
+                      type: { scalar: "f32", width: 2 },
+                      invariant: false,
+                      location: 2,
+                      interpolation: {
+                        type: "linear",
+                        sampling: "centroid",
+                      },
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      location: 5,
+                      interpolation: { type: "flat", sampling: "first" },
+                    },
+                    {
+                      type: { scalar: "f32", width: 1 },
+                      invariant: false,
+                      location: 6,
+                      interpolation: {
+                        type: "perspective",
+                        sampling: "center",
+                      },
+                    },
+                    {
+                      type: { scalar: "f32", width: 4 },
+                      invariant: true,
+                      builtin: "position",
+                    },
+                  ],
+                },
+                bindings: [],
+                samplingPairs: [],
+                overrides: [],
+              },
+              {
+                stage: "fragment",
+                wgsl: "fragment_main",
+                semanticInterface: {
+                  kind: "fragment",
+                  inputs: [
+                    {
+                      type: { scalar: "f32", width: 2 },
+                      invariant: false,
+                      location: 2,
+                      interpolation: {
+                        type: "linear",
+                        sampling: "centroid",
+                      },
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      location: 5,
+                      interpolation: { type: "flat", sampling: "first" },
+                    },
+                    {
+                      type: { scalar: "f32", width: 1 },
+                      invariant: false,
+                      location: 6,
+                      interpolation: {
+                        type: "perspective",
+                        sampling: "center",
+                      },
+                    },
+                    {
+                      type: { scalar: "bool", width: 1 },
+                      invariant: false,
+                      builtin: "front_facing",
+                    },
+                    {
+                      type: { scalar: "f32", width: 4 },
+                      invariant: false,
+                      builtin: "position",
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "sample_index",
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "sample_mask",
+                    },
+                  ],
+                  outputs: [
+                    {
+                      type: { scalar: "f32", width: 4 },
+                      invariant: false,
+                      location: 1,
+                    },
+                    {
+                      type: { scalar: "f32", width: 4 },
+                      invariant: false,
+                      location: 4,
+                    },
+                    {
+                      type: { scalar: "f32", width: 1 },
+                      invariant: false,
+                      builtin: "frag_depth",
+                    },
+                    {
+                      type: { scalar: "u32", width: 1 },
+                      invariant: false,
+                      builtin: "sample_mask",
+                    },
+                  ],
+                },
+                bindings: [],
+                samplingPairs: [],
+                overrides: [],
+              },
+            ],
+            bindings: [],
+            overrides: [],
+            types: {},
+            layouts: {},
+          },
+        },
+        `${id} exact render extraction evidence`
+      );
+      break;
     case "vertex-sparse":
       assertExactJSON(
         response.result?.interface,
@@ -2877,6 +3280,24 @@ function verifyRequestParity(builds, universal, oracle, protocols, validators) {
         prepareResponse = (response) => response;
         assertResponseSemantics = (response) =>
           protocols.inventory.assertInventoryResponseSemantics(
+            decodedRequest,
+            encodedRequest,
+            response
+          );
+        break;
+      }
+      case semanticExtractionContractId: {
+        protocols.semanticExtraction.assertSemanticExtractionExecutableProfile(
+          decodedRequest
+        );
+        const encodedRequest =
+          protocols.semanticExtraction.encodeSemanticExtractionRequest(
+            decodedRequest
+          );
+        request = Buffer.from(encodedRequest, "utf8");
+        prepareResponse = (response) => response;
+        assertResponseSemantics = (response) =>
+          protocols.semanticExtraction.assertSemanticExtractionResponseSemantics(
             decodedRequest,
             encodedRequest,
             response
@@ -3292,6 +3713,21 @@ async function main() {
   ) {
     fail("locked inventory protocol helper omitted semantic validators");
   }
+  const semanticExtractionProtocolModule = await import(
+    pathToFileURL(inputs.oracle.files.semanticExtractionProtocol).href
+  );
+  if (
+    typeof semanticExtractionProtocolModule.encodeSemanticExtractionRequest !==
+      "function" ||
+    typeof semanticExtractionProtocolModule.assertSemanticExtractionExecutableProfile !==
+      "function" ||
+    typeof semanticExtractionProtocolModule.assertSemanticExtractionResponseSemantics !==
+      "function" ||
+    semanticExtractionProtocolModule.SEMANTIC_EXTRACTION_CONTRACT !==
+      semanticExtractionContractId
+  ) {
+    fail("locked semantic extraction protocol helper omitted validators");
+  }
   const toolchain = verifyToolchain(inputs);
   const buildRoot = createScratch(options);
   let completed = false;
@@ -3328,7 +3764,11 @@ async function main() {
       builds,
       universal,
       oracle,
-      { compiler: protocolModule, inventory: inventoryProtocolModule },
+      {
+        compiler: protocolModule,
+        inventory: inventoryProtocolModule,
+        semanticExtraction: semanticExtractionProtocolModule,
+      },
       inputs.oracle.validators
     );
     const finalInputs = verifySourceInputs(options);

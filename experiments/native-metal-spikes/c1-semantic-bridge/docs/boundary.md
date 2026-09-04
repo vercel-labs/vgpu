@@ -172,8 +172,8 @@ reflection do not become runtime ABI.
 
 ## Process packaging
 
-Entry inventory and translation now run as separate contracts in the same source-built vgpu Tint
-tool. The future semantic extraction operation should join that executable under its own
-`contractId` and strict schema. Each invocation remains a fresh process handling one framed request,
-which avoids shipping multiple copies of the same static Tint closure without weakening process
-isolation. The runtime artifact ships none of these compiler operations.
+Entry inventory, semantic extraction, and translation now run as separate contracts in the same
+source-built vgpu Tint tool, each under its own `contractId` and strict schema. Each invocation
+remains a fresh process handling one framed request, which avoids shipping multiple copies of the
+same static Tint closure without weakening process isolation. The runtime artifact ships none of
+these compiler operations.

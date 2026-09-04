@@ -87,53 +87,56 @@ export function assertInventoryRequestSemantics(request) {
     fail("VGPU-C1-INVENTORY-CONTRACT", "request selects another contract");
   }
   assertInventoryRequestResourceLimits(request);
+  assertSourceCapsuleSemantics(request);
+  return request;
+}
+
+/**
+ * Validates the finalized source capsule shared by inventory and semantic
+ * extraction. Callers provide their own diagnostic namespace while the byte,
+ * provenance, path, and language-feature rules remain a single invariant.
+ */
+export function assertSourceCapsuleSemantics(
+  request,
+  { codePrefix = "VGPU-C1-INVENTORY", failWith = fail } = {}
+) {
+  const reject = (suffix, message) =>
+    failWith(`${codePrefix}-${suffix}`, message);
   if (
     typeof request.source?.text !== "string" ||
     !request.source.text.isWellFormed() ||
     request.source.text.includes("\u0000")
   ) {
-    fail(
-      "VGPU-C1-INVENTORY-SOURCE",
-      "source text is not valid exact-byte protocol text"
-    );
+    reject("SOURCE", "source text is not valid exact-byte protocol text");
   }
   if (Buffer.byteLength(request.source.text, "utf8") > 16 * 1024 * 1024) {
-    fail("VGPU-C1-INVENTORY-SOURCE-SIZE", "source exceeds 16 MiB UTF-8");
+    reject("SOURCE-SIZE", "source exceeds 16 MiB UTF-8");
   }
-  if (sha256Utf8(request.source.text) !== request.source.sha256) {
-    fail(
-      "VGPU-C1-INVENTORY-SOURCE-HASH",
-      "source hash differs from its UTF-8 bytes"
-    );
+  const sourceSha256 = createHash("sha256")
+    .update(request.source.text, "utf8")
+    .digest("hex");
+  if (sourceSha256 !== request.source.sha256) {
+    reject("SOURCE-HASH", "source hash differs from its UTF-8 bytes");
   }
-  assertCanonicalVirtualPath(request.source.virtualPath);
+  assertCanonicalVirtualPath(request.source.virtualPath, reject);
   if (
     request.originMap?.generatedSource?.virtualPath !==
       request.source.virtualPath ||
     request.originMap?.generatedSource?.sha256 !== request.source.sha256
   ) {
-    fail(
-      "VGPU-C1-INVENTORY-ORIGIN-SOURCE",
-      "origin map describes another source"
-    );
+    reject("ORIGIN-SOURCE", "origin map describes another source");
   }
   const sourceBytes = Buffer.byteLength(request.source.text, "utf8");
   try {
     assertValidModuleOriginMap(request.originMap, sourceBytes);
   } catch (cause) {
-    throw new InventoryProtocolError(
-      "VGPU-C1-INVENTORY-ORIGIN-MAP",
-      cause.message
-    );
+    reject("ORIGIN-MAP", cause.message);
   }
   if (originMapSha256(request.originMap) !== request.originMapSha256) {
-    fail(
-      "VGPU-C1-INVENTORY-ORIGIN-HASH",
-      "origin-map hash is stale or crossed"
-    );
+    reject("ORIGIN-HASH", "origin-map hash is stale or crossed");
   }
-  assertOriginCanonical(request.source.text, request.originMap);
-  assertFeaturesCanonical(request.languageFeatures);
+  assertOriginCanonical(request.source.text, request.originMap, reject);
+  assertFeaturesCanonical(request.languageFeatures, reject);
   return request;
 }
 
@@ -245,18 +248,15 @@ export function assertCanonicalEntryPoints(entryPoints) {
   return entryPoints;
 }
 
-function assertFeaturesCanonical(features) {
+function assertFeaturesCanonical(features, reject) {
   let previous;
   for (const feature of features) {
     if (!supportedFeatures.has(feature)) {
-      fail(
-        "VGPU-C1-INVENTORY-FEATURE",
-        `unsupported language feature ${feature}`
-      );
+      reject("FEATURE", `unsupported language feature ${feature}`);
     }
     if (previous !== undefined && compareAscii(previous, feature) >= 0) {
-      fail(
-        "VGPU-C1-INVENTORY-FEATURE-ORDER",
+      reject(
+        "FEATURE-ORDER",
         "language features are duplicated or not canonically ordered"
       );
     }
@@ -264,7 +264,7 @@ function assertFeaturesCanonical(features) {
   }
 }
 
-function assertOriginCanonical(text, originMap) {
+function assertOriginCanonical(text, originMap, reject) {
   const boundaries = new Set([0]);
   let offset = 0;
   for (const character of text) {
@@ -277,19 +277,13 @@ function assertOriginCanonical(text, originMap) {
       !boundaries.has(segment.generated.startByte) ||
       !boundaries.has(segment.generated.endByte)
     ) {
-      fail(
-        "VGPU-C1-INVENTORY-ORIGIN-UTF8",
-        "origin segment splits a UTF-8 code point"
-      );
+      reject("ORIGIN-UTF8", "origin segment splits a UTF-8 code point");
     }
     if (
       previous?.generated.endByte === segment.generated.startByte &&
       previous.origin.input === segment.origin.input
     ) {
-      fail(
-        "VGPU-C1-INVENTORY-ORIGIN-CANONICAL",
-        "adjacent equal origins must be merged"
-      );
+      reject("ORIGIN-CANONICAL", "adjacent equal origins must be merged");
     }
     previous = segment;
   }
@@ -300,19 +294,13 @@ function assertOriginCanonical(text, originMap) {
       !source.input.isWellFormed() ||
       source.input.normalize("NFC") !== source.input
     ) {
-      fail(
-        "VGPU-C1-INVENTORY-ORIGIN-INPUT",
-        "origin input is not NFC-canonical"
-      );
+      reject("ORIGIN-INPUT", "origin input is not NFC-canonical");
     }
     if (
       previousInput !== undefined &&
       compareAscii(previousInput, source.input) >= 0
     ) {
-      fail(
-        "VGPU-C1-INVENTORY-ORIGIN-ORDER",
-        "origin inputs are not canonically ordered"
-      );
+      reject("ORIGIN-ORDER", "origin inputs are not canonically ordered");
     }
     previousInput = source.input;
   }
@@ -322,7 +310,7 @@ function compareAscii(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function assertCanonicalVirtualPath(value) {
+function assertCanonicalVirtualPath(value, reject) {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
@@ -337,8 +325,8 @@ function assertCanonicalVirtualPath(value) {
     value.split("/").some((segment) => ["", ".", ".."].includes(segment)) ||
     posix.normalize(value) !== value
   ) {
-    fail(
-      "VGPU-C1-INVENTORY-SOURCE-PATH",
+    reject(
+      "SOURCE-PATH",
       "source virtual path is not a canonical relative POSIX NFC path"
     );
   }

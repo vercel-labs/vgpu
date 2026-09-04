@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-semantic-extraction/v1/request.schema.json",
+  "title": "vGPU Native Tint Semantic Extraction Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "source",
+    "originMap",
+    "originMapSha256",
+    "entryPoints",
+    "overrideConfiguration",
+    "languageFeatures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "vgpu-native-tint-semantic-extraction/v1" },
+    "source": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-entry-inventory/v1/request.schema.json#/$defs/source"
+    },
+    "originMap": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/origin-map.schema.json"
+    },
+    "originMapSha256": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-entry-inventory/v1/request.schema.json#/$defs/sha256"
+    },
+    "entryPoints": { "$ref": "#/$defs/selectedProgram" },
+    "overrideConfiguration": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/configuredOverride" }
+    },
+    "languageFeatures": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-entry-inventory/v1/request.schema.json#/properties/languageFeatures"
+    }
+  },
+  "$defs": {
+    "selectedVertex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl"],
+      "properties": {
+        "stage": { "const": "vertex" },
+        "wgsl": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "selectedFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl"],
+      "properties": {
+        "stage": { "const": "fragment" },
+        "wgsl": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "selectedCompute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl"],
+      "properties": {
+        "stage": { "const": "compute" },
+        "wgsl": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/identifier"
+        }
+      }
+    },
+    "selectedProgram": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/selectedCompute" }],
+          "items": false
+        },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "$ref": "#/$defs/selectedVertex" },
+            { "$ref": "#/$defs/selectedFragment" }
+          ],
+          "items": false
+        }
+      ]
+    },
+    "configuredOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/identifier"
+        },
+        "value": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }]
+        }
+      }
+    }
+  }
+}

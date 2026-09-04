@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/semantic-interface.wgsl",
+    "sha256": "65f7dbb0f56d463c43c44b070353153b0acf7f0dcdc5b4b88a32ee5cdbcb801f",
+    "text": "struct VertexInputs {\n  @location(3) model_position: vec2f,\n  @location(7) tint: vec4f,\n  @builtin(vertex_index) vertex_index: u32,\n  @builtin(instance_index) instance_index: u32,\n}\n\nstruct VertexOutputs {\n  @builtin(position) @invariant position: vec4f,\n  @location(2) @interpolate(linear, centroid) uv: vec2f,\n  @location(5) @interpolate(flat) tag: u32,\n  @location(6) weight: f32,\n}\n\n@vertex\nfn vertex_main(input: VertexInputs) -> VertexOutputs {\n  var output: VertexOutputs;\n  output.position = vec4f(\n    input.model_position + vec2f(f32(input.vertex_index), f32(input.instance_index)),\n    0.0,\n    1.0\n  );\n  output.uv = input.tint.xy;\n  output.tag = input.vertex_index;\n  output.weight = input.tint.w;\n  return output;\n}\n\nstruct FragmentInputs {\n  @builtin(position) position: vec4f,\n  @builtin(front_facing) front_facing: bool,\n  @builtin(sample_index) sample_index: u32,\n  @builtin(sample_mask) sample_mask: u32,\n  @location(2) @interpolate(linear, centroid) uv: vec2f,\n  @location(5) @interpolate(flat) tag: u32,\n  @location(6) weight: f32,\n}\n\nstruct FragmentOutputs {\n  @location(1) first: vec4f,\n  @location(4) second: vec4f,\n  @builtin(frag_depth) depth: f32,\n  @builtin(sample_mask) sample_mask: u32,\n}\n\n@fragment\nfn fragment_main(input: FragmentInputs) -> FragmentOutputs {\n  var output: FragmentOutputs;\n  output.first = vec4f(input.uv, input.weight, select(0.0, 1.0, input.front_facing));\n  output.second = vec4f(f32(input.tag), f32(input.sample_index), input.position.z, 1.0);\n  output.depth = input.position.z;\n  output.sample_mask = input.sample_mask;\n  return output;\n}\n\n@fragment\nfn scalar_fragment(@location(9) value: f32) -> @location(3) vec4f {\n  return vec4f(value);\n}\n\n@compute @workgroup_size(1)\nfn compute_builtins(\n  @builtin(local_invocation_id) local_id: vec3u,\n  @builtin(local_invocation_index) local_index: u32,\n  @builtin(global_invocation_id) global_id: vec3u,\n  @builtin(workgroup_id) workgroup_id: vec3u,\n  @builtin(num_workgroups) workgroup_count: vec3u,\n) {\n  _ = local_id;\n  _ = local_index;\n  _ = global_id;\n  _ = workgroup_id;\n  _ = workgroup_count;\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/semantic-interface.wgsl",
+      "sha256": "65f7dbb0f56d463c43c44b070353153b0acf7f0dcdc5b4b88a32ee5cdbcb801f"
+    },
+    "sources": [
+      {
+        "input": "semantic-interface-wgsl",
+        "sha256": "65f7dbb0f56d463c43c44b070353153b0acf7f0dcdc5b4b88a32ee5cdbcb801f"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 2097
+        },
+        "origin": {
+          "input": "semantic-interface-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "7cf0ea3bd1e28654b5f062439bf88e462a448d2b290b47693c9b2de7e2bfdec2",
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "compute_builtins"
+    }
+  ],
+  "overrideConfiguration": [],
+  "languageFeatures": []
+}

@@ -283,15 +283,15 @@ regenerating their own expectations:
   or a crossed request identity;
 - join selected authored entries to exact resolver declaration records and reject missing, crossed,
   duplicate, or out-of-bounds spans during assembly;
-- validate the generated interface through the future semantic extractor: vertex-index input,
+- retain the now-executable semantic extractor's generated-interface proof: vertex-index input,
   position and location-zero UV outputs, and no bindings, sampling pairs, or overrides;
 - replace the companion gate's reviewed interface literals with projections of that authenticated
   extraction while preserving its translation, offline compilation/link, UV, and `front_facing`
   results; and
 - keep resolver, inventory, compiler-protocol, direct-build, offline Metal, and corpus gates green.
 
-Until semantic extraction exists, the spike may use a second authenticated inventory invocation as
-an executable final-source oracle. That invocation belongs to the gate, not the long-term build
-pipeline: production proceeds from finalization to one multi-entry semantic extraction, which
-validates the concrete generated name and stage on the exact same finalized bytes later sent to
-translation.
+The source-finalization gate still uses a second authenticated inventory invocation as an isolated
+final-source oracle. That invocation belongs to this gate, not the long-term build pipeline. The
+semantic-extraction gate separately proves the production path from finalization to one multi-entry
+extraction, including the concrete generated name and interface on the exact finalized bytes later
+sent to translation.

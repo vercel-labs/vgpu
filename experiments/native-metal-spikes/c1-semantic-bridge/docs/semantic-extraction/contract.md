@@ -71,11 +71,12 @@ whether the vertex entry was authored or injected, are TypeScript facts. The wor
 selected WGSL names and stages.
 
 `overrideConfiguration` is module-scoped, sorted by WGSL declaration name, and contains no
-duplicates. It accepts finite JSON numbers and booleans; Tint validates and converts each value
-against the declaration's scalar type. Names also address declarations with an authored `@id`.
-Numeric Tint IDs never become request selectors: automatic IDs are implementation details, and an
-explicit WGSL ID is returned only as provenance. A valid configured declaration that is inactive in
-the selected program is accepted but omitted from the result.
+duplicates. It accepts finite canonical JSON numbers and booleans; negative zero is rejected because
+the deterministic JSON encoding would otherwise collapse it to zero. Tint validates and converts
+each value against the declaration's scalar type. Names also address declarations with an authored
+`@id`. Numeric Tint IDs never become request selectors: automatic IDs are implementation details,
+and an explicit WGSL ID is returned only as provenance. A valid configured declaration that is
+inactive in the selected program is accepted but omitted from the result.
 
 ## Request identity
 

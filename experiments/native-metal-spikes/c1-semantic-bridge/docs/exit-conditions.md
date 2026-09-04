@@ -65,13 +65,21 @@ three native inventory invocations. It proves exact append bytes and hashes, UTF
 generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inventory association,
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
-Semantic interface extraction, the resolver declaration join, extraction-derived translation, the
-integrated corpus, and the remaining bridge conditions are still open.
+
+The implemented interface-only semantic slice adds four frozen request/response pairs, nine
+prelaunch failures with zero launches, fifteen response failures, two static nominal
+authentications, and eighteen native invocations. It proves program-scoped render and compute
+interfaces, literal workgroup dimensions, the generated full-screen interface and adapter
+association, inactive-declaration pruning, deterministic successes, diagnostic provenance,
+canonical number and dual-source validation, the 64-leaf response boundary, and distinct temporary
+profile failures. This is partial evidence for conditions 3, 4, and 10. Active resource and override
+extraction, the resolver declaration join, extraction-derived translation, the integrated corpus,
+and the remaining bridge conditions are still open.
 
 The provisional Metal companion adds four deterministic successful translator invocations, two
 byte-identical invocations of one structured interface rejection, two offline AIR compilations, one
 metallib link, and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. It proves the selected
 generated vertex can reach Metal with top-origin UV and explicit counter-clockwise winding. Because
-its semantic interfaces are reviewed literals rather than output from the future authenticated
+its semantic interfaces are still reviewed literals rather than projections from the authenticated
 extractor, it is supporting evidence for conditions 7 and 12, not completion of either condition or
 of the bridge.

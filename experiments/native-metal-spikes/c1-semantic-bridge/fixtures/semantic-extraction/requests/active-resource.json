@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/semantic-active-resource.wgsl",
+    "sha256": "c27c740fb4ee569439205b1b75b82d45796b08522e666f645dcc2e7fe5e7936d",
+    "text": "struct Frame {\n  offset: vec2f,\n}\n\nstruct Vertices {\n  values: array<vec2f, 3>,\n}\n\nstruct Material {\n  tint: vec4f,\n}\n\n@group(0) @binding(0) var<uniform> frame: Frame;\n@group(0) @binding(1) var<storage, read> vertices: Vertices;\n@group(0) @binding(2) var albedo: texture_2d<f32>;\n@group(0) @binding(3) var albedo_sampler: sampler;\n@group(0) @binding(4) var<uniform> material: Material;\n\n@vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {\n  return vec4f(vertices.values[index] + frame.offset, 0.0, 1.0);\n}\n\n@fragment fn fs_main() -> @location(0) vec4f {\n  let sampled = textureSample(albedo, albedo_sampler, vec2f(0.5));\n  return sampled * material.tint + vec4f(frame.offset, 0.0, 0.0);\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/semantic-active-resource.wgsl",
+      "sha256": "c27c740fb4ee569439205b1b75b82d45796b08522e666f645dcc2e7fe5e7936d"
+    },
+    "sources": [
+      {
+        "input": "semantic-active-resource-wgsl",
+        "sha256": "c27c740fb4ee569439205b1b75b82d45796b08522e666f645dcc2e7fe5e7936d"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 721
+        },
+        "origin": {
+          "input": "semantic-active-resource-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "e3b61a3fdde90795bac98c6669f021800c23091506d4e6d2ab53c61b6f7a811d",
+  "entryPoints": [
+    {
+      "stage": "vertex",
+      "wgsl": "vs_main"
+    },
+    {
+      "stage": "fragment",
+      "wgsl": "fs_main"
+    }
+  ],
+  "overrideConfiguration": [],
+  "languageFeatures": []
+}

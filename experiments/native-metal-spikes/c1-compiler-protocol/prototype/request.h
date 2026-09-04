@@ -84,11 +84,33 @@ struct EntryInventoryRequest {
   RequestIdentity identity;
 };
 
-using WorkerRequest = std::variant<CompilerRequest, EntryInventoryRequest>;
+struct SelectedEntryPoint {
+  std::string stage;
+  std::string wgsl;
+};
+
+struct ConfiguredOverride {
+  std::string name;
+  std::variant<bool, double> value;
+};
+
+struct SemanticExtractionRequest {
+  std::string source_text;
+  std::string source_name;
+  std::set<std::string> features;
+  std::vector<SelectedEntryPoint> entry_points;
+  std::vector<ConfiguredOverride> override_configuration;
+  RequestIdentity identity;
+};
+
+using WorkerRequest =
+    std::variant<CompilerRequest, EntryInventoryRequest,
+                 SemanticExtractionRequest>;
 
 enum class RequestOperation {
   kCompiler,
   kEntryInventory,
+  kSemanticExtraction,
 };
 
 } // namespace vgpu::native

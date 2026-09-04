@@ -6,6 +6,8 @@
 // process failure exits nonzero and makes stdout untrustworthy.
 //
 // The inventory operation reports only canonical WGSL entry names and stages.
+// The semantic-extraction operation reports program-scoped compiler facts; its
+// first executable profile accepts interface-only programs.
 // The translation operation owns the Metal ABI instead of accepting
 // translator-selected internals. External buffer intervals are restricted to
 // 0..<30. Tint receives one shared immediate-data binding at buffer(30), with
@@ -51,6 +53,11 @@
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/msl/writer/writer.h"
+#include "src/tint/lang/wgsl/ast/attribute.h"
+#include "src/tint/lang/wgsl/ast/function.h"
+#include "src/tint/lang/wgsl/ast/literal_expression.h"
+#include "src/tint/lang/wgsl/ast/module.h"
+#include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 #include "src/tint/utils/diagnostic/diagnostic.h"
@@ -75,6 +82,8 @@ constexpr size_t kMaxInventoryEntryPoints = 65536;
 constexpr std::string_view kContractId = "vgpu-native-tint-compiler/v1";
 constexpr std::string_view kEntryInventoryContractId =
     "vgpu-native-tint-entry-inventory/v1";
+constexpr std::string_view kSemanticExtractionContractId =
+    "vgpu-native-tint-semantic-extraction/v1";
 constexpr std::string_view kTintRevision =
     "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
 
@@ -88,7 +97,9 @@ using InterfaceType = vgpu::native::InterfaceType;
 using InterfaceValue = vgpu::native::InterfaceValue;
 using Mapping = vgpu::native::Mapping;
 using RequestIdentity = vgpu::native::RequestIdentity;
+using SelectedEntryPoint = vgpu::native::SelectedEntryPoint;
 using SemanticInterface = vgpu::native::SemanticInterface;
+using SemanticExtractionRequest = vgpu::native::SemanticExtractionRequest;
 
 struct Location {
   std::string virtual_path;
@@ -123,6 +134,12 @@ struct InterfaceResult {
 struct InventoryEntryPoint {
   std::string stage;
   std::string wgsl;
+};
+
+struct SemanticExtractionEntryResult {
+  SelectedEntryPoint entry_point;
+  SemanticInterface semantic_interface;
+  std::optional<tint::inspector::WorkgroupSize> workgroup_size;
 };
 
 bool g_output_succeeded = true;
@@ -254,6 +271,22 @@ void WriteEntryInventoryFailure(const RequestIdentity &identity,
   output << "{\n"
          << "  \"schemaVersion\": 1,\n"
          << "  \"contractId\": " << JsonString(kEntryInventoryContractId)
+         << ",\n"
+         << "  \"ok\": false,\n";
+  WriteRequestIdentity(output, identity);
+  WriteCompilerIdentity(output);
+  WriteDiagnostics(output, diagnostics);
+  output << "\n}\n";
+  EmitResponse(output.str());
+}
+
+void WriteSemanticExtractionFailure(
+    const RequestIdentity &identity,
+    const std::vector<Diagnostic> &diagnostics) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schemaVersion\": 1,\n"
+         << "  \"contractId\": " << JsonString(kSemanticExtractionContractId)
          << ",\n"
          << "  \"ok\": false,\n";
   WriteRequestIdentity(output, identity);
@@ -884,6 +917,12 @@ InterfaceResult ExtractSemanticInterface(tint::core::ir::Module &ir) {
                            kind, false, result.outputs, error)) {
     return {.error = std::move(error)};
   }
+  const size_t maximum_inputs = kind == "compute" ? 5 : 64;
+  const size_t maximum_outputs = kind == "compute" ? 0 : 64;
+  if (result.inputs.size() > maximum_inputs ||
+      result.outputs.size() > maximum_outputs) {
+    return {.error = "Tint interface exceeds the v1 collection limit"};
+  }
   std::sort(result.inputs.begin(), result.inputs.end(), InterfaceValueLess);
   std::sort(result.outputs.begin(), result.outputs.end(), InterfaceValueLess);
   if (std::adjacent_find(result.inputs.begin(), result.inputs.end(),
@@ -893,6 +932,69 @@ InterfaceResult ExtractSemanticInterface(tint::core::ir::Module &ir) {
     return {.error = "Tint interface repeats a semantic key"};
   }
   return {.value = std::move(result)};
+}
+
+void WriteSemanticInterfaceValue(std::ostream &output,
+                                 const InterfaceValue &value) {
+  output << "{\"type\": {\"scalar\": " << JsonString(value.type.scalar)
+         << ", \"width\": " << value.type.width
+         << "}, \"invariant\": " << (value.invariant ? "true" : "false");
+  if (value.location) {
+    output << ", \"location\": " << *value.location;
+  } else {
+    output << ", \"builtin\": " << JsonString(*value.builtin);
+  }
+  if (value.interpolation) {
+    output << ", \"interpolation\": {\"type\": "
+           << JsonString(value.interpolation->type)
+           << ", \"sampling\": " << JsonString(value.interpolation->sampling)
+           << '}';
+  }
+  if (value.blend_source) {
+    output << ", \"blendSource\": " << *value.blend_source;
+  }
+  output << '}';
+}
+
+void WriteSemanticInterface(std::ostream &output,
+                            const SemanticInterface &shader_interface) {
+  output << "{\"kind\": " << JsonString(shader_interface.kind)
+         << ", \"inputs\": [";
+  for (size_t index = 0; index < shader_interface.inputs.size(); ++index) {
+    if (index > 0) {
+      output << ", ";
+    }
+    WriteSemanticInterfaceValue(output, shader_interface.inputs[index]);
+  }
+  output << "], \"outputs\": [";
+  for (size_t index = 0; index < shader_interface.outputs.size(); ++index) {
+    if (index > 0) {
+      output << ", ";
+    }
+    WriteSemanticInterfaceValue(output, shader_interface.outputs[index]);
+  }
+  output << "]}";
+}
+
+bool HasLiteralWorkgroupSize(const tint::Program &program,
+                             std::string_view entry_point) {
+  const auto *function =
+      program.AST().Functions().Find(program.Symbols().Get(entry_point));
+  if (function == nullptr) {
+    return false;
+  }
+  const auto *attribute =
+      tint::ast::GetAttribute<tint::ast::WorkgroupAttribute>(
+          function->attributes);
+  if (attribute == nullptr) {
+    return false;
+  }
+  const auto values = attribute->Values();
+  return values[0] != nullptr &&
+         std::all_of(values.begin(), values.end(),
+                     [](const tint::ast::Expression *value) {
+           return value == nullptr || value->Is<tint::ast::LiteralExpression>();
+         });
 }
 
 void WriteShaderInterface(std::ostream &output,
@@ -1504,6 +1606,204 @@ int Run(const EntryInventoryRequest &request) {
   return 0;
 }
 
+void WriteSemanticExtractionSuccess(
+    const SemanticExtractionRequest &request,
+    const std::vector<Diagnostic> &diagnostics,
+    const std::vector<SemanticExtractionEntryResult> &entry_points) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schemaVersion\": 1,\n"
+         << "  \"contractId\": " << JsonString(kSemanticExtractionContractId)
+         << ",\n"
+         << "  \"ok\": true,\n";
+  WriteRequestIdentity(output, request.identity);
+  WriteCompilerIdentity(output);
+  WriteDiagnostics(output, diagnostics);
+  output << ",\n  \"result\": {\n    \"entryPoints\": [\n";
+  for (size_t index = 0; index < entry_points.size(); ++index) {
+    const auto &entry = entry_points[index];
+    output << "      {\"stage\": " << JsonString(entry.entry_point.stage)
+           << ", \"wgsl\": " << JsonString(entry.entry_point.wgsl)
+           << ", \"semanticInterface\": ";
+    WriteSemanticInterface(output, entry.semantic_interface);
+    output << ", \"bindings\": [], \"samplingPairs\": [], \"overrides\": []";
+    if (entry.workgroup_size) {
+      output << ", \"workgroupSize\": {\"x\": " << entry.workgroup_size->x
+             << ", \"y\": " << entry.workgroup_size->y
+             << ", \"z\": " << entry.workgroup_size->z << '}';
+    }
+    output << '}' << (index + 1 == entry_points.size() ? "\n" : ",\n");
+  }
+  output << "    ],\n"
+         << "    \"bindings\": [],\n"
+         << "    \"overrides\": [],\n"
+         << "    \"types\": {},\n"
+         << "    \"layouts\": {}\n"
+         << "  }\n"
+         << "}\n";
+  EmitResponse(output.str());
+}
+
+int Run(const SemanticExtractionRequest &request) {
+  tint::Source::File source_file(request.source_name, request.source_text);
+  tint::wgsl::reader::Options reader_options;
+  EnableLanguageFeatures(request.features, reader_options);
+  auto program = tint::wgsl::reader::Parse(&source_file, reader_options);
+  auto diagnostics =
+      ConvertDiagnostics(program.Diagnostics(), source_file, request.source_name);
+  if (!program.IsValid()) {
+    if (diagnostics.empty()) {
+      diagnostics.push_back(Error("VGPU-NATIVE-WGSL-INVALID", "wgsl",
+                                  "Tint rejected WGSL without a diagnostic"));
+    }
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  tint::inspector::Inspector inspector(program);
+  const auto inspected = inspector.GetEntryPoints();
+  if (inspector.has_error()) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INSPECT", "inspect", inspector.error()));
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  std::vector<const tint::inspector::EntryPoint *> selected;
+  selected.reserve(request.entry_points.size());
+  for (const auto &requested : request.entry_points) {
+    const auto match = std::find_if(inspected.begin(), inspected.end(),
+                                    [&](const auto &entry) {
+                                      return entry.name == requested.wgsl;
+                                    });
+    if (match == inspected.end()) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
+                "selected WGSL entry point was not found"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    if (StageName(match->stage) != requested.stage) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
+                "selected WGSL entry point has a different stage"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    selected.push_back(&*match);
+  }
+
+  if (!request.override_configuration.empty()) {
+    diagnostics.push_back(Error(
+        "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED", "inspect",
+        "selected program configures overrides outside the interface-only "
+        "profile"));
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  for (const auto *entry : selected) {
+    const auto resources = inspector.GetResourceBindings(entry->name);
+    if (inspector.has_error()) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INSPECT", "inspect", inspector.error()));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    if (!resources.empty()) {
+      diagnostics.push_back(Error(
+          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+          "selected program uses resources outside the interface-only "
+          "profile"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+  }
+  if (std::any_of(selected.begin(), selected.end(), [](const auto *entry) {
+        return !entry->overrides.empty();
+      })) {
+    diagnostics.push_back(Error(
+        "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED", "inspect",
+        "selected program uses overrides outside the interface-only profile"));
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  if (selected.size() == 1) {
+    const auto &workgroup = selected[0]->workgroup_size;
+    if (!workgroup || workgroup->x == 0 || workgroup->y == 0 ||
+        workgroup->z == 0 ||
+        !HasLiteralWorkgroupSize(program, selected[0]->name)) {
+      diagnostics.push_back(Error(
+          "VGPU-NATIVE-TINT-SEMANTIC-WORKGROUP-UNSUPPORTED", "inspect",
+          "selected compute entry requires a literal positive workgroup size "
+          "in the interface-only profile"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+  }
+
+  std::vector<SemanticExtractionEntryResult> results;
+  results.reserve(request.entry_points.size());
+  for (size_t index = 0; index < request.entry_points.size(); ++index) {
+    const auto &requested = request.entry_points[index];
+    auto ir_result = tint::wgsl::reader::ProgramToLoweredIR(program);
+    if (ir_result != tint::Success) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-WGSL-LOWER", "lower", ir_result.Failure().reason));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    auto &ir = ir_result.Get();
+    auto single_entry =
+        tint::core::ir::transform::SingleEntryPoint(ir, requested.wgsl);
+    if (single_entry != tint::Success) {
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-SEMANTIC-LOWER", "lower",
+                                  single_entry.Failure().reason));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    tint::SubstituteOverridesConfig empty_override_config;
+    auto substituted =
+        tint::core::ir::transform::SubstituteOverrides(ir,
+                                                       empty_override_config);
+    if (substituted != tint::Success) {
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-SEMANTIC-LOWER", "lower",
+                                  substituted.Failure().reason));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    bool contains_override = false;
+    for (const auto *instruction : ir.Instructions()) {
+      contains_override = contains_override ||
+                          instruction->Is<tint::core::ir::Override>();
+    }
+    if (contains_override) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                "semantic extraction left an active override in lowered IR"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    auto semantic_interface = ExtractSemanticInterface(ir);
+    if (!semantic_interface.value) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
+                std::move(semantic_interface.error)));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    results.push_back(SemanticExtractionEntryResult{
+        .entry_point = requested,
+        .semantic_interface = std::move(*semantic_interface.value),
+        .workgroup_size = selected[index]->workgroup_size,
+    });
+  }
+
+  WriteSemanticExtractionSuccess(request, diagnostics, results);
+  return 0;
+}
+
 } // namespace
 
 int main(int argc, char **) {
@@ -1542,6 +1842,10 @@ int main(int argc, char **) {
               vgpu::native::RequestOperation::kEntryInventory &&
           decoded.request_identity) {
         WriteEntryInventoryFailure(*decoded.request_identity, diagnostics);
+      } else if (decoded.operation ==
+                     vgpu::native::RequestOperation::kSemanticExtraction &&
+                 decoded.request_identity) {
+        WriteSemanticExtractionFailure(*decoded.request_identity, diagnostics);
       } else {
         WriteFailure(diagnostics);
       }
@@ -1563,6 +1867,11 @@ int main(int argc, char **) {
     if (std::holds_alternative<EntryInventoryRequest>(*decoded.value)) {
       WriteEntryInventoryFailure(
           std::get<EntryInventoryRequest>(*decoded.value).identity,
+          diagnostics);
+    } else if (std::holds_alternative<SemanticExtractionRequest>(
+                   *decoded.value)) {
+      WriteSemanticExtractionFailure(
+          std::get<SemanticExtractionRequest>(*decoded.value).identity,
           diagnostics);
     } else {
       WriteFailure(diagnostics);

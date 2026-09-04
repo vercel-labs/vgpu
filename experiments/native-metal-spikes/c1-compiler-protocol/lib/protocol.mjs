@@ -566,15 +566,16 @@ function maskMslCommentsAndLiterals(msl) {
   return code;
 }
 
-function assertCanonicalJsonNumbers(root, label) {
+export function assertCanonicalJsonNumbers(
+  root,
+  label,
+  { code = "VGPU-C1-PROTOCOL-CANONICAL", failWith = fail } = {}
+) {
   const pending = [{ path: label, value: root }];
   while (pending.length > 0) {
     const { path, value } = pending.pop();
     if (typeof value === "number" && Object.is(value, -0)) {
-      fail(
-        "VGPU-C1-PROTOCOL-CANONICAL",
-        `${path} contains non-canonical negative zero`
-      );
+      failWith(code, `${path} contains non-canonical negative zero`);
     }
     if (Array.isArray(value)) {
       for (let index = value.length - 1; index >= 0; index -= 1) {

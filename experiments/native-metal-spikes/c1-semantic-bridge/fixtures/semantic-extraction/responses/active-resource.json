@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": false,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "b7cf923b157ad3436b338ceb0d4bd8fee621eea33de74d000323eca4593969b5"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED",
+      "severity": "error",
+      "phase": "inspect",
+      "message": "selected program uses resources outside the interface-only profile"
+    }
+  ]
+}

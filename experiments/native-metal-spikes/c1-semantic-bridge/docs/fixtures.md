@@ -32,6 +32,26 @@ virtual-path limit counts Unicode code points, matching JSON Schema and C++. NFC
 virtual paths and origin input IDs by the TypeScript caller; WGSL bytes are never normalized, and
 the standalone worker does not independently prove NFC.
 
+## Executable semantic-extraction slice
+
+The interface-only extractor freezes four request/response pairs. `render-interface` and
+`compute-interface` succeed with canonical interfaces; the compute case also returns a literal
+`1 x 1 x 1` workgroup size. `active-resource` and `active-override` fail with separate structured
+unsupported diagnostics, proving that the temporary profile never returns incomplete success data.
+
+Nine prelaunch mutations stop before a worker can run. Fifteen response mutations cover request and
+compiler association, entry identity, canonical numbers and ordering, builtin types, diagnostic
+provenance, dual-source feature/pair rules, stage-specific workgroup shape, and the empty resource
+graph required by this profile. Successful responses are nominally branded against the exact
+finalized capsule; cloning or crossing the capsule loses that authority.
+
+The native gate makes eighteen one-shot invocations. Beyond the four frozen responses and repeated
+successes, it proves that extraction is independent from later render-link validation, accepts the
+generated full-screen vertex and authenticates it through the adapter, ignores resource and required
+override declarations inactive in the selected entry, resolves an omitted workgroup `z` to one,
+rejects 65 interface leaves before emitting a schema-invalid success, distinguishes missing and
+wrong-stage selections, and handles malformed raw protocol requests deterministically.
+
 ## Executable program-selection slice
 
 The selection gate uses reviewed inventory and program literals. Twelve positive cases cover the
@@ -73,10 +93,10 @@ and resolver-span joins remain part of the integrated closure below.
 ## Provisional full-screen Metal canary
 
 The companion Metal gate uses a second fragment fixture that exposes UV and `front_facing` as
-pixel values. Until semantic extraction exists, reviewed vertex and fragment interfaces serve as
-the request oracle. Each entry is translated twice, and one additional schema-valid request runs
-twice to prove that Tint deterministically rejects a crossed UV width with one structured interface
-diagnostic.
+pixel values. Until that companion is wired to the authenticated extraction, reviewed vertex and
+fragment interfaces serve as the request oracle. Each entry is translated twice, and one additional
+schema-valid request runs twice to prove that Tint deterministically rejects a crossed UV width with
+one structured interface diagnostic.
 
 The two accepted MSL sources compile to separate AIR files and link into one metallib. A Swift probe
 loads translator-returned function names, renders 2x2 targets with explicit counter-clockwise and

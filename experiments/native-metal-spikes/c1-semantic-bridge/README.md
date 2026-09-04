@@ -1,9 +1,10 @@
 # C1 semantic-to-compiler bridge
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
-The first executable slice adds an authenticated entry inventory to the same one-shot Tint worker.
-It closes the gap between isolated semantic, override, slot-allocation, translation, and offline
-Metal proofs without turning TypeScript into a second WGSL compiler.
+Its executable slices now cover authenticated entry inventory, program selection, full-screen
+source finalization, and the first authenticated semantic-extraction profile in the same one-shot
+Tint worker. It closes the gap between isolated semantic, override, slot-allocation, translation,
+and offline Metal proofs without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -93,11 +94,25 @@ remain a sibling input for program assembly; the finalizer neither rewrites nor 
 them. See [`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md) for the exact profile and
 remaining semantic gates.
 
+`vgpu-native-tint-semantic-extraction/v1` is now implemented as the worker's third contract. Its
+first executable profile accepts one selected compute entry or one selected vertex-fragment pair
+when that program has no active resources or overrides. It extracts canonical stage interfaces and
+literal compute workgroup sizes from fresh per-entry lowered IR, while returning distinct
+structured failures for configured overrides, active resources, active overrides, and non-literal
+workgroup sizes.
+
+The semantic gate freezes four request/response pairs, nine prelaunch mutations, fifteen response
+mutations, and two static nominal authentications. Against the native worker it runs eighteen
+one-shot requests. These include deterministic render and compute successes, an interface that
+extracts even though assembly will later reject its render link, the generated full-screen vertex,
+inactive resource and override declarations, the interface-size boundary, malformed protocol
+requests, and request-specific adapter authentication.
+
 A separate provisional canary carries a real finalized effect through two deterministic
 translations per entry, two offline AIR compilations, one metallib link, and two live 2x2
 readbacks. It proves top-origin UV and counter-clockwise `front_facing` with a clockwise control on
-Apple M4 Pro. The compiler interfaces are reviewed literals until the multi-entry extractor can
-own them, so this is executable backend evidence rather than completion of semantic assembly. See
+Apple M4 Pro. The compiler interfaces remain reviewed literals until this companion projects the
+authenticated extraction, so it is executable backend evidence rather than completion of semantic assembly. See
 [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 
 ## Fixture strategy
@@ -127,8 +142,8 @@ The semantic work is split by responsibility so the growing design remains revie
 3. Inject the versioned full-screen source when required and finalize the exact source, source hash,
    origin map, and origin-map hash. This source-finalization slice is executable; resolver-owned
    entry declarations remain unchanged alongside it until program assembly.
-4. Add a multi-entry semantic-extraction operation and connect the existing exact-static override
-   materializer to it.
+4. Add a multi-entry semantic-extraction operation. The interface-only profile is executable;
+   active resource extraction and the existing exact-static override materializer remain next.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven declaration spans.
 6. Allocate program-level slots and derive one existing compiler request per entry point.

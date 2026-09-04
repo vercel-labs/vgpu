@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": false,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "0101a54f522a258bac516a50201e3b99e1a5bc444b9380f2cd24648decf6c0bd"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED",
+      "severity": "error",
+      "phase": "inspect",
+      "message": "selected program uses overrides outside the interface-only profile"
+    }
+  ]
+}
