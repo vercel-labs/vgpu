@@ -159,7 +159,8 @@ The source-build, vgpu-owned binding map, structured compiler diagnostics, clean
 determinism, native arm64 execution, Rosetta x86_64 execution, and spike-artifact license inventory
 are closed for the pinned profile. The remaining gates are:
 
-- connect the exact-static override materializer and broader semantic extractor to the worker;
+- carry authenticated fixed resources through semantic assembly and slot allocation, and extend
+  extraction/assembly with exact-static overrides;
 - validate the complete corpus through offline `metal` and `metallib` at MSL 2.4;
 - preserve authored spans beyond the current module-only diagnostic attribution;
 - connect the compiler result to the deterministic Swift artifact and production runtime; and

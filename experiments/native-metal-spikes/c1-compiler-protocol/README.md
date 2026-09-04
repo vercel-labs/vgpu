@@ -38,11 +38,12 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
   mismatches.
 
 This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
-`libwebgpu_dawn.a`. The companion direct-source gate now covers this exact worker revision and
-semantic-interface handshake. Its ordinary publication gate passes with an authenticated
-ten-canary request closure, byte-reproducible arm64, x86_64, and universal executables, and response
-parity with the arm64-native monolithic oracle across eight direct variants. The x86_64 executions
-run through Rosetta and establish compiler-process behavior, not Intel or AMD GPU support.
+`libwebgpu_dawn.a`. The companion direct-source gate now covers this exact worker revision,
+authenticated entry inventory, the semantic-interface handshake, and fixed singular-resource
+extraction. Its ordinary publication gate passes with an authenticated eighteen-canary request
+closure, byte-reproducible arm64, x86_64, and universal executables, and response parity with the
+arm64-native monolithic oracle across eight direct variants. The x86_64 executions run through
+Rosetta and establish compiler-process behavior, not Intel or AMD GPU support.
 
 ## Boundary
 
@@ -229,7 +230,8 @@ before or inside the independently validating worker.
 
 The remaining gates are:
 
-- connect the broader semantic extractor and multi-entry union to artifact construction;
+- carry the authenticated fixed-resource union through semantic assembly and slot allocation;
+- connect exact-static override extraction and assembly;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 

@@ -139,8 +139,10 @@ compares it before generation, inspects the same IR after Metal lowering, and re
 runtime-relevant projection. Its direct-source gate reproduces that handshake across arm64, x86_64,
 and universal executables.
 
-The remaining compiler integration is the bridge from vgpu's resolved module graph, source map,
-entry-point semantics, bindings, and overrides into that exact request. Once that bridge exists, the
-full shader corpus can run through the direct worker and its response can feed the deterministic
-artifact gate. The twelve isolated outputs have passed offline `metal` plus `metallib`; the direct
-worker's full-corpus output and pixel/buffer parity remain separate requirements.
+The bridge now carries vgpu's resolved module graph and source map through authenticated selection,
+finalization, interface extraction, interface-only semantic assembly, and request projection. Fixed
+singular resources are also extracted as one authenticated program union. Remaining integration
+must carry that resource graph through semantic assembly and slot allocation, add exact-static
+overrides, and then run the full shader corpus through the direct worker into the deterministic
+artifact gate. The twelve isolated outputs have passed offline `metal` plus `metallib`; full-corpus
+output and pixel/buffer parity remain separate requirements.

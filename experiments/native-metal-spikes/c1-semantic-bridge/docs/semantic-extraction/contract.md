@@ -202,18 +202,24 @@ interned from their inline facts instead of redundantly appearing in that graph.
 normalization rules live in
 [Sampling, resources, and types](./sampling-and-types.md).
 
-### First executable profile
+### Current executable profile
 
-The first implementation slice accepts only interface-only programs: `overrideConfiguration` must
-be empty, every selected entry must have zero active overrides and resources, and therefore
-`bindings`, `overrides`, `types`, and `layouts` must all be empty. It still extracts complete stage
-I/O and a literal compute workgroup size. Constant-expression and override-expression dimensions
-join the later override slice with their own reviewed canaries.
+The current implementation accepts interface-only programs plus singular active resources whose
+buffer graphs have fixed host-shareable layouts. `overrideConfiguration` must remain empty and no
+selected entry may use an active override. It extracts complete stage I/O, literal compute
+workgroup sizes, exact entry-local binding subsets and sampling pairs, the numeric program binding
+union, and the reachable content-addressed type and layout graphs.
 
-A non-empty configuration, active override, or active resource produces a structured unsupported
-failure; it is never silently omitted from a successful result. These restrictions belong to the
-temporary executable profile, not to the v1 response shape. Later slices widen implementation only
-after resource and override fields have literal fixtures and gates.
+The primary render fixture contains bindings `b0`, `b1`, `b2`, `b3`, and `b10`. Its vertex subset
+contains the shared frame uniform and vertex storage buffer; its fragment subset contains the same
+frame uniform, sampled texture, sampler, and material uniform. The response contains seven types,
+six layouts, and fixed buffer minimum sizes of 8, 24, and 16 bytes. Separate native canaries prove
+an authored fixed `@size`, a storage texture, and cross-stage unknown sampler/texture resolution.
+
+Runtime-sized buffers and resource binding arrays produce structured unsupported failures rather
+than approximate success. Configured overrides and active overrides also remain unsupported.
+Constant-expression and override-expression workgroup dimensions join the override slice. These
+are executable-profile restrictions, not omissions from the v1 response shape.
 
 ## Failure and process model
 

@@ -34,23 +34,28 @@ the standalone worker does not independently prove NFC.
 
 ## Executable semantic-extraction slice
 
-The interface-only extractor freezes four request/response pairs. `render-interface` and
-`compute-interface` succeed with canonical interfaces; the compute case also returns a literal
-`1 x 1 x 1` workgroup size. `active-resource` and `active-override` fail with separate structured
-unsupported diagnostics, proving that the temporary profile never returns incomplete success data.
+The extractor freezes four request/response pairs. `render-interface` and `compute-interface`
+succeed with canonical interfaces; the compute case also returns a literal `1 x 1 x 1` workgroup
+size. `active-resource` now succeeds with the numeric binding union `b0`, `b1`, `b2`, `b3`, `b10`.
+Its vertex subset is `b0`, `b1`; its fragment subset is `b0`, `b2`, `b3`, `b10`, with `b0`
+shared across stages and the texture/sampler pair at `b2`/`b3`. The graph contains seven types, six
+layouts, and fixed buffer minimum sizes 8, 24, and 16. `active-override` remains a structured
+unsupported failure.
 
-Nine prelaunch mutations stop before a worker can run. Fifteen response mutations cover request and
-compiler association, entry identity, canonical numbers and ordering, builtin types, diagnostic
-provenance, dual-source feature/pair rules, stage-specific workgroup shape, and the empty resource
-graph required by this profile. Successful responses are nominally branded against the exact
-finalized capsule; cloning or crossing the capsule loses that authority.
+Nine prelaunch mutations stop before a worker can run. Thirty-one response mutations cover request
+and compiler association, entry identity, canonical numbers and ordering, builtin types, diagnostic
+provenance, dual-source rules, binding subsets and union, sampling-pair roles and resolved classes,
+content IDs, graph closure, fixed-layout invariants, child-layout association, and resource limits.
+Three successful responses are nominally branded against the exact finalized capsule; cloning or
+crossing the capsule loses that authority.
 
-The native gate makes eighteen one-shot invocations. Beyond the four frozen responses and repeated
-successes, it proves that extraction is independent from later render-link validation, accepts the
-generated full-screen vertex and authenticates it through the adapter, ignores resource and required
-override declarations inactive in the selected entry, resolves an omitted workgroup `z` to one,
-rejects 65 interface leaves before emitting a schema-invalid success, distinguishes missing and
-wrong-stage selections, and handles malformed raw protocol requests deterministically.
+The native gate makes twenty-three one-shot invocations. Beyond the four frozen responses and
+repeated successes, it proves that extraction is independent from later render-link validation,
+accepts the generated full-screen vertex and authenticates it through the adapter, ignores inactive
+resource and override declarations, preserves an authored fixed `@size`, extracts a simple storage
+texture, and resolves unknown sampler/texture classes over both render stages using Dawn's policy.
+Runtime arrays and sized binding arrays fail explicitly. The gate also covers the interface-size
+boundary, missing and wrong-stage selections, and malformed raw protocol requests.
 
 ## Executable program-selection slice
 
@@ -87,7 +92,7 @@ frozen and repeats the inventory request's semantic and resource preflight befor
 
 With the accepted arm64 worker, the gate performs one authored inventory followed by two finalized
 inventories. The latter responses are byte-identical and contain exactly the derived vertex and the
-authored fragment in canonical order. Adversarial final-response mutations, active resources, and
+authored fragment in canonical order. Adversarial final-response mutations, resource assembly, and
 overrides remain part of the wider integrated closure below; interface extraction and the
 resolver-span join are now exercised by the assembly and companion gates.
 
@@ -145,8 +150,10 @@ initial closure must contain:
 
 Expected semantic objects, fingerprints, and request hashes remain reviewed oracles rather than
 being regenerated from translator responses. Actual compiler requests must be derived from the
-authenticated assembly. The current interface-only gates establish that boundary; resource,
-override, slot-allocation, corpus, and packaging fixtures remain to be connected.
+authenticated assembly. Fixed singular-resource extraction now establishes the compiler-owned
+resource graph, while assembly remains interface-only and rejects that graph before projection.
+Resource assembly, overrides, slot allocation, corpus, and packaging fixtures remain to be
+connected.
 
 ## Repository corpus
 

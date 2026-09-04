@@ -123,5 +123,5 @@ The recorded run used Apple M4 Pro. It performed nine one-shot Tint worker proce
 two byte-identical semantic extractions, four successful translations, and two byte-identical runs of
 one structured negative. It also performed two AIR compilations, one metallib link, and two
 byte-identical runtime executions. This is not Intel, AMD, or cross-machine evidence. The canary
-proves the interface-only assembly path; active resources, overrides, repository-corpus integration,
-and artifact packaging remain open.
+proves the interface-only assembly path; active-resource assembly and runtime binding, overrides,
+repository-corpus integration, and production artifact packaging remain open.

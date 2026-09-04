@@ -66,13 +66,15 @@ generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inv
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
 
-The implemented interface-only extraction slice adds four frozen request/response pairs, nine
-prelaunch failures with zero launches, fifteen response failures, two static nominal
-authentications, and eighteen native invocations. It proves program-scoped render and compute
-interfaces, literal workgroup dimensions, the generated full-screen interface and adapter
-association, inactive-declaration pruning, deterministic successes, diagnostic provenance,
-canonical number and dual-source validation, the 64-leaf response boundary, and distinct temporary
-profile failures. This is partial evidence for conditions 3, 4, and 10.
+The implemented fixed-resource extraction slice adds four frozen request/response pairs, nine
+prelaunch failures with zero launches, thirty-one response failures, three static nominal
+authentications, and twenty-three native invocations. It proves program-scoped render and compute
+interfaces, literal workgroup dimensions, and one five-binding resource graph with numeric order,
+exact stage subsets, one shared binding, seven types, six layouts, and fixed buffer minimum sizes of
+8, 24, and 16 bytes. Additional canaries prove an authored fixed `@size`, simple storage-texture
+reflection, Dawn-like cross-stage sampler/texture resolution, and explicit runtime-array and
+binding-array rejection. Configured and active overrides remain structured failures. This is
+partial evidence for conditions 3, 4, and 10.
 
 The executable assembly slice adds three interface-only programs and five projected compiler
 requests: effect, multi-module draw, and compute. It covers five nominal failures, five declaration
@@ -92,6 +94,8 @@ resolver span `6:1–9:2`, and the selected generated vertex reaches Metal with 
 explicit counter-clockwise winding. This is executable evidence for the interface-only portions of
 conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
 
-Active resources and exact-static overrides, versioned slot allocation and translator-response
-combination, compute translation parity, the integrated repository corpus, and production artifact
-packaging remain open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.
+Resource assembly and projection, exact-static overrides, versioned slot allocation and
+translator-response combination, compute translation parity, the integrated repository corpus, and
+production artifact packaging remain open. Assembly still accepts only interface-only extraction
+results and rejects resources before translator launch. The recorded GPU evidence is not an Intel,
+AMD, or cross-machine result.

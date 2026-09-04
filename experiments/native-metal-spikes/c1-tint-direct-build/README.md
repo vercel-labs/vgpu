@@ -16,15 +16,16 @@ builds were byte-identical within each architecture. Combining each pair with `l
 byte-identical universal executables.
 
 The accepted baseline includes the exact shader-interface handshake, authenticated entry inventory,
-and the interface-only semantic-extraction contract. It passed the ordinary publication gate after
-an independently reviewed candidate rebaseline. Candidate generation remains a separate
-non-publishing mode described below; measurements do not become accepted provenance by themselves.
+and the fixed-size singular-resource semantic-extraction contract. It passed the ordinary
+publication gate after an independently reviewed candidate rebaseline. Candidate generation remains
+a separate non-publishing mode described below; measurements do not become accepted provenance by
+themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  5,872,240 | `9c968b1a49892eff972b0ca2b90a84907c716f13b2092e5b1f947474b9b41b48` |
-| x86_64    |  6,940,760 | `e99c269238340325122f5547ef900e1d2f7a0ce82565689e0f2031213a7abedf` |
-| universal | 12,819,056 | `d6454a851d31ad920f7ca59158a015734cc5c39df34898c7d72bf58f1d9e9f85` |
+| arm64     |  5,952,688 | `5b31505951a410f1d8316115797c74754ea1bb73c94c0f7c35325b4874a2e962` |
+| x86_64    |  7,024,848 | `2786c9eb3f2765eb2c4a61b535065db5a39a262e67f67272346f6f15a704f5c9` |
+| universal | 12,997,808 | `7b4658e3bc890e987f10fc32e2e024089054c376a22a3214e69f9cf7bdccc3e6` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
 against the previously verified monolithic release archive. The locked request closure contains
@@ -34,28 +35,31 @@ dual-source, and semantic-interface-mismatch requests. Four authenticated invent
 empty module, a library-only module, invalid WGSL, and a multi-stage module. They establish empty
 inventories, structured parse failure, canonical entry-point names and stages, and the request identity
 `SHA-256(UTF-8("vgpu-native-tint-entry-inventory-request-bytes/v1") || 0x00 || exact encoded request bytes)`.
-Four semantic-extraction canaries add exact render and compute interfaces plus separate fail-closed
-rejections for active resources and overrides in the initial profile.
+Four semantic-extraction canaries add exact render and compute interfaces, one exact fixed-resource
+graph, and a fail-closed rejection for active overrides. The resource canary covers numeric binding
+order through binding ten, per-entry active subsets, one sampling pair, and content-addressed fixed
+buffer types and layouts.
 Each response must match the same reference byte for byte across eight direct variants: both thin
 A/B builds, both universal A/B builds, and each applicable arm64-native or x86_64-Rosetta execution
 mode. The last original translation request retains a historical fixture name; the real worker
 successfully translates it, and all variants agree on that success. The monolithic executable is
 reference-only: it is neither copied into `.artifacts` nor a candidate for distribution.
 
-In normal mode, before loading the oracle helper, the gate authenticates all fourteen local oracle
+In normal mode, before loading the oracle helper, the gate authenticates all sixteen local oracle
 inputs: both provenance manifests, the helper, the translation and origin-map protocol modules, all
 three contract families' request and response schemas, the shared origin-map schema, and the
-inventory and semantic-extraction protocol modules. It also authenticates the exact eighteen-request
-closure. It validates each request and response against its authenticated JSON Schema, then runs the
-corresponding JavaScript semantic validator in addition to the independent native decoder.
+inventory and semantic-extraction protocol modules, the semantic resource-graph validator, and the
+fixed-resource response oracle. It also authenticates the exact eighteen-request closure. It
+validates each request and response against its authenticated JSON Schema, then runs the corresponding
+JavaScript semantic validator in addition to the independent native decoder.
 Translation assertions require the exact sparse vertex attributes, sparse fragment colors, fragment
 and compute builtins, scalar locations, dual-source color/index pairs, and mismatch diagnostic.
 Inventory assertions require the empty-module and library-only results, invalid-WGSL diagnostic,
 canonical multi-stage names and stages, and request identity derived from the exact encoded bytes.
-Semantic-extraction assertions require literal program-scoped interfaces and exact unsupported
-diagnostics. Common byte parity therefore cannot bless a canary that stopped exercising its intended
-branch. Each oracle response must also match its locked byte count, SHA-256, and success state before
-any direct worker can use it as a reference.
+Semantic-extraction assertions require literal program-scoped interfaces, the exact fixed resource
+graph, and the exact unsupported-override diagnostic. Common byte parity therefore cannot bless a
+canary that stopped exercising its intended branch. Each oracle response must also match its locked
+byte count, SHA-256, and success state before any direct worker can use it as a reference.
 
 Candidate mode does not treat changed helper, protocol, schema, or request bytes as authenticated
 by the stale lock. It measures their exact bytes before use, requires them to remain identical

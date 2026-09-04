@@ -2,7 +2,7 @@
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
-source finalization, the first authenticated semantic-extraction profile, and interface-only
+source finalization, authenticated fixed-resource semantic extraction, and interface-only
 `semantic-v1` assembly. The same one-shot Tint worker supplies inventory, extraction, and
 translation. This closes the interface-only path between the isolated semantic, translation, and
 offline Metal proofs without turning TypeScript into a second WGSL compiler.
@@ -96,25 +96,29 @@ them. See [`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md) for t
 remaining semantic gates.
 
 `vgpu-native-tint-semantic-extraction/v1` is now implemented as the worker's third contract. Its
-first executable profile accepts one selected compute entry or one selected vertex-fragment pair
-when that program has no active resources or overrides. It extracts canonical stage interfaces and
-literal compute workgroup sizes from fresh per-entry lowered IR, while returning distinct
-structured failures for configured overrides, active resources, active overrides, and non-literal
-workgroup sizes.
+current executable profile accepts one selected compute entry or one selected vertex-fragment pair
+when that program has no active overrides and every active resource is singular with a fixed-size
+layout. It extracts canonical stage interfaces and literal compute workgroup sizes from fresh
+per-entry lowered IR, and combines them with Inspector-owned active bindings and sampling pairs.
+Runtime-sized buffers, resource binding arrays, configured or active overrides, and non-literal
+workgroup sizes still produce structured failures.
 
-The semantic gate freezes four request/response pairs, nine prelaunch mutations, fifteen response
-mutations, and two static nominal authentications. Against the native worker it runs eighteen
-one-shot requests. These include deterministic render and compute successes, an interface that
-extracts even though assembly will later reject its render link, the generated full-screen vertex,
-inactive resource and override declarations, the interface-size boundary, malformed protocol
-requests, and request-specific adapter authentication.
+The semantic gate freezes four request/response pairs, nine prelaunch mutations, thirty-one
+response mutations, and three static nominal authentications. Against the native worker it runs
+twenty-three one-shot requests. The primary resource fixture proves a numeric five-binding union at
+`b0`, `b1`, `b2`, `b3`, and `b10`, exact stage subsets, one shared uniform, seven content-addressed
+types, six layouts, and buffer minimum sizes of 8, 24, and 16 bytes. Additional canaries cover an
+authored fixed `@size`, a simple storage texture, cross-stage Dawn-like sampler/texture resolution,
+runtime-array and binding-array rejection, inactive declarations, deterministic interface-only
+successes, malformed protocol requests, and request-specific adapter authentication.
 
 The interface-only assembly gate resolves authored effect, multi-module draw, and compute fixtures,
 retains nominal resolver declaration evidence, authenticates extraction, emits schema-valid
 `semantic-v1`, checks render linking and fingerprints, and projects five compiler requests without
 launching the translator. With the native worker it performs six semantic-extraction invocations:
-two byte-identical runs for each fixture. Active resources and overrides remain outside this first
-profile. See
+two byte-identical runs for each fixture. Assembly remains deliberately interface-only: an
+authenticated extraction carrying resources is rejected before projection, and overrides remain
+outside both executable profiles. See
 [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md).
 
 The integrated full-screen canary carries one real resolved and finalized effect through two native
@@ -129,10 +133,10 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
-interfaces, and generated full-screen source. The interface-only effect, draw, and compute requests
-are now derived; resources, overrides, and program-level slot allocation remain. Once every request
-is derived, run the repository corpus through the same bridge and compile every successful MSL
-result for the `air64-apple-macos14.0` target.
+interfaces, and generated full-screen source. Interface-only effect, draw, and compute requests and
+one fixed-resource extraction are now derived; resource assembly, overrides, and program-level slot
+allocation remain. Once every request is derived, run the repository corpus through the same bridge
+and compile every successful MSL result for the `air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
@@ -154,8 +158,9 @@ The semantic work is split by responsibility so the growing design remains revie
 3. Inject the versioned full-screen source when required and finalize the exact source, source hash,
    origin map, and origin-map hash. This source-finalization slice is executable; resolver-owned
    entry declarations remain unchanged alongside it until program assembly.
-4. Add a multi-entry semantic-extraction operation. The interface-only profile is executable;
-   active resource extraction and the existing exact-static override materializer remain next.
+4. Add a multi-entry semantic-extraction operation. The fixed singular-resource profile is
+   executable; runtime-sized layouts, binding arrays, and the existing exact-static override
+   materializer remain next.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven declaration spans. The interface-only effect, multi-module draw, and compute slice is
    executable.
@@ -167,7 +172,7 @@ The semantic work is split by responsibility so the growing design remains revie
 
 ## Non-goals
 
-This spike does not yet connect active resources or overrides through assembly, run the integrated
+This spike does not yet connect extracted resources or overrides through assembly, run the integrated
 repository corpus, package a production artifact, implement the production Swift runtime, freeze a
 Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not recover general
 authored diagnostic spans from the current module-only origin map. Exact authored entry-declaration

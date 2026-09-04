@@ -53,8 +53,9 @@ The complete adapter must prove all of the following before producing `semantic-
 The executable interface-only profile applies the association, entry, source-span, link, canonical
 ordering, interface-type closure, capability, and fingerprint checks now. It requires extraction
 bindings, sampling pairs, overrides, semantic types, and layouts to be empty, and it rejects
-`dual_source_blending` before projection. Resource graphs, exact-static override unions, and their
-slot policy remain later slices rather than partially populated successes.
+`dual_source_blending` before projection. Joining authenticated resource graphs into `semantic-v1`,
+exact-static override unions, and their slot policy remain later slices rather than partially
+populated successes.
 
 For semantic v1, `program.sources` contains every WGSL input listed by the finalized origin map.
 Module-level provenance cannot honestly claim a smaller entry-reachability set, so assembly does
@@ -138,5 +139,6 @@ byte-identical runs for each fixture. The independently integrated full-screen c
 one inventory, two semantic extractions, four successful translations, and two structured-negative
 translations. Its compiler requests come from the nominal assembly, while the checked-in interface
 JSON remains a static oracle. The authored fragment's resolver-owned end-exclusive span is exactly
-`6:1–9:2`; the injected vertex omits authored provenance. Active resources, overrides, repository
-corpus integration, artifact packaging, and Intel/AMD hardware evidence remain open.
+`6:1–9:2`; the injected vertex omits authored provenance. Active-resource assembly, overrides,
+repository corpus integration, production artifact packaging, and Intel/AMD hardware evidence
+remain open.

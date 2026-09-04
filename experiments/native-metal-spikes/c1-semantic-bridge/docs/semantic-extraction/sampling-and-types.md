@@ -20,12 +20,15 @@ as the corresponding `semantic-v1` variants, but omit adapter-owned `swiftName` 
 - external textures contain only their common binding identity.
 
 For a binding active in both render stages, its declaration fields must agree. Visibility is not a
-Tint response field: TypeScript derives it from the entry subsets. For a runtime-sized buffer,
-`minimumBindingSize` is the maximum Tint reports across the selected entries and includes one
-complete trailing element; it is not the zero-element layout prefix.
+Tint response field: TypeScript derives it from the entry subsets. The current executable profile
+accepts only fixed buffers, so each `minimumBindingSize` equals its root layout size. The primary
+fixture proves sizes 8, 24, and 16 for its three buffers. The response shape reserves runtime-sized
+layout facts for a later slice.
 
-Resource binding arrays, texel buffers, and input attachments remain outside semantic contract v1
-and fail extraction before assembly. An unsupported shape is never represented approximately.
+Resource binding arrays, runtime-sized buffers, texel buffers, and input attachments fail the
+current extraction profile. Singular storage textures are accepted, including the simple
+`texture_storage_2d<rgba8unorm, write>` canary. An unsupported shape is never represented
+approximately.
 
 ## Sampling pairs
 
@@ -56,6 +59,11 @@ small `ResolveUnknownTypes` policy:
 Comparison samplers and depth textures remain concrete. No `unknown` value may cross the response
 boundary. This logic belongs in the small vgpu wrapper; linking Dawn Native only to reuse its
 device-layer resolver would enlarge the build-time binary and cross the accepted boundary.
+
+The cross-stage canary uses one shared ordinary sampler with a float texture in the vertex entry and
+an integer texture in the fragment entry. The integer pair resolves the sampler to `non-filtering`
+over the program union; the float texture consequently resolves to `unfilterable-float`. Resolving
+each entry independently would disagree on the shared binding and fails this canary.
 
 ## Type and layout identities
 
@@ -92,9 +100,12 @@ it exactly. An interface-only extraction has no host-shareable layout roots, so 
 is empty. A semantic module made only from such programs also has an empty layout table; TypeScript
 must not synthesize `AlignOf` or `SizeOf`.
 
-Layouts retain intrinsic WGSL alignment, size or minimum size, array and matrix strides, member
-offsets, and runtime-sized state. Address-space constraints are validated separately; uniform or
-storage use never rewrites the intrinsic layout.
+Layouts retain intrinsic WGSL alignment, fixed size, array and matrix strides, member offsets, and
+effective member sizes. A dedicated `@size(16)` canary proves that member, root layout, and buffer
+minimum sizes all retain the authored fixed footprint. The validator rejects a missing fixed-array
+count, any runtime-sized marker, unequal fixed size/minimum size, crossed child layouts, dangling or
+cyclic references, and unreachable records. Address-space constraints are validated separately;
+uniform or storage use never rewrites the intrinsic layout.
 
 ## Overrides and workgroup size
 
