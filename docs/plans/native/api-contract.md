@@ -143,8 +143,8 @@ Semantic extraction is a separate build stage from Metal translation. It owns th
 entry interfaces, bindings, intrinsic layouts, override declarations, and evaluated defaults used
 to assemble this contract. The accepted compiler contract requires each per-entry translation
 request to carry the exact semantic interface that the worker must match against Tint core IR before
-Metal lowering. The response does not serialize that broad semantic reflection again; integrating
-this extension into the current worker remains a C1 gate.
+Metal lowering. The response does not serialize that broad semantic reflection again. This exact
+request/response handshake is integrated and has passed its C1 protocol gate.
 
 Generated Swift and TypeScript packers consume the same semantic offsets. They require exact
 vector, matrix, and fixed-array shapes; reject non-integral or out-of-range integers and invalid
@@ -206,8 +206,9 @@ only user input locations to Metal attribute indices. Fragment entries map only 
 locations and optional blend-source indices to Metal color and source indices. Compute entries need
 no physical I/O map. Built-ins, inter-stage varyings, interpolation, and invariance remain in the
 semantic contract. Sparse locations remain exact and are never compacted. The v1 schemas reserve
-the paired blend-source shape, but the first alpha rejects `dual_source_blending`. The complete
-contract and canonical validation rules are in
+the paired blend-source shape, and the internal compiler protocol allowlists and tests it. The first
+alpha still rejects `dual_source_blending`; internal translator evidence is not product support. The
+complete contract and canonical validation rules are in
 [Native shader-interface contract](./compiler/shader-interfaces.md).
 
 The production native compiler constructs the user binding map and configures candidate internal
@@ -223,11 +224,13 @@ The accepted production contract requires each translation request to contain on
 one selected WGSL and vgpu-owned emitted entry name, the exact statically used typed override set
 after module-level configuration and required-value validation, declared language features, direct
 external slots, the candidate internal profile, and the exact semantic interface. The worker
-compares the portable interface before `Raise()`, validates the complete lowered interface
-privately, and prints MSL from that same raised IR. A success response is limited to MSL, that entry
-identity, the validated external slots, effective internal slots and size regions, the minimal
-runtime shader-interface projection, and a resolved workgroup size for compute. Expected compiler
-failures use the structured error response rather than a process failure.
+compares the portable interface before calling `Generate()`. The official writer path preserves
+Tint's `CanGenerate` preflight and performs Metal lowering and MSL generation on that same IR; the
+worker then validates the complete lowered interface privately on the now-raised IR. A success
+response is limited to the generated MSL, that entry identity, the validated external slots,
+effective internal slots and size regions, the minimal runtime shader-interface projection, and a
+resolved workgroup size for compute. Expected compiler failures use the structured error response
+rather than a process failure.
 
 The production worker framing is one UTF-8 JSON request on standard input terminated by EOF and one
 UTF-8 JSON response on standard output terminated by EOF. Any decoded response, including
@@ -240,6 +243,12 @@ assigned contiguous intervals in independent Metal buffer, texture, and sampler 
 Effective internal roles are emitted from reservations at the high end of their namespace. An
 independent verifier reconstructs the same allocation and rejects non-canonical, colliding, or
 overflowing maps.
+
+After generation, the worker verifies that the expected Metal resource-class, index, and count set
+exists in the raised wrapper. It does not independently recover each source `(group, binding)`
+identity from that wrapper. The association relies on Tint's `BindingRemapper`, and a successful
+response reserializes the requested source-to-slot map after its independent pre-generation
+validation. This is an explicit trust boundary, not reflected identity evidence.
 
 Vertex-stage shader buffers and runtime vertex streams share one Metal buffer namespace. The
 selected policy keeps shader and internal slots exact in the artifact, records an exclusive

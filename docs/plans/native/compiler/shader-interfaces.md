@@ -1,7 +1,8 @@
 # Native shader-interface contract
 
 Status: the semantic and Metal artifact shapes are accepted. The exact compiler-worker handshake is
-the next C1 integration gate. Render-target API choices for sparse attachments remain open.
+integrated and has passed its C1 protocol gate. Render-target API choices for sparse attachments
+remain open.
 
 ## Keep three different views
 
@@ -54,9 +55,11 @@ small scalar-or-vector wire type rather than artifact type IDs or source names. 
 2. apply `SingleEntryPoint`, then remove the remaining overrides with an empty substitution map;
 3. extract the selected core-IR interface before Metal raise;
 4. compare it exactly with the requested semantic interface;
-5. call Metal `Raise()` and validate the complete lowered interface privately;
-6. print MSL from that same raised IR; and
-7. return MSL plus the minimal runtime projection.
+5. call Metal `Generate()` on that same IR, preserving Tint's `CanGenerate` preflight and official
+   writer path;
+6. inspect the same, now-raised IR and validate the complete lowered interface and emitted physical
+   slots privately; and
+7. return the generated MSL plus the minimal runtime projection.
 
 The worker must not use its request as evidence that translation honored the request. It also must
 not use `Inspector` as the only interface oracle: the C1 canaries show that Inspector omits built-ins
@@ -64,8 +67,14 @@ and normalizes interpolation in roles where the semantic contract does not retai
 
 The raised IR remains pinned-compiler evidence. Synthesized Metal structures, members, wrapper
 entry names, inter-stage fields, and backend built-ins are not serialized into the artifact. The
-same C1 gate proved that explicit `Raise()` plus `Print()` produces the same final IR and MSL as
-`Generate()` for the interface corpus.
+isolated interface experiment established equivalent writer output, but the integrated worker uses
+`Generate()` so Tint's complete preflight remains in the production path.
+
+The worker checks that the expected Metal resource-class, index, and count set exists in the raised
+wrapper. It does not recover each original WGSL binding identity from that wrapper. The
+source-to-slot association relies on Tint's `BindingRemapper`, and a successful response
+reserializes the independently validated requested external map. This is an explicit trust
+boundary, not a claim of identity reflection.
 
 ## Serialize the minimal Metal map
 
@@ -128,10 +137,12 @@ The schemas can enforce the discriminated shape and paired presence of `blendSou
 `index`. An independent validator enforces canonical ordering, equality, uniqueness, the semantic
 bijection, and stage linking.
 
-Dual-source fields remain representable so the compiler boundary can be tested, but the first alpha
-rejects the WGSL `dual_source_blending` language feature during `native check`. A valid future pair
-has exactly two user-location outputs, both at location zero, with sources zero and one and the same
-type. Translator and current-device acceptance is not a product-support promise.
+Dual-source fields remain representable, and the internal compiler protocol allowlists
+`dual_source_blending` so its native canary can prove both location-zero blend sources lower to Metal
+color zero at indices zero and one. The first alpha still rejects that language feature during
+`native check`. A valid future pair has exactly two user-location outputs, both at location zero,
+with sources zero and one and the same type. Internal translator and current-device acceptance is
+not a product-support promise.
 
 ## Fingerprint and runtime compatibility
 
@@ -156,14 +167,24 @@ accepted the tested same-type interpolation mismatch and silently discarded an o
 attachment was absent. The tested `MTLRenderPipelineReflection` did not expose the varying or color
 information needed to reconstruct this contract.
 
+`experiments/native-metal-spikes/c1-compiler-protocol` now carries the exact semantic interface on
+every request, compares it before generation, calls `Generate()`, and inspects the same IR after
+Metal lowering. Fifteen positive and twenty-two negative native cases pass deterministically,
+including sparse interfaces and the internal dual-source canary.
+
+The last direct-source distribution proof predates this interface-handshake change. Its source lock
+and hashes are intentionally stale until they are rebaselined against the current worker, so it is
+not current arm64, x86_64, or universal distribution evidence.
+
 `experiments/native-metal-spikes/c3-artifact-swiftpm` now carries a synthetic `SparseDraw` program.
 It proves that locations `3/7` and colors `1/4` survive schema validation, canonical cross-checks,
 runtime fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction.
 
-Neither result expands the supported hardware matrix. The live gate ran only on Apple silicon; an
-x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. Offline
-`metal` and `metallib`, the exact semantic-extractor-to-worker integration, a real C1-connected
-artifact, full corpus coverage, and pixel/buffer parity remain open.
+These results do not expand the supported hardware matrix. The live gate ran only on Apple silicon;
+an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. Offline
+`metal` and `metallib`, the broader multi-entry semantic-extractor-to-artifact integration, a real
+C1-connected artifact, the direct-source rebaseline, full corpus coverage, and pixel/buffer parity
+remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

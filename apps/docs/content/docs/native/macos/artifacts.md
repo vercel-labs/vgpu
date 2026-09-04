@@ -152,15 +152,23 @@ Vertex attributes are ordered by semantic location. Fragment colors are ordered 
 location and optional blend-source index. An independent validator requires an exact bijection with
 the relevant semantic user-location subset—vertex inputs or fragment outputs—plus v1 identity
 mappings and no physical collisions. The first alpha rejects `dual_source_blending`; blend-source
-fields remain reserved for a later capability profile.
+fields remain reserved for a later capability profile. The internal compiler protocol allowlists
+and tests the paired lowering, but that translator evidence does not enable the alpha feature.
 
 vgpu supplies the external slot map and reserved internal profile to Tint. The accepted worker
 contract requires it to compare the requested semantic interface with core IR before Metal lowering,
-validate the complete lowered interface privately, return the validated external map unchanged, and
+call `Generate()` to preserve Tint's complete writer preflight, validate the complete lowered
+interface privately on the same, now-raised IR, return the validated external map unchanged, and
 report only the minimal runtime interface map, internal bindings, and size regions that the generated
-entry point uses. Tint does not allocate the public ABI. The current compiler-protocol fixture still
-needs this exact interface handshake wired in. An internal resource introduced by lowering has an
-explicit role and slot but no invented WGSL binding identity.
+entry point uses. Tint does not allocate the public ABI. This exact handshake has passed its C1
+protocol gate. An internal resource introduced by lowering has an explicit role and slot but no
+invented WGSL binding identity.
+
+The post-generation check proves that the expected Metal resource-class, index, and count set is
+present. It does not independently recover each original WGSL binding identity from the raised
+wrapper. That association relies on Tint's `BindingRemapper`, and the success response reserializes
+the independently validated requested source-to-slot map. This is an explicit trust boundary, not a
+claim of reflected identity.
 
 Slots are scoped by semantic program, selected stage, and Metal resource class. Within each namespace, active bindings are ordered by `(group, binding)`, projected components by stable component name, and each component occupies a contiguous interval. Only internal roles emitted for that program and stage appear in `internalBindings`. A slot `count` is projection width; it does not add WGSL resource binding-array semantics to semantic contract v1. The first alpha rejects WGSL resource binding arrays (`binding_array`) before projection.
 

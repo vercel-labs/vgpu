@@ -86,10 +86,16 @@ order, while required internal roles use explicit high-end reservations.
 The compiler-protocol follow-up narrowed the production translation boundary to one fully resolved
 entry point. Its request carries virtual-source provenance, the exact static typed override set,
 declared features, a vgpu-owned emitted name, direct external slots, and a candidate internal
-profile. Its current response deliberately omits broad semantic reflection and interface indices.
-The next integration adds the exact semantic interface to the request and only the minimal
-stage-discriminated Metal map to the response. Ten positive and sixteen negative native canaries
-are byte-deterministic across repeated runs.
+profile. The integrated request now also carries the exact semantic interface. The worker compares
+it with core IR, calls `Generate()`, validates the same IR after Metal lowering, and returns only the
+minimal stage-discriminated Metal map rather than broad semantic reflection. Fifteen positive and
+twenty-two negative native canaries are byte-deterministic across repeated runs. The internal
+protocol tests dual-source lowering, while the alpha front end continues to reject that feature.
+
+Post-generation slot validation proves the expected Metal resource-class, index, and count set, but
+does not recover each source binding identity from the raised wrapper. That association explicitly
+trusts Tint's `BindingRemapper`; the worker response reserializes the independently validated
+requested external map.
 
 Tint WGSL diagnostics currently retain a range in the resolved virtual source and, when a range is
 wholly attributable, the authored module identity. The resolver cannot yet prove an authored line
@@ -133,24 +139,28 @@ that changing the physical map requires rebinding every active stream. The fixtu
 partition, complete 31-entry table, and conservative constant-argument mix are test inputs rather
 than public ABI or hardware-support claims.
 
-The direct-source follow-up builds the worker from Tint's `tint_api` root for macOS 14 as
-byte-reproducible arm64, x86_64, and universal executables. Native and Rosetta executions match the
-authenticated monolithic oracle without linking WebGPU, runtime backends, or frameworks.
+The last locked direct-source revision built the worker from Tint's `tint_api` root for macOS 14 as
+byte-reproducible arm64, x86_64, and universal executables. Native and Rosetta executions matched
+the authenticated monolithic oracle without linking WebGPU, runtime backends, or frameworks. That
+proof predates the exact semantic-interface handshake and is intentionally stale until its source
+lock and hashes are rebaselined against the current worker.
 
-The shader-interface follow-up proves the required split. It extracts the complete portable
-interface from core IR before Metal lowering, while explicit `Raise()` plus `Print()` matches
-`Generate()` for all twelve entries. Live Metal runtime gates on the available Apple M4 Pro preserve
-sparse vertex attributes `3/7`, inter-stage locations `2/5/6`, sparse color outputs, multiple render
-targets, and dual-source lowering. The tested negative pipeline shows that Metal accepts a same-type
-interpolation mismatch, and readback shows that an output with no attachment is silently discarded.
-The tested `MTLRenderPipelineReflection` cannot reconstruct the missing contract. The artifact
-therefore serializes only vertex attribute and fragment color maps; the complete link remains
-semantic. Dual-source stays rejected by the alpha product profile.
+The shader-interface follow-up proves the required split. Its isolated experiment extracts the
+complete portable interface from core IR before Metal lowering and established equivalent writer
+output for all twelve entries. The integrated worker now uses `Generate()` to preserve Tint's
+`CanGenerate` preflight, then inspects the same IR after Tint raises it. Live Metal runtime gates on
+the available Apple M4 Pro preserve sparse vertex attributes `3/7`, inter-stage locations `2/5/6`,
+sparse color outputs, multiple render targets, and dual-source lowering. The tested negative
+pipeline shows that Metal accepts a same-type interpolation mismatch, and readback shows that an
+output with no attachment is silently discarded. The tested `MTLRenderPipelineReflection` cannot
+reconstruct the missing contract. The artifact therefore serializes only vertex attribute and
+fragment color maps; the complete link remains semantic. Dual-source stays rejected by the alpha
+product profile.
 
 Do not freeze the source pin or numeric slot profile until offline `metal` plus `metallib`, authored
-spans beyond current module-only provenance, the exact semantic-interface worker integration, the
-full shader corpus through the exact direct worker, deterministic connected artifact output, and
-pixel/buffer parity pass.
+spans beyond current module-only provenance, the direct-source proof rebaseline, the full shader
+corpus through the exact direct worker, deterministic connected artifact output, and pixel/buffer
+parity pass.
 Semantic v1 cannot represent WGSL resource binding-array (`binding_array`) cardinality, so alpha
 rejects all resource binding arrays.
 The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,

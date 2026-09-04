@@ -50,14 +50,20 @@ storage-size binding and no redundant boolean in the artifact.
 
 The accepted shader-I/O contract uses a parallel but deliberately asymmetric handshake. Semantic
 extraction sends the exact backend-neutral interface expected for one selected entry. The worker
-must compare it with Tint core IR before Metal `Raise()`, then validate the complete lowered
-interface privately and print MSL from that same raised IR. Generated Metal structures, varyings,
-and built-ins remain compiler details. The artifact keeps only the stage-discriminated physical map
-the runtime consumes: vertex locations to Metal attributes, fragment locations and optional blend
-sources to Metal colors and indices, and an empty compute interface. The runtime fingerprint covers
-that exact map and its `vgpu-metal-shader-interface-v1` model. The existing worker still needs this
-handshake integrated. See
+compares it with Tint core IR before calling Metal `Generate()`. That official writer path preserves
+Tint's `CanGenerate` preflight and performs Metal lowering and MSL generation on the same IR; after
+it returns, the worker privately validates the complete lowered interface on that now-raised IR.
+Generated Metal structures, varyings, and built-ins remain compiler details. The artifact keeps only the
+stage-discriminated physical map the runtime consumes: vertex locations to Metal attributes,
+fragment locations and optional blend sources to Metal colors and indices, and an empty compute
+interface. The runtime fingerprint covers that exact map and its
+`vgpu-metal-shader-interface-v1` model. This handshake has passed its C1 protocol gate. See
 [Native shader-interface contract](./compiler/shader-interfaces.md).
+
+Post-generation validation proves that the expected Metal resource-class, index, and count set is
+present. It does not recover each original WGSL binding identity from Tint's raised wrapper. That
+source-to-slot association remains an explicit trust boundary at Tint's `BindingRemapper`; a
+successful worker response reserializes the independently validated requested external map.
 
 At execution time, selecting a program and stage selects at most one size region. Its presence
 triggers conditional support validation for the projection's storage-buffer-size model. The runtime

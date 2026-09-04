@@ -91,13 +91,18 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   varyings, interpolation, invariance, and Tint-generated names remain outside the Metal runtime
   projection. Sparse indices are preserved exactly and never compacted.
 - The accepted compiler-worker contract requires the request to carry the exact semantic interface.
-  The worker must compare it against Tint core IR before Metal `Raise()`, validate the complete
-  lowered interface privately, and print MSL from that same raised IR. Its response returns only the
-  minimal Metal runtime map. Integrating this handshake into the existing worker remains a C1 gate.
+  The worker compares it against Tint core IR before calling Metal `Generate()`, preserving the
+  official writer preflight. It then validates the complete lowered interface privately on that
+  same, now-raised IR. Its response returns only the generated MSL and minimal Metal runtime map.
+  This handshake has passed its C1 protocol gate.
   [Native shader-interface contract](./compiler/shader-interfaces.md) owns the detailed boundary.
+- The worker validates the emitted Metal resource-class, index, and count set, but does not recover
+  each original WGSL binding identity from the raised wrapper. The source-to-slot association trusts
+  Tint's `BindingRemapper`; the response reserializes the independently validated requested map.
 - The first alpha rejects `dual_source_blending`. The semantic and Metal schemas retain paired
-  blend-source fields for future profiles and fixtures, but representability and current-device
-  acceptance do not enable the product feature.
+  blend-source fields for future profiles and fixtures. The internal worker protocol allowlists and
+  tests the paired lowering, but translator and current-device acceptance do not enable the product
+  feature.
 - The Metal projection names its storage-buffer-size model once and records a canonical
   `storageBufferSizeRegions` array for every program. A region contains only its stage and byte
   offset inside that stage's `immediate-data` internal binding. Programs without a required size
@@ -293,24 +298,28 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    fixture's numeric indices and conservative constant-argument budget are not public ABI or
    device-limit claims.
 
-   The direct-source follow-up now builds the same worker from Tint's `tint_api` root for the macOS
-   14 baseline. Clean arm64 and x86_64 builds are byte-reproducible, combine into a deterministic
-   universal executable, run natively and through Rosetta, and match the authenticated monolithic
-   oracle byte for byte without linking WebGPU, runtime backends, or frameworks.
+   The last locked direct-source revision built the worker from Tint's `tint_api` root for the macOS
+   14 baseline. Its clean arm64 and x86_64 builds were byte-reproducible, combined into a
+   deterministic universal executable, ran natively and through Rosetta, and matched the
+   authenticated monolithic oracle byte for byte without linking WebGPU, runtime backends, or
+   frameworks. That proof predates the semantic-interface handshake and is intentionally stale
+   until its source lock and hashes are rebaselined against the current worker.
 
-   The shader-interface follow-up captures the portable view before Metal lowering and proves that
-   explicit `Raise()` plus `Print()` matches `Generate()`. Its live Apple-silicon gate preserves
-   sparse vertex attributes, inter-stage locations, sparse color outputs, and multiple render
-   targets. It also proves that Metal accepted the tested same-type interpolation mismatch and that
-   tested pipeline reflection did not reveal silently discarded fragment outputs. The production worker still needs the exact
-   semantic-interface request and private lowered-interface validation wired into its protocol.
+   The shader-interface follow-up captures the portable view before Metal lowering. Its isolated
+   experiment established equivalent writer output, while the integrated production-path prototype
+   now calls `Generate()` and inspects the same IR after Tint raises it. Its live Apple-silicon gate
+   preserves sparse vertex attributes, inter-stage locations, sparse color outputs, and multiple
+   render targets. It also proves that Metal accepted the tested same-type interpolation mismatch and
+   that tested pipeline reflection did not reveal silently discarded fragment outputs. The internal
+   protocol additionally proves paired dual-source lowering; the alpha still rejects that feature.
 
    Before freezing the dependency or numeric slot profile, pass offline `metal` plus `metallib`
-   compilation, authored spans beyond the current module-only diagnostic attribution, the full
-   shader corpus through the exact direct worker, deterministic connected artifact output, and
-   pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
-   (`binding_array`) cardinality, so the alpha rejects all resource binding arrays; the
-   sampled-texture writer canary is future evidence only. Keep Naga only as a differential oracle.
+   compilation, rebaseline the direct-source proof, add authored spans beyond the current
+   module-only diagnostic attribution, run the full shader corpus through the exact direct worker,
+   and pass deterministic connected artifact output and pixel/buffer parity. Semantic v1 has no
+   WGSL resource binding-array (`binding_array`) cardinality, so the alpha rejects all resource
+   binding arrays; the sampled-texture writer canary is future evidence only. Keep Naga only as a
+   differential oracle.
 
 2. C3a passed its hardened structural fixture: strict Ajv compilation and cross-schema resolution,
    deterministic assembly, every artifact and fingerprint relation, Swift tools and language mode

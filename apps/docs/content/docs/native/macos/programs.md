@@ -82,7 +82,7 @@ Native artifacts use one semantic layout model, `wgsl-host-shareable-v1`; it is 
 
 List any WGSL environment feature that validation depends on in `languageFeatures`. For example, a uniform whose intrinsic array or nested-struct layout would violate the default uniform constraints needs `"uniform_buffer_standard_layout"`. This is a build-time language feature, not a Metal device capability. `native check` fails if the selected compiler does not support it, and it also fails when source requires a feature that the configuration did not select. The compiler never infers a missing feature from a failed validation and never retries with a broader environment.
 
-`languageFeatures` cannot opt a program into a resource shape that semantic contract v1 cannot encode or the alpha profile does not support. In particular, the first alpha rejects WGSL resource binding arrays (`binding_array`) and `dual_source_blending`, even if the pinned translator can lower a canary for them. This restriction does not apply to arrays inside buffer value types.
+`languageFeatures` cannot opt a program into a resource shape that semantic contract v1 cannot encode or the alpha profile does not support. In particular, the first alpha rejects WGSL resource binding arrays (`binding_array`) and `dual_source_blending`, even though internal compiler-protocol canaries prove that the pinned translator can lower them. This restriction does not apply to arrays inside buffer value types.
 
 ```json
 {

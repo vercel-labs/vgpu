@@ -17,8 +17,8 @@ The goal is behavioral parity, not line-for-line syntax parity:
 - The accepted compiler contract uses a pinned vgpu-owned Tint executable to translate one fully
   resolved entry point at a time. Its request includes the exact semantic interface to validate
   against Tint core IR. Its response contains only the MSL and effective Metal projection data
-  needed by the artifact; it does not duplicate the semantic contract. Wiring this interface
-  handshake into the existing worker is the next C1 gate.
+  needed by the artifact; it does not duplicate the semantic contract. This exact handshake is now
+  integrated and has passed its C1 protocol gate.
 - The application ships a `.metallib`, generated Swift program types, and only the vgpu Swift
   products it selects. Source imports remain explicit at the module level.
 - The Swift runtime products implement the public primitives over Metal without a JavaScript
