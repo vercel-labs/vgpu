@@ -22,6 +22,12 @@
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
       "maxLength": 256
     },
+    "emittedIdentifier": {
+      "description": "A vgpu-owned Metal identifier validated before invoking Tint.",
+      "type": "string",
+      "pattern": "^vgpu_[A-Za-z0-9_]+$",
+      "maxLength": 256
+    },
     "semanticVersion": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
@@ -209,7 +215,7 @@
           "$ref": "#/$defs/identifier"
         },
         "metal": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/emittedIdentifier"
         },
         "interfaceLocations": {
           "type": "array",

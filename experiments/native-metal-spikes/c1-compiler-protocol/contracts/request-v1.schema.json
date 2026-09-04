@@ -61,6 +61,12 @@
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
       "maxLength": 256
     },
+    "emittedIdentifier": {
+      "description": "A vgpu-owned Metal identifier. The prefix keeps caller-controlled names out of Metal's reserved-word domain before Tint runs.",
+      "type": "string",
+      "pattern": "^vgpu_[A-Za-z0-9_]+$",
+      "maxLength": 256
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
@@ -109,7 +115,7 @@
           "$ref": "#/$defs/identifier"
         },
         "metal": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/emittedIdentifier"
         }
       }
     },
