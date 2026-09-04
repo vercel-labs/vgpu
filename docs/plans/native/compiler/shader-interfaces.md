@@ -173,11 +173,12 @@ Metal lowering. Fifteen positive and twenty-two negative native cases pass deter
 including sparse interfaces and the internal dual-source canary.
 
 The current direct-source distribution proof covers this interface handshake. Its accepted lock
-authenticates an exact ten-canary request closure, including sparse vertex and fragment interfaces,
-scalar fragment I/O, compute built-ins, internal dual-source lowering, a fail-closed interface
-mismatch, and the four legacy branches. The ordinary publication gate passes with byte-identical
-responses from eight direct variants spanning the arm64, x86_64, and universal executables against
-the arm64-native oracle.
+authenticates an exact fourteen-canary request closure: ten translation requests covering sparse
+vertex and fragment interfaces, scalar fragment I/O, compute built-ins, internal dual-source
+lowering, a fail-closed interface mismatch, and the four legacy branches, plus four authenticated
+entry-inventory requests. The ordinary publication gate passes with byte-identical responses from
+eight direct variants spanning the arm64, x86_64, and universal executables against the
+arm64-native oracle.
 
 `experiments/native-metal-spikes/c3-artifact-swiftpm` now carries a synthetic `SparseDraw` program.
 It proves that locations `3/7` and colors `1/4` survive schema validation, canonical cross-checks,

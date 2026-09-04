@@ -161,9 +161,10 @@ product profile.
 
 The isolated interface, binding-slot, runtime-size, and vertex-slot MSL now passes offline `metal`
 plus `metallib` for the macOS 14 target, and all 224 successful Naga differential outputs pass that
-boundary. Do not freeze the source pin or numeric slot profile until authored spans beyond current
-module-only provenance, the full shader corpus from the exact direct Tint worker, deterministic
-connected artifact output, and pixel/buffer parity pass. Semantic v1 cannot represent WGSL resource
+boundary. Do not freeze the source pin or numeric slot profile until authored diagnostic mapping
+beyond current module-only provenance, the full shader corpus from the exact direct Tint worker,
+deterministic connected artifact output, and pixel/buffer parity pass. Exact authored
+entry-declaration spans are already retained. Semantic v1 cannot represent WGSL resource
 binding-array (`binding_array`) cardinality, so alpha rejects all resource binding arrays.
 The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,
 `experiments/native-metal-spikes/c1-tint-standalone`,

@@ -299,12 +299,14 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    device-limit claims.
 
    The current accepted direct-source revision builds the worker from Tint's `tint_api` root for the
-   macOS 14 baseline. Its ordinary publication gate authenticates ten branch-specific canaries,
-   produces byte-reproducible arm64, x86_64, and universal executables, and matches the arm64-native
+   macOS 14 baseline. Its ordinary publication gate authenticates fourteen branch-specific
+   canaries—ten translation requests and four authenticated entry inventories—produces
+   byte-reproducible arm64, x86_64, and universal executables, and matches the arm64-native
    monolithic oracle byte for byte across eight direct variants without linking WebGPU, runtime
-   backends, or frameworks. This proof covers the exact semantic-interface handshake. Its x86_64
-   executions run through Rosetta and do not establish Intel or AMD GPU support; its dual-source
-   canary remains internal translator evidence and does not enable the alpha feature.
+   backends, or frameworks. This proof covers the exact semantic-interface handshake and canonical
+   entry names and stages. Its x86_64 executions run through Rosetta and do not establish Intel or
+   AMD GPU support; its dual-source canary remains internal translator evidence and does not enable
+   the alpha feature.
 
    The shader-interface follow-up captures the portable view before Metal lowering. Its isolated
    experiment established equivalent writer output, while the integrated production-path prototype
@@ -317,9 +319,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    The isolated interface, binding-slot, runtime-size, and vertex-slot outputs now compile offline
    for `air64-apple-macos14.0`. The Naga differential runner also compiles and links all 224 of its
    successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
-   corpus from the exact direct Tint worker through the same offline boundary, add authored spans
-   beyond the current module-only diagnostic attribution, and pass deterministic connected artifact
-   output and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array (`binding_array`)
+   corpus from the exact direct Tint worker through the same offline boundary, complete authored
+   diagnostic mapping beyond the current module-only attribution, and pass deterministic connected
+   artifact output and pixel/buffer parity. Exact authored entry-declaration spans are already
+   retained. Semantic v1 has no WGSL resource binding-array (`binding_array`)
    cardinality, so the alpha rejects all resource binding arrays; the sampled-texture writer and
    offline canary remain future evidence only. Keep Naga only as a differential oracle.
 
