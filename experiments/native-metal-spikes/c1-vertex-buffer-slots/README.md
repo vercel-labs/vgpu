@@ -140,8 +140,8 @@ deployment target and reports the exact target triple. This checks the harness a
 baseline API surface; it is not execution on macOS 14 or evidence for another CPU/GPU family.
 
 When Apple's separately downloadable offline Metal tools are installed, the same run compiles all
-three MSL fixtures with Metal 2.4 for a macOS 14 deployment target and links metallibs. Make that
-gate mandatory with:
+three MSL fixtures with Metal 2.4 for a macOS 14 deployment target and links metallibs. The
+recorded run passed this gate for all three sources. Make it mandatory with:
 
 ```sh
 ./run.sh --require-offline-metal
@@ -158,9 +158,10 @@ The current runtime result is from one Apple silicon machine. There is no Intel 
 hardware result. An x86_64 compile and Rosetta run can reduce CPU-path risk but cannot establish
 Intel or AMD GPU behavior.
 
-Runtime compilation with MSL 2.4 on the active OS does not replace the offline macOS 14 gate. The
-fixtures are handwritten MSL that isolate Metal's slot and encoder-state behavior; they do not yet
-prove that the WGSL translator, artifact serializer, loader, and draw runtime preserve this mapping
-end to end. The next integration gate should feed the binding projection's real shader intervals,
-internal reservations, and runtime-projection fingerprint into this pipeline-local mapping and
-exercise the same switch sequence through the native command path.
+The offline compiler gate covers the macOS 14 AIR and library path, while the runtime gate covers
+pipeline creation and behavior on the active OS. The fixtures are handwritten MSL that isolate
+Metal's slot and encoder-state behavior; they do not yet prove that the WGSL translator, artifact
+serializer, loader, and draw runtime preserve this mapping end to end. The next integration gate
+should feed the binding projection's real shader intervals, internal reservations, and
+runtime-projection fingerprint into this pipeline-local mapping and exercise the same switch
+sequence through the native command path.

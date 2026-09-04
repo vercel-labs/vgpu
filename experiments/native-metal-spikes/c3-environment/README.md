@@ -24,19 +24,20 @@ diagnostic as a passing assertion.
 
 ## Machine-specific snapshot
 
-Observed on 2026-09-03. These values describe one machine and do not define the supported release
+Observed on 2026-09-04. These values describe one machine and do not define the supported release
 matrix:
 
-| Property | Observed value |
-| --- | --- |
-| Host | Apple M4 Pro, `arm64` |
-| macOS | 26.6, build 25G72 |
-| Xcode | 26.2, build 17C52 |
-| Swift | 6.2.3 (`swiftlang-6.2.3.3.21`) |
-| SwiftPM | 6.2.3 |
-| macOS SDK | 26.2, build 25C57 |
-| Default Metal device | Apple M4 Pro |
-| Downloadable Metal toolchain | Build 17C7003j, `uninstalled` |
+| Property                     | Observed value                 |
+| ---------------------------- | ------------------------------ |
+| Host                         | Apple M4 Pro, `arm64`          |
+| macOS                        | 26.6, build 25G72              |
+| Xcode                        | 26.2, build 17C52              |
+| Swift                        | 6.2.3 (`swiftlang-6.2.3.3.21`) |
+| SwiftPM                      | 6.2.3                          |
+| macOS SDK                    | 26.2, build 25C57              |
+| Default Metal device         | Apple M4 Pro                   |
+| Downloadable Metal toolchain | Build 17C7003j, installed      |
+| Metal compiler               | 32023.864                      |
 
 Only one Xcode installation was present. `xcodebuild -checkFirstLaunchStatus` exited successfully.
 
@@ -55,15 +56,16 @@ Only one Xcode installation was present. `xcodebuild -checkFirstLaunchStatus` ex
 - The negative non-`Sendable` capture is rejected as intended.
 - A minimal submission token crosses into an actor, suspends, and resumes before actor-isolated
   state is updated.
-- `xcodebuild -showComponent MetalToolchain -json` reported build 17C7003j as `uninstalled`.
-  Consequently, `xcrun metal` refused to compile and `xcrun --find metallib` failed. No component
-  was installed as part of this spike.
+- `xcodebuild -showComponent MetalToolchain -json` reported build 17C7003j as installed, and
+  `xcrun metal --version` reported 32023.864.
+- The Metal canary compiled for `air64-apple-macos14.0` with MSL 2.4 and linked into a nonempty
+  `.metallib`.
 
 ## What this establishes
 
 The proposed source-level baseline can be built by the observed current Swift toolchain for both
 CPU architectures and can emit binaries whose minimum OS is macOS 14. It also validates the
-intended Swift concurrency API shape on that toolchain.
+intended Swift concurrency API shape and the offline Metal compile/link path on that toolchain.
 
 The `x86_64` result is a useful cross-build gate, not evidence of Intel or AMD runtime support.
 Likewise, recording `minos 14.0` proves linker intent, not successful execution on macOS 14.
@@ -74,13 +76,12 @@ This fixture does not yet establish:
 
 - a minimum supported Xcode patch or compatibility across multiple Xcode releases;
 - execution on a macOS 14 host;
-- Metal source compilation and `.metallib` linking on this snapshot;
 - a generated package that builds and tests without Node.js after generation;
 - `Bundle.module` loading of the generated `.metallib`;
 - the real target/effect/bindings, offscreen submission, and readback path;
 - ABI incompatibility failures before pipeline creation; or
 - newest-generated-artifact compatibility with the oldest supported runtime.
 
-Those assertions require the downloadable Metal toolchain, the first generated runtime slice,
-additional Xcode installations, or separate CI hosts. They should remain independent release
-gates rather than being inferred from this machine snapshot.
+Those assertions require the first generated runtime slice, additional Xcode installations, or
+separate CI hosts. They should remain independent release gates rather than being inferred from
+this machine snapshot.

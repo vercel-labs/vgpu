@@ -37,6 +37,11 @@ If `metallib` is unavailable, this form exits with a stable failure after C3a pa
 are present but compilation, loading, pipeline creation, dispatch, or readback fails, both forms
 fail rather than converting that failure into a skip.
 
+The recorded 2026-09-04 run passed C3a and mandatory C3b with Apple Metal toolchain build
+17C7003j. Two handwritten MSL 2.4 sources compiled for `air64-apple-macos14.0` and linked into one
+packaged `.metallib`. The generated probe verified the `Bundle.module` payload hash and produced an
+exact `[0, 1, 2, 3]` readback on the Apple M4 Pro.
+
 ## C3a assertions
 
 The runner:
@@ -47,8 +52,9 @@ The runner:
    that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
    `interfaceLocations`, missing or mismatched stage-discriminated interfaces, invalid interpolation
    roles, workgroup-axis provenance objects and zero dimensions, emitted names outside the `vgpu_`
-   domain, non-finite override constants, multiple direct components for one semantic binding, and
-   components that disagree with their Metal resource class;
+   domain, non-finite override constants, repeated or non-canonical per-stage binding intervals,
+   stages incompatible with the program kind, and components that disagree with their Metal
+   resource class;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
    the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size

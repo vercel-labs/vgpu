@@ -129,14 +129,15 @@ generated compute MSL for the explicit `air64-apple-macos14.0` target. Use
 
 The recorded run passes 5 allocator programs, 27 input mutations, 12 independently verified source
 or output corruptions, 6 native map failures, deterministic immediate/UBO generation, Metal
-reflection, and readback. The offline gate is skipped because `metallib` is unavailable.
+reflection, and readback. Its generated compute MSL also compiles to AIR for
+`air64-apple-macos14.0` and links into a nonempty `.metallib`.
 
 ## Limits of the evidence
 
 The native result is from the local Apple-silicon machine only. It does not establish behavior on
 Intel Macs, discrete AMD GPUs, or Windows/Vulkan. The official Dawn archive is an arm64 feasibility
-dependency with a macOS 26 deployment target, not the production compiler artifact. No offline
-Metal result is claimed until both compiler tools execute successfully. The fixture values
+dependency with a macOS 26 deployment target, not the production compiler artifact. The offline
+result covers this one generated MSL source and does not establish a full-corpus gate. The fixture values
 (`buffer(30)`, offset `4`, and the buffer ceilings) validate this candidate profile; only the slot
 partition is supported by the pinned Dawn backend, while the immediate-region offset remains
 pipeline-specific.

@@ -314,12 +314,14 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    that tested pipeline reflection did not reveal silently discarded fragment outputs. The internal
    protocol additionally proves paired dual-source lowering; the alpha still rejects that feature.
 
-   Before freezing the dependency or numeric slot profile, pass offline `metal` plus `metallib`
-   compilation, add authored spans beyond the current module-only diagnostic attribution, run the
-   full shader corpus through the exact direct worker, and pass deterministic connected artifact
+   The isolated interface, binding-slot, runtime-size, and vertex-slot outputs now compile offline
+   for `air64-apple-macos14.0`. The Naga differential runner also compiles and links all 224 of its
+   successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
+   corpus from the exact direct Tint worker through the same offline boundary, add authored spans
+   beyond the current module-only diagnostic attribution, and pass deterministic connected artifact
    output and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array (`binding_array`)
-   cardinality, so the alpha rejects all resource binding arrays; the sampled-texture writer canary
-   is future evidence only. Keep Naga only as a differential oracle.
+   cardinality, so the alpha rejects all resource binding arrays; the sampled-texture writer and
+   offline canary remain future evidence only. Keep Naga only as a differential oracle.
 
 2. C3a passed its hardened structural fixture: strict Ajv compilation and cross-schema resolution,
    deterministic assembly, every artifact and fingerprint relation, Swift tools and language mode
@@ -332,10 +334,12 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    creation. A no-region program proves that storage-size model support is conditional on the
    selected program and stage.
 
-   C3b was skipped because the optional offline Metal toolchain was not installed. When available,
-   it links handwritten no-op and runtime-array Metal functions, but its fixture-local probe executes
-   only the no-op path. It is not the compare runner, WGSL-to-MSL evidence, or evidence for runtime
-   size-table upload. C3a now also carries a synthetic `SparseDraw` program and proves locations
+   C3b now passes with Apple Metal toolchain build 17C7003j. It compiles handwritten no-op and
+   runtime-array Metal functions for `air64-apple-macos14.0`, links and packages one `.metallib`,
+   verifies its `Bundle.module` URL and hash, then creates and dispatches the no-op pipeline with an
+   exact `[0, 1, 2, 3]` readback on the Apple M4 Pro. The fixture-local probe executes only that
+   no-op path. It is not the compare runner, WGSL-to-MSL evidence, or evidence for runtime size-table
+   upload. C3a also carries a synthetic `SparseDraw` program and proves locations
    `3/7` and color indices `1/4` survive semantic/projection cross-validation, runtime
    fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction. C3 remains
    open until a real C1-connected artifact, production runtime and ABI package, supported toolchain

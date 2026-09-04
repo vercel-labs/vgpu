@@ -12,10 +12,14 @@ interval. Vertex and fragment entries in one render program therefore share a se
 have independent Metal namespaces, while two selected compute entries from one WGSL source remain
 two semantic programs.
 
-The allocator and an independently implemented verifier agree on eight positive cases, twenty
+The allocator and an independently implemented verifier agree on nine positive cases, twenty
 input mutations, and nine corrupted-output mutations. The cases cover sparse groups, all three
 Metal resource classes, stage-local resources, two programs from one source, exact capacity,
 sampled texture arrays, expanded multi-component bindings, and translator-owned internal slots.
+The production projection sub-schema accepts canonically ordered external and internal slot unions
+across vertex and fragment, rejects duplicate stages, reversed order, and a third stage, and
+deliberately excludes the projection-only external-texture shape without removing its allocator or
+verifier coverage.
 
 The Tint feasibility wrapper also passes ten deterministic WGSL-to-MSL canaries and ten strict
 negative wrapper canaries. It constructs `tint::Bindings` only from the vgpu allocation, verifies the
@@ -60,11 +64,11 @@ transport configuration, an offset without an immediate binding, an immediate bi
 offset, and an external buffer that collides with `buffer(30)`.
 
 The sampled texture-array canary confirms that the pinned Tint writer preserves a reflected
-three-element type at the assigned base index. This is future evidence, not alpha support: the
-current semantic contract has no binding-array cardinality, the other resource-array classes are
-not covered, and the emitted MSL has not passed the offline compiler. The initial contract should
-therefore reject all binding arrays until that cardinality is versioned through semantic reflection,
-code generation, and runtime binding.
+three-element type at the assigned base index. Its emitted MSL now also passes the offline Apple
+compiler for the macOS 14 target. This is future evidence, not alpha support: the current semantic
+contract has no binding-array cardinality and the other resource-array classes are not covered. The
+initial contract therefore rejects all binding arrays until that cardinality is versioned through
+semantic reflection, code generation, and runtime binding.
 
 The expanded external-texture case likewise proves only that the projection model can represent
 multiple components. The wrapper intentionally rejects Tint external textures until their lowering
@@ -99,7 +103,7 @@ the archive is feasibility evidence rather than a production supply-chain bounda
 When Apple's separately downloadable Metal compiler is already available, the same run compiles
 each generated source with MSL 2.4 for an explicit macOS 14 AIR target and links a metallib. Use
 `--require-offline-metal` or `C1_REQUIRE_OFFLINE_METAL=1` to make that gate mandatory. The recorded
-workspace run skips this gate because the Metal toolchain is not installed.
+workspace run passed all ten generated sources for `air64-apple-macos14.0`.
 
 ## Scope of the evidence
 
@@ -107,9 +111,9 @@ The official Dawn archive is useful only as a semantic feasibility dependency. I
 macOS 26 deployment target, exposes a monolithic `libwebgpu_dawn.a`, and omits one header required
 by its installed Tint headers. It is not the production compiler artifact.
 
-Before this ABI can be frozen, a direct-target Tint build must pass at the macOS 14 baseline for
-arm64 and x86_64, the offline Metal gate must cover the full shader corpus, and the allocation
-profile must partition shader buffer slots from vertex-stream indices. Detailed size-table packing
-and runtime upload behavior remain separate from this binding-projection spike. There is no Intel
-hardware result; an x86_64 build and Rosetta execution can reduce CPU-path risk but cannot establish
-Intel or AMD GPU behavior.
+The direct-target Tint build now passes the macOS 14 baseline for arm64 and x86_64, and the
+pipeline-local vertex-stream follow-up closes the slot-partition question. Before this ABI can be
+frozen, the exact direct worker must pass the full shader corpus through the offline Apple compiler
+and a connected artifact. Detailed size-table packing and runtime upload behavior remain separate
+from this binding-projection spike. There is no Intel hardware result; an x86_64 build and Rosetta
+execution can reduce CPU-path risk but cannot establish Intel or AMD GPU behavior.

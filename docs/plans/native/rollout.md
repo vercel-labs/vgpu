@@ -159,17 +159,19 @@ reconstruct the missing contract. The artifact therefore serializes only vertex 
 fragment color maps; the complete link remains semantic. Dual-source stays rejected by the alpha
 product profile.
 
-Do not freeze the source pin or numeric slot profile until offline `metal` plus `metallib`, authored
-spans beyond current module-only provenance, the full shader corpus through the exact direct worker,
-deterministic connected artifact output, and pixel/buffer parity pass. Semantic v1 cannot represent
-WGSL resource binding-array (`binding_array`) cardinality, so alpha rejects all resource binding
-arrays.
+The isolated interface, binding-slot, runtime-size, and vertex-slot MSL now passes offline `metal`
+plus `metallib` for the macOS 14 target, and all 224 successful Naga differential outputs pass that
+boundary. Do not freeze the source pin or numeric slot profile until authored spans beyond current
+module-only provenance, the full shader corpus from the exact direct Tint worker, deterministic
+connected artifact output, and pixel/buffer parity pass. Semantic v1 cannot represent WGSL resource
+binding-array (`binding_array`) cardinality, so alpha rejects all resource binding arrays.
 The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,
 `experiments/native-metal-spikes/c1-tint-standalone`,
 `experiments/native-metal-spikes/c1-binding-slots`,
 `experiments/native-metal-spikes/c1-compiler-protocol`,
 `experiments/native-metal-spikes/c1-override-defaults`,
 `experiments/native-metal-spikes/c1-override-worker-integration`,
+`experiments/native-metal-spikes/c1-semantic-bridge`,
 `experiments/native-metal-spikes/c1-vertex-buffer-slots`,
 `experiments/native-metal-spikes/c1-runtime-buffer-sizes`,
 `experiments/native-metal-spikes/c1-tint-direct-build`, and
@@ -263,12 +265,13 @@ and fragment colors `1/4` survive runtime fingerprinting, generated Swift, tests
 architecture builds without compaction. Unknown shader-interface models fail before pipeline
 creation.
 
-C3b was skipped because the separately installed offline Metal toolchain was unavailable. When it
-runs, it links handwritten no-op and runtime-array Metal functions, but its probe executes only the
-no-op path while checking the exact packaged `.metallib`, function lookup, pipeline creation, slot
-use, dispatch, and readback. That probe is not the compare runner, does not appear in
-`projection.testing`, and cannot prove that recorded WGSL produced the MSL or that the runtime
-uploaded storage-size words. C3 therefore remains open pending a C1-connected artifact, production
+C3b passes with Apple Metal toolchain build 17C7003j. It compiles handwritten no-op and runtime-array
+functions for `air64-apple-macos14.0`, links one `.metallib`, packages it through SwiftPM, and checks
+the exact `Bundle.module` resource, hash, no-op function lookup, pipeline creation, slot use,
+dispatch, and `[0, 1, 2, 3]` readback on the Apple M4 Pro. The probe executes only the no-op path. It
+is not the compare runner, does not appear in `projection.testing`, and cannot prove that recorded
+WGSL produced the MSL or that the runtime uploaded storage-size words. C3 therefore remains open
+pending a C1-connected artifact, production
 `VGPUABI` and runtime, the supported Xcode/macOS and physical-hardware matrix, and
 newest-generator to oldest-runtime consumption. It is also still undecided whether production
 always emits the real compare runner or emits it only when compare testing is enabled.

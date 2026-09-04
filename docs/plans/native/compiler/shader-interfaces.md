@@ -184,9 +184,11 @@ It proves that locations `3/7` and colors `1/4` survive schema validation, canon
 runtime fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction.
 
 These results do not expand the supported hardware matrix. The live gate ran only on Apple silicon;
-an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. Offline
-`metal` and `metallib`, the broader multi-entry semantic-extractor-to-artifact integration, a real
-C1-connected artifact, full corpus coverage, and pixel/buffer parity remain open.
+an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. All twelve
+isolated interface outputs now compile offline for `air64-apple-macos14.0` and link into a
+`.metallib`. The broader multi-entry semantic-extractor-to-artifact integration, the exact direct
+worker's full corpus through that offline boundary, a real C1-connected artifact, and pixel/buffer
+parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

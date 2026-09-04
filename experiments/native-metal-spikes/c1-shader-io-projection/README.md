@@ -127,8 +127,10 @@ temporary directory. Native products never enter the repository.
 
 If Apple's separately downloadable command-line Metal toolchain is installed, the runner also
 compiles all twelve generated MSL files for `air64-apple-macos14.0` and links one `.metallib`.
-`--require-offline-metal` makes that gate mandatory. Runtime compilation remains real Metal
-evidence, but it does not replace the separate macOS 14 offline gate.
+The recorded run passed this gate for all twelve files. `--require-offline-metal` makes the gate
+mandatory. Runtime compilation and offline compilation remain complementary evidence: the former
+exercises pipelines and readback on the active runtime, while the latter exercises the macOS 14 AIR
+and library path.
 
 ## Remaining integration
 
@@ -140,5 +142,5 @@ and universal executables.
 The remaining compiler integration is the bridge from vgpu's resolved module graph, source map,
 entry-point semantics, bindings, and overrides into that exact request. Once that bridge exists, the
 full shader corpus can run through the direct worker and its response can feed the deterministic
-artifact gate. Offline `metal` plus `metallib` validation and pixel/buffer parity remain separate
-requirements.
+artifact gate. The twelve isolated outputs have passed offline `metal` plus `metallib`; the direct
+worker's full-corpus output and pixel/buffer parity remain separate requirements.

@@ -17,14 +17,14 @@ Both candidates receive the same resolved WGSL. Overrides become typed WGSL cons
 
 ## Canaries
 
-| Canary | Contract | Tint/Dawn | Naga 30.0.1 |
-| --- | --- | --- | --- |
-| `alignment-and-io` | Scalar, `vec3`, matrix, explicitly padded uniform array, built-ins, interpolation, texture, and sampler | Pass | Pass |
-| `uniform-standard-layout` | Natural stride-four `array<f32, 3>` in `var<uniform>`, matching the current host packer | Pass | Reject |
-| `binding-slots` | Sparse WebGPU groups/bindings projected into compact independent Metal namespaces | Pass | Pass |
-| `multiple-entry-points` | Two compute, one vertex, and one fragment entry point | Pass | Pass |
-| `typed-overrides` | `f32`, `u32`, and `bool` values baked before translation, including workgroup size | Pass | Pass |
-| `invalid` | Deliberate abstract-float-to-`u32` type error | Reject | Reject |
+| Canary                    | Contract                                                                                                | Tint/Dawn | Naga 30.0.1 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | --------- | ----------- |
+| `alignment-and-io`        | Scalar, `vec3`, matrix, explicitly padded uniform array, built-ins, interpolation, texture, and sampler | Pass      | Pass        |
+| `uniform-standard-layout` | Natural stride-four `array<f32, 3>` in `var<uniform>`, matching the current host packer                 | Pass      | Reject      |
+| `binding-slots`           | Sparse WebGPU groups/bindings projected into compact independent Metal namespaces                       | Pass      | Pass        |
+| `multiple-entry-points`   | Two compute, one vertex, and one fragment entry point                                                   | Pass      | Pass        |
+| `typed-overrides`         | `f32`, `u32`, and `bool` values baked before translation, including workgroup size                      | Pass      | Pass        |
+| `invalid`                 | Deliberate abstract-float-to-`u32` type error                                                           | Reject    | Reject      |
 
 The portable alignment canary uses an explicit wrapper:
 
@@ -47,10 +47,10 @@ This is valid for both candidates. It is intentionally separate from `uniform-st
 
 The normalized full-corpus observation is checked in at [`snapshots/observed.json`](./snapshots/observed.json). The corpus contains 226 WGSL files. The resolver accepts 224; the two known resolver-negative fixtures retain their expected semantic error codes. Of the resulting translator inputs, 223 are expected-valid and one is an intentional translator-negative fixture.
 
-| Candidate | Expected-valid WGSL | Intentional negative | Metal validation |
-| --- | ---: | ---: | --- |
-| Tint embedded in Dawn | 223 / 223 | 1 / 1 rejected | Real Metal pipelines cover every applicable entry point |
-| Naga 30.0.1 | 220 / 223 | 1 / 1 rejected | 220 / 220 emitted sources compile through `MTLDevice.makeLibrary` at MSL 2.4 |
+| Candidate             | Expected-valid WGSL | Intentional negative | Metal validation                                                             |
+| --------------------- | ------------------: | -------------------: | ---------------------------------------------------------------------------- |
+| Tint embedded in Dawn |           223 / 223 |       1 / 1 rejected | Real Metal pipelines cover every applicable entry point                      |
+| Naga 30.0.1           |           220 / 223 |       1 / 1 rejected | 220 / 220 emitted sources compile through `MTLDevice.makeLibrary` at MSL 2.4 |
 
 Naga's three expected-valid corpus failures are one shared language gap: the FFT library uses `ptr<workgroup>` parameters covered by WGSL's `unrestricted_pointer_parameters` extension. Dawn advertises and accepts that extension; Naga recognizes it but does not implement it. Enabling unrelated Naga capabilities does not close the gap.
 
@@ -82,13 +82,15 @@ Cargo builds the lockfile-pinned harness but does not install Rust or modify the
 
 ## What remains before C1 closes
 
-The current machine does not have Xcode's downloadable MetalToolchain, so offline `metal` and `metallib` validation is recorded as skipped. Finding the `metal` launcher alone is not sufficient.
+The recorded full run used Apple Metal toolchain build 17C7003j. All 224 successful Naga outputs
+(220 corpus sources and four positive canaries) compiled to AIR for the macOS 14 deployment target
+and linked with `metallib`. The product corpus deliberately excludes
+`experiments/native-metal-spikes/**`; those synthetic shaders keep their own isolated expectations.
 
-Before freezing Tint, a standalone build pinned to the tested Dawn commit must:
-
-- emit MSL and structured binding/entry-point projection without depending on a runtime WebGPU device;
-- pass offline `metal` and `metallib` for the corpus at the macOS 14 deployment target;
-- preserve authored diagnostic provenance, or clearly identify generated MSL diagnostics where mapping is unavailable;
-- prove deterministic artifacts, pixel/buffer parity, distribution size, startup behavior, and license obligations.
+Later follow-ups have already proved a deterministic standalone Tint worker and structured
+entry-point projection without a WebGPU device. Before freezing Tint, the remaining integrated gate
+must pass the complete resolved corpus from that exact direct worker through offline `metal` and
+`metallib`. It must also preserve honest diagnostic provenance and prove the connected artifact,
+pixel/buffer parity, final distribution behavior, and license packaging.
 
 Runtime compilation is useful evidence that the generated MSL is accepted by the installed driver stack. It is not a substitute for the offline compiler and packaging gates.
