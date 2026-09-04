@@ -236,11 +236,13 @@ inventory brand, so the API cannot append a second vertex. Multiple fragment sel
 same authored fragment-only capsule receive the same generated names and may reuse the same
 finalized capsule.
 
-Every later semantic-extraction and translation request must copy the finalized `source`,
-`originMap`, and their hashes unchanged. The final inventory projection is deeply frozen and runs
-the complete request semantic/resource preflight before launch. Each later operation creates a new
-request identity from its own exact encoded bytes; the authored inventory identity is lineage only
-and must not be reused.
+Every later semantic-extraction and translation request must copy the finalized `source` and
+`originMap` unchanged. Semantic extraction also carries the finalized `originMapSha256`; the
+existing translation schema omits that field, so compiler projection revalidates the copied map and
+source through its complete semantic/resource preflight. The final inventory projection is deeply
+frozen and runs the same preflight before launch. Each authenticated operation creates a new request
+identity from its own exact encoded bytes; the authored inventory identity is lineage only and must
+not be reused.
 
 ## Expected failures
 
@@ -272,23 +274,22 @@ prefix, Unicode preservation, UTF-8 generated range, generated provenance gap, r
 fragment selections, authored-vertex no-op, nominal-brand failures, same-request inventory
 crossing, name collision, and resource limit. It runs one authored and two finalized inventories
 with the accepted native worker; the final responses are byte-identical and contain exactly one
-derived vertex plus the authored fragment. The provisional translation, offline-toolchain, and
-live-render evidence is recorded separately in
+derived vertex plus the authored fragment. The integrated semantic-assembly, translation,
+offline-toolchain, and live-render evidence is recorded separately in
 [`fullscreen-metal.md`](./fullscreen-metal.md) so this source-finalization contract stays focused.
 
-The full profile is not accepted until the remaining gates run from reviewed literals rather than
-regenerating their own expectations:
+The companion now performs the previously open declaration and interface joins. It captures the
+declaration index in the same call that runs the real resolver, authenticates the finalized native
+extraction, assembles the effect, and derives both compiler requests from that nominal assembly. The
+authored fragment span is exactly `6:1–9:2`; the generated vertex keeps no authored span. Its nine
+Tint processes preserve the existing translation, offline compilation/link, UV, and
+`front_facing` results. The checked-in interface JSON is only a static expected-value oracle.
 
-- reject final inventory responses with a missing, extra, renamed, duplicate, or wrong-stage entry,
-  or a crossed request identity;
-- join selected authored entries to exact resolver declaration records and reject missing, crossed,
-  duplicate, or out-of-bounds spans during assembly;
-- retain the now-executable semantic extractor's generated-interface proof: vertex-index input,
-  position and location-zero UV outputs, and no bindings, sampling pairs, or overrides;
-- replace the companion gate's reviewed interface literals with projections of that authenticated
-  extraction while preserving its translation, offline compilation/link, UV, and `front_facing`
-  results; and
-- keep resolver, inventory, compiler-protocol, direct-build, offline Metal, and corpus gates green.
+The remaining bridge gates are active resource and exact-static override extraction/assembly,
+versioned slot allocation and response combination, the authenticated repository corpus, and
+production artifact packaging. Resolver, inventory, compiler-protocol, direct-build, offline Metal,
+and corpus baselines must stay green while those pieces are connected. Intel, AMD, and cross-machine
+hardware evidence also remain outside this run.
 
 The source-finalization gate still uses a second authenticated inventory invocation as an isolated
 final-source oracle. That invocation belongs to this gate, not the long-term build pipeline. The

@@ -2,9 +2,10 @@
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
-source finalization, and the first authenticated semantic-extraction profile in the same one-shot
-Tint worker. It closes the gap between isolated semantic, override, slot-allocation, translation,
-and offline Metal proofs without turning TypeScript into a second WGSL compiler.
+source finalization, the first authenticated semantic-extraction profile, and interface-only
+`semantic-v1` assembly. The same one-shot Tint worker supplies inventory, extraction, and
+translation. This closes the interface-only path between the isolated semantic, translation, and
+offline Metal proofs without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -108,19 +109,30 @@ extracts even though assembly will later reject its render link, the generated f
 inactive resource and override declarations, the interface-size boundary, malformed protocol
 requests, and request-specific adapter authentication.
 
-A separate provisional canary carries a real finalized effect through two deterministic
-translations per entry, two offline AIR compilations, one metallib link, and two live 2x2
-readbacks. It proves top-origin UV and counter-clockwise `front_facing` with a clockwise control on
-Apple M4 Pro. The compiler interfaces remain reviewed literals until this companion projects the
-authenticated extraction, so it is executable backend evidence rather than completion of semantic assembly. See
-[`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
+The interface-only assembly gate resolves authored effect and compute fixtures, retains nominal
+resolver declaration evidence, authenticates extraction, emits schema-valid `semantic-v1`, checks
+render linking and fingerprints, and projects three compiler requests without launching the
+translator. With the native worker it performs four semantic-extraction invocations: two
+byte-identical runs for each fixture. Active resources and overrides remain outside this first
+profile. See
+[`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md).
+
+The integrated full-screen canary carries one real resolved and finalized effect through two native
+semantic extractions, interface-only assembly, two deterministic translations per entry, two
+offline AIR compilations, one metallib link, and two live 2x2 readbacks. Its nine one-shot Tint
+processes are one inventory, two semantic extractions, four successful translations, and two runs of
+one structured negative. The checked-in interface JSON is only the static oracle; compiler requests
+are projected from the nominal assembly. The authored fragment retains the exact resolver span
+`6:1–9:2`. The run proves top-origin UV and counter-clockwise `front_facing` with a clockwise control
+on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
-interfaces, and generated full-screen source. Once every request is derived rather than handwritten,
-run the repository corpus through the same bridge and compile every successful MSL result for the
-`air64-apple-macos14.0` target.
+interfaces, and generated full-screen source. The interface-only effect and compute requests are now
+derived; resources, overrides, and program-level slot allocation remain. Once every request is
+derived, run the repository corpus through the same bridge and compile every successful MSL result
+for the `air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
@@ -145,18 +157,20 @@ The semantic work is split by responsibility so the growing design remains revie
 4. Add a multi-entry semantic-extraction operation. The interface-only profile is executable;
    active resource extraction and the existing exact-static override materializer remain next.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
-   proven declaration spans.
-6. Allocate program-level slots and derive one existing compiler request per entry point.
+   proven declaration spans. The interface-only effect and compute slice is executable.
+6. Allocate program-level slots and derive one existing compiler request per entry point. Projection
+   with empty external bindings and overrides is executable; allocation remains open.
 7. Validate and combine translator responses into `metal-projection-v1` without compacting indices.
 8. Compile and link every accepted MSL source offline.
 9. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
-This spike does not implement the production Swift runtime, freeze a Dawn/Tint source revision,
-establish Intel or AMD GPU support, recover general authored diagnostic spans from the current
-module-only origin map, or prove a production artifact. Exact authored entry-declaration spans come
-from resolver tokens and use 1-based locations, UTF-16-code-unit columns, and an end-exclusive
-boundary. Tint diagnostics instead report UTF-8 byte columns; consumers must not combine the two
-coordinate systems. The spike also does not expose broad Tint reflection in generated Swift or the
-Metal runtime artifact.
+This spike does not yet connect active resources or overrides through assembly, run the integrated
+repository corpus, package a production artifact, implement the production Swift runtime, freeze a
+Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not recover general
+authored diagnostic spans from the current module-only origin map. Exact authored entry-declaration
+spans come from resolver tokens and use 1-based locations, UTF-16-code-unit columns, and an
+end-exclusive boundary. Tint diagnostics instead report UTF-8 byte columns; consumers must not
+combine the two coordinate systems. The spike also does not expose broad Tint reflection in
+generated Swift or the Metal runtime artifact.

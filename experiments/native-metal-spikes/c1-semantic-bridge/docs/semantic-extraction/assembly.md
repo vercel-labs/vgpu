@@ -3,7 +3,8 @@
 Assembly is a pure TypeScript join. It consumes one authenticated extraction, the exact nominal
 selection/finalization objects that produced its request, resolver-owned authored declaration
 spans, and deterministic presentation policy. It does not parse WGSL or consult
-`ResolvedShader.reflection`.
+`ResolvedShader.reflection`. The executable first slice accepts only programs without active
+resources or overrides; broader assembly keeps the same ownership boundary.
 
 ## Ownership of the join
 
@@ -22,11 +23,12 @@ The adapter adds facts that Tint cannot or should not own:
 Tint remains authoritative for interfaces, active bindings, sampling pairs, exact-static
 overrides, types, layouts, and resolved workgroup size. Interning an authenticated inline interface
 shape into a content-addressed semantic type ID is adapter normalization, not type inference. The
-adapter can reject inconsistent facts but cannot repair or approximate them.
+interface-only adapter uses the exact `vgpu-native-semantic-type/v1` hash domain. The adapter can
+reject inconsistent facts but cannot repair or approximate them.
 
 ## Assembly invariants
 
-Before producing `semantic-v1`, the adapter proves all of the following:
+The complete adapter must prove all of the following before producing `semantic-v1`:
 
 1. The extraction is nominally attached to the exact request bytes, finalized capsule, and
    selection instances retained by the caller.
@@ -47,6 +49,12 @@ Before producing `semantic-v1`, the adapter proves all of the following:
 8. Root capabilities are the exact union of program capabilities. Language features equal the
    explicit request set; execution requirements come from versioned adapter policy applied only to
    authenticated facts.
+
+The executable interface-only profile applies the association, entry, source-span, link, canonical
+ordering, interface-type closure, capability, and fingerprint checks now. It requires extraction
+bindings, sampling pairs, overrides, semantic types, and layouts to be empty, and it rejects
+`dual_source_blending` before projection. Resource graphs, exact-static override unions, and their
+slot policy remain later slices rather than partially populated successes.
 
 For semantic v1, `program.sources` contains every WGSL input listed by the finalized origin map.
 Module-level provenance cannot honestly claim a smaller entry-reachability set, so assembly does
@@ -95,6 +103,11 @@ Only a validated assembled program can create compiler requests. Each selected e
   projected from the authenticated semantic graph; and
 - emitted Metal name plus external and candidate internal slots from versioned adapter policy.
 
+In the executable interface-only slice, selected overrides and external Metal bindings are both
+empty. The projector rejects a nonempty external binding policy and rehydrates every interface type
+from the assembled content IDs, then requires exact equality with the retained authenticated
+extraction before it can return a compiler request.
+
 For each interface leaf, projection resolves the semantic type ID, proves that it is a scalar or
 vector of one scalar, and emits the original authenticated inline `{ scalar, width }` shape. It
 rejects any mismatch with the retained extraction instead of reconstructing a type from WGSL. The
@@ -102,8 +115,25 @@ translator then starts in a fresh process, parses the same bytes, materializes t
 and compares the complete entry interface and resource mapping before MSL generation. A local
 projection bug therefore fails closed instead of silently changing the runtime artifact.
 
-Response combination happens only after each one-shot invocation passes schema and
-request-specific semantic checks. The program-level Metal projection preserves sparse interface
-indices, stage-local slots, effective internal resources, storage-size regions, and resolved compute
-dimensions. Broad extraction facts remain in `semantic-v1`; they are not copied into the runtime
-projection.
+Response combination remains a subsequent slice. It may happen only after each one-shot invocation
+passes schema and request-specific semantic checks. The eventual program-level Metal projection
+must preserve sparse interface indices, stage-local slots, effective internal resources,
+storage-size regions, and resolved compute dimensions. Broad extraction facts remain in
+`semantic-v1`; they are not copied into the runtime projection.
+
+## Executable evidence
+
+The static assembly gate resolves one effect and one compute fixture, mints declaration evidence only
+through that real resolver call, authenticates reviewed extraction responses, and assembles two
+schema-valid programs. It projects three compiler requests and covers five nominal failures, four
+declaration failures, one retained-resolver-snapshot mutation, one rejected profile, one broken
+render link, two fingerprint rules, and three projection failures. None of those checks launches the
+translator.
+
+With the accepted native worker, the gate performs four semantic-extraction invocations: two
+byte-identical runs for each fixture. The independently integrated full-screen companion then runs
+one inventory, two semantic extractions, four successful translations, and two structured-negative
+translations. Its compiler requests come from the nominal assembly, while the checked-in interface
+JSON remains a static oracle. The authored fragment's resolver-owned end-exclusive span is exactly
+`6:1–9:2`; the injected vertex omits authored provenance. Active resources, overrides, repository
+corpus integration, artifact packaging, and Intel/AMD hardware evidence remain open.

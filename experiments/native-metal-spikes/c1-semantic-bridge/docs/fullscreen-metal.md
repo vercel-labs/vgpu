@@ -1,13 +1,11 @@
 # Full-screen translation and Metal canary
 
-This companion gate carries the finalized full-screen source through the accepted one-entry Tint
-translator, Apple's offline Metal tools, and a live render readback. It is executable evidence for
-the frozen source profile, not the final semantic-bridge architecture: until the multi-entry
-extractor exists, the two compiler requests use reviewed literal interfaces as an oracle.
-
-Those literals must disappear from request construction once extraction is connected. At that
-point the same gate remains useful, but the translator inputs must be projections of one
-authenticated extraction rather than handwritten semantic claims.
+This companion gate carries the finalized full-screen source through authenticated semantic
+extraction, interface-only `semantic-v1` assembly, the accepted one-entry Tint translator, Apple's
+offline Metal tools, and a live render readback. The compiler requests are projections of the
+nominal assembly rather than handwritten semantic claims. The checked-in interface JSON remains an
+independent oracle for the static path and for comparing the native extraction; request construction
+does not read semantic fields from it.
 
 ## Exact path under test
 
@@ -15,10 +13,14 @@ The gate performs this sequence:
 
 ```text
 authored fragment fixture
+  -> real virtual resolver + nominal declaration index
+  -> checked-in resolved-WGSL and resolver snapshots
   -> authenticated Tint inventory
   -> nominal effect selection
   -> vgpu-native-fullscreen-triangle/v1 finalization
-  -> explicit vertex/fragment link check
+  -> two authenticated semantic extractions
+  -> interface-only semantic-v1 assembly + vertex/fragment link
+  -> one projected compiler request per selected entry
   -> two translations of each selected entry
   -> metal: two MSL files -> two AIR files
   -> metallib: one linked library
@@ -30,10 +32,11 @@ Both translator requests copy the finalized `source`, `originMap`, and language 
 recomputes and verifies the capsule's origin-map hash before projection. Requests use no bindings
 or overrides and retain the existing v1 immediate-data reservation at `buffer(30)`.
 
-The reviewed vertex interface is one `vertex_index` input, one perspective/center location-zero
+The authenticated vertex interface is one `vertex_index` input, one perspective/center location-zero
 `vec2f` UV output, and one position output. The fragment consumes that exact UV plus
 `front_facing`, then writes one location-zero `vec4f` color. Interface arrays use compiler-protocol
-canonical order: locations first, then built-ins.
+canonical order: locations first, then built-ins. The authored fragment carries its resolver-owned
+end-exclusive span exactly as `6:1–9:2`; the injected vertex has no authored name or source span.
 
 Before any translator launches, the gate compares the render link's location, type, interpolation,
 and invariance exactly. Reversing the vertex outputs fails the canonical request validator with
@@ -55,9 +58,10 @@ empty external bindings, internal bindings, and storage-size regions, no workgro
 diagnostics, and the exact requested WGSL and Metal entry names. A response for one stage is also
 rejected when validated against the other stage's request.
 
-The fixture, interface, finalized-source, request, response, and MSL hashes are checked-in
-snapshots. AIR and metallib byte sizes are deliberately not snapshots because they are Apple
-toolchain products; the gate instead requires regular, non-empty files and successful processes.
+The authored and resolved fixture, interface oracle, finalized source, semantic request and response,
+program fingerprint, translation request and response, and MSL hashes are checked-in snapshots. AIR
+and metallib byte sizes are deliberately not snapshots because they are Apple toolchain products;
+the gate instead requires regular, non-empty files and successful processes.
 
 ## Offline Metal and live readback
 
@@ -94,9 +98,12 @@ and coverage unchanged while flipping only that fact. Alpha also makes incomplet
 
 ## Run
 
-The static gate uses a reviewed local inventory response to exercise the real authentication,
-selection, finalization, render-link, compiler-schema, compiler-semantics, and request-snapshot path
-with zero compiler launches. It does not require native tools:
+The static gate runs the real resolver, compares its WGSL, declaration, and reflection output with
+checked-in snapshots, and uses reviewed local inventory and semantic responses to exercise nominal
+authentication, selection, finalization, assembly, render linking, compiler projection, and request
+snapshots with zero worker launches. The interface JSON is an expected-value oracle for that local
+semantic response, not a direct compiler-request input. The static gate does not require native
+tools:
 
 ```sh
 node experiments/native-metal-spikes/c1-semantic-bridge/gates/fullscreen-metal.mjs
@@ -112,8 +119,9 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/fullscreen-metal.m
   --require-metal-runtime
 ```
 
-The recorded run used Apple M4 Pro. It performed one inventory invocation, four successful
-translation invocations, two byte-identical invocations of one structured negative case, two AIR
-compilations, one metallib link, and two byte-identical runtime executions. This is not Intel, AMD,
-or cross-machine evidence. It also does not replace semantic extraction, program assembly, artifact
-packaging, or the complete repository corpus gate.
+The recorded run used Apple M4 Pro. It performed nine one-shot Tint worker processes: one inventory,
+two byte-identical semantic extractions, four successful translations, and two byte-identical runs of
+one structured negative. It also performed two AIR compilations, one metallib link, and two
+byte-identical runtime executions. This is not Intel, AMD, or cross-machine evidence. The canary
+proves the interface-only assembly path; active resources, overrides, repository-corpus integration,
+and artifact packaging remain open.

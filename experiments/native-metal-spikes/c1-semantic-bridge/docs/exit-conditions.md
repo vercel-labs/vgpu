@@ -66,20 +66,31 @@ generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inv
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
 
-The implemented interface-only semantic slice adds four frozen request/response pairs, nine
+The implemented interface-only extraction slice adds four frozen request/response pairs, nine
 prelaunch failures with zero launches, fifteen response failures, two static nominal
 authentications, and eighteen native invocations. It proves program-scoped render and compute
 interfaces, literal workgroup dimensions, the generated full-screen interface and adapter
 association, inactive-declaration pruning, deterministic successes, diagnostic provenance,
 canonical number and dual-source validation, the 64-leaf response boundary, and distinct temporary
-profile failures. This is partial evidence for conditions 3, 4, and 10. Active resource and override
-extraction, the resolver declaration join, extraction-derived translation, the integrated corpus,
-and the remaining bridge conditions are still open.
+profile failures. This is partial evidence for conditions 3, 4, and 10.
 
-The provisional Metal companion adds four deterministic successful translator invocations, two
-byte-identical invocations of one structured interface rejection, two offline AIR compilations, one
-metallib link, and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. It proves the selected
-generated vertex can reach Metal with top-origin UV and explicit counter-clockwise winding. Because
-its semantic interfaces are still reviewed literals rather than projections from the authenticated
-extractor, it is supporting evidence for conditions 7 and 12, not completion of either condition or
-of the bridge.
+The executable assembly slice adds two interface-only programs, three projected compiler requests,
+five nominal failures, four declaration failures, one retained-resolver-snapshot check, one profile
+failure, one render-link failure, two fingerprint checks, and three projection failures. Its four
+native invocations are two byte-identical semantic extractions each for effect and compute. It proves
+the resolver declaration join, schema-valid interface type interning, program fingerprints, and
+extraction-derived interface-only projection with zero translator launches. This is partial evidence
+for conditions 3 through 6 and 10.
+
+The integrated Metal companion adds nine one-shot Tint processes: one inventory, two byte-identical
+semantic extractions, four deterministic successful translations, and two byte-identical runs of one
+structured interface rejection. It also performs two offline AIR compilations, one metallib link,
+and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. Its compiler requests come from the nominal
+assembly; the interface JSON is only a static oracle. The authored fragment retains the exact
+resolver span `6:1–9:2`, and the selected generated vertex reaches Metal with top-origin UV and
+explicit counter-clockwise winding. This is executable evidence for the interface-only portions of
+conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
+
+Active resources and exact-static overrides, versioned slot allocation and translator-response
+combination, compute translation parity, the integrated repository corpus, and production artifact
+packaging remain open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.

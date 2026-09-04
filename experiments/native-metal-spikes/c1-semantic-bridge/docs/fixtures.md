@@ -87,22 +87,41 @@ frozen and repeats the inventory request's semantic and resource preflight befor
 
 With the accepted arm64 worker, the gate performs one authored inventory followed by two finalized
 inventories. The latter responses are byte-identical and contain exactly the derived vertex and the
-authored fragment in canonical order. Interface extraction, adversarial final-response mutations,
-and resolver-span joins remain part of the integrated closure below.
+authored fragment in canonical order. Adversarial final-response mutations, active resources, and
+overrides remain part of the wider integrated closure below; interface extraction and the
+resolver-span join are now exercised by the assembly and companion gates.
 
-## Provisional full-screen Metal canary
+## Executable interface-only assembly slice
 
-The companion Metal gate uses a second fragment fixture that exposes UV and `front_facing` as
-pixel values. Until that companion is wired to the authenticated extraction, reviewed vertex and
-fragment interfaces serve as the request oracle. Each entry is translated twice, and one additional
+The assembly gate resolves two authored fixtures and captures their declaration evidence in the same
+real-resolver call. One effect exercises generated full-screen vertex injection, render linking, and
+an authored fragment; one compute program exercises an authored compute entry and resolved
+`4 x 2 x 1` workgroup dimensions. Both produce schema-valid interface-only `semantic-v1` programs,
+content-addressed scalar/vector types, fixed program fingerprints, and three projected compiler
+requests.
+
+The static matrix covers five nominal-association failures, four malformed declaration candidates,
+one retained-resolver-snapshot mutation, one unsupported-profile failure, one broken render link,
+two fingerprint rules, and three projection failures. Pre-translation failures launch no translator.
+With the accepted arm64 worker, two deterministic native extractions per fixture add four one-shot
+invocations and must assemble to the same reviewed semantic objects and fingerprints.
+
+## Integrated full-screen Metal canary
+
+The companion Metal gate uses a second fragment fixture that exposes UV and `front_facing` as pixel
+values. It compares real resolver output with checked-in WGSL and declaration snapshots, then joins
+the authenticated extraction with that nominal declaration evidence. The interface JSON supplies
+only the reviewed static oracle; both compiler requests are projected from the assembled program.
+The authored fragment span is exactly `6:1–9:2`. Each entry is translated twice, and one additional
 schema-valid request runs twice to prove that Tint deterministically rejects a crossed UV width with
 one structured interface diagnostic.
 
 The two accepted MSL sources compile to separate AIR files and link into one metallib. A Swift probe
 loads translator-returned function names, renders 2x2 targets with explicit counter-clockwise and
 clockwise state, and runs twice. Exact RG values prove top-origin UV; blue is 255 for CCW and zero
-for the CW control. See [`fullscreen-metal.md`](./fullscreen-metal.md) for snapshots, commands, and
-limitations.
+for the CW control. The complete path uses nine one-shot Tint processes: one inventory, two semantic
+extractions, four successful translations, and two runs of the structured negative. See
+[`fullscreen-metal.md`](./fullscreen-metal.md) for snapshots, commands, and limitations.
 
 ## Initial authenticated closure
 
@@ -122,8 +141,10 @@ initial closure must contain:
 - `f16` values and explicit `uniform_buffer_standard_layout`; and
 - internal dual-source evidence, while the alpha profile still rejects the feature.
 
-Every expected semantic object and compiler request is a reviewed literal fixture. Tint may validate
-it, but no test regenerates its own expected value from the translator response.
+Expected semantic objects, fingerprints, and request hashes remain reviewed oracles rather than
+being regenerated from translator responses. Actual compiler requests must be derived from the
+authenticated assembly. The current interface-only gates establish that boundary; resource,
+override, slot-allocation, corpus, and packaging fixtures remain to be connected.
 
 ## Repository corpus
 
