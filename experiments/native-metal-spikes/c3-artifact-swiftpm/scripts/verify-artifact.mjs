@@ -319,6 +319,14 @@ function fingerprintProgram(program, semantic, inputs) {
   return sha256Canonical(programFingerprintInput(program, semantic, inputs));
 }
 
+function requireSemanticProgram(semantic, name) {
+  const program = semantic.programs.find(
+    (candidate) => candidate.name === name
+  );
+  if (!program) fail(`semantic program ${name} is missing`);
+  return program;
+}
+
 function roundUp(alignment, value) {
   return Math.ceil(value / alignment) * alignment;
 }
@@ -521,6 +529,61 @@ function assertShaderInterfaceProgramFingerprintSensitivity(semantic, inputs) {
   });
 }
 
+function assertOverrideProgramFingerprintSensitivity(semantic, inputs) {
+  const programName = "Noop";
+  const overrideName = "C3_WORKGROUP_X";
+  const originalProgram = requireSemanticProgram(semantic, programName);
+  const originalOverride = originalProgram.overrides.find(
+    (override) => override.names.wgsl === overrideName
+  );
+  if (!originalOverride) {
+    fail(`${programName} override fingerprint sensitivity is missing`);
+  }
+  const baseline = fingerprintProgram(originalProgram, semantic, inputs);
+  const mutate = (change) => {
+    const candidate = clone(semantic);
+    const program = requireSemanticProgram(candidate, programName);
+    const override = program.overrides.find(
+      (current) => current.names.wgsl === overrideName
+    );
+    if (!override) fail(`${programName} override ${overrideName} is missing`);
+    change(override);
+    return { candidate, program };
+  };
+
+  const renamed = mutate((override) => {
+    override.names.wgsl = "C3_WORKGROUP_Y";
+  });
+  if (
+    fingerprintProgram(renamed.program, renamed.candidate, inputs) === baseline
+  ) {
+    fail(`${programName} fingerprint ignored resolved override name`);
+  }
+
+  const reselected = mutate((override) => {
+    override.selected.value = 3;
+  });
+  if (
+    fingerprintProgram(reselected.program, reselected.candidate, inputs) ===
+    baseline
+  ) {
+    fail(`${programName} fingerprint ignored selected override value`);
+  }
+
+  const renamedForSwift = mutate((override) => {
+    override.swiftName = "renamedForSwift";
+  });
+  assertEqual(
+    fingerprintProgram(
+      renamedForSwift.program,
+      renamedForSwift.candidate,
+      inputs
+    ),
+    baseline,
+    `${programName} override Swift-name fingerprint exclusion`
+  );
+}
+
 function runtimeProjectionInput(projection, librarySHA256) {
   return {
     semantic: projection.semantic,
@@ -668,6 +731,60 @@ function compareCanonicalStrings(left, right) {
   left = left.normalize("NFC");
   right = right.normalize("NFC");
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function validateSemanticOverrides(semantic) {
+  const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  for (const program of semantic.programs) {
+    const names = new Set();
+    const authoredIds = new Set();
+    let previousName;
+    for (const override of program.overrides) {
+      const name = override.names?.wgsl;
+      if (
+        typeof name !== "string" ||
+        name.length > 256 ||
+        !wgslIdentifier.test(name)
+      ) {
+        fail(`${program.name} has an invalid override WGSL name`);
+      }
+      if (names.has(name)) fail(`${program.name} repeats override ${name}`);
+      if (previousName !== undefined && previousName >= name) {
+        fail(`${program.name} overrides are not canonically name ordered`);
+      }
+      names.add(name);
+      previousName = name;
+
+      if (Object.hasOwn(override, "wgslId")) {
+        if (authoredIds.has(override.wgslId)) {
+          fail(
+            `${program.name} repeats authored WGSL override ID ${override.wgslId}`
+          );
+        }
+        authoredIds.add(override.wgslId);
+      }
+    }
+  }
+}
+
+function requireSemanticOverrideMutationFailure(
+  semantic,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const candidate = clone(semantic);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    validateSemanticOverrides(candidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
 }
 
 function shaderInterfaceValueKey(value, includeBlendSource) {
@@ -1396,6 +1513,7 @@ if (!validateArtifact(artifact)) {
     })}`
   );
 }
+validateSemanticOverrides(artifact.semantic);
 const futureStorageSizeModelArtifact = clone(artifact);
 futureStorageSizeModelArtifact.projection.storageBufferSizeModel =
   artifact.projection.storageBufferSizeModel.endsWith("-v999")
@@ -1410,17 +1528,20 @@ if (!validateArtifact(futureStorageSizeModelArtifact)) {
   );
 }
 const finiteOverrideArtifact = clone(artifact);
-finiteOverrideArtifact.semantic.programs[0].overrides.push(
+const finiteOverrideProgram = requireSemanticProgram(
+  finiteOverrideArtifact.semantic,
+  "Noop"
+);
+finiteOverrideProgram.overrides.push(
   {
-    id: "fixture_f16",
     names: { authored: "FIXTURE_F16", wgsl: "FIXTURE_F16" },
     swiftName: "fixtureF16",
+    wgslId: 17,
     type: "f16",
     default: { type: "f16", bits: "7bff" },
     selected: { type: "f16", bits: "8000" },
   },
   {
-    id: "fixture_f32",
     names: { authored: "FIXTURE_F32", wgsl: "FIXTURE_F32" },
     swiftName: "fixtureF32",
     type: "f32",
@@ -1434,6 +1555,51 @@ if (!validateArtifact(finiteOverrideArtifact)) {
       validateArtifact.errors,
       { separator: "\n" }
     )}`
+  );
+}
+validateSemanticOverrides(finiteOverrideArtifact.semantic);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    const overrides = requireSemanticProgram(semantic, "Noop").overrides;
+    overrides.find(
+      (override) => override.names.wgsl === "FIXTURE_F16"
+    ).names.wgsl = "C3_WORKGROUP_X";
+  },
+  "repeats override",
+  "duplicate semantic override name"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    requireSemanticProgram(semantic, "Noop").overrides.reverse();
+  },
+  "not canonically name ordered",
+  "non-canonical semantic override order"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    const overrides = requireSemanticProgram(semantic, "Noop").overrides;
+    overrides.find(
+      (override) => override.names.wgsl === "FIXTURE_F16"
+    ).wgslId = 7;
+  },
+  "repeats authored WGSL override ID",
+  "duplicate authored WGSL override ID"
+);
+for (const [name, label] of [
+  ["NOT VALID", "override WGSL name containing whitespace"],
+  ["ÉXITO", "non-ASCII override WGSL name"],
+  [`A${"a".repeat(256)}`, "overlong override WGSL name"],
+]) {
+  requireSemanticOverrideMutationFailure(
+    finiteOverrideArtifact.semantic,
+    (semantic) => {
+      requireSemanticProgram(semantic, "Noop").overrides[0].names.wgsl = name;
+    },
+    "invalid override WGSL name",
+    label
   );
 }
 for (const [label, mutate] of [
@@ -1695,10 +1861,43 @@ for (const [label, mutate] of [
     },
   ],
   [
+    "legacy semantic override id",
+    (candidate) => {
+      requireSemanticProgram(candidate.semantic, "Noop").overrides[0].id =
+        "fixture_bool";
+    },
+  ],
+  [
+    "override WGSL name containing whitespace",
+    (candidate) => {
+      requireSemanticProgram(
+        candidate.semantic,
+        "Noop"
+      ).overrides[0].names.wgsl = "NOT VALID";
+    },
+  ],
+  [
+    "non-ASCII override WGSL name",
+    (candidate) => {
+      requireSemanticProgram(
+        candidate.semantic,
+        "Noop"
+      ).overrides[0].names.wgsl = "ÉXITO";
+    },
+  ],
+  [
+    "overlong override WGSL name",
+    (candidate) => {
+      requireSemanticProgram(
+        candidate.semantic,
+        "Noop"
+      ).overrides[0].names.wgsl = `A${"a".repeat(256)}`;
+    },
+  ],
+  [
     "non-finite f16 override",
     (candidate) => {
       candidate.semantic.programs[0].overrides.push({
-        id: "fixture_f16",
         names: { authored: "FIXTURE_F16", wgsl: "FIXTURE_F16" },
         swiftName: "fixtureF16",
         type: "f16",
@@ -1711,7 +1910,6 @@ for (const [label, mutate] of [
     "non-finite f32 override",
     (candidate) => {
       candidate.semantic.programs[0].overrides.push({
-        id: "fixture_f32",
         names: { authored: "FIXTURE_F32", wgsl: "FIXTURE_F32" },
         swiftName: "fixtureF32",
         type: "f32",
@@ -1932,12 +2130,6 @@ for (const program of artifact.semantic.programs) {
   const bindingsById = new Map(
     program.bindings.map((binding) => [binding.id, binding])
   );
-  const overrideIds = new Set();
-  for (const override of program.overrides) {
-    if (overrideIds.has(override.id))
-      fail(`${program.name} repeats override ${override.id}`);
-    overrideIds.add(override.id);
-  }
   for (const entry of Object.values(program.entryPoints)) {
     if (entry.source && !program.sources.includes(entry.source.input)) {
       fail(
@@ -2003,6 +2195,7 @@ assertShaderInterfaceProgramFingerprintSensitivity(
   artifact.semantic,
   artifact.inputs
 );
+assertOverrideProgramFingerprintSensitivity(artifact.semantic, artifact.inputs);
 
 const runtimeArraySemantic = artifact.semantic.programs.find(
   (program) => program.name === "RuntimeArray"
@@ -3193,5 +3386,5 @@ if (
 }
 
 console.log(
-  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, 6 base program-fingerprint sensitivity checks per program, 3 SparseDraw interface-fingerprint checks, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
+  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, 6 base program-fingerprint sensitivity checks per program, 3 SparseDraw interface-fingerprint checks, 3 Noop override-fingerprint checks, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
 );

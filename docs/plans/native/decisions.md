@@ -146,6 +146,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   declarations, evaluated defaults, selected values, and compute workgroup dimensions only as
   resolved positive integer `x`, `y`, and `z`. Literal-versus-expression provenance and override
   dependency lists remain in the referenced WGSL inputs instead of becoming runtime contract data.
+  A resolved WGSL name is the declaration's program-local identity; an authored numeric `@id` is
+  retained only as optional `wgslId` provenance, never duplicated by an invented opaque ID. The
+  resolved name uses the compiler request's ASCII identifier vocabulary and strict ascending order.
   V1 exposes no Metal function-constant or runtime-specialization contract. Configuration keys are
   validated against the module and remain valid when unused by a selected entry point. Before any
   lowering or pruning, every statically used declaration without an initializer must be supplied.

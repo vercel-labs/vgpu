@@ -162,6 +162,12 @@ referenced WGSL inputs and is not duplicated as dependency metadata. The contrac
 Metal function constants. Runtime specialization requires a future explicit API and artifact
 revision.
 
+The resolved WGSL name is the override's program-local identity. An authored numeric `@id`, when
+present, is retained only as `wgslId` provenance; semantic v1 does not invent a parallel opaque ID.
+Resolved names use the compiler request's ASCII identifier vocabulary. Programs store overrides in
+strict ascending resolved-name order and require both resolved names and authored numeric IDs to be
+unique within that program.
+
 Semantic extraction first resolves and type-checks every configured key against the WGSL module,
 accepting a valid module-level value even when no selected entry point uses it. For each selected
 entry point, every statically used override without an initializer must be configured before any

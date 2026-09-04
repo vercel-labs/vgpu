@@ -304,6 +304,40 @@ function compareCanonicalStrings(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function validateSemanticOverrides(semantic) {
+  const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  for (const program of semantic.programs) {
+    const names = new Set();
+    const authoredIds = new Set();
+    let previousName;
+    for (const override of program.overrides) {
+      const name = override.names?.wgsl;
+      if (
+        typeof name !== "string" ||
+        name.length > 256 ||
+        !wgslIdentifier.test(name)
+      ) {
+        fail(`${program.name} has an invalid override WGSL name`);
+      }
+      if (names.has(name)) fail(`${program.name} repeats override ${name}`);
+      if (previousName !== undefined && previousName >= name) {
+        fail(`${program.name} overrides are not canonically name ordered`);
+      }
+      names.add(name);
+      previousName = name;
+
+      if (Object.hasOwn(override, "wgslId")) {
+        if (authoredIds.has(override.wgslId)) {
+          fail(
+            `${program.name} repeats authored WGSL override ID ${override.wgslId}`
+          );
+        }
+        authoredIds.add(override.wgslId);
+      }
+    }
+  }
+}
+
 function shaderInterfaceValueKey(value, includeBlendSource) {
   if (Object.hasOwn(value, "location")) {
     const blendSource =
@@ -1093,6 +1127,7 @@ const artifact = JSON.parse(
   readFileSync(join(fixtureDirectory, "fixtures", "artifact.base.json"), "utf8")
 );
 artifact.projection.storageBufferSizeModel = options.storageBufferSizeModel;
+validateSemanticOverrides(artifact.semantic);
 validateVertexBufferPolicy(artifact.projection);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
 validateShaderInterfaceContract(artifact.semantic, artifact.projection);

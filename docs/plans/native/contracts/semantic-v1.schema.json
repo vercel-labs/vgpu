@@ -54,11 +54,16 @@
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
       "maxLength": 256
     },
+    "wgslIdentifier": {
+      "description": "A resolved WGSL identifier accepted by the native compiler protocol.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "maxLength": 256
+    },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "typeId": { "$ref": "#/$defs/nonEmptyString" },
     "layoutId": { "$ref": "#/$defs/nonEmptyString" },
     "inputId": { "$ref": "#/$defs/nonEmptyString" },
-    "overrideId": { "$ref": "#/$defs/nonEmptyString" },
     "bindingId": {
       "type": "string",
       "pattern": "^g(?:0|[1-9][0-9]*)b(?:0|[1-9][0-9]*)$"
@@ -981,16 +986,15 @@
       "required": ["authored", "wgsl"],
       "properties": {
         "authored": { "$ref": "#/$defs/nonEmptyString" },
-        "wgsl": { "$ref": "#/$defs/nonEmptyString" }
+        "wgsl": { "$ref": "#/$defs/wgslIdentifier" }
       }
     },
     "override": {
-      "description": "A WGSL override resolved and baked before backend translation. selected is always present; no runtime function-constant mapping is implied.",
+      "description": "A WGSL override resolved and baked before backend translation. names.wgsl is its program-local identity; wgslId is optional authored @id provenance. selected is always present; no runtime function-constant mapping is implied.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "names", "swiftName", "type", "selected"],
+      "required": ["names", "swiftName", "type", "selected"],
       "properties": {
-        "id": { "$ref": "#/$defs/overrideId" },
         "names": { "$ref": "#/$defs/overrideNames" },
         "swiftName": { "$ref": "#/$defs/swiftIdentifier" },
         "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
@@ -1101,7 +1105,9 @@
       "items": { "$ref": "#/$defs/binding" }
     },
     "programOverrides": {
+      "description": "Strict ascending ASCII names.wgsl order, matching the native compiler request. names.wgsl values and authored wgslId values are each unique within the program.",
       "type": "array",
+      "uniqueItems": true,
       "items": { "$ref": "#/$defs/override" }
     },
     "effectProgram": {

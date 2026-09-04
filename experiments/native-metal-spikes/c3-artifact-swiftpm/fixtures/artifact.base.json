@@ -167,8 +167,8 @@
             },
             "source": {
               "input": "noop-wgsl",
-              "start": { "line": 4, "column": 1 },
-              "end": { "line": 7, "column": 2 }
+              "start": { "line": 6, "column": 1 },
+              "end": { "line": 9, "column": 2 }
             },
             "inputs": [],
             "outputs": [],
@@ -197,7 +197,19 @@
             "minimumBindingSize": 16
           }
         ],
-        "overrides": [],
+        "overrides": [
+          {
+            "names": {
+              "authored": "C3_WORKGROUP_X",
+              "wgsl": "C3_WORKGROUP_X"
+            },
+            "swiftName": "c3WorkgroupX",
+            "wgslId": 7,
+            "type": "u32",
+            "default": { "type": "u32", "value": 4 },
+            "selected": { "type": "u32", "value": 4 }
+          }
+        ],
         "capabilities": {
           "vocabulary": 1,
           "languageFeatures": [],

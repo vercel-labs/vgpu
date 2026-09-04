@@ -107,6 +107,8 @@ A semantic `workgroupSize` contains only resolved `x`, `y`, and `z` values. It d
 
 Override configuration is resolved at module scope, so a valid key is accepted even when one selected entry point does not use it. Required values are checked against each entry point's static interface before lowering or pruning. Configured values are then substituted before omitted initializers are evaluated. The semantic program retains the canonical union of those static typed sets; a module override unused by every selected entry is omitted. Later compiler pruning does not redefine the required interface or the semantic v1 record.
 
+An override's resolved WGSL name is its program-local identity. Its authored numeric `@id` is recorded as optional `wgslId` provenance when present; the artifact does not invent a second opaque override ID. Resolved names use the same ASCII identifier vocabulary as compiler requests. Overrides are stored in strict ascending resolved-name order, with unique resolved names and authored IDs within the program.
+
 The `projection` object records only the selected Metal result:
 
 - the macOS deployment target, Metal compiler target triple, and Metal language version;

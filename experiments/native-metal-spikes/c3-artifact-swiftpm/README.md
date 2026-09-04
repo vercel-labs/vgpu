@@ -52,9 +52,11 @@ The runner:
    that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
    `interfaceLocations`, missing or mismatched stage-discriminated interfaces, invalid interpolation
    roles, workgroup-axis provenance objects and zero dimensions, emitted names outside the `vgpu_`
-   domain, non-finite override constants, repeated or non-canonical per-stage binding intervals,
-   stages incompatible with the program kind, and components that disagree with their Metal
-   resource class;
+   domain, legacy arbitrary override IDs, invalid resolved override identifiers, non-finite override
+   constants, repeated or non-canonical per-stage binding intervals, stages incompatible with the
+   program kind, and components that disagree with their Metal resource class; verifier negatives
+   also require override WGSL names to be unique and strictly ordered, and authored `@id` values to
+   be unique when present;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
    the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size
@@ -100,7 +102,9 @@ ordered arrays retain their order. Executable self-checks require referenced WGS
 language-feature, directly reachable layout, and transitively reachable elemental-layout changes
 to change the fingerprint, while an unreachable type/layout addition must not change it. Separate
 canaries prove that changing an interface location, type, or normalized interpolation also changes
-the owning program fingerprint.
+the owning program fingerprint. `Noop` uses an authored `@id` override to resolve its workgroup
+width; separate canaries prove that the resolved override name and selected value affect its
+program fingerprint while its generated Swift name does not.
 
 The projection requires a versioned `storageBufferSizeModel` string and every projected program
 contains a canonical `storageBufferSizeRegions` array. `Noop` uses an empty array. `RuntimeArray`
