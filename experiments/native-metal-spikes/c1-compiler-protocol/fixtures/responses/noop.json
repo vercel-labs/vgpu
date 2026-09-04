@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "ok": true,
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "msl": "#include <metal_stdlib>\nusing namespace metal;\n\nkernel void vgpu_noop() {\n}\n",
+    "entryPoint": {
+      "stage": "compute",
+      "wgsl": "main",
+      "metal": "vgpu_noop",
+      "interfaceLocations": []
+    },
+    "resolvedWorkgroupSize": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "bindings": [],
+    "internalBindings": [],
+    "storageBufferSizeRegions": []
+  }
+}

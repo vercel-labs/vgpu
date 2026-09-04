@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "ok": true,
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "msl": "#include <metal_stdlib>\nusing namespace metal;\n\nkernel void vgpu_runtime_array(device const uint* values [[buffer(0)]], constant uint* vgpu_immediate [[buffer(30)]]) {\n}\n",
+    "entryPoint": {
+      "stage": "compute",
+      "wgsl": "main",
+      "metal": "vgpu_runtime_array",
+      "interfaceLocations": []
+    },
+    "resolvedWorkgroupSize": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "bindings": [
+      {
+        "group": 0,
+        "binding": 0,
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 0,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "internalBindings": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizeRegions": [
+      {
+        "stage": "compute",
+        "immediateDataByteOffset": 4
+      }
+    ]
+  }
+}

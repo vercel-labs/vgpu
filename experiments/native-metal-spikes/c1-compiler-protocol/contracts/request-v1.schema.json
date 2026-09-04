@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json",
+  "title": "vGPU Native Tint Compiler Request v1",
+  "description": "One resolved WGSL entry-point translation request. The process transport carries one UTF-8 JSON value terminated by EOF.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "source",
+    "originMap",
+    "entryPoint",
+    "overrides",
+    "languageFeatures",
+    "metal"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractId": {
+      "const": "vgpu-native-tint-compiler/v1"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "originMap": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/origin-map.schema.json"
+    },
+    "entryPoint": {
+      "$ref": "#/$defs/entryPoint"
+    },
+    "overrides": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/override"
+      }
+    },
+    "languageFeatures": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/languageFeature"
+      }
+    },
+    "metal": {
+      "description": "The v1 writer profile always supplies one candidate immediate-data reservation at buffer(30) and a storage-size region offset of four bytes. Their presence configures Tint but does not imply that either is effective in the response.",
+      "$ref": "#/$defs/metal"
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "maxLength": 256
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[^\\u0000]+$"
+    },
+    "uint32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "stage": {
+      "enum": ["vertex", "fragment", "compute"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["virtualPath", "sha256", "text"],
+      "properties": {
+        "virtualPath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16777216
+        }
+      }
+    },
+    "entryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl", "metal"],
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "wgsl": {
+          "$ref": "#/$defs/identifier"
+        },
+        "metal": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "boolValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {
+          "const": "bool"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      }
+    },
+    "i32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {
+          "const": "i32"
+        },
+        "value": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "u32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {
+          "const": "u32"
+        },
+        "value": {
+          "$ref": "#/$defs/uint32"
+        }
+      }
+    },
+    "f16Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bits"],
+      "properties": {
+        "type": {
+          "const": "f16"
+        },
+        "bits": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{4}$"
+        }
+      }
+    },
+    "f32Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bits"],
+      "properties": {
+        "type": {
+          "const": "f32"
+        },
+        "bits": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}$"
+        }
+      }
+    },
+    "overrideValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/boolValue"
+        },
+        {
+          "$ref": "#/$defs/i32Value"
+        },
+        {
+          "$ref": "#/$defs/u32Value"
+        },
+        {
+          "$ref": "#/$defs/f16Value"
+        },
+        {
+          "$ref": "#/$defs/f32Value"
+        }
+      ]
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "value": {
+          "$ref": "#/$defs/overrideValue"
+        }
+      }
+    },
+    "languageFeature": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 256
+    },
+    "directSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "resourceClass", "component", "index", "count"],
+      "properties": {
+        "mode": {
+          "const": "direct"
+        },
+        "resourceClass": {
+          "enum": ["buffer", "texture", "sampler"]
+        },
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "maxLength": 256
+        },
+        "index": {
+          "$ref": "#/$defs/uint32"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "binding": {
+      "description": "The selected entry's WGSL resource kind is derived and checked through Tint Inspector. The request carries only the direct Metal component intervals: uniform and storage buffers use the buffer class, while sampled and storage textures use the texture class.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group", "binding", "slots"],
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/uint32"
+        },
+        "binding": {
+          "$ref": "#/$defs/uint32"
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/directSlot"
+          }
+        }
+      }
+    },
+    "internalReservation": {
+      "description": "The one candidate shared immediate-data binding in compiler protocol v1.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "slots"],
+      "properties": {
+        "role": {
+          "const": "immediate-data"
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/immediateDataSlot"
+          }
+        }
+      }
+    },
+    "immediateDataSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "resourceClass", "component", "index", "count"],
+      "properties": {
+        "mode": {
+          "const": "direct"
+        },
+        "resourceClass": {
+          "const": "buffer"
+        },
+        "component": {
+          "const": "buffer"
+        },
+        "index": {
+          "const": 30
+        },
+        "count": {
+          "const": 1
+        }
+      }
+    },
+    "storageBufferSizes": {
+      "description": "Candidate configuration supplied before generation. Only the writer result can make a size region effective.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "immediateDataByteOffset"],
+      "properties": {
+        "model": {
+          "const": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"
+        },
+        "immediateDataByteOffset": {
+          "const": 4
+        }
+      }
+    },
+    "metal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingModel",
+        "bindings",
+        "internalReservations",
+        "storageBufferSizes"
+      ],
+      "properties": {
+        "bindingModel": {
+          "const": "vgpu-metal-binding-slots-v1"
+        },
+        "bindings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        },
+        "internalReservations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/internalReservation"
+          }
+        },
+        "storageBufferSizes": {
+          "$ref": "#/$defs/storageBufferSizes"
+        }
+      }
+    }
+  }
+}

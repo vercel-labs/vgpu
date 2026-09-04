@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/noop.wgsl",
+    "sha256": "0e88698096320b7a1e81a4ebe37897aebb71c3e6c9cfd085624e287e3c673073",
+    "text": "@compute @workgroup_size(1)\nfn main() {}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/noop.wgsl",
+      "sha256": "0e88698096320b7a1e81a4ebe37897aebb71c3e6c9cfd085624e287e3c673073"
+    },
+    "sources": [
+      {
+        "input": "noop-wgsl",
+        "sha256": "0e88698096320b7a1e81a4ebe37897aebb71c3e6c9cfd085624e287e3c673073"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 41
+        },
+        "origin": {
+          "input": "noop-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "compute",
+    "wgsl": "main",
+    "metal": "vgpu_noop"
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}
