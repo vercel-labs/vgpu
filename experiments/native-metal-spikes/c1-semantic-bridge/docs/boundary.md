@@ -122,6 +122,13 @@ Extraction is multi-entry so one parse and configuration produces an atomic view
 Translation remains one-entry because its protocol, failure attribution, output identity, and cache
 boundary are already accepted at that granularity.
 
+The exact request and response boundary is specified in
+[`semantic-extraction/contract.md`](./semantic-extraction/contract.md). Resource-kind resolution,
+sampling pairs, type/layout identity, and canonical orders are specified in
+[`semantic-extraction/sampling-and-types.md`](./semantic-extraction/sampling-and-types.md). The
+adapter-owned join into `semantic-v1` is specified in
+[`semantic-extraction/assembly.md`](./semantic-extraction/assembly.md).
+
 ## Independent verification
 
 The translator receives semantic data only through its existing strict request schema. In a fresh

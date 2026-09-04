@@ -111,6 +111,15 @@ The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
 candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 
+The semantic work is split by responsibility so the growing design remains reviewable:
+
+- [`docs/semantic-extraction/contract.md`](./docs/semantic-extraction/contract.md) freezes request
+  scope, authentication, response ownership, and process isolation;
+- [`docs/semantic-extraction/sampling-and-types.md`](./docs/semantic-extraction/sampling-and-types.md)
+  freezes resources, sampling-pair resolution, content-addressed types/layouts, and ordering; and
+- [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) freezes the pure
+  TypeScript join, render linking, fingerprint exclusions, and translator projection.
+
 ## Implementation order
 
 1. Add an authenticated entry-inventory operation to the vgpu Tint tool. This slice is executable.
