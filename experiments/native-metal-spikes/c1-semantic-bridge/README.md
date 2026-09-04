@@ -179,7 +179,10 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
   freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
-  records the executable nominal response-to-program-projection boundary.
+  records the executable nominal response-to-program-projection boundary; and
+- [`docs/semantic-extraction/runtime-resource-binding.md`](./docs/semantic-extraction/runtime-resource-binding.md)
+  selects the nominal semantic/slot join and atomic prepare/encode boundary for the next live
+  resource gate.
 
 ## Implementation order
 
@@ -201,7 +204,10 @@ The semantic work is split by responsibility so the growing design remains revie
    the fixed-resource pair are executable.
 8. Compile and link every accepted MSL source offline. The fixed-resource pair is executable; the
    authenticated repository corpus remains open.
-9. Run the authenticated repository corpus and record expected failures separately.
+9. Join semantic resource constraints to projected slots, prepare a complete logical resource set,
+   and bind the fixed-resource render pair at runtime. This slice is designed but not yet
+   executable.
+10. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
