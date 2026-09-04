@@ -139,6 +139,11 @@ In particular, `uniform_buffer_standard_layout` is an explicit build-time WGSL l
 not a Metal-device requirement. The compiler starts from the declared language-feature set and
 never retries failed source with an additional feature enabled.
 
+Semantic extraction is a separate build stage from Metal translation. It owns the backend-neutral
+entry interfaces, bindings, intrinsic layouts, override declarations, and evaluated defaults used
+to assemble this contract. The per-entry Metal translation response checks the relevant reflected
+facts against its request, but does not serialize that broad semantic reflection again.
+
 Generated Swift and TypeScript packers consume the same semantic offsets. They require exact
 vector, matrix, and fixed-array shapes; reject non-integral or out-of-range integers and invalid
 runtime-array extents before mutating state; write matrices column-major and scalar values
@@ -151,6 +156,12 @@ preserves the declaration, default, selected value, and any override-backed work
 does not describe Metal function constants. Runtime specialization requires a future explicit API
 and artifact revision.
 
+Before translation, semantic extraction must produce the exact active override set in canonical
+declaration-name order with typed values. An omitted configured value uses its evaluated WGSL
+default; an active declaration without a default must be supplied by configuration. The existing
+resolver exposes only raw initializer text, so evaluated default extraction remains a required C1
+gate rather than something the translation worker infers from text.
+
 The Metal projection records:
 
 - macOS target, deployment version, the exact `metalCompilerTargetTriple` passed to Apple's Metal
@@ -159,7 +170,7 @@ The Metal projection records:
 - the vgpu-owned `vgpu-tint-compiler` wrapper identity, immutable Dawn/Tint revision, executable
   hash, flags, and producing Apple toolchain;
 - the single `.metallib` reference;
-- emitted function names and interface indices;
+- emitted function names;
 - the exact direct Metal buffer, texture, and sampler slots allocated by the versioned vgpu
   binding policy, including backend-internal bindings required by Metal lowering or the vgpu ABI;
 - the versioned storage-buffer-size model and any per-program, per-stage regions placed inside an
@@ -170,6 +181,12 @@ The Metal projection records:
 - optional source maps;
 - optional compare-runner metadata under `projection.testing`.
 
+The semantic contract retains WGSL entry inputs and outputs. Metal projection v1 does not yet
+serialize their backend indices: vertex attributes, inter-stage user locations, and fragment color
+outputs occupy different Metal namespaces, so one undifferentiated `metalIndex` would be ambiguous.
+A later gate must prove a discriminated interface projection before that data joins the artifact and
+its runtime-projection fingerprint.
+
 The production native compiler constructs the user binding map and configures candidate internal
 reservations before translation, then passes that configuration to Tint. For every selected entry
 whose reflection contains a runtime-sized storage type, it configures the shared immediate binding
@@ -178,6 +195,18 @@ part of the emitted interface. Tint's writer result after `Generate` is authorit
 records an `immediate-data` internal binding only when the generated entry uses it, and records a
 `storageBufferSizeRegions` entry only when Tint's writer result reports that the selected stage
 needs the size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
+
+Each translation request contains one resolved virtual WGSL source, its module-precision origin map,
+one selected WGSL and vgpu-owned emitted entry name, the exact active typed overrides, declared
+language features, direct external slots, and the candidate internal profile. A success response is
+limited to MSL, that entry identity, the validated external slots, effective internal slots and size
+regions, and a resolved workgroup size for compute. Expected compiler failures use the structured
+error response rather than a process failure.
+
+The production worker framing is one UTF-8 JSON request on standard input terminated by EOF and one
+UTF-8 JSON response on standard output terminated by EOF. Any decoded response, including
+`ok: false`, is a handled request. Nonzero process exits are reserved for a framing or transport
+failure, an undecodable request, or a crash; top-level CLI exit codes are a separate contract.
 
 The binding-slot follow-up exercises that boundary without Tint's convenience allocator. Within
 each semantic program and selected stage, active bindings are sorted by WGSL `(group, binding)` and

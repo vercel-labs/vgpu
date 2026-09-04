@@ -616,7 +616,7 @@ function validateStorageBufferSizeContract(semantic, projection) {
       if (
         slot.mode !== "direct" ||
         slot.resourceClass !== "buffer" ||
-        slot.component !== "immediate-data" ||
+        slot.component !== "buffer" ||
         slot.count !== 1
       ) {
         fail(
@@ -837,6 +837,33 @@ if (!validateArtifact(futureStorageSizeModelArtifact)) {
     )}`
   );
 }
+const finiteOverrideArtifact = clone(artifact);
+finiteOverrideArtifact.semantic.programs[0].overrides.push(
+  {
+    id: "fixture_f16",
+    names: { authored: "FIXTURE_F16", wgsl: "FIXTURE_F16" },
+    swiftName: "fixtureF16",
+    type: "f16",
+    default: { type: "f16", bits: "7bff" },
+    selected: { type: "f16", bits: "8000" },
+  },
+  {
+    id: "fixture_f32",
+    names: { authored: "FIXTURE_F32", wgsl: "FIXTURE_F32" },
+    swiftName: "fixtureF32",
+    type: "f32",
+    default: { type: "f32", bits: "7f7fffff" },
+    selected: { type: "f32", bits: "80000000" },
+  }
+);
+if (!validateArtifact(finiteOverrideArtifact)) {
+  fail(
+    `finite override edge values must remain structurally valid:\n${ajv.errorsText(
+      validateArtifact.errors,
+      { separator: "\n" }
+    )}`
+  );
+}
 for (const [label, mutate] of [
   [
     "missing storage-buffer-size model",
@@ -881,6 +908,64 @@ for (const [label, mutate] of [
     "redundant storage-buffer-size boolean",
     (candidate) => {
       candidate.projection.programs[1].needsStorageBufferSizes = true;
+    },
+  ],
+  [
+    "legacy ambiguous interface locations",
+    (candidate) => {
+      candidate.projection.programs[0].entryPoints[0].interfaceLocations = [];
+    },
+  ],
+  [
+    "emitted entry name outside the vgpu domain",
+    (candidate) => {
+      candidate.projection.programs[0].entryPoints[0].metal = "thread";
+    },
+  ],
+  [
+    "multiple direct components for one semantic binding",
+    (candidate) => {
+      candidate.projection.programs[0].bindings[0].slots.push({
+        stage: "compute",
+        mode: "direct",
+        resourceClass: "texture",
+        component: "texture",
+        index: 0,
+        count: 1,
+      });
+    },
+  ],
+  [
+    "incoherent direct component",
+    (candidate) => {
+      candidate.projection.programs[0].bindings[0].slots[0].component =
+        "texture";
+    },
+  ],
+  [
+    "non-finite f16 override",
+    (candidate) => {
+      candidate.semantic.programs[0].overrides.push({
+        id: "fixture_f16",
+        names: { authored: "FIXTURE_F16", wgsl: "FIXTURE_F16" },
+        swiftName: "fixtureF16",
+        type: "f16",
+        default: { type: "f16", bits: "7c00" },
+        selected: { type: "f16", bits: "7c00" },
+      });
+    },
+  ],
+  [
+    "non-finite f32 override",
+    (candidate) => {
+      candidate.semantic.programs[0].overrides.push({
+        id: "fixture_f32",
+        names: { authored: "FIXTURE_F32", wgsl: "FIXTURE_F32" },
+        swiftName: "fixtureF32",
+        type: "f32",
+        default: { type: "f32", bits: "ff800000" },
+        selected: { type: "f32", bits: "ff800000" },
+      });
     },
   ],
 ]) {
@@ -1396,7 +1481,7 @@ noopWithImmediate.internalBindings.push({
       stage: "compute",
       mode: "direct",
       resourceClass: "buffer",
-      component: "immediate-data",
+      component: "buffer",
       index:
         immediateWithoutRegionProjection.vertexBufferPolicy
           .externalBufferCeiling,

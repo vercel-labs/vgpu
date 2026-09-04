@@ -62,6 +62,12 @@
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
       "maxLength": 256
     },
+    "emittedIdentifier": {
+      "description": "A vgpu-owned Metal identifier validated before invoking Tint.",
+      "type": "string",
+      "pattern": "^vgpu_[A-Za-z0-9_]+$",
+      "maxLength": 256
+    },
     "semanticVersion": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
@@ -232,33 +238,18 @@
       "required": ["path"],
       "properties": { "path": { "$ref": "#/$defs/relativePath" } }
     },
-    "interfaceLocation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["direction", "semanticName", "location", "metalIndex"],
-      "properties": {
-        "direction": { "enum": ["input", "output"] },
-        "semanticName": { "$ref": "#/$defs/nonEmptyString" },
-        "location": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "metalIndex": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
-      }
-    },
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "wgsl", "metal", "interfaceLocations"],
+      "required": ["stage", "wgsl", "metal"],
       "properties": {
         "stage": { "$ref": "#/$defs/stage" },
         "wgsl": { "$ref": "#/$defs/nonEmptyString" },
-        "metal": { "$ref": "#/$defs/nonEmptyString" },
-        "interfaceLocations": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/interfaceLocation" }
-        }
+        "metal": { "$ref": "#/$defs/emittedIdentifier" }
       }
     },
     "directMetalSlot": {
-      "description": "One contiguous interval in the containing semantic program's selected-stage, Metal resource-class namespace. The count is the interval width of an explicitly projected backend component; it does not imply WGSL resource binding-array (`binding_array`) support in semantic v1.",
+      "description": "One contiguous interval in the containing semantic program's selected-stage, Metal resource-class namespace. The component names that physical namespace rather than a binding or internal role. The count is the interval width and does not imply WGSL resource binding-array (`binding_array`) support in semantic v1.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -273,16 +264,39 @@
         "stage": { "$ref": "#/$defs/stage" },
         "mode": { "const": "direct" },
         "resourceClass": { "enum": ["buffer", "texture", "sampler"] },
-        "component": { "$ref": "#/$defs/nonEmptyString" },
+        "component": { "enum": ["buffer", "texture", "sampler"] },
         "index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "count": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "buffer" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "buffer" } } }
+        },
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "texture" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "texture" } } }
+        },
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "sampler" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "sampler" } } }
+        }
+      ]
     },
     "metalSlot": {
       "$ref": "#/$defs/directMetalSlot"
     },
     "binding": {
-      "description": "All Metal components and intervals projected from one semantic WGSL binding. Allocation is scoped by containing semantic program, stage, and resource class.",
+      "description": "The one direct Metal component interval projected from a singular semantic WGSL binding in compiler protocol v1. Allocation is scoped by containing semantic program, stage, and resource class.",
       "type": "object",
       "additionalProperties": false,
       "required": ["semanticBinding", "slots"],
@@ -291,6 +305,8 @@
         "slots": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/metalSlot" }
         }
       }
@@ -305,6 +321,8 @@
         "slots": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/metalSlot" }
         }
       }

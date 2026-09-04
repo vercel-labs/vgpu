@@ -121,8 +121,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `wgsl-host-shareable-v1` is an implementation prerequisite, not an alternative native contract;
   no compatibility alias is planned.
 - WGSL overrides are selected and substituted before WGSL-to-MSL translation. V1 records their
-  declarations, defaults, selected values, and resolved workgroup dimensions but exposes no Metal
-  function-constant or runtime-specialization contract.
+  declarations, evaluated defaults, selected values, and resolved workgroup dimensions but exposes
+  no Metal function-constant or runtime-specialization contract. The translation request contains
+  the exact active typed set in canonical declaration-name order; an active declaration without a
+  WGSL default must be supplied by configuration.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
 - The runtime-projection fingerprint covers the storage-buffer-size model, every per-program stage
@@ -184,10 +186,21 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   assume unified-memory coherence. An `x86_64` cross-build is useful portability evidence but
   cannot establish Intel or AMD runtime support.
 - Native builds use one vgpu-owned, statically linked `vgpu-tint-compiler` executable built from an
-  immutable Dawn/Tint revision. The wrapper parses and reflects WGSL, accepts the versioned direct
-  Metal slot map allocated by vgpu, emits the selected MSL entry point, and returns structured
-  metadata including every external and internal slot. Stock `tint`/`tint_info`, `dump_shaders`,
-  and Tint's convenience binding allocator are not production interfaces.
+  immutable Dawn/Tint revision. Backend-neutral semantic extraction happens before each Metal
+  translation request and is not duplicated in its response. The wrapper accepts one fully resolved
+  entry point plus the versioned direct Metal slot map allocated by vgpu, validates the relevant
+  resources and override types through Tint, and returns either a structured compiler failure or MSL
+  with the selected entry, validated external slots, effective internal slots and size regions, and
+  resolved compute workgroup dimensions. Stock `tint`/`tint_info`, `dump_shaders`, and Tint's
+  convenience binding allocator are not production interfaces.
+- The compiler worker uses one UTF-8 JSON request on stdin terminated by EOF and one UTF-8 JSON
+  response on stdout terminated by EOF. A decoded `ok: false` response is a handled compiler result;
+  nonzero process exits are reserved for framing, transport, decode failure, or a crash. The
+  prototype's typed-argument `0`/`1`/`2` convention is not this production transport contract.
+- Current resolved-source provenance is deliberately module-precision. A Tint WGSL diagnostic may
+  name the resolved virtual source range and, only when proven, its authored input module; it cannot
+  claim an authored line or column. Inspect, lower, and generate failures carry no invented location.
+  Apple compiler diagnostics remain located in generated MSL unless a real WGSL-to-MSL map exists.
 - The compiler distinguishes writer configuration from the effective projection. It supplies user
   slots and candidate internal reservations before Tint generation, including the shared immediate
   binding and size offset whenever reflection contains a runtime-sized storage type. Only Tint's
@@ -221,6 +234,14 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    coexist in one physical binding, while post-generation output distinguishes the cases that emit
    only ordinary immediate data or no internal binding at all.
 
+   The compiler-protocol follow-up then fixed the one-entry request/response boundary, relocatable
+   virtual-source identity, module-only diagnostic attribution, exact typed override and resource
+   checks, vgpu-owned emitted-name domain, and structured expected failures. It deliberately omits
+   broad semantic reflection and ambiguous interface locations from the response. The current
+   resolver still exposes override initializer text rather than evaluated typed defaults, and the
+   C++ prototype still adapts validated JSON to typed arguments instead of implementing the final
+   stdin/EOF codec; both remain C1 gates.
+
    The runtime-size follow-up proved sparse slot-indexed packing for multiple runtime storage
    buffers, concrete binding ranges rather than backing-buffer lengths, derived extents, stage-local
    indices, range rebinding, immediate/UBO equivalence, and exact Metal readback on the available
@@ -237,8 +258,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 
    Before freezing the dependency or numeric slot profile, build the wrapper from direct Tint
    targets at the macOS 14 baseline with arm64 and x86_64 slices, and pass offline `metal` plus
-   `metallib` compilation, authored-diagnostic provenance, deterministic connected translator and
-   artifact output, and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
+   `metallib` compilation, authored spans beyond the current module-only diagnostic attribution,
+   evaluated override-default extraction, the final JSON worker codec, deterministic connected
+   translator and artifact output, and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
    (`binding_array`) cardinality, so the alpha rejects all resource binding arrays; the
    sampled-texture writer canary is future evidence only. Keep Naga only as a differential oracle.
 

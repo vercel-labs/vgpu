@@ -44,7 +44,10 @@ The runner:
 1. assembles the same tree twice and compares every byte;
 2. compiles all five native JSON Schemas in strict mode, resolves their external references, and
    validates `artifact.json`, then assembles and verifies a future-model descriptor without adding
-   that model to the runtime's fixed support set;
+   that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
+   `interfaceLocations`, emitted names outside the `vgpu_` domain, non-finite override constants,
+   multiple direct components for one semantic binding, and components that disagree with their
+   Metal resource class;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, and proves that the vertex-buffer policy,
    storage-buffer-size model, stage-local regions, and immediate-data slots change runtime
@@ -114,7 +117,7 @@ links them into one library. It invokes Apple's tools with an explicit
 `air64-apple-macos14.0` target and `-std=macos-metal2.4`, records their observable versions in the
 temporary artifact, packages the resulting library, revalidates the artifact, and executes the
 generated C3 Metal probe. The probe loads the exact `Bundle.module` URL and recorded SHA before it
-creates `c3_noop` and dispatches.
+creates `vgpu_c3_noop` and dispatches.
 
 The target spelling is a fixture-local hypothesis until this gate runs on the supported Xcode
 matrix. To keep the payload deployment target consistent with the projection and Swift package,

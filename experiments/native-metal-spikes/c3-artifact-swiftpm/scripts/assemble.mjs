@@ -394,7 +394,7 @@ function validateStorageBufferSizeContract(semantic, projection) {
       if (
         slot.mode !== "direct" ||
         slot.resourceClass !== "buffer" ||
-        slot.component !== "immediate-data" ||
+        slot.component !== "buffer" ||
         slot.count !== 1
       ) {
         fail(

@@ -572,13 +572,27 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "bits"],
-      "properties": { "type": { "const": "f16" }, "bits": { "type": "string", "pattern": "^[a-f0-9]{4}$" } }
+      "properties": {
+        "type": { "const": "f16" },
+        "bits": {
+          "description": "Finite IEEE 754 binary16 bits in canonical lowercase hexadecimal. Override defaults and selected values do not encode NaN or infinity in semantic v1.",
+          "type": "string",
+          "pattern": "^(?![7f][c-f][a-f0-9]{2}$)[a-f0-9]{4}$"
+        }
+      }
     },
     "f32Constant": {
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "bits"],
-      "properties": { "type": { "const": "f32" }, "bits": { "type": "string", "pattern": "^[a-f0-9]{8}$" } }
+      "properties": {
+        "type": { "const": "f32" },
+        "bits": {
+          "description": "Finite IEEE 754 binary32 bits in canonical lowercase hexadecimal. Override defaults and selected values do not encode NaN or infinity in semantic v1.",
+          "type": "string",
+          "pattern": "^(?![7f]f[89a-f][a-f0-9]{5}$)[a-f0-9]{8}$"
+        }
+      }
     },
     "constantValue": {
       "oneOf": [

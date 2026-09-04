@@ -291,8 +291,7 @@
           {
             "stage": "compute",
             "wgsl": "c3_noop",
-            "metal": "c3_noop",
-            "interfaceLocations": []
+            "metal": "vgpu_c3_noop"
           }
         ],
         "bindings": [
@@ -326,8 +325,7 @@
           {
             "stage": "compute",
             "wgsl": "c3_runtime_array",
-            "metal": "c3_runtime_array",
-            "interfaceLocations": []
+            "metal": "vgpu_c3_runtime_array"
           }
         ],
         "bindings": [
@@ -353,7 +351,7 @@
                 "stage": "compute",
                 "mode": "direct",
                 "resourceClass": "buffer",
-                "component": "immediate-data",
+                "component": "buffer",
                 "index": 30,
                 "count": 1
               }

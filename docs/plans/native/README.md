@@ -11,8 +11,12 @@ should recognize the same ownership and rendering model in Swift.
 The goal is behavioral parity, not line-for-line syntax parity:
 
 - WGSL remains the authored shader language.
-- Node.js resolves and packages shaders at build time; a pinned vgpu-owned Tint executable performs
-  WGSL validation, semantic reflection, and translation.
+- Node.js resolves and packages shaders at build time. A backend-neutral semantic-extraction stage
+  validates WGSL, reflects the selected program, and materializes typed override values before any
+  backend translation request is constructed.
+- A pinned vgpu-owned Tint executable translates one fully resolved entry point at a time. Its
+  response contains only the MSL and effective Metal projection data needed by the artifact; it does
+  not duplicate the semantic contract.
 - The application ships a `.metallib`, generated Swift program types, and only the vgpu Swift
   products it selects. Source imports remain explicit at the module level.
 - The Swift runtime products implement the public primitives over Metal without a JavaScript
@@ -29,7 +33,8 @@ physical hardware. This is a release-support boundary, not an API or artifact ca
 ```text
 WGSL modules
   -> vgpu module resolution and explicit language-feature set
-  -> vgpu-tint-compiler semantic reflection + versioned Metal slot map + MSL
+  -> backend-neutral semantic extraction + typed override materialization
+  -> vgpu-tint-compiler one-entry validation + versioned Metal slot map + MSL
   -> Apple Metal compiler
   -> versioned program manifest + .metallib + generated Swift
   -> selected vgpu Swift runtime products
