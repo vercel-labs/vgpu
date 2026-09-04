@@ -96,7 +96,7 @@ The `semantic` object is independent of Metal. It records:
 - authored and resolved WGSL entry points and stage interfaces;
 - the fixed `wgsl-host-shareable-v1` layout model, host-shareable types, and intrinsic WGSL alignment, size, offset, and stride values reflected by Tint;
 - WGSL resource bindings, including their address space and access independently from the referenced intrinsic layout;
-- typed, evaluated override defaults and the exact selected values baked before translation, with required values distinguished from declarations that have an initializer;
+- typed, evaluated override defaults and the exact selected values for overrides statically used by the selected entry points, baked before translation;
 - positive integer compute workgroup dimensions resolved after override selection;
 - explicitly enabled WGSL environment features and backend-neutral execution requirements;
 - the generated Swift, binding-layout, and required `VGPUABI` contract integers.
@@ -104,6 +104,8 @@ The `semantic` object is independent of Metal. It records:
 Intrinsic layout does not acquire a uniform or storage variant. Address-space constraints are a separate validation result under the recorded language-feature set; validation cannot rewrite a reflected layout. For a struct ending in a runtime-sized array, `layout.minimumSize` records the fixed zero-element prefix while the trailing array records its element stride. The binding's `minimumBindingSize` additionally includes one complete trailing element and any enclosing-structure padding. Neither value carries an allocation-specific element count or final byte length; that extent belongs to the resource and binding at runtime.
 
 A semantic `workgroupSize` contains only resolved `x`, `y`, and `z` values. It does not distinguish a literal from a constant or override expression, or serialize an override dependency list. The referenced WGSL inputs and their hashes retain that authored distinction, while runtime consumers receive the fixed dimensions they need.
+
+Override configuration is resolved at module scope, so a valid key is accepted even when one selected entry point does not use it. Required values are checked against each entry point's static interface before lowering or pruning. Configured values are then substituted before omitted initializers are evaluated. The semantic program retains the canonical union of those static typed sets; a module override unused by every selected entry is omitted. Later compiler pruning does not redefine the required interface or the semantic v1 record.
 
 The `projection` object records only the selected Metal result:
 

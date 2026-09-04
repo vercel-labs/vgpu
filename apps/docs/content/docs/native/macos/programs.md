@@ -68,7 +68,7 @@ List every program exported by the generated Swift module:
 | `program.kind`        |        No | `"effect"`      | `"effect"`, `"draw"`, or `"compute"`.                                                      |
 | `program.source`      |       Yes | —               | Entry WGSL file, relative to the configuration file.                                       |
 | `program.entryPoints` | Sometimes | Inferred        | Required when the resolved source has more than one compatible entry point.                |
-| `program.overrides`   |        No | Evaluated WGSL defaults | Typed WGSL override values fixed for this native program. An active override without an initializer must be configured. |
+| `program.overrides`   |        No | Evaluated WGSL defaults | Typed WGSL override values fixed for this native program. A statically used override without an initializer must be configured. |
 
 An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
 
@@ -108,9 +108,11 @@ Set WGSL overrides in the program configuration when the shader default is not t
 }
 ```
 
-Before translation, `native check` materializes the exact override set used by each selected entry point. It evaluates WGSL initializers with the pinned Tint semantics, preserves each scalar type and the bit pattern of finite `f16` and `f32` values, and then applies any configured replacement. Omitting a configured value uses that evaluated default. Omitting an active override that has no initializer is an error.
+Before translation, `native check` validates every configured key against the WGSL module, even if a selected entry point does not use it. It derives the exact static override set for each selected entry and requires a configured value for every declaration in that set without an initializer. Configuring a downstream override does not waive a required upstream declaration that remains part of the static interface.
 
-Unknown names, conflicting IDs, wrong types, non-finite floats, and integers outside their WGSL range fail validation. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
+Configured values are substituted before Tint evaluates omitted initializers. This order matters: configuring an override bypasses its own initializer, while configuring a dependency recomputes any omitted value that depends on it. The semantic program records the canonical union of the selected entries' static sets, preserving each scalar type and the bit pattern of finite `f16` and `f32` values. A valid module-level configuration unused by every selected entry is accepted but omitted from that record.
+
+Unknown names, conflicting IDs, wrong types, non-finite floats, and integers outside their WGSL range fail validation. This strict typed and finite boundary is the native build contract; it does not promise that every WebGPU input-conversion edge behaves identically. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
 
 The compiler substitutes the fully materialized values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. A compute entry records its workgroup size only as resolved positive integer `x`, `y`, and `z` values, whether the WGSL attribute used a literal, a constant expression, or an expression such as `X + Y`. The artifact does not duplicate that expression or its override dependency list; the referenced WGSL hashes preserve changes to the authored source. The typed selected values and resolved workgroup dimensions become part of the program fingerprint. Omitting an override and configuring it explicitly to the same evaluated default therefore produce the same normalized program semantics.
 

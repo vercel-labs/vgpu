@@ -151,18 +151,27 @@ little-endian; and initialize padding to zero. Conversion to WGSL `f16` uses IEE
 round-to-nearest, ties-to-even. A NaN must remain a quiet NaN, but its payload is not a cross-runtime
 value contract.
 
-Selected override values are substituted before WGSL-to-MSL translation. The semantic contract
-preserves each override declaration, default, and selected value. A compute entry's `workgroupSize`
-contains only the resolved positive integer `x`, `y`, and `z`; whether an axis was authored as a
-literal, constant expression, or override expression remains in the referenced WGSL inputs and is
-not duplicated as dependency metadata. The contract does not describe Metal function constants.
-Runtime specialization requires a future explicit API and artifact revision.
+Configured override values are substituted before omitted initializers are evaluated and before
+WGSL-to-MSL translation. The semantic contract preserves every override declaration statically
+used by a selected entry point, its available evaluated default, and its selected value. A compute
+entry's `workgroupSize` contains only the resolved positive integer `x`, `y`, and `z`; whether an
+axis was authored as a literal, constant expression, or override expression remains in the
+referenced WGSL inputs and is not duplicated as dependency metadata. The contract does not describe
+Metal function constants. Runtime specialization requires a future explicit API and artifact
+revision.
 
-Before translation, semantic extraction must produce the exact active override set in canonical
-declaration-name order with typed values. An omitted configured value uses its evaluated WGSL
-default; an active declaration without a default must be supplied by configuration. The existing
-resolver exposes only raw initializer text, so evaluated default extraction remains a required C1
-gate rather than something the translation worker infers from text.
+Semantic extraction first resolves and type-checks every configured key against the WGSL module,
+accepting a valid module-level value even when no selected entry point uses it. For each selected
+entry point, every statically used override without an initializer must be configured before any
+lowering or pruning. It then substitutes configured values and evaluates omitted initializers with
+Tint: configuring an override bypasses that declaration's initializer, while a configured
+dependency can change an omitted dependent value. The semantic program retains the canonical union
+of the selected entry points' static typed sets; a module override unused by all selected entries is
+omitted. Each translation request receives the corresponding exact static per-entry subset. Tint
+may later prune initializer-only dependencies, but that optimization does not redefine either the
+required interface or semantic v1. Evaluated-default extraction and partial-configuration ordering
+have passed the C1 feasibility follow-up; connecting that materializer to the exact-static compiler
+request and artifact remains part of the deterministic integration gate.
 
 The Metal projection records:
 
@@ -199,11 +208,12 @@ records an `immediate-data` internal binding only when the generated entry uses 
 needs the size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
 
 Each translation request contains one resolved virtual WGSL source, its module-precision origin map,
-one selected WGSL and vgpu-owned emitted entry name, the exact active typed overrides, declared
-language features, direct external slots, and the candidate internal profile. A success response is
-limited to MSL, that entry identity, the validated external slots, effective internal slots and size
-regions, and a resolved workgroup size for compute. Expected compiler failures use the structured
-error response rather than a process failure.
+one selected WGSL and vgpu-owned emitted entry name, the exact statically used typed override set
+after module-level configuration and required-value validation, declared language features, direct
+external slots, and the candidate internal profile. A success response is limited to MSL, that
+entry identity, the validated external slots, effective internal slots and size regions, and a
+resolved workgroup size for compute. Expected compiler failures use the structured error response
+rather than a process failure.
 
 The production worker framing is one UTF-8 JSON request on standard input terminated by EOF and one
 UTF-8 JSON response on standard output terminated by EOF. Any decoded response, including

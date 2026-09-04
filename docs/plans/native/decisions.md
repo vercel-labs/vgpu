@@ -124,9 +124,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   declarations, evaluated defaults, selected values, and compute workgroup dimensions only as
   resolved positive integer `x`, `y`, and `z`. Literal-versus-expression provenance and override
   dependency lists remain in the referenced WGSL inputs instead of becoming runtime contract data.
-  V1 exposes no Metal function-constant or runtime-specialization contract. The translation request
-  contains the exact active typed set in canonical declaration-name order; an active declaration
-  without a WGSL default must be supplied by configuration.
+  V1 exposes no Metal function-constant or runtime-specialization contract. Configuration keys are
+  validated against the module and remain valid when unused by a selected entry point. Before any
+  lowering or pruning, every statically used declaration without an initializer must be supplied.
+  Configured values are then substituted before omitted initializers are evaluated. The semantic
+  program records the union of the selected entries' static typed sets, and each translation request
+  contains the exact static subset for that entry. Later compiler pruning does not redefine this
+  interface.
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
 - The runtime-projection fingerprint covers the storage-buffer-size model, every per-program stage
@@ -239,10 +243,17 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    The compiler-protocol follow-up then fixed the one-entry request/response boundary, relocatable
    virtual-source identity, module-only diagnostic attribution, exact typed override and resource
    checks, vgpu-owned emitted-name domain, and structured expected failures. It deliberately omits
-   broad semantic reflection and ambiguous interface locations from the response. The current
-   resolver still exposes override initializer text rather than evaluated typed defaults, and the
-   C++ prototype still adapts validated JSON to typed arguments instead of implementing the final
-   stdin/EOF codec; both remain C1 gates.
+   broad semantic reflection and ambiguous interface locations from the response. The override
+   materialization follow-up then proved evaluated typed defaults and partial selections through
+   Tint's lowered IR. It validates missing required values over the entry point's static override
+   interface and substitutes module-level configuration before evaluating omitted initializers.
+   Its separately verified pruned set is local evidence, not a replacement for the exact-static
+   semantic and compiler contracts. Valid module configuration unused by one entry remains accepted.
+   The spike's strict typed, finite scalar boundary is a local native contract, not a claim of
+   complete WebGPU input-conversion parity. The public representation of initializer availability
+   remains undecided, and exact-static materializer-to-worker integration remains unproven. The C++
+   compiler-protocol prototype also still adapts validated JSON to typed arguments instead of
+   implementing the final stdin/EOF codec.
 
    The runtime-size follow-up proved sparse slot-indexed packing for multiple runtime storage
    buffers, concrete binding ranges rather than backing-buffer lengths, derived extents, stage-local
@@ -261,8 +272,8 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    Before freezing the dependency or numeric slot profile, build the wrapper from direct Tint
    targets at the macOS 14 baseline with arm64 and x86_64 slices, and pass offline `metal` plus
    `metallib` compilation, authored spans beyond the current module-only diagnostic attribution,
-   evaluated override-default extraction, the final JSON worker codec, deterministic connected
-   translator and artifact output, and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
+   the final JSON worker codec, deterministic connected translator and artifact output, and
+   pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
    (`binding_array`) cardinality, so the alpha rejects all resource binding arrays; the
    sampled-texture writer canary is future evidence only. Keep Naga only as a differential oracle.
 

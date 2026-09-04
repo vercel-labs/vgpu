@@ -9,7 +9,7 @@ the boundaries these gates protect and [decisions](./decisions.md) for unresolve
 | Gate                           | Fixture                                                                                                                                                                                                                                                                                                                                                                                                                  | Exit condition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C0: module and link boundaries | ABI-only, context-only, effect-only, low-level draw, scene-recipe, compute-only, view-integration, and full-runtime release applications                                                                                                                                                                                                                                                                                 | Declared dependency graphs and negative imports pass; public symbol graphs, final link maps, linked frameworks, stripped Mach-O payloads, and packaged resources contain no forbidden feature. If a protocol witness graph retains an unused backend capability, split that Metal implementation before freezing the package graph.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| C1: translation                | Imports, explicit language features, multiple entry points, I/O built-ins and interpolation, evaluated typed override defaults and selections, literal, constant-expression, and override-expression workgroup sizes, external and internal binding slots, shared immediate data, runtime storage-size regions, pipeline-local vertex streams, discriminated Metal interfaces, worker transport, and deliberate failures | Semantic extraction produces the backend-neutral layouts, resolved positive integer workgroup dimensions, and exact active override set before translation. The one-entry Tint worker validates the request, applies the versioned vgpu slot map, and returns only deterministic MSL, the selected entry, validated external slots, effective internal slots and size regions, and resolved compute workgroup dimensions. The semantic and translated `x`, `y`, and `z` values match exactly. Post-generation output determines effective internal data. Sparse multi-buffer size packing uses concrete binding ranges at physical Metal indices inside one shared immediate block. Vertex streams follow the highest occupied vertex-stage shader interval, fit below the projected external ceiling, and are rebound when a pipeline changes that physical mapping. Unsupported WGSL resource binding arrays (`binding_array`) fail before projection. Resolved MSL compiles offline; diagnostics never claim finer provenance than the available source mapping. |
+| C1: translation                | Imports, explicit language features, multiple entry points, I/O built-ins and interpolation, evaluated typed override defaults and selections, literal, constant-expression, and override-expression workgroup sizes, external and internal binding slots, shared immediate data, runtime storage-size regions, pipeline-local vertex streams, discriminated Metal interfaces, worker transport, and deliberate failures | Semantic extraction produces backend-neutral layouts and resolved positive integer workgroup dimensions. It validates required values over each entry's static override interface, substitutes module-level configuration before evaluating omitted initializers, and materializes the canonical union of exact static typed sets. The one-entry Tint worker validates its exact static subset, applies the versioned vgpu slot map, and returns only deterministic MSL, the selected entry, validated external slots, effective internal slots and size regions, and resolved compute workgroup dimensions. The semantic and translated `x`, `y`, and `z` values match exactly. Post-generation output determines effective internal data. Sparse multi-buffer size packing uses concrete binding ranges at physical Metal indices inside one shared immediate block. Vertex streams follow the highest occupied vertex-stage shader interval, fit below the projected external ceiling, and are rebound when a pipeline changes that physical mapping. Unsupported WGSL resource binding arrays (`binding_array`) fail before projection. Resolved MSL compiles offline; diagnostics never claim finer provenance than the available source mapping. |
 | C2: binding ABI                | Scalars, vectors including `vec3`, matrices, fixed and runtime arrays, compact uniform layouts, explicit `@align`/`@size`, strict negative inputs, and f16 edge values                                                                                                                                                                                                                                                   | Tint reflection, Swift, and TypeScript agree on `wgsl-host-shareable-v1` layouts and valid packed bytes; invalid shapes, counts, integer ranges, and extents fail before mutation; f16 matches round-to-nearest-ties-even; Metal readback observes every value at the intrinsic offset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | C3: artifact and SwiftPM       | Generated package in a clean sample project                                                                                                                                                                                                                                                                                                                                                                              | `swift build` and `swift test` need no Node.js after generation; `Bundle.module` loads the single `.metallib`; schema references resolve; semantic workgroup dimensions are resolved positive integers and match the Metal projection exactly; runtime-array layout and binding minima stay distinct; size regions pair canonically with one shared immediate slot and contain no dynamic words or ranges; unknown layout, binding, or vertex-buffer policy models and incompatible semantic, Metal-projection, generated-Swift, binding-layout, or `VGPUABI` integers fail before pipeline creation; storage-size model support is required only for a selected stage with a region; runner incompatibility blocks compare only.                                                                                                                                                                                                                                                                                                                                   |
 | R1: effect parity              | Existing UV-orientation fixture plus a uniform-driven effect                                                                                                                                                                                                                                                                                                                                                             | Top-origin UV, clear, alpha, blend, resize, and readback meet the fixture's declared tolerance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -61,14 +61,14 @@ The translator spike runs every repository WGSL source plus explicit language-fe
 entry-point I/O, `vec3`, matrix, array, override, literal and expression workgroup, and binding-slot
 canaries, including an axis computed from more than one override. Backend-neutral semantic
 extraction first produces layouts, entry interfaces, bindings, resolved workgroup dimensions, and
-the exact active typed override set. Production translation then constructs a deterministic
+the exact static typed override sets after validating the required interface.
+Production translation then constructs a deterministic
 direct user-slot map and candidate internal reservations for one selected entry. The wrapper passes
 that configuration into Tint, then uses the emitted interface and writer result after `Generate` to
 record only the effective internal slots and storage-size regions. Tint's convenience allocator is
-never an ABI. Hard gates are semantic coverage, evaluated default extraction, discriminated Metal
-interface projection, final worker transport, offline Apple compilation, correct binding and
-entry-point metadata, deterministic output, actionable negative diagnostics, and pixel/buffer
-parity.
+never an ABI. Hard gates are semantic coverage, discriminated Metal interface projection, final
+worker transport, offline Apple compilation, correct binding and entry-point metadata,
+deterministic output, actionable negative diagnostics, and pixel/buffer parity.
 
 Tint is the provisional semantic leader. Tint/Dawn accepted all 223 expected-valid shaders and
 created real Metal pipelines for every applicable entry point. Naga 30.0.1 accepted 220: it does
@@ -84,12 +84,12 @@ selected stage, and Metal resource class; active WGSL bindings use canonical `(g
 order, while required internal roles use explicit high-end reservations.
 
 The compiler-protocol follow-up narrowed the production translation boundary to one fully resolved
-entry point. Its request carries virtual-source provenance, exact typed overrides, declared
-features, a vgpu-owned emitted name, direct external slots, and a candidate internal profile. Its
-response deliberately omits broad semantic reflection and interface indices: it returns a
-structured failure or only MSL, the entry identity, validated external slots, effective internal
-slots and size regions, and resolved compute workgroup dimensions. Seven positive and fourteen
-negative native canaries are byte-deterministic across repeated runs.
+entry point. Its request carries virtual-source provenance, the exact static typed override set,
+declared features, a vgpu-owned emitted name, direct external slots, and a candidate internal
+profile. Its response deliberately omits broad semantic reflection and interface indices: it
+returns a structured failure or only MSL, the entry identity, validated external slots, effective
+internal slots and size regions, and resolved compute workgroup dimensions. Seven positive and
+fourteen negative native canaries are byte-deterministic across repeated runs.
 
 Tint WGSL diagnostics currently retain a range in the resolved virtual source and, when a range is
 wholly attributable, the authored module identity. The resolver cannot yet prove an authored line
@@ -97,6 +97,15 @@ or column because its source map has no usable mappings. Inspect, lower, and gen
 no invented location. The production stdin/EOF JSON codec remains open; its contract treats any
 decoded response, including `ok: false`, as handled and reserves nonzero exits for transport,
 decode, or crash failures.
+
+The override-materialization follow-up closed the feasibility question for evaluated defaults and
+partial-selection ordering against the pinned Tint APIs. It validates every module-level
+configuration key and the selected entry's static required interface before pruning, then
+substitutes configured values before evaluating omitted initializers. Its independently verified
+pruned set remains local evidence; semantic v1 and the translation request retain their exact
+static sets. The spike also enforces a strict typed and finite scalar boundary locally; it does not
+claim complete equivalence with WebGPU's staged input conversion. Connecting its materialized
+values to the exact-static request and artifact remains part of the integration gate.
 
 The shared-immediate follow-up reserves one stage-local `immediate-data` binding and places the
 storage-size region at its pipeline-specific byte offset. The wrapper safely configures that
@@ -124,8 +133,8 @@ than public ABI or hardware-support claims.
 
 Do not freeze the source pin or numeric slot profile until the wrapper is built from direct Tint
 targets for macOS 14 with arm64 and x86_64 slices, and offline `metal` plus `metallib`,
-authored spans beyond current module-only provenance, evaluated override-default extraction, a
-discriminated vertex-input/inter-stage/fragment-output projection, the final JSON worker codec,
+authored spans beyond current module-only provenance, a discriminated
+vertex-input/inter-stage/fragment-output projection, the final JSON worker codec,
 deterministic connected translator and artifact output, and pixel/buffer parity pass.
 Semantic v1 cannot represent WGSL resource binding-array (`binding_array`) cardinality, so alpha
 rejects all resource binding arrays.
@@ -133,6 +142,7 @@ The reproducible fixtures live in `experiments/native-metal-spikes/c1-translator
 `experiments/native-metal-spikes/c1-tint-standalone`, and
 `experiments/native-metal-spikes/c1-binding-slots`, and
 `experiments/native-metal-spikes/c1-compiler-protocol`, and
+`experiments/native-metal-spikes/c1-override-defaults`, and
 `experiments/native-metal-spikes/c1-vertex-buffer-slots`, and
 `experiments/native-metal-spikes/c1-runtime-buffer-sizes`.
 
@@ -174,9 +184,12 @@ not payload bits, is the portable assertion.
 `native doctor` must compile and link a minimal shader. Finding `xcrun` or the `metal` executable is
 not sufficient because recent Xcode installations can omit the downloadable Metal toolchain.
 
-Overrides in these fixtures are substituted before translation. Semantic extraction must evaluate
-each WGSL default into the declared type and materialize the exact active set; it cannot forward the
-resolver's raw initializer text. An active override without a default requires a configured value.
+Overrides in these fixtures are substituted before translation. Semantic extraction first validates
+every module-level configured key and requires values for every statically used override without an
+initializer. It then substitutes configured values before Tint evaluates omitted initializers and
+materializes the exact static typed sets for the selected entries; it cannot forward the resolver's
+raw initializer text. Tint may prune dependencies internally after materialization, but that
+post-folding evidence does not redefine the required interface, worker request, or semantic artifact.
 Neither candidate may defer overrides to Metal function constants in v1. Source maps are optional
 evidence: a translator that cannot produce a standard WGSL-to-MSL map must identify generated MSL
 clearly rather than fabricate one. Module attribution alone never authorizes an authored line or
