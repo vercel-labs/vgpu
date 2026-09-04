@@ -18,7 +18,10 @@ For example, [`all-scalars.wgsl`](./canaries/all-scalars.wgsl) declares `BASE = 
 materializes `DEP = 10`. Copying the previously reflected default would incorrectly produce `8`.
 
 The prototype deliberately emits a local evidence format. It does not decide the public contract
-for initializer presence or defaults, and this spike does not change any schema or documentation.
+for initializer presence or defaults, and this spike does not change any public schema. The format
+keeps two views with different jobs: `staticOverrides` is the exact Inspector-authorized interface
+that feeds semantic artifacts and compiler requests, while `overrides` is the post-configuration,
+post-folding closure retained as diagnostic evidence.
 
 ## Materialization procedure
 
@@ -28,9 +31,9 @@ initializer presence; `Inspector::GetEntryPoint()` supplies the statically used 
 Inspector authorizes module identities and is the required-value validation boundary; lowered IR
 decides only the effective evidence closure after folding and configuration. Every IR path begins
 with `ProgramToLoweredIR()`, the same core-dialect boundary used by Tint's compiler pipeline. The
-materializer has three roles:
+materializer has four roles:
 
-1. The **selected pass** accepts and converts every module-level explicit input through Tint's
+1. The **effective selected pass** accepts and converts every module-level explicit input through Tint's
    constant evaluator, including valid constants not statically used by the selected entry point.
    Before any IR pruning, it requires an API value for every statically used declaration without an
    initializer. It then calls `Override::SetInitializer()` before `SingleEntryPoint`. This
@@ -39,14 +42,20 @@ materializer has three roles:
    adds one temporary `var<private>` probe initialized from each retained override result.
    `SubstituteOverrides` evaluates the whole selected graph in WGSL order, including short-circuit
    control flow. Each probe initializer becomes a typed IR constant, which is the reported selected
-   value.
-2. The **default role** repeats on a fresh, unconfigured lowered module for each reported override.
-   After `SingleEntryPoint`, Tint's `ReferencedModuleDecls::AddToBlock()` isolates exactly that
-   override and its transitive initializer graph; functions and unrelated root declarations are
+   value in `overrides`.
+2. The **static selected pass** starts from a fresh lowered module, recreates every explicit input
+   from its normalized typed bits, and takes each override reflected for the selected entry as a
+   root. `ReferencedModuleDecls::AddToBlock()` forms their union after configured initializer cuts;
+   functions, inactive declarations, and orphaned initializer graphs are removed. One probe per
+   retained override plus `SubstituteOverrides` yields `staticOverrides`. The retained IDs must
+   equal Inspector's static set exactly, and the effective view must be its bit-identical subset.
+3. The **default role** repeats on a fresh, unconfigured lowered module for each static override.
+   `ReferencedModuleDecls::AddToBlock()` isolates exactly that override and its transitive
+   initializer graph without entry-point pruning; functions and unrelated root declarations are
    removed. A single probe plus `SubstituteOverrides` yields the declared default. A failure in
    that isolated graph is recorded as `requires-configuration`, while an absent initializer stays
    distinguishable as `absent`.
-3. The **verification pass** repeats the explicit initializer cuts, runs `SingleEntryPoint`, and
+4. The **verification pass** repeats the explicit initializer cuts, runs `SingleEntryPoint`, and
    requires its exact retained override-ID set to match the materialized selected map. It then
    calls `SubstituteOverrides` with that complete map. The gate verifies that no
    `core::ir::Override` remains and that compute workgroup dimensions are constants. This pruning
@@ -65,8 +74,8 @@ instructions and their now-unused initializer graph.
 - `DEP = REQUIRED + 1` has an initializer but no all-omitted value, so its default evaluation is
   `requires-configuration` and configuring `REQUIRED = 4` selects `DEP = 5`;
 - configuring only `DEP = 9` still fails with `MISSING_REQUIRED`; configuring both `DEP` and
-  `REQUIRED` succeeds, skips `DEP`'s initializer, and may canonicalize the effective evidence down
-  to `DEP`;
+  `REQUIRED` succeeds, skips `DEP`'s initializer, retains both in `staticOverrides`, and
+  canonicalizes the effective `overrides` evidence down to `DEP`;
 - selecting either unrelated entry point removes the inactive required override before
   substitution, so it needs no configuration. A valid module-level config for a declaration not
   statically used by that entry point is nevertheless accepted and omitted from canonical evidence.
@@ -80,8 +89,9 @@ Contextual unavailability is not a final validity decision.
 [`invalid-initializer.wgsl`](./canaries/invalid-initializer.wgsl) declares `X = 0` and `A = 4 / X`.
 The empty-config evaluation of `A` is unavailable, but configuring `X = 2` repairs the initializer
 and selects `A = 2`. Configuring `A = 7` directly bypasses its initializer, cuts initialized `X`
-from the effective closure, and succeeds with a workgroup size of `7`. With neither override
-configured, the selected pass fails with `VGPU-C1-OVERRIDE-INVALID-INITIALIZER`. Unlike
+from the effective closure, retains `A = 7` and `X = 0` in the static interface, and succeeds with
+a workgroup size of `7`. With neither override configured, the selected pass fails with
+`VGPU-C1-OVERRIDE-INVALID-INITIALIZER`. Unlike
 `REQUIRED`, `X` has a default, so the static required-value check does not reject the direct `A`
 selection. Evaluating every initializer before applying configuration would incorrectly reject it.
 
@@ -100,8 +110,9 @@ evaluating override initializers one at a time.
 still invalid because `REQUIRED` is statically used and has no initializer. Supplying either value
 for `REQUIRED` succeeds and produces identical effective evidence with `FOLDED = false`. This is
 why the static required set and post-folding evidence set have different jobs, and why Inspector and
-post-folding IR sets must not be compared for exact equality. Exact set equality is reserved for IR
-passes with identical preprocessing.
+post-folding IR sets must not be compared for exact equality. The static view still retains the
+chosen `REQUIRED` value, so changing it changes normalized semantics even when effective evidence
+and MSL are identical. Exact set equality is reserved for IR passes with identical preprocessing.
 
 [`configured-condition.wgsl`](./canaries/configured-condition.wgsl) makes the left-hand side another
 override. Configuring only `CONDITION = false` still cannot waive the statically required
@@ -146,7 +157,9 @@ At revision `8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca`:
   and surface as an internal Tint conversion error.
 
 The full effective map built from the reported selected values is checked against the exact
-post-configuration `SingleEntryPoint` ID set and accepted by `SubstituteOverrides`.
+post-configuration `SingleEntryPoint` ID set and accepted by `SubstituteOverrides`. Independently,
+the static map is checked against Inspector's exact entry set, materialized in one isolated Tint
+pass, and required to contain the effective map with bit-identical values.
 For `BASE` and `DEP`, the resolved workgroup size independently exposes the substituted result. For
 floating-point, boolean, and signed-integer selections, this spike proves Tint constant-evaluator
 conversion, constant bits captured after whole-graph substitution, and successful independent

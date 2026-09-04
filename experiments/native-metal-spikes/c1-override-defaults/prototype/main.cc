@@ -775,20 +775,10 @@ void WriteTypedValue(std::ostream &output, const TypedValue &value) {
   output << '}';
 }
 
-void WriteSuccess(
-    const Arguments &arguments, tint::inspector::PipelineStage stage,
-    const std::vector<MaterializedOverride> &materialized,
-    const std::optional<std::array<WorkgroupAxisEvidence, 3>> &workgroup_axes) {
-  std::ostringstream output;
-  output << "{\n"
-         << "  \"schemaVersion\": 1,\n"
-         << "  \"contractId\": " << JsonString(kContractId) << ",\n"
-         << "  \"ok\": true,\n"
-         << "  \"upstreamRevision\": " << JsonString(kTintRevision) << ",\n"
-         << "  \"sourceName\": " << JsonString(arguments.source_name) << ",\n"
-         << "  \"entryPoint\": {\"name\": " << JsonString(arguments.entry_point)
-         << ", \"stage\": " << JsonString(PipelineStageName(stage)) << "},\n"
-         << "  \"overrides\": [";
+void WriteMaterializedOverrides(
+    std::ostream &output,
+    const std::vector<MaterializedOverride> &materialized) {
+  output << '[';
   if (!materialized.empty()) {
     output << '\n';
   }
@@ -818,12 +808,34 @@ void WriteSuccess(
     WriteTypedValue(output, item.selected);
     output << '}' << (index + 1 == materialized.size() ? "\n" : ",\n");
   }
-  output << "  ],\n"
+  output << "  ]";
+}
+
+void WriteSuccess(
+    const Arguments &arguments, tint::inspector::PipelineStage stage,
+    const std::vector<MaterializedOverride> &static_materialized,
+    const std::vector<MaterializedOverride> &effective_materialized,
+    const std::optional<std::array<WorkgroupAxisEvidence, 3>> &workgroup_axes) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schemaVersion\": 1,\n"
+         << "  \"contractId\": " << JsonString(kContractId) << ",\n"
+         << "  \"ok\": true,\n"
+         << "  \"upstreamRevision\": " << JsonString(kTintRevision) << ",\n"
+         << "  \"sourceName\": " << JsonString(arguments.source_name) << ",\n"
+         << "  \"entryPoint\": {\"name\": " << JsonString(arguments.entry_point)
+         << ", \"stage\": " << JsonString(PipelineStageName(stage)) << "},\n"
+         << "  \"staticOverrides\": ";
+  WriteMaterializedOverrides(output, static_materialized);
+  output << ",\n  \"overrides\": ";
+  WriteMaterializedOverrides(output, effective_materialized);
+  output << ",\n"
          << "  \"verification\": {\"singleEntryPoint\": true, "
             "\"substituteOverrides\": true, "
             "\"fullActiveMapAccepted\": true, "
-            "\"verifiedOverrideCount\": "
-         << materialized.size();
+            "\"exactStaticOverrideCount\": "
+         << static_materialized.size() << ", "
+         << "\"verifiedOverrideCount\": " << effective_materialized.size();
   if (workgroup_axes) {
     output << ", \"workgroupSize\": [" << (*workgroup_axes)[0].resolved << ", "
            << (*workgroup_axes)[1].resolved << ", "
@@ -1028,6 +1040,11 @@ int Run(int argc, char **argv) {
     static_cast<void>(id);
     inspected_active.push_back(reflected);
   }
+  auto static_active = inspected_active;
+  std::sort(static_active.begin(), static_active.end(),
+            [](const ReflectedOverride &left, const ReflectedOverride &right) {
+              return left.name < right.name;
+            });
 
   // Pipeline-overridable constants without initializers are required by the
   // statically active entry-point interface. Validate them before any IR
@@ -1250,12 +1267,178 @@ int Run(int argc, char **argv) {
     }
   }
 
-  // Evaluate declared defaults on an unconfigured, entry-scoped IR. A failed
-  // default remains unavailable: a direct selection may legally bypass that
-  // initializer. The selected pass above is the validity oracle for omitted
-  // overrides.
+  // Materialize the exact static entry-point interface separately from the
+  // effective closure above. Every reflected static override is a root of the
+  // retained declaration union, so configured initializer cuts may remove
+  // dependency edges without removing values required by the compiler request
+  // or semantic artifact.
+  auto static_ir_result = tint::wgsl::reader::ProgramToLoweredIR(program);
+  if (static_ir_result != tint::Success) {
+    WriteFailure(Error("VGPU-C1-OVERRIDE-IR", "materialize",
+                       static_ir_result.Failure().reason));
+    return 1;
+  }
+  auto &static_ir = static_ir_result.Get();
+  std::map<uint16_t, tint::core::ir::Override *> static_ir_overrides;
+  internal_error = {};
+  if (!CrossCheckIRSubset(static_ir, inspected_all, static_ir_overrides,
+                          internal_error) ||
+      static_ir_overrides.size() != all_by_id.size()) {
+    if (internal_error.code.empty()) {
+      internal_error =
+          Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                "Tint IR omitted a module override reflected by Inspector");
+    }
+    WriteFailure(internal_error);
+    return 1;
+  }
+  for (const auto &[id, reflected] : active_by_id) {
+    static_cast<void>(reflected);
+    if (!static_ir_overrides.contains(id)) {
+      WriteFailure(Error(
+          "VGPU-C1-OVERRIDE-INTERNAL", "internal",
+          "Tint IR omitted a static override reflected for the entry point"));
+      return 1;
+    }
+  }
+
+  tint::core::ir::Builder static_builder(static_ir);
+  for (const auto &[id, value] : normalized_selections) {
+    auto *constant = MakeIRConstant(static_builder, value);
+    if (constant == nullptr) {
+      WriteFailure(Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                         "failed to recreate a typed static selection"));
+      return 1;
+    }
+    static_ir_overrides.at(id)->SetInitializer(constant);
+  }
+
+  tint::core::ir::ReferencedModuleDecls<tint::core::ir::Module>
+      static_referenced_declarations(static_ir);
+  tint::core::ir::ReferencedModuleDecls<tint::core::ir::Module>::DeclSet
+      static_closure;
+  for (const auto &[id, reflected] : active_by_id) {
+    static_cast<void>(reflected);
+    auto *target = static_ir_overrides.at(id);
+    static_referenced_declarations.AddToBlock(static_closure, target);
+    if (!static_closure.Contains(target)) {
+      WriteFailure(Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                         "static declaration closure omitted its root"));
+      return 1;
+    }
+  }
+
+  std::vector<tint::core::ir::Function *> static_functions;
+  for (auto *function : static_ir.functions) {
+    static_functions.push_back(function);
+  }
+  for (auto *function : static_functions) {
+    static_ir.Destroy(function);
+  }
+  std::vector<tint::core::ir::Instruction *> static_root_instructions;
+  for (auto *instruction : *static_ir.root_block) {
+    static_root_instructions.push_back(instruction);
+  }
+  for (auto instruction = static_root_instructions.rbegin();
+       instruction != static_root_instructions.rend(); ++instruction) {
+    if (!static_closure.Contains(*instruction)) {
+      (*instruction)->Destroy();
+    }
+  }
+
+  internal_error = {};
+  const auto retained_static_overrides =
+      CollectIROverrides(static_ir, internal_error);
+  if (!internal_error.code.empty()) {
+    WriteFailure(internal_error);
+    return 1;
+  }
+  std::set<uint16_t> static_ids;
+  for (const auto &[id, reflected] : active_by_id) {
+    static_cast<void>(reflected);
+    static_ids.insert(id);
+  }
+  std::set<uint16_t> retained_static_ids;
+  for (const auto &[id, item] : retained_static_overrides) {
+    const auto reflected = active_by_id.find(id);
+    if (reflected == active_by_id.end() ||
+        static_ir.NameOf(item).NameView() != reflected->second.name ||
+        IRType(item->Result()->Type()) != reflected->second.type) {
+      WriteFailure(Error(
+          "VGPU-C1-OVERRIDE-INTERNAL", "internal",
+          "static declaration closure disagrees with Inspector reflection"));
+      return 1;
+    }
+    retained_static_ids.insert(id);
+  }
+  if (retained_static_ids != static_ids) {
+    WriteFailure(Error(
+        "VGPU-C1-OVERRIDE-INTERNAL", "internal",
+        "static declaration closure is not the exact reflected interface"));
+    return 1;
+  }
+
+  internal_error = {};
+  const auto static_probes =
+      AddOverrideProbes(static_ir, retained_static_overrides, internal_error);
+  if (!internal_error.code.empty()) {
+    WriteFailure(internal_error);
+    return 1;
+  }
+  tint::SubstituteOverridesConfig static_substitution;
+  const auto static_substituted =
+      tint::core::ir::transform::SubstituteOverrides(static_ir,
+                                                     static_substitution);
+  if (static_substituted != tint::Success) {
+    WriteFailure(Error("VGPU-C1-OVERRIDE-INVALID-INITIALIZER", "materialize",
+                       "Tint could not materialize the static overrides"));
+    return 1;
+  }
+  internal_error = {};
+  auto static_probe_values = ReadOverrideProbes(static_probes, internal_error);
+  if (!static_probe_values) {
+    WriteFailure(internal_error);
+    return 1;
+  }
+  if (static_probe_values->size() != static_ids.size()) {
+    WriteFailure(Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                       "static override probes produced an incomplete map"));
+    return 1;
+  }
+  for (const auto &reflected : static_active) {
+    const auto selected = static_probe_values->find(reflected.id);
+    if (selected == static_probe_values->end() ||
+        selected->second.type != reflected.type) {
+      WriteFailure(Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                         "static override probe has the wrong identity"));
+      return 1;
+    }
+    const auto configured = normalized_selections.find(reflected.id);
+    if (configured != normalized_selections.end() &&
+        !SameTypedValue(configured->second, selected->second)) {
+      WriteFailure(
+          Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                "static override probe disagrees with Tint input conversion"));
+      return 1;
+    }
+  }
+  for (const auto &[id, value] : selected_values) {
+    const auto static_value = static_probe_values->find(id);
+    if (static_value == static_probe_values->end() ||
+        !SameTypedValue(value, static_value->second)) {
+      WriteFailure(
+          Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                "effective and static selected override values disagree"));
+      return 1;
+    }
+  }
+
+  // Evaluate declared defaults on a fresh, unconfigured IR isolated to one
+  // static override at a time. A failed default remains unavailable: a direct
+  // selection may legally bypass that initializer. The selected passes above
+  // are the validity oracle for omitted overrides.
   std::map<uint16_t, DefaultEvaluation> defaults;
-  for (const auto &reflected : active) {
+  for (const auto &reflected : static_active) {
     if (!reflected.has_initializer) {
       defaults.emplace(reflected.id,
                        DefaultEvaluation{.status = DefaultStatus::kAbsent});
@@ -1268,17 +1451,16 @@ int Run(int argc, char **argv) {
       return 1;
     }
     auto &default_ir = default_ir_result.Get();
-    auto default_single_entry = tint::core::ir::transform::SingleEntryPoint(
-        default_ir, arguments.entry_point);
-    if (default_single_entry != tint::Success) {
-      WriteFailure(Error("VGPU-C1-OVERRIDE-SINGLE-ENTRY", "materialize",
-                         default_single_entry.Failure().reason));
-      return 1;
-    }
     std::map<uint16_t, tint::core::ir::Override *> default_ir_overrides;
     internal_error = {};
-    if (!CrossCheckIRSubset(default_ir, inspected_active, default_ir_overrides,
-                            internal_error)) {
+    if (!CrossCheckIRSubset(default_ir, inspected_all, default_ir_overrides,
+                            internal_error) ||
+        default_ir_overrides.size() != all_by_id.size()) {
+      if (internal_error.code.empty()) {
+        internal_error =
+            Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
+                  "default evaluation IR omitted an Inspector override");
+      }
       WriteFailure(internal_error);
       return 1;
     }
@@ -1286,7 +1468,7 @@ int Run(int argc, char **argv) {
     if (target == default_ir_overrides.end() ||
         target->second->Initializer() == nullptr) {
       WriteFailure(Error("VGPU-C1-OVERRIDE-INTERNAL", "internal",
-                         "default pass lost an effective initializer"));
+                         "default pass lost a reflected initializer"));
       return 1;
     }
     tint::core::ir::ReferencedModuleDecls<tint::core::ir::Module>
@@ -1363,6 +1545,15 @@ int Run(int argc, char **argv) {
         .reflected = reflected,
         .default_evaluation = defaults.at(reflected.id),
         .selected = selected_values.at(reflected.id),
+    });
+  }
+  std::vector<MaterializedOverride> static_materialized;
+  static_materialized.reserve(static_active.size());
+  for (const auto &reflected : static_active) {
+    static_materialized.push_back(MaterializedOverride{
+        .reflected = reflected,
+        .default_evaluation = defaults.at(reflected.id),
+        .selected = static_probe_values->at(reflected.id),
     });
   }
 
@@ -1507,7 +1698,8 @@ int Run(int argc, char **argv) {
     return 1;
   }
 
-  WriteSuccess(arguments, entry.stage, materialized, workgroup_axes);
+  WriteSuccess(arguments, entry.stage, static_materialized, materialized,
+               workgroup_axes);
   return 0;
 }
 

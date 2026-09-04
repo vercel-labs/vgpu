@@ -414,6 +414,14 @@ function byName(result, name) {
   return item;
 }
 
+function staticByName(result, name) {
+  const item = result.staticOverrides.find(
+    (candidate) => candidate.name === name
+  );
+  assert(item, `result omits static override ${name}`);
+  return item;
+}
+
 function assertNames(result, expected, id) {
   same(
     result.overrides.map(({ name }) => name),
@@ -422,14 +430,48 @@ function assertNames(result, expected, id) {
   );
 }
 
+function assertStaticNames(result, expected, id) {
+  same(
+    result.staticOverrides.map(({ name }) => name),
+    expected,
+    `${id} static override interface or canonical ordering is wrong`
+  );
+}
+
 function assertSuccess(run, id) {
   assert(run.result.ok === true, `${id} unexpectedly failed`);
   assert(
+    Array.isArray(run.result.staticOverrides) &&
+      Array.isArray(run.result.overrides),
+    `${id} omitted an override view`
+  );
+  assert(
     run.result.verification?.singleEntryPoint === true &&
       run.result.verification?.substituteOverrides === true &&
-      run.result.verification?.fullActiveMapAccepted === true,
+      run.result.verification?.fullActiveMapAccepted === true &&
+      run.result.verification?.exactStaticOverrideCount ===
+        run.result.staticOverrides.length &&
+      run.result.verification?.verifiedOverrideCount ===
+        run.result.overrides.length,
     `${id} omitted full-map substitution evidence`
   );
+  const staticNames = run.result.staticOverrides.map(({ name }) => name);
+  same(
+    staticNames,
+    [...staticNames].sort(),
+    `${id} static override order is not canonical`
+  );
+  assert(
+    new Set(staticNames).size === staticNames.length,
+    `${id} static override names are not unique`
+  );
+  for (const item of run.result.overrides) {
+    same(
+      staticByName(run.result, item.name),
+      item,
+      `${id} effective override differs from its static value`
+    );
+  }
   return run.result;
 }
 
@@ -526,6 +568,7 @@ function runTintGate(options, scratch) {
     "SIGNED",
   ];
   assertNames(defaults, allNames, "all-scalars/defaults");
+  assertStaticNames(defaults, allNames, "all-scalars/defaults");
   const expectedTypes = {
     BASE: "u32",
     DEP: "u32",
@@ -707,6 +750,7 @@ function runTintGate(options, scratch) {
     "required/active"
   );
   assertNames(required, ["DEP", "REQUIRED"], "required/active");
+  assertStaticNames(required, ["DEP", "REQUIRED"], "required/active");
   assert(
     byName(required, "DEP").defaultEvaluation.status === "unavailable" &&
       byName(required, "DEP").defaultEvaluation.reason ===
@@ -757,9 +801,16 @@ function runTintGate(options, scratch) {
     ["DEP"],
     "required/configured-dependent-with-required"
   );
+  assertStaticNames(
+    configuredDependent,
+    ["DEP", "REQUIRED"],
+    "required/configured-dependent-with-required"
+  );
   assert(
     byName(configuredDependent, "DEP").defaultEvaluation.status ===
-      "unavailable" && byName(configuredDependent, "DEP").selected.value === 9,
+      "unavailable" &&
+      byName(configuredDependent, "DEP").selected.value === 9 &&
+      staticByName(configuredDependent, "REQUIRED").selected.value === 4,
     "direct DEP selection did not bypass only its own initializer"
   );
   assertWorkgroup(
@@ -781,9 +832,14 @@ function runTintGate(options, scratch) {
     "required/redundant-upstream-config"
   );
   same(
-    redundantRequired,
-    configuredDependent,
+    redundantRequired.overrides,
+    configuredDependent.overrides,
     "redundant upstream configuration changed effective evidence"
+  );
+  assert(
+    staticByName(redundantRequired, "REQUIRED").selected.value === 7 &&
+      staticByName(configuredDependent, "REQUIRED").selected.value === 4,
+    "distinct static selections were incorrectly canonicalized"
   );
 
   for (const [entryPoint, name, value] of [
@@ -799,6 +855,7 @@ function runTintGate(options, scratch) {
       `required/inactive-${entryPoint}`
     );
     assertNames(subset, [name], `required/inactive-${entryPoint}`);
+    assertStaticNames(subset, [name], `required/inactive-${entryPoint}`);
     assert(
       byName(subset, name).selected.value === value,
       `${name} default drift`
@@ -879,6 +936,11 @@ function runTintGate(options, scratch) {
     ["FOLDED"],
     "folding/short-circuit-configured-required"
   );
+  assertStaticNames(
+    shortCircuit,
+    ["FOLDED", "REQUIRED"],
+    "folding/short-circuit-configured-required"
+  );
   assert(
     byName(shortCircuit, "FOLDED").defaultEvaluation.value.value === false &&
       byName(shortCircuit, "FOLDED").selected.value === false,
@@ -900,9 +962,14 @@ function runTintGate(options, scratch) {
     "folding/short-circuit-alternative-required"
   );
   same(
-    alternativeShortCircuitRequired,
-    shortCircuit,
+    alternativeShortCircuitRequired.overrides,
+    shortCircuit.overrides,
     "folded required value changed effective evidence"
+  );
+  assert(
+    staticByName(alternativeShortCircuitRequired, "REQUIRED").selected.value ===
+      false && staticByName(shortCircuit, "REQUIRED").selected.value === true,
+    "folded static selections were incorrectly canonicalized"
   );
 
   const configuredConditionMissingRequired = execute({
@@ -997,6 +1064,11 @@ function runTintGate(options, scratch) {
     "evaluation/select-direct"
   );
   assertNames(selectedBuiltinDirect, ["N"], "evaluation/select-direct");
+  assertStaticNames(
+    selectedBuiltinDirect,
+    ["A", "N"],
+    "evaluation/select-direct"
+  );
   assert(
     byName(selectedBuiltinDirect, "N").defaultEvaluation.value.value === 2 &&
       byName(selectedBuiltinDirect, "N").selected.value === 3,
@@ -1128,12 +1200,18 @@ function runTintGate(options, scratch) {
     ["A"],
     "initializer/direct-selection-cuts-initializer"
   );
+  assertStaticNames(
+    bypassedInitializer,
+    ["A", "X"],
+    "initializer/direct-selection-cuts-initializer"
+  );
   assert(
     byName(bypassedInitializer, "A").defaultEvaluation.status ===
       "unavailable" &&
       byName(bypassedInitializer, "A").defaultEvaluation.reason ===
         "requires-configuration" &&
-      byName(bypassedInitializer, "A").selected.value === 7,
+      byName(bypassedInitializer, "A").selected.value === 7 &&
+      staticByName(bypassedInitializer, "X").selected.value === 0,
     "direct A selection did not bypass its invalid initializer"
   );
   assertWorkgroup(
@@ -1152,9 +1230,14 @@ function runTintGate(options, scratch) {
     "initializer/redundant-upstream-config"
   );
   same(
-    redundantUpstream,
-    bypassedInitializer,
+    redundantUpstream.overrides,
+    bypassedInitializer.overrides,
     "redundant initializer dependency changed effective evidence"
+  );
+  assert(
+    staticByName(redundantUpstream, "X").selected.value === 2 &&
+      staticByName(bypassedInitializer, "X").selected.value === 0,
+    "initializer dependency selections were lost from the static interface"
   );
 
   const negativeCases = [
