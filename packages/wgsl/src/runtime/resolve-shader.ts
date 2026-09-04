@@ -13,6 +13,7 @@ import { reservedIdentifierDiagnostics } from "./reserved-identifiers.ts";
 import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
 import { wgslError } from "./errors.ts";
+import { parseDeclarations } from "./reflect-declarations.ts";
 import { scan } from "./scanner.ts";
 import { releaseValidationDevice, retainValidationDevice } from "./validation-device.ts";
 import { resolveDefaultValidateMode, validateWGSL, type ValidateMode, type ValidationOutcome } from "./validation.ts";
@@ -55,7 +56,24 @@ export interface ResolveOptions {
    */
   readonly minify?: MinifyOption;
 }
-export interface WGSLModule { readonly path: string; readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[]; readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[]; readonly bytes: number; readonly hash8: string }
+/** A 1-based location in authored WGSL. Columns count JavaScript UTF-16 code units, not UTF-8 bytes, Unicode scalar values, or grapheme clusters. */
+export interface WGSLSourcePosition { readonly line: number; readonly column: number }
+/** The exact authored declaration range. `end` is exclusive. */
+export interface WGSLDeclarationSpan { readonly start: WGSLSourcePosition; readonly end: WGSLSourcePosition }
+export interface WGSLEntryPointDeclaration {
+  readonly name: string;
+  readonly stage: EntryPointInfo["stage"];
+  /** Starts at the first attribute or `export` token and ends immediately after the function body's closing brace. */
+  readonly span: WGSLDeclarationSpan;
+}
+export interface WGSLModule {
+  readonly path: string;
+  readonly entryPointDeclarations: readonly WGSLEntryPointDeclaration[];
+  readonly exports: readonly { readonly name: string; readonly localName: string; readonly sourcePath: string }[];
+  readonly imports: readonly { readonly from: string; readonly bindings: readonly { readonly local: string; readonly imported: string }[] }[];
+  readonly bytes: number;
+  readonly hash8: string;
+}
 export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
 export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection; readonly validation: { readonly mode: ValidateMode; readonly attempted: boolean; readonly ok: boolean; readonly skipped?: { readonly code: string; readonly message: string; readonly fix?: string } } }
@@ -169,8 +187,8 @@ function assertNoJsVisibleDuplicates(modules: readonly MangleModule[]): void {
   const overrides = new Map<string, string>(), entries = new Map<string, string>();
   for (const module of modules) for (const local of module.parsed.locals) {
     if (local.kind === "override") duplicate(overrides, local.name, module.path, "VGPU-WGSL-OVERRIDE-DUP");
-    if (entryKind(module, local.name, local.kind) === "entry") duplicate(entries, local.name, module.path, "VGPU-WGSL-ENTRYPOINT-DUP");
   }
+  for (const module of modules) for (const entry of parseDeclarations(module).entries) duplicate(entries, entry.name, module.path, "VGPU-WGSL-ENTRYPOINT-DUP");
 }
 function duplicate(map: Map<string, string>, name: string, path: string, code: string): void { const previous = map.get(name); if (previous) throw wgslError(code, `${name} appears in ${previous} and ${path}`); map.set(name, path); }
 function entryKind(module: MangleModule, name: string, kind: string): string { return isEntryPoint(module, name) ? "entry" : kind; }

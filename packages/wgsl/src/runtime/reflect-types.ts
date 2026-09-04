@@ -163,7 +163,12 @@ export type ParsedStructMember = StructMemberInfo & { readonly attrs: readonly A
 export type ParsedStruct = Omit<StructInfo, "members"> & { readonly path: string; readonly originalName: string; readonly members: readonly ParsedStructMember[] };
 export type ParsedAlias = AliasInfo & { readonly path: string; readonly originalName: string };
 export type EntryPointParam = { readonly name: string; readonly attrs: readonly Attr[]; readonly type: WGSLType };
-export type ParsedEntryPoint = EntryPointInfo & { readonly path: string; readonly params: readonly EntryPointParam[] };
+export type ParsedEntryPoint = EntryPointInfo & {
+  readonly path: string;
+  readonly params: readonly EntryPointParam[];
+  readonly declarationStartToken: Token;
+  readonly declarationEndToken: Token;
+};
 
 export type ParsedDecls = {
   readonly structs: readonly ParsedStruct[];
@@ -223,4 +228,3 @@ export interface ParseOverrideResult {
   readonly item?: OverrideInfo;
   readonly next: number;
 }
-
