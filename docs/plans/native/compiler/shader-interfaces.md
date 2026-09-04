@@ -195,12 +195,12 @@ runtime fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without
 
 These results do not expand the supported hardware matrix. The live gate ran only on Apple silicon;
 an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. All twelve
-isolated interface outputs now compile offline for `air64-apple-macos14.0` and link into a
-`.metallib`. Fixed-size singular-resource extraction and semantic assembly now pass. Backend slot
-allocation, exact per-entry compiler-request projection and translation for that assembled resource
-graph, override extraction and assembly, the broader semantic-extractor-to-artifact integration,
+isolated interface outputs compile offline for `air64-apple-macos14.0` and link into a `.metallib`.
+The connected fixed-size singular-resource render pair now passes semantic assembly, nominal slot
+allocation, exact per-entry projection and translation, two AIR compilations, and one metallib link.
+Override extraction and assembly, broader resource shapes, effective program-projection assembly,
 the exact direct worker's full corpus through that offline boundary, a real C1-connected artifact,
-and pixel/buffer parity remain open.
+resource runtime binding, and pixel/buffer parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

@@ -107,23 +107,26 @@ dimensions. A fourth multi-module draw fixture exercises five fixed singular res
 `b1`, `b2`, `b3`, and `b10`, exact stage subsets, one shared binding, one filtering sampling pair,
 and derived visibility. Its seven extracted types become eight semantic types after interface
 interning, its six layouts remain exact, and its buffer minimum sizes are 8, 24, and 16 bytes. The
-four fixtures produce schema-valid `semantic-v1` programs and fixed program fingerprints. Only the
-three resource-free fixtures produce compiler requests, for five requests total; resourceful
-projection fails closed until slot allocation.
+four fixtures produce schema-valid `semantic-v1` programs and fixed program fingerprints. Four
+nominal program allocations produce seven compiler requests: five resource-free requests plus the
+resource render pair.
 
 The static matrix covers five nominal-association failures, five declaration failures including a
 cross-module span mutation, three resolver-symbol failures, three resolver-resource-join failures,
 two retained-resolver-snapshot checks, one unsupported-profile failure, one broken render link,
-five fingerprint checks, twelve Swift-name failures, and five projection failures. Resolver
+five fingerprint checks, twelve Swift-name failures, one stage-isolation check, four slot-allocation
+failures, and two projection failures. Resolver
 declaration v2 evidence retains exact binding, struct, and member symbols as well as entry spans.
 Assembly preserves authored Swift spellings and rejects noncanonical and Swift 6 reserved names,
 the `_vgpu` helper namespace, generated module namespaces in nominal positions, and
 case-insensitive collisions within one binding set or one struct's members. Final aggregation owns
 collisions created by local/shared type placement and generated program API names. Neither stage
-recases, suffixes, or adds backticks. Pre-translation failures launch no translator. With the accepted arm64 worker, two
-deterministic native extractions per fixture add eight one-shot invocations and must assemble to the
-same reviewed semantic objects and fingerprints. The resource graph must also reproject exactly to
-its authenticated extraction.
+recases, suffixes, or adds backticks. Pre-translation failures launch no translator. With the
+accepted arm64 worker, two deterministic native extractions per fixture add eight one-shot
+invocations and must assemble to the same reviewed semantic objects and fingerprints. The resource
+graph must also reproject exactly to its authenticated extraction. Its two entries then run twice
+each through translation; exact request, response, and MSL hashes are frozen before both sources
+compile and link offline.
 
 ## Integrated full-screen Metal canary
 
@@ -162,9 +165,10 @@ initial closure must contain:
 
 Expected semantic objects, fingerprints, and request hashes remain reviewed oracles rather than
 being regenerated from translator responses. Actual compiler requests must be derived from the
-authenticated assembly. Fixed singular-resource extraction and assembly now establish the
-compiler-owned resource graph and adapter-owned presentation. Overrides, slot allocation and
-resource compiler projection, corpus, and packaging fixtures remain to be connected.
+authenticated assembly. Fixed singular-resource extraction, assembly, nominal slot allocation,
+exact per-entry projection, translation, and offline compilation now establish the connected
+build-time path. Overrides, broader resource shapes, runtime resource binding, corpus, and
+packaging fixtures remain to be connected.
 
 ## Repository corpus
 

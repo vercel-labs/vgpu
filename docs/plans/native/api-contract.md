@@ -182,10 +182,13 @@ and the exact-static materializer-to-worker boundary have passed their C1 gates.
 extraction wire now also passes against the source-built worker. Its four locked requests are a
 successful render interface, a successful compute interface with literal workgroup dimensions, a
 successful fixed-resource program union, and a fail-closed active-override case. The connected
-bridge assembles the fixed-size singular resources into semantic v1 with exact entry subsets,
-sampling pairs, visibility, authored presentation names, and reachable types and layouts. Backend
-slot allocation, per-entry compiler-request projection and translation for that assembled graph,
-exact-static override assembly, and the connected artifact remain deterministic integration gates.
+bridge carries the fixed-size singular resources through semantic v1, nominal program-level slot
+allocation, exact per-entry compiler requests, native translation, and offline Metal linking. It
+preserves entry subsets, sampling pairs, visibility, authored presentation names, and reachable
+types/layouts; its allocation is derived only from that authenticated graph and verified
+independently. Exact-static override assembly, broader resource shapes, effective program-projection
+assembly, runtime resource binding, and the connected artifact remain deterministic integration
+gates.
 
 The Metal projection records:
 
@@ -223,13 +226,15 @@ complete contract and canonical validation rules are in
 [Native shader-interface contract](./compiler/shader-interfaces.md).
 
 The production native compiler constructs the user binding map and configures candidate internal
-reservations before translation, then passes that configuration to Tint. For every selected entry
-whose reflection contains a runtime-sized storage type, it configures the shared immediate binding
-and size-region offset before Metal lowering; this is fail-closed writer input, not proof that either
-is part of the emitted interface. Tint's final raised interface and writer result are authoritative. The compiler
-records an `immediate-data` internal binding only when the generated entry uses it, and records a
-`storageBufferSizeRegions` entry only when Tint's writer result reports that the selected stage
-needs the size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
+capacity before translation, then passes that configuration to Tint. Compiler protocol v1 always
+carries a stage-local `immediate-data` candidate and a storage-size offset; this is fail-closed
+writer capacity, not proof that either is part of the emitted interface. The current bridge canary
+uses `buffer(30)` and byte offset `4`, but neither number is a public ABI or general immediate-layout
+rule. A production planner must derive the pipeline-specific offset before general runtime-sized
+resources use this path. Tint's final raised interface and writer result are authoritative. The
+compiler records an `immediate-data` internal binding only when the generated entry uses it, and
+records a `storageBufferSizeRegions` entry only when Tint reports that the selected stage needs the
+size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
 
 The accepted production contract requires each translation request to contain one resolved virtual WGSL source, its module-precision origin map,
 one selected WGSL and vgpu-owned emitted entry name, the exact statically used typed override set

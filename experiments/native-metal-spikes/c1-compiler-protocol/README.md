@@ -229,17 +229,17 @@ request, binds it to the resolved-source hash, and proves that missing, extra, o
 before or inside the independently validating worker.
 
 The semantic-bridge follow-up now carries the authenticated fixed-size singular-resource union
-through semantic assembly. It preserves exact per-entry binding subsets and sampling pairs, derives
-per-binding stage visibility, joins resolver-owned authored names, retains the reachable type and layout
-graphs, and fingerprints those semantics. Compiler-request projection remains deliberately closed
-for that resourceful assembly until the backend slot allocator supplies its exact mapping.
+through semantic assembly, nominal slot allocation, per-entry request projection, native
+translation, and offline Metal linking. It preserves exact binding subsets and sampling pairs,
+derives per-binding stage visibility, joins resolver-owned authored names, retains the reachable
+type and layout graphs, and fingerprints those semantics. The slot map is derived only from that
+authenticated graph and verified independently before the projector can use it.
 
 The remaining gates are:
 
-- allocate backend slots for the assembled fixed-resource union, project its exact per-entry
-  compiler requests, and translate them;
 - connect exact-static override extraction and assembly;
-- validate generated MSL through Apple's offline compiler when that toolchain is available; and
+- extend the connected bridge to runtime-sized and broader resource shapes, then run the full
+  corpus through Apple's offline compiler; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 
 There is no Intel GPU result. Rosetta covers the x86_64 compiler executable path, but it cannot

@@ -232,13 +232,15 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   name the resolved virtual source range and, only when proven, its authored input module; it cannot
   claim an authored line or column. Inspect, lower, and generate failures carry no invented location.
   Apple compiler diagnostics remain located in generated MSL unless a real WGSL-to-MSL map exists.
-- The compiler distinguishes writer configuration from the effective projection. It supplies user
-  slots and candidate internal reservations before Tint generation, including the shared immediate
-  binding and size offset whenever reflection contains a runtime-sized storage type. Only Tint's
-  final raised interface and writer result cause the effective
-  `immediate-data` slot and size region to be serialized. This permits ordinary immediate data
-  without a size region, runtime-sized storage without either emitted field, and both uses in one
-  physical immediate block.
+- The compiler distinguishes writer configuration from the effective projection. Compiler protocol
+  v1 supplies user slots plus a stage-local shared-immediate candidate and size offset on every
+  request; those fields reserve capacity and do not assert that the entry needs it. The connected
+  canary currently uses `buffer(30)` and byte offset `4`, neither of which is a public ABI or final
+  immediate-layout rule. General runtime-sized integration requires a planner to derive the
+  pipeline-specific offset before generation. Only Tint's final raised interface and writer result
+  cause the effective `immediate-data` slot and size region to be serialized. This permits ordinary
+  immediate data without a size region, runtime-sized storage without either emitted field, and
+  both uses in one physical immediate block.
 - When a selected stage has a size region, its sparse table places each runtime-sized storage
   binding's effective byte range at the word matching that binding's Metal buffer index. Fixed
   buffers leave zero holes and do not extend the table. Its derived word count is one past the
@@ -307,7 +309,8 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    semantic extractions—produces byte-reproducible arm64, x86_64, and universal executables, and
    matches the arm64-native monolithic oracle byte for byte across eight direct variants without
    linking WebGPU, runtime backends, or frameworks. This proof covers the exact semantic-interface
-   handshake, canonical entry names and stages, and the extractor's first interface-only profile.
+   handshake, canonical entry names and stages, and the extractor's resource-free and fixed-resource
+   profiles.
    Its x86_64 executions run through Rosetta and do not establish Intel or AMD GPU support; its
    dual-source canary remains internal translator evidence and does not enable the alpha feature.
 
@@ -320,8 +323,11 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    protocol additionally proves paired dual-source lowering; the alpha still rejects that feature.
 
    The isolated interface, binding-slot, runtime-size, and vertex-slot outputs now compile offline
-   for `air64-apple-macos14.0`. The Naga differential runner also compiles and links all 224 of its
-   successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
+   for `air64-apple-macos14.0`. The connected fixed-resource render pair also passes authenticated
+   semantic assembly, independently verified nominal slot allocation, exact per-entry translation,
+   two AIR compilations, and one metallib link. Its effective internal bindings and size regions are
+   empty, as expected for that fixture. The Naga differential runner also compiles and links all 224
+   of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
    corpus from the exact direct Tint worker through the same offline boundary, complete authored
    diagnostic mapping beyond the current module-only attribution, and pass deterministic connected
    artifact output and pixel/buffer parity. Exact authored entry-declaration spans are already

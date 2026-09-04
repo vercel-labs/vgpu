@@ -39,11 +39,12 @@ fixed-prefix `minimumSize` distinct from the binding's prefix-plus-one-element
 `minimumBindingSize`. It does not predict which backend lowering needs a length query. That choice
 belongs to the selected backend projection and compiler result.
 
-The Metal compiler configures deterministic user slots and candidate internal reservations before
-calling Tint. If reflection contains a runtime-sized storage type, it configures the shared
-immediate-data binding and size-region offset even when the selected entry may only use the fixed
-prefix. After Metal lowering and printing, the emitted entry interface and Tint's storage-size
-result determine what is effective: the program records the
+The Metal compiler configures deterministic user slots and candidate internal capacity before
+calling Tint. Compiler protocol v1 carries a shared immediate-data candidate and size-region offset
+for every selected entry; these inputs do not assert that generated code needs them. The current
+bridge values are canary policy, while general runtime-sized integration requires a versioned
+planner to choose the pipeline-specific offset. After Metal lowering and printing, the emitted
+entry interface and Tint's storage-size result determine what is effective: the program records the
 `immediate-data` internal slot only when generated MSL uses it, and records a per-stage
 `storageBufferSizeRegions` offset only when the size transport is needed. There is no second
 storage-size binding and no redundant boolean in the artifact.

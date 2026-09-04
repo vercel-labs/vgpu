@@ -116,11 +116,14 @@ finite bits for every supported scalar kind. The strict scalar boundary remains 
 does not claim complete equivalence with WebGPU's staged input conversion.
 
 The shared-immediate follow-up reserves one stage-local `immediate-data` binding and places the
-storage-size region at its pipeline-specific byte offset. The wrapper safely configures that
-candidate transport before generation whenever reflection finds a runtime-sized storage type, but
-the post-generation result is authoritative: ordinary immediate data may emit the slot without a
-size region, and a fixed-prefix-only entry may emit neither. The artifact therefore records the
-effective slot and region instead of a redundant `needsStorageBufferSizes` boolean.
+storage-size region at its pipeline-specific byte offset. Compiler protocol v1 carries candidate
+capacity on every request; that input does not assert that reflection or generated code needs it.
+The current connected bridge uses fixture values `buffer(30)` and byte offset `4`, not a public ABI
+or final layout rule. A production immediate-layout planner must derive the pipeline-specific offset
+before general runtime-sized integration. The post-generation result is authoritative: ordinary
+immediate data may emit the slot without a size region, and a fixed-prefix-only entry may emit
+neither. The artifact therefore records the effective slot and region instead of a redundant
+`needsStorageBufferSizes` boolean.
 
 The runtime-size follow-up proved the region's sparse packing with five runtime storage buffers,
 holes, high fixed-size buffers that do not extend the table, rebinding to larger ranges, shared
@@ -149,13 +152,13 @@ proof covers the exact semantic-interface handshake and both the resource-free a
 extraction profiles. Rosetta validates the x86_64 compiler process, not Intel or AMD GPU behavior,
 and the paired dual-source canary remains internal evidence rather than alpha support.
 
-The connected semantic bridge now assembles that authenticated fixed-size singular-resource union
-into semantic v1. It retains exact entry binding subsets and sampling pairs, derives stage
-visibility, joins resolver-owned authored presentation names without treating resolver layouts as
-authority, preserves the reachable Tint type and layout graphs, and fingerprints the complete
-program closure. It rejects compiler-request projection for resourceful programs until backend slot
-allocation is available; resource translation, exact-static override assembly, and runtime use
-remain open.
+The connected semantic bridge now carries that authenticated fixed-size singular-resource union
+through semantic v1, nominal program-level slot allocation, exact per-entry requests, native
+translation, and offline Metal linking. It retains exact binding subsets and sampling pairs,
+derives stage visibility, joins resolver-owned authored presentation names without treating
+resolver layouts as authority, preserves the reachable Tint type/layout graphs, and fingerprints
+the complete program closure. Exact-static override assembly, broader resource shapes, effective
+program-projection assembly, and runtime resource use remain open.
 
 The shader-interface follow-up proves the required split. Its isolated experiment extracts the
 complete portable interface from core IR before Metal lowering and established equivalent writer

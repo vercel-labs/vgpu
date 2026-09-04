@@ -2,11 +2,10 @@
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
-source finalization, authenticated fixed-resource semantic extraction, and fixed singular-resource
-`semantic-v1` assembly. The same one-shot Tint worker supplies inventory, extraction, and
-translation. Compiler projection remains fail-closed for resourceful programs until the versioned
-slot allocator is connected. The resource-free path continues through translation and offline
-Metal without turning TypeScript into a second WGSL compiler.
+source finalization, authenticated fixed-resource semantic extraction, fixed singular-resource
+`semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry projection, native
+translation, and offline Metal compilation. The same one-shot Tint worker supplies inventory,
+extraction, and translation without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -117,9 +116,9 @@ successes, malformed protocol requests, and request-specific adapter authenticat
 The assembly gate resolves authored effect, multi-module draw, compute, and fixed-resource
 fixtures, retains nominal resolver declaration evidence, authenticates extraction, emits four
 schema-valid `semantic-v1` programs, and checks render linking, resource joins, exact extraction
-reprojection, and fingerprints. The three resource-free fixtures project five compiler requests
-without launching the translator. The resource fixture remains fail-closed at compiler projection
-until slot allocation is connected, and overrides remain outside the executable assembly profile.
+reprojection, and fingerprints. All four fixtures receive nominal program-level Metal allocations
+and project seven compiler requests without launching the translator; overrides remain outside the
+executable assembly profile.
 Its numeric `b0`, `b1`, `b2`, `b3`, and `b10` union preserves exact subsets, sampling pair, and
 derived visibility. Seven extracted types become eight semantic types after interface interning;
 six layouts and buffer minima of 8, 24, and 16 bytes remain exact. Declaration v2 retains binding,
@@ -131,11 +130,14 @@ collisions created by local or shared type placement and generated program API n
 
 The static matrix covers five nominal, five declaration, three resolver-symbol, three
 resolver-resource-join, two retained-snapshot, one profile, one link, five fingerprint, twelve
-Swift-name, and five projection failures.
+Swift-name, four slot-allocation, and two projection failures. A separate stage-isolation check
+proves that one semantic buffer can receive different vertex and fragment indices.
 
-With the native worker the gate performs eight semantic-extraction invocations: two byte-identical
-runs for each of four fixtures. See
-[`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md).
+With the native worker the gate performs eight semantic-extraction invocations, then translates the
+fixed-resource vertex and fragment entries twice each. It freezes every request, response, and MSL
+hash, compiles both MSL sources to AIR, and links one metallib. See
+[`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) and
+[`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md).
 
 The integrated full-screen canary carries one real resolved and finalized resource-free effect
 through two native semantic extractions, semantic assembly, two deterministic translations per
@@ -149,9 +151,9 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
-interfaces, and generated full-screen source. Resource-free effect, draw, and compute requests and
-one fixed-resource semantic assembly are now derived; overrides and program-level slot allocation
-remain. Once every request is derived, run the repository corpus through the same bridge
+interfaces, and generated full-screen source. Resource-free effect, draw, and compute requests plus
+one fixed-resource render pair are now derived; exact-static overrides and the broader resource
+profile remain. Once every request is derived, run the repository corpus through the same bridge
 and compile every successful MSL result for the `air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
@@ -165,7 +167,9 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/sampling-and-types.md`](./docs/semantic-extraction/sampling-and-types.md)
   freezes resources, sampling-pair resolution, content-addressed types/layouts, and ordering; and
 - [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) freezes the pure
-  TypeScript join, render linking, fingerprint exclusions, and translator projection.
+  TypeScript join, render linking, and fingerprint exclusions; and
+- [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
+  freezes slot ownership, per-entry compiler projection, and the connected offline evidence.
 
 ## Implementation order
 
@@ -180,17 +184,19 @@ The semantic work is split by responsibility so the growing design remains revie
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven entry spans and resource-symbol evidence. Resource-free effect, multi-module draw, and
    compute programs plus fixed singular resources are executable.
-6. Allocate program-level slots and derive one existing compiler request per entry point. Projection
-   with empty external bindings and overrides is executable; allocation remains open.
-7. Validate and combine translator responses into `metal-projection-v1` without compacting indices.
-8. Compile and link every accepted MSL source offline.
+6. Allocate program-level slots and derive one existing compiler request per entry point. This is
+   executable for resource-free programs and singular fixed-size resources.
+7. Validate translator responses without compacting indices. The fixed-resource pair is executable;
+   program-level `metal-projection-v1` combination remains open.
+8. Compile and link every accepted MSL source offline. The fixed-resource pair is executable; the
+   authenticated repository corpus remains open.
 9. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
-This spike does not yet connect assembled resources through slot allocation and compiler projection
-or connect overrides through assembly. It also does not run the integrated repository corpus,
-package a production artifact, implement the production Swift runtime, freeze a
+This spike does not yet connect overrides, runtime-sized resources, or the broader resource profile
+through assembly and projection. It also does not bind the fixed-resource fixture at runtime, run
+the integrated repository corpus, package a production artifact, implement the production Swift runtime, freeze a
 Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not recover general
 authored diagnostic spans from the current module-only origin map. Exact authored entry-declaration
 spans come from resolver tokens and use 1-based locations, UTF-16-code-unit columns, and an

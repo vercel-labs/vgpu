@@ -77,12 +77,13 @@ binding-array rejection. Configured and active overrides remain structured failu
 partial evidence for conditions 3, 4, and 10.
 
 The executable assembly slice adds four programs: resource-free effect, multi-module draw, and
-compute fixtures plus one fixed singular-resource draw. Only the three resource-free programs
-produce compiler requests, for five requests total. The gate covers five nominal failures, five
-declaration failures, three resolver-symbol failures, three resolver-resource-join failures, two
-retained-resolver-snapshot checks, one profile failure, one render-link failure, five fingerprint
-checks, twelve Swift-name failures, and five projection failures. Its eight native invocations are
-two byte-identical semantic extractions for each fixture. It proves declaration v2 entry spans and
+compute fixtures plus one fixed singular-resource draw. Four nominal allocations produce seven
+compiler requests. The gate covers five nominal failures, five declaration failures, three
+resolver-symbol failures, three resolver-resource-join failures, two retained-resolver-snapshot
+checks, one profile failure, one render-link failure, five fingerprint checks, twelve Swift-name
+failures, one stage-isolation check, four slot-allocation failures, and two projection failures. Its
+eight semantic invocations are two byte-identical extractions for each fixture; the resource pair
+adds four deterministic translations. It proves declaration v2 entry spans and
 binding, struct, and member symbol evidence; exact authored Swift presentation with Swift 6 and
 helper/generated-module namespace rejection plus binding-local and member-local collision checks;
 schema-valid interface interning and fixed resource graphs; program fingerprints; and exact
@@ -101,8 +102,13 @@ resolver span `6:1–9:2`, and the selected generated vertex reaches Metal with 
 explicit counter-clockwise winding. This is executable evidence for the resource-free portions of
 conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
 
-Resource compiler projection, exact-static overrides, versioned slot allocation and
-translator-response combination, compute translation parity, the integrated repository corpus, and
-production artifact packaging remain open. Fixed singular-resource assembly is complete, but its
-compiler projection remains fail-closed until slot allocation. The recorded GPU evidence is not an
-Intel, AMD, or cross-machine result.
+The fixed-resource companion adds four deterministic translation processes after eight semantic
+extractions. Four nominal program allocations project seven total compiler requests; the resource
+pair preserves its exact stage subsets and external slots, reports no effective internals or size
+regions, compiles to two AIR files, and links one metallib. This closes fixed singular-resource
+allocation, request projection, response validation, and offline compilation for that fixture.
+
+Exact-static overrides, program-level translator-response combination, resource runtime binding and
+readback, compute-resource translation parity, broader resource shapes, the integrated repository
+corpus, and production artifact packaging remain open. The recorded GPU evidence is not an Intel,
+AMD, or cross-machine result.

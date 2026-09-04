@@ -18,7 +18,7 @@ The adapter adds facts that Tint cannot or should not own:
 - validation of program-wide unions and derived stage visibility;
 - backend-neutral capability policy;
 - fingerprints; and
-- later Metal slot allocation.
+- versioned Metal slot allocation after backend-neutral assembly.
 
 Tint remains authoritative for interfaces, active bindings, sampling pairs, exact-static
 overrides, types, layouts, and resolved workgroup size. Interning an authenticated inline interface
@@ -54,8 +54,9 @@ The executable profile applies the association, entry, source-span, resource-sym
 canonical ordering, transitive type/layout closure, capability, exact reprojection, and fingerprint
 checks now. It copies the authenticated program binding union, entry subsets, sampling pairs, types,
 and layouts exactly, then derives only stage visibility and Swift presentation. It accepts singular
-fixed-size resources and rejects `dual_source_blending`. Exact-static override unions and the
-versioned slot policy remain later slices rather than partially populated successes.
+fixed-size resources and rejects `dual_source_blending`. Exact-static override unions remain a
+later slice rather than a partially populated success. Metal slots are derived only after this
+backend-neutral assembly is complete.
 
 For semantic v1, `program.sources` contains every WGSL input listed by the finalized origin map.
 Module-level provenance cannot honestly claim a smaller entry-reachability set, so assembly does
@@ -110,12 +111,12 @@ Only a validated assembled program can create compiler requests. Each selected e
   projected from the authenticated semantic graph; and
 - emitted Metal name plus external and candidate internal slots from versioned adapter policy.
 
-In the executable resource-free projection slice, selected overrides and external Metal bindings
-are both empty. The projector rejects a nonempty external binding policy and rehydrates every
-interface type from the assembled content IDs, then requires exact equality with the retained
-authenticated extraction before it can return a compiler request. A resourceful semantic assembly
-is valid, but compiler-request projection fails closed until versioned slot allocation supplies its
-external Metal binding policy.
+The projector rehydrates every interface type from the assembled content IDs, then requires exact
+equality with the retained authenticated extraction before it can return a compiler request. It
+also requires a frozen nominal Metal allocation minted for that exact assembly. A clone, a
+hand-written map, or an allocation belonging to a structurally equal but distinct assembly fails
+before translation. Resource-free and fixed-size singular-resource programs now use the same
+projection path; only their derived external slot sets differ.
 
 For each interface leaf, projection resolves the semantic type ID, proves that it is a scalar or
 vector of one scalar, and emits the original authenticated inline `{ scalar, width }` shape. It
@@ -124,24 +125,27 @@ translator then starts in a fresh process, parses the same bytes, materializes t
 and compares the complete entry interface and resource mapping before MSL generation. A local
 projection bug therefore fails closed instead of silently changing the runtime artifact.
 
-Response combination remains a subsequent slice. It may happen only after each one-shot invocation
-passes schema and request-specific semantic checks. The eventual program-level Metal projection
-must preserve sparse interface indices, stage-local slots, effective internal resources,
-storage-size regions, and resolved compute dimensions. Broad extraction facts remain in
-`semantic-v1`; they are not copied into the runtime projection.
+The connected resource gate now validates each one-shot response against its schema and exact
+request, including the external map and empty effective internal result expected by the fixture.
+Program-level Metal projection assembly remains a subsequent slice. It must preserve sparse
+interface indices, stage-local slots, effective internal resources, storage-size regions, and
+resolved compute dimensions. Broad extraction facts remain in `semantic-v1`; they are not copied
+into the runtime projection. Slot ownership and the candidate-versus-effective split are detailed
+in [`metal-slot-projection.md`](./metal-slot-projection.md).
 
 ## Executable evidence
 
 The static assembly gate resolves effect, multi-module draw, compute, and fixed-resource fixtures,
 mints declaration evidence only through those real resolver calls, authenticates reviewed
 extraction responses, and assembles four schema-valid programs. The resolved-declarations v2
-snapshot retains entry spans plus binding, struct, and member symbol evidence. The three resource-free programs
-project five compiler requests; the resource program remains fail-closed before projection. The
-gate covers five nominal failures, five declaration failures including a cross-module span
+snapshot retains entry spans plus binding, struct, and member symbol evidence. Four nominal slot
+allocations project seven compiler requests, including both fixed-resource render stages. The gate
+covers five nominal failures, five declaration failures including a cross-module span
 mutation, three resolver-symbol failures, three resolver-resource-join failures, two retained
 resolver-snapshot checks, one rejected profile, one broken render link, five fingerprint checks,
-twelve Swift-name failures, and five projection failures. None of those checks launches the
-translator. The draw case
+twelve Swift-name failures, four slot-allocation failures, and two projection failures. One
+additional mutation proves stage-local buffer indices can differ for a shared semantic binding.
+None of those checks launches the translator. The draw case
 also proves that the resolver preserves public entry names while mangling imported helpers and
 module-local types; `names.authored` and `names.wgsl` retain their separate authorities even when
 their current values are equal.
@@ -153,10 +157,13 @@ the three buffer minimum sizes are 8, 24, and 16 bytes. Reprojection removes onl
 presentation and visibility and must reproduce the complete authenticated extraction exactly.
 
 With the accepted native worker, the gate performs eight semantic-extraction invocations: two
-byte-identical runs for each of four fixtures. The independently integrated full-screen companion
-then runs one inventory, two semantic extractions, four successful translations, and two
-structured-negative translations. Its compiler requests come from the nominal assembly, while the
+byte-identical runs for each of four fixtures. It then translates the resource vertex and fragment
+twice each, freezes request/response/MSL hashes, compiles two AIR files for the macOS 14 target, and
+links one metallib. The responses preserve the requested external slots and report no effective
+internal binding or size region. The independently integrated full-screen companion runs one
+inventory, two semantic extractions, four successful translations, two structured-negative
+translations, and live readback. Its compiler requests come from the nominal assembly, while the
 checked-in interface JSON remains a static oracle. The authored fragment's resolver-owned
-end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Resource slot allocation and compiler
-projection, overrides, repository corpus integration, production artifact packaging, and Intel/AMD
-hardware evidence remain open.
+end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Exact-static
+overrides, resource runtime binding/readback, repository corpus integration, production artifact
+packaging, and Intel/AMD hardware evidence remain open.

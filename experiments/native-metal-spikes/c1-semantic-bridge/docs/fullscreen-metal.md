@@ -122,7 +122,8 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/fullscreen-metal.m
 The recorded run used Apple M4 Pro. It performed nine one-shot Tint worker processes: one inventory,
 two byte-identical semantic extractions, four successful translations, and two byte-identical runs of
 one structured negative. It also performed two AIR compilations, one metallib link, and two
-byte-identical runtime executions. This is not Intel, AMD, or cross-machine evidence. The canary
-proves the resource-free assembly and translation path; resource slot allocation, compiler
-projection and runtime binding, overrides, repository-corpus integration, and production artifact
-packaging remain open.
+byte-identical runtime executions. This is not Intel, AMD, or cross-machine evidence. This canary
+proves the resource-free assembly, translation, and runtime path. The sibling semantic-assembly
+gate now proves fixed singular-resource allocation, projection, translation, and offline linking;
+resource runtime binding/readback, overrides, repository-corpus integration, and production
+artifact packaging remain open.
