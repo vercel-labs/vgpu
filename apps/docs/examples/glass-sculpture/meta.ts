@@ -1,0 +1,33 @@
+export const meta = {
+  slug: "glass-sculpture",
+  title: "Glass Sculpture",
+  description:
+    "A raymarched glass sculpture under a studio light rig: refraction, total internal reflection, chromatic dispersion and Beer-Lambert absorption are all traced inside one fragment shader, then bloomed and tonemapped. Move the pointer to steer the key light.",
+  tags: ["raymarching", "lighting", "hdr", "bloom", "post-processing", "rendering", "shader"],
+  capabilities: [
+    "webgpu",
+    "fragment-shader",
+    "pointer-input",
+    "pointer-orbit",
+    "controls",
+    "checkbox-controls",
+    "select-control",
+    "multi-pass",
+    "render-targets",
+    "continuous-rendering",
+    "responsive-canvas",
+    "hdr",
+  ],
+  thumb: { warmupFrames: 3 },
+  files: [
+    "index.tsx",
+    "renderer.ts",
+    "scene.ts",
+    "camera.ts",
+    "pointer-input.ts",
+    "sculpture.wgsl",
+    "bloom-extract.wgsl",
+    "bloom-blur.wgsl",
+    "present.wgsl",
+  ],
+} as const;

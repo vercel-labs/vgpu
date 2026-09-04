@@ -28,6 +28,7 @@ import { meta as tslExportsMeta } from '../examples/tsl-exports/meta';
 import { meta as threeTslMeta } from '../examples/three-tsl/meta';
 import { meta as particleOrbitMeta } from '../examples/particle-orbit/meta';
 import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
+import { meta as glassSculptureMeta } from '../examples/glass-sculpture/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -56,6 +57,7 @@ const rawMetadata = {
   'three-tsl': threeTslMeta,
   'particle-orbit': particleOrbitMeta,
   'adaptive-quality': adaptiveQualityMeta,
+  'glass-sculpture': glassSculptureMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -93,6 +95,7 @@ export const exampleMetadataBySlug = {
   'three-tsl': withThumbnails(rawMetadata['three-tsl']),
   'particle-orbit': withThumbnails(rawMetadata['particle-orbit']),
   'adaptive-quality': withThumbnails(rawMetadata['adaptive-quality']),
+  'glass-sculpture': withThumbnails(rawMetadata['glass-sculpture']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);
