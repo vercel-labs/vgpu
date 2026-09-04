@@ -67,6 +67,22 @@ performs thirteen invocations: each fixture twice, four raw protocol mutations, 
 Unicode origin-map case. Static Unicode canaries also prove that decomposed WGSL survives wire
 encoding without normalization and that path limits count Unicode code points consistently.
 
+The next executable slice accepts a successful request/response pair only after both inventory JSON
+Schemas and semantic association checks pass. It mints a frozen in-process inventory whose nominal
+brand is lost by cloning or deserialization. The pure program selector consumes an exact
+configuration-owned selection view and that branded inventory; it never receives WGSL or resolver
+reflection. It selects an explicit entry or the only entry in each required stage, ignores stages
+the program does not use, and emits a versioned injection directive only for an effect with no
+authored vertex.
+
+The selection gate passes twelve positive cases, twenty selection failures, and three inventory
+authentication failures. It covers effect, draw, and compute programs; defaulted effect kind;
+explicit and inferred normalization; missing, ambiguous, unknown, and wrong-stage entries; source
+crossing; schema-invalid inventory records; cloning; accessors; `null`; prototype pollution; and
+deterministic frozen output. See [`docs/program-selection.md`](./docs/program-selection.md) for the
+ownership and error contracts. The exact injection profile and its remaining gates are specified in
+[`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md).
+
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
@@ -81,16 +97,17 @@ candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 ## Implementation order
 
 1. Add an authenticated entry-inventory operation to the vgpu Tint tool. This slice is executable.
-2. Select programs in TypeScript, inject the versioned full-screen source when required, and
-   finalize the exact source, source hash, origin map, origin-map hash, and entry-declaration spans.
-3. Add a multi-entry semantic-extraction operation and connect the existing exact-static override
+2. Select programs from a nominally authenticated inventory. This slice is executable.
+3. Inject the versioned full-screen source when required and finalize the exact source, source hash,
+   origin map, origin-map hash, and entry-declaration spans.
+4. Add a multi-entry semantic-extraction operation and connect the existing exact-static override
    materializer to it.
-4. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
+5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven declaration spans.
-5. Allocate program-level slots and derive one existing compiler request per entry point.
-6. Validate and combine translator responses into `metal-projection-v1` without compacting indices.
-7. Compile and link every accepted MSL source offline.
-8. Run the authenticated repository corpus and record expected failures separately.
+6. Allocate program-level slots and derive one existing compiler request per entry point.
+7. Validate and combine translator responses into `metal-projection-v1` without compacting indices.
+8. Compile and link every accepted MSL source offline.
+9. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 

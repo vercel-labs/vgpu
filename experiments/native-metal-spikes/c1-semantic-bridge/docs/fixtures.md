@@ -32,6 +32,25 @@ virtual-path limit counts Unicode code points, matching JSON Schema and C++. NFC
 virtual paths and origin input IDs by the TypeScript caller; WGSL bytes are never normalized, and
 the standalone worker does not independently prove NFC.
 
+## Executable program-selection slice
+
+The selection gate uses reviewed inventory and program literals. Twelve positive cases cover the
+default effect with injection, authored effects, inferred and explicit draw and compute entries,
+multiple candidates with explicit names, irrelevant stages, interface checks deferred to semantic
+extraction, canonical request-identity member order, prototype pollution, frozen input, and
+byte-deterministic frozen output. Explicitly naming a sole candidate produces the same normalized
+selection as inference.
+
+Twenty selection negatives cover missing and ambiguous required stages, unknown and wrong-stage
+explicit names, an explicit absent effect vertex that must not inject, forbidden stage keys,
+malformed identifiers, `null`, accessors, a public program not projected to the narrow selection
+view, raw and cloned inventories, and a source-crossed inventory. Three authentication negatives
+reject a non-string entry name, an extra entry field, and a valid structured inventory failure.
+
+The gate intentionally does not ask JavaScript whether an authored effect vertex consumes a vertex
+location. Selection means stage membership only; the authenticated semantic extractor owns that
+later effect-interface rejection.
+
 ## Initial authenticated closure
 
 Use real repository shaders only after a small purpose-built closure can localize failures. The

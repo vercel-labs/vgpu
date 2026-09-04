@@ -53,3 +53,10 @@ prelaunch mutations with zero launches, five response mutations, one retained-re
 mutation, and thirteen native worker invocations. Those native invocations cover two executions of
 each fixture, four malformed raw requests, and one valid NFC Unicode origin map. This is evidence
 for conditions 2 and 10, not a claim that the complete bridge exit list has passed.
+
+The implemented selection slice additionally proves twelve positive selections, twenty typed
+selection failures, and three inventory-authentication failures. JSON Schema validation precedes
+the nominal inventory brand; cloned snapshots and selection plans lose their brands; explicit and
+inferred single-entry choices normalize identically; and the selector does not receive WGSL or
+resolver reflection. This extends evidence for conditions 2 and 10. Full-screen source finalization
+and the remaining bridge conditions are still open.
