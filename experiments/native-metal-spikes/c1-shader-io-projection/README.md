@@ -132,7 +132,13 @@ evidence, but it does not replace the separate macOS 14 offline gate.
 
 ## Remaining integration
 
-This spike establishes the extraction and validation seams; it does not yet change the compiler
-protocol or artifact schemas. The next gate should add the exact semantic interface to each worker
-request, derive a full private Metal interface after `Raise()`, return the runtime-relevant subset,
-and kill mutations that omit, compact, duplicate, or retag any interface item.
+The compiler-protocol follow-up now carries the exact semantic interface on every worker request,
+compares it before generation, inspects the same IR after Metal lowering, and returns only the
+runtime-relevant projection. Its direct-source gate reproduces that handshake across arm64, x86_64,
+and universal executables.
+
+The remaining compiler integration is the bridge from vgpu's resolved module graph, source map,
+entry-point semantics, bindings, and overrides into that exact request. Once that bridge exists, the
+full shader corpus can run through the direct worker and its response can feed the deterministic
+artifact gate. Offline `metal` plus `metallib` validation and pixel/buffer parity remain separate
+requirements.
