@@ -107,7 +107,6 @@ export function assertValidModuleOriginMap(map, generatedByteLength) {
     !Array.isArray(map.sources) ||
     map.sources.length === 0 ||
     !Array.isArray(map.segments) ||
-    map.segments.length === 0 ||
     !Number.isSafeInteger(generatedByteLength) ||
     generatedByteLength < 0
   ) {

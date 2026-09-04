@@ -1,5 +1,37 @@
 # Semantic bridge fixtures
 
+## Executable inventory slice
+
+The current entry-inventory gate checks four request/response fixture pairs:
+
+- `empty-module` succeeds for resolver output containing only a generated module header, with an
+  empty provenance-segment array and empty inventory;
+- `multi-stage` succeeds with entries in canonical stage/name order;
+- `library-only` succeeds with an empty inventory; and
+- `invalid-wgsl` fails with a structured WGSL diagnostic and no result.
+
+The static gate applies thirteen prelaunch mutations and requires zero worker launches. They cover
+an unknown request field, crossed source and provenance identities, stale hashes, a source NUL,
+noncanonical feature order, non-NFC path and origin identities, noncanonical origin segments, source
+and segment limits, the JSON allocation limit, and a cyclic request. Five response mutations cover
+crossed request and compiler identities, entry ordering and duplication, and an invalid failure
+shape. A separate association mutation changes the retained request after encoding and proves that
+old request bytes cannot validate it.
+
+The native gate makes thirteen one-shot worker invocations. It executes each of the four fixtures
+twice to prove byte-deterministic responses, sends four malformed requests directly to the worker
+decoder, and sends one valid origin map with an NFC Unicode input ID. The four raw mutations are an
+unknown top-level field, a stale origin-map hash, a NUL appended to source with otherwise coherent
+hashes and provenance, and unordered language features.
+
+Unicode has distinct identity, source, and limit canaries. The valid native origin ID proves that
+canonical non-ASCII identities cross the worker boundary. A static request appends decomposed
+`Cafe\u0301` to WGSL and proves the deterministic encoder retains those exact code units and UTF-8
+bytes instead of replacing them with NFC `Caf\u00e9`. Another static request proves the 4,096-unit
+virtual-path limit counts Unicode code points, matching JSON Schema and C++. NFC is required of
+virtual paths and origin input IDs by the TypeScript caller; WGSL bytes are never normalized, and
+the standalone worker does not independently prove NFC.
+
 ## Initial authenticated closure
 
 Use real repository shaders only after a small purpose-built closure can localize failures. The
@@ -51,8 +83,11 @@ Mutations must fail at the earliest owning boundary:
 
 - source bytes, source hash, virtual source identity, origin map, or origin-map hash crossed after
   resolution or injection;
+- deterministic request bytes re-encoded differently, or a response identity not equal to
+  SHA-256 of the inventory domain, one NUL byte, and those exact request bytes;
 - an inventory response with the wrong request identity, or an unknown, duplicate, or wrong-stage
   entry selection;
+- a non-NFC source virtual path or origin input ID rejected by the caller, without normalizing WGSL;
 - a generated full-screen range attributed to authored source, a stale injection version, or
   different finalized bytes sent to extraction and translation;
 - a missing, crossed, or out-of-bounds authored entry-declaration span;

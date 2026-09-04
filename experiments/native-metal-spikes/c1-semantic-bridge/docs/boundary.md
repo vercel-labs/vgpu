@@ -33,6 +33,33 @@ identity. Semantic extraction and translation receive the exact same finalized W
 identity, source hash, and origin map. No stage may substitute one member without invalidating the
 others.
 
+The inventory request has one deterministic wire representation: object keys are sorted, while
+string values are preserved exactly. The encoder must never normalize WGSL. Its response repeats a
+request identity whose hash is:
+
+```text
+SHA-256(UTF-8("vgpu-native-tint-entry-inventory-request-bytes/v1")
+  || 0x00
+  || exact encoded request bytes)
+```
+
+This authenticates the complete request, including exact WGSL code units and their UTF-8 bytes. The
+request also carries `originMapSha256`, computed over the origin map's deterministic key-sorted JSON
+encoding with the same string-preservation rule, so source and provenance cannot be crossed
+independently. Structured inventory protocol failures still echo the identity derived from the raw
+request bytes they received.
+
+That single representation is an official-producer invariant, not a second JSON parser inside the
+worker. The worker accepts any request that passes its strict UTF-8 JSON framing and
+operation-specific decoder, then authenticates the exact bytes it received. Whitespace or escape
+spelling therefore changes the request identity even when it decodes to the same value.
+
+NFC applies only to identities: the TypeScript caller requires the source `virtualPath` and every
+origin-map input ID to be NFC before it launches the worker. WGSL text is not an identity string and
+is never NFC-normalized. The standalone C++ worker validates UTF-8, request structure, source and
+origin-map hashes, and other protocol invariants, but it does not independently prove NFC. Direct
+worker callers therefore inherit the NFC precondition for virtual paths and input IDs.
+
 ## Ownership
 
 | Boundary                 | Owns                                                                                                                                                                                                                                      | Must not own                                                        |
@@ -47,12 +74,26 @@ others.
 The adapter may verify and canonically copy Tint's exact-static sets, but it never recomputes their
 membership or values. It builds each program union from those authenticated per-entry records.
 
+## Source locations
+
+Resolver-owned entry-declaration spans and Tint diagnostics use intentionally different coordinate
+systems. Resolver spans point into authored WGSL with 1-based locations, columns counted in UTF-16
+code units, and an end-exclusive boundary. Tint diagnostic columns count UTF-8 bytes. A consumer
+must retain the location's owner and convention rather than compare or merge the numeric columns.
+The origin map can prove an authored module for a diagnostic, but its current module-level precision
+cannot manufacture an authored line or column.
+
 ## Entry inventory and injection
 
 The inventory request carries the authored capsule identity and explicit WGSL language-feature set.
 Its response repeats the authenticated request identity and returns only canonical entry names and
 stages. TypeScript applies the configuration's explicit-or-single-match selection policy to that
 inventory; it does not inspect WGSL text to discover a stage or type.
+
+Entry records are ordered by stage (`vertex`, `fragment`, `compute`) and then by WGSL identifier.
+The inventory and translation contracts share one executable, but not one schema: the one-shot
+worker selects the strict operation-specific decoder from `contractId`. Unknown contracts and
+cross-contract fields fail closed.
 
 When a selected effect has no authored vertex entry, the adapter injects the versioned vgpu
 full-screen vertex source and rebuilds the source hash, origin map, origin-map hash, and request
@@ -124,8 +165,8 @@ reflection do not become runtime ABI.
 
 ## Process packaging
 
-The spike may prototype entry inventory and semantic extraction as sibling executables while
-iterating on Tint APIs. The distribution candidate is one source-built vgpu Tint tool with separate
-inventory, semantic, and translation operations. Each invocation is a fresh process with a strict
-operation-specific JSON schema. This avoids shipping multiple copies of the same static Tint closure
-without weakening process isolation. The application runtime ships none of these operations.
+Entry inventory and translation now run as separate contracts in the same source-built vgpu Tint
+tool. The future semantic extraction operation should join that executable under its own
+`contractId` and strict schema. Each invocation remains a fresh process handling one framed request,
+which avoids shipping multiple copies of the same static Tint closure without weakening process
+isolation. The runtime artifact ships none of these compiler operations.

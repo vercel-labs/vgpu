@@ -6,6 +6,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "src/tint/api/common/bindings.h"
@@ -69,6 +70,25 @@ struct CompilerRequest {
   std::set<std::string> features;
   std::map<std::string, OverrideValue> overrides;
   std::vector<Mapping> mappings;
+};
+
+struct RequestIdentity {
+  std::string domain;
+  std::string sha256;
+};
+
+struct EntryInventoryRequest {
+  std::string source_text;
+  std::string source_name;
+  std::set<std::string> features;
+  RequestIdentity identity;
+};
+
+using WorkerRequest = std::variant<CompilerRequest, EntryInventoryRequest>;
+
+enum class RequestOperation {
+  kCompiler,
+  kEntryInventory,
 };
 
 } // namespace vgpu::native

@@ -31,9 +31,8 @@
       }
     },
     "segments": {
-      "description": "Canonical generated-byte order. Segments MUST be non-empty and non-overlapping; gaps represent generated text with no authored provenance.",
+      "description": "Canonical generated-byte order. Each segment MUST be non-empty and non-overlapping; the array may be empty when all generated text has no authored provenance. Gaps represent generated text with no authored provenance.",
       "type": "array",
-      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/segment"

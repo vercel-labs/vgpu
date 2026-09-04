@@ -252,6 +252,22 @@ await assert.rejects(
   { code: "VGPU-C1-RESOLVER-GENERATED-COLLISION" }
 );
 
+const emptyModule = await resolveVirtualShader({
+  entry: "Shaders/empty.wgsl",
+  sources: [source("empty-wgsl", "Shaders/empty.wgsl", "")],
+});
+assert.match(
+  emptyModule.resolved.wgsl,
+  /^\/\/ vgsl-module: Shaders\/empty\.wgsl/mu
+);
+assert.deepEqual(emptyModule.originMap.segments, []);
+assert.deepEqual(emptyModule.originMap.sources, [
+  {
+    input: "empty-wgsl",
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  },
+]);
+
 const hashA = canonicalRequestHash({ z: 1, nested: { b: 2, a: 1 } });
 const hashB = canonicalRequestHash({ nested: { a: 1, b: 2 }, z: 1 });
 const hashChanged = canonicalRequestHash({ nested: { a: 1, b: 3 }, z: 1 });

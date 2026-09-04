@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-entry-inventory/v1",
+  "source": {
+    "virtualPath": "Intermediate/inventory-empty-module.wgsl",
+    "sha256": "2003fb3c2291ccc755820ee336fa190c42107752285ab43d029a31c9f1b8598e",
+    "text": "// vgsl-module: Shaders/empty.wgsl\n\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "Intermediate/inventory-empty-module.wgsl",
+      "sha256": "2003fb3c2291ccc755820ee336fa190c42107752285ab43d029a31c9f1b8598e"
+    },
+    "sources": [
+      {
+        "input": "inventory-empty-module-wgsl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "segments": []
+  },
+  "originMapSha256": "1382ceb303e4ddccb4f686180fdeaf67b1c6c515df070765d6916f3cbefd6cf3",
+  "languageFeatures": []
+}

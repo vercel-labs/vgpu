@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-entry-inventory/v1",
+  "ok": true,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-entry-inventory-request-bytes/v1",
+    "sha256": "08f69f079f54c4ef76baa95e2d108c23b45544cf8fb322572c73c714f4a61e24"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": { "entryPoints": [] }
+}

@@ -25,6 +25,10 @@ namespace vgpu::native {
 namespace {
 
 constexpr std::string_view kCompilerContract = "vgpu-native-tint-compiler/v1";
+constexpr std::string_view kEntryInventoryContract =
+    "vgpu-native-tint-entry-inventory/v1";
+constexpr std::string_view kEntryInventoryRequestIdentityDomain =
+    "vgpu-native-tint-entry-inventory-request-bytes/v1";
 constexpr std::string_view kOriginMapContract = "vgpu-native-origin-map/v1";
 constexpr std::string_view kBindingModel = "vgpu-metal-binding-slots-v1";
 constexpr std::string_view kStorageSizeModel =
@@ -655,9 +659,109 @@ std::string Sha256Hex(std::string_view value) {
   return hash.Finish();
 }
 
+std::string CanonicalJsonString(std::string_view value) {
+  constexpr char kHex[] = "0123456789abcdef";
+  std::string result;
+  result.reserve(value.size() + 2);
+  result.push_back('"');
+  for (const unsigned char character : value) {
+    switch (character) {
+    case '\\':
+      result.append("\\\\");
+      break;
+    case '"':
+      result.append("\\\"");
+      break;
+    case '\b':
+      result.append("\\b");
+      break;
+    case '\f':
+      result.append("\\f");
+      break;
+    case '\n':
+      result.append("\\n");
+      break;
+    case '\r':
+      result.append("\\r");
+      break;
+    case '\t':
+      result.append("\\t");
+      break;
+    default:
+      if (character < 0x20U) {
+        result.append("\\u00");
+        result.push_back(kHex[character >> 4U]);
+        result.push_back(kHex[character & 0x0fU]);
+      } else {
+        result.push_back(static_cast<char>(character));
+      }
+      break;
+    }
+  }
+  result.push_back('"');
+  return result;
+}
+
+// Mirrors deterministicStringify(originMap) in the inventory adapter. All
+// object keys are fixed by origin-map-v1 and emitted in UTF-16 lexical order.
+// Values are written only after DecodeOriginMap() has accepted their exact
+// types.
+std::string CanonicalOriginMap(const Json::Value &value) {
+  std::ostringstream output;
+  output << "{\"contractId\":"
+         << CanonicalJsonString(value["contractId"].asString())
+         << ",\"generatedSource\":{\"sha256\":"
+         << CanonicalJsonString(value["generatedSource"]["sha256"].asString())
+         << ",\"virtualPath\":"
+         << CanonicalJsonString(
+                value["generatedSource"]["virtualPath"].asString())
+         << "},\"schemaVersion\":" << value["schemaVersion"].asUInt64()
+         << ",\"segments\":[";
+  const auto &segments = value["segments"];
+  for (Json::ArrayIndex index = 0; index < segments.size(); ++index) {
+    const auto &segment = segments[index];
+    if (index > 0) {
+      output << ',';
+    }
+    output << "{\"generated\":{\"endByte\":"
+           << segment["generated"]["endByte"].asUInt64()
+           << ",\"startByte\":"
+           << segment["generated"]["startByte"].asUInt64()
+           << "},\"origin\":{\"input\":"
+           << CanonicalJsonString(segment["origin"]["input"].asString())
+           << "},\"precision\":"
+           << CanonicalJsonString(segment["precision"].asString()) << '}';
+  }
+  output << "],\"sources\":[";
+  const auto &sources = value["sources"];
+  for (Json::ArrayIndex index = 0; index < sources.size(); ++index) {
+    const auto &source = sources[index];
+    if (index > 0) {
+      output << ',';
+    }
+    output << "{\"input\":"
+           << CanonicalJsonString(source["input"].asString())
+           << ",\"sha256\":"
+           << CanonicalJsonString(source["sha256"].asString()) << '}';
+  }
+  output << "]}";
+  return output.str();
+}
+
+RequestIdentity EntryInventoryRequestIdentity(std::string_view request_bytes) {
+  Sha256 hash;
+  hash.Update(kEntryInventoryRequestIdentityDomain);
+  hash.Update(std::string_view("\0", 1));
+  hash.Update(request_bytes);
+  return RequestIdentity{
+      .domain = std::string(kEntryInventoryRequestIdentityDomain),
+      .sha256 = hash.Finish(),
+  };
+}
+
 class Decoder final {
 public:
-  std::optional<CompilerRequest> Decode(const Json::Value &root) {
+  std::optional<CompilerRequest> DecodeCompiler(const Json::Value &root) {
     if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
                                 "originMap", "entryPoint",
                                 "semanticInterface", "overrides",
@@ -686,6 +790,48 @@ public:
     return request;
   }
 
+  std::optional<EntryInventoryRequest>
+  DecodeEntryInventory(const Json::Value &root,
+                       const RequestIdentity &identity) {
+    if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
+                                "originMap", "originMapSha256",
+                                "languageFeatures"})) {
+      return Reject<EntryInventoryRequest>(
+          "entry inventory request has missing or unknown top-level fields");
+    }
+    const auto schema_version = ReadUnsignedInteger(root["schemaVersion"], 1);
+    if (!schema_version || *schema_version != 1 ||
+        !root["contractId"].isString() ||
+        root["contractId"].asString() != kEntryInventoryContract) {
+      return Reject<EntryInventoryRequest>(
+          "request selects an unsupported entry inventory contract");
+    }
+
+    EntryInventoryRequest request;
+    request.identity = identity;
+    std::string source_hash;
+    if (!DecodeSource(root["source"], request, source_hash) ||
+        !DecodeOriginMap(root["originMap"], request.source_name, source_hash,
+                         request.source_text)) {
+      return std::nullopt;
+    }
+    if (request.source_text.find('\0') != std::string::npos) {
+      return Reject<EntryInventoryRequest>(
+          "entry inventory source text contains a NUL byte");
+    }
+    if (!root["originMapSha256"].isString() ||
+        !IsLowerHex(root["originMapSha256"].asString(), 64) ||
+        Sha256Hex(CanonicalOriginMap(root["originMap"])) !=
+            root["originMapSha256"].asString()) {
+      return Reject<EntryInventoryRequest>(
+          "origin map hash does not match its canonical v1 JSON");
+    }
+    if (!DecodeFeatures(root["languageFeatures"], request)) {
+      return std::nullopt;
+    }
+    return request;
+  }
+
   const std::string &error() const { return error_; }
 
 private:
@@ -702,7 +848,8 @@ private:
     return false;
   }
 
-  bool DecodeSource(const Json::Value &value, CompilerRequest &request,
+  template <typename Request>
+  bool DecodeSource(const Json::Value &value, Request &request,
                     std::string &source_hash) {
     if (!HasExactMembers(value, {"virtualPath", "sha256", "text"}) ||
         !value["virtualPath"].isString() || !value["sha256"].isString() ||
@@ -776,9 +923,8 @@ private:
     }
 
     const auto &segments = value["segments"];
-    if (!segments.isArray() || segments.empty() ||
-        segments.size() > kMaxOriginSegments) {
-      return Fail("origin segments are empty or exceed the collection limit");
+    if (!segments.isArray() || segments.size() > kMaxOriginSegments) {
+      return Fail("origin segments exceed the collection limit");
     }
     uint64_t previous_end = 0;
     std::optional<std::string> previous_origin;
@@ -937,7 +1083,8 @@ private:
     return true;
   }
 
-  bool DecodeFeatures(const Json::Value &value, CompilerRequest &request) {
+  template <typename Request>
+  bool DecodeFeatures(const Json::Value &value, Request &request) {
     if (!value.isArray() || value.size() > kMaxLanguageFeatures) {
       return Fail("language features exceed the collection limit");
     }
@@ -1397,7 +1544,7 @@ DecodedRequest ReadRequest(std::istream &input) {
        static_cast<unsigned char>(bytes[2]) == 0xbfU) ||
       !InspectUtf8(bytes).valid || !HasValidJsonLexemes(bytes)) {
     return {.failure = RequestFailureKind::kFraming,
-            .error = "stdin is not canonical UTF-8 JSON"};
+            .error = "stdin failed strict UTF-8 JSON framing validation"};
   }
 
   Json::CharReaderBuilder builder;
@@ -1435,11 +1582,31 @@ DecodedRequest ReadRequest(std::istream &input) {
             .error = "JSON contains invalid Unicode or a non-finite number"};
   }
   Decoder decoder;
-  auto value = decoder.Decode(root);
-  if (!value) {
+  const bool is_entry_inventory =
+      root.isObject() && root["contractId"].isString() &&
+      root["contractId"].asString() == kEntryInventoryContract;
+  if (is_entry_inventory) {
+    const auto identity = EntryInventoryRequestIdentity(bytes);
+    auto request = decoder.DecodeEntryInventory(root, identity);
+    if (!request) {
+      return {.failure = RequestFailureKind::kProtocol,
+              .error = decoder.error(),
+              .operation = RequestOperation::kEntryInventory,
+              .request_identity = identity};
+    }
+    return {
+        .value = WorkerRequest(
+            std::in_place_type<EntryInventoryRequest>, std::move(*request)),
+        .operation = RequestOperation::kEntryInventory,
+        .request_identity = identity,
+    };
+  }
+  auto request = decoder.DecodeCompiler(root);
+  if (!request) {
     return {.failure = RequestFailureKind::kProtocol, .error = decoder.error()};
   }
-  return {.value = std::move(value)};
+  return {.value = WorkerRequest(std::in_place_type<CompilerRequest>,
+                                 std::move(*request))};
 }
 
 } // namespace vgpu::native

@@ -1,17 +1,18 @@
-// Feasibility prototype for the vgpu-owned Tint compiler protocol.
+// Feasibility prototype for the vgpu-owned Tint tool protocol.
 //
 // This one-shot worker reads exactly one UTF-8 JSON request from stdin through
 // EOF and writes exactly one JSON response to stdout. A decoded request always
 // exits zero, including protocol and compiler failures; framing, I/O, or a
 // process failure exits nonzero and makes stdout untrustworthy.
 //
-// This prototype owns the Metal ABI instead of accepting translator-selected
-// internals. External buffer intervals are restricted to 0..<30. Tint receives
-// one shared immediate-data binding at buffer(30), with the storage-buffer-size
-// table starting at byte offset 4 and the ordinary non-constant-zero word at
-// byte offset 0. The response reports an effective internal binding and
-// storage-buffer-size region only when Tint's raised entry interface / writer
-// output uses them.
+// The inventory operation reports only canonical WGSL entry names and stages.
+// The translation operation owns the Metal ABI instead of accepting
+// translator-selected internals. External buffer intervals are restricted to
+// 0..<30. Tint receives one shared immediate-data binding at buffer(30), with
+// the storage-buffer-size table starting at byte offset 4 and the ordinary
+// non-constant-zero word at byte offset 0. The translation response reports an
+// effective internal binding and storage-buffer-size region only when Tint's
+// raised entry interface / writer output uses them.
 
 #include <algorithm>
 #include <cmath>
@@ -70,7 +71,10 @@ constexpr uint32_t kStorageBufferSizesOffset = 4;
 constexpr uint32_t kNonConstantZeroOffset = 0;
 constexpr size_t kDiagnosticMessageMaxBytes = 16384;
 constexpr size_t kDiagnosticMessagesTotalMaxBytes = 1024 * 1024;
+constexpr size_t kMaxInventoryEntryPoints = 65536;
 constexpr std::string_view kContractId = "vgpu-native-tint-compiler/v1";
+constexpr std::string_view kEntryInventoryContractId =
+    "vgpu-native-tint-entry-inventory/v1";
 constexpr std::string_view kTintRevision =
     "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
 
@@ -78,10 +82,12 @@ static_assert(sizeof(float) == sizeof(uint32_t));
 static_assert(std::numeric_limits<float>::is_iec559);
 
 using Arguments = vgpu::native::CompilerRequest;
+using EntryInventoryRequest = vgpu::native::EntryInventoryRequest;
 using InterfaceInterpolation = vgpu::native::InterfaceInterpolation;
 using InterfaceType = vgpu::native::InterfaceType;
 using InterfaceValue = vgpu::native::InterfaceValue;
 using Mapping = vgpu::native::Mapping;
+using RequestIdentity = vgpu::native::RequestIdentity;
 using SemanticInterface = vgpu::native::SemanticInterface;
 
 struct Location {
@@ -112,6 +118,11 @@ struct EmittedSlotsResult {
 struct InterfaceResult {
   std::optional<SemanticInterface> value;
   std::string error;
+};
+
+struct InventoryEntryPoint {
+  std::string stage;
+  std::string wgsl;
 };
 
 bool g_output_succeeded = true;
@@ -224,6 +235,28 @@ void WriteFailure(const std::vector<Diagnostic> &diagnostics) {
          << "  \"schemaVersion\": 1,\n"
          << "  \"contractId\": " << JsonString(kContractId) << ",\n"
          << "  \"ok\": false,\n";
+  WriteCompilerIdentity(output);
+  WriteDiagnostics(output, diagnostics);
+  output << "\n}\n";
+  EmitResponse(output.str());
+}
+
+void WriteRequestIdentity(std::ostream &output,
+                          const RequestIdentity &identity) {
+  output << "  \"requestIdentity\": {\"domain\": "
+         << JsonString(identity.domain)
+         << ", \"sha256\": " << JsonString(identity.sha256) << "},\n";
+}
+
+void WriteEntryInventoryFailure(const RequestIdentity &identity,
+                                const std::vector<Diagnostic> &diagnostics) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schemaVersion\": 1,\n"
+         << "  \"contractId\": " << JsonString(kEntryInventoryContractId)
+         << ",\n"
+         << "  \"ok\": false,\n";
+  WriteRequestIdentity(output, identity);
   WriteCompilerIdentity(output);
   WriteDiagnostics(output, diagnostics);
   output << "\n}\n";
@@ -916,6 +949,29 @@ void WriteSlot(std::ostream &output, std::string_view resource_class,
          << ", \"index\": " << index << ", \"count\": " << count << '}';
 }
 
+void EnableLanguageFeatures(
+    const std::set<std::string> &features,
+    tint::wgsl::reader::Options &reader_options) {
+  for (const auto &feature : features) {
+    if (feature == "dual_source_blending") {
+      reader_options.allowed_features.extensions.insert(
+          tint::wgsl::Extension::kDualSourceBlending);
+    } else if (feature == "f16") {
+      reader_options.allowed_features.extensions.insert(
+          tint::wgsl::Extension::kF16);
+    } else if (feature == "uniform_buffer_standard_layout") {
+      reader_options.allowed_features.features.insert(
+          tint::wgsl::LanguageFeature::kUniformBufferStandardLayout);
+    } else if (feature == "unrestricted_pointer_parameters") {
+      reader_options.allowed_features.features.insert(
+          tint::wgsl::LanguageFeature::kUnrestrictedPointerParameters);
+    } else if (feature == "sized_binding_array") {
+      reader_options.allowed_features.features.insert(
+          tint::wgsl::LanguageFeature::kSizedBindingArray);
+    }
+  }
+}
+
 void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
                   const std::vector<Diagnostic> &diagnostics,
                   const SemanticInterface &shader_interface,
@@ -999,24 +1055,7 @@ int Run(const Arguments &arguments) {
 
   tint::Source::File source_file(arguments.source_name, arguments.source_text);
   tint::wgsl::reader::Options reader_options;
-  for (const auto &feature : arguments.features) {
-    if (feature == "dual_source_blending") {
-      reader_options.allowed_features.extensions.insert(
-          tint::wgsl::Extension::kDualSourceBlending);
-    } else if (feature == "f16") {
-      reader_options.allowed_features.extensions.insert(
-          tint::wgsl::Extension::kF16);
-    } else if (feature == "uniform_buffer_standard_layout") {
-      reader_options.allowed_features.features.insert(
-          tint::wgsl::LanguageFeature::kUniformBufferStandardLayout);
-    } else if (feature == "unrestricted_pointer_parameters") {
-      reader_options.allowed_features.features.insert(
-          tint::wgsl::LanguageFeature::kUnrestrictedPointerParameters);
-    } else if (feature == "sized_binding_array") {
-      reader_options.allowed_features.features.insert(
-          tint::wgsl::LanguageFeature::kSizedBindingArray);
-    }
-  }
+  EnableLanguageFeatures(arguments.features, reader_options);
   auto program = tint::wgsl::reader::Parse(&source_file, reader_options);
   auto diagnostics = ConvertDiagnostics(program.Diagnostics(), source_file,
                                         arguments.source_name);
@@ -1341,6 +1380,130 @@ int Run(const Arguments &arguments) {
   return 0;
 }
 
+int InventoryStageRank(std::string_view stage) {
+  if (stage == "vertex") {
+    return 0;
+  }
+  if (stage == "fragment") {
+    return 1;
+  }
+  if (stage == "compute") {
+    return 2;
+  }
+  return 3;
+}
+
+bool IsInventoryIdentifier(std::string_view value) {
+  if (value.empty() || value.size() > 256) {
+    return false;
+  }
+  const auto initial = static_cast<unsigned char>(value.front());
+  if (!((initial >= 'A' && initial <= 'Z') ||
+        (initial >= 'a' && initial <= 'z') || initial == '_')) {
+    return false;
+  }
+  return std::all_of(value.begin() + 1, value.end(), [](unsigned char item) {
+    return (item >= 'A' && item <= 'Z') || (item >= 'a' && item <= 'z') ||
+           (item >= '0' && item <= '9') || item == '_';
+  });
+}
+
+void WriteEntryInventorySuccess(
+    const EntryInventoryRequest &request,
+    const std::vector<Diagnostic> &diagnostics,
+    const std::vector<InventoryEntryPoint> &entry_points) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schemaVersion\": 1,\n"
+         << "  \"contractId\": " << JsonString(kEntryInventoryContractId)
+         << ",\n"
+         << "  \"ok\": true,\n";
+  WriteRequestIdentity(output, request.identity);
+  WriteCompilerIdentity(output);
+  WriteDiagnostics(output, diagnostics);
+  output << ",\n  \"result\": {\"entryPoints\": [";
+  if (!entry_points.empty()) {
+    output << '\n';
+  }
+  for (size_t index = 0; index < entry_points.size(); ++index) {
+    const auto &entry = entry_points[index];
+    output << "    {\"stage\": " << JsonString(entry.stage)
+           << ", \"wgsl\": " << JsonString(entry.wgsl) << '}'
+           << (index + 1 == entry_points.size() ? "\n" : ",\n");
+  }
+  output << "  ]}\n}\n";
+  EmitResponse(output.str());
+}
+
+int Run(const EntryInventoryRequest &request) {
+  tint::Source::File source_file(request.source_name, request.source_text);
+  tint::wgsl::reader::Options reader_options;
+  EnableLanguageFeatures(request.features, reader_options);
+  auto program = tint::wgsl::reader::Parse(&source_file, reader_options);
+  auto diagnostics =
+      ConvertDiagnostics(program.Diagnostics(), source_file, request.source_name);
+  if (!program.IsValid()) {
+    if (diagnostics.empty()) {
+      diagnostics.push_back(Error("VGPU-NATIVE-WGSL-INVALID", "wgsl",
+                                  "Tint rejected WGSL without a diagnostic"));
+    }
+    WriteEntryInventoryFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  tint::inspector::Inspector inspector(program);
+  const auto inspected = inspector.GetEntryPoints();
+  if (inspector.has_error()) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INSPECT", "inspect", inspector.error()));
+    WriteEntryInventoryFailure(request.identity, diagnostics);
+    return 1;
+  }
+  if (inspected.size() > kMaxInventoryEntryPoints) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
+              "entry points exceed the collection limit"));
+    WriteEntryInventoryFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  std::vector<InventoryEntryPoint> entry_points;
+  entry_points.reserve(inspected.size());
+  for (const auto &entry : inspected) {
+    const std::string stage = StageName(entry.stage);
+    if (stage == "unknown" || !IsInventoryIdentifier(entry.name)) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                "Tint returned an entry point outside the inventory contract"));
+      WriteEntryInventoryFailure(request.identity, diagnostics);
+      return 1;
+    }
+    entry_points.push_back(
+        InventoryEntryPoint{.stage = stage, .wgsl = entry.name});
+  }
+  std::sort(entry_points.begin(), entry_points.end(),
+            [](const auto &left, const auto &right) {
+              const int left_rank = InventoryStageRank(left.stage);
+              const int right_rank = InventoryStageRank(right.stage);
+              return left_rank != right_rank ? left_rank < right_rank
+                                             : left.wgsl < right.wgsl;
+            });
+  if (std::adjacent_find(entry_points.begin(), entry_points.end(),
+                         [](const auto &left, const auto &right) {
+                           return left.stage == right.stage &&
+                                  left.wgsl == right.wgsl;
+                         }) != entry_points.end()) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+              "Tint returned a duplicate entry point"));
+    WriteEntryInventoryFailure(request.identity, diagnostics);
+    return 1;
+  }
+
+  WriteEntryInventorySuccess(request, diagnostics, entry_points);
+  return 0;
+}
+
 } // namespace
 
 int main(int argc, char **) {
@@ -1372,8 +1535,16 @@ int main(int argc, char **) {
   }
   if (!decoded.value) {
     if (decoded.failure == vgpu::native::RequestFailureKind::kProtocol) {
-      WriteFailure(
-          {Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol", decoded.error)});
+      const auto diagnostics =
+          std::vector{Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol",
+                            decoded.error)};
+      if (decoded.operation ==
+              vgpu::native::RequestOperation::kEntryInventory &&
+          decoded.request_identity) {
+        WriteEntryInventoryFailure(*decoded.request_identity, diagnostics);
+      } else {
+        WriteFailure(diagnostics);
+      }
       return g_output_succeeded ? 0 : kExitIo;
     }
     std::cerr << (decoded.failure == vgpu::native::RequestFailureKind::kIo
@@ -1385,14 +1556,24 @@ int main(int argc, char **) {
   }
 
   tint::Initialize();
+  const auto write_internal_failure = [&](std::string message) {
+    const auto diagnostics =
+        std::vector{Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                          std::move(message))};
+    if (std::holds_alternative<EntryInventoryRequest>(*decoded.value)) {
+      WriteEntryInventoryFailure(
+          std::get<EntryInventoryRequest>(*decoded.value).identity,
+          diagnostics);
+    } else {
+      WriteFailure(diagnostics);
+    }
+  };
   try {
-    Run(*decoded.value);
+    std::visit([](const auto &request) { Run(request); }, *decoded.value);
   } catch (const std::exception &) {
-    WriteFailure({Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                        "compiler raised an internal exception")});
+    write_internal_failure("compiler raised an internal exception");
   } catch (...) {
-    WriteFailure({Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                        "compiler failed with an unknown exception")});
+    write_internal_failure("compiler failed with an unknown exception");
   }
   tint::Shutdown();
   return g_output_succeeded ? 0 : kExitIo;

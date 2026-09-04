@@ -1,6 +1,7 @@
 # C1 semantic-to-compiler bridge
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
+The first executable slice adds an authenticated entry inventory to the same one-shot Tint worker.
 It closes the gap between isolated semantic, override, slot-allocation, translation, and offline
 Metal proofs without turning TypeScript into a second WGSL compiler.
 
@@ -37,6 +38,35 @@ The spike has five explicit owners:
 Apple's offline `metal` and `metallib` tools remain a sixth, independent acceptance boundary. See
 [`docs/boundary.md`](./docs/boundary.md) for the data flow and trust rules.
 
+## Current executable evidence
+
+`vgpu-native-tint-entry-inventory/v1` is implemented as a second contract in the existing one-shot
+Tint worker. The worker dispatches inventory or translation from the request's exact `contractId`;
+each invocation still accepts one framed request and exits.
+
+The inventory caller uses a deterministic JSON encoder that sorts object keys but never normalizes
+string values. In particular, WGSL code units and their UTF-8 encoding remain exact. The response
+authenticates those encoded request bytes with:
+
+```text
+SHA-256(UTF-8("vgpu-native-tint-entry-inventory-request-bytes/v1")
+  || 0x00
+  || exact encoded request bytes)
+```
+
+The request separately authenticates the origin map with a SHA-256 of its deterministic,
+key-sorted JSON encoding. The TypeScript caller requires the source `virtualPath` and every origin
+map input ID to be NFC before encoding; it does not apply that requirement to WGSL text. The
+standalone worker validates UTF-8, shape, hashes, and protocol invariants but does not independently
+prove NFC, so canonical path and input identities remain a caller precondition.
+
+The checked-in gate covers four request fixtures, four response fixtures, thirteen prelaunch
+mutations including cyclic and non-NFC requests, five response mutations, one retained-request
+association mutation, and zero worker launches for all prelaunch failures. With a native worker it
+performs thirteen invocations: each fixture twice, four raw protocol mutations, and one valid NFC
+Unicode origin-map case. Static Unicode canaries also prove that decomposed WGSL survives wire
+encoding without normalization and that path limits count Unicode code points consistently.
+
 ## Fixture strategy
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
@@ -50,7 +80,7 @@ candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 
 ## Implementation order
 
-1. Add an authenticated entry-inventory operation to the vgpu Tint tool.
+1. Add an authenticated entry-inventory operation to the vgpu Tint tool. This slice is executable.
 2. Select programs in TypeScript, inject the versioned full-screen source when required, and
    finalize the exact source, source hash, origin map, origin-map hash, and entry-declaration spans.
 3. Add a multi-entry semantic-extraction operation and connect the existing exact-static override
@@ -66,6 +96,8 @@ candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 
 This spike does not implement the Swift runtime, freeze a Dawn/Tint source revision, establish Intel
 or AMD GPU support, recover general authored diagnostic spans from the current module-only origin
-map, or prove a production artifact. Exact authored entry-declaration spans are still required and
-come from resolver tokens. The spike also does not expose broad Tint reflection in generated Swift
-or the Metal runtime artifact.
+map, or prove a production artifact. Exact authored entry-declaration spans come from resolver
+tokens and use 1-based locations, UTF-16-code-unit columns, and an end-exclusive boundary. Tint
+diagnostics instead report UTF-8 byte columns; consumers must not combine the two coordinate
+systems. The spike also does not expose broad Tint reflection in generated Swift or the Metal
+runtime artifact.

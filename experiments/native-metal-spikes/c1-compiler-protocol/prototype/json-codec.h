@@ -24,14 +24,17 @@ enum class RequestFailureKind {
 };
 
 struct DecodedRequest {
-  std::optional<CompilerRequest> value;
+  std::optional<WorkerRequest> value;
   RequestFailureKind failure = RequestFailureKind::kNone;
   std::string error;
+  RequestOperation operation = RequestOperation::kCompiler;
+  std::optional<RequestIdentity> request_identity;
 };
 
-// Reads one UTF-8 JSON value through EOF, then validates and decodes the full
-// v1 request. Syntax/framing errors are deliberately distinct from a decoded
-// JSON value that does not implement the protocol.
+// Reads one UTF-8 JSON value through EOF, dispatches its v1 operation, then
+// validates and decodes that operation's exact request. Syntax/framing errors
+// are deliberately distinct from a decoded JSON value that does not implement
+// the selected protocol.
 DecodedRequest ReadRequest(std::istream &input);
 
 } // namespace vgpu::native

@@ -37,6 +37,8 @@ const compilerProtocolDirectory = resolve(
   "..",
   "c1-compiler-protocol"
 );
+const compilerContractId = "vgpu-native-tint-compiler/v1";
+const inventoryContractId = "vgpu-native-tint-entry-inventory/v1";
 let lock;
 let baseLockSha256;
 let localHeadCommit;
@@ -124,6 +126,12 @@ const legacyOracleInputIds = [
   "nativeCompiler",
   "protocol",
 ];
+const compilerOracleInputIds = [
+  ...legacyOracleInputIds,
+  "originSchema",
+  "requestSchema",
+  "responseSchema",
+];
 const oracleInputs = [
   {
     id: "releasesManifest",
@@ -146,6 +154,11 @@ const oracleInputs = [
     mutable: true,
   },
   {
+    id: "originMapProtocol",
+    path: "../c1-compiler-protocol/lib/origin-map.mjs",
+    mutable: true,
+  },
+  {
     id: "originSchema",
     path: "../c1-compiler-protocol/contracts/origin-map-v1.schema.json",
     mutable: true,
@@ -158,6 +171,21 @@ const oracleInputs = [
   {
     id: "responseSchema",
     path: "../c1-compiler-protocol/contracts/response-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "inventoryProtocol",
+    path: "../c1-semantic-bridge/lib/protocol.mjs",
+    mutable: true,
+  },
+  {
+    id: "inventoryRequestSchema",
+    path: "../c1-semantic-bridge/contracts/inventory-request-v1.schema.json",
+    mutable: true,
+  },
+  {
+    id: "inventoryResponseSchema",
+    path: "../c1-semantic-bridge/contracts/inventory-response-v1.schema.json",
     mutable: true,
   },
 ];
@@ -192,6 +220,26 @@ const oracleFixtures = [
     path: "c1-compiler-protocol/fixtures/requests/wgsl-error.json",
   },
   {
+    id: "inventory-empty-module",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/requests/empty-module.json",
+  },
+  {
+    id: "inventory-invalid-wgsl",
+    ok: false,
+    path: "c1-semantic-bridge/fixtures/requests/invalid-wgsl.json",
+  },
+  {
+    id: "inventory-library-only",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/requests/library-only.json",
+  },
+  {
+    id: "inventory-multi-stage",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/requests/multi-stage.json",
+  },
+  {
     id: "compute-builtins",
     ok: true,
     path: "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
@@ -224,6 +272,12 @@ const oracleFixtures = [
 ];
 const oracleFixtureIds = oracleFixtures.map(({ id }) => id);
 const oracleRequestPaths = oracleFixtures.map(({ path }) => path);
+const compilerOracleFixtureIds = oracleFixtures
+  .filter(({ id }) => !id.startsWith("inventory-"))
+  .map(({ id }) => id);
+const compilerOracleRequestPaths = oracleFixtures
+  .filter(({ id }) => !id.startsWith("inventory-"))
+  .map(({ path }) => path);
 const mutableCompiledRepositories = ["dawn", "abseil", "jsoncpp", "worker"];
 const valuedArguments = new Map([
   ["--dawn-root", "dawnRoot"],
@@ -531,8 +585,7 @@ function verifyLockedFile(expected, label, mutablePointer) {
 
 function verifyOracleInputs() {
   const lockedIds = Object.keys(lock.oracle.inputs);
-  const expectedIds =
-    baselineLockShape === "legacy" ? legacyOracleInputIds : oracleInputIds;
+  const expectedIds = oracleInputIdsForLockShape(baselineLockShape);
   assertEqual(
     JSON.stringify(lockedIds),
     JSON.stringify(expectedIds),
@@ -541,7 +594,7 @@ function verifyOracleInputs() {
   const files = {};
   for (const input of oracleInputs) {
     const expected = lock.oracle.inputs[input.id];
-    if (!expected && baselineLockShape !== "legacy") {
+    if (!expected && expectedIds.includes(input.id)) {
       fail(`oracle input ${input.id} is not locked`);
     }
     if (expected) {
@@ -589,15 +642,25 @@ function verifyOracleInputs() {
     readJSON(files.originSchema),
     readJSON(files.requestSchema),
     readJSON(files.responseSchema),
+    readJSON(files.inventoryRequestSchema),
+    readJSON(files.inventoryResponseSchema),
   ];
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   for (const schema of schemas) ajv.addSchema(schema);
   const validators = {
-    request: ajv.getSchema(schemas[1].$id),
-    response: ajv.getSchema(schemas[2].$id),
+    [compilerContractId]: {
+      request: ajv.getSchema(schemas[1].$id),
+      response: ajv.getSchema(schemas[2].$id),
+    },
+    [inventoryContractId]: {
+      request: ajv.getSchema(schemas[3].$id),
+      response: ajv.getSchema(schemas[4].$id),
+    },
   };
-  if (!validators.request || !validators.response) {
-    fail("oracle schemas did not register request and response validators");
+  for (const [contractId, contractValidators] of Object.entries(validators)) {
+    if (!contractValidators.request || !contractValidators.response) {
+      fail(`oracle schemas omitted validators for ${contractId}`);
+    }
   }
   return { files, requests, validators };
 }
@@ -650,6 +713,32 @@ function assertOracleFixtureDefinitions() {
   verifyMslMaskSelfCanary();
 }
 
+function oracleInputIdsForLockShape(shape) {
+  switch (shape) {
+    case "legacy":
+      return legacyOracleInputIds;
+    case "compiler":
+      return compilerOracleInputIds;
+    case "current":
+      return oracleInputIds;
+    default:
+      fail(`unknown oracle input lock shape ${String(shape)}`);
+  }
+}
+
+function oracleFixtureIdsForLockShape(shape) {
+  switch (shape) {
+    case "legacy":
+      return legacyOracleRequestPaths.map((path) => path.slice(0, -5));
+    case "compiler":
+      return compilerOracleFixtureIds;
+    case "current":
+      return oracleFixtureIds;
+    default:
+      fail(`unknown oracle fixture lock shape ${String(shape)}`);
+  }
+}
+
 function selectOracleRequestRoot() {
   assertOracleFixtureDefinitions();
   const expected = lock.oracle.requests;
@@ -659,22 +748,31 @@ function selectOracleRequestRoot() {
     "oracle request closure algorithm"
   );
   if (candidateMode) {
-    const hasLegacyShape =
-      expected.root === legacyOracleRequestRoot &&
-      JSON.stringify(expected.paths) ===
-        JSON.stringify(legacyOracleRequestPaths);
-    const hasCurrentShape =
-      expected.root === oracleRequestRoot &&
-      JSON.stringify(expected.paths) === JSON.stringify(oracleRequestPaths);
-    if (!hasLegacyShape && !hasCurrentShape) {
+    const shapes = [
+      {
+        id: "legacy",
+        root: legacyOracleRequestRoot,
+        paths: legacyOracleRequestPaths,
+      },
+      {
+        id: "compiler",
+        root: oracleRequestRoot,
+        paths: compilerOracleRequestPaths,
+      },
+      { id: "current", root: oracleRequestRoot, paths: oracleRequestPaths },
+    ];
+    const recognized = shapes.find(
+      (shape) =>
+        expected.root === shape.root &&
+        JSON.stringify(expected.paths) === JSON.stringify(shape.paths)
+    );
+    if (!recognized) {
       fail(
-        "source lock has neither the recognized legacy nor current oracle request shape"
+        "source lock has no recognized legacy, compiler-only, or current oracle request shape"
       );
     }
-    baselineLockShape = hasLegacyShape ? "legacy" : "current";
-    const expectedCanaryIds = hasLegacyShape
-      ? legacyOracleRequestPaths.map((path) => path.slice(0, -5))
-      : oracleFixtureIds;
+    baselineLockShape = recognized.id;
+    const expectedCanaryIds = oracleFixtureIdsForLockShape(baselineLockShape);
     assertEqual(
       JSON.stringify(Object.keys(lock.oracle.canaries).sort(compareUtf8)),
       JSON.stringify([...expectedCanaryIds].sort(compareUtf8)),
@@ -1109,6 +1207,7 @@ function isAllowedCandidateChange(pointer) {
     "/build/outputs/universal/sha256",
   ]);
   if (exact.has(pointer)) return true;
+  const baselineInputIds = oracleInputIdsForLockShape(baselineLockShape);
   for (const input of oracleInputs.filter((candidate) => candidate.mutable)) {
     const inputPointer = `/oracle/inputs/${input.id}`;
     if (
@@ -1117,11 +1216,7 @@ function isAllowedCandidateChange(pointer) {
     ) {
       return true;
     }
-    if (
-      baselineLockShape === "legacy" &&
-      !legacyOracleInputIds.includes(input.id) &&
-      pointer === inputPointer
-    ) {
+    if (!baselineInputIds.includes(input.id) && pointer === inputPointer) {
       return true;
     }
   }
@@ -1134,6 +1229,7 @@ function isAllowedCandidateChange(pointer) {
       }
     }
   }
+  const baselineFixtureIds = oracleFixtureIdsForLockShape(baselineLockShape);
   for (const id of oracleFixtureIds) {
     const canary = `/oracle/canaries/${escapeJsonPointer(id)}`;
     if (
@@ -1143,10 +1239,7 @@ function isAllowedCandidateChange(pointer) {
     ) {
       return true;
     }
-    if (
-      !legacyOracleRequestPaths.includes(`${id}.json`) &&
-      pointer === canary
-    ) {
+    if (!baselineFixtureIds.includes(id) && pointer === canary) {
       return true;
     }
   }
@@ -2544,6 +2637,65 @@ function verifyOracleBranchEvidence(id, response) {
       );
       break;
     }
+    case "inventory-invalid-wgsl":
+      assertExactJSON(
+        { ok: response.ok, diagnostics: response.diagnostics },
+        {
+          ok: false,
+          diagnostics: [
+            {
+              code: "VGPU-NATIVE-WGSL-INVALID",
+              severity: "error",
+              phase: "wgsl",
+              message:
+                "cannot convert value of type 'abstract-float' to type 'u32'",
+              location: {
+                kind: "generated-wgsl",
+                virtualPath: "Intermediate/inventory-invalid.wgsl",
+                start: { line: 1, column: 61 },
+                end: { line: 1, column: 64 },
+              },
+            },
+          ],
+        },
+        `${id} exact invalid inventory evidence`
+      );
+      break;
+    case "inventory-empty-module":
+    case "inventory-library-only":
+      assertExactJSON(
+        {
+          ok: response.ok,
+          diagnostics: response.diagnostics,
+          result: response.result,
+        },
+        { ok: true, diagnostics: [], result: { entryPoints: [] } },
+        `${id} exact empty inventory evidence`
+      );
+      break;
+    case "inventory-multi-stage":
+      assertExactJSON(
+        {
+          ok: response.ok,
+          diagnostics: response.diagnostics,
+          result: response.result,
+        },
+        {
+          ok: true,
+          diagnostics: [],
+          result: {
+            entryPoints: [
+              { stage: "vertex", wgsl: "alpha" },
+              { stage: "vertex", wgsl: "zebra" },
+              { stage: "fragment", wgsl: "beta" },
+              { stage: "fragment", wgsl: "gamma" },
+              { stage: "compute", wgsl: "zed" },
+            ],
+          },
+        },
+        `${id} exact multi-stage inventory evidence`
+      );
+      break;
     case "vertex-sparse":
       assertExactJSON(
         response.result?.interface,
@@ -2663,7 +2815,7 @@ function verifyOracleBranchEvidence(id, response) {
   }
 }
 
-function verifyRequestParity(builds, universal, oracle, protocol, validators) {
+function verifyRequestParity(builds, universal, oracle, protocols, validators) {
   const directVariants = [
     ["arm64/a", builds.arm64.a.executable, "native"],
     ["arm64/b", builds.arm64.b.executable, "native"],
@@ -2687,24 +2839,58 @@ function verifyRequestParity(builds, universal, oracle, protocol, validators) {
     if (!candidateMode) {
       assertEqual(expected.ok, fixture.ok, `${id} locked success state`);
     }
-    const request = readFileSync(join(requestDirectory, fixture.path));
+    const fixtureBytes = readFileSync(join(requestDirectory, fixture.path));
     let decodedRequest;
     try {
-      decodedRequest = JSON.parse(request.toString("utf8"));
+      decodedRequest = JSON.parse(fixtureBytes.toString("utf8"));
     } catch (error) {
       fail(`${id} request is not valid JSON: ${error.message}`);
     }
-    assertSchema(validators.request, decodedRequest, `${id} request`);
-    protocol.assertRequestSemantics(decodedRequest);
+    const contractId = decodedRequest?.contractId;
+    const contractValidators = validators[contractId];
+    if (!contractValidators) {
+      fail(`${id} selects unsupported oracle contract ${String(contractId)}`);
+    }
+    assertSchema(contractValidators.request, decodedRequest, `${id} request`);
+    let request = fixtureBytes;
+    let prepareResponse;
+    let assertResponseSemantics;
+    switch (contractId) {
+      case compilerContractId: {
+        protocols.compiler.assertRequestSemantics(decodedRequest);
+        const emittedName = decodedRequest.entryPoint.metal;
+        if (emittedNames.has(emittedName)) {
+          fail(`${id} duplicates another oracle emitted entry-point name`);
+        }
+        emittedNames.add(emittedName);
+        prepareResponse = (response) =>
+          protocols.compiler.attachDiagnosticOrigins(decodedRequest, response);
+        assertResponseSemantics = (response) =>
+          protocols.compiler.assertResponseSemantics(decodedRequest, response);
+        break;
+      }
+      case inventoryContractId: {
+        protocols.inventory.assertInventoryRequestSemantics(decodedRequest);
+        const encodedRequest =
+          protocols.inventory.encodeInventoryRequest(decodedRequest);
+        request = Buffer.from(encodedRequest, "utf8");
+        prepareResponse = (response) => response;
+        assertResponseSemantics = (response) =>
+          protocols.inventory.assertInventoryResponseSemantics(
+            decodedRequest,
+            encodedRequest,
+            response
+          );
+        break;
+      }
+      default:
+        fail(`${id} selects unsupported oracle contract ${String(contractId)}`);
+    }
     const requestSha256 = sha256Buffer(request);
     if (requestHashes.has(requestSha256)) {
       fail(`${id} duplicates another oracle request byte for byte`);
     }
     requestHashes.add(requestSha256);
-    if (emittedNames.has(decodedRequest.entryPoint.metal)) {
-      fail(`${id} duplicates another oracle emitted entry-point name`);
-    }
-    emittedNames.add(decodedRequest.entryPoint.metal);
     if (!candidateMode) {
       assertEqual(
         requestSha256,
@@ -2733,21 +2919,18 @@ function verifyRequestParity(builds, universal, oracle, protocol, validators) {
     }
     assertEqual(reference.decoded.ok, fixture.ok, `${id} oracle ok`);
     assertSchema(
-      validators.response,
+      contractValidators.response,
       reference.decoded,
       `${id} raw oracle response`
     );
-    const referenceWithOrigins = protocol.attachDiagnosticOrigins(
-      decodedRequest,
-      reference.decoded
-    );
+    const referenceForSemantics = prepareResponse(reference.decoded);
     assertSchema(
-      validators.response,
-      referenceWithOrigins,
-      `${id} enriched oracle response`
+      contractValidators.response,
+      referenceForSemantics,
+      `${id} semantic oracle response`
     );
-    protocol.assertResponseSemantics(decodedRequest, referenceWithOrigins);
-    verifyOracleBranchEvidence(id, referenceWithOrigins);
+    assertResponseSemantics(referenceForSemantics);
+    verifyOracleBranchEvidence(id, referenceForSemantics);
     for (const [variant, executable, execution] of directVariants) {
       const result = runWorker(
         executable,
@@ -2761,20 +2944,17 @@ function verifyRequestParity(builds, universal, oracle, protocol, validators) {
         );
       }
       assertSchema(
-        validators.response,
+        contractValidators.response,
         result.decoded,
         `${id} ${variant} raw response`
       );
-      const resultWithOrigins = protocol.attachDiagnosticOrigins(
-        decodedRequest,
-        result.decoded
-      );
+      const resultForSemantics = prepareResponse(result.decoded);
       assertSchema(
-        validators.response,
-        resultWithOrigins,
-        `${id} ${variant} enriched response`
+        contractValidators.response,
+        resultForSemantics,
+        `${id} ${variant} semantic response`
       );
-      protocol.assertResponseSemantics(decodedRequest, resultWithOrigins);
+      assertResponseSemantics(resultForSemantics);
     }
     measuredCanaries[id] = {
       requestSha256,
@@ -3094,9 +3274,23 @@ async function main() {
   if (
     typeof protocolModule.attachDiagnosticOrigins !== "function" ||
     typeof protocolModule.assertRequestSemantics !== "function" ||
-    typeof protocolModule.assertResponseSemantics !== "function"
+    typeof protocolModule.assertResponseSemantics !== "function" ||
+    protocolModule.COMPILER_CONTRACT !== compilerContractId
   ) {
     fail("locked protocol helper omitted semantic validators");
+  }
+  const inventoryProtocolModule = await import(
+    pathToFileURL(inputs.oracle.files.inventoryProtocol).href
+  );
+  if (
+    typeof inventoryProtocolModule.encodeInventoryRequest !== "function" ||
+    typeof inventoryProtocolModule.assertInventoryRequestSemantics !==
+      "function" ||
+    typeof inventoryProtocolModule.assertInventoryResponseSemantics !==
+      "function" ||
+    inventoryProtocolModule.INVENTORY_CONTRACT !== inventoryContractId
+  ) {
+    fail("locked inventory protocol helper omitted semantic validators");
   }
   const toolchain = verifyToolchain(inputs);
   const buildRoot = createScratch(options);
@@ -3134,7 +3328,7 @@ async function main() {
       builds,
       universal,
       oracle,
-      protocolModule,
+      { compiler: protocolModule, inventory: inventoryProtocolModule },
       inputs.oracle.validators
     );
     const finalInputs = verifySourceInputs(options);
