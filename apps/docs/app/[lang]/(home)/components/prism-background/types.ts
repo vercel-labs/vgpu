@@ -281,21 +281,20 @@ export const PRISM_LIGHT_TONE_MAPPING_ORDER: readonly LightToneMapping[] = [
   "reinhard",
   "clamp",
 ];
-export const PRISM_LIGHT_TONE_MAPPING_LABELS: Record<
-  LightToneMapping,
-  string
-> = {
-  aces: "ACES",
-  neutral: "Neutral",
-  reinhard: "Reinhard",
-  clamp: "Clamp (none)",
-};
-export const PRISM_LIGHT_TONE_MAPPING_CODES: Record<LightToneMapping, number> = {
-  aces: 0,
-  neutral: 1,
-  reinhard: 2,
-  clamp: 3,
-};
+export const PRISM_LIGHT_TONE_MAPPING_LABELS: Record<LightToneMapping, string> =
+  {
+    aces: "ACES",
+    neutral: "Neutral",
+    reinhard: "Reinhard",
+    clamp: "Clamp (none)",
+  };
+export const PRISM_LIGHT_TONE_MAPPING_CODES: Record<LightToneMapping, number> =
+  {
+    aces: 0,
+    neutral: 1,
+    reinhard: 2,
+    clamp: 3,
+  };
 export const DEFAULT_LIGHT_MODE_CONTROLS: LightModeControls = {
   wall: {
     normalStrength: 0.6,

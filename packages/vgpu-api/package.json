@@ -1,6 +1,6 @@
 {
   "name": "vgpu",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Public VGPU API entrypoint scaffold for browser, Node, mock, scene, and client typing surfaces.",
   "keywords": [
     "webgpu",
@@ -56,6 +56,11 @@
       "import": "./dist/core.js",
       "default": "./dist/core.js"
     },
+    "./three": {
+      "types": "./dist/three.d.ts",
+      "import": "./dist/three.js",
+      "default": "./dist/three.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -84,6 +89,18 @@
     "wgpu-matrix": "^3.4.2",
     "zod": "^4.4.3"
   },
+  "peerDependencies": {
+    "three": ">=0.180.0 <0.200.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "three": "^0.180.0"
+  },
   "vgpuExportBundleBudgetNote": "Gzip ceilings use 512-byte granularity: each budget is the next 512-byte multiple strictly above the measured size. Regenerate with `pnpm bundle-check --update`. vgpuBundleAudience/vgpuExportBundleAudiences select the gate: \"client\" entries ship to browsers and fail on any byte over budget; \"tooling\" entries (loaders, Node runtime, CLI, package tarballs) only warn until growth passes vgpuBundleBudgetGrowthThreshold (default 5%). Tarballs measure published dist bytes with sourcemap sourcesContent stripped and *.docs.md excluded.",
   "vgpuExportBundleAudiences": {
     ".": "client",
@@ -91,7 +108,8 @@
     "./mock": "tooling",
     "./scene": "client",
     "./client": "client",
-    "./core": "client"
+    "./core": "client",
+    "./three": "client"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
     ".": 38912,
@@ -99,13 +117,14 @@
     "./mock": 38912,
     "./scene": 12800,
     "./client": 512,
-    "./core": 3584
+    "./core": 3584,
+    "./three": 2560
   },
   "bin": {
     "vgpu": "./bin/vgpu.js"
   },
   "vgpuExperienceBundleBudgetsGzipBytes": {
-    "init-only": 1024,
+    "init-only": 1536,
     "effect-only": 25600,
     "triangle-low-level": 28672,
     "draw-recipe-box": 30208,

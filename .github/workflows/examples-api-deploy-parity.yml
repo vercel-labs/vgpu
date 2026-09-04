@@ -14,8 +14,8 @@
 #        the cutover: run 30935778630 (prod vs preview, byte-identical).
 #   G5 — minutes after the cutover deploy: run it once against production again.
 #
-# The script is dependency-free (pure Node, no imports outside node:*), so this workflow needs no
-# pnpm install and no build: checkout + node.
+# The verifier is dependency-free. When local parity is requested, the workflow installs the
+# generator dependency and creates the ignored artifact tree first; no full docs build is needed.
 #
 # OPERATIONAL RULE (Risk #5 of the design): this only READS a deployment over HTTP. Never "simplify"
 # verifying a preview by pointing the production domain at it — the only path to the production
@@ -70,10 +70,21 @@ jobs:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install pnpm for local artifact generation
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - name: Install generator dependencies
+        if: inputs.local_tree != 'none'
+        run: pnpm install --frozen-lockfile
+      - name: Generate local examples API artifact tree
+        if: inputs.local_tree != 'none'
+        run: node apps/docs/scripts/generate-examples-api.mjs
       - name: Verify the examples API artifact tree against the deployment(s)
         env:
           BASE_URL: ${{ inputs.base_url }}

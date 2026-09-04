@@ -24,6 +24,10 @@ import { meta as nextjsFlareMeta } from '../examples/nextjs-flare/meta';
 import { meta as depthEstimationMeta } from '../examples/depth-estimation/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
 import { meta as airPaintingMeta } from '../examples/air-painting/meta';
+import { meta as tslExportsMeta } from '../examples/tsl-exports/meta';
+import { meta as threeTslMeta } from '../examples/three-tsl/meta';
+import { meta as particleOrbitMeta } from '../examples/particle-orbit/meta';
+import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -48,6 +52,10 @@ const rawMetadata = {
   'depth-estimation': depthEstimationMeta,
   'mnist-classifier': mnistClassifierMeta,
   'air-painting': airPaintingMeta,
+  'tsl-exports': tslExportsMeta,
+  'three-tsl': threeTslMeta,
+  'particle-orbit': particleOrbitMeta,
+  'adaptive-quality': adaptiveQualityMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -81,6 +89,10 @@ export const exampleMetadataBySlug = {
   'depth-estimation': withThumbnails(rawMetadata['depth-estimation']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
   'air-painting': withThumbnails(rawMetadata['air-painting']),
+  'tsl-exports': withThumbnails(rawMetadata['tsl-exports']),
+  'three-tsl': withThumbnails(rawMetadata['three-tsl']),
+  'particle-orbit': withThumbnails(rawMetadata['particle-orbit']),
+  'adaptive-quality': withThumbnails(rawMetadata['adaptive-quality']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);

@@ -6,6 +6,10 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
+  "adaptive-quality": {
+    "card": "/examples/adaptive-quality.card.png",
+    "hero": "/examples/adaptive-quality.hero.png"
+  },
   "agent-radiance-cascades": {
     "card": "/examples/agent-radiance-cascades.card.png",
     "hero": "/examples/agent-radiance-cascades.hero.png"
@@ -78,6 +82,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/optimized-black-hole.card.png",
     "hero": "/examples/optimized-black-hole.hero.png"
   },
+  "particle-orbit": {
+    "card": "/examples/particle-orbit.card.png",
+    "hero": "/examples/particle-orbit.hero.png"
+  },
   "radiance-cascades": {
     "card": "/examples/radiance-cascades.card.png",
     "hero": "/examples/radiance-cascades.hero.png"
@@ -86,6 +94,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/raymarched-fractal.card.png",
     "hero": "/examples/raymarched-fractal.hero.png"
   },
+  "three-tsl": {
+    "card": "/examples/three-tsl.card.png",
+    "hero": "/examples/three-tsl.hero.png"
+  },
   "transmission": {
     "card": "/examples/transmission.card.png",
     "hero": "/examples/transmission.hero.png"
@@ -93,5 +105,9 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "triangle-led-front": {
     "card": "/examples/triangle-led-front.card.png",
     "hero": "/examples/triangle-led-front.hero.png"
+  },
+  "tsl-exports": {
+    "card": "/examples/tsl-exports.card.png",
+    "hero": "/examples/tsl-exports.hero.png"
   }
 };

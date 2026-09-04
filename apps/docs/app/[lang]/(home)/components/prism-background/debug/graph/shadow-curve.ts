@@ -11,9 +11,7 @@ export function shadowCurveValue(
     return safePivot * Math.pow(linear / safePivot, safeContrast);
   }
   return (
-    1 -
-    (1 - safePivot) *
-      Math.pow((1 - linear) / (1 - safePivot), safeContrast)
+    1 - (1 - safePivot) * Math.pow((1 - linear) / (1 - safePivot), safeContrast)
   );
 }
 

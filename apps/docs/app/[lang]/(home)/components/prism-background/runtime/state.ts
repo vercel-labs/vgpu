@@ -1,4 +1,4 @@
-import { cameraView, wallHalfHeight, type CameraView } from "../camera";
+import { cameraView, wallHalfHeight, type CameraView } from "../scene/camera";
 import {
   applyProjectionFraming,
   fitProjectionDistance,
@@ -7,9 +7,13 @@ import {
   projectedBounds,
   type NormalizedViewport,
   type ProjectionFraming,
-} from "../framing";
-import { buildLightMesh } from "../light-mesh";
-import { prismMeshData } from "../prism-mesh";
+} from "../scene/framing";
+import {
+  buildLightMesh,
+  LIGHT_VERTEX_FLOATS,
+  type LightMeshLayout,
+} from "../scene/light-mesh";
+import { prismMeshData } from "../scene/prism-mesh";
 import {
   CAMERA_DISTANCE,
   DEFAULT_PRISM_CONTROLS,
@@ -116,6 +120,22 @@ export function resizeRuntime(
   runtime.outputSize = output;
   runtime.aspect = output[0] / Math.max(1, output[1]);
   refreshRuntime(runtime);
+}
+
+export function setRuntimeLightMeshLayout(
+  runtime: PrismRuntime,
+  layout: LightMeshLayout
+): void {
+  if (
+    runtime.lightMeshLayout.samples === layout.samples &&
+    runtime.lightMeshLayout.beamSlices === layout.beamSlices
+  )
+    return;
+  runtime.lightVertices = new Float32Array(
+    layout.vertexCount * LIGHT_VERTEX_FLOATS
+  );
+  runtime.lightMeshLayout = layout;
+  refreshLightMesh(runtime);
 }
 
 export function incidenceAt(
@@ -230,6 +250,8 @@ function refreshLightMesh(runtime: PrismRuntime): void {
         runtime.controls.spectralDispersion ??
         PRISM_DISPERSION_PRESETS[runtime.controls.dispersion],
       edgeFalloff: runtime.controls.lightFade.edgeFalloff,
+      samples: runtime.lightMeshLayout.samples,
+      beamSlices: runtime.lightMeshLayout.beamSlices,
       wallHalfExtent: lightWallExtent(
         runtime.aspect,
         runtime.cameraDistance,

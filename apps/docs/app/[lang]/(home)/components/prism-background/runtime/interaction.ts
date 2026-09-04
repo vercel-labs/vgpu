@@ -1,8 +1,4 @@
-import {
-  CAMERA_ORBIT_LERP,
-  LAMP_AIM_LERP,
-  PRISM_DEFAULT_ARC,
-} from "../types";
+import { CAMERA_ORBIT_LERP, LAMP_AIM_LERP, PRISM_DEFAULT_ARC } from "../types";
 
 type Pair = readonly [number, number];
 
@@ -81,7 +77,11 @@ export function automaticPointerPosition(timeSeconds: number): Pair {
   ];
 }
 
-function easedPair(current: Pair, target: Pair, amount: number): Pair | undefined {
+function easedPair(
+  current: Pair,
+  target: Pair,
+  amount: number
+): Pair | undefined {
   const dx = target[0] - current[0];
   const dy = target[1] - current[1];
   if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) {

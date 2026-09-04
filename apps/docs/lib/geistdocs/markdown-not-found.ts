@@ -41,15 +41,15 @@ function localizedPathname(
 }
 
 function isKnownHtmlRoute(pathname: string): boolean {
-  const exampleSlug = pathname.startsWith("/examples/")
-    ? pathname.slice("/examples/".length)
-    : null;
+  const exampleRoute = pathname.match(
+    /^\/examples\/([^/]+)(?:\/(?:download|v0\.json))?$/u,
+  );
 
   return (
     HTML_ROUTE_PATHS.has(pathname) ||
     pathname === "/docs" ||
     pathname === "/examples" ||
-    (exampleSlug !== null && isExampleSlug(exampleSlug)) ||
+    (exampleRoute !== null && isExampleSlug(exampleRoute[1])) ||
     HTML_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
 }

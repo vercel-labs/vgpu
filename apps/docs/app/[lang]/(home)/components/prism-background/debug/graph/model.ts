@@ -3,6 +3,7 @@ import type { Edge, Node } from "@xyflow/react";
 import type {
   PrismDebugSource,
   PrismPipelineMode,
+  PrismPipelineQuality,
 } from "../../pipelines/types";
 import type { PrismDebugPreviewBridge } from "../preview-bridge";
 import { controlGroupsForSource } from "./control-schema";
@@ -10,15 +11,12 @@ import { controlGroupsForSource } from "./control-schema";
 export type PrismDebugNodeData = {
   readonly bridge: PrismDebugPreviewBridge;
   readonly mode: PrismPipelineMode;
+  readonly quality: PrismPipelineQuality;
   readonly source: PrismDebugSource;
 };
 
 export type PrismDebugFlowNode = Node<PrismDebugNodeData, "prismDebug">;
-export type PrismDebugEdgeData = {
-  readonly labelX?: number;
-  readonly labelY?: number;
-  readonly path?: string;
-};
+export type PrismDebugEdgeData = Record<string, never>;
 export type PrismDebugFlowEdge = Edge<PrismDebugEdgeData, "prismDebug">;
 
 export type PrismDebugGraphModel = {
@@ -33,12 +31,15 @@ const NON_PREVIEW_NODE_HEIGHT = 70;
 const CONTROL_ROW_HEIGHT = 48;
 const CONTROL_GROUP_HEIGHT = 34;
 const CONTROL_PREVIEW_HEIGHT = 112;
+const DETAIL_ROW_HEIGHT = 25;
+const DETAIL_BLOCK_PADDING = 14;
 
 /** Builds a deterministic left-to-right layout without React-owned graph state. */
 export function createDebugGraphModel(
   sources: readonly PrismDebugSource[],
   bridge: PrismDebugPreviewBridge,
-  mode: PrismPipelineMode
+  mode: PrismPipelineMode,
+  quality: PrismPipelineQuality = "high"
 ): PrismDebugGraphModel {
   const knownIds = new Set(sources.map(({ id }) => id));
   const depthOf = createDepthResolver(sources);
@@ -47,12 +48,15 @@ export function createDebugGraphModel(
   const nodes = sources.map<PrismDebugFlowNode>((source) => {
     const depth = depthOf(source.id);
     const y = nextYByDepth.get(depth) ?? 0;
-    nextYByDepth.set(depth, y + estimatedNodeHeight(source, mode) + NODE_GAP);
+    nextYByDepth.set(
+      depth,
+      y + estimatedNodeHeight(source, mode, quality) + NODE_GAP
+    );
     return {
       id: source.id,
       type: "prismDebug",
       position: { x: depth * COLUMN_GAP, y },
-      data: { bridge, mode, source },
+      data: { bridge, mode, quality, source },
       draggable: false,
       selectable: false,
       // XYFlow disables pointer hit-testing when a node is neither draggable
@@ -86,9 +90,10 @@ export function createDebugGraphModel(
 
 export function estimatedNodeHeight(
   source: PrismDebugSource,
-  mode: PrismPipelineMode
+  mode: PrismPipelineMode,
+  quality: PrismPipelineQuality = "high"
 ): number {
-  const groups = controlGroupsForSource(source.id, mode);
+  const groups = controlGroupsForSource(source.id, mode, quality);
   const controlCount = groups.reduce(
     (count, group) => count + group.controls.length,
     0
@@ -103,7 +108,10 @@ export function estimatedNodeHeight(
       : PREVIEW_NODE_HEIGHT) +
     groups.length * CONTROL_GROUP_HEIGHT +
     previewCount * CONTROL_PREVIEW_HEIGHT +
-    controlCount * CONTROL_ROW_HEIGHT
+    controlCount * CONTROL_ROW_HEIGHT +
+    (source.details?.length
+      ? DETAIL_BLOCK_PADDING + source.details.length * DETAIL_ROW_HEIGHT
+      : 0)
   );
 }
 

@@ -31,6 +31,10 @@ jobs:
       VERCEL_DEPLOYMENT_URL: ${{ inputs.deployment_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This workflow mutates production state. Never inherit the repository default branch,
+          # which is `canary`; retained production artifacts must be generated from stable `main`.
+          ref: main
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:

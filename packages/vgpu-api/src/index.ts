@@ -12,7 +12,8 @@ export { VGPUError } from "./errors.ts";
 export type { Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
 export { Uniform } from "./core/uniform.ts";
 export type { UniformOptions } from "./core/uniform.ts";
-export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
+export { isShaderFunctionExport } from "@vgpu/wgsl";
+export type { ResolvedShader, ShaderFunctionExport, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
 // --- The public creation API: gpu-first free functions. There is no facade — the `Gpu` is a
 // device handle plus a lifetime, and everything else takes it as its first argument.

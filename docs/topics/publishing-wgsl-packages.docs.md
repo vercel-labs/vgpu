@@ -16,7 +16,7 @@ import { customNoise } from '@acme/shaders/noise';
 }
 ```
 
-`@vgpu/wgsl-std` is exactly this kind of package — there is nothing private about the mechanism. Publish a package this way when you want to reuse shader code across apps or share it with other teams; use [a relative import](shader-workflow.docs.md) when the code lives in the same project.
+`@vgpu/wgsl-std` is exactly this kind of package — there is nothing private about the mechanism. Publish a package this way when you want to reuse shader code across apps or share it with other teams; use the local-file workflow from [WGSL modules](/concepts/wgsl-modules) when the code lives in the same project.
 
 ## The package
 

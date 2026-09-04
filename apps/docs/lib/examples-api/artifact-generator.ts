@@ -62,7 +62,7 @@ export function generateExampleArtifacts(
   const manifests = graph.examples.map((example) => {
     const files = example.files.map((file) => {
       validatePath(file.path);
-      // `.raw` keeps checked-in canonical TypeScript bytes out of the docs compiler;
+      // `.raw` keeps generated canonical TypeScript bytes out of the docs compiler;
       // the manifest path remains the authored path and the response bytes are unchanged.
       const key = `${base}/examples/${example.id}/files/${file.path}.raw`;
       add(key, encoder.encode(file.text), file.contentType, true);

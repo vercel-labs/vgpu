@@ -3,6 +3,7 @@
   "curation": {
     "packageOrder": [
       "vgpu",
+      "vgpu/three",
       "vgpu/scene",
       "@vgpu/wgsl",
       "@vgpu/wgsl-std",
@@ -82,6 +83,10 @@
         "srgb",
         "orbit",
         "..."
+      ],
+      "vgpu/three": [
+        "tsl-exports",
+        "..."
       ]
     },
     "guideGroups": [
@@ -89,6 +94,15 @@
         "title": "General",
         "slugs": [
           "getting-started"
+        ]
+      },
+      {
+        "title": "Integrations",
+        "slugs": [
+          "threejs",
+          "nextjs",
+          "no-bundler",
+          "external-ticker"
         ]
       },
       {
@@ -100,7 +114,9 @@
           "measuring",
           "optimize-pass",
           "shader-fix-its",
-          "performance-playbook"
+          "performance-playbook",
+          "adaptive-quality",
+          "shipping-to-production"
         ]
       },
       {
@@ -120,6 +136,7 @@
       "Concepts @ /concepts",
       "  ",
       "    Context @ /concepts/context",
+      "    WGSL modules @ /concepts/wgsl-modules",
       "    Draws @ /concepts/draws",
       "    Compilation @ /concepts/compilation",
       "    Effects @ /concepts/effects",
@@ -130,6 +147,7 @@
       "  ",
       "    Overview @ /guides",
       "  General",
+      "  Integrations",
       "  Performance",
       "  Testing",
       "  ...",

@@ -101,6 +101,7 @@ Read the concept guides in order — each builds on the previous one:
 
 ```sh
 vgpu docs cat concepts-context.md         # the Gpu context, surfaces, targets
+vgpu docs cat concepts-wgsl-modules.md    # split shaders with import and export
 vgpu docs cat concepts-draws.md           # draw(), meshes, instancing
 vgpu docs cat concepts-compilation.md     # compile() and pipeline warmup
 vgpu docs cat concepts-effects.md         # fragment effects and set()

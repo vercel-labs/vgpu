@@ -37,6 +37,8 @@ export function parseModule(tokens: readonly Token[]): ModuleParse {
       locals.push({ name, localName: name, kind: kind.text });
       if (exported) exports.push({ name, localName: name, kind: kind.text });
       sawDecl = true;
+      i = kindIndex + 1;
+      continue;
     }
     i++;
   }
@@ -74,9 +76,23 @@ function parseImport(tokens: readonly Token[], start: number): [ImportDecl, numb
 }
 
 function skipAttrs(tokens: readonly Token[], i: number): number {
-  while (tokens[i]?.text === "@") { i += 2; if (tokens[i]?.text === "(") while (tokens[i] && tokens[i]!.text !== ")") i++; if (tokens[i]?.text === ")") i++; }
+  i = skipTrivia(tokens, i);
+  while (tokens[i]?.text === "@") {
+    const nameIndex = skipTrivia(tokens, i + 1);
+    i = skipTrivia(tokens, nameIndex + 1);
+    if (tokens[i]?.text === "(") {
+      let depth = 0;
+      do {
+        if (tokens[i]?.text === "(") depth++;
+        else if (tokens[i]?.text === ")") depth--;
+        i++;
+      } while (tokens[i] && depth > 0);
+      i = skipTrivia(tokens, i);
+    }
+  }
   return i;
 }
+function skipTrivia(tokens: readonly Token[], i: number): number { while (tokens[i] && isComment(tokens[i]!)) i++; return i; }
 function findDeclName(tokens: readonly Token[], kindIndex: number): string {
   let i = kindIndex + 1;
   if (tokens[kindIndex]?.text === "var" && tokens[i]?.text === "<") while (tokens[i] && tokens[i]!.text !== ">") i++;

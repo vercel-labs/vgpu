@@ -1,11 +1,11 @@
 ---
 title: Agents
-description: Point your agent at npx vgpu, install the vgpu skill, or connect through MCP.
+description: Use package-versioned CLI docs, install the thin vgpu skill, or connect through MCP.
 ---
 
 # Agents
 
-vgpu is an agent-first library. Start with the CLI for documentation versioned with the API in your `node_modules`, install the skill for guided reference loading, or connect the hosted MCP server for remote read-only access.
+vgpu is an agent-first library. Start with the CLI for documentation versioned with the API in your `node_modules`, install the skill to route agents to that local documentation, or connect the hosted MCP server for remote read-only access to the latest stable release.
 
 ## Point your agent at the docs
 
@@ -21,7 +21,9 @@ That's the whole instruction. The command prints its own guide — starting with
 npx skills add vercel-labs/vgpu
 ```
 
-For agents that support skills, this installs the vgpu skill: the same reference docs plus guidance on when to load each one, so the agent reads only the doc it needs.
+For agents that support skills, this installs a small, version-independent router. It does not copy the API reference from the repository. Instead, it teaches the agent to inspect the `vgpu` version installed in your project and query the documentation bundled with that package, so the guidance stays aligned with the code you are using.
+
+If a manifest or lockfile selects `vgpu` but dependencies are not installed, the skill restores or invokes that exact selection instead of substituting another version. Only when neither the project nor the user has selected a version does it fall back to the latest stable package. Prerelease documentation is opt-in through an explicitly selected prerelease such as `vgpu@next`.
 
 ## Connect the hosted MCP server
 
@@ -31,8 +33,8 @@ Use `add-mcp` to detect installed MCP clients and add the hosted VGPU server glo
 npx -y add-mcp https://vgpu.sh/api/mcp -g
 ```
 
-The installer lets you review its detected clients before writing their configuration. The server requires no authentication and gives the agent two read-only tools: `docs` for searching and resolving the VGPU documentation, and `examples` for finding and reading verified example source.
+The installer lets you review its detected clients before writing their configuration. The server requires no authentication and gives the agent two read-only tools: `docs` for searching and resolving the VGPU documentation, and `examples` for finding and reading verified example source. The hosted server follows the stable release on vgpu.sh; use the local CLI or local stdio server when you need documentation for an installed prerelease.
 
 If the agent needs to download an example, run `npx -y vgpu mcp --project-from-cwd` locally on Linux or macOS. Filesystem writes remain disabled until you explicitly select an output boundary. See the [MCP reference](/docs/mcp) for hosted HTTP details, local stdio setup, safe download destinations, and editor-specific guidance.
 
-Everything an agent learns this way, you can read on this site — it is the human mirror of the same content.
+Everything the hosted server exposes is also readable on this site. Package-versioned CLI docs remain authoritative for the exact `vgpu` version installed in a project.

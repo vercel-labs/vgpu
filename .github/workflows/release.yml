@@ -4,47 +4,156 @@ on:
   release:
     types: [published]
 
+# npm publishes are irreversible and a recursive workspace publish is not atomic. Never allow
+# two release events to mutate the dist-tags concurrently, and never cancel one mid-publish.
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+  # GitHub otherwise keeps only one pending run and silently replaces it when a third release is
+  # published. Preserve the full FIFO queue because every npm release must be observed.
+  queue: max
+
 jobs:
   publish:
     # Binary-asset releases like dawn-* must not publish npm.
     if: ${{ startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ubuntu-latest
+    outputs:
+      release-branch: ${{ steps.release-channel.outputs.release-branch }}
     permissions:
       contents: read
       id-token: write
 
     steps:
-      # Resolved first, before anything expensive: a forgotten "Set as a pre-release" checkbox
-      # then fails in seconds instead of after a full install, build and test run.
-      #
-      # Prereleases go to the `next` dist-tag so `npm install vgpu` keeps resolving to the last
-      # stable. The guard covers the one mistake the UI makes easy: cutting `v0.2.0-rc.0` without
-      # ticking the box would publish a release candidate straight to `latest`. A hyphen in the
-      # tag is the signal, because semver only allows one there to introduce a prerelease.
-      # (`dawn-*` / `lavapipe-*` tags also contain hyphens but never reach this job — the `if:`
-      # above requires the tag to start with `v`.)
-      - name: Resolve npm dist-tag
-        id: dist-tag
+      # The release tag is the code that will be built and published. Fetching full history plus
+      # both long-lived branches lets us prove it is the current tip of the channel selected by
+      # its semver.
+      - name: Checkout release commit and branch history
+        uses: actions/checkout@v4
+        with:
+          # A release event is attached to an immutable commit SHA. Checking out that SHA avoids
+          # building different code if somebody moves the tag while this workflow is queued.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      # Resolve the channel before the expensive install/build/test gates. Only the two supported
+      # release shapes are accepted:
+      #   vX.Y.Z-rc.N + GitHub prerelease -> canary -> npm `next`
+      #   vX.Y.Z      + normal release    -> main   -> npm `latest`
+      # This rejects either checkbox mismatch, as well as arbitrary prerelease identifiers.
+      - name: Resolve and validate release channel
+        id: release-channel
+        shell: bash
         env:
           TAG_NAME: ${{ github.event.release.tag_name }}
           IS_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            echo "tag=next" >> "$GITHUB_OUTPUT"
-            echo "Prerelease $TAG_NAME -> publishing under dist-tag 'next'."
-          elif [ "$TAG_NAME" != "${TAG_NAME#*-}" ]; then
-            echo "::error::Release $TAG_NAME looks like a prerelease tag but the release is not marked as a pre-release; publishing it would move the 'latest' dist-tag. Edit the release, tick 'Set as a pre-release', and publish it again."
-            exit 1
+          set -euo pipefail
+
+          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            if [ "$IS_PRERELEASE" != "true" ]; then
+              echo "::error::Release candidate $TAG_NAME must be marked as a GitHub pre-release."
+              exit 1
+            fi
+            echo "dist-tag=next" >> "$GITHUB_OUTPUT"
+            echo "release-branch=canary" >> "$GITHUB_OUTPUT"
+            echo "Release candidate $TAG_NAME -> canary -> npm dist-tag 'next'."
+          elif [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ "$IS_PRERELEASE" != "false" ]; then
+              echo "::error::Stable release $TAG_NAME must not be marked as a GitHub pre-release."
+              exit 1
+            fi
+            echo "dist-tag=latest" >> "$GITHUB_OUTPUT"
+            echo "release-branch=main" >> "$GITHUB_OUTPUT"
+            echo "Stable release $TAG_NAME -> main -> npm dist-tag 'latest'."
           else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-            echo "Stable $TAG_NAME -> publishing under dist-tag 'latest'."
+            echo "::error::Unsupported npm release tag $TAG_NAME. Expected vX.Y.Z or vX.Y.Z-rc.N."
+            exit 1
           fi
 
-      - name: Checkout release tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 1
+      - name: Verify package versions and channel tip
+        shell: bash
+        env:
+          EVENT_SHA: ${{ github.sha }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          RELEASE_BRANCH: ${{ steps.release-channel.outputs.release-branch }}
+        run: |
+          set -euo pipefail
+
+          head_sha="$(git rev-parse HEAD)"
+          tag_ref="refs/tags/$TAG_NAME"
+          if ! git show-ref --verify --quiet "$tag_ref"; then
+            echo "::error::Release tag '$TAG_NAME' was not fetched."
+            exit 1
+          fi
+          tag_sha="$(git rev-parse "${tag_ref}^{commit}")"
+          if [ "$head_sha" != "$EVENT_SHA" ] || [ "$tag_sha" != "$EVENT_SHA" ]; then
+            echo "::error::$TAG_NAME, the release event, and the checked-out commit must resolve to the same SHA."
+            exit 1
+          fi
+
+          tag_version="${TAG_NAME#v}"
+          EXPECTED_VERSION="$tag_version" node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const config = JSON.parse(fs.readFileSync(".changeset/config.json", "utf8"));
+          const fixedPackages = new Set(config.fixed.flat());
+          const workspaceRoots = ["packages", "examples", "apps"];
+          const manifests = workspaceRoots
+            .flatMap((root) =>
+              fs
+                .readdirSync(root, { withFileTypes: true })
+                .filter((entry) => entry.isDirectory())
+                .map((entry) => path.join(root, entry.name, "package.json"))
+            )
+            .filter((manifestPath) => fs.existsSync(manifestPath))
+            .map((manifestPath) => ({
+              manifestPath,
+              manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")),
+            }));
+          const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
+          const errors = [];
+
+          for (const packageName of fixedPackages) {
+            const entry = byName.get(packageName);
+            if (!entry) {
+              errors.push(`${packageName}: package.json not found`);
+            } else if (entry.manifest.version !== process.env.EXPECTED_VERSION) {
+              errors.push(
+                `${packageName}: ${entry.manifest.version} (expected ${process.env.EXPECTED_VERSION})`
+              );
+            }
+          }
+
+          for (const { manifestPath, manifest } of manifests) {
+            if (manifest.private !== true && !fixedPackages.has(manifest.name)) {
+              errors.push(
+                `${manifest.name ?? manifestPath}: public workspace package missing from the fixed group`
+              );
+            }
+          }
+
+          if (errors.length > 0) {
+            console.error(
+              `::error::Release package validation failed: ${errors.join(", ")}`
+            );
+            process.exit(1);
+          }
+          NODE
+
+          branch_ref="refs/remotes/origin/$RELEASE_BRANCH"
+          if ! git show-ref --verify --quiet "$branch_ref"; then
+            echo "::error::Release branch '$RELEASE_BRANCH' was not fetched."
+            exit 1
+          fi
+          branch_sha="$(git rev-parse "$branch_ref")"
+          if [ "$head_sha" != "$branch_sha" ]; then
+            echo "::error::$TAG_NAME must point to the current $RELEASE_BRANCH tip ($branch_sha)."
+            exit 1
+          fi
+
+          echo "$TAG_NAME matches every fixed package and the current $RELEASE_BRANCH tip."
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -75,7 +184,8 @@ jobs:
       # The full suite, exactly as ci.yml runs it. Tests that need a real GPU (Dawn + Xvfb) are
       # guarded by `VGPU_DOCKER_TEST` and skip themselves here, so this stays runner-safe while
       # covering every publishable package. Real-device validation stays in ci.yml's `docker-gpu`
-      # job on `main`; a release tag is only ever cut from an already-green `main`.
+      # job on both long-lived branches; a release tag is only cut from an already-green `canary`
+      # (release candidates) or `main` (stable releases).
       - name: Run tests
         run: pnpm exec vitest run
 
@@ -88,5 +198,44 @@ jobs:
 
       - name: Publish to npm
         env:
-          DIST_TAG: ${{ steps.dist-tag.outputs.tag }}
+          DIST_TAG: ${{ steps.release-channel.outputs.dist-tag }}
         run: pnpm -r publish --access public --no-git-checks --tag "$DIST_TAG"
+
+  # Keep status reporting separate from the irreversible npm publish. If this API call has a
+  # transient failure, the failed job can be retried without attempting to republish packages.
+  # Vercel requires this exact status before assigning production domains to a `main` deployment.
+  # RC and binary-asset releases never emit it.
+  report-stable-npm-status:
+    name: Record stable npm publication status
+    needs: publish
+    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.release-branch == 'main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Mark stable npm publication successful
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_CHECK_CONTEXT: "Vercel - vgpu: npm stable published"
+        run: |
+          set -euo pipefail
+
+          main_sha="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+          if [ "$main_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Stable release commit $GITHUB_SHA is no longer the current main tip ($main_sha)."
+            exit 1
+          fi
+
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            --field state=success \
+            --field context="$VERCEL_CHECK_CONTEXT" \
+            --field description="All stable npm packages published successfully." \
+            --field target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

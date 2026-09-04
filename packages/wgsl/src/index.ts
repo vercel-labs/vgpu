@@ -1,2 +1,3 @@
 export { compile } from "./compile.ts";
-export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "./types.ts";
+export { isShaderFunctionExport } from "./shader-function-export.ts";
+export type { ResolvedShader, ShaderFunctionExport, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "./types.ts";

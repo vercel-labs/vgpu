@@ -1,5 +1,5 @@
 import { linearToSrgb3 } from "@vgpu/wgsl-std/color";
-import { applyPrismToneMapping } from "../../materials/shared/tone-mapping.wgsl";
+import { applyPrismToneMapping } from "../../pipelines/shared/presentation/tone-mapping.wgsl";
 
 struct PreviewParams {
   mode: u32,

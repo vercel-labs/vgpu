@@ -21,6 +21,7 @@ const previousRoot = process.env.VGPU_EXAMPLES_LOCAL_ROOT;
 beforeAll(async () => {
   root = await mkdtemp(resolve(tmpdir(), 'vgpu-route-test-'));
   await writeArtifactTree(set, root);
+  await writeArtifactTree(set, resolve(root, 'generated/examples-api'));
   process.env.VGPU_EXAMPLES_ARTIFACT_STORE = 'local';
   process.env.VGPU_EXAMPLES_LOCAL_ROOT = root;
 });
@@ -125,19 +126,21 @@ describe('examples API App Router handlers', () => {
     expect((await manifest.json()).files.map(({ path }: { path: string }) => path)).toEqual(fractal.files.map(({ path }) => path));
   });
 
-  it('serves the committed deployment tree when no artifact store is configured', async () => {
+  it('serves the build-generated deployment tree when no artifact store is configured', async () => {
     // Production default: VERCEL set, no store mode, no blob token. The API must read the generated
     // tree that shipped with the deployment -- the deploy is the publication step -- rather than
     // reaching for an object store it has no credential for.
     const previousVercel = process.env.VERCEL;
     const previousToken = process.env.VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN;
+    const previousWorkingDirectory = process.cwd();
     delete process.env.VGPU_EXAMPLES_ARTIFACT_STORE;
     delete process.env.VGPU_EXAMPLES_LOCAL_ROOT;
     delete process.env.VGPU_EXAMPLES_VERCEL_BLOB_READ_WRITE_TOKEN;
     process.env.VERCEL = '1';
+    process.chdir(root);
     try {
       const committed = JSON.parse(
-        await readFile(resolve(process.cwd(), 'apps/docs/generated/examples-api/examples/v1/latest.json'), 'utf8'),
+        await readFile(resolve(root, 'generated/examples-api/examples/v1/latest.json'), 'utf8'),
       );
 
       const discovery = await discoveryRoute.GET(request('/.well-known/vgpu-examples.json'));
@@ -152,6 +155,7 @@ describe('examples API App Router handlers', () => {
       expect(index.status).toBe(200);
       expect((await index.json()).revision).toBe(committed.revision);
     } finally {
+      process.chdir(previousWorkingDirectory);
       process.env.VGPU_EXAMPLES_ARTIFACT_STORE = 'local';
       process.env.VGPU_EXAMPLES_LOCAL_ROOT = root;
       if (previousVercel === undefined) delete process.env.VERCEL;

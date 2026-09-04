@@ -1,5 +1,6 @@
 [
   "3d",
+  "adaptive-quality",
   "animation",
   "anti-aliasing",
   "batch-rendering",
@@ -42,6 +43,8 @@
   "sierpinski",
   "simulation",
   "ssaa",
+  "three",
   "triangle",
+  "typegpu",
   "volumetric"
 ]

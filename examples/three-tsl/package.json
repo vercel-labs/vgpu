@@ -1,0 +1,30 @@
+{
+  "name": "@vgpu/example-three-tsl",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "previews": "vite-node scripts/generate-previews.ts",
+    "field-viz": "vite-node scripts/field-viz.ts"
+  },
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*",
+    "@vgpu/wgsl-std": "workspace:*",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@pmndrs/assets": "^1.7.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.180.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.3",
+    "vgpu": "workspace:^",
+    "vite": "^6.0.0",
+    "vite-node": "^3.2.4",
+    "vitest": "^3.2.7"
+  }
+}

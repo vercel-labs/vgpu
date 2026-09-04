@@ -29,7 +29,7 @@ import {
   prismSilhouette,
   regionStats,
   renderComposite,
-} from './validation';
+} from './scene/validation';
 
 const gpuOnly = process.env.VGPU_DOCKER_TEST !== '1';
 

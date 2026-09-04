@@ -44,6 +44,69 @@ test("FrameRunner.loop caps callbacks to the requested fps", () => {
   expect(callbacks.has(6)).toBe(false);
 });
 
+test("FrameRunner.frame cancels the frame when the callback throws and rethrows the callback's own error", () => {
+  // A test double for the frame, like the fps test above: the runner must only use the public
+  // submit()/cancel() surface here and never let its own bookkeeping throw over the callback.
+  const submit = vi.fn();
+  const cancel = vi.fn();
+  const runner = new FrameRunner(() => ({ submit, cancel }) as never, () => undefined);
+  const failure = new Error("tick failed");
+
+  let thrown: unknown;
+  try { runner.frame(() => { throw failure; }); }
+  catch (error) { thrown = error; }
+
+  expect(thrown).toBe(failure);
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(submit).not.toHaveBeenCalled();
+});
+
+test("a loop tick whose callback throws submits nothing for that frame and stops the loop", async () => {
+  const callbacks = mockAnimationFrames();
+  const gpu = await init();
+  const submits = spyQueueSubmits(gpu.device.gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const failure = new Error("tick failed");
+  let tick = 0;
+
+  const handle = frameLoop(gpu, (currentFrame) => {
+    tick += 1;
+    currentFrame.pass(colorTarget, () => undefined);
+    if (tick === 2) throw failure;
+  });
+  fire(callbacks, 1, 0);
+  expect(submits.count).toBe(1);
+
+  let thrown: unknown;
+  try { fire(callbacks, 2, 16); }
+  catch (error) { thrown = error; }
+
+  // The failed tick's command buffer never reached the queue, and the error escaped the rAF
+  // callback untouched — which also means no further tick was scheduled: the loop is over.
+  expect(thrown).toBe(failure);
+  expect(submits.count).toBe(1);
+  expect(callbacks.size).toBe(0);
+  expect(() => handle.stop()).not.toThrow();
+  await gpu.settled();
+  gpu.dispose();
+  vi.restoreAllMocks();
+});
+
+test("a loop ended by a throwing tick drops its gpu registration, like handle.stop() does", () => {
+  const callbacks = mockAnimationFrames();
+  const untrack = vi.fn();
+  const trackLoop = vi.fn(() => untrack);
+  const runner = new FrameRunner(() => ({ submit: () => undefined, cancel: () => undefined }) as never, () => undefined, trackLoop);
+
+  runner.loop(() => { throw new Error("tick failed"); });
+  expect(trackLoop).toHaveBeenCalledTimes(1);
+  expect(() => fire(callbacks, 1, 0)).toThrowError(/tick failed/);
+
+  // Nothing will ever run this loop again, so gpu.dispose() must not keep holding it.
+  expect(untrack).toHaveBeenCalledTimes(1);
+  expect(callbacks.size).toBe(0);
+});
+
 test("gpu.dispose() stops the render loops that gpu started", async () => {
   const callbacks = mockAnimationFrames();
   const gpu = await init();
@@ -104,6 +167,17 @@ function mockAnimationFrames(): Map<number, RafCallback> {
   }) as typeof requestAnimationFrame;
   globalThis.cancelAnimationFrame = ((id: number) => { callbacks.delete(id); }) as typeof cancelAnimationFrame;
   return callbacks;
+}
+
+/** Counts command buffers handed to the queue, matching frame-cancel.test.ts / frame-atomic.test.ts. */
+function spyQueueSubmits(device: GPUDevice): { readonly count: number } {
+  const counter = { count: 0 };
+  const original = device.queue.submit.bind(device.queue);
+  vi.spyOn(device.queue, "submit").mockImplementation((buffers: Iterable<GPUCommandBuffer>) => {
+    counter.count += 1;
+    original(buffers);
+  });
+  return counter;
 }
 
 function fire(callbacks: Map<number, RafCallback>, id: number, timestamp: number): void {

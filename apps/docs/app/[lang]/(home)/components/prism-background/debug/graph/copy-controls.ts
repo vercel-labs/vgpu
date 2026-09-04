@@ -13,7 +13,11 @@ export function formatPrismControlChanges(
   const changes = changedValues(current, activeControlValues(baseline, mode));
   if (!changes) return null;
 
-  return `Apply these Prism ${mode}-mode control changes as the new defaults:\n\n\`\`\`json\n${JSON.stringify({ theme: mode, changes }, null, 2)}\n\`\`\``;
+  return `Apply these Prism ${mode}-mode control changes as the new defaults:\n\n\`\`\`json\n${JSON.stringify(
+    { theme: mode, changes },
+    null,
+    2
+  )}\n\`\`\``;
 }
 
 function activeControlValues(controls: PrismControls, mode: PrismTheme) {

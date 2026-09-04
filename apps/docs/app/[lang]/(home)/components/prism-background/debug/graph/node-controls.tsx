@@ -1,6 +1,7 @@
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import type { PrismControls, PrismTheme } from "../../types";
+import type { PrismPipelineQuality } from "../../pipelines/types";
 import { useDebugControls } from "./control-context";
 import { clampDebugRangeValue, controlGroupsForSource } from "./control-schema";
 import type {
@@ -14,12 +15,20 @@ import { ShadowCurvePreview } from "./shadow-curve-preview";
 interface NodeControlsProps {
   readonly sourceId: string;
   readonly mode: PrismTheme;
+  readonly quality: PrismPipelineQuality;
 }
 
-export function NodeControls({ sourceId, mode }: NodeControlsProps) {
-  const groups = controlGroupsForSource(sourceId, mode);
+export function NodeControls({ sourceId, mode, quality }: NodeControlsProps) {
+  const groups = controlGroupsForSource(sourceId, mode, quality);
   if (groups.length === 0) return null;
-  return <ControlGroups groups={groups} mode={mode} sourceId={sourceId} />;
+  return (
+    <ControlGroups
+      groups={groups}
+      mode={mode}
+      quality={quality}
+      sourceId={sourceId}
+    />
+  );
 }
 
 interface ControlGroupsProps extends NodeControlsProps {

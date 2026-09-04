@@ -17,3 +17,5 @@ export function Example() {
 
   return <canvas ref={canvasRef} className="block h-full w-full bg-black" />;
 }
+
+export default Example;

@@ -6,6 +6,8 @@ import {
   type PrismDebugPreviewBridge,
 } from "./preview-bridge";
 import {
+  createDarkDebugSources,
+  createLightDebugSources,
   PRISM_DARK_DEBUG_SOURCES,
   PRISM_DARK_DEBUG_SOURCE_IDS,
   PRISM_DEBUG_SOURCES,
@@ -14,6 +16,7 @@ import {
 import { createDebugGraphModel, estimatedNodeHeight } from "./graph/model";
 import { layoutDebugGraphModel } from "./graph/elk-layout";
 import { DEFAULT_PRISM_CONTROLS } from "../types";
+import { LOW_LIGHT_MESH_LAYOUT } from "../pipelines/quality";
 
 describe("prism debug graph descriptors", () => {
   it("keeps separate light and dark graphs internally resolvable", () => {
@@ -28,6 +31,111 @@ describe("prism debug graph descriptors", () => {
     expect(
       PRISM_DARK_DEBUG_SOURCES.some(({ kind }) => kind === "control")
     ).toBe(false);
+  });
+
+  it("models the light render-pass draw order explicitly", () => {
+    const backdrop = PRISM_DEBUG_SOURCES.find(
+      ({ id }) => id === "light-backdrop-pass"
+    );
+    const scene = PRISM_DEBUG_SOURCES.find(
+      ({ id }) => id === "light-scene-pass"
+    );
+
+    expect(backdrop?.visualization).toBe("none");
+    expect(backdrop?.inputs.map(({ source }) => source)).toEqual([
+      "composed-wall",
+      "prism-shadow",
+      "projected-caustic",
+      "back-glass",
+      "internal-caustic",
+    ]);
+    expect(scene?.visualization).toBe("none");
+    expect(scene?.inputs.map(({ source }) => source)).toEqual([
+      "copy-backdrop",
+      "front-glass",
+      "glass-accent",
+    ]);
+  });
+
+  it("reports live target formats and sample counts without requiring previews", () => {
+    expect(detailValue(PRISM_DEBUG_SOURCES, "backdrop-hdr", "Samples")).toBe(
+      "1×"
+    );
+    expect(detailValue(PRISM_DEBUG_SOURCES, "scene-hdr", "Samples")).toBe(
+      "4× MSAA → resolve"
+    );
+    expect(
+      detailValue(PRISM_DARK_DEBUG_SOURCES, "dark-backdrop-hdr", "Samples")
+    ).toBe("1×");
+    expect(
+      detailValue(PRISM_DARK_DEBUG_SOURCES, "dark-scene-hdr", "Samples")
+    ).toBe("4× MSAA → resolve");
+
+    const light = createLightDebugSources({
+      backdrop: { format: "rgba16float", sampleCount: 4 },
+      scene: { format: "rgba16float", sampleCount: 1 },
+      outputFormat: "bgra8unorm",
+    });
+    expect(detailValue(light, "backdrop-hdr", "Samples")).toBe(
+      "4× MSAA → resolve"
+    );
+    expect(detailValue(light, "scene-hdr", "Samples")).toBe("1×");
+    expect(detailValue(light, "final-output", "Format")).toBe("bgra8unorm");
+
+    const dark = createDarkDebugSources({
+      backdrop: { format: "rgba16float", sampleCount: 1 },
+      bloom: [
+        { format: "rg11b10ufloat", sampleCount: 1 },
+        { format: "rg11b10ufloat", sampleCount: 1 },
+        { format: "rg11b10ufloat", sampleCount: 1 },
+        { format: "rgba16float", sampleCount: 1 },
+      ],
+    });
+    expect(detailValue(dark, "dark-backdrop-hdr", "Samples")).toBe("1×");
+    expect(detailValue(dark, "dark-bloom-0", "Format")).toBe("rg11b10ufloat");
+  });
+
+  it("describes the reduced low-quality graphs without phantom resources", () => {
+    const light = createLightDebugSources({
+      quality: "low",
+      lightMeshLayout: LOW_LIGHT_MESH_LAYOUT,
+    });
+    expect(detailValue(light, "scene-hdr", "Samples")).toBe(
+      "4× MSAA → resolve"
+    );
+    expect(detailValue(light, "spectral-light-mesh", "Sampling")).toBe(
+      "64 wavelengths × 12 beam slices"
+    );
+    expect(
+      light
+        .find(({ id }) => id === "composed-wall")
+        ?.inputs.map(({ source }) => source)
+    ).toEqual(["wall-material", "wall-lighting"]);
+
+    const dark = createDarkDebugSources({
+      quality: "low",
+      lightMeshLayout: LOW_LIGHT_MESH_LAYOUT,
+      bloom: [
+        { format: "rgba16float", sampleCount: 1 },
+        { format: "rgba16float", sampleCount: 1 },
+      ],
+    });
+    const ids = dark.map(({ id }) => id);
+    expect(ids).not.toContain("dark-bloom-2");
+    expect(ids).not.toContain("dark-particle-light");
+    expect(detailValue(dark, "dark-scene-hdr", "Samples")).toBe(
+      "4× MSAA → resolve"
+    );
+    expect(detailValue(dark, "dark-present-cache-pass", "Bloom strength")).toBe(
+      "0.15 · low-quality override"
+    );
+    expect(dark.find(({ id }) => id === "dark-dust")?.inputs).toEqual([
+      {
+        source: "dark-bloom-1",
+        operation: "particle color + illumination",
+      },
+    ]);
+    expectGraph(dark, ids);
   });
 
   it.each([
@@ -59,14 +167,10 @@ describe("prism debug graph descriptors", () => {
     ["light", PRISM_DEBUG_SOURCES],
     ["dark", PRISM_DARK_DEBUG_SOURCES],
   ] as const)(
-    "auto-layouts the %s graph without node overlap or routed edge crossings",
+    "auto-layouts the %s graph without node overlap and leaves edges to React Flow",
     async (mode, sources) => {
       const model = await layoutDebugGraphModel(
-        createDebugGraphModel(
-          sources,
-          NOOP_PRISM_DEBUG_PREVIEW_BRIDGE,
-          mode
-        )
+        createDebugGraphModel(sources, NOOP_PRISM_DEBUG_PREVIEW_BRIDGE, mode)
       );
       const rectangles = new Map(
         model.nodes.map((node) => [
@@ -89,22 +193,7 @@ describe("prism debug graph descriptors", () => {
         }
       }
 
-      for (const edge of model.edges) {
-        const points = parsePath(edge.data?.path);
-        expect(points.length).toBeGreaterThan(1);
-        for (let index = 1; index < points.length; index++) {
-          for (const [nodeId, rectangle] of rectangles) {
-            if (nodeId === edge.source || nodeId === edge.target) continue;
-            expect(
-              segmentCrossesInterior(
-                points[index - 1],
-                points[index],
-                rectangle
-              )
-            ).toBe(false);
-          }
-        }
-      }
+      expect(model.edges.every((edge) => edge.data === undefined)).toBe(true);
     }
   );
 
@@ -222,7 +311,19 @@ function expectGraph(
   }
 }
 
-type Point = { x: number; y: number };
+function detailValue(
+  sources: readonly {
+    id: string;
+    details?: readonly { label: string; value: string }[];
+  }[],
+  sourceId: string,
+  label: string
+): string | undefined {
+  return sources
+    .find(({ id }) => id === sourceId)
+    ?.details?.find((detail) => detail.label === label)?.value;
+}
+
 type Rectangle = { left: number; right: number; top: number; bottom: number };
 
 function overlaps(first: Rectangle, second: Rectangle): boolean {
@@ -232,34 +333,4 @@ function overlaps(first: Rectangle, second: Rectangle): boolean {
     first.bottom <= second.top ||
     second.bottom <= first.top
   );
-}
-
-function parsePath(path: string | undefined): Point[] {
-  if (!path) return [];
-  const values = [...path.matchAll(/[ML]\s+(-?[\d.]+)\s+(-?[\d.]+)/g)];
-  return values.map((match) => ({ x: Number(match[1]), y: Number(match[2]) }));
-}
-
-function segmentCrossesInterior(
-  start: Point,
-  end: Point,
-  rectangle: Rectangle
-): boolean {
-  if (start.x === end.x) {
-    return (
-      start.x > rectangle.left &&
-      start.x < rectangle.right &&
-      Math.max(start.y, end.y) > rectangle.top &&
-      Math.min(start.y, end.y) < rectangle.bottom
-    );
-  }
-  if (start.y === end.y) {
-    return (
-      start.y > rectangle.top &&
-      start.y < rectangle.bottom &&
-      Math.max(start.x, end.x) > rectangle.left &&
-      Math.min(start.x, end.x) < rectangle.right
-    );
-  }
-  return true;
 }

@@ -120,3 +120,13 @@ Use these instructions when an AI coding agent edits this project.
 - Run `pnpm dev` and open the changed pages when visual layout, navigation, or MDX rendering changes.
 - Check both `/docs` and AI-readable routes such as `/agents.md`, `/.well-known/mcp.json`, `/llms.txt`, `/llms-full.txt`, a page-level `.md` URL, an unknown URL with `Accept: text/markdown`, and an unknown `/api` path when changing content routing or proxy behavior.
 - Confirm no secrets were added to source files. Use `.env.local` for local values and keep it out of Git.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

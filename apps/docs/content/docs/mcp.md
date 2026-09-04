@@ -34,6 +34,8 @@ The recommended server for searching and reading content is:
 https://vgpu.sh/api/mcp
 ```
 
+This hosted endpoint follows the latest stable release published on vgpu.sh. It is not version-matched to a project's dependency; use local stdio when the documentation must match an installed package or prerelease.
+
 | Setting | Value |
 | --- | --- |
 | Name | `vgpu` |

@@ -1,9 +1,9 @@
 import type { Buffer, Geometry, GeometryLike, Gpu } from "vgpu";
 
-import type { CameraView } from "../camera";
-import type { EnvironmentTexture } from "../environment-texture";
-import type { NormalizedViewport, ProjectionFraming } from "../framing";
-import type { LightMeshStats } from "../light-mesh";
+import type { CameraView } from "../scene/camera";
+import type { EnvironmentTexture } from "../environment/texture";
+import type { NormalizedViewport, ProjectionFraming } from "../scene/framing";
+import type { LightMeshLayout, LightMeshStats } from "../scene/light-mesh";
 import type { PrismControls } from "../types";
 
 export interface PrismLightMeshMeasurement {
@@ -24,8 +24,9 @@ export interface PrismRuntime {
   readonly label: string;
   readonly lightBuffer: Buffer;
   readonly lightVertexScratch: number[];
-  readonly lightVertices: Float32Array<ArrayBuffer>;
+  lightVertices: Float32Array<ArrayBuffer>;
   readonly lightGeometry: GeometryLike;
+  lightMeshLayout: LightMeshLayout;
   readonly prism: Geometry;
   /** Allocated only when a debug wireframe is first requested. */
   prismWireframe?: Geometry;

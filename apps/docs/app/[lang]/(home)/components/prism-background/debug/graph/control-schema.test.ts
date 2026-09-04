@@ -6,6 +6,7 @@ import {
   type PrismControls,
   type PrismTheme,
 } from "../../types";
+import type { PrismPipelineQuality } from "../../pipelines/types";
 import { clampDebugRangeValue, controlGroupsForSource } from "./control-schema";
 import type {
   DebugControl,
@@ -16,7 +17,6 @@ import type {
 const LIGHT_CONTROL_NODES = [
   "scene-hdr",
   "projected-caustic",
-  "backdrop-hdr",
   "wall-material",
   "wall-normal",
   "global-shadow",
@@ -27,7 +27,7 @@ const LIGHT_CONTROL_NODES = [
 
 const DARK_CONTROL_NODES = [
   "dark-scene-hdr",
-  "dark-backdrop-hdr",
+  "dark-external-light",
   "dark-wall",
   "dark-front-glass",
   "dark-bloom-composite",
@@ -65,6 +65,11 @@ describe("React Flow prism controls", () => {
         "bloom-strength",
       ])
     );
+    const lowDark = controlIds(DARK_CONTROL_NODES, "dark", "low");
+    expect(lowDark).toEqual(
+      expect.arrayContaining(["bloom-threshold", "bloom-radius"])
+    );
+    expect(lowDark).not.toContain("bloom-strength");
     expect([...light, ...dark]).not.toEqual(
       expect.arrayContaining([
         "view",
@@ -78,10 +83,7 @@ describe("React Flow prism controls", () => {
   test("shows custom coefficients honestly and restores complete presets", () => {
     const preset = selectControl("projected-caustic", "dispersion-preset");
     const base = rangeControl("projected-caustic", "dispersion-base");
-    const strength = rangeControl(
-      "projected-caustic",
-      "dispersion-strength"
-    );
+    const strength = rangeControl("projected-caustic", "dispersion-strength");
     expect(preset.read(DEFAULT_PRISM_CONTROLS, "dark")).toBe("custom");
 
     const flint: PrismControls = {
@@ -105,11 +107,7 @@ describe("React Flow prism controls", () => {
     const toneMapping = selectControl("final-output", "tone-mapping");
     expect(toneMapping.read(DEFAULT_PRISM_CONTROLS, "light")).toBe("aces");
 
-    const next = toneMapping.write(
-      DEFAULT_PRISM_CONTROLS,
-      "light",
-      "neutral"
-    );
+    const next = toneMapping.write(DEFAULT_PRISM_CONTROLS, "light", "neutral");
     expect(next.lightMode.output).toEqual({
       exposure: DEFAULT_PRISM_CONTROLS.lightMode.output.exposure,
       toneMapping: "neutral",
@@ -148,7 +146,7 @@ describe("React Flow prism controls", () => {
 
   test("functional patches preserve the latest theme-derived wall color", () => {
     const width = rangeControl("projected-caustic", "beam-width");
-    const opacity = rangeControl("backdrop-hdr", "beam-opacity");
+    const opacity = rangeControl("projected-caustic", "beam-opacity");
     let current: PrismControls = {
       ...DEFAULT_PRISM_CONTROLS,
       wallColor: "#d2ccc2",
@@ -164,9 +162,13 @@ describe("React Flow prism controls", () => {
   });
 });
 
-function controlIds(nodes: readonly string[], mode: PrismTheme): string[] {
+function controlIds(
+  nodes: readonly string[],
+  mode: PrismTheme,
+  quality: PrismPipelineQuality = "high"
+): string[] {
   return nodes.flatMap((node) =>
-    controlGroupsForSource(node, mode).flatMap((group) =>
+    controlGroupsForSource(node, mode, quality).flatMap((group) =>
       group.controls.map(({ id }) => id)
     )
   );

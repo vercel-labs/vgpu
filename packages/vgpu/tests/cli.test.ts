@@ -171,8 +171,9 @@ test("curates root and guide listings for onboarding", () => {
 
   const guides = success(["docs", "ls", "/guides"]).trimEnd().split("\n");
   expect(guides[0]).toBe("getting-started.docs.md");
-  expect(guides.slice(1, 8)).toEqual([
+  expect(guides.slice(1, 9)).toEqual([
     "concepts-context.docs.md",
+    "concepts-wgsl-modules.docs.md",
     "concepts-draws.docs.md",
     "concepts-compilation.docs.md",
     "concepts-effects.docs.md",

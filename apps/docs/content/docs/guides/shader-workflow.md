@@ -23,12 +23,13 @@ npx vgpu docs cat getting-started.md
 ## 3. Read the concepts you actually need
 
 ```sh
+npx vgpu docs cat concepts-wgsl-modules.md # import/export, pure modules, resolution
 npx vgpu docs cat concepts-effects.md   # fullscreen fragment work and set()
 npx vgpu docs cat concepts-passes.md    # frame.pass, multi-pass work
 npx vgpu docs cat concepts-frames.md    # frame batching and animation loops
 ```
 
-Single fullscreen shader: read effects only. Anything with more than one target — blur pyramids, G-buffers, transmission — read passes and frames too.
+Shader split across files: read WGSL modules. Single fullscreen shader: read effects. Anything with more than one target — blur pyramids, G-buffers, transmission — read passes and frames too.
 
 ## 4. Validate every WGSL file
 

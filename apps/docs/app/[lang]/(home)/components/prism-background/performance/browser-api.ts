@@ -93,11 +93,7 @@ export function parsePrismPerformanceUrl(
 ): PrismPerformanceRunOptions | undefined {
   const params = new URLSearchParams(search);
   const workload = params.get("prism-perf");
-  if (
-    workload !== "light" &&
-    workload !== "dark" &&
-    workload !== "dark-dust"
-  )
+  if (workload !== "light" && workload !== "dark" && workload !== "dark-dust")
     return undefined;
   const mode = workload === "dark-dust" ? "dark" : workload;
   const frames = positiveInteger(params.get(FRAME_QUERY));

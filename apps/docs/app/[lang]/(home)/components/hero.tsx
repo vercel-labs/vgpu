@@ -4,7 +4,7 @@ import { VgpuWordmarkGlyphs } from "@/components/vgpu-wordmark";
 import DynamicLink from "fumadocs-core/dynamic-link";
 import { preload } from "react-dom";
 import { HeroTabs } from "./hero-tabs";
-import { WALL_GLOBAL_LIGHT_MASK_URL } from "./prism-background/assets/light/manifest";
+import { WALL_GLOBAL_LIGHT_MASK_URL } from "./prism-background/pipelines/light/assets/manifest";
 import { PrismBackground } from "./prism-background/prism-background";
 import "../hero-glass-button.css";
 import "../hero-theme.css";

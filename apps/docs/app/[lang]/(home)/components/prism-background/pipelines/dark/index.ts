@@ -1,7 +1,9 @@
 import type { Target } from "vgpu";
 
-import { BLOOM_VISIBLE_LEVELS, PARTICLE_LIGHT_FIRST_LEVEL } from "../../bloom";
-import { PRISM_DARK_DEBUG_SOURCES } from "../../debug/sources";
+import {
+  createDarkDebugSources,
+  PRISM_DARK_DEBUG_SOURCES,
+} from "../../debug/sources";
 import { prepareRuntimeEnvironment } from "../../runtime/resources";
 import { settleAllOrThrow } from "../../runtime/settle";
 import { resizeRuntime } from "../../runtime/state";
@@ -10,6 +12,7 @@ import type {
   PrismDebugTargetPreview,
   PrismOutput,
   PrismPipeline,
+  PrismPipelineQuality,
 } from "../types";
 import { bindDarkGraph } from "./bind";
 import { recordDarkBackdropBundle } from "./bundles";
@@ -32,12 +35,22 @@ export interface DarkPrismPipeline extends PrismPipeline {
   debugTarget(sourceId: string): PrismDebugTargetPreview | undefined;
 }
 
-export function createDarkPipeline(runtime: PrismRuntime): DarkPrismPipeline {
-  const graph = createDarkGraph(runtime);
+export interface DarkPipelineOptions {
+  readonly quality?: PrismPipelineQuality;
+}
+
+export function createDarkPipeline(
+  runtime: PrismRuntime,
+  options: DarkPipelineOptions = {}
+): DarkPrismPipeline {
+  const quality = options.quality ?? "high";
+  const graph = createDarkGraph(runtime, quality);
   let presentationValid = false;
   let boundRevealProgress = 1;
+  let debugSources = PRISM_DARK_DEBUG_SOURCES;
   return {
     mode: "dark",
+    lightMeshLayout: graph.lightMeshLayout,
     get targets() {
       return {
         backdropHDR: graph.backgroundTarget,
@@ -47,7 +60,16 @@ export function createDarkPipeline(runtime: PrismRuntime): DarkPrismPipeline {
     },
     async prepare(output) {
       resizeRuntime(runtime, output.size);
-      ensureDarkTargets(graph, runtime, output.size, output.format);
+      ensureDarkTargets(graph, runtime, output.size, output.format, quality);
+      debugSources = createDarkDebugSources({
+        quality,
+        lightMeshLayout: graph.lightMeshLayout,
+        backdrop: graph.backgroundTarget,
+        scene: graph.sceneTarget,
+        bloom: graph.bloomTargets?.map(({ vertical }) => vertical),
+        presentation: graph.presentationTarget,
+        outputFormat: output.format,
+      });
       presentationValid = false;
       const environmentReady = prepareRuntimeEnvironment(runtime);
       bindDarkGraph(graph, runtime, 0, true);
@@ -78,15 +100,14 @@ export function createDarkPipeline(runtime: PrismRuntime): DarkPrismPipeline {
       boundRevealProgress = revealProgress;
     },
     render(currentFrame, output, options) {
-      const updateScene =
-        (options?.updateScene ?? true) || !presentationValid;
+      const updateScene = (options?.updateScene ?? true) || !presentationValid;
       renderDarkGraph(currentFrame, graph, runtime, output, {
         ...options,
         updateScene,
       });
       presentationValid = true;
     },
-    debugSources: () => PRISM_DARK_DEBUG_SOURCES,
+    debugSources: () => debugSources,
     debugTarget(sourceId) {
       return resolveDarkDebugTarget(graph, sourceId);
     },
@@ -107,6 +128,8 @@ function resolveDarkDebugTarget(
   if (sourceId === "dark-backdrop-hdr" && backdrop)
     return { primary: backdrop };
   if (sourceId === "dark-scene-hdr" && scene) return { primary: scene };
+  if (sourceId === "dark-presentation-ldr" && graph.presentationTarget)
+    return { primary: graph.presentationTarget };
   if (sourceId === "dark-front-glass" && scene && backdrop) {
     return {
       primary: scene,
@@ -117,12 +140,16 @@ function resolveDarkDebugTarget(
   }
   if (sourceId === "dark-bloom-composite" && bloom)
     return { primary: bloom[0].horizontal };
-  if (sourceId === "dark-particle-light" && bloom)
-    return { primary: bloom[PARTICLE_LIGHT_FIRST_LEVEL].vertical };
+  if (
+    sourceId === "dark-particle-light" &&
+    bloom &&
+    graph.dedicatedParticleLight
+  )
+    return { primary: bloom[graph.bloomVisibleLevels]!.vertical };
 
   const level = /^dark-bloom-(\d+)$/.exec(sourceId)?.[1];
   const index = level === undefined ? -1 : Number.parseInt(level, 10);
-  if (bloom && index >= 0 && index < BLOOM_VISIBLE_LEVELS)
+  if (bloom && index >= 0 && index < graph.bloomVisibleLevels)
     return { primary: bloom[index]!.vertical };
   return undefined;
 }
@@ -150,9 +177,13 @@ function compileGraph(
       level.vertical.compile(bloom[index]!.vertical),
     ]),
     graph.bloomComposite.compile(bloom[0].horizontal),
-    graph.particleLightDownsample.compile(
-      bloom[PARTICLE_LIGHT_FIRST_LEVEL].vertical
-    ),
+    ...(graph.particleLightDownsample
+      ? [
+          graph.particleLightDownsample.compile(
+            bloom[graph.bloomVisibleLevels]!.vertical
+          ),
+        ]
+      : []),
     graph.present.compile(presentation),
     graph.copyPresentation.compile(outputSignature),
   ];

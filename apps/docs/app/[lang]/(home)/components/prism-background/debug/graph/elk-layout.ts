@@ -1,15 +1,9 @@
 import ELK, {
   type ElkExtendedEdge,
-  type ElkLabel,
   type ElkNode,
-  type ElkPoint,
 } from "elkjs/lib/elk.bundled.js";
 
-import {
-  estimatedNodeHeight,
-  type PrismDebugFlowEdge,
-  type PrismDebugGraphModel,
-} from "./model";
+import { estimatedNodeHeight, type PrismDebugGraphModel } from "./model";
 
 const elk = new ELK();
 const NODE_WIDTH = 280;
@@ -40,7 +34,11 @@ export async function layoutDebugGraphModel(
     children: model.nodes.map<ElkNode>((node) => ({
       id: node.id,
       width: NODE_WIDTH,
-      height: estimatedNodeHeight(node.data.source, node.data.mode),
+      height: estimatedNodeHeight(
+        node.data.source,
+        node.data.mode,
+        node.data.quality
+      ),
     })),
     edges: model.edges.map<ElkExtendedEdge>((edge) => ({
       id: edge.id,
@@ -62,8 +60,6 @@ export async function layoutDebugGraphModel(
   const layoutNodes = new Map(
     graph.children?.map((node) => [node.id, node]) ?? []
   );
-  const layoutEdges = new Map(graph.edges?.map((edge) => [edge.id, edge]) ?? []);
-
   return {
     nodes: model.nodes.map((node) => {
       const layout = layoutNodes.get(node.id);
@@ -74,44 +70,9 @@ export async function layoutDebugGraphModel(
           }
         : node;
     }),
-    edges: model.edges.map((edge) => layoutEdge(edge, layoutEdges.get(edge.id))),
-  };
-}
-
-function layoutEdge(
-  edge: PrismDebugFlowEdge,
-  layout: ElkExtendedEdge | undefined
-): PrismDebugFlowEdge {
-  const points = layout?.sections?.flatMap((section) => [
-    section.startPoint,
-    ...(section.bendPoints ?? []),
-    section.endPoint,
-  ]);
-  const label = layout?.labels?.[0];
-
-  if (!points?.length) return edge;
-  return {
-    ...edge,
-    data: {
-      path: orthogonalPath(points),
-      ...(labelPosition(label) ?? {}),
-    },
-  };
-}
-
-function orthogonalPath(points: ElkPoint[]): string {
-  return points
-    .map(({ x, y }, index) => `${index === 0 ? "M" : "L"} ${x} ${y}`)
-    .join(" ");
-}
-
-function labelPosition(
-  label: ElkLabel | undefined
-): { labelX: number; labelY: number } | undefined {
-  if (label?.x === undefined || label.y === undefined) return undefined;
-  return {
-    labelX: label.x + (label.width ?? 0) / 2,
-    labelY: label.y + (label.height ?? 0) / 2,
+    // React Flow measures the real nodes and connects their handles. ELK's
+    // estimated edge endpoints are deliberately discarded.
+    edges: model.edges,
   };
 }
 

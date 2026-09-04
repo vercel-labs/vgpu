@@ -59,7 +59,7 @@ declare function clock(gpu: Gpu): Clock;
 | effect.opts | `EffectOptions` | ✖ | `{}` | `label` defaults to `"effect"`; `set` defaults to no initial bindings. |
 | draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
-| frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits automatically in `finally`; if omitted, caller must call `frame.submit()`. |
+| frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits when the callback returns and cancels (submits nothing) when it throws; if omitted, caller must call `frame.submit()` or `frame.cancel()`. |
 | sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `sampler(gpu)` is the canonical default sampler. |
 | geometry.input | `GeometryOptions \\| GeometryRecipe` | ✔ | — | A raw buffer descriptor, or a `vgpu/scene` recipe such as `box()` or `plane()`. |
 | compute.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. Must contain a `@compute` entry point. |

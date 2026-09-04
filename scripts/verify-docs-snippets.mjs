@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const repo = process.cwd();
-const list = spawnSync("git", ["ls-files", "*.docs.md", ":!:skills/**"], { cwd: repo, encoding: "utf8" });
+const list = spawnSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "*.docs.md", ":!:skills/**"],
+  { cwd: repo, encoding: "utf8" },
+);
 if (list.status !== 0) {
   process.stderr.write(list.stderr);
   process.exit(list.status ?? 1);
@@ -63,6 +67,10 @@ try {
         "vgpu/node": ["packages/vgpu-api/src/node.ts"],
         "vgpu/scene": ["packages/vgpu-api/src/scene.ts"],
         "vgpu/core": ["packages/vgpu-api/src/core.ts"],
+        "vgpu/client": ["packages/vgpu-api/src/client.ts"],
+        "vgpu/three": ["packages/vgpu-api/src/three.ts"],
+        "three/webgpu": ["packages/vgpu-api/node_modules/@types/three/build/three.webgpu.d.ts"],
+        "three/tsl": ["packages/vgpu-api/node_modules/@types/three/build/three.tsl.d.ts"],
         "@vgpu/core": ["packages/core/src/index.ts"],
         "@vgpu/adapter-mock": ["packages/adapter-mock/src/index.ts"],
         "@vgpu/adapter-node": ["packages/adapter-node/src/index.ts"],

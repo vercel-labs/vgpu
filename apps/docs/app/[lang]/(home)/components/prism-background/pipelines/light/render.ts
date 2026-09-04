@@ -1,12 +1,5 @@
 import type { Frame, TimerSpan } from "vgpu";
 
-import {
-  LIGHT_INTERNAL_FIRST_VERTEX,
-  LIGHT_INTERNAL_VERTICES,
-  LIGHT_OUTGOING_FIRST_VERTEX,
-  LIGHT_OUTGOING_VERTICES,
-  LIGHT_WHITE_VERTICES,
-} from "../../light-mesh";
 import type { PrismRuntime } from "../../runtime/types";
 import type {
   PrismOutput,
@@ -59,6 +52,7 @@ function renderBackdrop(
   profile?: PrismPassProfile
 ): void {
   const target = graph.backdropHDR!;
+  const light = graph.lightMeshLayout;
   const showWall = runtime.controls.view !== "caustic";
   const showLight = runtime.controls.view !== "wall";
   const showGlass =
@@ -81,18 +75,18 @@ function renderBackdrop(
       if (showLight) {
         pass.draw(graph.caustic, {
           firstVertex: 0,
-          vertices: LIGHT_WHITE_VERTICES,
+          vertices: light.whiteVertices,
         });
         pass.draw(graph.caustic, {
-          firstVertex: LIGHT_OUTGOING_FIRST_VERTEX,
-          vertices: LIGHT_OUTGOING_VERTICES,
+          firstVertex: light.outgoingFirstVertex,
+          vertices: light.outgoingVertices,
         });
       }
       if (showGlass) pass.draw(graph.glassBack);
       if (showLight) {
         pass.draw(graph.caustic, {
-          firstVertex: LIGHT_INTERNAL_FIRST_VERTEX,
-          vertices: LIGHT_INTERNAL_VERTICES,
+          firstVertex: light.internalFirstVertex,
+          vertices: light.internalVertices,
         });
       }
       if (runtime.controls.lightWireframe && graph.lightWireframe) {

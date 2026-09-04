@@ -7,6 +7,8 @@ description: "Wire the WGSL loader into Next.js (Turbopack or webpack) or Vite, 
 
 This guide is the bundler half of [Getting started](getting-started.docs.md): install, loader config, TypeScript types for `.wgsl` imports, and the client component that owns the canvas.
 
+New to shader imports? Read [WGSL modules](/concepts/wgsl-modules) first for the `import`/`export` syntax, pure-module rule, and what vgpu emits. This page focuses on wiring that model into a bundler.
+
 ## Install
 
 ```sh
@@ -96,7 +98,7 @@ declare module "*.wgsl" {
 }
 ```
 
-Either way the default export is a `ShaderSource` object (`{ version: 1, wgsl: string }`), **not** a plain string. Pass it straight to `effect(gpu, source)`, which accepts `string | ShaderSource` — do not reach into `.wgsl` yourself.
+Either way the default export is a `ShaderSource` object (`{ version: 1, wgsl: string, functionExports?: [...] }`), **not** a plain string. Pass it straight to `effect(gpu, source)`, which accepts `string | ShaderSource` — do not reach into `.wgsl` yourself. New loader artifacts include `functionExports`, even when the array is empty; integrations such as `vgpu/three` use that metadata to preserve authored function identity through identifier minification.
 
 ## Render it from a client component
 
@@ -192,12 +194,13 @@ Then prove the pixels in Node instead of squinting at a browser tab: [Getting st
 |---|---|---|
 | `TS2307: Cannot find module './x.wgsl'` | No ambient declaration for `.wgsl` | Add the `wgsl-env.d.ts` above |
 | `VGPU-WGSL-PKG-NOTFOUND: Package <pkg> was not found` | A WGSL package import is not installed in `node_modules` | `npm install <pkg>`, or fix the specifier |
-| `VGPU-WGSL-RUNTIME-IMPORT` | The bundler ran the loader synchronously while the WGSL file has top-level imports | Let the loader use async mode (webpack/Turbopack/Vite all do by default) |
+| `VGPU-WGSL-RUNTIME-IMPORT` | The bundler ran the loader synchronously while the WGSL file has top-level imports or a direct `export fn` | Let the loader use async mode (webpack/Turbopack/Vite all do by default) |
 | `VGPU-RESOLVE-MODULE-BINDING` | An imported `.wgsl` module declares `@group`/`@binding` | Keep resources in the entry shader; modules export only structs and functions |
 | Shader compiles but nothing draws | Passing `source.wgsl` (a string field) where the object was expected, or no `frame.pass` | Pass the imported object to `effect(gpu, source)`; render inside `frame`/`frameLoop` |
 
 ## See also
 
+- [Use WGSL modules in three.js TSL](/guides/threejs) — connect loader-resolved pure WGSL functions to Three TSL node materials with `vgpu/three`
 - `npx vgpu docs cat /@vgpu/wgsl/loader-webpack/index.docs.md` — every loader option
 - `npx vgpu docs cat /@vgpu/wgsl/loader-vite/index.docs.md` — the Vite plugin
 - `npx vgpu docs cat /@vgpu/wgsl/runtime/resolve-shader.docs.md` — resolving import graphs without a bundler

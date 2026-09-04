@@ -30,6 +30,10 @@ export const exampleComponentLoaders = {
   'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
   'air-painting': () => import('../examples/air-painting/index'),
+  'tsl-exports': () => import('../examples/tsl-exports/index'),
+  'three-tsl': () => import('../examples/three-tsl/index'),
+  'particle-orbit': () => import('../examples/particle-orbit/index'),
+  'adaptive-quality': () => import('../examples/adaptive-quality/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

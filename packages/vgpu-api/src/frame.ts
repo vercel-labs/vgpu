@@ -18,7 +18,10 @@ import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
 
 /**
  * Opens a frame on `gpu`: advances the frame clock, runs `cb` against a fresh command encoder and
- * submits it when the callback returns (or on the way out of a throw).
+ * submits it when the callback returns. If the callback throws, the frame is canceled instead —
+ * nothing it encoded reaches the queue — and the error is rethrown unchanged; a callback that
+ * already submitted or canceled the frame is left as it is. Only the command buffer is covered,
+ * not the clock tick or CPU-side state. `frame.submit()` in your own `catch` keeps partial work.
  *
  * Without a callback the frame is yours: encode passes at your own pace and finish it with
  * `frame.submit()` or `frame.cancel()` — an unfinished frame holds every retain its passes took.
@@ -30,7 +33,9 @@ export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
 }
 
 /**
- * Runs `cb` once per animation frame until the returned handle is stopped.
+ * Runs `cb` once per animation frame until the returned handle is stopped. Each tick follows the
+ * `frame(gpu, cb)` rule: submit on return, cancel on throw. A throwing tick also stops the loop,
+ * since its error escapes the animation-frame callback and no further tick would run.
  *
  * The loop belongs to the gpu's `scheduler` phase, so `gpu.dispose()` stops it before anything it
  * could encode against is torn down; a loop that stops on its own drops that registration.
@@ -38,6 +43,9 @@ export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
 export function frameLoop(gpu: Gpu, cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
   return frameRunner(liveKernel(gpu, "frameLoop")).loop(cb, opts);
 }
+
+/** Assigned by `Frame`'s static block; see the comment there. */
+let frameIsOpen!: (frame: Frame) => boolean;
 
 /**
  * One runner per gpu: it carries the reentrancy guard, the frame clock and the loop registrations,
@@ -118,6 +126,15 @@ export class Frame {
   #submitted = false;
   #canceled = false;
   #passActive = false;
+  /**
+   * Module-private view of the close state for `FrameRunner`: a callback that already submitted
+   * or canceled its frame needs neither the implicit submit nor the cancel-on-throw. Kept out of
+   * the public surface — the class exposes no `state` getter — by assigning the module-scoped
+   * `frameIsOpen` from inside the class body, where `#private` fields are reachable. The brand
+   * check keeps it from throwing on a frame that is not a `Frame` (a test double): an unknown
+   * frame is treated as open, and its own cancel() decides.
+   */
+  static { frameIsOpen = (frame) => !(#submitted in frame) || (!frame.#submitted && !frame.#canceled); }
   constructor(
     private readonly device: Device,
     private readonly defaultTarget?: Target,
@@ -231,8 +248,8 @@ export class Frame {
 
   submit(): void {
     // Closed either way: a re-submit has nothing left to flush, and a canceled frame dropped its
-    // encoder. Both are silent no-ops so `frame(gpu, cb)`'s submit-in-finally never masks a cancel()
-    // (or an exception) from inside the callback. Checked before the device so that submitting an
+    // encoder. Both are silent no-ops so `frame(gpu, cb)`'s implicit submit-on-return never masks
+    // a cancel() from inside the callback. Checked before the device so that submitting an
     // already-closed frame stays a no-op even after `gpu.dispose()` took the device with it.
     if (this.#submitted || this.#canceled) return;
     assertDeviceUsable(this.device, "Frame.submit");
@@ -548,15 +565,27 @@ export class FrameRunner {
       const frame = this.createFrame();
       if (cb) {
         try { cb(frame); }
-        finally {
-          // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
-          // exactly that). The device is then gone and the frame has nothing left to flush, so this
-          // implicit submit swallows that one error instead of throwing over the callback's own
-          // intent — the same reason a canceled frame submits as a no-op. An explicit
-          // frame.submit() on a dead device still reports it.
-          try { frame.submit(); }
-          catch (error) { if (!isDeviceGoneError(error)) throw error; }
+        catch (error) {
+          // Submit-on-success, cancel-on-throw: a throw means the callback never reached a state it
+          // meant to present, so the frame's command buffer is dropped whole rather than submitted
+          // half-encoded — and cancel() releases the telemetry retains the encoded passes took. A
+          // callback that already submitted (work on the queue, cannot be taken back) or canceled
+          // closed the frame itself, so there is nothing to do; asking cancel() would throw
+          // VGPU-FRAME-SUBMITTED over the callback's own error. Cleanup can only fail on an
+          // internal bug, and even then the original error is what the caller must see.
+          if (frameIsOpen(frame)) {
+            try { frame.cancel(); }
+            catch { /* never mask the callback's error with a cleanup failure */ }
+          }
+          throw error;
         }
+        // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
+        // exactly that). dispose() cancels the open frame, so this submit is a no-op; if the device
+        // was lost instead, the frame has nothing left to flush either, so the implicit submit
+        // swallows that one error rather than throwing over the callback's own intent. An explicit
+        // frame.submit() on a dead device still reports it.
+        try { frame.submit(); }
+        catch (error) { if (!isDeviceGoneError(error)) throw error; }
       }
       return frame;
     } finally {
@@ -571,28 +600,34 @@ export class FrameRunner {
     const minIntervalMs = opts.fps && opts.fps > 0 ? 1000 / opts.fps : 0;
     let lastFrameMs: number | undefined;
     let id = 0;
+    // Registered with the owning gpu so gpu.dispose() stops it: a loop left running would keep
+    // encoding frames against a disposed device. Stopping is idempotent and drops the registration.
+    let untrack: (() => void) | undefined;
+    const stop = () => {
+      stopped = true;
+      cancel(id);
+      untrack?.();
+      untrack = undefined;
+    };
     const tick = (timestamp: number) => {
       if (stopped) return;
       if (shouldRunFrame(timestamp, lastFrameMs, minIntervalMs)) {
         lastFrameMs = timestamp;
-        this.frame(cb);
+        try { this.frame(cb); }
+        catch (error) {
+          // The frame was canceled and the error is about to escape the rAF callback, where no
+          // caller can catch it and no next tick would be scheduled anyway. Stop the loop properly
+          // rather than leave it "running" without ticks and registered with the gpu forever.
+          stop();
+          throw error;
+        }
       }
       // The callback may dispose the owning gpu, which stops this loop while the current tick is
       // running. Do not enqueue one last (no-op) tick after stop() already canceled the old id.
       if (!stopped) id = request(tick);
     };
     id = request(tick);
-    // Registered with the owning gpu so gpu.dispose() stops it: a loop left running would keep
-    // encoding frames against a disposed device. Stopping is idempotent and drops the registration.
-    let untrack: (() => void) | undefined;
-    const handle: FrameLoopHandle = {
-      stop() {
-        stopped = true;
-        cancel(id);
-        untrack?.();
-        untrack = undefined;
-      },
-    };
+    const handle: FrameLoopHandle = { stop };
     untrack = this.trackLoop?.(handle);
     return handle;
   }

@@ -25,3 +25,5 @@ export function Example() {
     </div>
   );
 }
+
+export default Example;

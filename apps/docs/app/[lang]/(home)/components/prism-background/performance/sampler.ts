@@ -1,11 +1,11 @@
 import type { Gpu, Timer } from "vgpu";
 import { timer as createGpuTimer } from "vgpu";
 
-import { PARTICLE_LIGHT_FIRST_LEVEL } from "../bloom";
+import { PARTICLE_LIGHT_FIRST_LEVEL } from "../pipelines/dark/passes/bloom/config";
 import {
   bloomFormatForLevel,
   PACKED_BLOOM_FEATURE,
-} from "../capabilities";
+} from "../runtime/capabilities";
 import type { PrismPassProfile, PrismPipelineMode } from "../pipelines/types";
 import { setRuntimeLampAim, setRuntimeOrbit } from "../runtime/state";
 import type { PrismLightMeshMeasurement, PrismRuntime } from "../runtime/types";

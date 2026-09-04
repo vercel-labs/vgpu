@@ -43,7 +43,7 @@ Validation always covers the WGSL you get back. When `minify` rewrites the emitt
 
 Validation acquires one WebGPU device per process through `@vgpu/adapter-node` and reuses it across calls, then destroys it shortly after the last validation finishes — a live device holds handles on the Node event loop, so without that release a script that validated a shader would never exit on its own. A later `resolveShader` transparently acquires a new device; a *failed* acquisition is remembered and **not retried for the lifetime of the process**, so after installing a device (for example `npx vgpu install-software-renderer`) restart the process rather than expecting the next call to pick it up.
 
-**Returns:** `Promise<ResolvedShader>` — resolved WGSL plus dependency paths, cache keys, lightweight AST modules, source map, diagnostics, reflection for entry points/resources, and `validation: { mode, attempted, ok, skipped? }` reporting what the device-backed check actually did (`skipped` carries the `code`, `message`, and `fix` when `"auto"` could not get a device).
+**Returns:** `Promise<ResolvedShader>` — resolved WGSL plus `functionExports`, dependency paths, cache keys, lightweight AST modules, source map, diagnostics, reflection for entry points/resources, and `validation: { mode, attempted, ok, skipped? }` reporting what the device-backed check actually did (`skipped` carries the `code`, `message`, and `fix` when `"auto"` could not get a device). `functionExports` is always present and records each surviving direct `export fn` as `{ name, resolvedName, parameterNames }`.
 
 **Throws:** `VGPU-RESOLVE-MODULE-BINDING` when a non-entry imported module declares any `@group(...)` or `@binding(...)` resource — move the resource declaration into the entry module and export only structs/functions from the module. The error message is exactly:
 
@@ -112,6 +112,7 @@ fn fs_main() -> @location(0) vec4f {
 });
 
 console.log(resolved.wgsl.includes("fs_main"));
+console.log(resolved.functionExports);
 ```
 
 ```ts
@@ -147,6 +148,8 @@ console.log(resolved.deps.length);
 - Imported modules are pure: no `@group`/`@binding` in any non-entry module. Export structs, aliases, constants, and functions from modules; declare uniforms/storage/textures/samplers only in the entry.
 - `resolveShader()` is for setup, tests, loaders, and build tooling. Do not call it per frame; resolve and create pipelines off the render hot path.
 - Declaration-level DCE always runs before validation/minification when entry points exist. There is no DCE opt-out in this release.
+- `functionExports` is produced after DCE. It includes every surviving direct function export across the resolved graph, retains authored function and parameter names, and points `resolvedName` at the exact declaration in final WGSL after mangling and safe identifier minification. Import aliases are not exports, duplicate authored names remain separate entries, and the metadata never roots otherwise-dead declarations.
+- Pass the complete `ResolvedShader` to consumers that need authored identity, such as `tslExports()` from `vgpu/three`. Passing only `.wgsl` discards the authored-to-minified mapping.
 - `minify: true` is the production preset. Safe identifier minification is conservative and does not rename entry points, resources, overrides, structs, fields, import/export names, attributes, builtins, or predeclared WGSL names.
 - Reserved-word diagnostics are collected per loaded module before emission, so imported modules report their own file/line. `import`/`export`/`from`/`as` module syntax is exempt; only declared identifiers are checked.
 - Validation maps diagnostics back to generated module headers. Columns can be approximate when substituted identifiers appear; those diagnostics include `VGPU-WGSL-COL-APPROX` metadata.

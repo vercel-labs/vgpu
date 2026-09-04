@@ -276,7 +276,7 @@ test("dispose() mid-frame keeps the query set alive until the frame is submitted
   vi.restoreAllMocks();
 });
 
-test("dispose() inside a frame whose callback throws still releases the query set with that frame's submit", async () => {
+test("dispose() inside a frame whose callback throws still releases the query set with that frame's cancel", async () => {
   const gpu = await initWithTimestampQuery();
   const destroyed: number[] = [];
   spyQuerySetDestroys(gpu.device.gpu, destroyed);
@@ -289,7 +289,7 @@ test("dispose() inside a frame whose callback throws still releases the query se
     throw new Error("frame callback blew up");
   })).toThrowError(/frame callback blew up/);
 
-  // frame(gpu) submits in a finally, so the deferred destroy happens as soon as the frame ends.
+  // frame(gpu, cb) cancels on throw, so the deferred destroy happens as soon as the frame ends.
   expect(destroyed).toEqual([0]);
   gpu.dispose();
   expect(destroyed).toEqual([0]);

@@ -1,93 +1,85 @@
 ---
 name: vgpu
 description: >-
-  Build and optimize WebGPU apps with the vgpu package and entrypoints vgpu/node,
-  vgpu/mock, vgpu/scene, and vgpu/client. Use @vgpu/render/inspect, /utils, /edit,
-  and /perf only as slim tooling subpaths. Bundles performance guides and the API
-  reference; load one doc at a time.
-vgpuVersion: 0.3.1
-gitSha: 61779b7d15cc40a0058e4ade0457b8dbf717319e
-generatedAt: 2026-08-26T05:40:09.518Z
+  Build, debug, test, and optimize WebGPU projects using vgpu, its CLI, or @vgpu packages.
+  Use for vgpu API questions, WGSL workflows, browser or Node rendering, integrations,
+  testing, and performance work.
 ---
 
 # vgpu
 
-Generated from the vgpu `.docs.md` source. Each entry maps to a file in `references/` and to a
-doc you can load on demand with the CLI — **load only what you need, don't read the whole skill**:
+Treat the documentation bundled with the target project's installed `vgpu` package as the
+authority for that project. This skill is intentionally version-neutral: do not infer API shapes
+from the skill's Git revision, remembered APIs, the repository default branch, hosted docs, or a
+hosted MCP server when local package docs are available.
 
-vgpu is layered: vgpu/core (thin WebGPU wrappers) → vgpu (main API with WGSL reflection) → vgpu/scene (geometry/camera helpers). Lower layers are always accessible and interoperable.
-
-Glossary: **Surface** means a canvas-backed render target (swapchain) created with `surface(gpu, canvas)`; do not confuse it with the general phrase ‘API surface’.
+The public skill install command has no branch pin:
 
 ```sh
-npx -y vgpu docs find <query>    # search doc paths + symbols
-npx -y vgpu docs grep -i <term>  # search doc CONTENT
-npx -y vgpu docs cat <symbol>    # print one doc, e.g. `cat Frame`, `cat performance-model`
+npx skills add vercel-labs/vgpu
 ```
 
-## Core concepts
+## Select the package version
 
-- **Context** — Everything in vgpu starts from one call.  `references/guides/concepts-context.docs.md`
-- **Draws** — A Draw renders geometry with custom vertex buffers: you write both the vertex and the fragment stage, and a geometry supplies the buffers.  `references/guides/concepts-draws.docs.md`
-- **Compilation** — Pipelines compile lazily: the first draw() against a new target pays the pipeline creation cost, and that cost lands inside your frame.  `references/guides/concepts-compilation.docs.md`
-- **Effects** — An Effect is a full-screen fragment shader created with effect(gpu, source).  `references/guides/concepts-effects.docs.md`
-- **Passes** — A pass is a render-pass section inside a frame.  `references/guides/concepts-passes.docs.md`
-- **Frames** — A frame is one unit of GPU work.  `references/guides/concepts-frames.docs.md`
-- **Render bundles** — A render loop re-encodes every pipeline, bind group, and draw on every tick — even when nothing changed.  `references/guides/concepts-render-bundles.docs.md`
+Run the project-local `vgpu` executable from the workspace that owns the dependency. First check
+the relevant package manifest and lockfile, then confirm which local CLI you resolved without
+allowing the package manager to download a missing command:
 
-## CLI reference
+```sh
+pnpm exec vgpu --version
+npm exec --no -- vgpu --version
+```
 
-- **CLI** — vgpu CLI commands, arguments, flags, and exit codes.  `references/guides/cli.docs.md`
+Use a local-only equivalent for other package managers, such as `yarn exec vgpu --version` or an
+already resolved `node_modules/.bin/vgpu`. Commands such as bare `npx vgpu` or `bunx vgpu`
+may download a missing package, so do not use them for local version discovery. npm's `--offline`
+is also insufficient because it can install a missing package from cache. Do not replace an
+installed version merely to read newer documentation.
 
-## Performance guides
+If a package manifest or lockfile selects `vgpu` but the local binary is unavailable, treat the
+dependency tree as incomplete rather than unversioned. Restore the project's locked dependencies
+when installation is within scope. For read-only access, the exact selected version can be invoked
+explicitly instead:
 
-Writing or optimizing a shader? Read **performance-model** first, then the rest as needed.
+```sh
+npx -y vgpu@<selected-version> docs cat getting-started.md
+```
 
-- **WebGPU screenshots with agent-browser** — Use agent-browser to verify and capture vgpu previews that run WebGPU on Linux, including containers without a GPU.  `references/guides/agent-browser-webgpu.docs.md`
-- **Authoring shaders for performance** — Write WGSL so reflection can build stable layouts.  `references/guides/authoring-for-perf.docs.md`
-- **Browser testing with Playwright WebGPU** — Browser tests should exercise the same public API users copy: init(), surface(gpu, canvas, opts), explicit targets, and deterministic frame submiss…  `references/guides/browser-testing.docs.md`
-- **External ticker** — By default vgpu owns the clock: every frame(gpu) moves clock(gpu).time forward by the wall-clock delta since the last frame, and frameLoop(gpu, cb)…  `references/guides/external-ticker.docs.md`
-- **Getting started** — Start with the public vgpu package.  `references/guides/getting-started.docs.md`
-- **MCP** — Connect coding agents directly to VGPU documentation and verified examples through the Model Context Protocol.  `references/guides/mcp.docs.md`
-- **Measuring** — Measure the thing you intend to optimize: CPU encoding, pipeline warm-up, bind-group churn, target memory, or shader cost.  `references/guides/measuring.docs.md`
-- **Overview** — Share one GPUDevice between vgpu and a machine learning runtime so model outputs stay on the GPU.  `references/guides/ml.docs.md`
-- **Quickstart: Browser** — In this quickstart you run an ONNX model with ONNX Runtime Web's WebGPU execution provider and consume its output with vgpu shaders — on one shared…  `references/guides/ml-browser.docs.md`
-- **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
-- **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
-- **Using vgpu with Next.js and other bundlers** — effect(gpu, source) takes WGSL as a string, so nothing forces you to use a bundler loader.  `references/guides/nextjs.docs.md`
-- **Using vgpu without a bundler** — effect(gpu, source) and draw(gpu, { shader }) take WGSL as a plain string, so nothing forces you to use a bundler.  `references/guides/no-bundler.docs.md`
-- **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`
-- **Performance model** — vgpu's public API is organized around stable identities.  `references/guides/performance-model.docs.md`
-- **Performance patterns** — This is the quick index.  `references/guides/performance-patterns.docs.md`
-- **Performance playbook: write fast vgpu by default** — This guide is for LLMs and humans writing shaders.  `references/guides/performance-playbook.docs.md`
-- **Publishing WGSL module packages** — A WGSL module package is an ordinary npm package whose exports map points at .wgsl files instead of JavaScript.  `references/guides/publishing-wgsl-packages.docs.md`
-- **Debugging shaders by extracting internal values** — A shader has no console.log.  `references/guides/shader-debugging.docs.md`
-- **Shader diagnostics and fix-its** — Use these messages as the self-correction map for generated shader code.  `references/guides/shader-fix-its.docs.md`
-- **The default workflow for developing shaders with vgpu** — Follow these eight steps in order every time you write or change a shader.  `references/guides/shader-workflow.docs.md`
-- **Practical texture-format matrix** — Choose a target format from the operations it must support, not just its channel precision.  `references/guides/texture-formats.docs.md`
-- **Two-pass rendering: offscreen depth target composited to the canvas** — Surfaces and canvases have no depth buffer, and Draws need one for any real 3D scene.  `references/guides/two-pass-rendering.docs.md`
+Do not substitute `@latest` for a selected stable, RC, or other prerelease. Only when neither the
+project nor the user has selected a vgpu version, default to the explicit stable tag:
 
-## API reference
+```sh
+npx -y vgpu@latest docs cat getting-started.md
+```
 
-258 symbols across 20 packages — open `references/<package>/<file>` or `npx -y vgpu docs cat <symbol>`:
+When adding a previously unselected dependency is part of the requested work, install
+`vgpu@latest` with the project's package manager. Use `vgpu@next`, an RC, or any other
+prerelease only when the user or the existing project explicitly selected that prerelease;
+preserve an exact requested version.
 
-- `@vgpu/adapter-node` — createNodeAdapter, createNodeDevice
-- `@vgpu/render/edit` — bevel, bridge, dissolveEdges, dissolveFaces, dissolveVertices, EdgeView, EditableMesh, EditableMeshValue, ElementDomain, ElementSelection, ElementSet, extrude, FaceView, fillHole, gridFill, healManifold, inset, KernelHandle, loopCut, mergeByDistance, MeshEditError, MeshEditWarning, recomputeNormals, ScoredSelection, subdivideEdges, subdivideFaces, toEditable, toEditableWithDiagnostics, VertexView
-- `@vgpu/render/inspect` — InspectMaterial, InspectMaterialUniformParams, meshToReadable, meshToWireframe, normalDebugMaterial, NormalDebugMaterialSpec, wireframeMaterial, WireframeMaterialSpec, WireframeMesh
-- `@vgpu/render/perf` — gpuFrameTime, GpuFrameTimeOptions, GpuFrameTimeResult, pixelDiff, PixelDiffResult
-- `@vgpu/render/utils` — canvasMouseTracker, CanvasMouseTracker, CanvasMouseTrackerSpec, canvasResolution, CanvasResolution, frameClock, FrameClock
-- `@vgpu/wgsl` — compile, ResolvedShader, SourceMap, WGSLAst, WGSLSource
-- `@vgpu/wgsl-std/color` — applyExposure, luminance, luminanceThreshold, tonemapAces, tonemapReinhard
-- `@vgpu/wgsl-std/fullscreen` — fullscreenTriangleClip, fullscreenTriangleUv
-- `@vgpu/wgsl-std/hash` — hash1, hash2, hash3, hashU32, pcg2d, pcg3d, unitFloat
-- `@vgpu/wgsl-std/noise` — voronoi2d, voronoi3d, VoronoiSample2, VoronoiSample3
-- `@vgpu/wgsl-std/noise/perlin` — fbmPerlin2d, fbmPerlin3d, perlin2d, perlin3d
-- `@vgpu/wgsl-std/noise/simplex` — fbmSimplex2d, fbmSimplex3d, simplex2d, simplex3d
-- `@vgpu/wgsl/loader-vite` — transformWgsl, ViteLoadResult, wgslVitePlugin
-- `@vgpu/wgsl/loader-webpack` — wgslWebpackLoader
-- `@vgpu/wgsl/reflect-source` — EntryPointInfo, Reflection, reflectSource
-- `@vgpu/wgsl/runtime` — ResolvedShader, ResolveOptions, resolveShader, SourceMap, WGSLAst, WGSLModule
-- `vgpu` — Bundle, BundleOptions, BundleRecorder, clock, Clock, Compute, ComputeOptions, Draw, DrawCallOptions, DrawLayoutOptions, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FramePass, FramePassOptions, FrameRunner, Geometry, GeometryLike, Gpu, init, InitOptions, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, Surface, SurfaceOptions, SurfaceResizeEvent, Target, TargetOptions, TargetTextureOptions, Timer, TimerSpan, Uniform, UniformOptions, Visibility, VisibilityOptions, VisibilityQuery
-- `vgpu/core` — bind, Buffer, BufferOptions, createBindGroup, createBindGroupLayout, CreateDeviceOptions, createPipelineLayout, createRenderBundle, createSampler, Device, DeviceOptions, Queue, RenderBundleOptions, RenderBundleRecorder, ScalarUniformType, StorageBuffer, StorageBufferOptions, StructuredUniform, StructuredUniformOptions, Texture, TextureOptions, Uniform, UniformField, UniformLayout, UniformLayoutInfo, UniformOptions, UniformPool, UniformPoolOptions, UniformSlot, UniformValues, ValidationError, VectorUniformInput, VGPUAdapter, VGPUError, WgslUniformType
-- `vgpu/mock` — createMockAdapter
-- `vgpu/scene` — ambientLight, AmbientLight, AmbientLightOptions, AmbientLightValues, box, BoxOptions, Camera, CameraVec3, capsule, CapsuleOptions, ColorMaterialOptions, ColorMaterialValues, cone, ConeOptions, cylinder, CylinderOptions, degToRad, directionalLight, DirectionalLight, DirectionalLightOptions, DirectionalLightValues, disk, DiskOptions, dodecahedron, fullscreenQuad, FullscreenQuadOptions, geometries, GeometryKind, group, icosahedron, icosphere, IcosphereOptions, lambertMaterial, LambertMaterial, Mat4, MaterialBlend, mesh, MeshNode, NodeOptions, NodeTransformValues, normalMaterial, NormalMaterial, octahedron, orbit, orbitControls, OrbitControls, OrbitControlsElement, OrbitControlsOptions, OrbitControlsValues, OrbitOptions, orthographicCamera, OrthographicCamera, OrthographicCameraOptions, OrthographicCameraValues, perspectiveCamera, PerspectiveCamera, PerspectiveCameraOptions, PerspectiveCameraValues, plane, PlaneOptions, PolyhedronOptions, QuatLike, ring, RingOptions, scene, SceneCamera, SceneGeometry, SceneGeometryOfKind, SceneMaterial, SceneMaterialKind, SceneNode, SceneNodeKind, shaderMaterial, ShaderMaterial, ShaderMaterialOptions, sphere, SphereOptions, srgb, tetrahedron, torus, TorusOptions, unlitMaterial, UnlitMaterial, Vec3, Vec3Like
+## Route through the bundled docs
+
+Ask the resolved local CLI what documentation its version supports, then load only the pages
+needed for the task:
+
+```sh
+pnpm exec vgpu docs --help
+pnpm exec vgpu docs ls
+pnpm exec vgpu docs cat getting-started.md
+pnpm exec vgpu docs find "<topic, symbol, or error code>"
+pnpm exec vgpu docs grep -i "<term>"
+pnpm exec vgpu docs cat "<path or symbol>"
+```
+
+Adapt `pnpm exec` to a no-install command for the project's package manager, but keep using its
+local binary; with npm, retain `npm exec --no -- vgpu` for every docs command. Start with getting
+started for unfamiliar projects, use `find` for task or symbol discovery, use `grep` for details
+mentioned inside pages, and `cat` every relevant guide and API page before changing code. Let
+`docs --help` from that installed version define the available commands.
+
+For MCP-based lookup, start `vgpu mcp` through the same project-local executable so it serves the
+same bundled corpus. A hosted MCP server is a convenience for current stable documentation, not
+the authority for a project pinned to another version.
+
+If the installed docs do not contain a proposed API or workflow, do not invent it or silently
+switch versions. Report the mismatch and change versions only when the user's task authorizes it.

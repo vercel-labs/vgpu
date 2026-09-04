@@ -94,8 +94,8 @@ function parseRevisionDocument(bytes: Uint8Array, expectedRevision: string): Rev
 }
 
 /**
- * Latest-only serving reads the generated tree that ships inside the deployment, so `local` is the
- * default everywhere -- including on Vercel, where the auto-deploy IS the publish step. `blob` is
+ * Latest-only serving reads the build-generated tree that ships inside the deployment, so `local`
+ * is the default everywhere -- including on Vercel, where the auto-deploy IS the publish step. `blob` is
  * still selectable for the dormant versioned-retention mode and stays fail-closed without a token:
  * serving unverified bytes would be worse than serving nothing.
  */

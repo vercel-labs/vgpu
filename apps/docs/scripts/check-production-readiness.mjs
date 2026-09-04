@@ -192,11 +192,56 @@ async function checkMarkdown(baseUrl) {
     "examples Markdown preference fallback: valid app page was replaced",
   );
 
-  const exampleHtml = await request(baseUrl, "/examples/gradient", { headers: { Accept: "text/markdown" } });
-  assert(exampleHtml.status === 200, `example Markdown preference fallback: status ${exampleHtml.status}`);
+  const examplePage = await request(baseUrl, "/examples/gradient", { headers: { Accept: "text/html" } });
+  const examplePageBody = await examplePage.text();
+  assert(examplePage.status === 200, `example HTML: status ${examplePage.status}`);
   assert(
-    exampleHtml.headers.get("content-type")?.includes("text/html"),
-    "example Markdown preference fallback: valid detail page was replaced",
+    examplePageBody.includes('<link rel="alternate" type="text/markdown" href="https://vgpu.sh/examples/gradient.md"'),
+    "example HTML: Markdown alternate is missing",
+  );
+
+  const negotiatedExample = await request(baseUrl, "/examples/gradient", { headers: { Accept: "text/markdown" } });
+  assertMarkdownResponse(negotiatedExample, "negotiated example Markdown");
+  const negotiatedExampleBody = await negotiatedExample.text();
+  assert(negotiatedExampleBody.includes("# Simple Gradient"), "negotiated example Markdown: README title is missing");
+  assert(
+    negotiatedExampleBody.includes("npx vgpu examples pull gradient --out ./gradient"),
+    "negotiated example Markdown: download command is missing",
+  );
+
+  const explicitExample = await request(baseUrl, "/examples/gradient.md");
+  assertMarkdownResponse(explicitExample, "explicit example Markdown");
+  const explicitExampleBody = await explicitExample.text();
+  assert(
+    explicitExampleBody === negotiatedExampleBody,
+    "explicit and negotiated example Markdown differ",
+  );
+  assert(
+    explicitExample.headers.get("link")?.includes("<https://vgpu.sh/examples/gradient>; rel=\"canonical\""),
+    "explicit example Markdown: canonical Link is missing",
+  );
+  assert(
+    explicitExampleBody.includes("https://vgpu.sh/examples/gradient/source.md"),
+    "explicit example Markdown: complete source link is missing",
+  );
+
+  const explicitExampleSource = await request(baseUrl, "/examples/gradient/source.md");
+  assertMarkdownResponse(explicitExampleSource, "explicit example source Markdown");
+  const explicitExampleSourceBody = await explicitExampleSource.text();
+  for (const expected of ["# Simple Gradient source", "## `index.tsx`", "## `renderer.ts`", "## `shader.wgsl`"]) {
+    assert(
+      explicitExampleSourceBody.includes(expected),
+      `explicit example source Markdown: missing ${expected}`,
+    );
+  }
+
+  const negotiatedExampleSource = await request(baseUrl, "/examples/gradient/source", {
+    headers: { Accept: "text/markdown" },
+  });
+  assertMarkdownResponse(negotiatedExampleSource, "negotiated example source Markdown");
+  assert(
+    await negotiatedExampleSource.text() === explicitExampleSourceBody,
+    "explicit and negotiated example source Markdown differ",
   );
 
   const missingExample = await request(baseUrl, "/examples/not-a-real-example", {

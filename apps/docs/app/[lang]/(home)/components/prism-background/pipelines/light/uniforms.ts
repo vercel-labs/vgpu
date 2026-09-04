@@ -1,4 +1,4 @@
-import { LIGHT_PIPELINE_TUNING } from "../../materials/light/tuning";
+import { LIGHT_PIPELINE_TUNING } from "./config";
 import { runtimeWallExtent } from "../../runtime/uniforms";
 import type { PrismRuntime } from "../../runtime/types";
 import {
@@ -6,7 +6,7 @@ import {
   PRISM_LIGHT_TONE_MAPPING_CODES,
   PRISM_SIDE,
 } from "../../types";
-import { presentationRevealUniforms } from "../presentation";
+import { presentationRevealUniforms } from "../shared/presentation/index";
 
 export function lightWallUniforms(
   runtime: PrismRuntime

@@ -17,7 +17,7 @@ order: 60
 
 # Frames
 
-A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. When the callback returns, vgpu encodes everything into one command encoder and submits it once.
+A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. Everything is encoded into one command encoder, and vgpu submits it once when the callback returns.
 
 ## Render a single frame
 
@@ -66,6 +66,33 @@ One-shot draws like `pulseEffect.draw(canvasTarget)` are the simple default for 
 
 > Warning: Do not call `frame(gpu)` from inside another frame callback or from a surface resize callback. vgpu throws `VGPU-FRAME-REENTRANT` so command encoders stay ordered and predictable.
 
+## When the callback throws
+
+The callback is all-or-nothing for the frame's command buffer. If it returns, the frame submits once. If it throws, vgpu cancels the frame: nothing it encoded reaches the GPU, the timer and visibility instances it attached release their per-frame retains, and the error reaches you unchanged. A half-encoded frame is never presented by accident.
+
+The guarantee is scoped to the command buffer. The frame clock has already ticked, uniform updates and buffer writes made inside the callback stay applied, and anything submitted on its own from inside the callback (a one-shot `draw()`, a manual frame) has already reached the queue. A canvas the frame already opened a pass on still shows that browser frame, only empty, because the texture was acquired but never drawn into. Errors the GPU reports after a successful submit still arrive through `gpu.onError` and `await gpu.settled()`.
+
+If you called `frame.submit()` yourself before the throw, that work is on the queue and stays there; vgpu just rethrows your error. That is also the way to keep partial work on purpose:
+
+```ts
+import { init, frame, target } from "vgpu";
+import type { Frame } from "vgpu";
+
+const gpu = await init();
+const scene = target(gpu, { size: [64, 64] });
+function encode(currentFrame: Frame): void { currentFrame.pass(scene, () => undefined); }
+
+// ---cut---
+frame(gpu, (currentFrame) => {
+  try {
+    encode(currentFrame);
+  } catch (error) {
+    currentFrame.submit(); // keep what was encoded before the failure
+    throw error;
+  }
+});
+```
+
 ## Render loops
 
 For animation, use [`frameLoop(gpu)`](/reference/vgpu/frame#framerunner) — it runs your frame every tick:
@@ -96,6 +123,8 @@ handle.stop(); // call it when your component unmounts
 ```
 
 The loop advances the frame clock — `clock(gpu).time`, `deltaTime` and `frameCount` — and runs surface auto-resize before each tick. The optional `fps` throttles it.
+
+Each tick follows the same rule as `frame(gpu, cb)`: a tick that throws submits nothing for that frame. It also ends the loop, because the error escapes the animation-frame callback where nothing can catch it; the handle is released as if you had called `stop()`. Recover, then start a new `frameLoop(gpu, cb)`.
 
 This is what the same loop looks like by hand with `requestAnimationFrame`:
 

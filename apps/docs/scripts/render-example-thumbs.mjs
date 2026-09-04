@@ -65,7 +65,7 @@ if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
 async function renderOne(renderers, example, size, metaThumb, output) {
   const slug = example.meta.slug;
-  const gpu = await init();
+  const gpu = await init({ requiredLimits: metaThumb.requiredLimits });
   try {
     const colorTarget = target(gpu, { size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];

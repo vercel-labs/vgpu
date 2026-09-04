@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/core",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Core WebGPU runtime primitives (device, buffer, texture, shader, queue) for vgpu.",
   "keywords": [
     "webgpu",

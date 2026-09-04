@@ -36,6 +36,8 @@ vgpu UniformOptions packages/vgpu-api/src/core/uniform.docs.md
 vgpu Visibility packages/vgpu-api/src/visibility.docs.md
 vgpu VisibilityOptions packages/vgpu-api/src/visibility.docs.md
 vgpu VisibilityQuery packages/vgpu-api/src/visibility.docs.md
+vgpu/three tslExports packages/vgpu-api/src/three/tsl-exports.docs.md
+vgpu/three TslExportsErrorCode packages/vgpu-api/src/three/tsl-exports.docs.md
 vgpu/core Device packages/core/src/device.docs.md
 vgpu/core DeviceOptions packages/core/src/device.docs.md
 vgpu/core CreateDeviceOptions packages/core/src/device.docs.md
@@ -88,7 +90,10 @@ vgpu/scene PerspectiveCameraOptions packages/vgpu-api/src/scene/perspective-came
 vgpu/scene degToRad packages/vgpu-api/src/scene/deg-to-rad.docs.md
 vgpu/scene srgb packages/vgpu-api/src/scene/srgb.docs.md
 @vgpu/wgsl compile packages/wgsl/src/compile.docs.md
+@vgpu/wgsl isShaderFunctionExport packages/wgsl/src/resolved-shader.docs.md
 @vgpu/wgsl ResolvedShader packages/wgsl/src/resolved-shader.docs.md
+@vgpu/wgsl ShaderSource packages/wgsl/src/resolved-shader.docs.md
+@vgpu/wgsl ShaderFunctionExport packages/wgsl/src/resolved-shader.docs.md
 @vgpu/wgsl SourceMap packages/wgsl/src/resolved-shader.docs.md
 @vgpu/wgsl WGSLAst packages/wgsl/src/resolved-shader.docs.md
 @vgpu/wgsl WGSLSource packages/wgsl/src/resolved-shader.docs.md

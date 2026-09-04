@@ -1,8 +1,13 @@
 import type { Bundle, Draw, Effect, Geometry, Target } from "vgpu";
 
-import type { LightAssetTextures } from "../../assets/light/types";
+import type { LightAssetTextures } from "./assets/types";
+import type { LightMeshLayout } from "../../scene/light-mesh";
+import type { PrismPipelineQuality } from "../types";
 
 export interface LightPipelineGraph {
+  readonly quality: PrismPipelineQuality;
+  readonly lightMeshLayout: LightMeshLayout;
+  readonly simplifiedWall: boolean;
   readonly wall: Draw;
   readonly prismShadow: Draw;
   readonly prismShadowGeometry: Geometry;

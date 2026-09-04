@@ -7,6 +7,23 @@ import type { Diagnostic } from "./diagnostic-types.ts";
 
 export interface PackageResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string> }
 
+const entrySourceKey = Symbol("@vgpu/wgsl entry source");
+interface EntrySourceOverride { readonly path: string; readonly source: string }
+type InternalPackageResolveOptions = PackageResolveOptions & {
+  readonly [entrySourceKey]?: EntrySourceOverride;
+};
+
+/** Internal loader bridge: overlay only the bundler-provided entry while imports keep normal resolution. */
+export function withEntrySource<Options extends PackageResolveOptions>(
+  options: Options,
+  source: string,
+): Options {
+  return {
+    ...options,
+    [entrySourceKey]: { path: resolve(options.entry), source },
+  };
+}
+
 /** Fix-it for a bare package specifier that is not installed. WGSL packages are npm packages: `@vgpu/wgsl-std` ships with `vgpu`, anything else has to be installed. */
 export const PKG_NOTFOUND_FIXIT = "Install the package (npm install <pkg>) or check the specifier";
 /** Fix-it for the in-memory (`modules`) resolver, where node_modules is never consulted. */
@@ -33,6 +50,8 @@ export function resolveImport(spec: string, from: string, opts: PackageResolveOp
 }
 
 export async function readModule(path: string, opts: PackageResolveOptions): Promise<string> {
+  const entrySource = (opts as InternalPackageResolveOptions)[entrySourceKey];
+  if (entrySource?.path === path) return entrySource.source;
   const text = opts.modules?.[path];
   if (text !== undefined) return text;
   if (existsSync(path)) return await readFile(path, "utf8");
@@ -40,6 +59,8 @@ export async function readModule(path: string, opts: PackageResolveOptions): Pro
 }
 
 export function canonicalEntry(entry: string, opts: PackageResolveOptions): string {
+  const entrySource = (opts as InternalPackageResolveOptions)[entrySourceKey];
+  if (entrySource !== undefined) return entrySource.path;
   return opts.modules ? defaultVirtual(entry, opts.modules) : defaultFile(resolve(entry));
 }
 

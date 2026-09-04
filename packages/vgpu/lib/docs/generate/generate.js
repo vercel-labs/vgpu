@@ -1,8 +1,7 @@
-// Shared core for one docs-generation run: builds the manifest from docs/allowlist.txt +
-// docs/topics, then writes the manifest + skill mirror. Used by both cli.js (writes into the
-// repo's committed skills/vgpu) and check-drift.js (writes into a scratch temp dir so it can diff
-// against the committed copy without touching the working tree).
-import { execSync } from "node:child_process";
+// Shared core for one docs-generation run: builds the versioned CLI manifest from
+// docs/allowlist.txt + docs/topics, then writes that manifest and the version-neutral skill router.
+// Used by both cli.js (writes into the repo's committed skills/vgpu) and check-drift.js (writes into
+// a scratch temp dir so it can diff against the committed copy without touching the working tree).
 import {
   existsSync,
   mkdirSync,
@@ -50,31 +49,6 @@ function prune(dir, expected) {
   }
 }
 
-/**
- * Frontmatter stamp for the generated SKILL.md: the vgpu package version + the commit + date this
- * generation ran from, so a stale installed skill is detectable in the frontmatter by a human or
- * an agent without diffing anything. gitSha/generatedAt are intentionally volatile — they change on
- * every run by design — so check-drift.js normalizes them away before comparing; a stamp-only
- * difference between two generations is never reported as drift.
- */
-export function computeStamp(root) {
-  // NB: the public "vgpu" package (what `npx -y vgpu` runs) lives at packages/vgpu-api — the
-  // "packages/vgpu" directory is the (private) @vgpu/cli package that hosts this generator.
-  let vgpuVersion = "unknown";
-  try {
-    vgpuVersion = JSON.parse(readFileSync(resolve(root, "packages/vgpu-api/package.json"), "utf8")).version;
-  } catch {}
-
-  let gitSha = "unknown";
-  try {
-    gitSha = execSync("git rev-parse HEAD", { cwd: root, stdio: ["ignore", "pipe", "ignore"] })
-      .toString()
-      .trim();
-  } catch {}
-
-  return { vgpuVersion, gitSha, generatedAt: new Date().toISOString() };
-}
-
 export function loadManifest(root) {
   const allowlistPath = resolve(root, "docs/allowlist.txt");
   const topicsDir = resolve(root, "docs/topics");
@@ -94,15 +68,15 @@ export function loadManifest(root) {
 }
 
 /**
- * Runs one full generation: manifest + skill mirror (SKILL.md router + references/<doc>), written
- * to the given output paths. Returns the manifest so callers can log stats.
+ * Runs one full generation: versioned CLI manifest + version-neutral SKILL.md router, written to
+ * the given output paths. Returns the manifest so callers can log stats.
  */
-export function generateDocs({ root, skillDir, manifestOut, stamp }) {
+export function generateDocs({ root, skillDir, manifestOut }) {
   const manifest = loadManifest(root);
   writeAtomic(manifestOut, `export const docsManifest = ${serializeManifest(manifest)};`);
 
   const expected = new Set();
-  for (const [relativePath, content] of buildSkill(manifest, stamp)) {
+  for (const [relativePath, content] of buildSkill()) {
     const outPath = resolve(skillDir, relativePath);
     expected.add(outPath);
     writeAtomic(outPath, content);

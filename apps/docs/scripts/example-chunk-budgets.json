@@ -1,6 +1,8 @@
 {
   "description": "Production Turbopack gzip baselines for every canonical preview route after the examples were made self-contained. The checker requires exact coverage of exampleSlugs, allows the larger of 2% or 5 KiB growth per example and 5 KiB for the shared host, rejects stale builds and shared route-owned chunks, and supplements those checks with surviving WGSL source markers. ML runtimes and model files are fetched dynamically as public assets and are not attributed to route chunks.",
-  "$comment:tgeist-08": "All 22 current baselines and the shared host were measured from the same Node 22 / Next 16.3.2 production build and confirmed by a second build. previousAppsDocsBaseline remains read-only historical provenance, including examples that no longer exist.",
+  "$comment:tgeist-08": "All current baselines and the shared host were measured from Node 22 / Next 16.3.2 production builds. previousAppsDocsBaseline remains read-only historical provenance, including examples that no longer exist.",
+  "$comment:three-tsl": "three-tsl is the outlier here at ~279 KB against a 15-85 KB field, and deliberately so: it is the advanced three.js integration example, so three.js core, the TSL node system, WebGPURenderer and BloomNode are the subject of the example rather than incidental weight. Adding the second Three route made Turbopack factor 238179 B gzip of shared Three code into its own chunk; a same-build control with the former local helper measured 276833 B, so vgpu/three itself adds only 2280 B to this route. The HDRI it lights with is served from public/examples/three-tsl/sunset.exr instead of the inlined @pmndrs/assets data URI, which keeps ~147 KB of base64 out of this number. Treat a regression against this baseline the same as any other; do not treat the baseline itself as a precedent for non-three examples.",
+  "$comment:tsl-exports": "The focused tslExports route is 239570 B gzip: a 238179 B shared Three/TSL/WebGPURenderer chunk plus 1391 B of route-owned example code. Renaming the route shortened both the adapter and former-local-helper builds by 4 B, so the same-build control remains a 2285 B adapter delta. Keep this route intentionally small even though the framework it demonstrates dominates its transfer size.",
   "sharedHost": {
     "gzipBytes": 2104,
     "maxGrowthBytes": 5120
@@ -27,7 +29,11 @@
     "nextjs-flare": 74593,
     "depth-estimation": 65647,
     "mnist-classifier": 63571,
-    "air-painting": 71822
+    "air-painting": 71822,
+    "tsl-exports": 239570,
+    "three-tsl": 279113,
+    "particle-orbit": 160967,
+    "adaptive-quality": 56238
   },
   "exampleGrowth": {
     "percent": 2,

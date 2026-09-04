@@ -26,6 +26,7 @@ export default defineConfig({
       { find: "vgpu/mock", replacement: resolve("packages/vgpu-api/src/mock.ts") },
       { find: "vgpu/scene", replacement: resolve("packages/vgpu-api/src/scene.ts") },
       { find: "vgpu/core", replacement: resolve("packages/vgpu-api/src/core.ts") },
+      { find: "vgpu/three", replacement: resolve("packages/vgpu-api/src/three.ts") },
       { find: "vgpu", replacement: resolve("packages/vgpu-api/src/index.ts") },
       { find: "@vgpu/wgsl/loader-webpack", replacement: resolve("packages/wgsl/src/loader-webpack/index.ts") },
       { find: "@vgpu/wgsl/loader-vite", replacement: resolve("packages/wgsl/src/loader-vite/index.ts") },

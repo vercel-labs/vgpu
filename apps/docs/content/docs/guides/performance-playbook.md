@@ -295,3 +295,7 @@ timer.onResults((spans) => console.log(`main ${spans.main}ms`));
 frameLoop(gpu, (f) => f.pass({ target: scene, timer: timer.span("main") }, (p) => p.draw(world)));
 ```
 Default: attach `timer.span(name)` to each pass you plan to touch and optimize the worst milliseconds first. Open `measuring` for what else to measure.
+
+## Runtime quality tiers
+
+When the fastest High pipeline still cannot hold its target on every device, add a Low pipeline and switch to it on GPU tier, battery, or presented-FPS health. The technique and its copy-pasteable code are in [Adaptive quality](adaptive-quality.docs.md) and the [adaptive quality example](/examples/adaptive-quality).

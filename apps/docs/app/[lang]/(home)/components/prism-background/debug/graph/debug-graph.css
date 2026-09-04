@@ -39,6 +39,49 @@
   font: 500 0.62rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.prism-debug-graph__selectors {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.prism-debug-graph__selectors label {
+  display: grid;
+  grid-template-columns: auto minmax(5rem, auto);
+  align-items: center;
+  gap: 0.35rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.prism-debug-graph__selectors select {
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.35rem;
+  outline: none;
+  background: rgba(24, 24, 24, 0.94);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  padding: 0.35rem 1.6rem 0.35rem 0.5rem;
+  font: inherit;
+}
+
+.prism-debug-graph__selectors select:hover {
+  border-color: rgba(255, 255, 255, 0.56);
+  color: white;
+}
+
+.prism-debug-graph__selectors select:focus-visible {
+  outline: 2px solid #e5e5e5;
+  outline-offset: 2px;
+}
+
+.prism-debug-graph__selectors small {
+  grid-column: 2;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.55rem;
+  white-space: nowrap;
+}
+
 .prism-debug-graph__actions button {
   min-height: 2rem;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -102,16 +145,32 @@
   --prism-debug-kind: #a3a3a3;
 }
 
+.prism-debug-node[data-kind="geometry"] {
+  --prism-debug-kind: #93c5fd;
+}
+
 .prism-debug-node[data-kind="view"] {
   --prism-debug-kind: #d4d4d4;
 }
 
+.prism-debug-node[data-kind="draw"] {
+  --prism-debug-kind: #f0abfc;
+}
+
 .prism-debug-node[data-kind="pass"] {
-  --prism-debug-kind: #b8b8b8;
+  --prism-debug-kind: #fbbf24;
 }
 
 .prism-debug-node[data-kind="target"] {
-  --prism-debug-kind: #e5e5e5;
+  --prism-debug-kind: #67e8f9;
+}
+
+.prism-debug-node[data-kind="output"] {
+  --prism-debug-kind: #86efac;
+}
+
+.prism-debug-node[data-kind="state"] {
+  --prism-debug-kind: #c4b5fd;
 }
 
 .prism-debug-node[data-kind="control"] {
@@ -130,6 +189,32 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   color-scheme: dark;
   padding: 0.45rem 0.55rem 0.55rem;
+}
+
+.prism-debug-node__details {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.58rem;
+}
+
+.prism-debug-node__details div {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.prism-debug-node__details dt {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.prism-debug-node__details dd {
+  min-width: 0;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  overflow-wrap: anywhere;
 }
 
 .prism-debug-node__controls fieldset {

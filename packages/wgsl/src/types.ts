@@ -1,7 +1,15 @@
-/** V1 loader artifact. The bindings field is reserved for a future version bump and is not part of this shape. */
+/** Authored identity for one direct `export fn` that survives shader resolution. */
+export interface ShaderFunctionExport {
+  readonly name: string;
+  readonly resolvedName: string;
+  readonly parameterNames: readonly string[];
+}
+
+/** V1 loader artifact. Extra metadata is additive; bindings remain reserved for a future version bump. */
 export interface ShaderSource {
   readonly version: 1;
   readonly wgsl: string;
+  readonly functionExports?: readonly ShaderFunctionExport[];
 }
 
 export interface WGSLSource {

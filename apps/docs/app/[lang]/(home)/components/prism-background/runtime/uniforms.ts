@@ -1,17 +1,12 @@
-import { rotationMatrix } from "../camera";
+import { rotationMatrix } from "../scene/camera";
 import {
   ENVIRONMENT_SIZE,
   ENVIRONMENT_TEXEL_ANGLE,
-} from "../environment-texture";
-import {
-  LIGHT_INTERNAL_QUADS,
-  LIGHT_INTERNAL_SEGMENTS,
-  LIGHT_WHITE_QUADS,
-} from "../light-mesh";
-import { prismPlanes } from "../prism-mesh";
+} from "../environment/texture";
+import { LIGHT_INTERNAL_SEGMENTS, type LightMeshLayout } from "../scene/light-mesh";
+import { prismPlanes } from "../scene/prism-mesh";
 import {
   PRISM_BACK_Z,
-  PRISM_BEAM_SLICES,
   PRISM_FRONT_Z,
   PRISM_GLASS,
   PRISM_LIGHT_PLANE_Z,
@@ -36,7 +31,8 @@ export function schlickFresnelF0(ior: number): number {
 /** Shared block used by wall and light draws in either theme. */
 export function sceneUniforms(
   runtime: PrismRuntime,
-  beamWidthReveal = 1
+  beamWidthReveal = 1,
+  layout: LightMeshLayout = runtime.lightMeshLayout
 ): Record<string, unknown> {
   const light = lampAt(
     runtime.lampArc,
@@ -56,9 +52,10 @@ export function sceneUniforms(
       : [0, 0, 0],
     causticOnly: runtime.controls.view === "caustic" ? 1 : 0,
     lightPlaneZ: PRISM_LIGHT_PLANE_Z,
-    lightWhiteQuads: LIGHT_WHITE_QUADS,
-    lightBeamSlices: PRISM_BEAM_SLICES,
-    lightInternalQuads: LIGHT_INTERNAL_QUADS,
+    lightWhiteQuads: layout.whiteQuads,
+    lightBeamSlices: layout.beamSlices,
+    lightSpectralSamples: layout.samples,
+    lightInternalQuads: layout.internalQuads,
     lightInternalSegments: LIGHT_INTERNAL_SEGMENTS,
     lightOpacity: runtime.controls.lightFade.beamOpacity,
     lightEdgeFalloff: runtime.controls.lightFade.edgeFalloff,

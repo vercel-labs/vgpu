@@ -53,11 +53,12 @@ import {
   LIGHT_VERTEX_STRIDE,
   LIGHT_WHITE_VERTICES,
   lightVertexCount,
-} from "./light-mesh";
-import { prismPlanes } from "./prism-mesh";
-import { darkWallClear } from "./pipelines/dark/wall-clear";
+} from "./scene/light-mesh";
+import { LOW_LIGHT_MESH_LAYOUT } from "./pipelines/quality";
+import { prismPlanes } from "./scene/prism-mesh";
+import { darkWallClear } from "./pipelines/dark/passes/wall/clear";
 import { schlickFresnelF0 } from "./runtime/uniforms";
-import { wallExtent } from "./scene";
+import { wallExtent } from "./scene/scene";
 import {
   CAMERA_DISTANCE,
   DEFAULT_PRISM_CONTROLS,
@@ -275,6 +276,7 @@ function gpu(features: readonly GPUFeatureName[] = []) {
   const targets: {
     size: number[];
     format: string;
+    sampleCount: 1 | 4;
     color: { gpu: object };
     msaa?: boolean | 4;
     resize: ReturnType<typeof vi.fn>;
@@ -348,6 +350,9 @@ function gpu(features: readonly GPUFeatureName[] = []) {
           const created = {
             size: [...options.size],
             format: options.format ?? "bgra8unorm",
+            sampleCount: (options.msaa === true || options.msaa === 4
+              ? 4
+              : 1) as 1 | 4,
             color: { gpu: {} },
             msaa: options.msaa,
             resize: vi.fn((size: number[]) => {
@@ -418,6 +423,7 @@ function drawNamed(live: ReturnType<typeof gpu>, label: string) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -447,7 +453,7 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.effects).toHaveLength(16);
   expect(live.draws).toHaveLength(4);
   const darkDrawOptions = live.instance.fns.draw.mock.calls as unknown as [
-    Record<string, unknown>,
+    Record<string, unknown>
   ][];
   expect(darkDrawOptions.map(([options]) => options.label)).toEqual([
     "prism-rainbow.light",
@@ -498,8 +504,8 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.effects[13]!.compile).toHaveBeenCalledWith({
     colors: ["bgra8unorm"],
   });
-  // One full-resolution MSAA target composites back-side glass and light; a
-  // second lets the front interface sample that resolved result. Four pairs of
+  // A single-sample HDR backdrop holds back-side glass and light, while the
+  // front-side target alone uses MSAA. Four pairs of
   // smaller HDR targets hold three bloom scales and one particle-light scale; the
   // display-encoded target retains the dark base underneath animated dust. The
   // remainder are transient studio-environment mip-bake surfaces. The debug
@@ -507,7 +513,7 @@ test("renders the deterministic light once and idles until something changes", a
   expect(live.targets).toHaveLength(26);
   expect(live.targets[0]!.format).toBe("rgba16float");
   expect(live.targets[1]!.format).toBe("rgba16float");
-  expect(live.targets[0]!.msaa).toBe(true);
+  expect(live.targets[0]!.msaa).toBeUndefined();
   expect(live.targets[1]!.msaa).toBe(true);
   expect(live.targets.slice(2, 10).map((entry) => entry.size)).toEqual([
     [100, 50],
@@ -625,6 +631,7 @@ test("renders the deterministic light once and idles until something changes", a
     expect.objectContaining({
       sceneTexture: live.targets[1],
       bloomTexture: live.targets[2],
+      params: { bloomStrength: 0.7 },
     })
   );
   expect(live.effects[12]!.compile).toHaveBeenCalledWith(live.targets[10]);
@@ -741,13 +748,12 @@ test("requests supported packed bloom with optional performance timestamps", asy
   await renderer.ready;
 
   expect(requestAdapter).toHaveBeenCalledOnce();
-  expect(mocks.init).toHaveBeenCalledWith(expect.objectContaining({
-    adapter: expect.objectContaining({ requestDevice: expect.any(Function) }),
-    requiredFeatures: [
-      "rg11b10ufloat-renderable",
-      "timestamp-query",
-    ],
-  }));
+  expect(mocks.init).toHaveBeenCalledWith(
+    expect.objectContaining({
+      adapter: expect.objectContaining({ requestDevice: expect.any(Function) }),
+      requiredFeatures: ["rg11b10ufloat-renderable", "timestamp-query"],
+    })
+  );
   expect(live.targets.slice(2, 8).map(({ format }) => format)).toEqual(
     Array.from({ length: 6 }, () => "rg11b10ufloat")
   );
@@ -806,8 +812,301 @@ test("uses an explicit DPR only for performance sampling", async () => {
   await renderer.ready;
 
   expect(live.instance.fns.surface).toHaveBeenCalledWith(env.canvas, {
+    autoResize: false,
     dpr: 2,
   });
+  renderer.dispose();
+});
+
+test.each(["dark", "light"] as const)(
+  "uses DPR 1 for the low-quality %s pipeline",
+  async (mode) => {
+    const env = browser();
+    vi.stubGlobal("navigator", {});
+    const live = gpu();
+    mocks.init.mockResolvedValueOnce(live.instance);
+    const renderer = createRenderer({
+      canvas: env.canvas,
+      initialMode: mode,
+      initialQuality: "low",
+    });
+    await renderer.ready;
+
+    expect(live.instance.fns.surface).toHaveBeenCalledWith(env.canvas, {
+      autoResize: false,
+      dpr: 1,
+    });
+    env.flushAnimationFrames();
+    expect(live.surface.resize).toHaveBeenLastCalledWith([200, 100]);
+    renderer.dispose();
+  }
+);
+
+test("remeasures the canvas when quality changes at runtime", async () => {
+  const env = browser();
+  vi.stubGlobal("navigator", {});
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "light",
+  });
+  await renderer.ready;
+
+  env.flushAnimationFrames();
+  expect(live.surface.resize).toHaveBeenLastCalledWith([400, 200]);
+
+  await renderer.setQualityPreference("low");
+  env.flushAnimationFrames();
+  expect(live.surface.resize).toHaveBeenLastCalledWith([200, 100]);
+  expect(
+    (live.lightBuffer.write.mock.calls.at(-1)![0] as Float32Array).byteLength
+  ).toBe(LOW_LIGHT_MESH_LAYOUT.vertexCount * LIGHT_VERTEX_STRIDE);
+
+  await renderer.setQualityPreference("high");
+  env.flushAnimationFrames();
+  expect(live.surface.resize).toHaveBeenLastCalledWith([400, 200]);
+  expect(
+    (live.lightBuffer.write.mock.calls.at(-1)![0] as Float32Array).byteLength
+  ).toBe(lightVertexCount() * LIGHT_VERTEX_STRIDE);
+  renderer.dispose();
+});
+
+test("renders High before loading the deferred Auto controller", async () => {
+  vi.useFakeTimers();
+  const env = browser();
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const autoController = {
+    recordFrame: vi.fn(),
+    resetHealth: vi.fn(),
+    dispose: vi.fn(),
+  };
+  const createAuto = vi.fn(() => autoController);
+  const loadAutoQuality = vi.fn(async () => ({
+    createPrismAutoQualityController: createAuto,
+  }));
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    loadAutoQuality,
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+
+  tick(live.loopFrame);
+  expect(renderer.getQualityState()).toEqual({
+    preference: "auto",
+    effective: "high",
+    reason: "initial",
+  });
+  expect(live.loopFrame.pass).toHaveBeenCalled();
+  expect(loadAutoQuality).not.toHaveBeenCalled();
+
+  env.flushAnimationFrames();
+  expect(loadAutoQuality).not.toHaveBeenCalled();
+  await vi.runOnlyPendingTimersAsync();
+  expect(loadAutoQuality).toHaveBeenCalledOnce();
+  expect(createAuto).toHaveBeenCalledOnce();
+  renderer.dispose();
+});
+
+test("performance sampling never starts Auto", async () => {
+  vi.useFakeTimers();
+  const env = browser();
+  vi.stubGlobal("navigator", {});
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const loadAutoQuality = vi.fn();
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    performanceSampling: true,
+    loadAutoQuality,
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  live.instance.fns.frameLoop.mock.calls[0]![0](live.loopFrame);
+  env.flushAnimationFrames();
+  await vi.runOnlyPendingTimersAsync();
+  expect(loadAutoQuality).not.toHaveBeenCalled();
+  renderer.dispose();
+});
+
+test("an explicit preference cancels a stale Auto import", async () => {
+  vi.useFakeTimers();
+  const env = browser();
+  const live = gpu();
+  const pendingAuto = deferred<{
+    createPrismAutoQualityController: ReturnType<typeof vi.fn>;
+  }>();
+  const createAuto = vi.fn();
+  const loadAutoQuality = vi.fn(() => pendingAuto.promise);
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    loadAutoQuality,
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  live.instance.fns.frameLoop.mock.calls[0]![0](live.loopFrame);
+  env.flushAnimationFrames();
+  await vi.runOnlyPendingTimersAsync();
+  expect(loadAutoQuality).toHaveBeenCalledOnce();
+
+  await renderer.setQualityPreference("high");
+  pendingAuto.resolve({ createPrismAutoQualityController: createAuto });
+  await pendingAuto.promise;
+  await Promise.resolve();
+  expect(createAuto).not.toHaveBeenCalled();
+  expect(renderer.getQualityState()).toEqual({
+    preference: "high",
+    effective: "high",
+    reason: "forced",
+  });
+  renderer.dispose();
+});
+
+test("forcing High supersedes an Auto Low preparation and restores DPR", async () => {
+  vi.useFakeTimers();
+  const env = browser();
+  const live = gpu();
+  let requestLow!: (reason: "gpu-tier") => void;
+  const loadAutoQuality = vi.fn(async () => ({
+    createPrismAutoQualityController: (options: {
+      onDowngrade(reason: "gpu-tier"): void;
+    }) => {
+      requestLow = options.onDowngrade;
+      return {
+        recordFrame: vi.fn(),
+        resetHealth: vi.fn(),
+        dispose: vi.fn(),
+      };
+    },
+  }));
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    loadAutoQuality,
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  live.instance.fns.frameLoop.mock.calls[0]![0](live.loopFrame);
+  env.flushAnimationFrames();
+  await vi.runOnlyPendingTimersAsync();
+
+  requestLow("gpu-tier");
+  expect(live.surface.resize).toHaveBeenLastCalledWith([200, 100]);
+  await renderer.setQualityPreference("high");
+  expect(renderer.getQualityState()).toEqual({
+    preference: "high",
+    effective: "high",
+    reason: "forced",
+  });
+  expect(live.surface.resize).toHaveBeenLastCalledWith([400, 200]);
+  renderer.dispose();
+});
+
+test("Auto downgrades once across theme changes and selecting Auto restarts High", async () => {
+  vi.useFakeTimers();
+  const env = browser();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Promise.reject(new Error("offline")))
+  );
+  const live = gpu();
+  const downgrade: ((reason: "gpu-tier") => void)[] = [];
+  const controllers: { dispose: ReturnType<typeof vi.fn> }[] = [];
+  const qualityLogger = { info: vi.fn() };
+  const loadAutoQuality = vi.fn(async () => ({
+    createPrismAutoQualityController: (options: {
+      onDowngrade(reason: "gpu-tier"): void;
+    }) => {
+      downgrade.push(options.onDowngrade);
+      const controller = {
+        recordFrame: vi.fn(),
+        resetHealth: vi.fn(),
+        dispose: vi.fn(),
+      };
+      controllers.push(controller);
+      return controller;
+    },
+  }));
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    loadAutoQuality,
+    qualityLogger,
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+  tick(live.loopFrame);
+  env.flushAnimationFrames();
+  await vi.runOnlyPendingTimersAsync();
+
+  downgrade[0]!("gpu-tier");
+  await vi.waitFor(() =>
+    expect(renderer.getQualityState()).toEqual({
+      preference: "auto",
+      effective: "low",
+      reason: "gpu-tier",
+    })
+  );
+  expect(controllers[0]!.dispose).toHaveBeenCalledOnce();
+  expect(qualityLogger.info).toHaveBeenCalledWith(
+    "[Prism quality] Downgraded to Low.",
+    {
+      preference: "auto",
+      reason: "gpu-tier",
+      from: "high",
+      to: "low",
+      dpr: 1,
+    }
+  );
+
+  await renderer.setMode("light");
+  expect(renderer.getQualityState().effective).toBe("low");
+  downgrade[0]!("gpu-tier");
+  expect(renderer.getQualityState().effective).toBe("low");
+
+  await renderer.setQualityPreference("auto");
+  expect(renderer.getQualityState()).toEqual({
+    preference: "auto",
+    effective: "high",
+    reason: "initial",
+  });
+  tick(live.loopFrame);
+  env.flushAnimationFrames();
+  await vi.runOnlyPendingTimersAsync();
+  expect(loadAutoQuality).toHaveBeenCalledTimes(2);
+  renderer.dispose();
+});
+
+test("applies DPR 1 before Low preparation and restores High DPR on failure", async () => {
+  const env = browser();
+  vi.stubGlobal("navigator", {});
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "light",
+    initialQuality: "high",
+  });
+  await renderer.ready;
+  env.flushAnimationFrames();
+  expect(live.surface.resize).toHaveBeenLastCalledWith([400, 200]);
+
+  live.failNextCompile(new Error("low shader failed"));
+  const transition = renderer.setQualityPreference("low");
+  expect(live.surface.resize).toHaveBeenLastCalledWith([200, 100]);
+  await expect(transition).rejects.toThrow("low shader failed");
+  expect(live.surface.resize).toHaveBeenLastCalledWith([400, 200]);
+  expect(renderer.getQualityState().effective).toBe("high");
   renderer.dispose();
 });
 
@@ -835,6 +1134,158 @@ test("caps a 120 Hz interactive loop at 90 rendered frames", async () => {
 
   // Light mode encodes three passes per rendered frame.
   expect(live.loopFrame.pass).toHaveBeenCalledTimes(90 * 3);
+  renderer.dispose();
+});
+
+test.each([
+  ["dark", 10],
+  ["light", 3],
+] as const)(
+  "caps the low-quality %s pipeline at 60 rendered frames",
+  async (mode, passesPerFrame) => {
+    const env = browser();
+    vi.stubGlobal("navigator", {});
+    const live = gpu();
+    live.gpuClock.deltaTime = 1 / 120;
+    mocks.init.mockResolvedValueOnce(live.instance);
+    const renderer = createRenderer({
+      canvas: env.canvas,
+      initialMode: mode,
+      initialQuality: "low",
+    });
+    await renderer.ready;
+    const tick = live.instance.fns.frameLoop.mock.calls[0]![0];
+
+    for (let sourceFrame = 0; sourceFrame < 120; sourceFrame++) {
+      env.windowListeners.get("pointermove")?.({
+        pointerId: 1,
+        clientX: sourceFrame % 2 === 0 ? 0 : 200,
+        clientY: sourceFrame % 3 === 0 ? 0 : 100,
+      } as unknown as Event);
+      tick(live.loopFrame);
+    }
+
+    expect(live.loopFrame.pass).toHaveBeenCalledTimes(60 * passesPerFrame);
+    renderer.dispose();
+  }
+);
+
+test("uses the reduced shared GPU layout for low-quality light", async () => {
+  const env = browser();
+  vi.stubGlobal("navigator", {});
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "light",
+    initialQuality: "low",
+  });
+  await renderer.ready;
+
+  expect(
+    live.targets.slice(0, 2).map(({ sampleCount }) => sampleCount)
+  ).toEqual([1, 4]);
+  expect(
+    (live.lightBuffer.write.mock.calls[0]![0] as Float32Array).byteLength
+  ).toBe(LOW_LIGHT_MESH_LAYOUT.vertexCount * LIGHT_VERTEX_STRIDE);
+  expect(
+    drawNamed(live, "prism-rainbow.light.wall").set
+  ).toHaveBeenLastCalledWith(
+    expect.objectContaining({ wallMaterial: expect.anything() })
+  );
+  expect(
+    (
+      live.instance.fns.bundle.mock.results[0]?.value as {
+        commands: unknown[];
+      }
+    ).commands
+  ).toEqual([
+    live.draws[0],
+    live.draws[1],
+    partialDraw(live.draws[2], 0, LOW_LIGHT_MESH_LAYOUT.whiteVertices),
+    partialDraw(
+      live.draws[2],
+      LOW_LIGHT_MESH_LAYOUT.outgoingFirstVertex,
+      LOW_LIGHT_MESH_LAYOUT.outgoingVertices
+    ),
+    live.draws[3],
+    partialDraw(
+      live.draws[2],
+      LOW_LIGHT_MESH_LAYOUT.internalFirstVertex,
+      LOW_LIGHT_MESH_LAYOUT.internalVertices
+    ),
+  ]);
+  const mesh = renderer
+    .debugSources()
+    .find(({ id }) => id === "spectral-light-mesh");
+  expect(mesh?.details).toEqual(
+    expect.arrayContaining([
+      { label: "Sampling", value: "64 wavelengths × 12 beam slices" },
+    ])
+  );
+  const wall = renderer.debugSources().find(({ id }) => id === "composed-wall");
+  expect(wall?.details).toEqual(
+    expect.arrayContaining([
+      {
+        label: "Material",
+        value:
+          "flat albedo + large normal · no micro-normal / roughness / specular",
+      },
+    ])
+  );
+  renderer.dispose();
+});
+
+test("removes the far bloom and particle-light targets in low-quality dark", async () => {
+  const env = browser();
+  vi.stubGlobal("navigator", {});
+  const live = gpu();
+  mocks.init.mockResolvedValueOnce(live.instance);
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    initialMode: "dark",
+    initialQuality: "low",
+  });
+  await renderer.ready;
+
+  expect(live.targets).toHaveLength(22);
+  expect(live.effects).toHaveLength(11);
+  expect(
+    live.targets.slice(0, 2).map(({ sampleCount }) => sampleCount)
+  ).toEqual([1, 4]);
+  expect(live.effects[7]!.set).toHaveBeenLastCalledWith(
+    expect.objectContaining({ params: { bloomStrength: 0.15 } })
+  );
+  const sourceIds = renderer.debugSources().map(({ id }) => id);
+  expect(sourceIds).not.toContain("dark-bloom-2");
+  expect(sourceIds).not.toContain("dark-particle-light");
+  const dust = drawNamed(live, "prism-rainbow.dust");
+  expect(dust.set).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      colorTexture: live.targets[5],
+      lightTexture: live.targets[5],
+    })
+  );
+  expect(
+    (
+      live.instance.fns.bundle.mock.results[0]?.value as {
+        commands: unknown[];
+      }
+    ).commands
+  ).toEqual([
+    partialDraw(live.draws[0], 0, LOW_LIGHT_MESH_LAYOUT.whiteVertices),
+    partialDraw(
+      live.draws[0],
+      LOW_LIGHT_MESH_LAYOUT.outgoingFirstVertex,
+      LOW_LIGHT_MESH_LAYOUT.outgoingVertices
+    ),
+    live.draws[1],
+    partialDraw(
+      live.draws[0],
+      LOW_LIGHT_MESH_LAYOUT.internalFirstVertex,
+      LOW_LIGHT_MESH_LAYOUT.internalVertices
+    ),
+  ]);
   renderer.dispose();
 });
 
@@ -930,7 +1381,10 @@ test("an explicit light mode uses the lean pipeline and never schedules dust-onl
     [200, 100],
     [200, 100],
   ]);
-  expect(live.targets.slice(0, 2).every(({ msaa }) => msaa === 4)).toBe(true);
+  expect(live.targets.slice(0, 2).map(({ msaa }) => msaa)).toEqual([
+    undefined,
+    4,
+  ]);
   const lightDrawOptions = live.instance.fns.draw.mock.calls as unknown as [
     Record<string, unknown>
   ][];
@@ -1055,9 +1509,11 @@ test("dust-only animation frames reuse the resolved scene and bloom", async () =
       time: 76 / 30,
     },
   });
-  live.effects.slice(0, 13).forEach(({ set }, index) =>
-    expect(set).toHaveBeenCalledTimes(effectSetCounts[index]!)
-  );
+  live.effects
+    .slice(0, 13)
+    .forEach(({ set }, index) =>
+      expect(set).toHaveBeenCalledTimes(effectSetCounts[index]!)
+    );
   expect(live.effects[13]!.set).toHaveBeenCalledTimes(effectSetCounts[13]!);
   live.draws.forEach((draw) =>
     expect(draw.set).toHaveBeenCalledTimes(
@@ -1115,9 +1571,11 @@ test("dark-dust performance samples never rebuild the retained scene", async () 
   live.effects.forEach(({ set }, index) =>
     expect(set).toHaveBeenCalledTimes(effectSetCounts[index]!)
   );
-  live.draws.filter((draw) => draw !== dust).forEach((draw) =>
-    expect(draw.set).toHaveBeenCalledTimes(drawSetCounts.get(draw)!)
-  );
+  live.draws
+    .filter((draw) => draw !== dust)
+    .forEach((draw) =>
+      expect(draw.set).toHaveBeenCalledTimes(drawSetCounts.get(draw)!)
+    );
   expect(dust.set.mock.calls.slice(-2)).toEqual([
     [{ params: { time: 1 / 30 } }],
     [{ params: { time: 2 / 30 } }],
@@ -1603,14 +2061,16 @@ test("the camera follows the pointer without rebuilding an unchanged light", asy
 test("mobile ignores pointer input and advances the automatic beam", async () => {
   const env = browser();
   let mobile = true;
-  (window as unknown as { matchMedia: (query: string) => MediaQueryList })
-    .matchMedia = vi.fn(() =>
+  (
+    window as unknown as { matchMedia: (query: string) => MediaQueryList }
+  ).matchMedia = vi.fn(
+    () =>
       ({
         get matches() {
           return mobile;
         },
-      }) as MediaQueryList
-    );
+      } as MediaQueryList)
+  );
   const live = gpu();
   mocks.init.mockResolvedValueOnce(live.instance);
   const renderer = createRenderer({ canvas: env.canvas, initialMode: "dark" });
@@ -1714,9 +2174,9 @@ test("stays stopped when initialization finishes hidden and offscreen", async ()
 });
 
 test.each([
-  ["debug previews", { debugPreviews: true }],
-  ["performance sampling", { performanceSampling: true }],
-] as const)("%s bypass inactive scheduling", async (_label, optIn) => {
+  ["debug previews", { debugPreviews: true }, true],
+  ["performance sampling", { performanceSampling: true }, false],
+] as const)("%s bypass inactive scheduling", async (_label, optIn, observesActivity) => {
   const env = browser();
   env.setHidden(true);
   env.setCanvasRect({ top: 2_000, bottom: 2_100 });
@@ -1731,8 +2191,12 @@ test.each([
   await renderer.ready;
 
   expect(live.instance.fns.frameLoop).toHaveBeenCalledOnce();
-  expect(env.intersectionObserve).not.toHaveBeenCalled();
-  expect(env.documentListeners.has("visibilitychange")).toBe(false);
+  expect(env.intersectionObserve).toHaveBeenCalledTimes(
+    observesActivity ? 1 : 0
+  );
+  expect(env.documentListeners.has("visibilitychange")).toBe(
+    observesActivity
+  );
   env.setHidden(false, true);
   env.intersect(false);
   expect(live.stop).not.toHaveBeenCalled();

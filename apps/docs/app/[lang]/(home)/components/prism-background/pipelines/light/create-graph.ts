@@ -1,29 +1,39 @@
 import { draw, effect, sampler } from "vgpu";
 
-import copyLinearWgsl from "../../copy-linear.wgsl";
-import glassBackWgsl from "../../glass-back.wgsl";
-import glassWgsl from "../../glass.wgsl";
-import lightWireframeWgsl from "../../light-wireframe.wgsl";
-import causticWgsl from "../../materials/light/caustic.wgsl";
-import glassAccentWgsl from "../../materials/light/glass-accent.wgsl";
-import presentWgsl from "../../materials/light/present.wgsl";
-import shadowWgsl from "../../materials/light/shadow.wgsl";
-import wallWgsl from "../../materials/light/wall.wgsl";
+import copyLinearWgsl from "../shared/presentation/copy-linear.wgsl";
+import glassBackWgsl from "../shared/glass/glass-back.wgsl";
+import glassWgsl from "../shared/glass/glass.wgsl";
+import lightWireframeWgsl from "../shared/spectral/light-wireframe.wgsl";
+import causticWgsl from "./passes/caustic/caustic.wgsl";
+import glassAccentWgsl from "./passes/glass-accent/glass-accent.wgsl";
+import presentWgsl from "./passes/presentation/present.wgsl";
+import shadowWgsl from "./passes/shadow/shadow.wgsl";
+import wallLowWgsl from "./passes/wall/wall-low.wgsl";
+import wallWgsl from "./passes/wall/wall.wgsl";
 import { ensurePrismWireframeGeometry } from "../../runtime/resources";
 import type { PrismRuntime } from "../../runtime/types";
-import wireframeWgsl from "../../wireframe.wgsl";
-import { createPrismShadowGeometry } from "./shadow/tuning";
+import { lightMeshLayoutForQuality } from "../quality";
+import type { PrismPipelineQuality } from "../types";
+import wireframeWgsl from "../shared/wireframe/wireframe.wgsl";
+import { createPrismShadowGeometry } from "./passes/shadow/tuning";
 import type { LightPipelineGraph } from "./types";
 
-export function createLightGraph(runtime: PrismRuntime): LightPipelineGraph {
+export function createLightGraph(
+  runtime: PrismRuntime,
+  quality: PrismPipelineQuality = "high"
+): LightPipelineGraph {
   const { gpu, label } = runtime;
+  const lightMeshLayout = lightMeshLayoutForQuality(quality);
   const prismShadowGeometry = createPrismShadowGeometry(
     gpu,
     `${label}.light.prism-shadow-geometry`
   );
   return {
+    quality,
+    lightMeshLayout,
+    simplifiedWall: quality === "low",
     wall: draw(gpu, {
-      shader: wallWgsl,
+      shader: quality === "low" ? wallLowWgsl : wallWgsl,
       vertices: 6,
       cull: "back",
       depth: false,

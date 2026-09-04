@@ -1,5 +1,43 @@
 # vgpu
 
+## 0.4.0
+
+### Minor Changes
+
+- 2d137a4: `frame(gpu, cb)` and `frameLoop(gpu, cb)` now cancel the frame when the callback throws instead of submitting whatever was encoded. A callback that returns still submits once; a callback that throws submits no command buffer, releases the timer/visibility retains its passes took, and rethrows the original error unchanged. A callback that already called `frame.submit()` keeps that submit (the error is rethrown without a cancel attempt), and one that already called `frame.cancel()` stays canceled. The guarantee covers only the frame's command buffer: the clock tick, CPU-side mutations and independent submissions are not rolled back. Manual `frame(gpu)` is unchanged.
+
+  A `frameLoop` tick that throws now also stops the loop properly — the handle is released from the gpu as if `stop()` had been called — instead of leaving a loop that never ticks again registered until `gpu.dispose()`.
+
+  BREAKING CHANGE (pre-1.0): code that relied on a throwing callback still presenting its partial frame must now submit explicitly before rethrowing:
+
+  ```ts
+  frame(gpu, (currentFrame) => {
+    try {
+      encode(currentFrame);
+    } catch (error) {
+      currentFrame.submit();
+      throw error;
+    }
+  });
+  ```
+
+- 8b2282c: Add the `vgpu/three` adapter for calling resolved WGSL function exports from three.js TSL, including a sound curried selector with positional export names, manually typed input contracts, identifier-minified shader support, a type-only `TslExportsErrorCode` union, and early rejection of global WGSL directives that Three cannot place correctly.
+
+  Expose authored function-export metadata from the WGSL resolver and bundler loaders so integrations can address direct `export fn` declarations after mangling and minification. Add the `isShaderFunctionExport()` type guard to `@vgpu/wgsl`, with a convenience re-export from `vgpu`, for validating unknown metadata at integration boundaries.
+
+  Treat WGSL comments as trivia around stage and resource-binding attributes so declaration DCE, emitted identifiers, and reflection metadata stay aligned.
+
+  Use the entry source supplied by Vite and webpack during imported-graph resolution, preserving upstream transforms and virtual entries while resolving dependencies from their normal locations.
+
+### Patch Changes
+
+- Updated dependencies [8b2282c]
+  - @vgpu/wgsl@0.4.0
+  - @vgpu/core@0.4.0
+  - @vgpu/adapter-mock@0.4.0
+  - @vgpu/adapter-node@0.4.0
+  - @vgpu/wgsl-std@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes

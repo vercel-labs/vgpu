@@ -21,7 +21,33 @@ test("a throwing pass callback leaves no phantom timer result", async () => {
   await gpu.settled();
 
   // The pass never encoded its draws, so its timing is meaningless: the frame's telemetry is
-  // dropped instead of resolved/read back as if the pass had run.
+  // dropped instead of resolved/read back as if the pass had run. The throw also cancels the
+  // frame, so no resolve is encoded and the encoder is never finished.
+  expect(results).toEqual([]);
+  expect(ops.encodeOps).toEqual([]);
+  gpuTimer.dispose();
+  gpu.dispose();
+  vi.restoreAllMocks();
+});
+
+test("a pass failure caught inside the callback still drops that pass's telemetry when the frame submits", async () => {
+  const gpu = await initWithTimestampQuery();
+  const ops = spyFrameEncoders(gpu.device.gpu);
+  const gpuTimer = timer(gpu);
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const results: Array<Readonly<Record<string, number>>> = [];
+  gpuTimer.onResults((spans) => { results.push(spans); });
+
+  // The callback recovers from the failed pass and returns, so the frame is submitted: this is the
+  // pass-level rollback on its own, with no frame cancel to hide behind.
+  frame(gpu, (currentFrame) => {
+    try {
+      currentFrame.pass({ target: colorTarget, timer: gpuTimer.span("main") }, () => { throw new Error("draw setup failed"); });
+    } catch { /* recovered: render without this pass */ }
+  });
+  await gpu.settled();
+
+  // The frame reached the queue, but the failed pass's span was dropped: no resolve, no result.
   expect(results).toEqual([]);
   expect(ops.encodeOps).toEqual([["finish"]]);
   gpuTimer.dispose();
@@ -117,7 +143,8 @@ test("a throwing pass callback leaves no phantom visibility result", async () =>
   expect(query.state).toBe("unknown");
   expect(query.hidden).toBe(false);
   expect(query.age).toBe(Infinity);
-  expect(ops.encodeOps).toEqual([["finish"]]);
+  // The frame was canceled by the throw: nothing resolved, nothing finished.
+  expect(ops.encodeOps).toEqual([]);
   vis.dispose();
   gpu.dispose();
   vi.restoreAllMocks();
@@ -254,7 +281,7 @@ test("a throwing pass callback still releases the frame's query set retain", asy
     throw new Error("draw setup failed");
   }))).toThrowError(/draw setup failed/);
 
-  // frame(gpu) submits in a finally: dropping the telemetry must not drop the retain with it.
+  // frame(gpu, cb) cancels on throw: the cancel must release the retain the dropped pass took.
   expect(destroyed).toEqual([0]);
   await gpu.settled();
   gpu.dispose();

@@ -115,34 +115,31 @@ function findDeclarationName(tokens: readonly Token[], kindIndex: number): numbe
 
 function findDeclarationStart(tokens: readonly Token[], kindIndex: number): number {
   let start = kindIndex;
-  while (start >= 2 && tokens[start - 2]?.text === "@" && isAttributeName(tokens[start - 1])) {
-    start -= 2;
-    if (tokens[start + 2]?.text === "(") {
-      // The attribute has arguments between the name and the declaration kind.
-      // Keep walking left; the current start already points at '@'.
-    }
-  }
-
-  // The loop above covers argument-less attributes. For attributes with
-  // arguments, walk left from the declaration kind across balanced parens and
-  // adjacent @name(...) groups.
-  let cursor = kindIndex - 1;
-  while (cursor >= 0) {
+  let cursor = previousNonComment(tokens, kindIndex - 1);
+  while (cursor !== undefined) {
+    let nameIndex = cursor;
     if (tokens[cursor]?.text === ")") {
       const open = findMatchingBackward(tokens, cursor, "(", ")");
-      if (open === undefined || tokens[open - 2]?.text !== "@" || !isAttributeName(tokens[open - 1])) break;
-      start = open - 2;
-      cursor = start - 1;
-      continue;
+      if (open === undefined) break;
+      const beforeOpen = previousNonComment(tokens, open - 1);
+      if (beforeOpen === undefined) break;
+      nameIndex = beforeOpen;
     }
-    if (isAttributeName(tokens[cursor]) && tokens[cursor - 1]?.text === "@") {
-      start = cursor - 1;
-      cursor = start - 1;
-      continue;
-    }
-    break;
+    if (!isAttributeName(tokens[nameIndex])) break;
+
+    const atIndex = previousNonComment(tokens, nameIndex - 1);
+    if (atIndex === undefined || tokens[atIndex]?.text !== "@") break;
+    start = atIndex;
+    cursor = previousNonComment(tokens, atIndex - 1);
   }
   return start;
+}
+
+function previousNonComment(tokens: readonly Token[], start: number): number | undefined {
+  for (let index = start; index >= 0; index--) {
+    if (!isComment(tokens[index])) return index;
+  }
+  return undefined;
 }
 
 function findDeclarationEnd(tokens: readonly Token[], kindIndex: number): number | undefined {
@@ -172,18 +169,23 @@ function isEntryPoint(declaration: Declaration, tokens: readonly Token[]): boole
 }
 
 function hasEntryPointAttribute(tokens: readonly Token[]): boolean {
-  return tokens.some((token, index) => tokens[index - 1]?.text === "@" && entryPointAttributes.has(token.text));
+  return tokens.some((token, index) => entryPointAttributes.has(token.text) && isAttributeNameAt(tokens, index));
 }
 
 function hasResourceBinding(tokens: readonly Token[]): boolean {
   let hasGroup = false;
   let hasBinding = false;
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i - 1]?.text !== "@") continue;
+    if (!isAttributeNameAt(tokens, i)) continue;
     hasGroup ||= tokens[i]!.text === "group";
     hasBinding ||= tokens[i]!.text === "binding";
   }
   return hasGroup && hasBinding;
+}
+
+function isAttributeNameAt(tokens: readonly Token[], nameIndex: number): boolean {
+  const atIndex = previousNonComment(tokens, nameIndex - 1);
+  return atIndex !== undefined && tokens[atIndex]?.text === "@";
 }
 
 function collectReferences(tokens: readonly Token[], start: number, end: number, nameIndex: number): string[] {
@@ -257,4 +259,8 @@ function findMatchingBackward(tokens: readonly Token[], closeIndex: number, open
 
 function isAttributeName(token: Token | undefined): boolean {
   return token?.kind === "ident" || token?.kind === "keyword";
+}
+
+function isComment(token: Token | undefined): boolean {
+  return token?.kind === "lineComment" || token?.kind === "blockComment";
 }

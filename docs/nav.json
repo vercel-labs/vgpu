@@ -5,6 +5,7 @@
   },
   "packageOrder": [
     "vgpu",
+    "vgpu/three",
     "vgpu/scene",
     "@vgpu/wgsl",
     "@vgpu/wgsl-std",
@@ -35,6 +36,7 @@
       "orbit",
       "..."
     ],
+    "vgpu/three": ["tsl-exports", "..."],
     "vgpu/core": [
       "device",
       "buffer",
@@ -92,6 +94,10 @@
       "slugs": ["getting-started"]
     },
     {
+      "title": "Integrations",
+      "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
+    },
+    {
       "title": "Performance",
       "slugs": [
         "performance-model",
@@ -100,7 +106,9 @@
         "measuring",
         "optimize-pass",
         "shader-fix-its",
-        "performance-playbook"
+        "performance-playbook",
+        "adaptive-quality",
+        "shipping-to-production"
       ]
     },
     {
@@ -132,6 +140,7 @@
           "title": "",
           "items": [
             { "title": "Context", "href": "/concepts/context" },
+            { "title": "WGSL modules", "href": "/concepts/wgsl-modules" },
             { "title": "Draws", "href": "/concepts/draws" },
             { "title": "Compilation", "href": "/concepts/compilation" },
             { "title": "Effects", "href": "/concepts/effects" },
@@ -155,6 +164,10 @@
           "slugs": ["getting-started"]
         },
         {
+          "title": "Integrations",
+          "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
+        },
+        {
           "title": "Performance",
           "slugs": [
             "performance-model",
@@ -163,7 +176,9 @@
             "measuring",
             "optimize-pass",
             "shader-fix-its",
-            "performance-playbook"
+            "performance-playbook",
+            "adaptive-quality",
+            "shipping-to-production"
           ]
         },
         {
