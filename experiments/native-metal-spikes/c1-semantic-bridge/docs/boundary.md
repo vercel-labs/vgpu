@@ -166,6 +166,11 @@ internal-binding records may contain one vertex and one fragment slot in canonic
 per-entry compiler protocol still carries only the selected stage. Compute programs may contain
 compute slots only.
 
+The executable combiner requires nominal request, response, assembly, and allocation associations,
+normalizes input order, independently verifies the exact `metal-projection-v1` program fragment,
+and exposes retained `{ stage, entryPoint, msl }` records only from the resulting nominal
+projection.
+
 The artifact retains complete backend-neutral semantics separately from its minimal Metal runtime
 projection. Synthesized Tint structures, raised member names, generated MSL, and broad compiler
 reflection do not become runtime ABI.

@@ -183,12 +183,12 @@ extraction wire now also passes against the source-built worker. Its four locked
 successful render interface, a successful compute interface with literal workgroup dimensions, a
 successful fixed-resource program union, and a fail-closed active-override case. The connected
 bridge carries the fixed-size singular resources through semantic v1, nominal program-level slot
-allocation, exact per-entry compiler requests, native translation, and offline Metal linking. It
-preserves entry subsets, sampling pairs, visibility, authored presentation names, and reachable
-types/layouts; its allocation is derived only from that authenticated graph and verified
-independently. Exact-static override assembly, broader resource shapes, effective program-projection
-assembly, runtime resource binding, and the connected artifact remain deterministic integration
-gates.
+allocation, exact per-entry compiler requests, native translation, authenticated program
+projection, and offline Metal linking. It preserves entry subsets, sampling pairs, visibility,
+authored presentation names, and reachable types/layouts; its allocation and final program fragment
+are independently verified against that authenticated graph. Exact-static override assembly,
+broader resource shapes, runtime resource binding, and the connected artifact remain deterministic
+integration gates.
 
 The Metal projection records:
 

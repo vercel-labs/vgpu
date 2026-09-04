@@ -154,11 +154,12 @@ and the paired dual-source canary remains internal evidence rather than alpha su
 
 The connected semantic bridge now carries that authenticated fixed-size singular-resource union
 through semantic v1, nominal program-level slot allocation, exact per-entry requests, native
-translation, and offline Metal linking. It retains exact binding subsets and sampling pairs,
-derives stage visibility, joins resolver-owned authored presentation names without treating
-resolver layouts as authority, preserves the reachable Tint type/layout graphs, and fingerprints
-the complete program closure. Exact-static override assembly, broader resource shapes, effective
-program-projection assembly, and runtime resource use remain open.
+translation, authenticated program projection, and offline Metal linking. It retains exact binding
+subsets and sampling pairs, derives stage visibility, joins resolver-owned authored presentation
+names without treating resolver layouts as authority, preserves the reachable Tint type/layout
+graphs, and fingerprints the complete program closure. Compilation consumes retained MSL only from
+the nominal projection. Exact-static override assembly, broader resource shapes, and runtime
+resource use remain open.
 
 The shader-interface follow-up proves the required split. Its isolated experiment extracts the
 complete portable interface from core IR before Metal lowering and established equivalent writer

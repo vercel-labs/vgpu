@@ -49,6 +49,12 @@ entry interface and Tint's storage-size result determine what is effective: the 
 `storageBufferSizeRegions` offset only when the size transport is needed. There is no second
 storage-size binding and no redundant boolean in the artifact.
 
+Each successful one-entry response is snapshotted and authenticated against the exact nominal
+request that launched it. The program combiner then requires the complete selected stage set from
+one semantic assembly and allocation, reconstructs `$defs/program` independently, and retains MSL
+behind the resulting nominal projection. Offline compilation and runtime function lookup consume
+that retained source/name view instead of recombining raw responses.
+
 The accepted shader-I/O contract uses a parallel but deliberately asymmetric handshake. Semantic
 extraction sends the exact backend-neutral interface expected for one selected entry. The worker
 compares it with Tint core IR before calling Metal `Generate()`. That official writer path preserves

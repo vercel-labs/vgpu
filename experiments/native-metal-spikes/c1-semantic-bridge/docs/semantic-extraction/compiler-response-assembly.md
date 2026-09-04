@@ -1,13 +1,14 @@
 # Compiler response assembly
 
-Status: candidate API for the next executable slice.
+Status: executable for resource-free effect/draw and compute programs, plus the current singular
+fixed buffer, sampled-texture, and sampler profile with empty projected requirements.
 
 This slice converts validated one-entry Tint results into one nominal program fragment matching
 `$defs/program` in `metal-projection-v1`. It deliberately does not construct the top-level Metal
 projection: target, Apple toolchain, linked metallib identity, global ABI policies, runtime
 fingerprint, and module-wide requirements belong to later artifact assembly.
 
-## Candidate API
+## Executable API
 
 ```js
 const request = compilerRequestForAssembledEntry({
@@ -40,20 +41,23 @@ in-process values. Cloning or deserializing any one of them intentionally loses 
 `compilerRequestForAssembledEntry` records the exact assembly, allocation, and stage that produced
 each frozen request. `authenticateSuccessfulCompilerTranslation` accepts only such a request and:
 
-1. takes one owned structural snapshot of the caller's response;
-2. validates that snapshot against compiler response v1;
-3. applies the existing request-specific semantic validator;
-4. requires `ok: true` and freezes the snapshot; and
-5. mints a translation associated with that exact request identity.
+1. rejects a request without the nominal assembly-owned brand before inspecting response data;
+2. takes one owned structural snapshot of the caller's response;
+3. validates that snapshot against compiler response v1;
+4. applies the existing request-specific semantic validator;
+5. requires `ok: true` and freezes the snapshot; and
+6. mints a translation associated with that exact request identity.
 
 The response protocol does not echo a request identity. The trusted one-shot process caller must
 therefore preserve the request-to-response association until this function mints the nominal
 translation. A raw response is neither self-authenticating nor independently cacheable evidence;
 reuse requires its exact request association and the same validation.
 
-MSL remains private retained evidence rather than a field in the serializable program fragment.
-`metalSourcesForProgramProjection` returns frozen stage/name/source records only after complete
-program assembly succeeds.
+MSL remains retained evidence rather than a field in the serializable program fragment. The
+trusted combiner can inspect the frozen request and response through internal accessors while
+assembling and verifying the program. Runtime and packaging consumers instead call
+`metalSourcesForProgramProjection`, which returns frozen `{ stage, entryPoint, msl }` records only
+after complete program assembly succeeds.
 
 ## Assemble one program fragment
 
@@ -65,7 +69,10 @@ assembly and allocation passed to the combiner.
 Fields have one authority:
 
 - `semanticProgram` and `kind` come from semantic v1;
-- `entryPoints[].stage`, `wgsl`, `metal`, and `interface` come from validated response results;
+- `entryPoints[].stage`, `wgsl`, and `metal` come from the nominal request, and the authenticated
+  response must repeat them exactly;
+- `entryPoints[].interface` comes from the response only after it matches both the request's exact
+  semantic-interface projection and semantic v1;
 - external `bindings` are copied from the nominal program allocation, because Tint can validate and
   reproduce a requested map but cannot recover the original WGSL identity after remapping;
 - effective `internalBindings` and `storageBufferSizeRegions` come only from response results, never
@@ -98,14 +105,16 @@ within the program; module-wide emitted-name uniqueness belongs to final aggrega
 ## Independent verification
 
 Before minting the projection, a separate verifier reconstructs the expected program fragment from
-the nominal assembly, allocation, and translation records. It checks:
+the semantic program and layout graph, allocation, and translation records. It checks:
 
 - a bijective selected-stage set with no missing, duplicate, or extra translation;
-- exact request ownership and canonical output ordering;
+- structural request/semantic/allocation agreement and canonical output ordering;
 - external bindings equal to the allocator result;
 - response-derived entry maps, effective internal slots, and size regions;
 - no external/internal or internal/internal interval collision in a stage/class namespace;
 - every effective internal slot was a candidate reservation in its request;
+- every size region belongs to a stage with an active runtime-sized storage buffer and one
+  compatible effective immediate-data slot;
 - exact compute workgroup dimensions;
 - supported empty device requirements; and
 - the complete `$defs/program` JSON Schema.
@@ -113,13 +122,14 @@ the nominal assembly, allocation, and translation records. It checks:
 The verifier does not call the assembler or trust fields copied from its output as its expected
 model.
 
-## Initial gate
+## Executable gate
 
-The fixed-resource render fixture should produce two entry records, preserve its five-binding
-program allocation, and emit empty `internalBindings`, `storageBufferSizeRegions`, and device
-requirements. The candidate `buffer(30)` reservation must not leak into that effective projection.
-The two retained MSL sources must still compile to AIR and link into one metallib through the
-projection accessor.
+The gate emits four program fragments from seven authenticated translations: resource-free effect
+and draw, compute, and fixed-resource draw. Every input permutation normalizes to the same program.
+The fixed-resource fragment preserves its five-binding allocation and emits empty
+`internalBindings`, `storageBufferSizeRegions`, and device requirements. The candidate `buffer(30)`
+reservation does not leak into that effective projection. Two retained MSL sources compile to AIR
+and link into one metallib exclusively through the projection accessor.
 
 Static negatives cover cloned requests and translations; crossed assembly/allocation/request
 ownership; schema-invalid and unsuccessful responses; mutated entry, interface, binding, internal,
@@ -127,7 +137,16 @@ region, and MSL fields; missing, duplicate, and extra stages; repeated emitted n
 identity disagreement; effective internal slots outside the candidate set or colliding with an
 external slot; invalid region relationships; and compute dimensions that differ from semantic v1.
 A permutation must normalize to identical output. A separate success canary keeps an effective
-immediate slot with no size region.
+immediate slot with no size region. An independent positive canary validates a runtime-sized
+storage buffer, effective immediate slot, and size region together; mutations cover the same
+region without a runtime-sized layout, an unreserved internal slot, an external/internal collision,
+an extra stage, and caller-authored device requirements. The current run records nineteen
+authentication/combination failures, six independent verifier canaries, and four requirements
+projector checks.
+
+The resource-free full-screen gate crosses the same boundary before execution. Both AIR
+compilation and live function lookup read MSL and emitted names only through the nominal projection
+accessor; two deterministic 2x2 readbacks pass on the available Apple M4 Pro.
 
 This slice precedes runtime resource binding. The runtime must consume one validated program
 projection rather than recreate a slot union from per-entry responses. Exact-static overrides can

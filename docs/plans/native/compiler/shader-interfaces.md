@@ -197,10 +197,12 @@ These results do not expand the supported hardware matrix. The live gate ran onl
 an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. All twelve
 isolated interface outputs compile offline for `air64-apple-macos14.0` and link into a `.metallib`.
 The connected fixed-size singular-resource render pair now passes semantic assembly, nominal slot
-allocation, exact per-entry projection and translation, two AIR compilations, and one metallib link.
-Override extraction and assembly, broader resource shapes, effective program-projection assembly,
-the exact direct worker's full corpus through that offline boundary, a real C1-connected artifact,
-resource runtime binding, and pixel/buffer parity remain open.
+allocation, exact per-entry projection and translation, authenticated program assembly, two AIR
+compilations, and one metallib link. The resource-free full-screen companion consumes the same
+nominal program boundary for offline compilation and live function lookup. Override extraction and
+assembly, broader resource shapes, the exact direct worker's full corpus through that offline
+boundary, a real C1-connected artifact, resource runtime binding, and pixel/buffer parity remain
+open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

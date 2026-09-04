@@ -125,13 +125,14 @@ translator then starts in a fresh process, parses the same bytes, materializes t
 and compares the complete entry interface and resource mapping before MSL generation. A local
 projection bug therefore fails closed instead of silently changing the runtime artifact.
 
-The connected resource gate now validates each one-shot response against its schema and exact
-request, including the external map and empty effective internal result expected by the fixture.
-Program-level Metal projection assembly remains a subsequent slice. It must preserve sparse
-interface indices, stage-local slots, effective internal resources, storage-size regions, and
-resolved compute dimensions. Broad extraction facts remain in `semantic-v1`; they are not copied
-into the runtime projection. Slot ownership and the candidate-versus-effective split are detailed
-in [`metal-slot-projection.md`](./metal-slot-projection.md).
+The connected resource gate now authenticates each one-shot response against its schema and exact
+nominal request, including the external map and empty effective internal result expected by the
+fixture. It combines the complete stage set into the exact `$defs/program` fragment, preserving
+sparse interface indices, stage-local slots, effective internal resources, storage-size regions,
+and resolved compute dimensions. Broad extraction facts remain in `semantic-v1`; they are not
+copied into the runtime projection. Top-level target, toolchain, metallib, fingerprint, and module
+aggregation remain a subsequent artifact slice. Slot ownership and the candidate-versus-effective
+split are detailed in [`metal-slot-projection.md`](./metal-slot-projection.md).
 
 ## Executable evidence
 
@@ -157,13 +158,17 @@ the three buffer minimum sizes are 8, 24, and 16 bytes. Reprojection removes onl
 presentation and visibility and must reproduce the complete authenticated extraction exactly.
 
 With the accepted native worker, the gate performs eight semantic-extraction invocations: two
-byte-identical runs for each of four fixtures. It then translates the resource vertex and fragment
-twice each, freezes request/response/MSL hashes, compiles two AIR files for the macOS 14 target, and
-links one metallib. The responses preserve the requested external slots and report no effective
-internal binding or size region. The independently integrated full-screen companion runs one
+byte-identical runs for each of four fixtures. Seven static compiler translations assemble four
+schema-valid program projections, with nineteen authentication/combination failures and independent
+slot, runtime-region, workgroup, and requirements canaries. It then translates the resource vertex
+and fragment twice each, authenticates one result per stage, compiles two AIR files for the macOS 14
+target through the projection source accessor, and links one metallib. The resulting program
+preserves the requested external slots and reports no effective internal binding or size region.
+The independently integrated full-screen companion runs one
 inventory, two semantic extractions, four successful translations, two structured-negative
-translations, and live readback. Its compiler requests come from the nominal assembly, while the
-checked-in interface JSON remains a static oracle. The authored fragment's resolver-owned
+translations, combines a resource-free program projection, and performs live readback. Its compiler
+requests come from the nominal assembly, while the checked-in interface JSON remains a static
+oracle. The authored fragment's resolver-owned
 end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Exact-static
 overrides, resource runtime binding/readback, repository corpus integration, production artifact
 packaging, and Intel/AMD hardware evidence remain open.

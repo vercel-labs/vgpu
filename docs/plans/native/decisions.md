@@ -325,8 +325,11 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    The isolated interface, binding-slot, runtime-size, and vertex-slot outputs now compile offline
    for `air64-apple-macos14.0`. The connected fixed-resource render pair also passes authenticated
    semantic assembly, independently verified nominal slot allocation, exact per-entry translation,
-   two AIR compilations, and one metallib link. Its effective internal bindings and size regions are
-   empty, as expected for that fixture. The Naga differential runner also compiles and links all 224
+   authenticated response combination into the exact `metal-projection-v1` program fragment, two
+   AIR compilations, and one metallib link. Its effective internal bindings and size regions are
+   empty, as expected for that fixture. The resource-free full-screen path consumes the same nominal
+   projection for offline compilation and live function lookup. The Naga differential runner also
+   compiles and links all 224
    of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
    corpus from the exact direct Tint worker through the same offline boundary, complete authored
    diagnostic mapping beyond the current module-only attribution, and pass deterministic connected

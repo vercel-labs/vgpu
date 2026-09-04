@@ -70,7 +70,7 @@ performs thirteen invocations: each fixture twice, four raw protocol mutations, 
 Unicode origin-map case. Static Unicode canaries also prove that decomposed WGSL survives wire
 encoding without normalization and that path limits count Unicode code points consistently.
 
-The next executable slice accepts a successful request/response pair only after both inventory JSON
+The authenticated inventory layer accepts a successful request/response pair only after both JSON
 Schemas and semantic association checks pass. It mints a frozen in-process inventory whose nominal
 brand is lost by cloning or deserialization. The pure program selector consumes an exact
 configuration-owned selection view and that branded inventory; it never receives WGSL or resolver
@@ -131,13 +131,21 @@ collisions created by local or shared type placement and generated program API n
 The static matrix covers five nominal, five declaration, three resolver-symbol, three
 resolver-resource-join, two retained-snapshot, one profile, one link, five fingerprint, twelve
 Swift-name, four slot-allocation, and two projection failures. A separate stage-isolation check
-proves that one semantic buffer can receive different vertex and fragment indices.
+proves that one semantic buffer can receive different vertex and fragment indices. Seven
+authenticated compiler translations assemble four exact `metal-projection-v1` program fragments
+under nominal ownership. Their permutations remain canonical. Nineteen response/combination
+failures, six independent verifier canaries, and four device-requirement checks cover response
+association, stage closure, compiler identity, internal reservations, slot collisions, runtime-size
+regions, compute dimensions, and fail-closed requirements.
 
 With the native worker the gate performs eight semantic-extraction invocations, then translates the
-fixed-resource vertex and fragment entries twice each. It freezes every request, response, and MSL
-hash, compiles both MSL sources to AIR, and links one metallib. See
+fixed-resource vertex and fragment entries twice each. It authenticates and combines one response
+per entry, then compiles both retained MSL sources to AIR and links one metallib exclusively through
+the nominal program-projection accessor. See
 [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) and
-[`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md).
+[`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md),
+and
+[`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md).
 
 The integrated full-screen canary carries one real resolved and finalized resource-free effect
 through two native semantic extractions, semantic assembly, two deterministic translations per
@@ -171,7 +179,7 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
   freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
-  proposes the nominal response-to-program-projection boundary for the next slice.
+  records the executable nominal response-to-program-projection boundary.
 
 ## Implementation order
 
@@ -188,8 +196,9 @@ The semantic work is split by responsibility so the growing design remains revie
    compute programs plus fixed singular resources are executable.
 6. Allocate program-level slots and derive one existing compiler request per entry point. This is
    executable for resource-free programs and singular fixed-size resources.
-7. Validate translator responses without compacting indices. The fixed-resource pair is executable;
-   program-level `metal-projection-v1` combination remains open.
+7. Authenticate translator responses without compacting indices and combine the exact selected
+   stage set into `$defs/program` of `metal-projection-v1`. Resource-free effect/draw, compute, and
+   the fixed-resource pair are executable.
 8. Compile and link every accepted MSL source offline. The fixed-resource pair is executable; the
    authenticated repository corpus remains open.
 9. Run the authenticated repository corpus and record expected failures separately.
@@ -197,7 +206,7 @@ The semantic work is split by responsibility so the growing design remains revie
 ## Non-goals
 
 This spike does not yet connect overrides, runtime-sized resources, or the broader resource profile
-through assembly and projection. It also does not bind the fixed-resource fixture at runtime, run
+through nominal assembly and translation. It also does not bind the fixed-resource fixture at runtime, run
 the integrated repository corpus, package a production artifact, implement the production Swift runtime, freeze a
 Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not recover general
 authored diagnostic spans from the current module-only origin map. Exact authored entry-declaration

@@ -99,16 +99,17 @@ structured interface rejection. It also performs two offline AIR compilations, o
 and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. Its compiler requests come from the nominal
 assembly; the interface JSON is only a static oracle. The authored fragment retains the exact
 resolver span `6:1–9:2`, and the selected generated vertex reaches Metal with top-origin UV and
-explicit counter-clockwise winding. This is executable evidence for the resource-free portions of
-conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
+explicit counter-clockwise winding. Its compiler and runtime consume MSL and emitted names only
+through the authenticated program projection. This is executable evidence for the resource-free
+portions of conditions 3, 5, 6, 7, 10, and 12, not completion of the whole bridge.
 
 The fixed-resource companion adds four deterministic translation processes after eight semantic
 extractions. Four nominal program allocations project seven total compiler requests; the resource
 pair preserves its exact stage subsets and external slots, reports no effective internals or size
-regions, compiles to two AIR files, and links one metallib. This closes fixed singular-resource
-allocation, request projection, response validation, and offline compilation for that fixture.
+regions, combines the exact stage set into `$defs/program`, compiles the retained sources to two AIR
+files, and links one metallib. This closes fixed singular-resource allocation, request projection,
+response authentication, program projection, and offline compilation for that fixture.
 
-Exact-static overrides, program-level translator-response combination, resource runtime binding and
-readback, compute-resource translation parity, broader resource shapes, the integrated repository
-corpus, and production artifact packaging remain open. The recorded GPU evidence is not an Intel,
-AMD, or cross-machine result.
+Exact-static overrides, resource runtime binding and readback, compute-resource translation parity,
+broader resource shapes, the integrated repository corpus, and production artifact packaging remain
+open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.
