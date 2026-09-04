@@ -198,7 +198,7 @@ export function compileTintPrototype({
   }
 
   const executable = join(scratch, "vgpu-tint-compiler-prototype");
-  const result = runCommand("xcrun", [
+  const result = runCommand("/usr/bin/xcrun", [
     "clang++",
     "-std=c++20",
     "-O2",
@@ -216,8 +216,10 @@ export function compileTintPrototype({
     ...(compatInclude ? [`-I${compatInclude}`] : []),
     `-I${tintInclude}`,
     `-I${includeRoot}`,
-    `-L${join(releaseRoot, "lib")}`,
-    "-lwebgpu_dawn",
+    // Link the exact archive whose provenance was verified above. Using
+    // -L/-l would let an unverified dylib with the same basename win the
+    // linker's search order.
+    library,
     "-framework",
     "CoreGraphics",
     "-framework",

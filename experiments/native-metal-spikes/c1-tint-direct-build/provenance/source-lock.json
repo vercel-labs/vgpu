@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "profile": "vgpu-c1-tint-direct-build-v1",
+  "sourcePolicy": "pre-materialized-pinned-git-checkouts-with-exact-input-closures",
+  "fixture": {
+    "cmake": {
+      "path": "CMakeLists.txt",
+      "bytes": 7145,
+      "sha256": "2d9efbd6c665fdea1673cb2120b4a0ba9b884f5b67bf3bbb446bdeb092fe85d7"
+    },
+    "configurationInputs": {
+      "path": "provenance/configuration-inputs.json",
+      "bytes": 7098,
+      "sha256": "734ea2117558304face4ebddf039bf953b70d46d6d01f756c49e343b2b43e4fa"
+    }
+  },
+  "dawn": {
+    "repository": "https://dawn.googlesource.com/dawn",
+    "commit": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca",
+    "tree": "705c128d699cbf9137ce0bd89698cad7d5c51efb",
+    "commitTimestamp": "2026-09-01T03:50:16Z",
+    "deps": {
+      "path": "DEPS",
+      "bytes": 38282,
+      "sha256": "f1ac6588bff21e61c31986db9c9b9a321808caddedb14c7747151098735dde8d"
+    },
+    "license": {
+      "spdx": "NOASSERTION",
+      "linkedClosureSpdx": "BSD-3-Clause",
+      "sourcePath": "LICENSE",
+      "trackedPath": "dawn-LICENSE.txt",
+      "bytes": 11829,
+      "sha256": "0493f897193af1796d5054659f45ec7d4c5af648fa67a99f01d30e55cc805abc"
+    }
+  },
+  "dependencies": {
+    "abseil": {
+      "role": "linked-static-closure",
+      "pathWithinDawn": "third_party/abseil-cpp",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp",
+      "chromiumCheckoutCommit": "435e7d977fb36fb47854a4c552c0706dad0bd7cf",
+      "upstreamRevision": "1c84143fb79e6041f3e0596df51c3ae7d7e46a8a",
+      "tree": "1d0cd81adfb26856e44bb5ed6d3131e98f516480",
+      "authorTimestamp": "2026-08-26T07:04:04Z",
+      "commitTimestamp": "2026-08-26T07:08:51Z",
+      "license": {
+        "spdx": "Apache-2.0",
+        "sourcePath": "LICENSE",
+        "trackedPath": "abseil-LICENSE.txt",
+        "bytes": 11361,
+        "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+      }
+    },
+    "spirvHeaders": {
+      "role": "configure-only-no-linked-objects",
+      "pathWithinDawn": "third_party/spirv-headers/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers",
+      "commit": "496543121ce6419f23d6fa5d7194ba66c36212d2",
+      "tree": "edf8b7ffce761b7d1d17330d81bc5bbc2b7f6ddb",
+      "commitTimestamp": "2026-08-26T18:41:22Z",
+      "license": {
+        "spdx": "NOASSERTION",
+        "sourcePath": "LICENSE",
+        "trackedPath": "spirv-headers-LICENSE.txt",
+        "bytes": 23503,
+        "sha256": "ea43b1de38a6f90c488800d66dec1ed671e68cda530266bc96951fb5b6307613"
+      }
+    },
+    "spirvTools": {
+      "role": "excluded-by-profile",
+      "depsCommit": "b40380bfa431d028fb7ca8eb375e4d21ea98a70e",
+      "reason": "SPIR-V validation, reader, writer, and built DXC are disabled"
+    },
+    "jsoncpp": {
+      "role": "linked-worker-codec",
+      "commit": "8519b8381f3c741ad1421f88237b1deda0b11412",
+      "tree": "b2b54358d63493c3ea3d3e3c32719e8172c7035a",
+      "sharedProvenance": "../c1-compiler-protocol/provenance/jsoncpp-1.9.8.json"
+    }
+  },
+  "worker": {
+    "role": "neighboring-real-compiler-worker",
+    "defaultRoot": "../c1-compiler-protocol/prototype",
+    "closure": {
+      "algorithm": "relative-path-nul-file-sha256-lines-v1",
+      "files": 4,
+      "sha256": "0081726410136549fdcef7ced8ac3462d1e4346af1bc2017734cde60568794e0",
+      "paths": ["json-codec.cc", "json-codec.h", "main.cc", "request.h"]
+    }
+  },
+  "oracle": {
+    "inputs": {
+      "releasesManifest": {
+        "path": "../c1-tint-standalone/provenance/releases.json",
+        "bytes": 3501,
+        "sha256": "4954de258a869a2b48d7a7d845b35e398ddb60d60f6eb00d9390e8e794220d56"
+      },
+      "jsoncppProvenance": {
+        "path": "../c1-compiler-protocol/provenance/jsoncpp-1.9.8.json",
+        "bytes": 1461,
+        "sha256": "a25cbee5212b7437a12cdd8c15b16d53f271d23a3be66d230618cc07568cc33c"
+      },
+      "nativeCompiler": {
+        "path": "../c1-compiler-protocol/lib/native-compiler.mjs",
+        "bytes": 15016,
+        "sha256": "6bccb8d4fe1bf563aa39381d4681db4e65883fc25c23d4583611e2fb80323bf9"
+      },
+      "protocol": {
+        "path": "../c1-compiler-protocol/lib/protocol.mjs",
+        "bytes": 15366,
+        "sha256": "5bd7b424bcad612c083a4335a0f241b39c013d9e29128683430b5ce80717f589"
+      }
+    },
+    "requests": {
+      "root": "../c1-compiler-protocol/fixtures/requests",
+      "algorithm": "relative-path-nul-file-sha256-lines-v1",
+      "files": 4,
+      "bytes": 7346,
+      "sha256": "ba0d7256fdb0fc685871fe1c7f72ba33441adfe537589619cbccb3f4e789f3be",
+      "paths": [
+        "generate-failure.json",
+        "noop.json",
+        "runtime-array.json",
+        "wgsl-error.json"
+      ]
+    },
+    "canaries": {
+      "noop": {
+        "requestSha256": "a4e46d2605376e6dacf6e1433cd40a5c22b9bd9e9f4eb28d6cc22c0821a09c30",
+        "responseBytes": 659,
+        "responseSha256": "4c8bd42627a40a4ebf743243c9e87569f4e91734f090a0841c8807bd2740dc1f",
+        "ok": true
+      },
+      "runtime-array": {
+        "requestSha256": "6e25492b0daeb06e20270bed332cf26b21554867d20b581ca1562a17319cd2eb",
+        "responseBytes": 2562,
+        "responseSha256": "9f233318b9c6a8bf6f893a4c45192629dce7876d9936262d6ac4c2ef8430cfac",
+        "ok": true
+      },
+      "wgsl-error": {
+        "requestSha256": "1738906d0f41bae8baa6c5a6851e57608dfd69a0079ade65936c6e74e08985bd",
+        "responseBytes": 594,
+        "responseSha256": "43832f679fad7f320b70ef39ca1fc5ebacb7bc190ab1b89f131bf1973b8ad756",
+        "ok": false
+      },
+      "generate-failure": {
+        "requestSha256": "1596dd2699ec449918d451484ea7f57d32fcc8253100b88d74d2c2f2272cfab1",
+        "responseBytes": 689,
+        "responseSha256": "b2c21f4eb080c5ebd5f4ea57c4f77e2d7c336407d9750f5b6c68a636c2692a3c",
+        "ok": true
+      }
+    }
+  },
+  "closures": {
+    "configuration": {
+      "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
+      "files": 156,
+      "bytes": 815569,
+      "sha256": "de479a9b77bd1a386ba39734cd40842c95ed1e7965aa4feda0c2e7b4bcb98ed5",
+      "repositories": {
+        "dawn": {
+          "files": 128,
+          "bytes": 584264,
+          "sha256": "39c8e22269b4f08456b6829d5de9f6eca2a78b9e8305a797fcdce7dac9c1262c"
+        },
+        "abseil": {
+          "files": 27,
+          "bytes": 228952,
+          "sha256": "bfde6466d4e203bcb94860106cc484439d116e973c0540f9018eff13f9be09da"
+        },
+        "spirvHeaders": {
+          "files": 1,
+          "bytes": 2353,
+          "sha256": "023ec1dcaceadbc9f151c905478736703c1738308e06e0b0c3bf9a5db8fbe335"
+        }
+      }
+    },
+    "compiled": {
+      "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
+      "objects": 407,
+      "files": 920,
+      "bytes": 8691753,
+      "sha256": "ffd134b06776d56a4c7e340d3b2d374c3fc4973dc7ac9ee3565119ae90a2eec9",
+      "repositories": {
+        "dawn": {
+          "files": 804,
+          "bytes": 7378710,
+          "sha256": "21f1d05c5d8aef7bc24983bee7c49eabe1f5784c8dc3b0e0aeab28fea0a539ac"
+        },
+        "abseil": {
+          "files": 97,
+          "bytes": 994677,
+          "sha256": "52ca45acae4852ca00435593ad6f6204e955409b01bdc9e2c6b733001148e7fb"
+        },
+        "spirvHeaders": {
+          "files": 0,
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "jsoncpp": {
+          "files": 15,
+          "bytes": 237576,
+          "sha256": "06d06c5919c219af43813049af0585b743f60518ab806e315babe0150bd245c0"
+        },
+        "worker": {
+          "files": 4,
+          "bytes": 80790,
+          "sha256": "0081726410136549fdcef7ced8ac3462d1e4346af1bc2017734cde60568794e0"
+        }
+      }
+    }
+  },
+  "build": {
+    "cmake": "3.31.6",
+    "ninja": "1.13.2",
+    "appleClangFirstLine": "Apple clang version 17.0.0 (clang-1700.6.3.2)",
+    "pythonFirstLine": "Python 3.9.6",
+    "configuration": "Release",
+    "cxxStandard": 20,
+    "sdk": "macosx14.5",
+    "minimumMacOS": "14.0",
+    "minimumHostMacOS": 26,
+    "compileCommands": 548,
+    "directWorkerObjects": 5,
+    "linkArchives": {
+      "algorithm": "ordered-ninja-path-lines-v1",
+      "files": 54,
+      "sha256": "1519af2f027707882851149dc594f9a8fee1940afe94d4559bf0947110eb84a8"
+    },
+    "outputs": {
+      "arm64": {
+        "bytes": 5747504,
+        "sha256": "ec5206089bc08c602af46ae4d329559647c37e9f622359f86b97cefe2a0d9ef3"
+      },
+      "x86_64": {
+        "bytes": 6795880,
+        "sha256": "c3ca7647b9ae54e434365042c6d87ff3760cb76c5f50b6d40ca549488327af71"
+      },
+      "universal": {
+        "bytes": 12563248,
+        "sha256": "78fd48a856bbb50b57fd0c16d421f999f78dfd6c364665bfa9b2db623ab72382"
+      }
+    },
+    "architectures": ["arm64", "x86_64"]
+  }
+}
