@@ -61,7 +61,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 | opts.size | `readonly [number, number]` | ✔ | — | Initial offscreen texture size in physical pixels. |
 | opts.format | `GPUTextureFormat` | ✖ | `"rgba8unorm"` | Used for single-color targets when `colors` is omitted. |
 | opts.colors | `readonly { format: GPUTextureFormat }[]` | ✖ | `[{ format: opts.format ?? "rgba8unorm" }]` | Multiple render targets (MRT): one attachment per entry, all written by one pass — the G-buffer layout for deferred shading. `target.color` is `colors[0]`. |
-| opts.depth | `boolean \| GPUTextureFormat` | ✖ | `undefined` | `true` means `"depth24plus"`; a string uses that depth format; omitted means no depth. Combined depth-stencil formats such as `"depth24plus-stencil8"` are supported; stencil-only `"stencil8"` is rejected. |
+| opts.depth | `boolean \| GPUTextureFormat` | ✖ | `undefined` | `true` means `"depth24plus"`; a string uses that depth format; omitted means no depth. The depth texture also has `texture_binding` usage, so later passes can sample it. Combined depth-stencil formats such as `"depth24plus-stencil8"` are supported; stencil-only `"stencil8"` is rejected. |
 | opts.msaa | `boolean \| 4` | ✖ | `false` / sample count `1` | Only `true` or `4` enables MSAA, creating color/depth attachments with sample count `4` and resolving to sampleable `.color(s)`. |
 | opts.clearColor | `ClearColor` | ✖ | `[0, 0, 0, 1]` | Default clear color of this target, used by passes that clear without naming one. Writable at runtime as `target.clearColor`; a pass `clear` color still wins for that pass. Four finite numbers, or a `GPUColor` object. |
 | opts.label | `string` | ✖ | `undefined` | Prefix for created texture labels. |
@@ -81,7 +81,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 
 **Returns:** `target(gpu)` returns `Target`; `resize()` returns `void`; `read()` returns `Promise<Uint8Array>`; `readFloats()` returns `Promise<Float32Array>`; `renderPassDescriptor(opts?)` returns a WebGPU render pass descriptor; `pingPong(gpu)` returns `PingPongTargets`; `pingPongStorage(gpu)` returns `PingPongStorage`.
 
-**Throws:** `VGPU-CORE-UNSUPPORTED-FORMAT` when `read()` / `readFloats()` runs on a color format outside the readback table (see `Texture`); `VGPU-TARGET-SIZE-REQUIRED` when runtime JS calls `target(gpu)` without `size`; `VGPU-TARGET-MSAA-INVALID` when runtime JS passes an unsupported `msaa` value (only `true` / `4` are accepted); `VGPU-TARGET-DEPTH-STENCIL-ONLY` when `depth` receives the stencil-only `"stencil8"` format (stencil-only depth targets are not supported yet); `VGPU-RING1-UNSUPPORTED` when `msaa: true` / `4` with `rgba16float` is used on a Dawn compatibility-mode device; underlying core texture/readback operations can throw native WebGPU validation errors.
+**Throws:** `VGPU-CORE-UNSUPPORTED-FORMAT` when `read()` / `readFloats()` runs on a color format outside the readback table (see `Texture`); `VGPU-TARGET-SIZE-REQUIRED` when runtime JS calls `target(gpu)` without `size`; `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` when a `texture_depth_*` binding receives a target without a depth attachment; `VGPU-TARGET-MSAA-INVALID` when runtime JS passes an unsupported `msaa` value (only `true` / `4` are accepted); `VGPU-TARGET-DEPTH-STENCIL-ONLY` when `depth` receives the stencil-only `"stencil8"` format (stencil-only depth targets are not supported yet); `VGPU-RING1-UNSUPPORTED` when `msaa: true` / `4` with `rgba16float` is used on a Dawn compatibility-mode device; underlying core texture/readback operations can throw native WebGPU validation errors.
 
 ## Examples
 
@@ -184,6 +184,10 @@ frame(gpu, (currentFrame) => {
 });
 pair.swap();
 ```
+
+## Sampling depth
+
+`target.depth` is a `Texture` with `render_attachment` and `texture_binding` usage. Bind it, or the `Target` itself, to a `texture_depth_2d` binding. Depth textures are not filterable: use `textureLoad`, or pair `textureSample` with `sampler(gpu, { minFilter: "nearest", magFilter: "nearest" })`; vgpu declares that sampler slot as `non-filtering` automatically. A comparison sampler also works with `textureSampleCompare`. Combined depth-stencil formats are exposed through a depth-only view. A target without `depth` is rejected with a fix-it.
 
 ## Notes
 

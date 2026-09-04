@@ -113,6 +113,7 @@ export class OffscreenTarget implements Target {
     return format ? this.device.createTexture({
       size: this.#currentSize,
       format,
+      // texture_binding lets later passes read the depth (fog, occlusion, SSAO) without a copy.
       usage: ["render_attachment", "texture_binding"],
       sampleCount: this.sampleCount,
       label: this.options.label ? `${this.options.label}.depth` : undefined,

@@ -14,6 +14,7 @@ export const exampleComponentLoaders = {
   'black-hole': () => import('../examples/black-hole/index'),
   'optimized-black-hole': () => import('../examples/optimized-black-hole/index'),
   earth: () => import('../examples/earth/index'),
+  atmosphere: () => import('../examples/atmosphere/index'),
   fluid: () => import('../examples/fluid/index'),
   'instanced-rendering': () => import('../examples/instanced-rendering/index'),
   'batch-rendering': () => import('../examples/batch-rendering/index'),

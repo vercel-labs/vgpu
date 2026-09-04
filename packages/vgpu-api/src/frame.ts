@@ -96,7 +96,14 @@ export interface FramePassOptions {
 }
 
 export interface FrameLoopHandle { stop(): void }
-export interface FrameLoopOptions { readonly fps?: number }
+export interface FrameLoopOptions {
+  /**
+   * Caps the callback rate: ticks closer than 1000/fps ms to the last frame are skipped, less a millisecond of
+   * slack for requestAnimationFrame timestamp jitter, so a cap at a divisor of the display rate (60 on 120 Hz)
+   * runs on every second tick instead of stuttering.
+   */
+  readonly fps?: number;
+}
 export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
@@ -633,8 +640,16 @@ export class FrameRunner {
   }
 }
 
+/**
+ * requestAnimationFrame timestamps land a few tenths of a millisecond either side of the display period, so a strict
+ * comparison against 1000/fps drops every other tick when the cap equals the refresh rate or a divisor of it
+ * (a 60 fps cap measured 48 fps on a 60 Hz display). One millisecond of slack accepts those ticks and still skips the
+ * next-shorter interval of any display up to 240 Hz.
+ */
+const FRAME_INTERVAL_SLACK_MS = 1;
+
 function shouldRunFrame(timestamp: number, lastFrameMs: number | undefined, minIntervalMs: number): boolean {
   if (lastFrameMs === undefined) return true;
   if (minIntervalMs <= 0) return true;
-  return timestamp - lastFrameMs >= minIntervalMs;
+  return timestamp - lastFrameMs >= minIntervalMs - FRAME_INTERVAL_SLACK_MS;
 }

@@ -5,6 +5,7 @@ export const exampleSlugs = [
   'black-hole',
   'optimized-black-hole',
   'earth',
+  'atmosphere',
   'fluid',
   'instanced-rendering',
   'batch-rendering',

@@ -497,6 +497,24 @@ export function targetSizeRequiredError(): VGPUError {
   });
 }
 
+export function textureSizeRequiredError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-TEXTURE-SIZE-REQUIRED",
+    message: "Texture size required. Fix: texture(gpu, { size: [w,h] }) or texture(gpu, { size: [w,h,d], dimension: \"3d\" }); every entry must be an integer >= 1.",
+    where: "texture",
+  });
+}
+
+export function textureStorageFormatError(format: GPUTextureFormat): VGPUError {
+  return new VGPUError({
+    code: "VGPU-TEXTURE-STORAGE-FORMAT",
+    message: `Format '${format}' is not storage-capable, but usage includes storage_binding.`,
+    fix: "Use a storage-capable format (rgba8unorm, rgba16float, r32float, rgba32float, ...) or pass usage without storage_binding, e.g. usage: ['texture_binding', 'copy_dst'].",
+    where: "texture",
+    detail: { format },
+  });
+}
+
 export function surfaceNotInFrameError(where: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-NOT-IN-FRAME",

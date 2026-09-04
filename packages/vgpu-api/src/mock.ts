@@ -12,6 +12,7 @@ export type { GeometryAttributeOverride, GeometryAttributes, GeometryBuffer, Geo
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "./frame.ts";
 export type { Effect, EffectOptions } from "./effect.ts";
 export type { CompileTarget, Target, TargetOptions, TargetSignature, TargetTextureOptions } from "./target.ts";
+export type { TextureOptions, TextureUsageName } from "./texture.ts";
 export { VGPUError } from "./errors.ts";
 export type { Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
 export { Uniform } from "./core/uniform.ts";
@@ -35,6 +36,7 @@ export { storage } from "./storage.ts";
 export { surface } from "./surface.ts";
 export type { SurfaceCanvas } from "./surface.ts";
 export { target } from "./target-offscreen.ts";
+export { texture } from "./texture.ts";
 export { timer } from "./timer.ts";
 export { uniforms } from "./uniforms.ts";
 export { visibility } from "./visibility.ts";

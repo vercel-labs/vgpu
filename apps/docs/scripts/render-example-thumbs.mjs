@@ -49,7 +49,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.atmosphereMetrics ? `, atmosphere=${JSON.stringify(result.atmosphereMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
@@ -73,7 +73,8 @@ async function renderOne(renderers, example, size, metaThumb, output) {
     const blackHoleVariantPixels = slug === 'black-hole' ? new Map() : undefined;
     const raymarchedFractalVariantPixels = slug === 'raymarched-fractal' ? new Map() : undefined;
     const fftOceanVariantPixels = slug === 'fft-ocean' ? new Map() : undefined;
-    const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels;
+    const atmosphereVariantPixels = slug === 'atmosphere' ? new Map() : undefined;
+    const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels ?? atmosphereVariantPixels;
     const modePixels = aaModePixels;
     let fluidState;
     let radianceStats;
@@ -115,6 +116,9 @@ async function renderOne(renderers, example, size, metaThumb, output) {
     const fftOceanMetrics = fftOceanVariantPixels && !args.proofDir
       ? assertFftOceanMetrics(fftOceanVariantPixels, pixels, size[0], size[1])
       : undefined;
+    const atmosphereMetrics = atmosphereVariantPixels && !args.proofDir
+      ? assertAtmosphereMetrics(atmosphereVariantPixels, pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
     }
@@ -136,7 +140,7 @@ async function renderOne(renderers, example, size, metaThumb, output) {
       : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, fluidMetrics, fluidState, radianceStats };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, atmosphereMetrics, fluidMetrics, fluidState, radianceStats };
   } finally {
     gpu.dispose();
   }
@@ -167,6 +171,43 @@ function lumaVariance(bytes) {
   }
   const mean = sum / count;
   return sumSq / count - mean * mean;
+}
+
+/**
+ * Physical sanity checks on the golden-hour poster and its noon variant:
+ * the noon zenith is blue, the golden-hour horizon is warmer than the noon horizon, and the sun moved the sky.
+ */
+function assertAtmosphereMetrics(variantPixels, poster, width, height) {
+  const noon = variantPixels.get('noon');
+  if (!noon) throw new Error('Atmosphere validation did not capture the noon variant.');
+  const band = (pixels, y0, y1) => {
+    const sum = [0, 0, 0];
+    let count = 0;
+    for (let y = Math.floor(y0 * height); y < Math.floor(y1 * height); y++) for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      sum[0] += pixels[i]; sum[1] += pixels[i + 1]; sum[2] += pixels[i + 2];
+      count++;
+    }
+    return sum.map((v) => v / count);
+  };
+  let changed = 0;
+  for (let i = 0; i < poster.length; i += 4) {
+    if (Math.abs(poster[i] - noon[i]) + Math.abs(poster[i + 1] - noon[i + 1]) + Math.abs(poster[i + 2] - noon[i + 2]) > 24) changed++;
+  }
+  const noonZenith = band(noon, 0, 0.1);
+  const noonHorizon = band(noon, 0.36, 0.44);
+  const goldenHorizon = band(poster, 0.36, 0.44);
+  const metrics = {
+    noonZenithBlue: noonZenith[2] / Math.max(1, noonZenith[0]),
+    goldenWarmth: (goldenHorizon[0] - goldenHorizon[2]) - (noonHorizon[0] - noonHorizon[2]),
+    changedRatio: changed / (poster.length / 4),
+  };
+  const problems = [];
+  if (metrics.noonZenithBlue < 1.25) problems.push(`noon zenith blue/red ratio ${metrics.noonZenithBlue.toFixed(2)} (need >=1.25)`);
+  if (metrics.goldenWarmth < 15) problems.push(`golden-hour horizon warmth ${metrics.goldenWarmth.toFixed(1)} (need >=15 more red-minus-blue than the noon horizon)`);
+  if (metrics.changedRatio < 0.5) problems.push(`sun move changed only ${(metrics.changedRatio * 100).toFixed(1)}% of pixels (need >=50%)`);
+  if (problems.length) throw new Error(`Atmosphere validation failed (${width}x${height}):\n${problems.map((x) => `- ${x}`).join('\n')}`);
+  return metrics;
 }
 
 function assertFluidState(stats) {
