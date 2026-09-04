@@ -181,7 +181,7 @@ test('generated metadata and files preserve the canonical and explicit order', (
 });
 
 test('all thumbnail entries satisfy the internal contract and stay out of public source', async () => {
-  expect(exampleSlugs).toHaveLength(26);
+  expect(exampleSlugs).toHaveLength(27);
 
   for (const slug of exampleSlugs) {
     const directory = path.join(docsDir, 'examples', slug);
