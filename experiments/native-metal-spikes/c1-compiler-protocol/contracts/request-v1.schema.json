@@ -32,6 +32,7 @@
       "$ref": "#/$defs/entryPoint"
     },
     "overrides": {
+      "description": "Canonical declaration-name order. This post-materialization request contains exactly every override active in the selected entry point, including typed values selected from shader defaults upstream.",
       "type": "array",
       "uniqueItems": true,
       "items": {
@@ -251,7 +252,30 @@
           "minimum": 1,
           "maximum": 4294967295
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "buffer" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "buffer" } } }
+        },
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "texture" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "texture" } } }
+        },
+        {
+          "if": {
+            "properties": { "resourceClass": { "const": "sampler" } },
+            "required": ["resourceClass"]
+          },
+          "then": { "properties": { "component": { "const": "sampler" } } }
+        }
+      ]
     },
     "binding": {
       "description": "The selected entry's WGSL resource kind is derived and checked through Tint Inspector. The request carries only the direct Metal component intervals: uniform and storage buffers use the buffer class, while sampled and storage textures use the texture class.",
@@ -268,6 +292,7 @@
         "slots": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 1,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/directSlot"
