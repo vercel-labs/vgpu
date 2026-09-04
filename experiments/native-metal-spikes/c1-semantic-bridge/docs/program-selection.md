@@ -56,10 +56,15 @@ The selection result always names each chosen authored entry, whether its config
 explicit or inferred. It does not record that presentation distinction, so explicitly naming the
 only candidate and omitting that name produce the same normalized selection and later fingerprint.
 
-The result is deeply frozen and nominally branded. The injection result is still a directive rather
-than a fabricated entry name. The source finalizer is the only owner of the generated WGSL bytes
-and collision-resistant generated name. A later semantic extraction must authenticate that
-concrete generated entry before program assembly.
+The result is deeply frozen and nominally branded. Its private brand also records the exact
+authenticated inventory instance that produced it. Re-authenticating even identical request and
+response bytes therefore requires running the pure selector again; a plan cannot be crossed with a
+second nominal inventory that happens to carry the same request identity. The public request
+identity remains useful lineage, but it is not a substitute for this in-process association.
+
+The injection result is still a directive rather than a fabricated entry name. The source
+finalizer is the only owner of the generated WGSL bytes and collision-resistant generated name. A
+later semantic extraction must authenticate that concrete generated entry before program assembly.
 
 Selection failures use stable internal codes:
 
@@ -73,5 +78,6 @@ Selection failures use stable internal codes:
 
 The build command can project configuration and entry errors to its public configuration-invalid
 diagnostic. The inventory code represents a failed integrity boundary and must not be downgraded to
-ordinary configuration ambiguity. Stale or crossed capsule bytes are detected by finalization or
-assembly, where the current capsule and retained inventory request identity are both available.
+ordinary configuration ambiguity. Stale or crossed inventory instances and capsule bytes are
+detected by finalization or assembly, where the nominal association, current capsule, and retained
+inventory request identity are all available.

@@ -31,11 +31,13 @@ no vertex entry. Its result is a directive, not a fabricated WGSL entry:
 }
 ```
 
-The selection plan remains attached to the exact authored inventory request identity. Before
-changing source, the finalizer reconstructs that inventory request from the retained capsule and
-language features, encodes it with the official deterministic encoder, and requires its identity
-to equal the one carried by the plan. A changed source, path, source hash, origin map,
-origin-map hash, or language-feature set therefore invalidates the plan before injection.
+The selection plan remains nominally attached to the exact authenticated inventory instance and
+also carries its authored request identity as lineage. Before changing source, the finalizer parses
+the privately retained request bytes, re-encodes them with the official deterministic encoder, and
+requires their identity and capsule fields to match both values. A cloned or independently
+re-authenticated inventory, even for the same request, requires a new selection. A changed source,
+path, source hash, origin map, origin-map hash, or language-feature set invalidates the pair before
+injection.
 
 The finalizer is the only owner of the generated names and bytes. It returns a concrete selection
 only after finalization:
@@ -52,10 +54,11 @@ The resolver remains the authority for authored declaration spans. Tint remains 
 whether the finalized WGSL parses and whether the generated entry has the expected semantic
 interface. The finalizer must not consult `resolved.reflection` or scan WGSL to make either claim.
 
-An authored vertex selection is a strict no-op. The source text, virtual path, source hash, origin
-map, origin-map hash, and authored declaration spans pass through unchanged, and no injection
-metadata is produced. An explicit vertex name that is absent never reaches this fallback; program
-selection rejects it as an unknown or wrong-stage entry.
+An authored vertex selection is a strict source-capsule no-op. The source text, virtual path,
+source hash, origin map, origin-map hash, and language features pass through unchanged, and no
+injection metadata is produced. Resolver declaration records travel alongside this step rather
+than through it, so they remain unchanged by construction. An explicit vertex name that is absent
+never reaches this fallback; program selection rejects it as an unknown or wrong-stage entry.
 
 ## Exact v1 template
 
@@ -185,11 +188,16 @@ or identities. NFC remains a precondition for the virtual path and authored orig
 A diagnostic wholly inside the generated range names the generated virtual WGSL but receives no
 `origin`. A caller must reject a response that attributes such a diagnostic to an authored input.
 
-## Preserve authored declaration spans
+## Keep authored declaration spans outside source finalization
 
-The authored declaration index is built directly from `resolved.ast.modules[*].entryPointDeclarations`
-and the resolver's virtual-path-to-input table. It is retained as trusted resolver output, not
-reconstructed from flattened WGSL. Finalization preserves every record exactly:
+The authored declaration index is built directly from
+`resolved.ast.modules[*].entryPointDeclarations` and the resolver's virtual-path-to-input table. It
+is retained as trusted resolver output, not reconstructed from flattened WGSL. The source finalizer
+does not accept or emit this index: the build coordinator carries it unchanged beside the finalized
+capsule until program assembly. This keeps byte finalization from becoming a second owner of
+resolver evidence.
+
+Program assembly then validates and preserves every selected authored record exactly:
 
 - `input` continues to identify the authored source module;
 - lines and columns remain 1-based;
@@ -206,35 +214,37 @@ never be converted into a UTF-16 authored span.
 
 ## Finalization API
 
-The intended pure boundary is:
+The executable pure boundary is:
 
 ```ts
-finalizeProgramCapsule({ authored, selection }) => {
+finalizeProgramCapsule({ inventory, selection }) => {
   capsule,
   selection: concreteSelection,
   injection?
 }
 ```
 
-`authored` contains the exact source, its hash, origin map and hash, resolver-owned declaration
-index, language features, and the accepted inventory snapshot. `selection` is the nominally
-authenticated program-selection result. For injection, `injection` records only build-internal
-evidence such as the profile and generated UTF-8 range; the generated output-structure name is not
-part of program semantics.
+`inventory` is the nominal authenticated snapshot that privately retains the exact authored
+inventory request bytes. `selection` must be the nominal plan minted from that same inventory. For
+injection, `injection` records only build-internal evidence such as the profile and generated UTF-8
+range; the generated output-structure name is not part of program semantics. The resolver-owned
+declaration index remains a separate build input and joins the concrete selection during assembly.
 
-Calling the function twice with the same authored input produces byte-identical results. Passing a
-previously finalized capsule as though it were the authored capsule fails the selection-plan
-identity check instead of appending a second vertex. Multiple fragment selections over the same
-authored fragment-only capsule receive the same generated names and may reuse the same finalized
-capsule.
+Calling the function twice with the same nominal inventory and selection produces byte-identical
+results. A finalized capsule cannot be passed back in the inventory position because it has no
+inventory brand, so the API cannot append a second vertex. Multiple fragment selections over the
+same authored fragment-only capsule receive the same generated names and may reuse the same
+finalized capsule.
 
 Every later semantic-extraction and translation request must copy the finalized `source`,
-`originMap`, and their hashes unchanged. It creates a new request identity from its own exact
-encoded bytes; the authored inventory identity is lineage only and must not be reused.
+`originMap`, and their hashes unchanged. The final inventory projection is deeply frozen and runs
+the complete request semantic/resource preflight before launch. Each later operation creates a new
+request identity from its own exact encoded bytes; the authored inventory identity is lineage only
+and must not be reused.
 
 ## Expected failures
 
-Implementation should keep these internal failure classes distinct:
+The completed pipeline should keep these internal failure classes distinct:
 
 - `VGPU-C1-FULLSCREEN-PLAN`: the selection is unauthenticated, stale, crossed, not an injection
   directive for an effect, or already consumed against another capsule;
@@ -244,39 +254,33 @@ Implementation should keep these internal failure classes distinct:
   identity, or language features disagree;
 - `VGPU-C1-FULLSCREEN-PROVENANCE`: a final map changed authored sources or segments, maps any byte
   in the generated range, or does not describe the final source;
-- `VGPU-C1-FULLSCREEN-SPAN`: an authored declaration record is missing, crossed, duplicated, or
-  outside its retained source;
 - `VGPU-C1-FULLSCREEN-ENTRY`: the finalized Tint result omits the derived vertex, changes its stage,
   loses an authored entry, adds another entry, or exposes a generated-name collision; and
 - `VGPU-C1-FULLSCREEN-RESOURCE-LIMIT`: the finalized source or request exceeds an existing worker
   limit before launch.
 
-A structured Tint syntax or semantic diagnostic inside the generated range is an injection failure
-with generated-source location and no authored origin. It must not trigger a different name,
-profile, language feature, or source rewrite.
+A missing, crossed, duplicated, or out-of-bounds authored declaration record is an assembly
+failure, not a source-finalization failure. A structured Tint syntax or semantic diagnostic inside
+the generated range is an injection failure with generated-source location and no authored origin.
+It must not trigger a different name, profile, language feature, or source rewrite.
 
-## Pending gates
+## Executable evidence and remaining gates
 
-The implementation is not accepted until these gates run from reviewed literals rather than
+The current gate locks the exact template byte count and hash, marker counts, name-domain test
+vector, one rendered-capsule hash, the unconditional LF rule, byte determinism, exact authored
+prefix, Unicode preservation, UTF-8 generated range, generated provenance gap, reuse across
+fragment selections, authored-vertex no-op, nominal-brand failures, same-request inventory
+crossing, name collision, and resource limit. It runs one authored and two finalized inventories
+with the accepted native worker; the final responses are byte-identical and contain exactly one
+derived vertex plus the authored fragment.
+
+The full profile is not accepted until the remaining gates run from reviewed literals rather than
 regenerating their own expectations:
 
-- lock the exact template byte count, SHA-256, marker counts, name-domain test vector, and one fully
-  rendered source snapshot;
-- prove byte determinism, the unconditional LF rule, exact authored-prefix preservation, and reuse
-  across multiple fragment selections;
-- cover authored sources with LF, without LF, with astral Unicode, and with decomposed Unicode so
-  generated ranges are demonstrably UTF-8 byte ranges and WGSL is never normalized;
-- prove an authored vertex is a complete no-op and an explicit missing vertex never falls back to
-  injection;
-- mutate the plan identity, profile, source, hashes, path, features, origin map, spans, marker
-  counts, generated range, and resource limits, requiring zero worker launches for every local
-  failure;
-- reject a segment that attributes any generated byte to an authored input and a generated
-  diagnostic that claims authored `origin`;
-- invoke the native inventory twice for a finalized capsule and require byte-identical responses
-  whose entries are exactly the authored inventory plus the one derived vertex in canonical order;
 - reject final inventory responses with a missing, extra, renamed, duplicate, or wrong-stage entry,
   or a crossed request identity;
+- join selected authored entries to exact resolver declaration records and reject missing, crossed,
+  duplicate, or out-of-bounds spans during assembly;
 - validate the generated interface through the future semantic extractor: vertex-index input,
   position and location-zero UV outputs, and no bindings, sampling pairs, or overrides;
 - preserve the top-origin UV result and the TypeScript `effect()` winding with separate UV and

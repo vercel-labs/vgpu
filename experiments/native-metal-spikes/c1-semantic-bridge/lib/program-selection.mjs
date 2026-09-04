@@ -12,7 +12,7 @@ const stagesForKind = Object.freeze({
   compute: Object.freeze(["compute"]),
 });
 const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/u;
-const programSelectionPlans = new WeakSet();
+const programSelectionPlans = new WeakMap();
 
 export class ProgramSelectionError extends Error {
   constructor(code, message, details = {}) {
@@ -68,13 +68,16 @@ export function selectProgramEntries(selectionView, inventory) {
     });
   }
 
-  return freezeSelectionPlan({
-    name: normalized.name,
-    source: normalized.source,
-    kind: normalized.kind,
-    inventoryRequestIdentity: inventory.requestIdentity,
-    entryPoints: selected,
-  });
+  return freezeSelectionPlan(
+    {
+      name: normalized.name,
+      source: normalized.source,
+      kind: normalized.kind,
+      inventoryRequestIdentity: inventory.requestIdentity,
+      entryPoints: selected,
+    },
+    inventory
+  );
 }
 
 export function isProgramSelectionPlan(value) {
@@ -82,6 +85,13 @@ export function isProgramSelectionPlan(value) {
     typeof value === "object" &&
     value !== null &&
     programSelectionPlans.has(value)
+  );
+}
+
+export function isProgramSelectionPlanForInventory(value, inventory) {
+  return (
+    isProgramSelectionPlan(value) &&
+    programSelectionPlans.get(value) === inventory
   );
 }
 
@@ -226,11 +236,11 @@ function selectionDetails(program, stage, available, requested) {
   };
 }
 
-function freezeSelectionPlan(plan) {
+function freezeSelectionPlan(plan, inventory) {
   for (const entry of Object.values(plan.entryPoints)) Object.freeze(entry);
   Object.freeze(plan.entryPoints);
   Object.freeze(plan);
-  programSelectionPlans.add(plan);
+  programSelectionPlans.set(plan, inventory);
   return plan;
 }
 

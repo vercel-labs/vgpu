@@ -17,6 +17,7 @@ import {
 import {
   FULLSCREEN_TRIANGLE_INJECTION_PROFILE,
   isProgramSelectionPlan,
+  isProgramSelectionPlanForInventory,
   ProgramSelectionError,
   selectProgramEntries,
 } from "../lib/program-selection.mjs";
@@ -257,6 +258,18 @@ assert.deepEqual(defaultEffect, {
 });
 assert(isProgramSelectionPlan(defaultEffect));
 assert(!isProgramSelectionPlan(structuredClone(defaultEffect)));
+assert(
+  isProgramSelectionPlanForInventory(
+    defaultEffect,
+    fragmentAndCompute.authenticated
+  )
+);
+assert(
+  !isProgramSelectionPlanForInventory(
+    defaultEffect,
+    structuredClone(fragmentAndCompute.authenticated)
+  )
+);
 
 const authoredEffect = selectProgramEntries(
   {

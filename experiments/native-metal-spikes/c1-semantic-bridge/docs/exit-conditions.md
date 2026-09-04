@@ -58,5 +58,12 @@ The implemented selection slice additionally proves twelve positive selections, 
 selection failures, and three inventory-authentication failures. JSON Schema validation precedes
 the nominal inventory brand; cloned snapshots and selection plans lose their brands; explicit and
 inferred single-entry choices normalize identically; and the selector does not receive WGSL or
-resolver reflection. This extends evidence for conditions 2 and 10. Full-screen source finalization
-and the remaining bridge conditions are still open.
+resolver reflection. This extends evidence for conditions 2 and 10.
+
+The implemented full-screen slice adds eight positive finalization cases, ten local failures, and
+three native inventory invocations. It proves exact append bytes and hashes, UTF-8 ranges,
+generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inventory association,
+prelaunch validation of the final request, and two byte-identical final inventories containing only
+the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
+Semantic interface extraction, the resolver declaration join, translation, offline Metal, the GPU
+UV/winding canaries, and the remaining bridge conditions are still open.

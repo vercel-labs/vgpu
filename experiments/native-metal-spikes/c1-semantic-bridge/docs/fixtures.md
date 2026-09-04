@@ -51,6 +51,26 @@ The gate intentionally does not ask JavaScript whether an authored effect vertex
 location. Selection means stage membership only; the authenticated semantic extractor owns that
 later effect-interface rejection.
 
+## Executable full-screen finalization slice
+
+The finalization gate has eight positive cases covering the locked v1 template and name vector,
+deterministic frozen output, exact UTF-8 ranges, astral and decomposed Unicode, the unconditional LF
+join, an authored-vertex no-op, capsule reuse across fragment selections, generated diagnostic
+provenance, and parity with the current TypeScript triangle positions and UVs.
+
+Ten local failures cover cloned finalized capsules, false authored provenance on a generated
+diagnostic, cloned plans, cloned inventories, inventories crossed at both different and identical
+request identities, unknown profiles, malformed source hashes, derived entry collisions, and the
+16 MiB finalized-source limit. A plan is nominally attached to the exact authenticated inventory
+instance in addition to carrying its request identity. The final inventory projection is deeply
+frozen and repeats the inventory request's semantic and resource preflight before launch.
+
+With the accepted arm64 worker, the gate performs one authored inventory followed by two finalized
+inventories. The latter responses are byte-identical and contain exactly the derived vertex and the
+authored fragment in canonical order. Interface extraction, adversarial final-response mutations,
+resolver-span joins, translation, offline compilation/linking, and the GPU `front_facing` canary
+remain part of the integrated closure below.
+
 ## Initial authenticated closure
 
 Use real repository shaders only after a small purpose-built closure can localize failures. The

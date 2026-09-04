@@ -80,8 +80,18 @@ authentication failures. It covers effect, draw, and compute programs; defaulted
 explicit and inferred normalization; missing, ambiguous, unknown, and wrong-stage entries; source
 crossing; schema-invalid inventory records; cloning; accessors; `null`; prototype pollution; and
 deterministic frozen output. See [`docs/program-selection.md`](./docs/program-selection.md) for the
-ownership and error contracts. The exact injection profile and its remaining gates are specified in
-[`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md).
+ownership and error contracts.
+
+The full-screen finalizer now consumes that exact nominal inventory/selection pair, renders the
+versioned triangle, appends it without rewriting authored bytes, and produces a frozen finalized
+capsule with a generated provenance gap. Its static gate passes eight positive cases and ten local
+failures. With the accepted native worker it performs three inventory invocations: one over the
+authored source and two byte-deterministic runs over the finalized source. Both final runs expose
+exactly the derived vertex and authored fragment. The final inventory request also repeats the
+complete semantic/resource preflight before a worker can launch. Resolver-owned declaration spans
+remain a sibling input for program assembly; the finalizer neither rewrites nor claims to validate
+them. See [`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md) for the exact profile and
+remaining semantic, translation, offline-Metal, and runtime canaries.
 
 ## Fixture strategy
 
@@ -99,7 +109,8 @@ candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 1. Add an authenticated entry-inventory operation to the vgpu Tint tool. This slice is executable.
 2. Select programs from a nominally authenticated inventory. This slice is executable.
 3. Inject the versioned full-screen source when required and finalize the exact source, source hash,
-   origin map, origin-map hash, and entry-declaration spans.
+   origin map, and origin-map hash. This source-finalization slice is executable; resolver-owned
+   entry declarations remain unchanged alongside it until program assembly.
 4. Add a multi-entry semantic-extraction operation and connect the existing exact-static override
    materializer to it.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
