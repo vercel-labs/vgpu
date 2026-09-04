@@ -1,0 +1,48 @@
+{
+  "fragment": {
+    "kind": "fragment",
+    "inputs": [
+      {
+        "type": { "scalar": "f32", "width": 2 },
+        "invariant": false,
+        "location": 0,
+        "interpolation": { "type": "perspective", "sampling": "center" }
+      },
+      {
+        "type": { "scalar": "bool", "width": 1 },
+        "invariant": false,
+        "builtin": "front_facing"
+      }
+    ],
+    "outputs": [
+      {
+        "type": { "scalar": "f32", "width": 4 },
+        "invariant": false,
+        "location": 0
+      }
+    ]
+  },
+  "vertex": {
+    "kind": "vertex",
+    "inputs": [
+      {
+        "type": { "scalar": "u32", "width": 1 },
+        "invariant": false,
+        "builtin": "vertex_index"
+      }
+    ],
+    "outputs": [
+      {
+        "type": { "scalar": "f32", "width": 2 },
+        "invariant": false,
+        "location": 0,
+        "interpolation": { "type": "perspective", "sampling": "center" }
+      },
+      {
+        "type": { "scalar": "f32", "width": 4 },
+        "invariant": false,
+        "builtin": "position"
+      }
+    ]
+  }
+}

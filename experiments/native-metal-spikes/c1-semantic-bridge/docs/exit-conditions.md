@@ -65,5 +65,13 @@ three native inventory invocations. It proves exact append bytes and hashes, UTF
 generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inventory association,
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
-Semantic interface extraction, the resolver declaration join, translation, offline Metal, the GPU
-UV/winding canaries, and the remaining bridge conditions are still open.
+Semantic interface extraction, the resolver declaration join, extraction-derived translation, the
+integrated corpus, and the remaining bridge conditions are still open.
+
+The provisional Metal companion adds four deterministic successful translator invocations, two
+byte-identical invocations of one structured interface rejection, two offline AIR compilations, one
+metallib link, and two byte-identical 2x2 GPU readbacks on Apple M4 Pro. It proves the selected
+generated vertex can reach Metal with top-origin UV and explicit counter-clockwise winding. Because
+its semantic interfaces are reviewed literals rather than output from the future authenticated
+extractor, it is supporting evidence for conditions 7 and 12, not completion of either condition or
+of the bridge.

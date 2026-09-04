@@ -272,7 +272,9 @@ prefix, Unicode preservation, UTF-8 generated range, generated provenance gap, r
 fragment selections, authored-vertex no-op, nominal-brand failures, same-request inventory
 crossing, name collision, and resource limit. It runs one authored and two finalized inventories
 with the accepted native worker; the final responses are byte-identical and contain exactly one
-derived vertex plus the authored fragment.
+derived vertex plus the authored fragment. The provisional translation, offline-toolchain, and
+live-render evidence is recorded separately in
+[`fullscreen-metal.md`](./fullscreen-metal.md) so this source-finalization contract stays focused.
 
 The full profile is not accepted until the remaining gates run from reviewed literals rather than
 regenerating their own expectations:
@@ -283,10 +285,9 @@ regenerating their own expectations:
   duplicate, or out-of-bounds spans during assembly;
 - validate the generated interface through the future semantic extractor: vertex-index input,
   position and location-zero UV outputs, and no bindings, sampling pairs, or overrides;
-- preserve the top-origin UV result and the TypeScript `effect()` winding with separate UV and
-  `@builtin(front_facing)` canaries; an UV-only image is insufficient;
-- translate the selected generated vertex in a fresh worker, compile its MSL with the pinned Apple
-  tools, and link it with the selected fragment; and
+- replace the companion gate's reviewed interface literals with projections of that authenticated
+  extraction while preserving its translation, offline compilation/link, UV, and `front_facing`
+  results; and
 - keep resolver, inventory, compiler-protocol, direct-build, offline Metal, and corpus gates green.
 
 Until semantic extraction exists, the spike may use a second authenticated inventory invocation as

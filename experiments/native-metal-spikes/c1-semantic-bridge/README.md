@@ -91,7 +91,14 @@ exactly the derived vertex and authored fragment. The final inventory request al
 complete semantic/resource preflight before a worker can launch. Resolver-owned declaration spans
 remain a sibling input for program assembly; the finalizer neither rewrites nor claims to validate
 them. See [`docs/fullscreen-injection.md`](./docs/fullscreen-injection.md) for the exact profile and
-remaining semantic, translation, offline-Metal, and runtime canaries.
+remaining semantic gates.
+
+A separate provisional canary carries a real finalized effect through two deterministic
+translations per entry, two offline AIR compilations, one metallib link, and two live 2x2
+readbacks. It proves top-origin UV and counter-clockwise `front_facing` with a clockwise control on
+Apple M4 Pro. The compiler interfaces are reviewed literals until the multi-entry extractor can
+own them, so this is executable backend evidence rather than completion of semantic assembly. See
+[`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 
 ## Fixture strategy
 
@@ -122,10 +129,10 @@ candidate are in [`docs/exit-conditions.md`](./docs/exit-conditions.md).
 
 ## Non-goals
 
-This spike does not implement the Swift runtime, freeze a Dawn/Tint source revision, establish Intel
-or AMD GPU support, recover general authored diagnostic spans from the current module-only origin
-map, or prove a production artifact. Exact authored entry-declaration spans come from resolver
-tokens and use 1-based locations, UTF-16-code-unit columns, and an end-exclusive boundary. Tint
-diagnostics instead report UTF-8 byte columns; consumers must not combine the two coordinate
-systems. The spike also does not expose broad Tint reflection in generated Swift or the Metal
-runtime artifact.
+This spike does not implement the production Swift runtime, freeze a Dawn/Tint source revision,
+establish Intel or AMD GPU support, recover general authored diagnostic spans from the current
+module-only origin map, or prove a production artifact. Exact authored entry-declaration spans come
+from resolver tokens and use 1-based locations, UTF-16-code-unit columns, and an end-exclusive
+boundary. Tint diagnostics instead report UTF-8 byte columns; consumers must not combine the two
+coordinate systems. The spike also does not expose broad Tint reflection in generated Swift or the
+Metal runtime artifact.

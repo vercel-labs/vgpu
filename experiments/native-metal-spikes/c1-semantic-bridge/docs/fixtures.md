@@ -68,8 +68,21 @@ frozen and repeats the inventory request's semantic and resource preflight befor
 With the accepted arm64 worker, the gate performs one authored inventory followed by two finalized
 inventories. The latter responses are byte-identical and contain exactly the derived vertex and the
 authored fragment in canonical order. Interface extraction, adversarial final-response mutations,
-resolver-span joins, translation, offline compilation/linking, and the GPU `front_facing` canary
-remain part of the integrated closure below.
+and resolver-span joins remain part of the integrated closure below.
+
+## Provisional full-screen Metal canary
+
+The companion Metal gate uses a second fragment fixture that exposes UV and `front_facing` as
+pixel values. Until semantic extraction exists, reviewed vertex and fragment interfaces serve as
+the request oracle. Each entry is translated twice, and one additional schema-valid request runs
+twice to prove that Tint deterministically rejects a crossed UV width with one structured interface
+diagnostic.
+
+The two accepted MSL sources compile to separate AIR files and link into one metallib. A Swift probe
+loads translator-returned function names, renders 2x2 targets with explicit counter-clockwise and
+clockwise state, and runs twice. Exact RG values prove top-origin UV; blue is 255 for CCW and zero
+for the CW control. See [`fullscreen-metal.md`](./fullscreen-metal.md) for snapshots, commands, and
+limitations.
 
 ## Initial authenticated closure
 
