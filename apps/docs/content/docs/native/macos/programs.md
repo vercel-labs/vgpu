@@ -108,11 +108,18 @@ Set WGSL overrides in the program configuration when the shader default is not t
 }
 ```
 
+Keys follow WGSL's pipeline-overridable constant identifier. Use the declaration name when it has
+no `@id`. If it declares `@id(17)`, use the base-10 string `"17"`; the declaration name is not an
+alternate key. This is the same single-identifier rule used by
+[WebGPU](https://www.w3.org/TR/webgpu/#dom-gpuprogrammablestage-constants). `native check`
+diagnostics include both forms as context—for example, `"17" (@id of SAMPLE_COUNT)`—without
+accepting both as aliases.
+
 Before translation, `native check` validates every configured key against the WGSL module, even if a selected entry point does not use it. It derives the exact static override set for each selected entry and requires a configured value for every declaration in that set without an initializer. Configuring a downstream override does not waive a required upstream declaration that remains part of the static interface.
 
 Configured values are substituted before Tint evaluates omitted initializers. This order matters: configuring an override bypasses its own initializer, while configuring a dependency recomputes any omitted value that depends on it. The semantic program records the canonical union of the selected entries' static sets, preserving each scalar type and the bit pattern of finite `f16` and `f32` values. A valid module-level configuration unused by every selected entry is accepted but omitted from that record.
 
-Unknown names, duplicate authored `@id` values, wrong types, non-finite floats, and integers outside their WGSL range fail validation. This strict typed and finite boundary is the native build contract; it does not promise that every WebGPU input-conversion edge behaves identically. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
+Unknown identifiers, noncanonical numeric IDs, duplicate authored `@id` values, wrong types, non-finite floats, and integers outside their WGSL range fail validation. This strict typed and finite boundary is the native build contract; it does not promise that every WebGPU input-conversion edge behaves identically. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
 
 The compiler substitutes the fully materialized values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. A compute entry records its workgroup size only as resolved positive integer `x`, `y`, and `z` values, whether the WGSL attribute used a literal, a constant expression, or an expression such as `X + Y`. The artifact does not duplicate that expression or its override dependency list; the referenced WGSL hashes preserve changes to the authored source. The typed selected values and resolved workgroup dimensions become part of the program fingerprint. Omitting an override and configuring it explicitly to the same evaluated default therefore produce the same normalized program semantics.
 

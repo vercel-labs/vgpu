@@ -187,6 +187,8 @@ The semantic work is split by responsibility so the growing design remains revie
   freezes resources, sampling-pair resolution, content-addressed types/layouts, and ordering; and
 - [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) freezes the pure
   TypeScript join, render linking, and fingerprint exclusions; and
+- [`docs/semantic-extraction/exact-static-overrides.md`](./docs/semantic-extraction/exact-static-overrides.md)
+  selects the next connected override materialization, union, projection, and Metal evidence; and
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
   freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)

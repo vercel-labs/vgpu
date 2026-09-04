@@ -14,8 +14,10 @@ lets the worker resolve cross-stage resource kinds atomically while TypeScript r
 
 The request uses `vgpu-native-tint-semantic-extraction/v1`:
 
-The placeholders below stand for values with the exact schema shape; the checked-in request
-fixtures will contain concrete hashes, byte ranges, and source text:
+The placeholders below stand for values in the selected target shape for the next override slice;
+the checked-in request fixtures will contain concrete hashes, byte ranges, and source text. The
+current executable profile still requires an empty `overrideConfiguration`; its schema, JavaScript
+validator, C++ decoder, and oracles migrate to `identifier` together in that slice.
 
 ```json
 {
@@ -50,8 +52,8 @@ fixtures will contain concrete hashes, byte ranges, and source text:
     { "stage": "fragment", "wgsl": "fs_main" }
   ],
   "overrideConfiguration": [
-    { "name": "SAMPLE_COUNT", "value": 9 },
-    { "name": "USE_DITHER", "value": true }
+    { "identifier": "17", "value": 9 },
+    { "identifier": "USE_DITHER", "value": true }
   ],
   "languageFeatures": []
 }
@@ -70,13 +72,14 @@ The request deliberately has no `programKind`. Whether a render pair is an effec
 whether the vertex entry was authored or injected, are TypeScript facts. The worker only needs the
 selected WGSL names and stages.
 
-`overrideConfiguration` is module-scoped, sorted by WGSL declaration name, and contains no
-duplicates. It accepts finite canonical JSON numbers and booleans; negative zero is rejected because
-the deterministic JSON encoding would otherwise collapse it to zero. Tint validates and converts
-each value against the declaration's scalar type. Names also address declarations with an authored
-`@id`. Numeric Tint IDs never become request selectors: automatic IDs are implementation details,
-and an explicit WGSL ID is returned only as provenance. A valid configured declaration that is
-inactive in the selected program is accepted but omitted from the result.
+`overrideConfiguration` is module-scoped, sorted by pipeline-overridable constant identifier, and
+contains no duplicates. It accepts finite canonical JSON numbers and booleans; negative zero is
+rejected because the deterministic JSON encoding would otherwise collapse it to zero. Tint validates
+and converts each value against the declaration's scalar type. A declaration with an authored
+`@id(17)` is identified only by the canonical base-10 string `"17"`; otherwise its WGSL name is the
+identifier. Automatic Tint IDs are implementation details and never become selectors. A valid
+configured declaration that is inactive in the selected program is accepted but omitted from the
+result.
 
 ## Request identity
 
@@ -220,6 +223,9 @@ Runtime-sized buffers and resource binding arrays produce structured unsupported
 than approximate success. Configured overrides and active overrides also remain unsupported.
 Constant-expression and override-expression workgroup dimensions join the override slice. These
 are executable-profile restrictions, not omissions from the v1 response shape.
+
+The selected integration contract, three-fixture gate, and failure matrix are specified in
+[`exact-static-overrides.md`](./exact-static-overrides.md).
 
 ## Failure and process model
 

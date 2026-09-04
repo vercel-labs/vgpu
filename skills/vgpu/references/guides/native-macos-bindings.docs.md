@@ -81,7 +81,7 @@ The public values are ordinary Swift scalars, SIMD vectors, matrices, arrays, an
 
 Generated value-only types such as `Gradient.Params` conform to `Sendable`. Generated binding-set types and any wrapper that can hold a context-owned resource do not, regardless of the case stored by one particular value. Keep them in the same application-chosen isolation domain as their `VGPU` context.
 
-Types referenced by more than one program are generated once at module scope. A `Particle` used by both `StepParticles` and `ParticleDraw` has one Swift identity, so the same `VGPUStorage<Particle>` can bind to both programs.
+Types referenced by one program are nested under that program. Types referenced by more than one program are generated once at module scope. A `Particle` used by both `StepParticles` and `ParticleDraw` has one Swift identity, so the same `VGPUStorage<Particle>` can bind to both programs. After computing that actual placement, the build validates the resulting Swift scopes and fails instead of renaming or moving a type to resolve a collision.
 
 ## Pack values with the WGSL layout
 
@@ -119,7 +119,7 @@ let gradient = try gpu.effect(
 
 A program with no bindings has an overload that omits `bindings`. Requiring complete initial bindings makes an unrenderable instance impossible to construct; native code does not defer a missing-binding error until its first draw.
 
-There are no global uniforms and no reserved binding names. Time comes from `gpu.clock`, resolution comes from a surface or target, and both cross into WGSL only when you bind them.
+There are no global uniforms and no library-reserved binding names. A binding or field can use a name such as `Bindings`, `artifact`, `Vertex`, `Swift`, `Foundation`, or `VGPUABI` because it occupies a separate member scope; it must still be a valid exact Swift spelling and cannot collide case-insensitively with a peer in that scope. Time comes from `gpu.clock`, resolution comes from a surface or target, and both cross into WGSL only when you bind them. See [Programs and entry points](/native/macos/programs#keep-swift-names-predictable) for the complete naming policy.
 
 ## Update bindings
 

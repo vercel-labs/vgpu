@@ -150,8 +150,12 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   retained only as optional `wgslId` provenance, never duplicated by an invented opaque ID. The
   resolved name uses the compiler request's ASCII identifier vocabulary and strict ascending order.
   V1 exposes no Metal function-constant or runtime-specialization contract. Configuration keys are
-  validated against the module and remain valid when unused by a selected entry point. Before any
-  lowering or pruning, every statically used declaration without an initializer must be supplied.
+  WGSL's single pipeline-overridable constant identifier string: canonical base-10 `@id` when one
+  is authored, otherwise the declaration name. The original selector reaches Tint validation before
+  the materialized result normalizes to its resolved WGSL name; the name is not an alias for an
+  authored ID. Keys are validated against the module and remain valid when unused by a selected
+  entry point. Before any lowering or pruning, every statically used declaration without an
+  initializer must be supplied.
   Configured values are then substituted before omitted initializers are evaluated. The semantic
   program records the union of the selected entries' static typed sets, and each translation request
   contains the exact static subset for that entry. Later compiler pruning does not redefine this

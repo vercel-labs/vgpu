@@ -55,7 +55,8 @@ canonical ordering, transitive type/layout closure, capability, exact reprojecti
 checks now. It copies the authenticated program binding union, entry subsets, sampling pairs, types,
 and layouts exactly, then derives only stage visibility and Swift presentation. It accepts singular
 fixed-size resources and rejects `dual_source_blending`. Exact-static override unions remain a
-later slice rather than a partially populated success. Metal slots are derived only after this
+later slice rather than a partially populated success; their selected join is specified in
+[`exact-static-overrides.md`](./exact-static-overrides.md). Metal slots are derived only after this
 backend-neutral assembly is complete.
 
 For semantic v1, `program.sources` contains every WGSL input listed by the finalized origin map.

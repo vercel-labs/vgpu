@@ -168,6 +168,11 @@ Resolved names use the compiler request's ASCII identifier vocabulary. Programs 
 strict ascending resolved-name order and require both resolved names and authored numeric IDs to be
 unique within that program.
 
+The build configuration uses WGSL's single pipeline-overridable constant identifier string: the
+canonical base-10 `@id` when one is authored, and otherwise the declaration name. The semantic
+extraction request preserves that selector until Tint validates it; only the materialized result is
+normalized to the resolved WGSL name. A name is not an alias for an authored ID.
+
 Semantic extraction first resolves and type-checks every configured key against the WGSL module,
 accepting a valid module-level value even when no selected entry point uses it. For each selected
 entry point, every statically used override without an initializer must be configured before any
