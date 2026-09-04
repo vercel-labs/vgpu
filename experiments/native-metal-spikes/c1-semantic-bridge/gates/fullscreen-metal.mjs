@@ -26,10 +26,15 @@ import {
   assertRequestSemantics,
   assertResponseSemantics,
   attachDiagnosticOrigins,
-  COMPILER_CONTRACT,
   sha256Utf8,
 } from "../../c1-compiler-protocol/lib/protocol.mjs";
 import { authenticateSuccessfulInventory } from "../lib/authenticated-inventory.mjs";
+import {
+  authenticateSuccessfulSemanticExtraction,
+  isAuthenticatedSemanticExtraction,
+  isSemanticExtractionForFinalizedCapsule,
+  semanticExtractionRequestForFinalizedCapsule,
+} from "../lib/authenticated-semantic-extraction.mjs";
 import {
   finalizeProgramCapsule,
   inventoryRequestForFinalizedCapsule,
@@ -42,14 +47,40 @@ import {
   inventoryRequestIdentity,
   originMapSha256,
 } from "../lib/protocol.mjs";
+import { resolveVirtualShaderWithDeclarations } from "../lib/resolved-declarations.mjs";
 import { selectProgramEntries } from "../lib/program-selection.mjs";
+import {
+  assembleInterfaceOnlySemanticProgram,
+  compilerRequestForAssembledEntry,
+  semanticModuleForAssembly,
+} from "../lib/semantic-assembly.mjs";
+import {
+  encodeSemanticExtractionRequest,
+  SEMANTIC_EXTRACTION_COMPILER,
+  SEMANTIC_EXTRACTION_CONTRACT,
+  semanticExtractionRequestIdentity,
+} from "../lib/semantic-extraction-protocol.mjs";
 
 const spikeDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const fixturePath = join(spikeDirectory, "fixtures", "fullscreen-metal.wgsl");
+const authoredFixturePath = join(
+  spikeDirectory,
+  "fixtures",
+  "fullscreen-metal.wgsl"
+);
+const resolvedFixturePath = join(
+  spikeDirectory,
+  "fixtures",
+  "fullscreen-metal.resolved.wgsl"
+);
 const interfacePath = join(
   spikeDirectory,
   "fixtures",
   "fullscreen-metal-interfaces.json"
+);
+const resolverFixturePath = join(
+  spikeDirectory,
+  "fixtures",
+  "fullscreen-metal-resolver.json"
 );
 const swiftProbePath = join(spikeDirectory, "gates", "fullscreen-metal.swift");
 const configSource = "Fixtures/fullscreen-metal.wgsl";
@@ -60,36 +91,42 @@ const emittedNames = Object.freeze({
   fragment: "vgpu_fullscreen_canary_fragment",
 });
 const expectedSnapshots = Object.freeze({
-  sourceSha256:
+  authoredSourceSha256:
     "059ed1451b4eef55123dd26a7ca13fce4bc71ab3ea96cb313f214ef669c5ae9d",
+  resolvedSourceSha256:
+    "1e1c437f9a895d0c0ee6b2d49c770352fa0d1c4734a68e6129a842558438a9fa",
   interfacesSha256:
     "1ce79b30182ddfdcf93617aeea8d0937cecfbbb6a9ea76389582a6880b19f175",
   runtimeProbeSha256:
     "99f261cb3457e57193fc182e24c9f740041778f19f4cf3aa557caef362380545",
   finalizedSourceSha256:
-    "580a5133e4f0a322ea2dc1bc079bcb3c4c49d72c4854c49bb4ea41fa4f17e065",
+    "c088affdd4b035b54fcc4ea92a55e0f06d0076292104cc51b1e78ce87ff86bf7",
+  semanticRequestSha256:
+    "0427eecc4575f315c1b55a893218160a7333521d89f1a67843b7c6c13af79148",
+  semanticResponseSha256:
+    "55fe2b8f60cf33d100e31e9487ec4e289e2197f545b56542abc29c0feae9a594",
   vertex: Object.freeze({
-    wgsl: "vgpu_fullscreen_vertex_cce722361ea5b6e92c6cf9ef0b196673a5fe112f439f0e835c0d26c742b501f7",
+    wgsl: "vgpu_fullscreen_vertex_b0d7494f46a396f522cb14febaf1ddcc0530d03275a3fdfdcc38c8431791eaca",
     requestSha256:
-      "9d61356fb0cc9ebb7d707dfae1e9764f628ade62a82078b0d8ed2396b7d5b679",
+      "bd93b2a982237ffc190812f1f02bb49a95902a4ec7c0255a806658c534dd990e",
     responseSha256:
-      "8bdb212a8799529d95db40474c9478fe71b5b1861fbb8b24b760fefaef5d9783",
+      "b3f6db28fd719fe1b3eae5f38dce93f323776cbc41e36dc1615c4834ffc4e1f4",
     mslSha256:
-      "7cb04513be8345f3dc4dc32e466aa32f663ce13bf4b732be10bd2019518ae8a8",
+      "70e1ff61fcca0105ccc1e7cec58029b10a00ccd45df0d719fb4038d50c4c2100",
   }),
   fragment: Object.freeze({
     wgsl: "shade",
     requestSha256:
-      "527f28fc53d1f6945a4f2358e0f0fbb5b80b8a17eca603b7e7985a393c306c8f",
+      "9e6383f15b47a611e5e9201a1b758196eedede25bb38dc2982b6de53235d85fe",
     responseSha256:
-      "1b62d5710d88d9ebcb9887c4bce90adfd4c3749248fc76abdd4a93c0d36acbfa",
+      "410855463e8e892ec61a3c935454210bd81f9fd37f8d5c80a233048e4b0adf98",
     mslSha256:
-      "3133d09a7930aa74835ffce45dce438689f684e5f0d2193391520a59fb5ceaf7",
+      "c3821e04e249269ac532907b441c24444c1ec087688db9c71f2289a1219b91b7",
   }),
   rejectedInterface: Object.freeze({
     message: "request semantic interface differs from selected-entry core IR",
     requestSha256:
-      "9d255772427c4d4984703a2f8f349abf7b32148a511c53476ab70629fd05763b",
+      "f88454d09b09cc8ffa0b04a7d71926c213c75832a9ad92de0cfde78528b885c4",
     responseSha256:
       "5e9309a88aaf82dff9e7d67d41b5446ac6df65f334fbeb29ac4750252d637128",
   }),
@@ -109,17 +146,40 @@ const expectedInternalReservations = Object.freeze([
   }),
 ]);
 let compilerWorkerLaunches = 0;
+let semanticWorkerLaunches = 0;
 
 const options = parseArguments(process.argv.slice(2));
 const validators = loadCompilerValidators();
-const sourceText = readFileSync(fixturePath, "utf8");
+const authoredSourceText = readFileSync(authoredFixturePath, "utf8");
+const sourceText = readFileSync(resolvedFixturePath, "utf8");
 const interfaces = JSON.parse(readFileSync(interfacePath, "utf8"));
-const inventoryRequest = makeInventoryRequest(sourceText);
+const resolverFixture = JSON.parse(readFileSync(resolverFixturePath, "utf8"));
+const { graph: resolverGraph, declarations: fixtureDeclarations } =
+  await resolveVirtualShaderWithDeclarations({
+    entry: resolverFixture.modulePath,
+    generatedVirtualPath: virtualPath,
+    sources: [
+      {
+        id: configSource,
+        virtualPath: resolverFixture.modulePath,
+        text: authoredSourceText,
+        sha256: sha256Utf8(authoredSourceText),
+      },
+    ],
+  });
+const inventoryRequest = makeInventoryRequest(resolverGraph);
 assertInventoryRequestSemantics(inventoryRequest);
 assertStaticFixture();
 const fixtureInventory = authenticateFixtureInventory(inventoryRequest);
 const fixtureFinalized = finalizeFixture(fixtureInventory);
-const fixtureRequests = translationRequests(fixtureFinalized);
+const fixtureExtraction =
+  authenticateFixtureSemanticExtraction(fixtureFinalized);
+const fixtureAssembly = assembleFixtureProgram(
+  fixtureFinalized,
+  fixtureExtraction
+);
+assertFixtureAssembly(fixtureAssembly);
+const fixtureRequests = translationRequests(fixtureAssembly);
 assertFullscreenRenderLink(fixtureRequests);
 assertRequestSnapshots(fixtureRequests);
 const launchesBeforePreflightFailure = compilerWorkerLaunches;
@@ -136,10 +196,13 @@ const result = {
   status: "static-passed",
   static: {
     status: "passed",
-    sourceSha256: inventoryRequest.source.sha256,
+    authoredSourceSha256: inventoryRequest.originMap.sources[0].sha256,
+    resolvedSourceSha256: inventoryRequest.source.sha256,
     interfacesSha256: sha256File(interfacePath),
     runtimeProbeSha256: sha256File(swiftProbePath),
     finalizedSourceSha256: fixtureFinalized.capsule.source.sha256,
+    semanticProgramFingerprint:
+      semanticModuleForAssembly(fixtureAssembly).programs[0].fingerprint.sha256,
     translationRequests: fixtureRequests.map((request) => ({
       stage: request.entryPoint.stage,
       sha256: sha256Utf8(JSON.stringify(request)),
@@ -161,7 +224,21 @@ if (options.worker) {
   const finalized = finalizeFixture(authoredInventory);
   assert.deepEqual(finalized, fixtureFinalized);
 
-  const requests = translationRequests(finalized);
+  const semantic = await extractSemanticsTwice(options.worker, finalized);
+  assert.equal(
+    sha256Utf8(semantic.requestBytes),
+    expectedSnapshots.semanticRequestSha256
+  );
+  assert.equal(
+    sha256Utf8(semantic.stdout),
+    expectedSnapshots.semanticResponseSha256
+  );
+  const assembly = assembleFixtureProgram(finalized, semantic.extraction);
+  assert.deepEqual(
+    semanticModuleForAssembly(assembly),
+    semanticModuleForAssembly(fixtureAssembly)
+  );
+  const requests = translationRequests(assembly);
   assertFullscreenRenderLink(requests);
   assertRequestSnapshots(requests);
   assert.deepEqual(requests, fixtureRequests);
@@ -182,10 +259,15 @@ if (options.worker) {
   result.translation = {
     status: "passed",
     inventoryInvocations: 1,
+    semanticExtractionInvocations: semanticWorkerLaunches,
+    semanticRequestSha256: sha256Utf8(semantic.requestBytes),
+    semanticResponseSha256: sha256Utf8(semantic.stdout),
+    semanticProgramFingerprint:
+      semanticModuleForAssembly(assembly).programs[0].fingerprint.sha256,
     successfulCompilerInvocations: requests.length * 2,
     rejectedCompilerInvocations: 2,
     compilerInvocations: compilerWorkerLaunches,
-    totalNativeProcesses: 1 + compilerWorkerLaunches,
+    totalNativeProcesses: 1 + semanticWorkerLaunches + compilerWorkerLaunches,
     deterministic: true,
     structuredFailures: 1,
     rejectedInterface,
@@ -310,7 +392,39 @@ function parseArguments(argv) {
 }
 
 function assertStaticFixture() {
-  assert.equal(inventoryRequest.source.sha256, expectedSnapshots.sourceSha256);
+  assert.equal(resolverGraph.resolved.wgsl, sourceText);
+  assert.deepEqual(
+    resolverGraph.resolved.ast.modules.map(
+      ({ path, entryPointDeclarations }) => ({
+        path,
+        entryPointDeclarations,
+      })
+    ),
+    [
+      {
+        path: resolverFixture.modulePath,
+        entryPointDeclarations: resolverFixture.entryPointDeclarations,
+      },
+    ]
+  );
+  assert.deepEqual(
+    resolverGraph.resolved.reflection.entryPoints.map(
+      ({ name, mangledName, stage }) => ({ name, mangledName, stage })
+    ),
+    resolverFixture.entryPoints
+  );
+  assert.equal(
+    sha256Utf8(authoredSourceText),
+    expectedSnapshots.authoredSourceSha256
+  );
+  assert.equal(
+    inventoryRequest.source.sha256,
+    expectedSnapshots.resolvedSourceSha256
+  );
+  assert.equal(
+    inventoryRequest.originMap.sources[0].sha256,
+    expectedSnapshots.authoredSourceSha256
+  );
   assert.equal(sha256File(interfacePath), expectedSnapshots.interfacesSha256);
   assert.equal(
     sha256File(swiftProbePath),
@@ -333,6 +447,18 @@ function assertStaticFixture() {
   );
 }
 
+function assertFixtureAssembly(assembly) {
+  const program = semanticModuleForAssembly(assembly).programs[0];
+  assert.equal(program.kind, "effect");
+  assert.equal(program.entryPoints.vertex.origin, "injected");
+  assert(!Object.hasOwn(program.entryPoints.vertex, "source"));
+  assert.deepEqual(program.entryPoints.fragment.source, {
+    input: configSource,
+    start: { line: 6, column: 1 },
+    end: { line: 9, column: 2 },
+  });
+}
+
 function assertFullscreenRenderLink(requests) {
   const vertex = requests.find(
     (request) => request.entryPoint.stage === "vertex"
@@ -352,24 +478,10 @@ function assertFullscreenRenderLink(requests) {
   assert.deepEqual(fragmentLocations[0], vertexLocations[0]);
 }
 
-function makeInventoryRequest(text) {
+function makeInventoryRequest(graph) {
+  const text = graph.resolved.wgsl;
   const sourceSha256 = sha256Utf8(text);
-  const originMap = {
-    schemaVersion: 1,
-    contractId: "vgpu-native-origin-map/v1",
-    generatedSource: { virtualPath, sha256: sourceSha256 },
-    sources: [{ input: configSource, sha256: sourceSha256 }],
-    segments: [
-      {
-        generated: {
-          startByte: 0,
-          endByte: Buffer.byteLength(text, "utf8"),
-        },
-        origin: { input: configSource },
-        precision: "module",
-      },
-    ],
-  };
+  const originMap = structuredClone(graph.originMap);
   return {
     schemaVersion: 1,
     contractId: INVENTORY_CONTRACT,
@@ -395,6 +507,63 @@ function authenticateFixtureInventory(request) {
       diagnostics: [],
       result: { entryPoints: [{ stage: "fragment", wgsl: "shade" }] },
     },
+  });
+}
+
+function authenticateFixtureSemanticExtraction(finalized) {
+  const request = semanticExtractionRequestForFinalizedCapsule(finalized);
+  const requestBytes = encodeSemanticExtractionRequest(request);
+  return authenticateSuccessfulSemanticExtraction({
+    finalized,
+    request,
+    requestBytes,
+    response: {
+      schemaVersion: 1,
+      contractId: SEMANTIC_EXTRACTION_CONTRACT,
+      ok: true,
+      requestIdentity: semanticExtractionRequestIdentity(requestBytes),
+      compiler: SEMANTIC_EXTRACTION_COMPILER,
+      diagnostics: [],
+      result: {
+        entryPoints: [
+          {
+            stage: "vertex",
+            wgsl: finalized.selection.entryPoints.vertex.names.wgsl,
+            semanticInterface: structuredClone(interfaces.vertex),
+            bindings: [],
+            samplingPairs: [],
+            overrides: [],
+          },
+          {
+            stage: "fragment",
+            wgsl: finalized.selection.entryPoints.fragment.names.wgsl,
+            semanticInterface: structuredClone(interfaces.fragment),
+            bindings: [],
+            samplingPairs: [],
+            overrides: [],
+          },
+        ],
+        bindings: [],
+        overrides: [],
+        types: {},
+        layouts: {},
+      },
+    },
+  });
+}
+
+function assembleFixtureProgram(finalized, extraction) {
+  return assembleInterfaceOnlySemanticProgram({
+    presentation: {
+      module: {
+        name: "FullscreenMetalShaders",
+        swiftName: "FullscreenMetalShaders",
+      },
+      program: { swiftName: "FullscreenMetalCanary" },
+    },
+    finalized,
+    extraction,
+    declarations: fixtureDeclarations,
   });
 }
 
@@ -448,54 +617,74 @@ async function invokeInventory(executable, request) {
   return inventory;
 }
 
-function translationRequests(finalized) {
-  const common = {
-    schemaVersion: 1,
-    contractId: COMPILER_CONTRACT,
-    source: structuredClone(finalized.capsule.source),
-    originMap: structuredClone(finalized.capsule.originMap),
-    overrides: [],
-    languageFeatures: [...finalized.capsule.languageFeatures],
-    metal: {
-      bindingModel: "vgpu-metal-binding-slots-v1",
-      bindings: [],
-      internalReservations: structuredClone(expectedInternalReservations),
-      storageBufferSizes: {
-        model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-        immediateDataByteOffset: 4,
-      },
+async function extractSemanticsTwice(executable, finalized) {
+  const request = semanticExtractionRequestForFinalizedCapsule(finalized);
+  const requestBytes = encodeSemanticExtractionRequest(request);
+  const attempts = await Promise.all([
+    invokeSemanticExtraction(executable, finalized, request, requestBytes),
+    invokeSemanticExtraction(executable, finalized, request, requestBytes),
+  ]);
+  assert.equal(
+    attempts[0].stdout,
+    attempts[1].stdout,
+    "full-screen semantic extraction is not byte-deterministic"
+  );
+  assert.deepEqual(attempts[0].extraction, attempts[1].extraction);
+  return {
+    extraction: attempts[0].extraction,
+    requestBytes,
+    stdout: attempts[0].stdout,
+  };
+}
+
+async function invokeSemanticExtraction(
+  executable,
+  finalized,
+  request,
+  requestBytes
+) {
+  semanticWorkerLaunches += 1;
+  const worker = startTintWorker({ executable });
+  try {
+    await worker.write(Buffer.from(requestBytes, "utf8"));
+    worker.end();
+  } catch (error) {
+    worker.terminate(error);
+  }
+  const attempt = await worker.result;
+  let extraction;
+  decodeTintWorkerResponse(attempt, (response) => {
+    extraction = authenticateSuccessfulSemanticExtraction({
+      finalized,
+      request,
+      requestBytes,
+      response,
+    });
+    return true;
+  });
+  assert(isAuthenticatedSemanticExtraction(extraction));
+  assert(isSemanticExtractionForFinalizedCapsule(extraction, finalized));
+  return { extraction, stdout: attempt.stdout };
+}
+
+function translationRequests(assembly) {
+  const metal = {
+    bindingModel: "vgpu-metal-binding-slots-v1",
+    bindings: [],
+    internalReservations: structuredClone(expectedInternalReservations),
+    storageBufferSizes: {
+      model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      immediateDataByteOffset: 4,
     },
   };
-  const requests = [
-    {
-      ...structuredClone(common),
-      entryPoint: {
-        stage: "vertex",
-        wgsl: finalized.selection.entryPoints.vertex.names.wgsl,
-        metal: emittedNames.vertex,
-      },
-      semanticInterface: structuredClone(interfaces.vertex),
-    },
-    {
-      ...structuredClone(common),
-      entryPoint: {
-        stage: "fragment",
-        wgsl: finalized.selection.entryPoints.fragment.names.wgsl,
-        metal: emittedNames.fragment,
-      },
-      semanticInterface: structuredClone(interfaces.fragment),
-    },
-  ];
-  for (const request of requests) {
-    assertSchema(
-      validators.request,
-      request,
-      `${request.entryPoint.stage} request`
-    );
-    assertRequestSemantics(request);
-    freezeJson(request);
-  }
-  return requests;
+  return ["vertex", "fragment"].map((stage) =>
+    compilerRequestForAssembledEntry({
+      assembly,
+      stage,
+      metalEntryPoint: emittedNames[stage],
+      metal,
+    })
+  );
 }
 
 async function translateTwice(executable, request) {
