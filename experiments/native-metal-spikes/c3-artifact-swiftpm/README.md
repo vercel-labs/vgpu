@@ -96,18 +96,22 @@ The runner:
 The `vgpu-native-program/v1` fingerprint preimage is domain-separated and contains the referenced
 WGSL input IDs and hashes, `layoutModel`, the semantic program without its fingerprint, Swift
 presentation names, source spans, interface diagnostic names, or redundant source list, and only
-the transitive type/layout closure reachable from that program's bindings and interfaces.
-Capabilities remain in the program. Arrays declared as unordered unique sets by the schema are
-sorted before hashing; semantically ordered arrays retain their order. Executable self-checks
-require referenced WGSL, layout-model,
-language-feature, directly reachable layout, and transitively reachable elemental-layout changes
-to change the fingerprint, while an unreachable type/layout addition must not change it. Separate
-canaries prove that changing an interface location, type, or normalized interpolation also changes
-the owning program fingerprint. Interface diagnostic names are removed through a directed
-projection: rename/removal and non-mutation canaries prove the exclusion, while program, resolved
-entry, binding, reachable member, and override names remain covered. `Noop` uses an authored `@id`
-override to resolve its workgroup width; separate canaries prove that the resolved override name and
-selected value affect its program fingerprint while its generated Swift name does not.
+the forward type/layout closure reachable from that program's bindings and interfaces. The traversal
+starts from interface and binding types plus each buffer binding's explicit layout, follows only
+type element/member references and layout type/member/layout references, and never discovers a
+layout by scanning for a matching type. Capabilities remain in the program. Arrays declared as
+unordered unique sets by the schema are sorted before hashing; semantically ordered arrays retain
+their order. Executable self-checks require referenced WGSL, layout-model, language-feature,
+binding-root-layout, and explicitly member-linked child-layout changes to change the fingerprint.
+`SparseDraw` proves that an interface-only program has an empty layout closure, while `Noop` proves
+that a same-type layout reachable only from another program does not change its fingerprint. An
+unreachable type/layout addition must likewise not change it. Separate canaries prove that changing
+an interface location, type, or normalized interpolation changes the owning program fingerprint.
+Interface diagnostic names are removed through a directed projection: rename/removal and
+non-mutation canaries prove the exclusion, while program, resolved entry, binding, reachable member,
+and override names remain covered. `Noop` uses an authored `@id` override to resolve its workgroup
+width; separate canaries prove that the resolved override name and selected value affect its program
+fingerprint while its generated Swift name does not.
 
 The projection requires a versioned `storageBufferSizeModel` string and every projected program
 contains a canonical `storageBufferSizeRegions` array. `Noop` uses an empty array. `RuntimeArray`

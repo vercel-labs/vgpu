@@ -266,9 +266,6 @@ function reachableTypeAndLayoutClosure(program, semantic) {
       const id = typeQueue.shift();
       const type = semantic.types[id];
       if (!type) fail(`program ${program.name} references unknown type ${id}`);
-      for (const [layoutId, layout] of Object.entries(semantic.layouts)) {
-        if (layout.type === id) addLayout(layoutId);
-      }
       addType(type.element);
       for (const member of type.members ?? []) addType(member.type);
     }
@@ -428,57 +425,57 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
     "language features"
   );
 
-  const changedReachableLayout = clone(semantic);
   const reachableLayouts = Object.keys(
     reachableTypeAndLayoutClosure(program, semantic).layouts
   );
-  if (reachableLayouts.length === 0) {
-    fail(`${program.name} fingerprint sensitivity needs a reachable layout`);
+  const bindingLayoutIds = [
+    ...new Set(
+      program.bindings
+        .map((binding) => binding.layout)
+        .filter((id) => id !== undefined)
+    ),
+  ];
+  if (bindingLayoutIds.length === 0 && reachableLayouts.length !== 0) {
+    fail(`${program.name} binding-free layout closure is not empty`);
   }
-  const directlyReachableTypeIds = new Set([
-    ...program.bindings.map((binding) => binding.type),
-    ...Object.values(program.entryPoints).flatMap((entry) => [
-      ...entry.inputs.map((value) => value.type),
-      ...entry.outputs.map((value) => value.type),
-    ]),
-  ]);
-  const directlyReachableLayoutId = reachableLayouts.find((id) =>
-    directlyReachableTypeIds.has(semantic.layouts[id]?.type)
-  );
-  if (!directlyReachableLayoutId) {
-    fail(
-      `${program.name} fingerprint sensitivity needs a directly reachable layout`
-    );
+  if (program.name === "SparseDraw" && reachableLayouts.length !== 0) {
+    fail("SparseDraw interface-only layout closure is not empty");
   }
-  changedReachableLayout.layouts[directlyReachableLayoutId].minimumSize += 1;
-  assertChanged(
-    fingerprintProgram(program, changedReachableLayout, inputs),
-    "reachable intrinsic layout"
-  );
 
-  const elementalTypeId = Object.keys(
-    reachableTypeAndLayoutClosure(program, semantic).types
-  )
-    .map((id) => semantic.types[id].element)
-    .find((id) => id !== undefined);
-  const elementalLayoutId = Object.keys(semantic.layouts).find(
-    (id) => semantic.layouts[id].type === elementalTypeId
-  );
-  if (
-    !elementalTypeId ||
-    !elementalLayoutId ||
-    !reachableLayouts.includes(elementalLayoutId)
-  ) {
-    fail(
-      `${program.name} fingerprint sensitivity needs a transitively reachable elemental layout`
+  for (const layoutId of bindingLayoutIds) {
+    if (!reachableLayouts.includes(layoutId)) {
+      fail(`${program.name} fingerprint omitted binding layout ${layoutId}`);
+    }
+    const changedBindingLayout = clone(semantic);
+    changedBindingLayout.layouts[layoutId].minimumSize += 1;
+    assertChanged(
+      fingerprintProgram(program, changedBindingLayout, inputs),
+      `binding-root layout ${layoutId}`
     );
   }
-  const changedElementalLayout = clone(semantic);
-  changedElementalLayout.layouts[elementalLayoutId].minimumSize += 1;
-  assertChanged(
-    fingerprintProgram(program, changedElementalLayout, inputs),
-    "transitively reachable elemental layout"
-  );
+
+  const bindingLayoutSet = new Set(bindingLayoutIds);
+  const childLayoutIds = [
+    ...new Set(
+      reachableLayouts.flatMap((layoutId) =>
+        semantic.layouts[layoutId].members.map((member) => member.layout)
+      )
+    ),
+  ].filter((layoutId) => !bindingLayoutSet.has(layoutId));
+  if (program.name === "RuntimeArray" && childLayoutIds.length === 0) {
+    fail("RuntimeArray fingerprint sensitivity needs a member-linked layout");
+  }
+  for (const layoutId of childLayoutIds) {
+    if (!reachableLayouts.includes(layoutId)) {
+      fail(`${program.name} fingerprint omitted member layout ${layoutId}`);
+    }
+    const changedChildLayout = clone(semantic);
+    changedChildLayout.layouts[layoutId].minimumSize += 1;
+    assertChanged(
+      fingerprintProgram(program, changedChildLayout, inputs),
+      `member-linked layout ${layoutId}`
+    );
+  }
 
   const changedUnreachable = clone(semantic);
   changedUnreachable.types.c3_unreachable = { kind: "scalar", scalar: "u32" };
@@ -494,6 +491,39 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
     fingerprintProgram(program, changedUnreachable, inputs),
     baseline,
     `${program.name} unreachable type/layout fingerprint exclusion`
+  );
+}
+
+function assertSameTypeUnreachableLayoutExclusion(semantic, inputs) {
+  const program = requireSemanticProgram(semantic, "Noop");
+  const binding = program.bindings.find((candidate) => candidate.id === "g0b0");
+  if (!binding) fail("Noop same-type layout canary needs binding g0b0");
+  const elementType = semantic.types[binding.type]?.element;
+  if (!elementType) {
+    fail("Noop same-type layout canary needs an elemental binding type");
+  }
+  const foreignLayout = Object.entries(semantic.layouts).find(
+    ([id, layout]) => id !== binding.layout && layout.type === elementType
+  );
+  if (!foreignLayout) {
+    fail("Noop same-type layout canary needs an unrelated elemental layout");
+  }
+  const [foreignLayoutId] = foreignLayout;
+  const closure = reachableTypeAndLayoutClosure(program, semantic);
+  if (
+    !Object.hasOwn(closure.types, elementType) ||
+    Object.hasOwn(closure.layouts, foreignLayoutId)
+  ) {
+    fail("Noop same-type layout canary is not forward-unreachable");
+  }
+
+  const baseline = fingerprintProgram(program, semantic, inputs);
+  const changed = clone(semantic);
+  changed.layouts[foreignLayoutId].minimumSize += 1;
+  assertEqual(
+    fingerprintProgram(program, changed, inputs),
+    baseline,
+    "Noop same-type unreachable layout fingerprint exclusion"
   );
 }
 
@@ -2307,6 +2337,7 @@ for (const program of artifact.semantic.programs) {
     artifact.inputs
   );
 }
+assertSameTypeUnreachableLayoutExclusion(artifact.semantic, artifact.inputs);
 assertShaderInterfaceProgramFingerprintSensitivity(
   artifact.semantic,
   artifact.inputs

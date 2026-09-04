@@ -188,9 +188,6 @@ function reachableTypeAndLayoutClosure(program, semantic) {
       const id = typeQueue.shift();
       const type = semantic.types[id];
       if (!type) fail(`program ${program.name} references unknown type ${id}`);
-      for (const [layoutId, layout] of Object.entries(semantic.layouts)) {
-        if (layout.type === id) addLayout(layoutId);
-      }
       addType(type.element);
       for (const member of type.members ?? []) addType(member.type);
     }
