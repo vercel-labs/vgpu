@@ -10,12 +10,13 @@ objects to the rest of the toolchain.
 Yes, for the covered one-shot compiler boundary. The candidate protocol owns its JSON schema, the
 Node caller validates requests before launch, and the C++ worker independently decodes the complete
 typed request before Tint runs. It derives resource kinds from Tint Inspector, applies the
-vgpu-owned Metal slot mapping, and returns either a structured compiler failure or MSL plus the
-effective binding metadata.
+vgpu-owned Metal slot mapping, compares the exact selected-entry shader interface before and after
+Metal lowering, and returns either a structured compiler failure or MSL plus the minimal runtime
+projection.
 
-The full gate passes ten positive and sixteen negative native canaries. Every native case is run
-twice, for 26 deterministic cases, and produces byte-identical status and output. A separate codec
-gate covers 25 fatal framing/complexity faults, eleven decoded protocol failures, the 64/65 nesting
+The full gate passes fifteen positive and twenty-two negative native canaries. Every native case is
+run twice, for 37 deterministic cases, and produces byte-identical status and output. A separate codec
+gate covers 25 fatal framing/complexity faults, nineteen decoded protocol failures, the 64/65 nesting
 boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a known SHA-256
 vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
 
@@ -28,12 +29,18 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
 - independent Metal buffer, texture, and sampler namespaces;
 - one sampled texture binding array as translator evidence;
 - runtime storage-array sizes through the shared immediate-data binding at `buffer(30)`;
+- exact sparse vertex attributes `3/7`, inter-stage locations `2/5/6`, fragment colors `1/4`, a
+  direct scalar fragment input and unnamed return, and the core compute built-ins;
+- effective interpolation defaults, explicit interpolation, built-ins, types, widths, and
+  invariance before and after Metal `Raise()`;
 - concrete emitted `[[buffer]]`, `[[texture]]`, and `[[sampler]]` indices; and
-- fail-closed checks for stage, feature, override, binding, and emitted-name mismatches.
+- fail-closed checks for stage, feature, override, binding, shader-interface, and emitted-name
+  mismatches.
 
 This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
-`libwebgpu_dawn.a`. The separate direct-source gate validates the same worker as distributable
-arm64, x86_64, and universal executables without that dependency.
+`libwebgpu_dawn.a`. The separate direct-source lock covers the worker revision before this interface
+change and is intentionally stale. This cut therefore makes no current arm64, x86_64, or universal
+distribution claim until that proof is deliberately rebaselined.
 
 ## Boundary
 
@@ -43,6 +50,8 @@ resolved source and one selected entry point. Its variable inputs are:
 - resolved WGSL text, a virtual path, and its SHA-256;
 - a module-precision origin map;
 - WGSL and emitted Metal entry names plus the selected stage;
+- the exact flattened semantic interface, with resolved scalar/vector types and normalized
+  interpolation but without artifact type IDs or source names;
 - the exact, typed set of active overrides after upstream default materialization;
 - an explicit allowlist of WGSL language features; and
 - one direct Metal component interval for every reflected WGSL resource binding.
@@ -55,8 +64,11 @@ response reports the internal binding and size region only when they are effecti
 [`contracts/response-v1.schema.json`](./contracts/response-v1.schema.json) separates expected
 compiler failures from successes. Both include the compiler and exact upstream revision. A success
 contains MSL, the selected entry point, the unchanged external slot map, effective internal
-bindings, storage-size regions, and resolved workgroup dimensions for compute entries. It does not
-duplicate broad semantic reflection that belongs upstream of translation.
+bindings, storage-size regions, resolved workgroup dimensions for compute entries, and a minimal
+stage-discriminated Metal interface. Vertex responses contain only exact location-to-attribute
+mappings, fragment responses only exact location/blend-source-to-color/index mappings, and compute
+responses only their kind. Built-ins, inter-stage values, types, interpolation, and invariance are
+not duplicated from the authoritative semantic request.
 
 The worker transport carries one UTF-8 JSON request on stdin and uses EOF as its only frame. It is
 therefore deliberately one process per request. A decoded JSON request produces exactly one UTF-8
@@ -81,8 +93,10 @@ The experimental resource policy is 128 MiB for the stdin frame, 64 JSON contain
 allocation units, 16 MiB of decoded UTF-8 source, 64 MiB of decoded UTF-8 MSL, 160 MiB of captured
 stdout, and 64 KiB of captured stderr. Diagnostics are limited to 16 KiB per message and 1 MiB of
 message text in aggregate. Origin sources and overrides are limited to 4,096 entries each, origin
-segments and bindings to 65,536 each, and language features to the four supported values. These
-numbers are feasibility policy to measure against a real corpus, not frozen v1 ABI. JSON Schema's
+segments and bindings to 65,536 each, and language features to the five supported values. These
+numbers are feasibility policy to measure against a real corpus, not frozen v1 ABI. Each shader
+interface direction is limited to 64 flattened values; compute input is limited to its five
+allowlisted built-ins and compute output is empty. JSON Schema's
 `source.text.maxLength` counts Unicode code points; the worker adds the stricter 16 MiB UTF-8 byte
 limit for memory control. One allocation unit means one JSON value or one object-member name; the
 Node caller computes that same recursive metric from its typed value, while the C++ lexical pass
@@ -129,14 +143,26 @@ WGSL parse and validation phase may attach a Tint source range; later phases can
 location they do not have.
 
 The prototype does not call Tint's `GenerateBindings`. It obtains selected-entry resources and
-override types from Inspector, builds `tint::Bindings` from the request, lowers WGSL to IR, and
-checks the raised entry interface against the declared Metal intervals after generation. This
-keeps the vgpu ABI authoritative on both sides of Tint.
+override types from Inspector, builds `tint::Bindings` from the request, lowers WGSL to IR, applies
+`SingleEntryPoint` and exact override substitution, and then flattens the core-IR parameters and
+return value. It compares that normalized interface exactly with the request before calling Metal
+`Generate()`, preserving Tint's complete writer preflight. `Generate()` mutates the same IR through
+Metal raise, so the worker can flatten the raised wrapper afterward, ignore only declared bound
+resource parameters, require semantic equality with the pre-raise view, and validate the emitted
+physical slot set. The minimal interface response map is derived from the raised view, not copied
+from the request.
+
+The emitted-slot check proves that the expected Metal resource-class/index/count set exists after
+lowering; it does not independently recover each original `@group`/`@binding` identity from the
+raised wrapper. That association relies on Tint's `BindingRemapper`, and the success response
+reserializes the requested source-to-slot mapping. This is an explicit trust boundary rather than a
+claim of identity reflection.
 
 One error response for the writer's `generate` phase is schema-only evidence. No stable source was
-found that makes this pinned writer return a controlled generation failure; some invalid remapped
-names trap inside Tint instead. The `vgpu_` preflight guard closes the known unsafe input without a
-test-only compiler backdoor.
+found that makes this pinned writer's internal `CanGenerate` preflight return a controlled failure;
+the structural source gate requires the official `Generate()` path and every successful native
+canary traverses it. Some invalid remapped names trap inside Tint instead. The `vgpu_` preflight
+guard closes the known unsafe input without a test-only compiler backdoor.
 
 ## Run
 
@@ -179,17 +205,21 @@ writer can preserve it. It is not initial product support: the semantic API, run
 offline Metal compiler have not validated binding arrays end to end. External textures are excluded
 because their multi-component lowering needs a separate versioned shape.
 
-Shader interface locations are also intentionally absent. WGSL `@location` values map to different
-Metal namespaces depending on whether they describe vertex inputs, inter-stage values, or fragment
-outputs. A later interface contract needs a discriminated representation rather than one ambiguous
-integer projection.
+The shader-interface wire profile intentionally excludes source names and artifact type IDs. It
+supports only scalar/vector leaves, the initial core built-in allowlist, normalized interpolation,
+vertex-position invariance, and representable blend-source metadata. Clip distances, primitive and
+linear invocation indices, subgroups, fragment depth-mode qualifiers, framebuffer fetch, and nested
+I/O structures fail closed until their semantics and capability profiles are explicit.
 
-The direct-build follow-up compiles these same worker sources against Dawn/Tint commit
-`8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca`, declaring only `tint_api` as the link root. Independent
-arm64 and x86_64 Release builds are byte-identical, combine into a deterministic universal
-executable, and link no WebGPU implementation, runtime backend, or framework. The arm64 direct
-workers run natively and the x86_64 direct workers run under Rosetta; every variant produces
-responses byte-identical to this fixture's arm64-native monolithic oracle.
+The internal compiler protocol allowlists `dual_source_blending` and its native canary proves both
+location-0 blend sources become Metal color 0 indices 0 and 1. This translator evidence does not
+enable dual-source blending in the higher-level product alpha, whose capability policy continues to
+reject it.
+
+The direct-build follow-up owns the distribution proof for these same worker sources and pins their
+complete source, request, response, and binary hashes. Its proof must be deliberately rebaselined
+after this protocol change; that separate refresh keeps distribution provenance out of the logical
+interface-handshake commit.
 
 The override integration follow-up now connects the materializer's exact static view to this
 request, binds it to the resolved-source hash, and proves that missing, extra, or stale values fail
@@ -198,7 +228,7 @@ before or inside the independently validating worker.
 The remaining gates are:
 
 - connect the broader semantic extractor and multi-entry union to artifact construction;
-- define the vertex-input, inter-stage, and fragment-output interface projection;
+- rebaseline the direct Tint build proof against this exact worker revision;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 

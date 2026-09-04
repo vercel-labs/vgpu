@@ -19,6 +19,9 @@
       "wgsl": "main",
       "metal": "vgpu_runtime_array"
     },
+    "interface": {
+      "kind": "compute"
+    },
     "resolvedWorkgroupSize": {
       "x": 1,
       "y": 1,

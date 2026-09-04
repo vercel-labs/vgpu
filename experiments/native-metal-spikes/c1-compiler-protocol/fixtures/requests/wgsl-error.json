@@ -51,6 +51,11 @@
     "wgsl": "main",
     "metal": "vgpu_imported_error"
   },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [],
+    "outputs": []
+  },
   "overrides": [],
   "languageFeatures": [],
   "metal": {

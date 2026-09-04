@@ -97,8 +97,9 @@ exit. `.artifacts/` and `.scratch/` are ignored as a guard for local investigati
 ## Scope
 
 This is a local integration contract between two feasibility prototypes. `staticOverrides` is not a
-public API, and this spike does not change the compiler request schema, define artifact persistence,
-or validate offline `metal`/`metallib` compilation. The materializer result does not yet authenticate
-the normalized `languageFeatures` set. The only overlapping feature is currently `f16`, whose
+public API, and beyond supplying the required empty compute semantic interface, this spike does not
+define shader-interface extraction, artifact persistence, or offline `metal`/`metallib` validation.
+The materializer result does not yet authenticate the normalized `languageFeatures` set. The only
+overlapping feature is currently `f16`, whose
 absence makes an `f16` source fail parsing; broader feature support must either bind that set to the
 result or keep it in an inseparable in-process context.

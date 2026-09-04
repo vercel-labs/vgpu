@@ -37,10 +37,18 @@
 #include "src/tint/lang/core/ir/transform/substitute_overrides.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/binding_array.h"
+#include "src/tint/lang/core/type/bool.h"
+#include "src/tint/lang/core/type/f16.h"
+#include "src/tint/lang/core/type/f32.h"
+#include "src/tint/lang/core/type/i32.h"
 #include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/sampler.h"
+#include "src/tint/lang/core/type/struct.h"
 #include "src/tint/lang/core/type/texture.h"
+#include "src/tint/lang/core/type/u32.h"
+#include "src/tint/lang/core/type/vector.h"
+#include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/msl/writer/writer.h"
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
@@ -70,7 +78,11 @@ static_assert(sizeof(float) == sizeof(uint32_t));
 static_assert(std::numeric_limits<float>::is_iec559);
 
 using Arguments = vgpu::native::CompilerRequest;
+using InterfaceInterpolation = vgpu::native::InterfaceInterpolation;
+using InterfaceType = vgpu::native::InterfaceType;
+using InterfaceValue = vgpu::native::InterfaceValue;
 using Mapping = vgpu::native::Mapping;
+using SemanticInterface = vgpu::native::SemanticInterface;
 
 struct Location {
   std::string virtual_path;
@@ -94,6 +106,11 @@ struct EmittedSlot {
 
 struct EmittedSlotsResult {
   std::optional<std::vector<EmittedSlot>> value;
+  std::string error;
+};
+
+struct InterfaceResult {
+  std::optional<SemanticInterface> value;
   std::string error;
 };
 
@@ -620,6 +637,277 @@ EmittedSlotsResult ValidateEmittedSlots(tint::core::ir::Module &ir,
   return {.value = std::move(emitted)};
 }
 
+std::optional<InterfaceType>
+InterfaceTypeFor(const tint::core::type::Type *type) {
+  uint32_t width = 1;
+  if (const auto *vector = type->As<tint::core::type::Vector>()) {
+    width = vector->Width();
+    type = vector->Type();
+  }
+  std::string scalar;
+  if (type->Is<tint::core::type::Bool>()) {
+    scalar = "bool";
+  } else if (type->Is<tint::core::type::F16>()) {
+    scalar = "f16";
+  } else if (type->Is<tint::core::type::F32>()) {
+    scalar = "f32";
+  } else if (type->Is<tint::core::type::I32>()) {
+    scalar = "i32";
+  } else if (type->Is<tint::core::type::U32>()) {
+    scalar = "u32";
+  } else {
+    return std::nullopt;
+  }
+  if (width == 0 || width > 4) {
+    return std::nullopt;
+  }
+  return InterfaceType{.scalar = std::move(scalar), .width = width};
+}
+
+bool HasAnyInterfaceAttribute(const tint::core::IOAttributes &attributes) {
+  return attributes.location || attributes.blend_src || attributes.color ||
+         attributes.builtin ||
+         (attributes.depth_mode &&
+          *attributes.depth_mode != tint::core::BuiltinDepthMode::kUndefined) ||
+         attributes.interpolation || attributes.input_attachment_index ||
+         attributes.binding_point || attributes.invariant;
+}
+
+std::optional<InterfaceInterpolation>
+NormalizedInterpolation(const tint::core::IOAttributes &attributes,
+                        bool linked_location, std::string &error) {
+  if (!linked_location) {
+    if (attributes.interpolation) {
+      error = "Tint retained interpolation outside an inter-stage location";
+    }
+    return std::nullopt;
+  }
+  std::string type = "perspective";
+  std::string sampling = "center";
+  if (attributes.interpolation) {
+    type = std::string(tint::core::ToString(attributes.interpolation->type));
+    sampling =
+        std::string(tint::core::ToString(attributes.interpolation->sampling));
+    if (type == "undefined") {
+      error = "Tint produced an undefined interpolation type";
+      return std::nullopt;
+    }
+    if (sampling == "undefined") {
+      sampling = type == "flat" ? "first" : "center";
+    }
+  }
+  const bool valid =
+      ((type == "perspective" || type == "linear") &&
+       (sampling == "center" || sampling == "centroid" ||
+        sampling == "sample")) ||
+      (type == "flat" && (sampling == "first" || sampling == "either"));
+  if (!valid) {
+    error = "Tint produced an unsupported interpolation pair";
+    return std::nullopt;
+  }
+  return InterfaceInterpolation{.type = std::move(type),
+                                .sampling = std::move(sampling)};
+}
+
+bool AppendInterfaceLeaf(const tint::core::type::Type *type,
+                         const tint::core::IOAttributes &attributes,
+                         std::string_view stage, bool input,
+                         std::vector<InterfaceValue> &values,
+                         std::string &error) {
+  if (attributes.color) {
+    error = "Tint interface contains unsupported color input metadata";
+    return false;
+  }
+  if (attributes.depth_mode &&
+      *attributes.depth_mode != tint::core::BuiltinDepthMode::kUndefined) {
+    error = "Tint interface contains unsupported fragment depth mode metadata";
+    return false;
+  }
+  if (attributes.input_attachment_index) {
+    error = "Tint interface contains unsupported input attachment metadata";
+    return false;
+  }
+  if (attributes.binding_point) {
+    error = "Tint interface leaf unexpectedly contains a resource binding";
+    return false;
+  }
+  if (attributes.location.has_value() == attributes.builtin.has_value()) {
+    error = "Tint interface leaf does not have exactly one semantic key";
+    return false;
+  }
+  const auto interface_type = InterfaceTypeFor(type);
+  if (!interface_type) {
+    error = "Tint interface leaf is not a scalar or vector in the v1 profile";
+    return false;
+  }
+  const bool linked_location =
+      attributes.location &&
+      ((stage == "vertex" && !input) || (stage == "fragment" && input));
+  auto interpolation =
+      NormalizedInterpolation(attributes, linked_location, error);
+  if (!error.empty()) {
+    return false;
+  }
+  InterfaceValue value{
+      .type = *interface_type,
+      .invariant = attributes.invariant,
+      .location = attributes.location,
+      .builtin = std::nullopt,
+      .interpolation = std::move(interpolation),
+      .blend_source = attributes.blend_src,
+  };
+  if (attributes.builtin) {
+    value.builtin = std::string(tint::core::ToString(*attributes.builtin));
+  }
+  values.push_back(std::move(value));
+  return true;
+}
+
+bool AppendInterfaceType(const tint::core::type::Type *type,
+                         const tint::core::IOAttributes &attributes,
+                         std::string_view stage, bool input,
+                         std::vector<InterfaceValue> &values,
+                         std::string &error) {
+  if (const auto *structure = type->As<tint::core::type::Struct>()) {
+    if (HasAnyInterfaceAttribute(attributes)) {
+      error = "Tint attached interface attributes to a structured container";
+      return false;
+    }
+    for (const auto *member : structure->Members()) {
+      if (member->Type()->Is<tint::core::type::Struct>() ||
+          !AppendInterfaceLeaf(member->Type(), member->Attributes(), stage,
+                               input, values, error)) {
+        if (error.empty()) {
+          error = "Tint interface nesting exceeds the flattened v1 profile";
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+  return AppendInterfaceLeaf(type, attributes, stage, input, values, error);
+}
+
+bool InterfaceValueLess(const InterfaceValue &left,
+                        const InterfaceValue &right) {
+  if (left.location.has_value() != right.location.has_value()) {
+    return left.location.has_value();
+  }
+  if (left.location) {
+    const uint32_t left_blend =
+        left.blend_source ? *left.blend_source + 1 : 0;
+    const uint32_t right_blend =
+        right.blend_source ? *right.blend_source + 1 : 0;
+    return std::tie(*left.location, left_blend) <
+           std::tie(*right.location, right_blend);
+  }
+  return *left.builtin < *right.builtin;
+}
+
+bool SameInterfaceKey(const InterfaceValue &left,
+                      const InterfaceValue &right) {
+  return !InterfaceValueLess(left, right) &&
+         !InterfaceValueLess(right, left);
+}
+
+InterfaceResult ExtractSemanticInterface(tint::core::ir::Module &ir) {
+  tint::core::ir::Function *entry = nullptr;
+  for (auto *function : ir.functions) {
+    if (!function->IsEntryPoint()) {
+      continue;
+    }
+    if (entry) {
+      return {.error = "Tint IR contains more than one selected entry point"};
+    }
+    entry = function;
+  }
+  if (!entry) {
+    return {.error = "Tint IR omits the selected entry point"};
+  }
+  std::string kind;
+  if (entry->IsVertex()) {
+    kind = "vertex";
+  } else if (entry->IsFragment()) {
+    kind = "fragment";
+  } else if (entry->IsCompute()) {
+    kind = "compute";
+  } else {
+    return {.error = "Tint IR selected entry point has no supported stage"};
+  }
+
+  SemanticInterface result{.kind = kind};
+  std::string error;
+  for (auto *parameter : entry->Params()) {
+    if (parameter->BindingPoint()) {
+      continue;
+    }
+    if (!AppendInterfaceType(parameter->Type(), parameter->Attributes(), kind,
+                             true, result.inputs, error)) {
+      return {.error = std::move(error)};
+    }
+  }
+  if (!entry->ReturnType()->Is<tint::core::type::Void>() &&
+      !AppendInterfaceType(entry->ReturnType(), entry->ReturnAttributes(),
+                           kind, false, result.outputs, error)) {
+    return {.error = std::move(error)};
+  }
+  std::sort(result.inputs.begin(), result.inputs.end(), InterfaceValueLess);
+  std::sort(result.outputs.begin(), result.outputs.end(), InterfaceValueLess);
+  if (std::adjacent_find(result.inputs.begin(), result.inputs.end(),
+                         SameInterfaceKey) != result.inputs.end() ||
+      std::adjacent_find(result.outputs.begin(), result.outputs.end(),
+                         SameInterfaceKey) != result.outputs.end()) {
+    return {.error = "Tint interface repeats a semantic key"};
+  }
+  return {.value = std::move(result)};
+}
+
+void WriteShaderInterface(std::ostream &output,
+                          const SemanticInterface &shader_interface) {
+  output << "{\"kind\": " << JsonString(shader_interface.kind);
+  if (shader_interface.kind == "vertex") {
+    output << ", \"attributes\": [";
+    bool first = true;
+    for (const auto &input : shader_interface.inputs) {
+      if (!input.location) {
+        continue;
+      }
+      if (!first) {
+        output << ", ";
+      }
+      first = false;
+      output << "{\"semantic\": {\"location\": " << *input.location
+             << "}, \"metal\": {\"attribute\": " << *input.location
+             << "}}";
+    }
+    output << ']';
+  } else if (shader_interface.kind == "fragment") {
+    output << ", \"colorOutputs\": [";
+    bool first = true;
+    for (const auto &shader_output : shader_interface.outputs) {
+      if (!shader_output.location) {
+        continue;
+      }
+      if (!first) {
+        output << ", ";
+      }
+      first = false;
+      output << "{\"semantic\": {\"location\": "
+             << *shader_output.location;
+      if (shader_output.blend_source) {
+        output << ", \"blendSource\": " << *shader_output.blend_source;
+      }
+      output << "}, \"metal\": {\"color\": " << *shader_output.location;
+      if (shader_output.blend_source) {
+        output << ", \"index\": " << *shader_output.blend_source;
+      }
+      output << "}}";
+    }
+    output << ']';
+  }
+  output << '}';
+}
+
 void WriteSlot(std::ostream &output, std::string_view resource_class,
                std::string_view component, uint32_t index, uint32_t count) {
   output << "{\"mode\": \"direct\", \"resourceClass\": "
@@ -630,6 +918,7 @@ void WriteSlot(std::ostream &output, std::string_view resource_class,
 
 void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
                   const std::vector<Diagnostic> &diagnostics,
+                  const SemanticInterface &shader_interface,
                   const tint::msl::writer::Output &generated,
                   bool used_immediate) {
   if (generated.msl.size() > vgpu::native::kMaxMslBytes) {
@@ -657,6 +946,9 @@ void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
          << "    \"entryPoint\": {\"stage\": " << JsonString(arguments.stage)
          << ", \"wgsl\": " << JsonString(arguments.entry_point)
          << ", \"metal\": " << JsonString(arguments.emitted_name) << "},\n";
+  output << "    \"interface\": ";
+  WriteShaderInterface(output, shader_interface);
+  output << ",\n";
   if (arguments.stage == "compute") {
     output << "    \"resolvedWorkgroupSize\": {\"x\": "
            << generated.workgroup_info.x
@@ -708,7 +1000,10 @@ int Run(const Arguments &arguments) {
   tint::Source::File source_file(arguments.source_name, arguments.source_text);
   tint::wgsl::reader::Options reader_options;
   for (const auto &feature : arguments.features) {
-    if (feature == "f16") {
+    if (feature == "dual_source_blending") {
+      reader_options.allowed_features.extensions.insert(
+          tint::wgsl::Extension::kDualSourceBlending);
+    } else if (feature == "f16") {
       reader_options.allowed_features.extensions.insert(
           tint::wgsl::Extension::kF16);
     } else if (feature == "uniform_buffer_standard_layout") {
@@ -954,6 +1249,21 @@ int Run(const Arguments &arguments) {
     }
   }
 
+  const auto core_interface = ExtractSemanticInterface(ir);
+  if (!core_interface.value) {
+    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
+                                core_interface.error));
+    WriteFailure(diagnostics);
+    return 1;
+  }
+  if (*core_interface.value != arguments.semantic_interface) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
+              "request semantic interface differs from selected-entry core IR"));
+    WriteFailure(diagnostics);
+    return 1;
+  }
+
   const auto runtime_storage =
       RuntimeStorageBindings(ir, arguments.entry_point);
 
@@ -992,6 +1302,20 @@ int Run(const Arguments &arguments) {
     WriteFailure(diagnostics);
     return 1;
   }
+  const auto raised_interface = ExtractSemanticInterface(ir);
+  if (!raised_interface.value) {
+    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                                raised_interface.error));
+    WriteFailure(diagnostics);
+    return 1;
+  }
+  if (*raised_interface.value != *core_interface.value) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+              "Metal raise changed the selected semantic interface"));
+    WriteFailure(diagnostics);
+    return 1;
+  }
   const auto emitted = ValidateEmittedSlots(ir, mappings);
   if (!emitted.value) {
     diagnostics.push_back(
@@ -1012,8 +1336,8 @@ int Run(const Arguments &arguments) {
     return 1;
   }
 
-  WriteSuccess(arguments, mappings, diagnostics, generated.Get(),
-               used_immediate);
+  WriteSuccess(arguments, mappings, diagnostics, *raised_interface.value,
+               generated.Get(), used_immediate);
   return 0;
 }
 

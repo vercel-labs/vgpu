@@ -37,6 +37,11 @@
     "wgsl": "writer_failure",
     "metal": "vgpu_writer_failure"
   },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [],
+    "outputs": []
+  },
   "overrides": [],
   "languageFeatures": [],
   "metal": {

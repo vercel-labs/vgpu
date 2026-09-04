@@ -532,6 +532,7 @@ function exactStaticRequest({
       ],
     },
     entryPoint: { stage, wgsl: entryPoint, metal: emittedName },
+    semanticInterface: { kind: "compute", inputs: [], outputs: [] },
     overrides,
     languageFeatures,
     metal: {

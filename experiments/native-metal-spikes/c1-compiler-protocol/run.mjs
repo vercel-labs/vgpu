@@ -49,6 +49,171 @@ const expectedInternalReservation = {
   ],
 };
 
+const interfaceType = (scalar, width = 1) => ({ scalar, width });
+const interpolation = (type, sampling) => ({ type, sampling });
+const shaderInterfaces = {
+  vertex: {
+    kind: "vertex",
+    inputs: [
+      { type: interfaceType("f32", 2), invariant: false, location: 3 },
+      { type: interfaceType("f32", 4), invariant: false, location: 7 },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "instance_index",
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "vertex_index",
+      },
+    ],
+    outputs: [
+      {
+        type: interfaceType("f32", 2),
+        invariant: false,
+        location: 2,
+        interpolation: interpolation("linear", "centroid"),
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        location: 5,
+        interpolation: interpolation("flat", "first"),
+      },
+      {
+        type: interfaceType("f32"),
+        invariant: false,
+        location: 6,
+        interpolation: interpolation("perspective", "center"),
+      },
+      {
+        type: interfaceType("f32", 4),
+        invariant: true,
+        builtin: "position",
+      },
+    ],
+  },
+  fragment: {
+    kind: "fragment",
+    inputs: [
+      {
+        type: interfaceType("f32", 2),
+        invariant: false,
+        location: 2,
+        interpolation: interpolation("linear", "centroid"),
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        location: 5,
+        interpolation: interpolation("flat", "first"),
+      },
+      {
+        type: interfaceType("f32"),
+        invariant: false,
+        location: 6,
+        interpolation: interpolation("perspective", "center"),
+      },
+      {
+        type: interfaceType("bool"),
+        invariant: false,
+        builtin: "front_facing",
+      },
+      {
+        type: interfaceType("f32", 4),
+        invariant: false,
+        builtin: "position",
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "sample_index",
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "sample_mask",
+      },
+    ],
+    outputs: [
+      { type: interfaceType("f32", 4), invariant: false, location: 1 },
+      { type: interfaceType("f32", 4), invariant: false, location: 4 },
+      {
+        type: interfaceType("f32"),
+        invariant: false,
+        builtin: "frag_depth",
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "sample_mask",
+      },
+    ],
+  },
+  scalarFragment: {
+    kind: "fragment",
+    inputs: [
+      {
+        type: interfaceType("f32"),
+        invariant: false,
+        location: 9,
+        interpolation: interpolation("perspective", "center"),
+      },
+    ],
+    outputs: [{ type: interfaceType("f32", 4), invariant: false, location: 3 }],
+  },
+  dualSource: {
+    kind: "fragment",
+    inputs: [],
+    outputs: [
+      {
+        type: interfaceType("f32", 4),
+        invariant: false,
+        location: 0,
+        blendSource: 0,
+      },
+      {
+        type: interfaceType("f32", 4),
+        invariant: false,
+        location: 0,
+        blendSource: 1,
+      },
+    ],
+  },
+  computeBuiltins: {
+    kind: "compute",
+    inputs: [
+      {
+        type: interfaceType("u32", 3),
+        invariant: false,
+        builtin: "global_invocation_id",
+      },
+      {
+        type: interfaceType("u32", 3),
+        invariant: false,
+        builtin: "local_invocation_id",
+      },
+      {
+        type: interfaceType("u32"),
+        invariant: false,
+        builtin: "local_invocation_index",
+      },
+      {
+        type: interfaceType("u32", 3),
+        invariant: false,
+        builtin: "num_workgroups",
+      },
+      {
+        type: interfaceType("u32", 3),
+        invariant: false,
+        builtin: "workgroup_id",
+      },
+    ],
+    outputs: [],
+  },
+};
+
 function fail(message) {
   throw new Error(`C1 compiler protocol: ${message}`);
 }
@@ -183,6 +348,7 @@ function runContractGate(validators) {
 
   const requestSchemaMutations = [
     ["unknown-property", (value) => (value.unknown = true)],
+    ["missing-semantic-interface", (value) => delete value.semanticInterface],
     [
       "wrong-contract",
       (value) => (value.contractId = "vgpu-native-tint-compiler/v2"),
@@ -241,6 +407,56 @@ function runContractGate(validators) {
       "unc-origin-input",
       (value) =>
         (value.originMap.sources[0].input = "\\\\server\\share\\shader.wgsl"),
+    ],
+    [
+      "named-interface-value",
+      (value) => {
+        value.semanticInterface.inputs = [
+          {
+            name: "global_id",
+            type: interfaceType("u32", 3),
+            invariant: false,
+            builtin: "global_invocation_id",
+          },
+        ];
+      },
+    ],
+    [
+      "compute-interface-output",
+      (value) => {
+        value.semanticInterface.outputs = [
+          {
+            type: interfaceType("u32"),
+            invariant: false,
+            builtin: "local_invocation_index",
+          },
+        ];
+      },
+    ],
+    [
+      "vertex-interface-without-position",
+      (value) => {
+        value.entryPoint.stage = "vertex";
+        value.semanticInterface = structuredClone(shaderInterfaces.vertex);
+        value.semanticInterface.outputs.pop();
+      },
+    ],
+    [
+      "invalid-interpolation-pair",
+      (value) => {
+        value.semanticInterface = structuredClone(shaderInterfaces.vertex);
+        value.semanticInterface.outputs[0].interpolation = interpolation(
+          "flat",
+          "center"
+        );
+      },
+    ],
+    [
+      "location-and-builtin",
+      (value) => {
+        value.semanticInterface = structuredClone(shaderInterfaces.vertex);
+        value.semanticInterface.inputs[0].builtin = "vertex_index";
+      },
     ],
   ];
   for (const [id, mutate] of requestSchemaMutations) {
@@ -385,6 +601,98 @@ function runContractGate(validators) {
       "noop",
       (value) => (value.source.text = "\ud800"),
     ],
+    [
+      "negative-zero-request",
+      "runtime-array",
+      (value) => (value.metal.bindings[0].group = -0),
+    ],
+    [
+      "semantic-interface-kind",
+      "noop",
+      (value) =>
+        (value.semanticInterface = {
+          kind: "fragment",
+          inputs: [],
+          outputs: [],
+        }),
+    ],
+    [
+      "semantic-interface-order",
+      "noop",
+      (value) => {
+        value.semanticInterface = structuredClone(
+          shaderInterfaces.computeBuiltins
+        );
+        value.semanticInterface.inputs.reverse();
+      },
+    ],
+    [
+      "semantic-interface-builtin-type",
+      "noop",
+      (value) => {
+        value.semanticInterface = structuredClone(
+          shaderInterfaces.computeBuiltins
+        );
+        value.semanticInterface.inputs[0].type.width = 1;
+      },
+    ],
+    [
+      "semantic-interface-integral-linear",
+      "noop",
+      (value) => {
+        value.entryPoint.stage = "fragment";
+        value.semanticInterface = {
+          kind: "fragment",
+          inputs: [
+            {
+              type: interfaceType("u32"),
+              invariant: false,
+              location: 0,
+              interpolation: interpolation("linear", "center"),
+            },
+          ],
+          outputs: [],
+        };
+      },
+    ],
+    [
+      "semantic-interface-dual-source",
+      "noop",
+      (value) => {
+        value.entryPoint.stage = "fragment";
+        value.languageFeatures = ["dual_source_blending"];
+        value.semanticInterface = {
+          kind: "fragment",
+          inputs: [],
+          outputs: [
+            {
+              type: interfaceType("f32", 4),
+              invariant: false,
+              location: 0,
+              blendSource: 0,
+            },
+          ],
+        };
+      },
+    ],
+    [
+      "semantic-interface-dual-source-feature",
+      "noop",
+      (value) => {
+        value.entryPoint.stage = "fragment";
+        value.semanticInterface = structuredClone(shaderInterfaces.dualSource);
+      },
+    ],
+    [
+      "semantic-interface-missing-position",
+      "noop",
+      (value) => {
+        value.entryPoint.stage = "vertex";
+        value.semanticInterface = structuredClone(shaderInterfaces.vertex);
+        value.semanticInterface.outputs.pop();
+      },
+      false,
+    ],
   ];
   const requestSemanticCodes = {
     "source-hash": "VGPU-C1-PROTOCOL-SOURCE-HASH",
@@ -403,11 +711,26 @@ function runContractGate(validators) {
     "split-utf8-origin": "VGPU-C1-PROTOCOL-ORIGIN-UTF8",
     "adjacent-equal-origin": "VGPU-C1-PROTOCOL-ORIGIN-CANONICAL",
     "isolated-surrogate-source": "VGPU-C1-PROTOCOL-UNICODE",
+    "negative-zero-request": "VGPU-C1-PROTOCOL-CANONICAL",
+    "semantic-interface-kind": "VGPU-C1-PROTOCOL-INTERFACE",
+    "semantic-interface-order": "VGPU-C1-PROTOCOL-CANONICAL",
+    "semantic-interface-builtin-type": "VGPU-C1-PROTOCOL-INTERFACE",
+    "semantic-interface-integral-linear": "VGPU-C1-PROTOCOL-INTERFACE",
+    "semantic-interface-dual-source": "VGPU-C1-PROTOCOL-INTERFACE",
+    "semantic-interface-dual-source-feature": "VGPU-C1-PROTOCOL-INTERFACE",
+    "semantic-interface-missing-position": "VGPU-C1-PROTOCOL-INTERFACE",
   };
-  for (const [id, base, mutate] of requestSemanticMutations) {
+  for (const [
+    id,
+    base,
+    mutate,
+    schemaPrecondition = true,
+  ] of requestSemanticMutations) {
     const request = structuredClone(requests[base]);
     mutate(request);
-    assertSchema(validators.request, request, `${id} mutation precondition`);
+    if (schemaPrecondition) {
+      assertSchema(validators.request, request, `${id} mutation precondition`);
+    }
     expectRejected(
       () => assertRequestSemantics(request),
       id,
@@ -416,6 +739,11 @@ function runContractGate(validators) {
   }
 
   const responseSchemaMutations = [
+    [
+      "success-without-interface",
+      "noop",
+      (value) => delete value.result.interface,
+    ],
     [
       "success-with-error",
       "noop",
@@ -457,9 +785,21 @@ function runContractGate(validators) {
 
   const responseSemanticMutations = [
     [
+      "response-interface-drift",
+      "noop",
+      (value) => (value.result.interface = { kind: "vertex", attributes: [] }),
+      (request, response) => assertResponseSemantics(request, response),
+    ],
+    [
       "response-binding-drift",
       "runtime-array",
       (value) => (value.result.bindings[0].slots[0].index = 1),
+      (request, response) => assertResponseSemantics(request, response),
+    ],
+    [
+      "negative-zero-response",
+      "runtime-array",
+      (value) => (value.result.bindings[0].slots[0].index = -0),
       (request, response) => assertResponseSemantics(request, response),
     ],
     [
@@ -496,13 +836,33 @@ function runContractGate(validators) {
           "// vgpu_noop is not an entry declaration\nkernel void other() {}\n"),
       (request, response) => assertResponseSemantics(request, response),
     ],
+    [
+      "block-comment-entry-declaration",
+      "noop",
+      (value) =>
+        (value.result.msl =
+          "/*\nkernel void vgpu_noop() {}\n*/\nkernel void other() {}\n"),
+      (request, response) => assertResponseSemantics(request, response),
+    ],
+    [
+      "prototype-entry-declaration",
+      "noop",
+      (value) =>
+        (value.result.msl =
+          "kernel void vgpu_noop();\nkernel void other() {}\n"),
+      (request, response) => assertResponseSemantics(request, response),
+    ],
   ];
   const responseSemanticCodes = {
+    "response-interface-drift": "VGPU-C1-PROTOCOL-INTERFACE",
     "response-binding-drift": "VGPU-C1-PROTOCOL-BINDINGS",
+    "negative-zero-response": "VGPU-C1-PROTOCOL-CANONICAL",
     "diagnostic-source-drift": "VGPU-C1-PROTOCOL-DIAGNOSTIC-SOURCE",
     "diagnostic-origin-drift": "VGPU-C1-PROTOCOL-DIAGNOSTIC-ORIGIN",
     "non-wgsl-location-semantic": "VGPU-C1-PROTOCOL-DIAGNOSTIC-PHASE",
     "comment-only-entry-name": "VGPU-C1-PROTOCOL-MSL-ENTRY",
+    "block-comment-entry-declaration": "VGPU-C1-PROTOCOL-MSL-ENTRY",
+    "prototype-entry-declaration": "VGPU-C1-PROTOCOL-MSL-ENTRY",
   };
   for (const [
     id,
@@ -579,6 +939,7 @@ function singleSourceRequest({
   bindings = [],
   overrides = [],
   languageFeatures = [],
+  semanticInterface = { kind: "compute", inputs: [], outputs: [] },
 }) {
   const sha256 = sha256Utf8(text);
   return {
@@ -599,6 +960,7 @@ function singleSourceRequest({
       ],
     },
     entryPoint: { stage, wgsl: entryPoint, metal: emittedName },
+    semanticInterface,
     overrides,
     languageFeatures,
     metal: {
@@ -660,6 +1022,7 @@ fn main() {
         wgsl: entryPoint.mangledName,
         metal: "vgpu_resolved_main",
       },
+      semanticInterface: { kind: "compute", inputs: [], outputs: [] },
       overrides: [],
       languageFeatures: [],
       metal: {
@@ -822,13 +1185,77 @@ fn main() {
       "utf8"
     ),
   });
+  const shaderInterfaceSource = readFileSync(
+    join(fixtureDirectory, "canaries", "shader-interface.wgsl"),
+    "utf8"
+  );
+  const vertexInterface = singleSourceRequest({
+    input: "shader-interface-wgsl",
+    virtualPath: "resolved/shader-interface.wgsl",
+    text: shaderInterfaceSource,
+    stage: "vertex",
+    entryPoint: "vertex_main",
+    emittedName: "vgpu_vertex_interface",
+    semanticInterface: structuredClone(shaderInterfaces.vertex),
+  });
+  const fragmentInterface = singleSourceRequest({
+    input: "shader-interface-wgsl",
+    virtualPath: "resolved/shader-interface.wgsl",
+    text: shaderInterfaceSource,
+    stage: "fragment",
+    entryPoint: "fragment_main",
+    emittedName: "vgpu_fragment_interface",
+    semanticInterface: structuredClone(shaderInterfaces.fragment),
+  });
+  const scalarFragmentInterface = singleSourceRequest({
+    input: "shader-interface-wgsl",
+    virtualPath: "resolved/shader-interface.wgsl",
+    text: shaderInterfaceSource,
+    stage: "fragment",
+    entryPoint: "scalar_fragment",
+    emittedName: "vgpu_scalar_fragment_interface",
+    semanticInterface: structuredClone(shaderInterfaces.scalarFragment),
+  });
+  const computeBuiltinInterface = singleSourceRequest({
+    input: "shader-interface-wgsl",
+    virtualPath: "resolved/shader-interface.wgsl",
+    text: shaderInterfaceSource,
+    stage: "compute",
+    entryPoint: "compute_builtins",
+    emittedName: "vgpu_compute_builtin_interface",
+    semanticInterface: structuredClone(shaderInterfaces.computeBuiltins),
+  });
+  const dualSourceInterface = singleSourceRequest({
+    input: "dual-source-interface-wgsl",
+    virtualPath: "resolved/dual-source-interface.wgsl",
+    text: readFileSync(
+      join(
+        fixtureDirectory,
+        "..",
+        "c1-shader-io-projection",
+        "canaries",
+        "interfaces.wgsl"
+      ),
+      "utf8"
+    ),
+    stage: "fragment",
+    entryPoint: "dual_constant_fragment",
+    emittedName: "vgpu_dual_source_interface",
+    semanticInterface: structuredClone(shaderInterfaces.dualSource),
+    languageFeatures: ["dual_source_blending"],
+  });
   return {
     boundedDiagnostic,
+    computeBuiltinInterface,
+    dualSourceInterface,
     fixedPrefix,
+    fragmentInterface,
     inactiveRequired,
     invalidInitializer,
     requiredAndSubsets,
+    scalarFragmentInterface,
     typedOverrides,
+    vertexInterface,
     resources,
     resourceArray,
     ...contractRequests,
@@ -890,18 +1317,6 @@ function assertExpectedNativeResult(id, response, expectation) {
     response.result.resolvedWorkgroupSize?.x !== expectation.workgroupX
   ) {
     fail(`${id} returned an unexpected resolved workgroup size`);
-  }
-  const stageKeyword = {
-    compute: "kernel",
-    fragment: "fragment",
-    vertex: "vertex",
-  }[response.result.entryPoint.stage];
-  if (
-    !response.result.msl.includes(
-      `${stageKeyword} void ${response.result.entryPoint.metal}(`
-    )
-  ) {
-    fail(`${id} MSL omitted the selected emitted entry declaration`);
   }
   for (const token of expectation.mslIncludes ?? []) {
     if (!response.result.msl.includes(token)) {
@@ -1200,6 +1615,55 @@ async function runWorkerCodecGate({ executable, requests, validators }) {
       (request) => request.metal.bindings.reverse(),
       requests.fixedPrefix,
     ],
+    [
+      "interface-unknown-field",
+      (request) => (request.semanticInterface.inputs[0].name = "global_id"),
+      requests.computeBuiltinInterface,
+    ],
+    [
+      "interface-order",
+      (request) => request.semanticInterface.inputs.reverse(),
+      requests.computeBuiltinInterface,
+    ],
+    [
+      "interface-builtin-type",
+      (request) => (request.semanticInterface.inputs[0].type.width = 1),
+      requests.computeBuiltinInterface,
+    ],
+    [
+      "interface-compute-location",
+      (request) =>
+        (request.semanticInterface.inputs[0] = {
+          type: interfaceType("u32", 3),
+          invariant: false,
+          location: 0,
+        }),
+      requests.computeBuiltinInterface,
+    ],
+    [
+      "interface-vertex-position",
+      (request) => request.semanticInterface.outputs.pop(),
+      requests.vertexInterface,
+    ],
+    [
+      "interface-dual-source-feature",
+      (request) => (request.languageFeatures = []),
+      requests.dualSourceInterface,
+    ],
+    [
+      "interface-dual-source-pair",
+      (request) => (request.semanticInterface.outputs[1].type.width = 3),
+      requests.dualSourceInterface,
+    ],
+    [
+      "interface-integral-linear",
+      (request) =>
+        (request.semanticInterface.inputs[1].interpolation = interpolation(
+          "linear",
+          "center"
+        )),
+      requests.fragmentInterface,
+    ],
   ];
   for (const [label, mutate, base = requests.noop] of protocolMutations) {
     const request = structuredClone(base);
@@ -1470,6 +1934,66 @@ async function runTintGate(options, validators, contractRequests, scratch) {
       requests.resolverIntegrated,
       { ok: true, mslIncludes: ["[[buffer(0)]]", "[[buffer(1)]]"] },
     ],
+    [
+      "vertex-interface",
+      requests.vertexInterface,
+      {
+        ok: true,
+        mslIncludes: [
+          "[[attribute(3)]]",
+          "[[attribute(7)]]",
+          "[[user(locn2)]] [[centroid_no_perspective]]",
+          "[[vertex_id]]",
+          "[[instance_id]]",
+          "[[invariant]]",
+        ],
+      },
+    ],
+    [
+      "fragment-interface",
+      requests.fragmentInterface,
+      {
+        ok: true,
+        mslIncludes: [
+          "[[color(1)]]",
+          "[[color(4)]]",
+          "[[front_facing]]",
+          "[[sample_id]]",
+          "[[depth(any)]]",
+          "[[sample_mask]]",
+        ],
+      },
+    ],
+    [
+      "scalar-fragment-interface",
+      requests.scalarFragmentInterface,
+      {
+        ok: true,
+        mslIncludes: ["[[user(locn9)]]", "[[color(3)]]"],
+      },
+    ],
+    [
+      "dual-source-interface",
+      requests.dualSourceInterface,
+      {
+        ok: true,
+        mslIncludes: ["[[color(0)]] [[index(0)]]", "[[color(0)]] [[index(1)]]"],
+      },
+    ],
+    [
+      "compute-builtin-interface",
+      requests.computeBuiltinInterface,
+      {
+        ok: true,
+        mslIncludes: [
+          "[[thread_position_in_grid]]",
+          "[[thread_position_in_threadgroup]]",
+          "[[thread_index_in_threadgroup]]",
+          "[[threadgroups_per_grid]]",
+          "[[threadgroup_position_in_grid]]",
+        ],
+      },
+    ],
   ];
   const results = new Map();
   for (const [id, request, expectation] of positives) {
@@ -1555,20 +2079,29 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     const request = structuredClone(base);
     mutate(request);
     const code = {
+      interface: "VGPU-NATIVE-TINT-INTERFACE",
       inspect: "VGPU-NATIVE-TINT-INSPECT",
       protocol: "VGPU-NATIVE-TINT-PROTOCOL",
     }[phase];
+    const diagnosticPhase = phase === "interface" ? "inspect" : phase;
     negativeCases.push([
       id,
       request,
-      { ok: false, code, phase, messageIncludes },
+      { ok: false, code, phase: diagnosticPhase, messageIncludes },
       validateRequest,
     ]);
   };
   addNegative(
     "stage-mismatch",
     requests.noop,
-    (request) => (request.entryPoint.stage = "fragment"),
+    (request) => {
+      request.entryPoint.stage = "fragment";
+      request.semanticInterface = {
+        kind: "fragment",
+        inputs: [],
+        outputs: [],
+      };
+    },
     "inspect",
     true,
     "selected WGSL entry point has a different stage"
@@ -1688,6 +2221,56 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     "inspect",
     true,
     "binding mapping differs"
+  );
+  addNegative(
+    "semantic-interface-location-mismatch",
+    requests.vertexInterface,
+    (request) => (request.semanticInterface.inputs[0].location = 4),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
+  );
+  addNegative(
+    "semantic-interface-type-mismatch",
+    requests.fragmentInterface,
+    (request) => (request.semanticInterface.inputs[0].type.width = 3),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
+  );
+  addNegative(
+    "semantic-interface-interpolation-mismatch",
+    requests.fragmentInterface,
+    (request) =>
+      (request.semanticInterface.inputs[0].interpolation.sampling = "center"),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
+  );
+  addNegative(
+    "semantic-interface-flat-sampling-mismatch",
+    requests.vertexInterface,
+    (request) =>
+      (request.semanticInterface.outputs[1].interpolation.sampling = "either"),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
+  );
+  addNegative(
+    "semantic-interface-invariant-mismatch",
+    requests.vertexInterface,
+    (request) => (request.semanticInterface.outputs[3].invariant = false),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
+  );
+  addNegative(
+    "semantic-interface-builtin-mismatch",
+    requests.computeBuiltinInterface,
+    (request) => request.semanticInterface.inputs.pop(),
+    "interface",
+    true,
+    "differs from selected-entry core IR"
   );
   for (const [id, request, expectation, validateRequest] of negativeCases) {
     results.set(

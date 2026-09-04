@@ -37,6 +37,11 @@
     "wgsl": "main",
     "metal": "vgpu_noop"
   },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [],
+    "outputs": []
+  },
   "overrides": [],
   "languageFeatures": [],
   "metal": {

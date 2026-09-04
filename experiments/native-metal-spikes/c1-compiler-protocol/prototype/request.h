@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -25,12 +26,46 @@ struct OverrideValue {
   double value;
 };
 
+struct InterfaceType {
+  std::string scalar;
+  uint32_t width = 0;
+
+  bool operator==(const InterfaceType &) const = default;
+};
+
+struct InterfaceInterpolation {
+  std::string type;
+  std::string sampling;
+
+  bool operator==(const InterfaceInterpolation &) const = default;
+};
+
+struct InterfaceValue {
+  InterfaceType type;
+  bool invariant = false;
+  std::optional<uint32_t> location;
+  std::optional<std::string> builtin;
+  std::optional<InterfaceInterpolation> interpolation;
+  std::optional<uint32_t> blend_source;
+
+  bool operator==(const InterfaceValue &) const = default;
+};
+
+struct SemanticInterface {
+  std::string kind;
+  std::vector<InterfaceValue> inputs;
+  std::vector<InterfaceValue> outputs;
+
+  bool operator==(const SemanticInterface &) const = default;
+};
+
 struct CompilerRequest {
   std::string source_text;
   std::string source_name;
   std::string stage;
   std::string entry_point;
   std::string emitted_name;
+  SemanticInterface semantic_interface;
   std::set<std::string> features;
   std::map<std::string, OverrideValue> overrides;
   std::vector<Mapping> mappings;

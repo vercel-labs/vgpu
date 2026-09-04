@@ -19,6 +19,9 @@
       "wgsl": "main",
       "metal": "vgpu_noop"
     },
+    "interface": {
+      "kind": "compute"
+    },
     "resolvedWorkgroupSize": {
       "x": 1,
       "y": 1,

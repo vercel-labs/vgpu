@@ -40,6 +40,7 @@ export function sha256Utf8(value) {
  * ordering, unique semantic keys, UTF-8 origin ranges, and interval overlap.
  */
 export function assertRequestSemantics(request) {
+  assertCanonicalJsonNumbers(request, "request");
   if (request.contractId !== COMPILER_CONTRACT || request.schemaVersion !== 1) {
     fail("VGPU-C1-PROTOCOL-CONTRACT", "request selects another contract");
   }
@@ -47,8 +48,10 @@ export function assertRequestSemantics(request) {
     ["origin sources", request.originMap.sources.length, 4_096],
     ["origin segments", request.originMap.segments.length, 65_536],
     ["overrides", request.overrides.length, 4_096],
-    ["language features", request.languageFeatures.length, 4],
+    ["language features", request.languageFeatures.length, 5],
     ["bindings", request.metal.bindings.length, 65_536],
+    ["interface inputs", request.semanticInterface.inputs.length, 64],
+    ["interface outputs", request.semanticInterface.outputs.length, 64],
   ];
   if (
     Buffer.byteLength(request.source.text, "utf8") > 16 * 1024 * 1024 ||
@@ -140,6 +143,7 @@ export function assertRequestSemantics(request) {
     "language features"
   );
   assertSortedUnique(request.overrides, (item) => item.name, "override names");
+  assertSemanticInterface(request);
   assertSortedUnique(
     request.metal.bindings,
     (binding) => coordinate(binding.group, binding.binding),
@@ -284,6 +288,7 @@ export function attachDiagnosticOrigins(request, response) {
 }
 
 export function assertResponseSemantics(request, response) {
+  assertCanonicalJsonNumbers(response, "response");
   if (
     response.contractId !== COMPILER_CONTRACT ||
     response.schemaVersion !== 1
@@ -329,6 +334,17 @@ export function assertResponseSemantics(request, response) {
   }
   if (!isDeepStrictEqual(response.result.entryPoint, request.entryPoint)) {
     fail("VGPU-C1-PROTOCOL-ENTRY", "response changed the selected entry point");
+  }
+  if (
+    !isDeepStrictEqual(
+      response.result.interface,
+      expectedMetalInterface(request.semanticInterface)
+    )
+  ) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "response changed or compacted the exact Metal interface projection"
+    );
   }
   if (!isDeepStrictEqual(response.result.bindings, request.metal.bindings)) {
     fail("VGPU-C1-PROTOCOL-BINDINGS", "response changed the external slot map");
@@ -482,10 +498,94 @@ function hasMslEntryDeclaration(msl, stage, emittedName) {
     vertex: "vertex",
   }[stage];
   const escapedName = emittedName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const code = maskMslCommentsAndLiterals(msl);
   return new RegExp(
-    `^\\s*${stageKeyword}\\s+[^\\n{};]*\\b${escapedName}\\s*\\(`,
+    `^\\s*${stageKeyword}\\s+[^{};]*\\b${escapedName}\\s*\\([^{};]*\\)\\s*\\{`,
     "mu"
-  ).test(msl);
+  ).test(code);
+}
+
+function maskMslCommentsAndLiterals(msl) {
+  let code = "";
+  let state = "code";
+  for (let index = 0; index < msl.length; index += 1) {
+    const character = msl[index];
+    const next = msl[index + 1];
+    if (state === "line-comment") {
+      if (character === "\n") {
+        code += "\n";
+        state = "code";
+      } else {
+        code += " ";
+      }
+      continue;
+    }
+    if (state === "block-comment") {
+      if (character === "*" && next === "/") {
+        code += "  ";
+        index += 1;
+        state = "code";
+      } else {
+        code += character === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+    if (state === "string" || state === "character") {
+      if (character === "\\" && next !== undefined) {
+        code += next === "\n" ? " \n" : "  ";
+        index += 1;
+      } else {
+        code += character === "\n" ? "\n" : " ";
+        if (
+          (state === "string" && character === '"') ||
+          (state === "character" && character === "'")
+        ) {
+          state = "code";
+        }
+      }
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      code += "  ";
+      index += 1;
+      state = "line-comment";
+    } else if (character === "/" && next === "*") {
+      code += "  ";
+      index += 1;
+      state = "block-comment";
+    } else if (character === '"') {
+      code += " ";
+      state = "string";
+    } else if (character === "'") {
+      code += " ";
+      state = "character";
+    } else {
+      code += character;
+    }
+  }
+  return code;
+}
+
+function assertCanonicalJsonNumbers(root, label) {
+  const pending = [{ path: label, value: root }];
+  while (pending.length > 0) {
+    const { path, value } = pending.pop();
+    if (typeof value === "number" && Object.is(value, -0)) {
+      fail(
+        "VGPU-C1-PROTOCOL-CANONICAL",
+        `${path} contains non-canonical negative zero`
+      );
+    }
+    if (Array.isArray(value)) {
+      for (let index = value.length - 1; index >= 0; index -= 1) {
+        pending.push({ path: `${path}[${index}]`, value: value[index] });
+      }
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        pending.push({ path: `${path}.${key}`, value: child });
+      }
+    }
+  }
 }
 
 function assertSortedUnique(items, keyOf, label) {
@@ -514,6 +614,184 @@ function slotKey(slot) {
     10,
     "0"
   )}:${String(slot.count).padStart(10, "0")}`;
+}
+
+const builtinTypes = new Map([
+  ["vertex:inputs:vertex_index", "u32:1"],
+  ["vertex:inputs:instance_index", "u32:1"],
+  ["vertex:outputs:position", "f32:4"],
+  ["fragment:inputs:position", "f32:4"],
+  ["fragment:inputs:front_facing", "bool:1"],
+  ["fragment:inputs:sample_index", "u32:1"],
+  ["fragment:inputs:sample_mask", "u32:1"],
+  ["fragment:outputs:frag_depth", "f32:1"],
+  ["fragment:outputs:sample_mask", "u32:1"],
+  ["compute:inputs:local_invocation_id", "u32:3"],
+  ["compute:inputs:local_invocation_index", "u32:1"],
+  ["compute:inputs:global_invocation_id", "u32:3"],
+  ["compute:inputs:workgroup_id", "u32:3"],
+  ["compute:inputs:num_workgroups", "u32:3"],
+]);
+
+function interfaceValueKey(value) {
+  if (value.location !== undefined) {
+    const blend = value.blendSource === undefined ? 0 : value.blendSource + 1;
+    return `0:${String(value.location).padStart(10, "0")}:${blend}`;
+  }
+  return `1:${value.builtin}`;
+}
+
+function interfaceTypeKey(type) {
+  return `${type.scalar}:${type.width}`;
+}
+
+function assertSemanticInterface(request) {
+  const shaderInterface = request.semanticInterface;
+  if (shaderInterface.kind !== request.entryPoint.stage) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "semantic interface kind differs from the selected entry-point stage"
+    );
+  }
+  for (const direction of ["inputs", "outputs"]) {
+    const values = shaderInterface[direction];
+    assertSortedUnique(
+      values,
+      interfaceValueKey,
+      `${shaderInterface.kind} interface ${direction}`
+    );
+    for (const value of values) {
+      if (shaderInterface.kind === "compute" && value.location !== undefined) {
+        fail(
+          "VGPU-C1-PROTOCOL-INTERFACE",
+          "compute interface values must use builtins"
+        );
+      }
+      if (
+        value.type.scalar === "f16" &&
+        !request.languageFeatures.includes("f16")
+      ) {
+        fail(
+          "VGPU-C1-PROTOCOL-INTERFACE",
+          "f16 interface type requires the f16 language feature"
+        );
+      }
+      if (value.builtin !== undefined) {
+        const key = `${shaderInterface.kind}:${direction}:${value.builtin}`;
+        if (builtinTypes.get(key) !== interfaceTypeKey(value.type)) {
+          fail(
+            "VGPU-C1-PROTOCOL-INTERFACE",
+            `builtin ${value.builtin} has the wrong scalar or vector width`
+          );
+        }
+      } else if (
+        (value.type.scalar === "i32" || value.type.scalar === "u32") &&
+        (value.interpolation?.type === undefined ||
+          value.interpolation.type !== "flat") &&
+        ((shaderInterface.kind === "vertex" && direction === "outputs") ||
+          (shaderInterface.kind === "fragment" && direction === "inputs"))
+      ) {
+        fail(
+          "VGPU-C1-PROTOCOL-INTERFACE",
+          "integral inter-stage locations require flat interpolation"
+        );
+      }
+    }
+  }
+
+  if (
+    shaderInterface.kind === "vertex" &&
+    shaderInterface.outputs.filter((value) => value.builtin === "position")
+      .length !== 1
+  ) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "vertex interface must contain exactly one position output"
+    );
+  }
+  const vertexAttributes =
+    shaderInterface.kind === "vertex"
+      ? shaderInterface.inputs.filter((value) => value.location !== undefined)
+      : [];
+  if (vertexAttributes.some((value) => value.location > 30)) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "vertex input location exceeds Metal attribute(30)"
+    );
+  }
+  const colorOutputs =
+    shaderInterface.kind === "fragment"
+      ? shaderInterface.outputs.filter((value) => value.location !== undefined)
+      : [];
+  if (colorOutputs.some((value) => value.location > 7)) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "fragment output location exceeds Metal color(7)"
+    );
+  }
+  const dualSource = colorOutputs.filter(
+    (value) => value.blendSource !== undefined
+  );
+  if (
+    dualSource.length > 0 &&
+    !request.languageFeatures.includes("dual_source_blending")
+  ) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "dual-source outputs require the dual_source_blending language feature"
+    );
+  }
+  if (
+    dualSource.length > 0 &&
+    (colorOutputs.length !== 2 ||
+      dualSource.length !== 2 ||
+      dualSource[0].location !== 0 ||
+      dualSource[1].location !== 0 ||
+      dualSource[0].blendSource !== 0 ||
+      dualSource[1].blendSource !== 1 ||
+      !isDeepStrictEqual(dualSource[0].type, dualSource[1].type))
+  ) {
+    fail(
+      "VGPU-C1-PROTOCOL-INTERFACE",
+      "dual-source outputs must be the exact same-type location(0) source 0/1 pair"
+    );
+  }
+}
+
+function expectedMetalInterface(shaderInterface) {
+  if (shaderInterface.kind === "vertex") {
+    return {
+      kind: "vertex",
+      attributes: shaderInterface.inputs
+        .filter((value) => value.location !== undefined)
+        .map((value) => ({
+          semantic: { location: value.location },
+          metal: { attribute: value.location },
+        })),
+    };
+  }
+  if (shaderInterface.kind === "fragment") {
+    return {
+      kind: "fragment",
+      colorOutputs: shaderInterface.outputs
+        .filter((value) => value.location !== undefined)
+        .map((value) => ({
+          semantic: {
+            location: value.location,
+            ...(value.blendSource === undefined
+              ? {}
+              : { blendSource: value.blendSource }),
+          },
+          metal: {
+            color: value.location,
+            ...(value.blendSource === undefined
+              ? {}
+              : { index: value.blendSource }),
+          },
+        })),
+    };
+  }
+  return { kind: "compute" };
 }
 
 function compare(left, right) {

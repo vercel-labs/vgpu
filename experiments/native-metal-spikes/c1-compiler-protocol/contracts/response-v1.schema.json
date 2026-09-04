@@ -354,12 +354,190 @@
         }
       }
     },
+    "vertexAttributeSemantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        }
+      }
+    },
+    "vertexAttributeMetal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attribute"],
+      "properties": {
+        "attribute": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        }
+      }
+    },
+    "vertexAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "metal"],
+      "properties": {
+        "semantic": {
+          "$ref": "#/$defs/vertexAttributeSemantic"
+        },
+        "metal": {
+          "$ref": "#/$defs/vertexAttributeMetal"
+        }
+      }
+    },
+    "fragmentColorSemantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "blendSource": {
+          "enum": [0, 1]
+        }
+      }
+    },
+    "fragmentColorMetal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color"],
+      "properties": {
+        "color": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "index": {
+          "enum": [0, 1]
+        }
+      }
+    },
+    "fragmentColorOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "metal"],
+      "properties": {
+        "semantic": {
+          "$ref": "#/$defs/fragmentColorSemantic"
+        },
+        "metal": {
+          "$ref": "#/$defs/fragmentColorMetal"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "semantic": {
+              "type": "object",
+              "properties": {
+                "blendSource": false
+              }
+            },
+            "metal": {
+              "type": "object",
+              "properties": {
+                "index": false
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "semantic": {
+              "type": "object",
+              "required": ["blendSource"],
+              "properties": {
+                "blendSource": true
+              }
+            },
+            "metal": {
+              "type": "object",
+              "required": ["index"],
+              "properties": {
+                "index": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    "vertexInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "attributes"],
+      "properties": {
+        "kind": {
+          "const": "vertex"
+        },
+        "attributes": {
+          "type": "array",
+          "maxItems": 31,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/vertexAttribute"
+          }
+        }
+      }
+    },
+    "fragmentInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "colorOutputs"],
+      "properties": {
+        "kind": {
+          "const": "fragment"
+        },
+        "colorOutputs": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fragmentColorOutput"
+          }
+        }
+      }
+    },
+    "computeInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "const": "compute"
+        }
+      }
+    },
+    "shaderInterface": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/vertexInterface"
+        },
+        {
+          "$ref": "#/$defs/fragmentInterface"
+        },
+        {
+          "$ref": "#/$defs/computeInterface"
+        }
+      ]
+    },
     "result": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "msl",
         "entryPoint",
+        "interface",
         "bindings",
         "internalBindings",
         "storageBufferSizeRegions"
@@ -372,6 +550,9 @@
         },
         "entryPoint": {
           "$ref": "#/$defs/entryPoint"
+        },
+        "interface": {
+          "$ref": "#/$defs/shaderInterface"
         },
         "resolvedWorkgroupSize": {
           "$ref": "#/$defs/resolvedWorkgroupSize"

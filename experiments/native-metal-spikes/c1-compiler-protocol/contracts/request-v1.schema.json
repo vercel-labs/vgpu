@@ -11,6 +11,7 @@
     "source",
     "originMap",
     "entryPoint",
+    "semanticInterface",
     "overrides",
     "languageFeatures",
     "metal"
@@ -30,6 +31,10 @@
     },
     "entryPoint": {
       "$ref": "#/$defs/entryPoint"
+    },
+    "semanticInterface": {
+      "description": "The exact, flattened, backend-neutral interface expected for the selected entry point. Artifact type IDs and diagnostic source names are resolved away before this boundary.",
+      "$ref": "#/$defs/semanticInterface"
     },
     "overrides": {
       "description": "Canonical declaration-name order. This post-materialization request contains exactly every override active in the selected entry point, including typed values selected from shader defaults upstream.",
@@ -119,6 +124,395 @@
           "$ref": "#/$defs/emittedIdentifier"
         }
       }
+    },
+    "interfaceType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scalar", "width"],
+      "properties": {
+        "scalar": {
+          "enum": ["bool", "f16", "f32", "i32", "u32"]
+        },
+        "width": {
+          "enum": [1, 2, 3, 4]
+        }
+      }
+    },
+    "numericInterfaceType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scalar", "width"],
+      "properties": {
+        "scalar": {
+          "enum": ["f16", "f32", "i32", "u32"]
+        },
+        "width": {
+          "enum": [1, 2, 3, 4]
+        }
+      }
+    },
+    "interpolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sampling"],
+      "properties": {
+        "type": {
+          "enum": ["perspective", "linear", "flat"]
+        },
+        "sampling": {
+          "enum": ["center", "centroid", "sample", "first", "either"]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": ["perspective", "linear"]
+            },
+            "sampling": {
+              "enum": ["center", "centroid", "sample"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "flat"
+            },
+            "sampling": {
+              "enum": ["first", "either"]
+            }
+          }
+        }
+      ]
+    },
+    "interfaceValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "invariant"],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/interfaceType"
+        },
+        "invariant": {
+          "type": "boolean"
+        },
+        "location": {
+          "$ref": "#/$defs/uint32"
+        },
+        "builtin": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 256
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation"
+        },
+        "blendSource": {
+          "enum": [0, 1]
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["location"],
+          "properties": {
+            "location": true,
+            "builtin": false
+          }
+        },
+        {
+          "required": ["builtin"],
+          "properties": {
+            "location": false,
+            "builtin": true,
+            "interpolation": false,
+            "blendSource": false
+          }
+        }
+      ]
+    },
+    "vertexInputValue": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/interfaceValue"
+        },
+        {
+          "properties": {
+            "invariant": {
+              "const": false
+            },
+            "builtin": {
+              "enum": ["vertex_index", "instance_index"]
+            },
+            "interpolation": false,
+            "blendSource": false
+          }
+        },
+        {
+          "if": {
+            "required": ["location"],
+            "properties": {
+              "location": true
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "$ref": "#/$defs/numericInterfaceType"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "vertexOutputValue": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/interfaceValue"
+        },
+        {
+          "properties": {
+            "builtin": {
+              "const": "position"
+            },
+            "blendSource": false
+          }
+        },
+        {
+          "if": {
+            "required": ["location"],
+            "properties": {
+              "location": true
+            }
+          },
+          "then": {
+            "required": ["interpolation"],
+            "properties": {
+              "type": {
+                "$ref": "#/$defs/numericInterfaceType"
+              },
+              "invariant": {
+                "const": false
+              },
+              "interpolation": true
+            }
+          },
+          "else": {
+            "properties": {
+              "interpolation": false
+            }
+          }
+        }
+      ]
+    },
+    "fragmentInputValue": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/interfaceValue"
+        },
+        {
+          "properties": {
+            "invariant": {
+              "const": false
+            },
+            "builtin": {
+              "enum": [
+                "position",
+                "front_facing",
+                "sample_index",
+                "sample_mask"
+              ]
+            },
+            "blendSource": false
+          }
+        },
+        {
+          "if": {
+            "required": ["location"],
+            "properties": {
+              "location": true
+            }
+          },
+          "then": {
+            "required": ["interpolation"],
+            "properties": {
+              "type": {
+                "$ref": "#/$defs/numericInterfaceType"
+              },
+              "interpolation": true
+            }
+          },
+          "else": {
+            "properties": {
+              "interpolation": false
+            }
+          }
+        }
+      ]
+    },
+    "fragmentOutputValue": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/interfaceValue"
+        },
+        {
+          "properties": {
+            "invariant": {
+              "const": false
+            },
+            "builtin": {
+              "enum": ["frag_depth", "sample_mask"]
+            },
+            "interpolation": false
+          }
+        },
+        {
+          "if": {
+            "required": ["location"],
+            "properties": {
+              "location": true
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "$ref": "#/$defs/numericInterfaceType"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["blendSource"],
+            "properties": {
+              "blendSource": true
+            }
+          },
+          "then": {
+            "required": ["location"],
+            "properties": {
+              "location": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "computeInputValue": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/interfaceValue"
+        },
+        {
+          "properties": {
+            "invariant": {
+              "const": false
+            },
+            "location": false,
+            "builtin": {
+              "enum": [
+                "local_invocation_id",
+                "local_invocation_index",
+                "global_invocation_id",
+                "workgroup_id",
+                "num_workgroups"
+              ]
+            },
+            "interpolation": false,
+            "blendSource": false
+          }
+        }
+      ]
+    },
+    "semanticInterface": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "inputs", "outputs"],
+          "properties": {
+            "kind": {
+              "const": "vertex"
+            },
+            "inputs": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/vertexInputValue"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/vertexOutputValue"
+              },
+              "contains": {
+                "type": "object",
+                "required": ["builtin"],
+                "properties": {
+                  "builtin": {
+                    "const": "position"
+                  }
+                }
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "inputs", "outputs"],
+          "properties": {
+            "kind": {
+              "const": "fragment"
+            },
+            "inputs": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/fragmentInputValue"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/fragmentOutputValue"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "inputs", "outputs"],
+          "properties": {
+            "kind": {
+              "const": "compute"
+            },
+            "inputs": {
+              "type": "array",
+              "maxItems": 5,
+              "items": {
+                "$ref": "#/$defs/computeInputValue"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        }
+      ]
     },
     "boolValue": {
       "type": "object",

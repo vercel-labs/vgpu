@@ -32,8 +32,9 @@ constexpr std::string_view kStorageSizeModel =
 constexpr size_t kMaxOriginSources = 4096;
 constexpr size_t kMaxOriginSegments = 65536;
 constexpr size_t kMaxOverrides = 4096;
-constexpr size_t kMaxLanguageFeatures = 4;
+constexpr size_t kMaxLanguageFeatures = 5;
 constexpr size_t kMaxBindings = 65536;
+constexpr size_t kMaxInterfaceValues = 64;
 constexpr size_t kMaxJsonComplexityUnits = 262144;
 constexpr uint64_t kMaxSafeInteger = 9007199254740991ULL;
 
@@ -301,6 +302,30 @@ bool HasExactMembers(const Json::Value &value,
   return std::all_of(expected.begin(), expected.end(), [&](const auto name) {
     return value.isMember(std::string(name));
   });
+}
+
+bool HasAllowedMembers(
+    const Json::Value &value,
+    std::initializer_list<std::string_view> required,
+    std::initializer_list<std::string_view> optional = {}) {
+  if (!value.isObject()) {
+    return false;
+  }
+  for (const auto name : required) {
+    if (!value.isMember(std::string(name))) {
+      return false;
+    }
+  }
+  for (const auto &name : value.getMemberNames()) {
+    const auto allowed = [&](std::string_view candidate) {
+      return candidate == name;
+    };
+    if (std::none_of(required.begin(), required.end(), allowed) &&
+        std::none_of(optional.begin(), optional.end(), allowed)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 std::optional<uint64_t> ReadUnsignedInteger(const Json::Value &value,
@@ -634,7 +659,8 @@ class Decoder final {
 public:
   std::optional<CompilerRequest> Decode(const Json::Value &root) {
     if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
-                                "originMap", "entryPoint", "overrides",
+                                "originMap", "entryPoint",
+                                "semanticInterface", "overrides",
                                 "languageFeatures", "metal"})) {
       return Reject("request has missing or unknown top-level fields");
     }
@@ -653,6 +679,7 @@ public:
         !DecodeEntryPoint(root["entryPoint"], request) ||
         !DecodeOverrides(root["overrides"], request) ||
         !DecodeFeatures(root["languageFeatures"], request) ||
+        !DecodeSemanticInterface(root["semanticInterface"], request) ||
         !DecodeMetal(root["metal"], request)) {
       return std::nullopt;
     }
@@ -915,8 +942,8 @@ private:
       return Fail("language features exceed the collection limit");
     }
     static const std::set<std::string> kAllowedFeatures{
-        "f16", "sized_binding_array", "uniform_buffer_standard_layout",
-        "unrestricted_pointer_parameters"};
+        "dual_source_blending", "f16", "sized_binding_array",
+        "uniform_buffer_standard_layout", "unrestricted_pointer_parameters"};
     std::optional<std::string> previous;
     for (const auto &item : value) {
       if (!item.isString()) {
@@ -940,6 +967,263 @@ private:
       }
       previous = feature;
       request.features.insert(feature);
+    }
+    return true;
+  }
+
+  bool DecodeInterfaceType(const Json::Value &value, InterfaceType &type) {
+    if (!HasExactMembers(value, {"scalar", "width"}) ||
+        !value["scalar"].isString()) {
+      return Fail("shader interface type does not implement the v1 shape");
+    }
+    const std::string scalar = value["scalar"].asString();
+    if (scalar != "bool" && scalar != "f16" && scalar != "f32" &&
+        scalar != "i32" && scalar != "u32") {
+      return Fail("shader interface scalar type is unsupported");
+    }
+    const auto width = ReadUnsignedInteger(value["width"], 4);
+    if (!width || *width == 0) {
+      return Fail("shader interface vector width is unsupported");
+    }
+    type = InterfaceType{.scalar = scalar,
+                         .width = static_cast<uint32_t>(*width)};
+    return true;
+  }
+
+  bool DecodeInterfaceValue(const Json::Value &value, std::string_view stage,
+                            std::string_view direction,
+                            const std::set<std::string> &features,
+                            InterfaceValue &decoded) {
+    if (!HasAllowedMembers(value, {"type", "invariant"},
+                           {"location", "builtin", "interpolation",
+                            "blendSource"}) ||
+        !value["invariant"].isBool() ||
+        !DecodeInterfaceType(value["type"], decoded.type)) {
+      return Fail("shader interface value does not implement the v1 shape");
+    }
+    decoded.invariant = value["invariant"].asBool();
+    const bool has_location = value.isMember("location");
+    const bool has_builtin = value.isMember("builtin");
+    if (has_location == has_builtin) {
+      return Fail("shader interface value must have exactly one semantic key");
+    }
+    if (has_location) {
+      const auto location = ReadUnsignedInteger(
+          value["location"], std::numeric_limits<uint32_t>::max());
+      if (!location || decoded.type.scalar == "bool") {
+        return Fail("shader interface location or type is unsupported");
+      }
+      if (stage == "compute") {
+        return Fail("compute shader interface values must use builtins");
+      }
+      decoded.location = static_cast<uint32_t>(*location);
+    } else {
+      if (!value["builtin"].isString()) {
+        return Fail("shader interface builtin is not a string");
+      }
+      decoded.builtin = value["builtin"].asString();
+    }
+    if (value.isMember("interpolation")) {
+      const auto &interpolation = value["interpolation"];
+      if (!HasExactMembers(interpolation, {"type", "sampling"}) ||
+          !interpolation["type"].isString() ||
+          !interpolation["sampling"].isString()) {
+        return Fail("shader interface interpolation is invalid");
+      }
+      const std::string type = interpolation["type"].asString();
+      const std::string sampling = interpolation["sampling"].asString();
+      const bool valid =
+          ((type == "perspective" || type == "linear") &&
+           (sampling == "center" || sampling == "centroid" ||
+            sampling == "sample")) ||
+          (type == "flat" &&
+           (sampling == "first" || sampling == "either"));
+      if (!valid) {
+        return Fail("shader interface interpolation pair is unsupported");
+      }
+      decoded.interpolation =
+          InterfaceInterpolation{.type = type, .sampling = sampling};
+    }
+    if (value.isMember("blendSource")) {
+      const auto blend_source = ReadUnsignedInteger(value["blendSource"], 1);
+      if (!blend_source) {
+        return Fail("shader interface blend source is invalid");
+      }
+      decoded.blend_source = static_cast<uint32_t>(*blend_source);
+    }
+
+    const bool linked_location =
+        decoded.location &&
+        ((stage == "vertex" && direction == "outputs") ||
+         (stage == "fragment" && direction == "inputs"));
+    if (linked_location != decoded.interpolation.has_value()) {
+      return Fail("shader interface interpolation is not normalized by role");
+    }
+    if (linked_location &&
+        (decoded.type.scalar == "i32" || decoded.type.scalar == "u32") &&
+        decoded.interpolation->type != "flat") {
+      return Fail("integral inter-stage location is not flat");
+    }
+    if (decoded.type.scalar == "f16" && !features.contains("f16")) {
+      return Fail("f16 shader interface type lacks the f16 feature");
+    }
+
+    std::optional<InterfaceType> expected_builtin;
+    if (decoded.builtin) {
+      const auto expect = [&](std::string scalar, uint32_t width) {
+        expected_builtin =
+            InterfaceType{.scalar = std::move(scalar), .width = width};
+      };
+      if (stage == "vertex" && direction == "inputs" &&
+          (*decoded.builtin == "vertex_index" ||
+           *decoded.builtin == "instance_index")) {
+        expect("u32", 1);
+      } else if (stage == "vertex" && direction == "outputs" &&
+                 *decoded.builtin == "position") {
+        expect("f32", 4);
+      } else if (stage == "fragment" && direction == "inputs" &&
+                 *decoded.builtin == "position") {
+        expect("f32", 4);
+      } else if (stage == "fragment" && direction == "inputs" &&
+                 *decoded.builtin == "front_facing") {
+        expect("bool", 1);
+      } else if (stage == "fragment" && direction == "inputs" &&
+                 (*decoded.builtin == "sample_index" ||
+                  *decoded.builtin == "sample_mask")) {
+        expect("u32", 1);
+      } else if (stage == "fragment" && direction == "outputs" &&
+                 *decoded.builtin == "frag_depth") {
+        expect("f32", 1);
+      } else if (stage == "fragment" && direction == "outputs" &&
+                 *decoded.builtin == "sample_mask") {
+        expect("u32", 1);
+      } else if (stage == "compute" && direction == "inputs" &&
+                 (*decoded.builtin == "local_invocation_id" ||
+                  *decoded.builtin == "global_invocation_id" ||
+                  *decoded.builtin == "workgroup_id" ||
+                  *decoded.builtin == "num_workgroups")) {
+        expect("u32", 3);
+      } else if (stage == "compute" && direction == "inputs" &&
+                 *decoded.builtin == "local_invocation_index") {
+        expect("u32", 1);
+      }
+      if (!expected_builtin || decoded.type != *expected_builtin) {
+        return Fail("shader interface builtin or builtin type is unsupported");
+      }
+    }
+
+    const bool may_be_invariant =
+        stage == "vertex" && direction == "outputs" && decoded.builtin &&
+        *decoded.builtin == "position";
+    if (decoded.invariant && !may_be_invariant) {
+      return Fail("shader interface invariant is unsupported in this role");
+    }
+    if (decoded.blend_source &&
+        (stage != "fragment" || direction != "outputs" ||
+         !decoded.location || *decoded.location != 0)) {
+      return Fail("shader interface blend source is unsupported in this role");
+    }
+    if (stage == "vertex" && direction == "inputs" && decoded.location &&
+        *decoded.location > 30) {
+      return Fail("vertex interface exceeds Metal attribute(30)");
+    }
+    if (stage == "fragment" && direction == "outputs" && decoded.location &&
+        *decoded.location > 7) {
+      return Fail("fragment interface exceeds Metal color(7)");
+    }
+    return true;
+  }
+
+  bool DecodeInterfaceValues(const Json::Value &value,
+                             std::string_view stage,
+                             std::string_view direction,
+                             const std::set<std::string> &features,
+                             std::vector<InterfaceValue> &decoded) {
+    const size_t maximum = stage == "compute" && direction == "inputs"
+                               ? 5
+                               : kMaxInterfaceValues;
+    if (!value.isArray() || value.size() > maximum ||
+        (stage == "compute" && direction == "outputs" && !value.empty())) {
+      return Fail("shader interface values exceed the role limit");
+    }
+    const auto less = [](const InterfaceValue &left,
+                         const InterfaceValue &right) {
+      if (left.location.has_value() != right.location.has_value()) {
+        return left.location.has_value();
+      }
+      if (left.location) {
+        const uint32_t left_blend =
+            left.blend_source ? *left.blend_source + 1 : 0;
+        const uint32_t right_blend =
+            right.blend_source ? *right.blend_source + 1 : 0;
+        return std::tie(*left.location, left_blend) <
+               std::tie(*right.location, right_blend);
+      }
+      return *left.builtin < *right.builtin;
+    };
+    for (const auto &item : value) {
+      InterfaceValue interface_value;
+      if (!DecodeInterfaceValue(item, stage, direction, features,
+                                interface_value)) {
+        return false;
+      }
+      if (!decoded.empty() && !less(decoded.back(), interface_value)) {
+        return Fail(
+            "shader interface values are duplicated or not strictly sorted");
+      }
+      decoded.push_back(std::move(interface_value));
+    }
+    return true;
+  }
+
+  bool DecodeSemanticInterface(const Json::Value &value,
+                               CompilerRequest &request) {
+    if (!HasExactMembers(value, {"kind", "inputs", "outputs"}) ||
+        !value["kind"].isString()) {
+      return Fail("semantic interface does not implement the v1 shape");
+    }
+    request.semantic_interface.kind = value["kind"].asString();
+    if (request.semantic_interface.kind != request.stage) {
+      return Fail("semantic interface kind differs from the entry-point stage");
+    }
+    if (!DecodeInterfaceValues(value["inputs"], request.stage, "inputs",
+                               request.features,
+                               request.semantic_interface.inputs) ||
+        !DecodeInterfaceValues(value["outputs"], request.stage, "outputs",
+                               request.features,
+                               request.semantic_interface.outputs)) {
+      return false;
+    }
+    if (request.stage == "vertex" &&
+        std::count_if(request.semantic_interface.outputs.begin(),
+                      request.semantic_interface.outputs.end(),
+                      [](const auto &output) {
+                        return output.builtin &&
+                               *output.builtin == "position";
+                      }) != 1) {
+      return Fail("vertex shader interface must have one position output");
+    }
+    if (request.stage == "fragment") {
+      std::vector<const InterfaceValue *> color_outputs;
+      std::vector<const InterfaceValue *> dual_source;
+      for (const auto &output : request.semantic_interface.outputs) {
+        if (output.location) {
+          color_outputs.push_back(&output);
+        }
+        if (output.blend_source) {
+          dual_source.push_back(&output);
+        }
+      }
+      if (!dual_source.empty() &&
+          (!request.features.contains("dual_source_blending") ||
+           color_outputs.size() != 2 || dual_source.size() != 2 ||
+           *dual_source[0]->location != 0 ||
+           *dual_source[1]->location != 0 ||
+           *dual_source[0]->blend_source != 0 ||
+           *dual_source[1]->blend_source != 1 ||
+           dual_source[0]->type != dual_source[1]->type)) {
+        return Fail("dual-source shader interface is not an exact pair");
+      }
     }
     return true;
   }
