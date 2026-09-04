@@ -1403,6 +1403,14 @@ function isAllowedCandidateChange(pointer) {
   for (const id of oracleFixtureIds) {
     const canary = `/oracle/canaries/${escapeJsonPointer(id)}`;
     if (
+      id === "semantic-active-resource" &&
+      pointer === `${canary}/ok` &&
+      lock.oracle.canaries[id]?.ok === false &&
+      oracleFixtures.find((fixture) => fixture.id === id)?.ok === true
+    ) {
+      return true;
+    }
+    if (
       pointer === `${canary}/requestSha256` ||
       pointer === `${canary}/responseBytes` ||
       pointer === `${canary}/responseSha256`
