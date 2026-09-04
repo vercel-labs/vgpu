@@ -181,14 +181,20 @@ Metal namespaces depending on whether they describe vertex inputs, inter-stage v
 outputs. A later interface contract needs a discriminated representation rather than one ambiguous
 integer projection.
 
+The direct-build follow-up compiles these same worker sources against Dawn/Tint commit
+`8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca`, declaring only `tint_api` as the link root. Independent
+arm64 and x86_64 Release builds are byte-identical, combine into a deterministic universal
+executable, and link no WebGPU implementation, runtime backend, or framework. The arm64 direct
+workers run natively and the x86_64 direct workers run under Rosetta; every variant produces
+responses byte-identical to this fixture's arm64-native monolithic oracle.
+
 The remaining gates are:
 
 - connect the proven override-default materializer and the broader semantic extractor to request
   construction;
 - define the vertex-input, inter-stage, and fragment-output interface projection;
-- build the wrapper from direct Tint targets for macOS 14 on arm64 and x86_64;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 
-There is no Intel GPU result. Rosetta can later validate the x86_64 compiler executable path, but
-it cannot establish Intel or AMD GPU behavior.
+There is no Intel GPU result. Rosetta covers the x86_64 compiler executable path, but it cannot
+establish Intel or AMD GPU behavior.

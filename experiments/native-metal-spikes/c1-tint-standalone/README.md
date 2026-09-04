@@ -21,9 +21,10 @@ can:
 - produce byte-identical MSL and JSON across repeated invocations.
 
 The proof archive is **not distributable as the production compiler**. It is arm64, has a macOS 26
-deployment target, and the prototype links its monolithic `libwebgpu_dawn.a`. Production requires a
-source build with a macOS 14 deployment target, arm64 and x86_64 slices, direct Tint targets, and a
-vgpu-owned binding map.
+deployment target, and the prototype links its monolithic `libwebgpu_dawn.a`. The follow-up
+[`c1-tint-direct-build`](../c1-tint-direct-build) validates a source-built worker with a macOS 14
+deployment target, arm64 and x86_64 slices, direct Tint targets, and the vgpu-owned binding map. That
+fixture is source-build evidence, not the final signed or integrated distribution artifact.
 
 Do not use these as the production API:
 
@@ -127,45 +128,26 @@ Exit codes are explicit:
 This runner exercises stock WGSL-to-MSL translation only. It does not build the wrapper and does
 not validate MSL with Apple's offline compiler.
 
-## Production build outline
+## Validated source-build shape
 
-Build a downstream executable from a pinned Dawn checkout with only these direct Tint targets:
+Build the worker inside the pinned Dawn source graph and declare only Tint's API target as the link
+root:
 
 ```cmake
-target_link_libraries(vgpu-tint-compiler PRIVATE
-  tint_api
-  tint_lang_core_ir
-  tint_lang_core_type
-  tint_lang_msl_writer
-  tint_lang_wgsl_inspector
-  tint_lang_wgsl_reader
-)
+target_link_libraries(vgpu-tint-worker PRIVATE tint_api)
 ```
 
-`tint_api_helpers` may be linked in tests for comparison with `GenerateBindings`, but should be
-omitted from production. The Tint targets carry their transitive `common`, `printer`, `raise`,
-resolver, and `program_to_ir` dependencies.
+CMake resolves that root to the exact static closure; the validated profile contains 54 archives
+without Dawn's WebGPU implementation, runtime backends, tools, or monolithic target. Collecting and
+ordering loose `libtint_*.a` files outside their owning source graph would recreate CMake's
+transitive-link behavior and is not the validated shape. The exact flags, source closures,
+toolchain, output hashes, and notices are recorded by
+[`c1-tint-direct-build/CMakeLists.txt`](../c1-tint-direct-build/CMakeLists.txt) and its
+[`source-lock.json`](../c1-tint-direct-build/provenance/source-lock.json).
 
-Configure the source build with a canonical output name and at least:
-
-```text
-CMAKE_BUILD_TYPE=Release
-CMAKE_OSX_DEPLOYMENT_TARGET=14.0
-DAWN_BUILD_MONOLITHIC_LIBRARY=OFF
-DAWN_BUILD_SAMPLES=OFF
-DAWN_BUILD_TESTS=OFF
-DAWN_ENABLE_METAL=OFF
-TINT_BUILD_CMD_TOOLS=OFF
-TINT_BUILD_TESTS=OFF
-TINT_BUILD_WGSL_READER=ON
-TINT_BUILD_WGSL_WRITER=OFF
-TINT_BUILD_MSL_WRITER=ON
-TINT_RANDOMIZE_HASHES=OFF
-```
-
-Build arm64 and x86_64 separately, test the x86_64 slice under Rosetta, and combine or package the
-slices deterministically. Record the commit, flags, compiler version, artifact hashes, licenses,
-and notices.
+The follow-up builds arm64 and x86_64 separately, runs the x86_64 compiler process under Rosetta,
+and combines both slices deterministically. Independent A/B builds are byte-identical for each
+architecture and for the universal executable.
 
 Tint's `--msl-version 2.4` controls its Apple validation invocation; it does not parameterize the
 MSL writer. The MSL 2.4 contract closes only after compiling generated source with
@@ -173,29 +155,30 @@ MSL writer. The MSL 2.4 contract closes only after compiling generated source wi
 
 ## Remaining gates
 
-- Build the direct-target wrapper from source at the macOS 14 baseline.
-- Replace `GenerateBindings` with the versioned vgpu ABI mapping.
-- Return structured diagnostics and remap generated-source ranges through vgpu's resolver map.
-- Validate the complete corpus through offline `metal` and `metallib` at MSL 2.4.
-- Verify clean-build artifact determinism, arm64 execution, Rosetta x86_64 execution, and signing.
-- Include Dawn/Tint's BSD-3-Clause license and all required notices in the distributed artifact.
+The source-build, vgpu-owned binding map, structured compiler diagnostics, clean-build binary
+determinism, native arm64 execution, Rosetta x86_64 execution, and spike-artifact license inventory
+are closed for the pinned profile. The remaining gates are:
 
-There is no Intel hardware result. Rosetta can cover the x86_64 executable path, leaving a small
-documented residual risk for initial simple shaders.
+- connect the exact-static override materializer and broader semantic extractor to the worker;
+- validate the complete corpus through offline `metal` and `metallib` at MSL 2.4;
+- preserve authored spans beyond the current module-only diagnostic attribution;
+- connect the compiler result to the deterministic Swift artifact and production runtime; and
+- validate the final distribution, signing, supported-hardware matrix, and pixel/buffer parity.
 
-The remaining pin choice has no clear winner. `c5d549e250b9225744929ae860b369cb4304a767`
-maximizes continuity with the runtime evidence; `7d5e330...` is the closest official standalone
-release but has broken stock metadata tooling; a later release has better tooling but a larger
-semantic delta. The provisional choice is `c5d549...` until the source-built wrapper passes every
-gate above.
+There is no Intel hardware result. Rosetta covers the x86_64 compiler process, leaving a documented
+residual risk for initial simple shaders and no claim about Intel or AMD GPU behavior.
+
+The source-build pin is Dawn/Tint commit `8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca`, tree
+`705c128d699cbf9137ce0bd89698cad7d5c51efb`. The authoritative dependency, closure, and toolchain
+record is [`c1-tint-direct-build/provenance/source-lock.json`](../c1-tint-direct-build/provenance/source-lock.json).
 
 ## Official sources
 
 - [Dawn build documentation](https://dawn.googlesource.com/dawn/+/HEAD/docs/building.md)
-- [Pinned CMake configuration](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/CMakeLists.txt)
-- [Tint Inspector](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/src/tint/lang/wgsl/inspector/inspector.h)
-- [MSL writer options](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/src/tint/lang/msl/writer/common/options.h)
-- [MSL writer output](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/src/tint/lang/msl/writer/common/output.h)
-- [Uniform layout validation](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/src/tint/lang/wgsl/resolver/validator.cc)
-- [MSL 2.4 validation invocation](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/src/tint/lang/msl/validate/validate.cc)
-- [BSD-3-Clause license](https://dawn.googlesource.com/dawn/+/c5d549e250b9225744929ae860b369cb4304a767/LICENSE)
+- [Pinned CMake configuration](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/CMakeLists.txt)
+- [Tint Inspector](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/wgsl/inspector/inspector.h)
+- [MSL writer options](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/msl/writer/common/options.h)
+- [MSL writer output](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/msl/writer/common/output.h)
+- [Uniform layout validation](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/wgsl/resolver/validator.cc)
+- [MSL 2.4 validation invocation](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/tint/lang/msl/validate/validate.cc)
+- [BSD-3-Clause license](https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/LICENSE)
