@@ -199,6 +199,15 @@ function stripPresentationAndProvenance(value) {
   );
 }
 
+function stripInterfaceDiagnosticNames(program) {
+  for (const entry of Object.values(program.entryPoints)) {
+    for (const value of [...entry.inputs, ...entry.outputs]) {
+      delete value.name;
+    }
+  }
+  return program;
+}
+
 function normalizeSemanticSets(value, key = "") {
   if (Array.isArray(value)) {
     const normalized = value.map((child) => normalizeSemanticSets(child));
@@ -308,7 +317,9 @@ function programFingerprintInput(program, semantic, inputs) {
     sources,
     languageFeatures: [...semantic.capabilities.languageFeatures].sort(),
     program: normalizeSemanticSets(
-      stripPresentationAndProvenance(programWithoutFingerprint)
+      stripPresentationAndProvenance(
+        stripInterfaceDiagnosticNames(programWithoutFingerprint)
+      )
     ),
     types: closure.types,
     layouts: closure.layouts,
@@ -484,21 +495,31 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
 
 function assertShaderInterfaceProgramFingerprintSensitivity(semantic, inputs) {
   const programName = "SparseDraw";
-  const originalProgram = semantic.programs.find(
-    (program) => program.name === programName
-  );
-  if (!originalProgram)
-    fail(`${programName} fingerprint sensitivity is missing`);
+  const originalProgram = requireSemanticProgram(semantic, programName);
   const baseline = fingerprintProgram(originalProgram, semantic, inputs);
-  const assertMutationChangesFingerprint = (label, mutate) => {
+  const originalBytes = canonicalize(originalProgram);
+  const mutate = (change) => {
     const candidate = clone(semantic);
-    const program = candidate.programs.find(
-      (current) => current.name === programName
-    );
-    mutate(program);
-    if (fingerprintProgram(program, candidate, inputs) === baseline) {
+    const program = requireSemanticProgram(candidate, programName);
+    change(program);
+    return { candidate, program };
+  };
+  const assertMutationChangesFingerprint = (label, change) => {
+    const candidate = mutate(change);
+    if (
+      fingerprintProgram(candidate.program, candidate.candidate, inputs) ===
+      baseline
+    ) {
       fail(`${programName} fingerprint ignored shader-interface ${label}`);
     }
+  };
+  const assertMutationPreservesFingerprint = (label, change) => {
+    const candidate = mutate(change);
+    assertEqual(
+      fingerprintProgram(candidate.program, candidate.candidate, inputs),
+      baseline,
+      `${programName} ${label} fingerprint exclusion`
+    );
   };
 
   assertMutationChangesFingerprint("location", (program) => {
@@ -527,6 +548,88 @@ function assertShaderInterfaceProgramFingerprintSensitivity(semantic, inputs) {
       value.interpolation.sampling = "center";
     }
   });
+
+  assertMutationPreservesFingerprint(
+    "vertex input diagnostic-name",
+    (program) => {
+      const value = program.entryPoints.vertex.inputs.find(
+        (input) => input.location === 3
+      );
+      if (!value) fail(`${programName} diagnostic-name input is missing`);
+      value.name = "renamedPosition";
+    }
+  );
+  assertMutationPreservesFingerprint(
+    "fragment output diagnostic-name removal",
+    (program) => {
+      const value = program.entryPoints.fragment.outputs.find(
+        (output) => output.location === 1
+      );
+      if (!value) fail(`${programName} diagnostic-name output is missing`);
+      delete value.name;
+    }
+  );
+
+  assertMutationChangesFingerprint("program name", (program) => {
+    program.name = "SparseDrawRenamed";
+  });
+  assertMutationChangesFingerprint("resolved entry name", (program) => {
+    program.entryPoints.vertex.names.wgsl = "c3_sparse_vertex_renamed";
+  });
+
+  const fingerprintInput = programFingerprintInput(
+    originalProgram,
+    semantic,
+    inputs
+  );
+  for (const entry of Object.values(fingerprintInput.program.entryPoints)) {
+    for (const value of [...entry.inputs, ...entry.outputs]) {
+      if (Object.hasOwn(value, "name")) {
+        fail(`${programName} fingerprint preimage retained an interface name`);
+      }
+    }
+  }
+  assertEqual(
+    canonicalize(originalProgram),
+    originalBytes,
+    `${programName} fingerprint projection mutation`
+  );
+}
+
+function assertRetainedNameProgramFingerprintSensitivity(semantic, inputs) {
+  const programName = "RuntimeArray";
+  const originalProgram = requireSemanticProgram(semantic, programName);
+  const baseline = fingerprintProgram(originalProgram, semantic, inputs);
+
+  const renamedBindingSemantic = clone(semantic);
+  const renamedBindingProgram = requireSemanticProgram(
+    renamedBindingSemantic,
+    programName
+  );
+  renamedBindingProgram.bindings[0].name = "renamedRuntimeValues";
+  if (
+    fingerprintProgram(
+      renamedBindingProgram,
+      renamedBindingSemantic,
+      inputs
+    ) === baseline
+  ) {
+    fail(`${programName} fingerprint ignored binding name`);
+  }
+
+  const renamedMemberSemantic = clone(semantic);
+  const renamedMemberProgram = requireSemanticProgram(
+    renamedMemberSemantic,
+    programName
+  );
+  renamedMemberSemantic.types["runtime-values"].members[0].name =
+    "renamedPrefix";
+  if (
+    fingerprintProgram(renamedMemberProgram, renamedMemberSemantic, inputs) ===
+    baseline
+  ) {
+    fail(`${programName} fingerprint ignored reachable member name`);
+  }
 }
 
 function assertOverrideProgramFingerprintSensitivity(semantic, inputs) {
@@ -2195,6 +2298,10 @@ assertShaderInterfaceProgramFingerprintSensitivity(
   artifact.semantic,
   artifact.inputs
 );
+assertRetainedNameProgramFingerprintSensitivity(
+  artifact.semantic,
+  artifact.inputs
+);
 assertOverrideProgramFingerprintSensitivity(artifact.semantic, artifact.inputs);
 
 const runtimeArraySemantic = artifact.semantic.programs.find(
@@ -3386,5 +3493,5 @@ if (
 }
 
 console.log(
-  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, 6 base program-fingerprint sensitivity checks per program, 3 SparseDraw interface-fingerprint checks, 3 Noop override-fingerprint checks, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
+  `C3 artifact verified: 5 schemas, ${referenceCount} refs, ${artifact.files.length} payload files, program-fingerprint boundary checks for interfaces and retained names, 3 Noop override-fingerprint checks, ${artifact.extensions["dev.vgpu.c3"].payloadKind}.`
 );

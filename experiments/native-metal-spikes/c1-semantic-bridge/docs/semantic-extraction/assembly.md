@@ -75,9 +75,10 @@ or layout content IDs or program fingerprints. The arbitrary semantic override `
 and optional `wgslId` preserves an authored numeric WGSL ID.
 
 An interface leaf's optional `name` is diagnostic context only. It may enter the complete semantic
-artifact when independently proven, but it is excluded from the program fingerprint. Changing a
-diagnostic label must not rebuild otherwise identical executable semantics. The extractor's first
-implementation omits these names rather than manufacturing lowered symbols.
+artifact when independently proven, but it is excluded from the program fingerprint. With
+referenced source hashes held constant, changing only that metadata must not change the program
+fingerprint; it can still change complete semantic and transitive artifact hashes. The extractor's
+first implementation omits these names rather than manufacturing lowered symbols.
 
 The program fingerprint includes selected resolved WGSL IDs and hashes, the layout model, explicit
 language features, normalized executable program semantics and capabilities, and only the reachable

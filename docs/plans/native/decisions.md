@@ -126,10 +126,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   referenced WGSL input IDs and content hashes, `layoutModel`, the resolved language-feature set,
   executable program semantics and capabilities, and only the transitively reachable types and
   intrinsic layouts. It excludes its own fingerprint, redundant source IDs, Swift presentation
-  names, and source spans. Feature, language-feature, visibility, and entry binding-ID sets are
-  sorted before `JCS-RFC8785+VGPU-PATHS-v1` canonicalization; ordered arrays retain their order.
-  Referenced WGSL bytes and reachable semantics change the fingerprint; unreachable declarations
-  do not.
+  names, source spans, and optional interface-value diagnostic names; other semantic `name` fields
+  remain. Feature, language-feature, visibility, and entry binding-ID sets are sorted before
+  `JCS-RFC8785+VGPU-PATHS-v1` canonicalization; ordered arrays retain their order. Referenced WGSL
+  bytes and reachable semantics change the fingerprint; unreachable declarations do not.
 - Generated Swift and TypeScript packers consume the reflected semantic layout rather than Swift
   `MemoryLayout` or TypeScript's current layout calculator. They reject invalid shapes, fixed-array
   counts, integer values, ranges, and runtime extents before mutation; write little-endian scalars

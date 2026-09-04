@@ -307,7 +307,8 @@ using the domain only as an adjacent label. Its exact logical value is:
 
 `sources` contains each referenced WGSL input ID and content hash, sorted by ID. `program` contains
 the executable semantic program and its capabilities, but omits `fingerprint`, the redundant source
-ID list, every `swiftName`, and source spans. `types` and `layouts` contain only the complete
+ID list, every `swiftName`, source spans, and optional interface-value diagnostic names. Other
+semantic `name` fields remain in the preimage. `types` and `layouts` contain only the complete
 transitive closure reachable from that program's bindings and entry-point interfaces. Arrays that
 represent `features`, `languageFeatures`, `visibility`, or an entry point's binding-ID set are sorted
 before canonicalization; ordered arrays keep their authored semantic order. The value is serialized

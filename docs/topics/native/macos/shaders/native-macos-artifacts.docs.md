@@ -215,10 +215,10 @@ Each program fingerprint is the SHA-256 of the `JCS-RFC8785+VGPU-PATHS-v1` canon
 - the semantic contract's `layoutModel`;
 - each referenced WGSL input as its stable ID and SHA-256, sorted by ID;
 - the explicitly selected WGSL `languageFeatures`, sorted as a set;
-- the normalized semantic program without its fingerprint, redundant source list, Swift presentation names, or source spans; and
+- the normalized semantic program without its fingerprint, redundant source list, Swift presentation names, source spans, or optional interface-value diagnostic names; and
 - only the transitive `types` and `layouts` closure reachable from the program's bindings and entry-point inputs and outputs.
 
-The closure traverses structure members, composite element types, layouts, and member layouts. A change to a directly referenced layout or a transitively reached elemental layout therefore changes the fingerprint; adding an unreachable type or layout does not. Capabilities remain in the normalized program. Feature, language-feature, visibility, and entry binding-ID arrays defined by this contract as unordered sets are sorted before hashing, while arrays whose order is semantic retain that order.
+The closure traverses structure members, composite element types, layouts, and member layouts. A change to a directly referenced layout or a transitively reached elemental layout therefore changes the fingerprint; adding an unreachable type or layout does not. Capabilities remain in the normalized program. Interface-value names are diagnostic metadata and are removed with a directed projection; program, entry, binding, override, type-member, and layout-member names are not removed. Feature, language-feature, visibility, and entry binding-ID arrays defined by this contract as unordered sets are sorted before hashing, while arrays whose order is semantic retain that order.
 
 The logical fingerprint covers canonical resolved WGSL and normalized program configuration, including the selected language features. The semantic fingerprint covers the complete backend-neutral semantic object, including `layoutModel` and its intrinsic layouts. The application build fingerprint additionally covers `@vgpu/native`, the `vgpu-tint-compiler` protocol and binary, pinned Dawn/Tint revision, translator flags, generated API and ABI versions, the Metal compiler target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
 

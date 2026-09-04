@@ -22,6 +22,10 @@ Each selected entry point stores flattened input and output leaves. A leaf conta
 `location` or `builtin`, its semantic type ID, effective invariance, and an optional authored name
 for diagnostics. Scalar returns do not need a fabricated name.
 
+That optional name remains semantic diagnostic metadata but is excluded from the program
+fingerprint. The exclusion is directed only at interface leaves; program, entry, binding, override,
+type-member, and layout-member names keep their existing fingerprint ownership.
+
 The stage and direction constrain every field:
 
 - vertex inputs permit user locations, `vertex_index`, and `instance_index`;

@@ -125,6 +125,15 @@ function stripPresentationAndProvenance(value) {
   );
 }
 
+function stripInterfaceDiagnosticNames(program) {
+  for (const entry of Object.values(program.entryPoints)) {
+    for (const value of [...entry.inputs, ...entry.outputs]) {
+      delete value.name;
+    }
+  }
+  return program;
+}
+
 function normalizeSemanticSets(value, key = "") {
   if (Array.isArray(value)) {
     const normalized = value.map((child) => normalizeSemanticSets(child));
@@ -234,7 +243,9 @@ function programFingerprintInput(program, semantic, inputs) {
     sources,
     languageFeatures: [...semantic.capabilities.languageFeatures].sort(),
     program: normalizeSemanticSets(
-      stripPresentationAndProvenance(programWithoutFingerprint)
+      stripPresentationAndProvenance(
+        stripInterfaceDiagnosticNames(programWithoutFingerprint)
+      )
     ),
     types: closure.types,
     layouts: closure.layouts,

@@ -101,7 +101,7 @@
       }
     },
     "programFingerprint": {
-      "description": "SHA-256 of the JCS-RFC8785+VGPU-PATHS-v1 canonical preimage containing the vgpu-native-program/v1 domain, referenced WGSL input IDs and content hashes, layout model, resolved language features, executable program semantics and capabilities, and the transitively reachable types and intrinsic layouts. The preimage excludes its own fingerprint, redundant source IDs, Swift presentation names, source spans, and unreachable declarations; feature, language-feature, visibility, and entry binding-ID sets are sorted before hashing.",
+      "description": "SHA-256 of the JCS-RFC8785+VGPU-PATHS-v1 canonical preimage containing the vgpu-native-program/v1 domain, referenced WGSL input IDs and content hashes, layout model, resolved language features, executable program semantics and capabilities, and the transitively reachable types and intrinsic layouts. The preimage excludes its own fingerprint, redundant source IDs, Swift presentation names, source spans, interface-value diagnostic names, and unreachable declarations; feature, language-feature, visibility, and entry binding-ID sets are sorted before hashing.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],
@@ -384,7 +384,7 @@
       ]
     },
     "interfaceValue": {
-      "description": "One flattened entry-point leaf. Its location or builtin, stage role, and type are semantic identity; name is optional authored diagnostic context and must not be reconstructed from Tint-generated symbols.",
+      "description": "One flattened entry-point leaf. Its location or builtin, stage role, and type are semantic identity; name is optional authored diagnostic context, is excluded from the program fingerprint, and must not be reconstructed from Tint-generated symbols.",
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "invariant"],

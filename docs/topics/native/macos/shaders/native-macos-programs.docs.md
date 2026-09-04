@@ -99,7 +99,7 @@ List any WGSL environment feature that validation depends on in `languageFeature
 }
 ```
 
-The program fingerprint covers the referenced WGSL IDs and hashes, fixed layout model, selected language features, normalized program semantics, and only the transitive type and layout closure reachable from that program's bindings and stage interfaces. That closure includes elemental layouts reached through arrays and other composite types. Changing any of those inputs requires a new artifact even when the authored entry file is unchanged; Swift presentation names, source spans, and unrelated types or layouts do not. [Generated artifacts](/native/macos/artifacts) defines the canonical preimage and ordering rules.
+The program fingerprint covers the referenced WGSL IDs and hashes, fixed layout model, selected language features, normalized program semantics, and only the transitive type and layout closure reachable from that program's bindings and stage interfaces. That closure includes elemental layouts reached through arrays and other composite types. Changing any of those inputs requires a new artifact even when the authored entry file is unchanged. Swift presentation names, source spans, and unrelated types or layouts do not affect this fingerprint. With referenced source hashes held constant, neither do optional interface-value diagnostic names; renaming an identifier in WGSL still changes its source hash. The complete semantic artifact preserves available diagnostic names. [Generated artifacts](/native/macos/artifacts) defines the canonical preimage and ordering rules.
 
 ### Bake overrides at build time
 
