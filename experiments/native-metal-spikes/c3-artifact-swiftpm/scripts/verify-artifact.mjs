@@ -537,6 +537,52 @@ function runtimeProjectionInput(projection, librarySHA256) {
   };
 }
 
+function validateProjectionSlotEntryStages(projection) {
+  for (const program of projection.programs) {
+    const entryStages = new Set(
+      program.entryPoints.map((entry) => entry.stage)
+    );
+    for (const binding of program.bindings) {
+      for (const slot of binding.slots) {
+        if (!entryStages.has(slot.stage)) {
+          fail(
+            `${program.semanticProgram}/${binding.semanticBinding} slot stage ${slot.stage} has no projected entry point`
+          );
+        }
+      }
+    }
+    for (const internal of program.internalBindings) {
+      for (const slot of internal.slots) {
+        if (!entryStages.has(slot.stage)) {
+          fail(
+            `${program.semanticProgram}/${internal.role} slot stage ${slot.stage} has no projected entry point`
+          );
+        }
+      }
+    }
+  }
+}
+
+function requireProjectionSlotEntryMutationFailure(
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const candidate = clone(projection);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    validateProjectionSlotEntryStages(candidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
+}
+
 function validateVertexBufferPolicy(projection) {
   const ceiling = projection.vertexBufferPolicy?.externalBufferCeiling;
   if (!Number.isSafeInteger(ceiling) || ceiling < 0) {
@@ -1540,6 +1586,78 @@ for (const [label, mutate] of [
     },
   ],
   [
+    "compute external binding with a vertex slot",
+    (candidate) => {
+      candidate.projection.programs.find(
+        (program) => program.semanticProgram === "Noop"
+      ).bindings[0].slots[0].stage = "vertex";
+    },
+  ],
+  [
+    "compute internal binding with a vertex slot",
+    (candidate) => {
+      candidate.projection.programs.find(
+        (program) => program.semanticProgram === "RuntimeArray"
+      ).internalBindings[0].slots[0].stage = "vertex";
+    },
+  ],
+  [
+    "reordered external program slot union",
+    (candidate) => {
+      candidate.projection.programs
+        .find((program) => program.semanticProgram === "SparseDraw")
+        .bindings.push({
+          semanticBinding: "g0b0",
+          slots: [
+            {
+              stage: "fragment",
+              mode: "direct",
+              resourceClass: "buffer",
+              component: "buffer",
+              index: 0,
+              count: 1,
+            },
+            {
+              stage: "vertex",
+              mode: "direct",
+              resourceClass: "buffer",
+              component: "buffer",
+              index: 0,
+              count: 1,
+            },
+          ],
+        });
+    },
+  ],
+  [
+    "reordered internal program slot union",
+    (candidate) => {
+      candidate.projection.programs
+        .find((program) => program.semanticProgram === "SparseDraw")
+        .internalBindings.push({
+          role: "immediate-data",
+          slots: [
+            {
+              stage: "fragment",
+              mode: "direct",
+              resourceClass: "buffer",
+              component: "buffer",
+              index: 30,
+              count: 1,
+            },
+            {
+              stage: "vertex",
+              mode: "direct",
+              resourceClass: "buffer",
+              component: "buffer",
+              index: 30,
+              count: 1,
+            },
+          ],
+        });
+    },
+  ],
+  [
     "incoherent direct component",
     (candidate) => {
       candidate.projection.programs[0].bindings[0].slots[0].component =
@@ -1904,6 +2022,81 @@ assertEqual(libraries.length, 1, "projected Metal library count");
 assertEqual(libraries[0].path, libraryPath, "projected Metal library path");
 const runtimeSHA256 = sha256Canonical(
   runtimeProjectionInput(artifact.projection, libraries[0].sha256)
+);
+validateProjectionSlotEntryStages(artifact.projection);
+requireProjectionSlotEntryMutationFailure(
+  artifact.projection,
+  (projection) => {
+    projection.programs.find(
+      (program) => program.semanticProgram === "Noop"
+    ).bindings[0].slots[0].stage = "vertex";
+  },
+  "Noop/g0b0 slot stage vertex has no projected entry point",
+  "cross-kind external slot"
+);
+requireProjectionSlotEntryMutationFailure(
+  artifact.projection,
+  (projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    );
+    program.bindings = [];
+    program.internalBindings[0].slots[0].stage = "vertex";
+  },
+  "RuntimeArray/immediate-data slot stage vertex has no projected entry point",
+  "cross-kind internal slot"
+);
+requireProjectionSlotEntryMutationFailure(
+  artifact.projection,
+  (projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "SparseDraw"
+    );
+    program.entryPoints = program.entryPoints.filter(
+      (entry) => entry.stage !== "vertex"
+    );
+    program.bindings.push({
+      semanticBinding: "g0b0",
+      slots: [
+        {
+          stage: "vertex",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 0,
+          count: 1,
+        },
+      ],
+    });
+  },
+  "SparseDraw/g0b0 slot stage vertex has no projected entry point",
+  "missing-entry external slot"
+);
+requireProjectionSlotEntryMutationFailure(
+  artifact.projection,
+  (projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "SparseDraw"
+    );
+    program.entryPoints = program.entryPoints.filter(
+      (entry) => entry.stage !== "vertex"
+    );
+    program.internalBindings.push({
+      role: "immediate-data",
+      slots: [
+        {
+          stage: "vertex",
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 30,
+          count: 1,
+        },
+      ],
+    });
+  },
+  "SparseDraw/immediate-data slot stage vertex has no projected entry point",
+  "missing-entry internal slot"
 );
 validateVertexBufferPolicy(artifact.projection);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);

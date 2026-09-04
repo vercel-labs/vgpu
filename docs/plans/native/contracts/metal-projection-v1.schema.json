@@ -463,7 +463,7 @@
       "$ref": "#/$defs/directMetalSlot"
     },
     "binding": {
-      "description": "The one direct Metal component interval projected from a singular semantic WGSL binding in compiler protocol v1. Allocation is scoped by containing semantic program, stage, and resource class.",
+      "description": "The direct Metal component intervals projected from one singular semantic WGSL binding across the containing semantic program's selected entry points. Each selected stage contributes at most one interval; the one-entry compiler protocol carries only that stage's interval.",
       "type": "object",
       "additionalProperties": false,
       "required": ["semanticBinding", "slots"],
@@ -472,14 +472,62 @@
         "slots": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 1,
+          "maxItems": 2,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/metalSlot" }
+          "items": { "$ref": "#/$defs/metalSlot" },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "vertex" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "fragment" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "compute" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "if": { "type": "array", "minItems": 2 },
+              "then": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "object",
+                    "properties": { "stage": { "const": "vertex" } }
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "stage": { "const": "fragment" } }
+                  }
+                ],
+                "items": false
+              }
+            }
+          ]
         }
       }
     },
     "internalBinding": {
-      "description": "A backend resource required by Metal lowering or the versioned vgpu binding ABI. Its role and slots are explicit in this projection; numeric indices are projection data governed by the versioned binding model, not global constants. It has no semantic WGSL binding identity.",
+      "description": "A backend resource required by Metal lowering or the versioned vgpu binding ABI. Its role and per-stage slots are explicit in this program-level projection, with at most one interval in each selected stage; numeric indices are projection data governed by the versioned binding model, not global constants. It has no semantic WGSL binding identity.",
       "type": "object",
       "additionalProperties": false,
       "required": ["role", "slots"],
@@ -488,9 +536,57 @@
         "slots": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 1,
+          "maxItems": 2,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/metalSlot" }
+          "items": { "$ref": "#/$defs/metalSlot" },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "vertex" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "fragment" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["stage"],
+                "properties": { "stage": { "const": "compute" } }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "if": { "type": "array", "minItems": 2 },
+              "then": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "object",
+                    "properties": { "stage": { "const": "vertex" } }
+                  },
+                  {
+                    "type": "object",
+                    "properties": { "stage": { "const": "fragment" } }
+                  }
+                ],
+                "items": false
+              }
+            }
+          ]
         }
       }
     },
@@ -656,6 +752,84 @@
             }
           },
           "else": { "properties": { "resolvedWorkgroupSize": false } }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "compute" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": { "stage": { "const": "compute" } }
+                      }
+                    }
+                  }
+                }
+              },
+              "internalBindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": { "stage": { "const": "compute" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stage": { "enum": ["vertex", "fragment"] }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "internalBindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stage": { "enum": ["vertex", "fragment"] }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },

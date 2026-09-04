@@ -27,6 +27,12 @@ const fixtureDirectory = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(fixtureDirectory, "..", "..", "..");
 const expectedTintCommit = "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
 const metalTarget = "air64-apple-macos14.0";
+const projectionRepresentabilityCaseId =
+  "external-texture-expansion-representability";
+const supportedFixtureStatuses = new Set([
+  "tint-writer-validated-sampled-texture-array",
+  "projection-representability-only",
+]);
 
 function fail(message) {
   throw new Error(`C1 binding slots: ${message}`);
@@ -147,6 +153,143 @@ function validateProjectionFragments(allocation, validators, caseId) {
       }
     }
   }
+}
+
+function expectProjectionSchemaFailure(
+  validator,
+  value,
+  expectedKeyword,
+  canaryId
+) {
+  if (validator(value)) {
+    fail(`${canaryId} unexpectedly passed the projection schema`);
+  }
+  if (!validator.errors?.some((error) => error.keyword === expectedKeyword)) {
+    fail(
+      `${canaryId} failed for the wrong reason: ${JSON.stringify(
+        validator.errors
+      )}`
+    );
+  }
+}
+
+function runProjectionSchemaCanaries(allocations, validators) {
+  const sharedBinding = allocations
+    .get("stage-local-draw-and-shared-binding")
+    ?.allocation.programs.find(
+      (program) => program.semanticProgram === "SharedDraw"
+    )
+    ?.bindings.find((binding) => binding.semanticBinding === "g0b0");
+  const sharedInternal = allocations
+    .get("stage-local-internal-binding")
+    ?.allocation.programs.find(
+      (program) => program.semanticProgram === "SharedInternalDraw"
+    )
+    ?.internalBindings.find((binding) => binding.role === "immediate-data");
+  if (!sharedBinding || !sharedInternal) {
+    fail("projection schema canaries reference missing program-level unions");
+  }
+  const projectionOnlyBinding = allocations
+    .get(projectionRepresentabilityCaseId)
+    ?.allocation.programs.find(
+      (program) => program.semanticProgram === "ExternalTexture"
+    )
+    ?.bindings.find((binding) => binding.semanticBinding === "g0b0");
+  if (!projectionOnlyBinding) {
+    fail("projection-only schema canary references a missing binding");
+  }
+  if (validators.binding(projectionOnlyBinding)) {
+    fail("projection-only external texture passed the production schema");
+  }
+  if (
+    !validators.binding.errors?.some(
+      (error) =>
+        error.instancePath === "/slots" &&
+        error.keyword === "maxItems" &&
+        error.params.limit === 2
+    )
+  ) {
+    fail(
+      `projection-only external texture failed for the wrong reason: ${JSON.stringify(
+        validators.binding.errors
+      )}`
+    );
+  }
+
+  const canaries = [
+    {
+      id: "binding-duplicate-stage",
+      validator: validators.binding,
+      keyword: "contains",
+      value: clone(sharedBinding),
+      mutate(value) {
+        value.slots[1].stage = value.slots[0].stage;
+        value.slots[1].index = value.slots[0].index + 1;
+      },
+    },
+    {
+      id: "binding-three-stage-slots",
+      validator: validators.binding,
+      keyword: "maxItems",
+      value: clone(sharedBinding),
+      mutate(value) {
+        value.slots.push({
+          ...clone(value.slots[0]),
+          stage: "compute",
+        });
+      },
+    },
+    {
+      id: "binding-inverted-stage-order",
+      validator: validators.binding,
+      keyword: "const",
+      value: clone(sharedBinding),
+      mutate(value) {
+        value.slots.reverse();
+      },
+    },
+    {
+      id: "internal-binding-duplicate-stage",
+      validator: validators.internalBinding,
+      keyword: "contains",
+      value: clone(sharedInternal),
+      mutate(value) {
+        value.slots[1].stage = value.slots[0].stage;
+        value.slots[1].index = value.slots[0].index - 1;
+      },
+    },
+    {
+      id: "internal-binding-three-stage-slots",
+      validator: validators.internalBinding,
+      keyword: "maxItems",
+      value: clone(sharedInternal),
+      mutate(value) {
+        value.slots.push({
+          ...clone(value.slots[0]),
+          stage: "compute",
+        });
+      },
+    },
+    {
+      id: "internal-binding-inverted-stage-order",
+      validator: validators.internalBinding,
+      keyword: "const",
+      value: clone(sharedInternal),
+      mutate(value) {
+        value.slots.reverse();
+      },
+    },
+  ];
+  for (const canary of canaries) {
+    canary.mutate(canary.value);
+    expectProjectionSchemaFailure(
+      canary.validator,
+      canary.value,
+      canary.keyword,
+      canary.id
+    );
+  }
+  return canaries.length;
 }
 
 function findProgram(input, name) {
@@ -290,7 +433,23 @@ function runAllocator(fixtures, mutationFixture, expected) {
   const validators = schemaValidators();
   const allocations = new Map();
   const actualCases = [];
+  let artifactSchemaCases = 0;
+  let projectionRepresentabilityCases = 0;
   for (const fixtureCase of fixtures.cases) {
+    if (
+      fixtureCase.status !== undefined &&
+      !supportedFixtureStatuses.has(fixtureCase.status)
+    ) {
+      fail(`${fixtureCase.id} has unsupported status ${fixtureCase.status}`);
+    }
+    if (
+      (fixtureCase.status === "projection-representability-only") !==
+      (fixtureCase.id === projectionRepresentabilityCaseId)
+    ) {
+      fail(
+        `${fixtureCase.id} does not match the projection-representability allowlist`
+      );
+    }
     for (const source of fixtureCase.sources ?? []) {
       if (!existsSync(join(fixtureDirectory, "canaries", source))) {
         fail(`${fixtureCase.id} references missing canary ${source}`);
@@ -307,13 +466,23 @@ function runAllocator(fixtures, mutationFixture, expected) {
       fail(`${fixtureCase.id} allocation is not deterministic`);
     }
     verifyBindingSlotAllocation(input, first);
-    validateProjectionFragments(first, validators, fixtureCase.id);
+    if (fixtureCase.status === "projection-representability-only") {
+      projectionRepresentabilityCases += 1;
+    } else {
+      validateProjectionFragments(first, validators, fixtureCase.id);
+      artifactSchemaCases += 1;
+    }
     allocations.set(fixtureCase.id, { input, allocation: first });
     actualCases.push({
       id: fixtureCase.id,
       ...(fixtureCase.status ? { status: fixtureCase.status } : {}),
       ...first,
     });
+  }
+  if (artifactSchemaCases !== 8 || projectionRepresentabilityCases !== 1) {
+    fail(
+      `expected 8 production-schema cases and 1 projection-only case, received ${artifactSchemaCases}/${projectionRepresentabilityCases}`
+    );
   }
   const actual = {
     schemaVersion: 1,
@@ -438,14 +607,21 @@ function runAllocator(fixtures, mutationFixture, expected) {
     }
     fail(`${verifierCase.id} escaped the independent verifier`);
   }
+  const projectionSchemaMutations = runProjectionSchemaCanaries(
+    allocations,
+    validators
+  );
   return {
     allocations,
     summary: {
       status: "passed",
       cases: fixtures.cases.length,
+      artifactSchemaCases,
+      projectionRepresentabilityCases,
       deterministicPermutations: fixtures.cases.length,
       mutations: mutationFixture.mutations.length,
       verifierMutations: verifierCases.length,
+      projectionSchemaMutations,
     },
   };
 }

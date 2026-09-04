@@ -12,7 +12,7 @@
         "role": "immediate-data",
         "stage": "vertex",
         "resourceClass": "buffer",
-        "component": "immediate-data",
+        "component": "buffer",
         "index": 30,
         "count": 1
       },
@@ -20,7 +20,7 @@
         "role": "immediate-data",
         "stage": "fragment",
         "resourceClass": "buffer",
-        "component": "immediate-data",
+        "component": "buffer",
         "index": 30,
         "count": 1
       },
@@ -28,7 +28,7 @@
         "role": "immediate-data",
         "stage": "compute",
         "resourceClass": "buffer",
-        "component": "immediate-data",
+        "component": "buffer",
         "index": 30,
         "count": 1
       }
@@ -361,6 +361,33 @@
       ]
     },
     {
+      "id": "stage-local-internal-binding",
+      "evidence": "allocator contract for a program-level internal-role union across render stages",
+      "sources": [],
+      "programs": [
+        {
+          "semanticProgram": "SharedInternalDraw",
+          "entries": [
+            { "stage": "vertex", "bindings": ["g0b0"] },
+            { "stage": "fragment", "bindings": ["g0b0"] }
+          ],
+          "bindings": [
+            {
+              "id": "g0b0",
+              "group": 0,
+              "binding": 0,
+              "components": [
+                { "resourceClass": "buffer", "component": "buffer", "count": 1 }
+              ]
+            }
+          ],
+          "requiredInternalBindings": [
+            { "role": "immediate-data", "stages": ["vertex", "fragment"] }
+          ]
+        }
+      ]
+    },
+    {
       "id": "internal-storage-buffer-size-table",
       "evidence": "allocator-contract",
       "sources": ["runtime-array.wgsl"],
@@ -400,7 +427,7 @@
               "components": [
                 {
                   "resourceClass": "buffer",
-                  "component": "capacity-probe",
+                  "component": "buffer",
                   "count": 30
                 }
               ]
@@ -493,7 +520,7 @@
     {
       "id": "sized-resource-arrays",
       "status": "tint-writer-validated-sampled-texture-array",
-      "evidence": "Tint writer validates the direct sampled-texture array; offline Apple compilation is pending",
+      "evidence": "Tint writer and offline Apple compiler validate the direct sampled-texture array; alpha semantic cardinality remains absent",
       "sources": ["resource-arrays.wgsl"],
       "programs": [
         {

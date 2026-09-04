@@ -219,6 +219,60 @@
       ]
     },
     {
+      "id": "stage-local-internal-binding",
+      "programs": [
+        {
+          "semanticProgram": "SharedInternalDraw",
+          "bindings": [
+            {
+              "semanticBinding": "g0b0",
+              "slots": [
+                {
+                  "stage": "vertex",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                },
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 0,
+                  "count": 1
+                }
+              ]
+            }
+          ],
+          "internalBindings": [
+            {
+              "role": "immediate-data",
+              "slots": [
+                {
+                  "stage": "vertex",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 30,
+                  "count": 1
+                },
+                {
+                  "stage": "fragment",
+                  "mode": "direct",
+                  "resourceClass": "buffer",
+                  "component": "buffer",
+                  "index": 30,
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "internal-storage-buffer-size-table",
       "programs": [
         {
@@ -246,7 +300,7 @@
                   "stage": "compute",
                   "mode": "direct",
                   "resourceClass": "buffer",
-                  "component": "immediate-data",
+                  "component": "buffer",
                   "index": 30,
                   "count": 1
                 }
@@ -269,7 +323,7 @@
                   "stage": "compute",
                   "mode": "direct",
                   "resourceClass": "buffer",
-                  "component": "capacity-probe",
+                  "component": "buffer",
                   "index": 0,
                   "count": 30
                 }
@@ -321,7 +375,7 @@
                   "stage": "compute",
                   "mode": "direct",
                   "resourceClass": "buffer",
-                  "component": "immediate-data",
+                  "component": "buffer",
                   "index": 30,
                   "count": 1
                 }
@@ -367,7 +421,7 @@
                   "stage": "compute",
                   "mode": "direct",
                   "resourceClass": "buffer",
-                  "component": "immediate-data",
+                  "component": "buffer",
                   "index": 30,
                   "count": 1
                 }

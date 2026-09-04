@@ -179,7 +179,7 @@
           "target": "component.count",
           "program": "CapacityExact",
           "binding": "g1b0",
-          "component": "capacity-probe",
+          "component": "buffer",
           "value": 31
         }
       ],
@@ -333,7 +333,7 @@
             "role": "immediate-data",
             "stage": "compute",
             "resourceClass": "buffer",
-            "component": "immediate-data",
+            "component": "buffer",
             "index": 30,
             "count": 1
           }
@@ -342,7 +342,7 @@
       "expected": {
         "status": "error",
         "code": "DUPLICATE_RESERVATION",
-        "messageIncludes": "immediate-data/compute/buffer/immediate-data"
+        "messageIncludes": "immediate-data/compute/buffer/buffer"
       }
     },
     {
