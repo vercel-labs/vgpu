@@ -43,8 +43,12 @@ mode qualifiers, and framebuffer fetch.
 
 Before backend projection, a draw validates its portable stage link. Every fragment user-location
 input must have a vertex output with the same location, scalar kind, component count, and normalized
-interpolation and sampling. Additional vertex outputs are valid. Locations and built-ins are unique
-within their stage role.
+interpolation and sampling. Additional vertex outputs are valid. Semantic keys are unique within
+their stage role: normally the key is `location` or `builtin`; for fragment outputs it includes both
+`location` and optional `blendSource`, so the accepted location-zero pair remains distinct.
+Interface arrays put numeric locations first in ascending order, using absent blend source before
+source zero and source one at the same fragment-output location, then put built-ins in ASCII order.
+The compiler request and semantic artifact use this same order.
 
 ## Validate at the compiler boundary
 

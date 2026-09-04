@@ -5,7 +5,17 @@
   "description": "Backend-neutral program semantics shared by every native projection. Translation output, platform toolchains, and backend slots do not belong in this contract.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "contractId", "module", "abi", "layoutModel", "types", "layouts", "programs", "capabilities"],
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "module",
+    "abi",
+    "layoutModel",
+    "types",
+    "layouts",
+    "programs",
+    "capabilities"
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "contractId": { "const": "vgpu-native-semantic/v1" },
@@ -25,7 +35,11 @@
       "propertyNames": { "$ref": "#/$defs/nonEmptyString" },
       "additionalProperties": { "$ref": "#/$defs/layout" }
     },
-    "programs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/program" } },
+    "programs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/program" }
+    },
     "capabilities": { "$ref": "#/$defs/capabilities" },
     "extensions": {
       "description": "Namespaced, informational metadata. Extensions MUST NOT alter compilation, ABI, capability requirements, or runtime behavior.",
@@ -35,13 +49,20 @@
   },
   "$defs": {
     "nonEmptyString": { "type": "string", "minLength": 1, "maxLength": 1024 },
-    "swiftIdentifier": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 256 },
+    "swiftIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "maxLength": 256
+    },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "typeId": { "$ref": "#/$defs/nonEmptyString" },
     "layoutId": { "$ref": "#/$defs/nonEmptyString" },
     "inputId": { "$ref": "#/$defs/nonEmptyString" },
     "overrideId": { "$ref": "#/$defs/nonEmptyString" },
-    "bindingId": { "type": "string", "pattern": "^g(?:0|[1-9][0-9]*)b(?:0|[1-9][0-9]*)$" },
+    "bindingId": {
+      "type": "string",
+      "pattern": "^g(?:0|[1-9][0-9]*)b(?:0|[1-9][0-9]*)$"
+    },
     "stage": { "enum": ["vertex", "fragment", "compute"] },
     "module": {
       "type": "object",
@@ -98,13 +119,19 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "scalar"],
-      "properties": { "kind": { "const": "scalar" }, "scalar": { "enum": ["bool", "f16", "f32", "i32", "u32"] } }
+      "properties": {
+        "kind": { "const": "scalar" },
+        "scalar": { "enum": ["bool", "f16", "f32", "i32", "u32"] }
+      }
     },
     "atomicType": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "element"],
-      "properties": { "kind": { "const": "atomic" }, "element": { "$ref": "#/$defs/typeId" } }
+      "properties": {
+        "kind": { "const": "atomic" },
+        "element": { "$ref": "#/$defs/typeId" }
+      }
     },
     "vectorType": {
       "type": "object",
@@ -155,18 +182,34 @@
         "kind": { "const": "struct" },
         "wgslName": { "$ref": "#/$defs/nonEmptyString" },
         "swiftName": { "$ref": "#/$defs/swiftIdentifier" },
-        "members": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/structMember" } }
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/structMember" }
+        }
       }
     },
     "layoutMember": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type", "layout", "offset", "alignment", "minimumSize", "runtimeSized"],
+      "required": [
+        "name",
+        "type",
+        "layout",
+        "offset",
+        "alignment",
+        "minimumSize",
+        "runtimeSized"
+      ],
       "properties": {
         "name": { "$ref": "#/$defs/nonEmptyString" },
         "type": { "$ref": "#/$defs/typeId" },
         "layout": { "$ref": "#/$defs/layoutId" },
-        "offset": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "alignment": {
           "description": "Effective WGSL member alignment after any authored @align attribute.",
           "type": "integer",
@@ -189,11 +232,20 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "runtimeSized": { "const": true } }, "required": ["runtimeSized"] },
+          "if": {
+            "properties": { "runtimeSized": { "const": true } },
+            "required": ["runtimeSized"]
+          },
           "then": { "properties": { "size": false } },
           "else": {
             "required": ["size"],
-            "properties": { "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 } }
+            "properties": {
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
           }
         }
       ]
@@ -202,24 +254,62 @@
       "description": "Intrinsic WGSL AlignOf/SizeOf layout for one host-shareable type use. For a runtime-sized layout, minimumSize is its fixed zero-element prefix; a buffer binding's minimumBindingSize additionally includes one trailing array element. Address-space constraints are validated separately from these offsets, alignments, sizes, and strides.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "alignment", "minimumSize", "runtimeSized", "members"],
+      "required": [
+        "type",
+        "alignment",
+        "minimumSize",
+        "runtimeSized",
+        "members"
+      ],
       "properties": {
         "type": { "$ref": "#/$defs/typeId" },
-        "alignment": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "minimumSize": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "alignment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "minimumSize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "runtimeSized": { "type": "boolean" },
-        "arrayStride": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "matrixStride": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "members": { "type": "array", "items": { "$ref": "#/$defs/layoutMember" } }
+        "arrayStride": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "matrixStride": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "members": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/layoutMember" }
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "runtimeSized": { "const": true } }, "required": ["runtimeSized"] },
+          "if": {
+            "properties": { "runtimeSized": { "const": true } },
+            "required": ["runtimeSized"]
+          },
           "then": { "properties": { "size": false } },
           "else": {
             "required": ["size"],
-            "properties": { "size": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 } }
+            "properties": {
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
           }
         }
       ]
@@ -267,7 +357,9 @@
       "required": ["type", "sampling"],
       "properties": {
         "type": { "enum": ["perspective", "linear", "flat"] },
-        "sampling": { "enum": ["center", "centroid", "sample", "first", "either"] }
+        "sampling": {
+          "enum": ["center", "centroid", "sample", "first", "either"]
+        }
       },
       "oneOf": [
         {
@@ -304,7 +396,11 @@
         {
           "required": ["location"],
           "properties": {
-            "location": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+            "location": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
             "builtin": false
           }
         },
@@ -345,7 +441,10 @@
         },
         {
           "type": "object",
-          "if": { "required": ["location"], "properties": { "location": true } },
+          "if": {
+            "required": ["location"],
+            "properties": { "location": true }
+          },
           "then": {
             "required": ["interpolation"],
             "properties": {
@@ -364,13 +463,23 @@
           "type": "object",
           "properties": {
             "invariant": { "const": false },
-            "builtin": { "enum": ["position", "front_facing", "sample_index", "sample_mask"] },
+            "builtin": {
+              "enum": [
+                "position",
+                "front_facing",
+                "sample_index",
+                "sample_mask"
+              ]
+            },
             "blendSource": false
           }
         },
         {
           "type": "object",
-          "if": { "required": ["location"], "properties": { "location": true } },
+          "if": {
+            "required": ["location"],
+            "properties": { "location": true }
+          },
           "then": {
             "required": ["interpolation"],
             "properties": { "interpolation": true }
@@ -392,7 +501,10 @@
         },
         {
           "type": "object",
-          "if": { "required": ["blendSource"], "properties": { "blendSource": true } },
+          "if": {
+            "required": ["blendSource"],
+            "properties": { "blendSource": true }
+          },
           "then": {
             "required": ["location"],
             "properties": { "location": { "const": 0 } }
@@ -433,18 +545,58 @@
         "mode": { "enum": ["filtering", "comparison"] }
       }
     },
-    "vertexInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/vertexInputValue" } },
-    "vertexOutputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/vertexOutputValue" } },
-    "fragmentInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/fragmentInputValue" } },
-    "fragmentOutputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/fragmentOutputValue" } },
-    "computeInputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/computeInputValue" } },
+    "vertexInputs": {
+      "description": "Canonical interface order: user locations numerically ascending, then built-ins in ASCII order.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/vertexInputValue" }
+    },
+    "vertexOutputs": {
+      "description": "Canonical interface order: user locations numerically ascending, then built-ins in ASCII order.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/vertexOutputValue" }
+    },
+    "fragmentInputs": {
+      "description": "Canonical interface order: user locations numerically ascending, then built-ins in ASCII order.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/fragmentInputValue" }
+    },
+    "fragmentOutputs": {
+      "description": "Canonical interface order: user locations numerically ascending, with an absent blendSource before blendSource 0 and then 1 at the same location, followed by built-ins in ASCII order.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/fragmentOutputValue" }
+    },
+    "computeInputs": {
+      "description": "Canonical interface order: built-ins in ASCII order; compute inputs have no user locations in semantic v1.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/computeInputValue" }
+    },
     "computeOutputs": { "type": "array", "maxItems": 0 },
-    "entryBindings": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/bindingId" } },
-    "entrySamplingPairs": { "type": "array", "items": { "$ref": "#/$defs/samplingPair" } },
+    "entryBindings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/bindingId" }
+    },
+    "entrySamplingPairs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/samplingPair" }
+    },
     "effectVertexEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "origin", "names", "inputs", "outputs", "bindings", "samplingPairs"],
+      "required": [
+        "stage",
+        "origin",
+        "names",
+        "inputs",
+        "outputs",
+        "bindings",
+        "samplingPairs"
+      ],
       "properties": {
         "stage": { "const": "vertex" },
         "origin": { "enum": ["authored", "injected"] },
@@ -457,7 +609,10 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "origin": { "const": "authored" } }, "required": ["origin"] },
+          "if": {
+            "properties": { "origin": { "const": "authored" } },
+            "required": ["origin"]
+          },
           "then": {
             "required": ["source"],
             "properties": {
@@ -483,7 +638,16 @@
     "drawVertexEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "origin", "names", "source", "inputs", "outputs", "bindings", "samplingPairs"],
+      "required": [
+        "stage",
+        "origin",
+        "names",
+        "source",
+        "inputs",
+        "outputs",
+        "bindings",
+        "samplingPairs"
+      ],
       "properties": {
         "stage": { "const": "vertex" },
         "origin": { "const": "authored" },
@@ -498,7 +662,16 @@
     "fragmentEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "origin", "names", "source", "inputs", "outputs", "bindings", "samplingPairs"],
+      "required": [
+        "stage",
+        "origin",
+        "names",
+        "source",
+        "inputs",
+        "outputs",
+        "bindings",
+        "samplingPairs"
+      ],
       "properties": {
         "stage": { "const": "fragment" },
         "origin": { "const": "authored" },
@@ -510,7 +683,11 @@
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
       }
     },
-    "positiveUint32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "positiveUint32": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
     "workgroupSize": {
       "description": "Positive integer workgroup dimensions resolved after the selected WGSL override values have been substituted. Authored literal or expression provenance stays in the referenced WGSL inputs and is not duplicated here.",
       "type": "object",
@@ -525,7 +702,17 @@
     "computeEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "origin", "names", "source", "inputs", "outputs", "bindings", "samplingPairs", "workgroupSize"],
+      "required": [
+        "stage",
+        "origin",
+        "names",
+        "source",
+        "inputs",
+        "outputs",
+        "bindings",
+        "samplingPairs",
+        "workgroupSize"
+      ],
       "properties": {
         "stage": { "const": "compute" },
         "origin": { "const": "authored" },
@@ -542,13 +729,19 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["vertex", "fragment"],
-      "properties": { "vertex": { "$ref": "#/$defs/effectVertexEntry" }, "fragment": { "$ref": "#/$defs/fragmentEntry" } }
+      "properties": {
+        "vertex": { "$ref": "#/$defs/effectVertexEntry" },
+        "fragment": { "$ref": "#/$defs/fragmentEntry" }
+      }
     },
     "drawEntryPoints": {
       "type": "object",
       "additionalProperties": false,
       "required": ["vertex", "fragment"],
-      "properties": { "vertex": { "$ref": "#/$defs/drawVertexEntry" }, "fragment": { "$ref": "#/$defs/fragmentEntry" } }
+      "properties": {
+        "vertex": { "$ref": "#/$defs/drawVertexEntry" },
+        "fragment": { "$ref": "#/$defs/fragmentEntry" }
+      }
     },
     "computeEntryPoints": {
       "type": "object",
@@ -556,11 +749,29 @@
       "required": ["compute"],
       "properties": { "compute": { "$ref": "#/$defs/computeEntry" } }
     },
-    "visibility": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/stage" } },
+    "visibility": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/stage" }
+    },
     "bufferBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "swiftName", "group", "binding", "kind", "visibility", "addressSpace", "access", "type", "layout", "minimumBindingSize"],
+      "required": [
+        "id",
+        "name",
+        "swiftName",
+        "group",
+        "binding",
+        "kind",
+        "visibility",
+        "addressSpace",
+        "access",
+        "type",
+        "layout",
+        "minimumBindingSize"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/bindingId" },
         "name": { "$ref": "#/$defs/nonEmptyString" },
@@ -584,7 +795,16 @@
     "samplerBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "swiftName", "group", "binding", "kind", "visibility", "samplerKind"],
+      "required": [
+        "id",
+        "name",
+        "swiftName",
+        "group",
+        "binding",
+        "kind",
+        "visibility",
+        "samplerKind"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/bindingId" },
         "name": { "$ref": "#/$defs/nonEmptyString" },
@@ -596,11 +816,24 @@
         "samplerKind": { "enum": ["filtering", "non-filtering", "comparison"] }
       }
     },
-    "textureDimension": { "enum": ["1d", "2d", "2d-array", "cube", "cube-array", "3d"] },
+    "textureDimension": {
+      "enum": ["1d", "2d", "2d-array", "cube", "cube-array", "3d"]
+    },
     "textureBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "swiftName", "group", "binding", "kind", "visibility", "dimension", "sampleType", "multisampled"],
+      "required": [
+        "id",
+        "name",
+        "swiftName",
+        "group",
+        "binding",
+        "kind",
+        "visibility",
+        "dimension",
+        "sampleType",
+        "multisampled"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/bindingId" },
         "name": { "$ref": "#/$defs/nonEmptyString" },
@@ -610,14 +843,27 @@
         "kind": { "const": "texture" },
         "visibility": { "$ref": "#/$defs/visibility" },
         "dimension": { "$ref": "#/$defs/textureDimension" },
-        "sampleType": { "enum": ["float", "unfilterable-float", "depth", "sint", "uint"] },
+        "sampleType": {
+          "enum": ["float", "unfilterable-float", "depth", "sint", "uint"]
+        },
         "multisampled": { "type": "boolean" }
       }
     },
     "storageTextureBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "swiftName", "group", "binding", "kind", "visibility", "dimension", "format", "access"],
+      "required": [
+        "id",
+        "name",
+        "swiftName",
+        "group",
+        "binding",
+        "kind",
+        "visibility",
+        "dimension",
+        "format",
+        "access"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/bindingId" },
         "name": { "$ref": "#/$defs/nonEmptyString" },
@@ -634,7 +880,15 @@
     "externalTextureBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "swiftName", "group", "binding", "kind", "visibility"],
+      "required": [
+        "id",
+        "name",
+        "swiftName",
+        "group",
+        "binding",
+        "kind",
+        "visibility"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/bindingId" },
         "name": { "$ref": "#/$defs/nonEmptyString" },
@@ -659,19 +913,32 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "value"],
-      "properties": { "type": { "const": "bool" }, "value": { "type": "boolean" } }
+      "properties": {
+        "type": { "const": "bool" },
+        "value": { "type": "boolean" }
+      }
     },
     "i32Constant": {
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "value"],
-      "properties": { "type": { "const": "i32" }, "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 } }
+      "properties": {
+        "type": { "const": "i32" },
+        "value": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
     },
     "u32Constant": {
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "value"],
-      "properties": { "type": { "const": "u32" }, "value": { "type": "integer", "minimum": 0, "maximum": 4294967295 } }
+      "properties": {
+        "type": { "const": "u32" },
+        "value": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
     },
     "f16Constant": {
       "type": "object",
@@ -712,7 +979,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["authored", "wgsl"],
-      "properties": { "authored": { "$ref": "#/$defs/nonEmptyString" }, "wgsl": { "$ref": "#/$defs/nonEmptyString" } }
+      "properties": {
+        "authored": { "$ref": "#/$defs/nonEmptyString" },
+        "wgsl": { "$ref": "#/$defs/nonEmptyString" }
+      }
     },
     "override": {
       "description": "A WGSL override resolved and baked before backend translation. selected is always present; no runtime function-constant mapping is implied.",
@@ -729,14 +999,72 @@
         "selected": { "$ref": "#/$defs/constantValue" }
       },
       "allOf": [
-        { "if": { "properties": { "type": { "const": "bool" } }, "required": ["type"] }, "then": { "properties": { "default": { "$ref": "#/$defs/boolConstant" }, "selected": { "$ref": "#/$defs/boolConstant" } } } },
-        { "if": { "properties": { "type": { "const": "f16" } }, "required": ["type"] }, "then": { "properties": { "default": { "$ref": "#/$defs/f16Constant" }, "selected": { "$ref": "#/$defs/f16Constant" } } } },
-        { "if": { "properties": { "type": { "const": "f32" } }, "required": ["type"] }, "then": { "properties": { "default": { "$ref": "#/$defs/f32Constant" }, "selected": { "$ref": "#/$defs/f32Constant" } } } },
-        { "if": { "properties": { "type": { "const": "i32" } }, "required": ["type"] }, "then": { "properties": { "default": { "$ref": "#/$defs/i32Constant" }, "selected": { "$ref": "#/$defs/i32Constant" } } } },
-        { "if": { "properties": { "type": { "const": "u32" } }, "required": ["type"] }, "then": { "properties": { "default": { "$ref": "#/$defs/u32Constant" }, "selected": { "$ref": "#/$defs/u32Constant" } } } }
+        {
+          "if": {
+            "properties": { "type": { "const": "bool" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/$defs/boolConstant" },
+              "selected": { "$ref": "#/$defs/boolConstant" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "f16" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/$defs/f16Constant" },
+              "selected": { "$ref": "#/$defs/f16Constant" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "f32" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/$defs/f32Constant" },
+              "selected": { "$ref": "#/$defs/f32Constant" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "i32" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/$defs/i32Constant" },
+              "selected": { "$ref": "#/$defs/i32Constant" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "u32" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/$defs/u32Constant" },
+              "selected": { "$ref": "#/$defs/u32Constant" }
+            }
+          }
+        }
       ]
     },
-    "capabilityId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)*/v[1-9][0-9]*$" },
+    "capabilityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)*/v[1-9][0-9]*$"
+    },
     "wgslLanguageFeature": {
       "description": "A WGSL environment language feature name, such as uniform_buffer_standard_layout. These are explicitly enabled for build-time parsing and validation and are not runtime device requirements.",
       "type": "string",
@@ -762,13 +1090,34 @@
         }
       }
     },
-    "programSources": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/inputId" } },
-    "programBindings": { "type": "array", "items": { "$ref": "#/$defs/binding" } },
-    "programOverrides": { "type": "array", "items": { "$ref": "#/$defs/override" } },
+    "programSources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/inputId" }
+    },
+    "programBindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/binding" }
+    },
+    "programOverrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/override" }
+    },
     "effectProgram": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "swiftName", "kind", "sources", "fingerprint", "entryPoints", "bindings", "overrides", "capabilities"],
+      "required": [
+        "name",
+        "swiftName",
+        "kind",
+        "sources",
+        "fingerprint",
+        "entryPoints",
+        "bindings",
+        "overrides",
+        "capabilities"
+      ],
       "properties": {
         "name": { "$ref": "#/$defs/nonEmptyString" },
         "swiftName": { "$ref": "#/$defs/swiftIdentifier" },
@@ -784,7 +1133,17 @@
     "drawProgram": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "swiftName", "kind", "sources", "fingerprint", "entryPoints", "bindings", "overrides", "capabilities"],
+      "required": [
+        "name",
+        "swiftName",
+        "kind",
+        "sources",
+        "fingerprint",
+        "entryPoints",
+        "bindings",
+        "overrides",
+        "capabilities"
+      ],
       "properties": {
         "name": { "$ref": "#/$defs/nonEmptyString" },
         "swiftName": { "$ref": "#/$defs/swiftIdentifier" },
@@ -800,7 +1159,17 @@
     "computeProgram": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "swiftName", "kind", "sources", "fingerprint", "entryPoints", "bindings", "overrides", "capabilities"],
+      "required": [
+        "name",
+        "swiftName",
+        "kind",
+        "sources",
+        "fingerprint",
+        "entryPoints",
+        "bindings",
+        "overrides",
+        "capabilities"
+      ],
       "properties": {
         "name": { "$ref": "#/$defs/nonEmptyString" },
         "swiftName": { "$ref": "#/$defs/swiftIdentifier" },

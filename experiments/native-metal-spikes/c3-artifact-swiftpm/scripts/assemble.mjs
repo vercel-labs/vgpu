@@ -315,6 +315,25 @@ function shaderInterfaceValueKey(value, includeBlendSource) {
   return `builtin:${value.builtin}`;
 }
 
+function compareShaderInterfaceValues(left, right, includeBlendSource) {
+  const leftHasLocation = Object.hasOwn(left, "location");
+  const rightHasLocation = Object.hasOwn(right, "location");
+  if (leftHasLocation !== rightHasLocation) return leftHasLocation ? -1 : 1;
+  if (leftHasLocation) {
+    if (left.location !== right.location) return left.location - right.location;
+    const blendRank = (value) =>
+      includeBlendSource && Object.hasOwn(value, "blendSource")
+        ? value.blendSource + 1
+        : 0;
+    return blendRank(left) - blendRank(right);
+  }
+  return left.builtin < right.builtin
+    ? -1
+    : left.builtin > right.builtin
+    ? 1
+    : 0;
+}
+
 function resolveShaderInterfaceType(semantic, value, owner) {
   const type = semantic.types[value.type];
   if (!type) {
@@ -361,10 +380,18 @@ function validateSemanticInterfaceValues(semantic, program, entry, direction) {
   const includeBlendSource =
     entry.stage === "fragment" && direction === "outputs";
   const keys = new Set();
+  let previous;
   for (const value of values) {
     const key = shaderInterfaceValueKey(value, includeBlendSource);
     if (keys.has(key)) fail(`${owner} repeats shader interface value ${key}`);
+    if (
+      previous !== undefined &&
+      compareShaderInterfaceValues(previous, value, includeBlendSource) >= 0
+    ) {
+      fail(`${owner} shader interface values are not canonically ordered`);
+    }
     keys.add(key);
+    previous = value;
 
     const shape = resolveShaderInterfaceType(semantic, value, owner);
     const shapeKey = shaderInterfaceTypeKey(shape);

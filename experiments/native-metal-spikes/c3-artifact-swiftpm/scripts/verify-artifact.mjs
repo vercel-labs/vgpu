@@ -681,6 +681,25 @@ function shaderInterfaceValueKey(value, includeBlendSource) {
   return `builtin:${value.builtin}`;
 }
 
+function compareShaderInterfaceValues(left, right, includeBlendSource) {
+  const leftHasLocation = Object.hasOwn(left, "location");
+  const rightHasLocation = Object.hasOwn(right, "location");
+  if (leftHasLocation !== rightHasLocation) return leftHasLocation ? -1 : 1;
+  if (leftHasLocation) {
+    if (left.location !== right.location) return left.location - right.location;
+    const blendRank = (value) =>
+      includeBlendSource && Object.hasOwn(value, "blendSource")
+        ? value.blendSource + 1
+        : 0;
+    return blendRank(left) - blendRank(right);
+  }
+  return left.builtin < right.builtin
+    ? -1
+    : left.builtin > right.builtin
+    ? 1
+    : 0;
+}
+
 function resolveShaderInterfaceType(semantic, value, owner) {
   const type = semantic.types[value.type];
   if (!type) {
@@ -727,10 +746,18 @@ function validateSemanticInterfaceValues(semantic, program, entry, direction) {
   const includeBlendSource =
     entry.stage === "fragment" && direction === "outputs";
   const keys = new Set();
+  let previous;
   for (const value of values) {
     const key = shaderInterfaceValueKey(value, includeBlendSource);
     if (keys.has(key)) fail(`${owner} repeats shader interface value ${key}`);
+    if (
+      previous !== undefined &&
+      compareShaderInterfaceValues(previous, value, includeBlendSource) >= 0
+    ) {
+      fail(`${owner} shader interface values are not canonically ordered`);
+    }
     keys.add(key);
+    previous = value;
 
     const shape = resolveShaderInterfaceType(semantic, value, owner);
     const shapeKey = shaderInterfaceTypeKey(shape);
@@ -1453,25 +1480,28 @@ for (const [label, mutate] of [
   [
     "vertex input interpolation",
     (candidate) => {
-      candidate.semantic.programs[2].entryPoints.vertex.inputs[0].interpolation =
-        {
-          type: "perspective",
-          sampling: "center",
-        };
+      candidate.semantic.programs[2].entryPoints.vertex.inputs.find(
+        (value) => value.location === 3
+      ).interpolation = {
+        type: "perspective",
+        sampling: "center",
+      };
     },
   ],
   [
     "missing normalized vertex output interpolation",
     (candidate) => {
-      delete candidate.semantic.programs[2].entryPoints.vertex.outputs[1]
-        .interpolation;
+      delete candidate.semantic.programs[2].entryPoints.vertex.outputs.find(
+        (value) => value.location === 2
+      ).interpolation;
     },
   ],
   [
     "invalid flat interpolation sampling",
     (candidate) => {
-      candidate.semantic.programs[2].entryPoints.fragment.inputs[2].interpolation.sampling =
-        "center";
+      candidate.semantic.programs[2].entryPoints.fragment.inputs.find(
+        (value) => value.location === 5
+      ).interpolation.sampling = "center";
     },
   ],
   [
@@ -2181,9 +2211,10 @@ requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
   (semantic) => {
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.vertex.inputs[0].type = "c3_missing_interface_type";
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.inputs.find((value) => value.location === 3).type =
+      "c3_missing_interface_type";
   },
   "references unknown shader interface type c3_missing_interface_type",
   "unknown shader-interface type"
@@ -2192,9 +2223,10 @@ requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
   (semantic) => {
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.vertex.inputs[0].type = "u32x4";
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.inputs.find((value) => value.location === 3).type =
+      "u32x4";
   },
   "must resolve to a scalar or vector of scalars",
   "composite shader-interface leaf"
@@ -2204,9 +2236,10 @@ requireShaderInterfaceMutationFailure(
   artifact.projection,
   (semantic) => {
     semantic.types.c3_bool = { kind: "scalar", scalar: "bool" };
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.vertex.inputs[0].type = "c3_bool";
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.inputs.find((value) => value.location === 3).type =
+      "c3_bool";
   },
   "user location 3 cannot use bool",
   "boolean user location"
@@ -2215,9 +2248,11 @@ requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
   (semantic) => {
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.vertex.outputs[0].type = "vec2f";
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.outputs.find(
+        (value) => value.builtin === "position"
+      ).type = "vec2f";
   },
   "builtin position requires f32x4, received f32x2",
   "wrong vertex-position builtin type"
@@ -2250,6 +2285,29 @@ requireShaderInterfaceMutationFailure(
   },
   "builtin global_invocation_id requires u32x3, received u32x1",
   "wrong compute builtin type"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    const outputs = semantic.programs.find(
+      (program) => program.name === "SparseDraw"
+    ).entryPoints.vertex.outputs;
+    outputs.unshift(outputs.pop());
+  },
+  "shader interface values are not canonically ordered",
+  "builtin-first semantic vertex outputs"
+);
+requireShaderInterfaceMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (semantic) => {
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.inputs.reverse();
+  },
+  "shader interface values are not canonically ordered",
+  "descending semantic vertex input locations"
 );
 requireShaderInterfaceMutationFailure(
   artifact.semantic,
@@ -2317,9 +2375,10 @@ requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
   (semantic) => {
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.fragment.inputs[1].type = "f32";
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.fragment.inputs.find((value) => value.location === 2).type =
+      "f32";
   },
   "location 2 has an incompatible stage link",
   "stage-link type mismatch"
@@ -2361,9 +2420,11 @@ requireShaderInterfaceMutationFailure(
   artifact.semantic,
   artifact.projection,
   (semantic) => {
-    semantic.programs.find(
-      (program) => program.name === "SparseDraw"
-    ).entryPoints.vertex.inputs[1].location = 3;
+    semantic.programs
+      .find((program) => program.name === "SparseDraw")
+      .entryPoints.vertex.inputs.find(
+        (value) => value.location === 7
+      ).location = 3;
   },
   "repeats shader interface value location:3",
   "duplicate semantic vertex location"

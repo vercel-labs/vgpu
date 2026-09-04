@@ -71,9 +71,9 @@ The runner:
    program names after NFC normalization, orders semantic programs by ascending `name` and projected
    programs by ascending `semanticProgram` under the same normalization, resolves every interface
    type to a legal scalar or vector shape, requires exactly one vertex `position` output, checks
-   required builtin shapes and flat interpolation for integer inter-stage values, validates
-   vertex-to-fragment linking, and rejects missing, duplicated, reordered, compacted, colliding, or
-   invalid dual-source maps;
+   required builtin shapes, canonical location-then-builtin ordering and flat interpolation for
+   integer inter-stage values, validates vertex-to-fragment linking, and rejects missing,
+   duplicated, reordered, compacted, colliding, or invalid dual-source maps;
 6. verifies Swift tools 6.0, Swift language mode 6, macOS 14, the single `VGPUABI` package
    dependency, and the `AppShaders` target's single ABI product dependency;
 7. tests the generated package for the native architecture, builds the generated package and clean
