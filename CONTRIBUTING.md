@@ -247,8 +247,9 @@ Roll out this policy in the following order:
 5. Create a repository-level tag ruleset for `refs/tags/v*` with update, deletion, and signature
    rules, then activate it before the next RC. Do not rely on an inherited ruleset whose include
    list is empty; it protects no tags. Keep all normal work targeting `canary`.
-6. Confirm all seven npm packages trust `release.yml` as their GitHub Actions publisher. Publish
-   and verify an RC from canary; this proves OIDC works without using the stale `NPM_TOKEN`.
+6. Confirm all seven npm packages trust `release.yml` as their GitHub Actions publisher, with no
+   environment and direct `npm publish` enabled under **Allowed actions**. Publish and verify an RC
+   from canary; this proves OIDC works without using the stale `NPM_TOKEN`.
 7. Remove the repository-level `NPM_TOKEN` after that successful RC; no workflow references it.
    Then publish the first stable npm version from a frozen canary tip and promote that exact tagged
    commit with a merge commit. The first promotion is a deliberate bootstrap: its old main base
@@ -270,7 +271,7 @@ emergency operation, never the normal release path.
 
 Publishing uses OIDC, not a token — the repository must not retain an `NPM_TOKEN` secret. Each published package
 has a Trusted Publisher configured on npm (provider GitHub Actions, owner `vercel-labs`,
-repository `vgpu`, workflow `release.yml`, no environment) with direct `npm publish` included
-in its allowed actions. New Trusted Publishers may otherwise default to staged publishing only,
-but this repository's release workflow invokes `npm publish`, not `npm stage publish`. A **new**
-package has to be published manually once before Trusted Publishing can be configured for it.
+repository `vgpu`, workflow `release.yml`, no environment). Under **Allowed actions**, explicitly
+enable direct `npm publish`; a stage-only trust relationship cannot authorize this repository's
+release workflow. Do not rely on npm's preselected action. A **new** package has to be published
+manually once before Trusted Publishing can be configured for it.
