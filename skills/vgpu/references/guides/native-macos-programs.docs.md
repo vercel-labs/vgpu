@@ -79,7 +79,7 @@ List every program exported by the generated Swift module:
 | `program.kind`        |        No | `"effect"`      | `"effect"`, `"draw"`, or `"compute"`.                                                      |
 | `program.source`      |       Yes | —               | Entry WGSL file, relative to the configuration file.                                       |
 | `program.entryPoints` | Sometimes | Inferred        | Required when the resolved source has more than one compatible entry point.                |
-| `program.overrides`   |        No | Shader defaults | Typed WGSL override values fixed for this native program.                                  |
+| `program.overrides`   |        No | Evaluated WGSL defaults | Typed WGSL override values fixed for this native program. An active override without an initializer must be configured. |
 
 An effect selects one fragment entry point. If the resolved module has no vertex entry point, it gets vgpu's full-screen stage; otherwise it also selects an authored vertex entry point, which may use built-ins but no vertex buffers. A draw selects one vertex and one fragment entry point. A compute program selects one compute entry point.
 
@@ -119,7 +119,11 @@ Set WGSL overrides in the program configuration when the shader default is not t
 }
 ```
 
-Override names and values are checked against the resolved WGSL declaration. The compiler substitutes the selected values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. The selected values and resolved workgroup dimensions become part of the program fingerprint.
+Before translation, `native check` materializes the exact override set used by each selected entry point. It evaluates WGSL initializers with the pinned Tint semantics, preserves each scalar type and the bit pattern of finite `f16` and `f32` values, and then applies any configured replacement. Omitting a configured value uses that evaluated default. Omitting an active override that has no initializer is an error.
+
+Unknown names, conflicting IDs, wrong types, non-finite floats, and integers outside their WGSL range fail validation. The resolver may retain initializer text for provenance, but JavaScript does not parse or interpret that text as the default value. Evaluation belongs to the same pinned compiler semantics used for translation.
+
+The compiler substitutes the fully materialized values before WGSL-to-MSL translation, so the emitted Metal functions have literal, fixed values rather than runtime function constants. The typed selected values and resolved workgroup dimensions become part of the program fingerprint. Omitting an override and configuring it explicitly to the same evaluated default therefore produce the same normalized program semantics.
 
 Runtime specialization would require a separate artifact and API contract. It is not implicit in this proposal.
 

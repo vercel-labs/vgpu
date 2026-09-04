@@ -76,7 +76,7 @@ When a compare runner is present, its separate runner-build fingerprint and cach
 npx vgpu native check
 ```
 
-`check` exercises the same resolver and `vgpu-tint-compiler` boundary as `build`, but stops before Apple's `metal` and `metallib` tools and does not write an artifact.
+`check` exercises the same resolver, semantic-materialization, and `vgpu-tint-compiler` boundaries as `build`, but stops before Apple's `metal` and `metallib` tools and does not write an artifact.
 
 It verifies:
 
@@ -112,7 +112,11 @@ Keep it current while editing WGSL:
 npx vgpu native dev
 ```
 
-The build invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, baked overrides, the explicit language-feature set, a stable emitted function name, vgpu's versioned external Metal slot map, and its reserved internal profile. It returns MSL plus structured entry-point, interface, workgroup, binding, effective internal-slot, storage-buffer-size-region, and intrinsic-layout metadata. Tint's automatic slot allocator is not used as the artifact contract.
+The build first derives backend-neutral semantics from the resolved source. That stage owns entry-point interfaces, intrinsic layouts, resource declarations, and typed override defaults. It evaluates defaults and materializes the exact active override set before translation; raw WGSL initializer text is provenance, not a value parser input.
+
+The build then invokes `vgpu-tint-compiler`, a vgpu-owned build-time executable linked from a pinned Dawn/Tint source revision. For each selected entry point it receives resolved WGSL, the materialized typed overrides, the explicit language-feature set, a stable emitted function name, vgpu's versioned external Metal slot map, and its reserved internal profile. It returns either a structured compiler error or MSL with the selected entry point, the unchanged validated external slot map, effective internal slots, storage-buffer-size regions, and resolved compute workgroup dimensions. It does not return semantic layouts, override declarations, defaults, or broad interface reflection. Tint's automatic slot allocator is not used as the artifact contract.
+
+The internal production worker protocol carries one UTF-8 JSON request on stdin, terminated by EOF, and exactly one UTF-8 JSON response on stdout, also terminated by EOF. A response with `ok: false` is a handled compiler result. Nonzero process exits are reserved for framing or decode failures, crashes, and other transport failures; they are not the compiler-error channel.
 
 The map is deterministic per semantic program, selected stage, and Metal buffer, texture, or sampler namespace. Required backend-internal resources use explicit reservations and cannot shift a user slot silently. The generated result decides which reserved internal bindings and size regions are emitted, and the projection retains that effective result. Storage sizes share the stage's `immediate-data` slot instead of occupying a second buffer. The projection also records a versioned `vertexBufferPolicy` with an exclusive external-buffer ceiling; changing the slot ABI, that policy, the storage-buffer-size model, a recorded region, or its immediate-data slot invalidates the build and runtime-projection fingerprints. Concrete ranges and packed size words are runtime data and do not.
 
@@ -124,11 +128,15 @@ Generated MSL and compiler intermediates belong to an inspectable build cache, n
 
 ## Understand the current validation status
 
-The C1 binding-slot fixture now passes a vgpu-owned map directly into Tint without calling its automatic allocator. It covers stage-local resources, sparse WGSL groups, multiple programs from one source, contiguous intervals, and one shared `immediate-data` binding that can contain ordinary immediates and a storage-size region together. Companion canaries prove that either feature may also appear without the other and that Tint's generated result, rather than the reflected runtime-sized type alone, decides whether a region is emitted. An independent verifier and negative map canaries reject drift, collisions, overflow, missing or extra resources, and wrong resource classes. The sampled-texture resource binding-array canary is translator evidence only; resource binding arrays stay outside alpha because semantic v1 cannot carry their cardinality.
+The C1 compiler-protocol fixture now combines the virtual resolver, direct Tint API, and vgpu-owned slot map without calling Tint's automatic allocator. Its per-entry translation response is deliberately narrow: MSL, the selected entry point, the unchanged validated external map, effective internal bindings and size regions, and resolved compute workgroup dimensions. Seven positive and fourteen negative native canaries cover stage-local resources, sparse WGSL groups, typed overrides, deterministic virtual-source diagnostics, multiple Metal resource namespaces, runtime storage sizes, and fail-closed reflection mismatches. The compiler validates requested remaps independently against Inspector and the lowered entry interface instead of treating the request as its own evidence.
+
+The same fixture preserves Tint ranges only in the resolved virtual WGSL and adds an authored module identity when the complete range lies within one proven module segment. It does not fabricate authored line or column positions. Extracting evaluated, typed WGSL override defaults remains a separate semantic-materialization gate; the translation request currently begins after that work has been completed. The sampled-texture resource binding-array canary is translator evidence only; resource binding arrays stay outside alpha because semantic v1 cannot carry their cardinality.
+
+The fixture validates the JSON envelopes in Node.js and adapts them to typed prototype arguments. The final stdin/EOF JSON codec and its transport-failure tests remain an implementation gate.
 
 The vertex-buffer follow-up establishes a pipeline-local mapping instead of a fixed shader-versus-geometry partition. It preserves artifact-fixed shader and internal slots, starts logical vertex streams after the highest occupied external shader-buffer interval, and rejects a range that crosses the recorded external ceiling. A deliberately colliding Metal pipeline still compiled, while order-sensitive readback exposed the alias; vgpu must therefore validate disjointness itself. Another canary switched between two mappings in one encoder and proved that every active vertex stream must be rebound when the pipeline mapping changes. The exact-capacity fixture used its complete 31-entry test table in a real draw. Its numeric partition and conservative constant-argument mix are fixture inputs, not public ABI or hardware-support claims. This runtime evidence comes from the current Apple-silicon machine; it does not establish Intel or discrete-GPU support, and offline `metal` plus `metallib` validation remains pending.
 
-The runtime-size follow-up validates multiple runtime storage buffers, sparse physical slots, stage-local packing, rebinding larger effective ranges, and equivalent immediate-data and legacy UBO results on the current Apple-silicon Metal runtime. For `buffer(i)`, word `i` is the effective bound range in bytes, and the region extends through the highest projected runtime-sized storage slot. C1 remains open for the direct-target macOS 14 arm64 and x86_64 compiler build, offline `metal` and `metallib`, the full shader corpus through that exact wrapper, authored-diagnostic provenance, artifact determinism, and pixel/buffer parity. The reproducible fixtures live in `experiments/native-metal-spikes/c1-runtime-buffer-sizes` and `experiments/native-metal-spikes/c1-vertex-buffer-slots`.
+The runtime-size follow-up validates multiple runtime storage buffers, sparse physical slots, stage-local packing, rebinding larger effective ranges, and equivalent immediate-data and legacy UBO results on the current Apple-silicon Metal runtime. For `buffer(i)`, word `i` is the effective bound range in bytes, and the region extends through the highest projected runtime-sized storage slot. C1 remains open for evaluated override-default extraction, the direct-target macOS 14 arm64 and x86_64 compiler build, offline `metal` and `metallib`, the full shader corpus through that exact wrapper, authored spans beyond the current module-only attribution, artifact determinism, and pixel/buffer parity. The reproducible fixtures live in `experiments/native-metal-spikes/c1-runtime-buffer-sizes` and `experiments/native-metal-spikes/c1-vertex-buffer-slots`.
 
 C3a passed the current structural artifact fixture. It assembles the generated package around intentionally invalid UTF-8 text whose filename ends in `.metallib`, then verifies deterministic output, schemas and hashes, compatibility checks, SwiftPM dependency and resource boundaries, clean consumer builds without invoking Node.js, Tint, or Apple Metal compiler tools after generation, and the positive generated-output allowlist. Its `Noop` program has no size region; its synthetic `RuntimeArray` program records a compute region and shared immediate-data slot. The fixture distinguishes the zero-element layout minimum from the one-element binding minimum, validates region order and slot relationships, keeps dynamic ranges out of the artifact, and requires model support only for a selected stage with a region. It resolves and hashes the sentinel through `Bundle.module`, but never passes it to Metal. C3a therefore validates the package and compatibility boundary, not a Metal library or shader execution.
 
@@ -207,17 +215,14 @@ A one-shot command writes one versioned JSON envelope to stdout and no ANSI cont
   "error": {
     "code": "VGPU-NATIVE-FEATURE-UNSUPPORTED",
     "message": "Program ParticleDraw requires storage buffers.",
-    "file": "Shaders/Particles.wgsl",
-    "line": 12,
-    "column": 24,
     "fix": "Upgrade @vgpu/native and the vGPU Swift products to compatible versions with storage-buffer support, or remove this program."
   }
 }
 ```
 
-Exit code `0` means success, `1` means the operation completed with a negative result, and `2` means the invocation itself was invalid.
+These are public CLI envelopes and exit codes: `0` means success, `1` means the operation completed with a negative result, and `2` means the invocation itself was invalid. They are separate from the internal worker transport, where a decoded `ok: false` response is handled normally and nonzero exits indicate transport failure or a crash.
 
-Resolver and reflection diagnostics point to authored WGSL spans. Translation and Metal compiler diagnostics include an authored span when the translator supplies a mapping; otherwise generated MSL is the primary location and the diagnostic says that no WGSL mapping is available.
+Resolver errors can point to an authored WGSL span. Tint parse and validation diagnostics point to the resolved virtual WGSL; the current origin map can add the authored module identity but cannot honestly recover its line or column. Inspect, lower, and generate failures do not invent a source location. Apple's compiler points to generated MSL unless a real WGSL-to-MSL source map is available.
 
 ## Add CI gates
 
@@ -248,7 +253,7 @@ Steady-state tests verify that no pipeline is created after warm-up, memory does
 | `VGPU-NATIVE-OUTPUT-INTERRUPTED`      | A read-only command found an orphaned staging directory from an interrupted swap cleanup.                   | Run the reported `native build` or `native dev` command; it validates markers before removing the orphan. |
 | `VGPU-NATIVE-TOOLCHAIN-MISSING`       | The selected SDK or downloadable Metal toolchain cannot compile and link.                                   | Run `native doctor --target macos` and apply its reported fix.                                            |
 | `VGPU-NATIVE-FEATURE-UNSUPPORTED`     | A program requires a resource, stage, format, or option unavailable in the installed compiler/runtime pair. | Inspect `native capabilities --json`; upgrade both packages together or remove the feature.               |
-| `VGPU-NATIVE-MSL-COMPILE`             | Generated MSL failed Apple's compiler.                                                                      | Open the retained MSL location and use the WGSL span when the translator provided one.                    |
+| `VGPU-NATIVE-MSL-COMPILE`             | Generated MSL failed Apple's compiler.                                                                      | Open the retained MSL location and use a WGSL span only when a real WGSL-to-MSL map provides one.         |
 | `VGPU-NATIVE-ARTIFACT-STALE`          | Source or configuration no longer matches committed output.                                                 | Rebuild on a supported macOS build machine and commit the complete package.                               |
 | `VGPU-NATIVE-ARTIFACT-INCOMPATIBLE`   | Manifest, generated Swift, Metal library, or `VGPUABI` contract do not agree.                               | Regenerate with a compatible native compiler/runtime release.                                             |
 | `VGPU-NATIVE-METAL-UNAVAILABLE`       | No compatible Metal device is available.                                                                    | Render the view fallback or avoid constructing the renderer.                                              |

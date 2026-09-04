@@ -94,7 +94,7 @@ The `semantic` object is independent of Metal. It records:
 - authored and resolved WGSL entry points and stage interfaces;
 - the fixed `wgsl-host-shareable-v1` layout model, host-shareable types, and intrinsic WGSL alignment, size, offset, and stride values reflected by Tint;
 - WGSL resource bindings, including their address space and access independently from the referenced intrinsic layout;
-- typed override defaults and selected values baked before translation;
+- typed, evaluated override defaults and the exact selected values baked before translation, with required values distinguished from declarations that have an initializer;
 - literal or override-backed workgroup dimensions;
 - explicitly enabled WGSL environment features and backend-neutral execution requirements;
 - the generated Swift, binding-layout, and required `VGPUABI` contract integers.
@@ -106,16 +106,18 @@ The `projection` object records only the selected Metal result:
 - the macOS deployment target, Metal compiler target triple, and Metal language version;
 - `vgpu-tint-compiler`, its pinned Dawn/Tint revision, wrapper protocol and binary hash, translator options, and the producing Apple toolchain;
 - the single `.metallib` reference;
-- emitted Metal function names and interface indices;
+- emitted Metal function names;
 - the versioned vgpu mapping from semantic bindings to Metal buffer, texture, and sampler slots, plus every emitted backend-only internal slot;
 - the storage-buffer-size model and each compiler-emitted stage-local region within an `immediate-data` payload;
 - the versioned policy and exclusive external-buffer ceiling used to place pipeline-local vertex streams without colliding with vertex-stage shader buffers;
 - resolved compute workgroup dimensions;
 - static Metal-device requirements;
-- optional WGSL-to-MSL source maps;
+- optional, separately produced WGSL-to-MSL source maps;
 - optional compare-runner metadata under `projection.testing`.
 
-vgpu supplies the external slot map and reserved internal profile to Tint, then records the effective external slots, internal bindings, and size regions returned for the generated entry point. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
+The projection does not flatten every WGSL `@location` into one generic Metal interface index. A vertex input, an inter-stage value, and a fragment output occupy different Metal namespaces. A future interface projection must distinguish those roles explicitly instead of assigning the same meaning to one integer field.
+
+vgpu supplies the external slot map and reserved internal profile to Tint. The translation worker checks the external map against Tint reflection and the lowered entry interface, returns that validated map unchanged, and reports only the internal bindings and size regions that the generated entry point actually uses. Tint does not allocate the public ABI. An internal resource introduced by lowering has an explicit role and slot but no invented WGSL binding identity.
 
 Slots are scoped by semantic program, selected stage, and Metal resource class. Within each namespace, active bindings are ordered by `(group, binding)`, projected components by stable component name, and each component occupies a contiguous interval. Only internal roles emitted for that program and stage appear in `internalBindings`. A slot `count` is projection width; it does not add WGSL resource binding-array semantics to semantic contract v1. The first alpha rejects WGSL resource binding arrays (`binding_array`) before projection.
 
