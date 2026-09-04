@@ -139,11 +139,13 @@ that changing the physical map requires rebinding every active stream. The fixtu
 partition, complete 31-entry table, and conservative constant-argument mix are test inputs rather
 than public ABI or hardware-support claims.
 
-The last locked direct-source revision built the worker from Tint's `tint_api` root for macOS 14 as
-byte-reproducible arm64, x86_64, and universal executables. Native and Rosetta executions matched
-the authenticated monolithic oracle without linking WebGPU, runtime backends, or frameworks. That
-proof predates the exact semantic-interface handshake and is intentionally stale until its source
-lock and hashes are rebaselined against the current worker.
+The current accepted direct-source revision builds the worker from Tint's `tint_api` root for macOS
+14 as byte-reproducible arm64, x86_64, and universal executables. Its ordinary publication gate
+authenticates ten branch-specific canaries and matches the arm64-native monolithic oracle across
+eight direct variants without linking WebGPU, runtime backends, or frameworks. This proof covers
+the exact semantic-interface handshake. Rosetta validates the x86_64 compiler process, not Intel or
+AMD GPU behavior, and the paired dual-source canary remains internal evidence rather than alpha
+support.
 
 The shader-interface follow-up proves the required split. Its isolated experiment extracts the
 complete portable interface from core IR before Metal lowering and established equivalent writer
@@ -158,11 +160,10 @@ fragment color maps; the complete link remains semantic. Dual-source stays rejec
 product profile.
 
 Do not freeze the source pin or numeric slot profile until offline `metal` plus `metallib`, authored
-spans beyond current module-only provenance, the direct-source proof rebaseline, the full shader
-corpus through the exact direct worker, deterministic connected artifact output, and pixel/buffer
-parity pass.
-Semantic v1 cannot represent WGSL resource binding-array (`binding_array`) cardinality, so alpha
-rejects all resource binding arrays.
+spans beyond current module-only provenance, the full shader corpus through the exact direct worker,
+deterministic connected artifact output, and pixel/buffer parity pass. Semantic v1 cannot represent
+WGSL resource binding-array (`binding_array`) cardinality, so alpha rejects all resource binding
+arrays.
 The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,
 `experiments/native-metal-spikes/c1-tint-standalone`,
 `experiments/native-metal-spikes/c1-binding-slots`,

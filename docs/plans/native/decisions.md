@@ -298,12 +298,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    fixture's numeric indices and conservative constant-argument budget are not public ABI or
    device-limit claims.
 
-   The last locked direct-source revision built the worker from Tint's `tint_api` root for the macOS
-   14 baseline. Its clean arm64 and x86_64 builds were byte-reproducible, combined into a
-   deterministic universal executable, ran natively and through Rosetta, and matched the
-   authenticated monolithic oracle byte for byte without linking WebGPU, runtime backends, or
-   frameworks. That proof predates the semantic-interface handshake and is intentionally stale
-   until its source lock and hashes are rebaselined against the current worker.
+   The current accepted direct-source revision builds the worker from Tint's `tint_api` root for the
+   macOS 14 baseline. Its ordinary publication gate authenticates ten branch-specific canaries,
+   produces byte-reproducible arm64, x86_64, and universal executables, and matches the arm64-native
+   monolithic oracle byte for byte across eight direct variants without linking WebGPU, runtime
+   backends, or frameworks. This proof covers the exact semantic-interface handshake. Its x86_64
+   executions run through Rosetta and do not establish Intel or AMD GPU support; its dual-source
+   canary remains internal translator evidence and does not enable the alpha feature.
 
    The shader-interface follow-up captures the portable view before Metal lowering. Its isolated
    experiment established equivalent writer output, while the integrated production-path prototype
@@ -314,12 +315,11 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    protocol additionally proves paired dual-source lowering; the alpha still rejects that feature.
 
    Before freezing the dependency or numeric slot profile, pass offline `metal` plus `metallib`
-   compilation, rebaseline the direct-source proof, add authored spans beyond the current
-   module-only diagnostic attribution, run the full shader corpus through the exact direct worker,
-   and pass deterministic connected artifact output and pixel/buffer parity. Semantic v1 has no
-   WGSL resource binding-array (`binding_array`) cardinality, so the alpha rejects all resource
-   binding arrays; the sampled-texture writer canary is future evidence only. Keep Naga only as a
-   differential oracle.
+   compilation, add authored spans beyond the current module-only diagnostic attribution, run the
+   full shader corpus through the exact direct worker, and pass deterministic connected artifact
+   output and pixel/buffer parity. Semantic v1 has no WGSL resource binding-array (`binding_array`)
+   cardinality, so the alpha rejects all resource binding arrays; the sampled-texture writer canary
+   is future evidence only. Keep Naga only as a differential oracle.
 
 2. C3a passed its hardened structural fixture: strict Ajv compilation and cross-schema resolution,
    deterministic assembly, every artifact and fingerprint relation, Swift tools and language mode

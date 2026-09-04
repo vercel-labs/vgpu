@@ -172,9 +172,12 @@ every request, compares it before generation, calls `Generate()`, and inspects t
 Metal lowering. Fifteen positive and twenty-two negative native cases pass deterministically,
 including sparse interfaces and the internal dual-source canary.
 
-The last direct-source distribution proof predates this interface-handshake change. Its source lock
-and hashes are intentionally stale until they are rebaselined against the current worker, so it is
-not current arm64, x86_64, or universal distribution evidence.
+The current direct-source distribution proof covers this interface handshake. Its accepted lock
+authenticates an exact ten-canary request closure, including sparse vertex and fragment interfaces,
+scalar fragment I/O, compute built-ins, internal dual-source lowering, a fail-closed interface
+mismatch, and the four legacy branches. The ordinary publication gate passes with byte-identical
+responses from eight direct variants spanning the arm64, x86_64, and universal executables against
+the arm64-native oracle.
 
 `experiments/native-metal-spikes/c3-artifact-swiftpm` now carries a synthetic `SparseDraw` program.
 It proves that locations `3/7` and colors `1/4` survive schema validation, canonical cross-checks,
@@ -183,8 +186,7 @@ runtime fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without
 These results do not expand the supported hardware matrix. The live gate ran only on Apple silicon;
 an x86_64 package build and Rosetta execution do not establish Intel or AMD GPU behavior. Offline
 `metal` and `metallib`, the broader multi-entry semantic-extractor-to-artifact integration, a real
-C1-connected artifact, the direct-source rebaseline, full corpus coverage, and pixel/buffer parity
-remain open.
+C1-connected artifact, full corpus coverage, and pixel/buffer parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 
