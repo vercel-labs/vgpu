@@ -84,7 +84,7 @@
     "closure": {
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
       "files": 4,
-      "sha256": "33197544d0d0d10615cc1af95c8f0a54df00edee58422969f9862f3531d4e8de",
+      "sha256": "591cd19a26a177f768eba9c97ca382975329ed42214faf3c1fda142119c6222c",
       "paths": ["json-codec.cc", "json-codec.h", "main.cc", "request.h"]
     }
   },
@@ -102,13 +102,13 @@
       },
       "nativeCompiler": {
         "path": "../c1-compiler-protocol/lib/native-compiler.mjs",
-        "bytes": 15110,
-        "sha256": "1c8ce0f698a99927d28e7805e5f50f5d87a216f3ae3d94838b06f50daaa73b91"
+        "bytes": 15242,
+        "sha256": "1f8f0c5941c3699864c0737b668fdd3fa486c223ae0f9da1d08432a949ec458e"
       },
       "protocol": {
         "path": "../c1-compiler-protocol/lib/protocol.mjs",
-        "bytes": 23875,
-        "sha256": "0992a2962310d8d5948227b71fc9a8008ca421b133f91efc8aa3d14a20397657"
+        "bytes": 23909,
+        "sha256": "55f4a29989d2c82b5054d431868be1ef79e457478c85cff5b95c75b8855ba1be"
       },
       "originMapProtocol": {
         "path": "../c1-compiler-protocol/lib/origin-map.mjs",
@@ -132,8 +132,8 @@
       },
       "inventoryProtocol": {
         "path": "../c1-semantic-bridge/lib/protocol.mjs",
-        "bytes": 12601,
-        "sha256": "2fea9bd049afc3e4e4e8da6c6e939b894b0c0d73cfa008e6b38dd4157e2290b8"
+        "bytes": 12797,
+        "sha256": "720598ac423e4bbbd63396b2f61542fc9d39a9ad2d57e9dc9bb863ff634f1d2c"
       },
       "inventoryRequestSchema": {
         "path": "../c1-semantic-bridge/contracts/inventory-request-v1.schema.json",
@@ -144,14 +144,29 @@
         "path": "../c1-semantic-bridge/contracts/inventory-response-v1.schema.json",
         "bytes": 3979,
         "sha256": "2e37070009a9b555ce92938231af84c593664155330a4a8fd34ea3b0326e6c48"
+      },
+      "semanticExtractionProtocol": {
+        "path": "../c1-semantic-bridge/lib/semantic-extraction-protocol.mjs",
+        "bytes": 14616,
+        "sha256": "28d71840840c507657c2a357a9cee534e6d021f393024e2985a98115ac92c082"
+      },
+      "semanticExtractionRequestSchema": {
+        "path": "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
+        "bytes": 3268,
+        "sha256": "da321fd903639706411cda8080ed322af8bc448376c5f9dd79aafc0279d18602"
+      },
+      "semanticExtractionResponseSchema": {
+        "path": "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
+        "bytes": 21835,
+        "sha256": "960270e71103338ad8090d45c62b603a5d9c151aa6426acc7c52cfa2136ba729"
       }
     },
     "requests": {
       "root": "..",
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
-      "files": 14,
-      "bytes": 29813,
-      "sha256": "ccd47f88eefe752d3cff72381e63ba7ce86dcf98a4687b7cbcf344549e928863",
+      "files": 18,
+      "bytes": 39978,
+      "sha256": "544724738f8e996e26cc6621eb906292088db0eb886bee8882f7d2f3e88fb73c",
       "paths": [
         "c1-compiler-protocol/fixtures/requests/generate-failure.json",
         "c1-compiler-protocol/fixtures/requests/noop.json",
@@ -161,6 +176,10 @@
         "c1-semantic-bridge/fixtures/requests/invalid-wgsl.json",
         "c1-semantic-bridge/fixtures/requests/library-only.json",
         "c1-semantic-bridge/fixtures/requests/multi-stage.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-override.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-resource.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/compute-interface.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
         "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
         "c1-tint-direct-build/fixtures/requests/dual-source.json",
         "c1-tint-direct-build/fixtures/requests/fragment-sparse.json",
@@ -216,6 +235,30 @@
         "requestSha256": "f4099224a88d7acc51608b853335421ce41714996077368ad133f3d4cf6b2a4b",
         "responseBytes": 700,
         "responseSha256": "a1ecac6d1ae9dcb99acfddad70e34770324fd1a1baecd301bab3be4678b5ce78",
+        "ok": true
+      },
+      "semantic-active-override": {
+        "requestSha256": "b85ff9868f9ba540725326f41bff7b7b801657c8be7da12ae302bd7bd217c93b",
+        "responseBytes": 648,
+        "responseSha256": "5e364e5aeaf3c55553e81996c7b8dea38242624dae1a1df334c003fa1fbc10d0",
+        "ok": false
+      },
+      "semantic-active-resource": {
+        "requestSha256": "0ea33c6c0cef0308b16a863ba74d5c5f1038bf8b141ebd97ce4259fee139a79f",
+        "responseBytes": 648,
+        "responseSha256": "53a91be78f26552efe6a7ef5a5ea617ef6cdd2810163a1e00a6b0af72f789e43",
+        "ok": false
+      },
+      "semantic-compute-interface": {
+        "requestSha256": "ee6da4eb9153eeefbda37ab9ad5a5d883f392065d358048d7733170fbe18082e",
+        "responseBytes": 1272,
+        "responseSha256": "072fe886fa65aaf935b0228ccf0c7aa61584f74a405532d152cc924e4507a3c8",
+        "ok": true
+      },
+      "semantic-render-interface": {
+        "requestSha256": "0208d7a7733a99d34917dbe5025d5e057ba154a70b32c176b335affe425d0be3",
+        "responseBytes": 2833,
+        "responseSha256": "d7642766faa953b8b02129e61fc599b4f53b624010ea0c2c589591dad5b54dd7",
         "ok": true
       },
       "compute-builtins": {
@@ -284,8 +327,8 @@
       "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
       "objects": 407,
       "files": 920,
-      "bytes": 8734177,
-      "sha256": "ec4dae9c72ff740a9220b1ad61acc3f907f9a7bd555bdb554eeaca21d675baa1",
+      "bytes": 8753430,
+      "sha256": "a032ffef13aeba3aa3f0781a89860f4d8bcde1ab2375e77e2172314bd511d167",
       "repositories": {
         "dawn": {
           "files": 804,
@@ -309,8 +352,8 @@
         },
         "worker": {
           "files": 4,
-          "bytes": 123214,
-          "sha256": "33197544d0d0d10615cc1af95c8f0a54df00edee58422969f9862f3531d4e8de"
+          "bytes": 142467,
+          "sha256": "591cd19a26a177f768eba9c97ca382975329ed42214faf3c1fda142119c6222c"
         }
       }
     }
@@ -334,16 +377,16 @@
     },
     "outputs": {
       "arm64": {
-        "bytes": 5831920,
-        "sha256": "11294a44d01587759c699ed8922f1ccc78c7fa4db75b671dcccca1e81811aebf"
+        "bytes": 5872240,
+        "sha256": "9c968b1a49892eff972b0ca2b90a84907c716f13b2092e5b1f947474b9b41b48"
       },
       "x86_64": {
-        "bytes": 6896352,
-        "sha256": "2bf6f6f6157d06bfa9c3c79e44d1dcba448430fa77686ad42b72c27aded9d3c1"
+        "bytes": 6940760,
+        "sha256": "e99c269238340325122f5547ef900e1d2f7a0ce82565689e0f2031213a7abedf"
       },
       "universal": {
-        "bytes": 12745968,
-        "sha256": "12fb8ae89add85fc0908ba0155d7382180759170ead407264236e6a758a33fe7"
+        "bytes": 12819056,
+        "sha256": "d6454a851d31ad920f7ca59158a015734cc5c39df34898c7d72bf58f1d9e9f85"
       }
     },
     "architectures": ["arm64", "x86_64"]
