@@ -212,5 +212,6 @@ relocates identical source while keeping the virtual source name stable.
 
 This proves extraction and materialization semantics against a verified feasibility archive. The
 archive is arm64, targets a newer macOS than the distribution baseline, and exposes a monolithic
-library. It does not close the later source-build, macOS 14, x86_64, direct-target, offline Metal,
-signing, or packaging gates.
+library. The separate direct-source gate closes the compiler worker's macOS 14 arm64/x86_64 build;
+this materializer fixture does not itself validate offline Metal, signing, artifact assembly, or
+packaging.

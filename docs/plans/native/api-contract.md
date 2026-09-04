@@ -169,9 +169,10 @@ dependency can change an omitted dependent value. The semantic program retains t
 of the selected entry points' static typed sets; a module override unused by all selected entries is
 omitted. Each translation request receives the corresponding exact static per-entry subset. Tint
 may later prune initializer-only dependencies, but that optimization does not redefine either the
-required interface or semantic v1. Evaluated-default extraction and partial-configuration ordering
-have passed the C1 feasibility follow-up; connecting that materializer to the exact-static compiler
-request and artifact remains part of the deterministic integration gate.
+required interface or semantic v1. Evaluated-default extraction, partial-configuration ordering,
+and the exact-static materializer-to-worker boundary have passed their C1 gates. Connecting the
+multi-entry semantic union and translation responses to the artifact remains a deterministic
+integration gate.
 
 The Metal projection records:
 

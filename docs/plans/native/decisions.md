@@ -247,13 +247,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    materialization follow-up then proved evaluated typed defaults and partial selections through
    Tint's lowered IR. It validates missing required values over the entry point's static override
    interface and substitutes module-level configuration before evaluating omitted initializers.
-   Its separately verified pruned set is local evidence, not a replacement for the exact-static
-   semantic and compiler contracts. Valid module configuration unused by one entry remains accepted.
-   The spike's strict typed, finite scalar boundary is a local native contract, not a claim of
-   complete WebGPU input-conversion parity. The public representation of initializer availability
-   remains undecided, and exact-static materializer-to-worker integration remains unproven. The C++
-   compiler-protocol prototype also still adapts validated JSON to typed arguments instead of
-   implementing the final stdin/EOF codec.
+   It now preserves the exact static interface separately from its pruned effective evidence, binds
+   every success to the resolved-source SHA-256, and feeds only that exact typed set to the compiler
+   worker. The connected gate proves dependent reevaluation, bypassed invalid initializers, inactive
+   required declarations, all five scalar kinds, and fail-closed stale-source and set mismatches.
+   The worker materializes those values in Tint IR before entry pruning, then substitutes the
+   surviving overrides with an empty map. Valid module configuration unused by one entry remains
+   accepted. The spike's strict typed, finite scalar boundary is a local native contract, not a
+   claim of complete WebGPU input-conversion parity. Its rich initializer/default metadata and
+   pruned set remain local evidence rather than compiler-response surface.
+
+   The C++ worker also owns the final one-request stdin/EOF JSON codec. Its transport gate covers
+   framing and complexity limits, fragmented UTF-8, EOF, pipe backpressure, cancellation, timeout,
+   and decoded protocol failures. A handled compiler failure remains an `ok: false` response;
+   nonzero exit is reserved for an untrustworthy transport or process result.
 
    The runtime-size follow-up proved sparse slot-indexed packing for multiple runtime storage
    buffers, concrete binding ranges rather than backing-buffer lengths, derived extents, stage-local
@@ -269,10 +276,14 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    fixture's numeric indices and conservative constant-argument budget are not public ABI or
    device-limit claims.
 
-   Before freezing the dependency or numeric slot profile, build the wrapper from direct Tint
-   targets at the macOS 14 baseline with arm64 and x86_64 slices, and pass offline `metal` plus
-   `metallib` compilation, authored spans beyond the current module-only diagnostic attribution,
-   the final JSON worker codec, deterministic connected translator and artifact output, and
+   The direct-source follow-up now builds the same worker from Tint's `tint_api` root for the macOS
+   14 baseline. Clean arm64 and x86_64 builds are byte-reproducible, combine into a deterministic
+   universal executable, run natively and through Rosetta, and match the authenticated monolithic
+   oracle byte for byte without linking WebGPU, runtime backends, or frameworks.
+
+   Before freezing the dependency or numeric slot profile, pass offline `metal` plus `metallib`
+   compilation, authored spans beyond the current module-only diagnostic attribution, the full
+   shader corpus through the exact direct worker, deterministic connected artifact output, and
    pixel/buffer parity. Semantic v1 has no WGSL resource binding-array
    (`binding_array`) cardinality, so the alpha rejects all resource binding arrays; the
    sampled-texture writer canary is future evidence only. Keep Naga only as a differential oracle.

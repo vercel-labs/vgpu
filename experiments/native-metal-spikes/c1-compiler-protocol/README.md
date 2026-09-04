@@ -13,8 +13,8 @@ typed request before Tint runs. It derives resource kinds from Tint Inspector, a
 vgpu-owned Metal slot mapping, and returns either a structured compiler failure or MSL plus the
 effective binding metadata.
 
-The full gate passes seven positive and fourteen negative native canaries. Every native case is run
-twice, for 21 deterministic cases, and produces byte-identical status and output. A separate codec
+The full gate passes ten positive and sixteen negative native canaries. Every native case is run
+twice, for 26 deterministic cases, and produces byte-identical status and output. A separate codec
 gate covers 25 fatal framing/complexity faults, eleven decoded protocol failures, the 64/65 nesting
 boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a known SHA-256
 vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
@@ -23,14 +23,17 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
 - module-attributed WGSL diagnostics without invented authored line or column positions;
 - exact active override sets whose `bool`, `i32`, `u32`, `f16`, and `f32` values are observable in
   emitted MSL and resolved workgroup dimensions;
+- exact-static override materialization before entry pruning, including a bypassed invalid
+  initializer and a required declaration used only by another entry point;
 - independent Metal buffer, texture, and sampler namespaces;
 - one sampled texture binding array as translator evidence;
 - runtime storage-array sizes through the shared immediate-data binding at `buffer(30)`;
 - concrete emitted `[[buffer]]`, `[[texture]]`, and `[[sampler]]` indices; and
 - fail-closed checks for stage, feature, override, binding, and emitted-name mismatches.
 
-This is a protocol and semantic-feasibility result, not a distributable compiler. The native gate
-still uses the verified arm64 Dawn release archive and its monolithic `libwebgpu_dawn.a`.
+This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
+`libwebgpu_dawn.a`. The separate direct-source gate validates the same worker as distributable
+arm64, x86_64, and universal executables without that dependency.
 
 ## Boundary
 
@@ -188,10 +191,13 @@ executable, and link no WebGPU implementation, runtime backend, or framework. Th
 workers run natively and the x86_64 direct workers run under Rosetta; every variant produces
 responses byte-identical to this fixture's arm64-native monolithic oracle.
 
+The override integration follow-up now connects the materializer's exact static view to this
+request, binds it to the resolved-source hash, and proves that missing, extra, or stale values fail
+before or inside the independently validating worker.
+
 The remaining gates are:
 
-- connect the proven override-default materializer and the broader semantic extractor to request
-  construction;
+- connect the broader semantic extractor and multi-entry union to artifact construction;
 - define the vertex-input, inter-stage, and fragment-output interface projection;
 - validate generated MSL through Apple's offline compiler when that toolchain is available; and
 - connect this compiler response to the deterministic Swift package artifact spike.
