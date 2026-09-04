@@ -48,6 +48,7 @@ export const PROGRAM_FINGERPRINT_DOMAIN = "vgpu-native-program/v1";
 
 const assemblies = new WeakMap();
 const slotAllocations = new WeakMap();
+const compilerRequests = new WeakMap();
 const validators = loadValidators();
 const stageOrder = ["vertex", "fragment", "compute"];
 const programStages = Object.freeze({
@@ -230,6 +231,21 @@ export function isMetalSlotAllocation(value) {
   );
 }
 
+export function isMetalSlotAllocationForAssembly(value, assembly) {
+  return slotAllocations.get(value)?.assembly === assembly;
+}
+
+export function isAssembledCompilerRequest(value) {
+  return (
+    typeof value === "object" && value !== null && compilerRequests.has(value)
+  );
+}
+
+export function isCompilerRequestForAssembly(value, assembly, allocation) {
+  const record = compilerRequests.get(value);
+  return record?.assembly === assembly && record?.allocation === allocation;
+}
+
 /**
  * Projects one existing compiler request from a nominal assembly and its
  * associated vgpu-owned slot allocation. No caller can supply semantic facts
@@ -309,7 +325,9 @@ export function compilerRequestForAssembledEntry({
       `compiler request preflight failed: ${cause?.message ?? cause}`
     );
   }
-  return freezeJson(request);
+  const projectedRequest = freezeJson(request);
+  compilerRequests.set(projectedRequest, { assembly, allocation, stage });
+  return projectedRequest;
 }
 
 function assertAssemblyAssociations(finalized, extraction, declarations) {
