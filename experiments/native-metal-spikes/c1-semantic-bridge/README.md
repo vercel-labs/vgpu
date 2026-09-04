@@ -169,7 +169,9 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) freezes the pure
   TypeScript join, render linking, and fingerprint exclusions; and
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
-  freezes slot ownership, per-entry compiler projection, and the connected offline evidence.
+  freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
+- [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
+  proposes the nominal response-to-program-projection boundary for the next slice.
 
 ## Implementation order
 
