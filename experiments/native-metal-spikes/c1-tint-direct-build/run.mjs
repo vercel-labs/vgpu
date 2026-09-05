@@ -159,9 +159,8 @@ const resourceGraphOracleInputIds = [
   "semanticExtractionRequestSchema",
   "semanticExtractionResponseSchema",
   "semanticActiveResourceResponse",
-  "semanticRuntimeSizedStorageResponse",
 ];
-const currentOracleInputIds = [
+const preRuntimeStorageOracleInputIds = [
   ...inventoryOracleInputIds,
   "semanticExtractionProtocol",
   "semanticOverrideGraph",
@@ -174,6 +173,9 @@ const currentOracleInputIds = [
   "semanticOverrideConfiguredBypassResponse",
   "semanticOverrideConfiguredDependentResponse",
   "semanticOverrideRenderUnionResponse",
+];
+const currentOracleInputIds = [
+  ...preRuntimeStorageOracleInputIds,
   "semanticRuntimeSizedStorageResponse",
 ];
 const oracleInputs = [
@@ -461,7 +463,30 @@ const resourceGraphOracleFixtureIds = [
   "semantic-active-resource",
   "semantic-compute-interface",
   "semantic-render-interface",
-  "semantic-runtime-sized-storage",
+  "compute-builtins",
+  "dual-source",
+  "fragment-sparse",
+  "interface-mismatch",
+  "scalar-fragment",
+  "vertex-sparse",
+];
+const preRuntimeStorageOracleFixtureIds = [
+  "generate-failure",
+  "noop",
+  "runtime-array",
+  "wgsl-error",
+  "inventory-empty-module",
+  "inventory-invalid-wgsl",
+  "inventory-library-only",
+  "inventory-multi-stage",
+  "semantic-active-override",
+  "semantic-active-resource",
+  "semantic-compute-interface",
+  "semantic-override-all-scalars",
+  "semantic-override-configured-bypass",
+  "semantic-override-configured-dependent",
+  "semantic-override-render-union",
+  "semantic-render-interface",
   "compute-builtins",
   "dual-source",
   "fragment-sparse",
@@ -502,6 +527,9 @@ const inventoryOracleRequestPaths = oracleRequestPathsForFixtureIds(
 );
 const resourceGraphOracleRequestPaths = oracleRequestPathsForFixtureIds(
   resourceGraphOracleFixtureIds
+);
+const preRuntimeStorageOracleRequestPaths = oracleRequestPathsForFixtureIds(
+  preRuntimeStorageOracleFixtureIds
 );
 const currentOracleRequestPaths = oracleRequestPathsForFixtureIds(
   currentOracleFixtureIds
@@ -1014,6 +1042,8 @@ function oracleInputIdsForLockShape(shape) {
       return fixedInterfaceOracleInputIds;
     case "resource":
       return resourceGraphOracleInputIds;
+    case "pre-runtime-storage":
+      return preRuntimeStorageOracleInputIds;
     case "current":
       return currentOracleInputIds;
     default:
@@ -1032,6 +1062,8 @@ function oracleFixtureIdsForLockShape(shape) {
     case "fixed-interface":
     case "resource":
       return resourceGraphOracleFixtureIds;
+    case "pre-runtime-storage":
+      return preRuntimeStorageOracleFixtureIds;
     case "current":
       return currentOracleFixtureIds;
     default:
@@ -1077,6 +1109,12 @@ function selectOracleRequestRoot() {
         inputIds: resourceGraphOracleInputIds,
       },
       {
+        id: "pre-runtime-storage",
+        root: oracleRequestRoot,
+        paths: preRuntimeStorageOracleRequestPaths,
+        inputIds: preRuntimeStorageOracleInputIds,
+      },
+      {
         id: "current",
         root: oracleRequestRoot,
         paths: currentOracleRequestPaths,
@@ -1093,7 +1131,7 @@ function selectOracleRequestRoot() {
     );
     if (!recognized) {
       fail(
-        "source lock has no recognized legacy, compiler-only, inventory, fixed-interface, resource, or current oracle shape"
+        "source lock has no recognized legacy, compiler-only, inventory, fixed-interface, resource, pre-runtime-storage, or current oracle shape"
       );
     }
     baselineLockShape = recognized.id;
