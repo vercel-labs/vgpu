@@ -85,7 +85,7 @@ const expectedConnectedProbeReport = Object.freeze({
   directVertexCount: 0,
   sameAllocationGeneration: true,
   cpuPacketReads: 0,
-  cpuWaits: 0,
+  intermediateCPUWaits: 0,
   onErrorCount: 0,
   negativeCases: Object.freeze([
     Object.freeze({
