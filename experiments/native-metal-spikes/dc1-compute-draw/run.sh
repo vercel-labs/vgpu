@@ -1,105 +1,104 @@
-#!/usr/bin/env bash
+#!/bin/bash
+
 set -euo pipefail
 
-SPIKE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-BUILD_DIR="$SPIKE_DIR/.build"
-ARTIFACT_DIR="$SPIKE_DIR/.artifacts"
-PREPARED_DIR="$BUILD_DIR/prepared-runtime"
+if [[ $# -gt 1 ]]; then
+  echo "usage: run.sh [vgpu-tint-worker]" >&2
+  exit 64
+fi
 
-"$SPIKE_DIR/oracle/run.sh"
+spike_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$spike_dir/../../.." && pwd)"
+worker="${1:-$repo_root/experiments/native-metal-spikes/c1-tint-direct-build/.artifacts/bin/vgpu-tint-worker-universal}"
+bridge="$spike_dir/scripts/compiler-bridge.mjs"
 
-for required_command in swift node rg cmp; do
-  if ! command -v "$required_command" >/dev/null 2>&1; then
-    echo "missing required command: $required_command" >&2
+for command_name in node jq; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "dc1-compute-draw: required command is missing: $command_name" >&2
     exit 1
   fi
 done
-
-mkdir -p "$BUILD_DIR" "$ARTIFACT_DIR"
-node "$SPIKE_DIR/scripts/prepare-runtime.mjs" --output "$PREPARED_DIR" >/dev/null
-
-swift format lint --strict --recursive "$PREPARED_DIR/Sources"
-
-if rg -n '(^|[[:space:]])import[[:space:]]+(VGPUResources|VGPUCompute)' \
-  "$PREPARED_DIR/Sources/VGPURender"; then
-  echo "VGPURender gained a Resources or Compute dependency" >&2
+if [[ ! -x "$worker" ]]; then
+  echo "dc1-compute-draw: Tint worker is missing or not executable: $worker" >&2
+  echo "pass an explicit worker path or build the c1-tint-direct-build component first" >&2
   exit 1
 fi
 
-PACKAGE_JSON="$ARTIFACT_DIR/runtime-package.json"
-swift package --package-path "$PREPARED_DIR" dump-package > "$PACKAGE_JSON"
-node --input-type=module - "$PACKAGE_JSON" <<'NODE'
-import { readFileSync } from "node:fs";
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/vgpu-dc1-suite.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
 
-const description = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const render = description.targets.find(({ name }) => name === "VGPURender");
-const dependencies = render?.dependencies.map((dependency) => dependency.byName?.[0]);
-if (JSON.stringify(dependencies) !== JSON.stringify([
-  "VGPUABI",
-  "VGPUCore",
-  "_VGPUBackendSPI",
-])) {
-  throw new Error("VGPURender target boundary drifted");
-}
-NODE
+if ! bash "$spike_dir/oracle/run.sh" >"$scratch/oracle.json" 2>"$scratch/oracle.stderr"; then
+  cat "$scratch/oracle.stderr" >&2
+  exit 1
+fi
+if [[ -s "$scratch/oracle.stderr" ]]; then
+  cat "$scratch/oracle.stderr" >&2
+  exit 1
+fi
 
-COMMON_FLAGS=(
-  --package-path "$PREPARED_DIR"
-  --cache-path "$BUILD_DIR/cache"
-  --config-path "$BUILD_DIR/config"
-  --security-path "$BUILD_DIR/security"
-  --scratch-path "$BUILD_DIR/runtime-native"
-  -Xswiftc -strict-concurrency=complete
-  -Xswiftc -warnings-as-errors
-)
+if ! node "$bridge" \
+  --worker "$worker" \
+  --probe "$spike_dir/probe.sh" \
+  >"$scratch/native.json" 2>"$scratch/native.stderr"; then
+  cat "$scratch/native.stderr" >&2
+  exit 1
+fi
+if [[ -s "$scratch/native.stderr" ]]; then
+  cat "$scratch/native.stderr" >&2
+  exit 1
+fi
 
-swift build "${COMMON_FLAGS[@]}"
-for run in first second; do
-  swift run "${COMMON_FLAGS[@]}" DC1RecordingProbe > "$ARTIFACT_DIR/runtime-$run.json"
-done
-cmp "$ARTIFACT_DIR/runtime-first.json" "$ARTIFACT_DIR/runtime-second.json"
+jq -e '
+  .contract == "vgpu-native-dc1-webgpu-oracle/v1"
+  and .status == "passed"
+  and .packet == {words:8,decoyByteRange:[0,16],realByteRange:[16,32]}
+  and .scenarios.blue.color == [0,0,255,255]
+  and .scenarios.red.color == [255,0,0,255]
+  and .scenarios.green.color == [0,255,0,255]
+  and .positive.callsBeforeFirstAwait == ["compute.dispatch(1)","frame.drawIndirect(offset:16)"]
+  and .positive.firstAwait == "target.read()"
+  and .positive.packetReadbacks == 0
+  and .positive.onErrorCount == 0
+' "$scratch/oracle.json" >/dev/null
+jq -e '
+  .schemaVersion == 1
+  and .gate == "dc1-compiler-bridge"
+  and .status == "passed"
+  and .connectedGate == true
+  and .resolverCalls == 1
+  and .semanticPrograms == 2
+  and .projections == 2
+  and .runtimeManifests == 2
+  and .uniqueTranslations == 3
+  and ([.programs[].semanticProgram] == ["ConsumePacket","ProducePacket"])
+  and ([.programs[].kind] == ["draw","compute"])
+  and .programs[0].bindings == []
+  and .programs[1].bindings == ["g0b0"]
+  and .programs[1].slots == [{stage:"compute",index:0}]
+  and .probe.status == "passed"
+  and .probe.gate == "dc1-compute-draw"
+  and .probe.deterministicProcesses == 2
+  and (.probe.reportSha256 | test("^[a-f0-9]{64}$"))
+' "$scratch/native.json" >/dev/null
 
-node --input-type=module - "$ARTIFACT_DIR/runtime-first.json" <<'NODE'
-import { readFileSync } from "node:fs";
-
-const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
-if (
-  report.schemaVersion !== 1 ||
-  report.gate !== "dc1-compute-draw-recording" ||
-  report.status !== "passed" ||
-  !same(report.commitTrace, ["computeCommit", "frameCommit"]) ||
-  !same(report.renderedArguments, [3, 1, 0, 0]) ||
-  !same(report.viewRange, [16, 32]) ||
-  report.consumerByteOffset !== 0 ||
-  report.physicalByteOffset !== 16 ||
-  report.directVertexCount !== 0 ||
-  report.nestedSlice !== true ||
-  report.sameAllocationGeneration !== true ||
-  report.noCPUReadOrWait !== true
-) {
-  throw new Error("DC1 recording handshake drifted");
-}
-const expectedFailureCodes = {
-  foreignContext: "VGPU-NATIVE-CONTEXT-MISMATCH",
-  misalignedOffset: "VGPU-INDIRECT-INVALID",
-  missingIndirectUsage: "VGPU-INDIRECT-INVALID",
-  offsetOverflow: "VGPU-INDIRECT-INVALID",
-  shortRange: "VGPU-INDIRECT-INVALID",
-};
-for (const [name, expectedCode] of Object.entries(expectedFailureCodes)) {
-  const failure = report.synchronousFailures?.[name];
-  if (
-    failure?.code !== expectedCode ||
-    failure?.submissionDelta !== 0 ||
-    failure?.tokenDelta !== 0 ||
-    failure?.onErrorDelta !== 0
-  ) {
-    throw new Error(`DC1 negative evidence drifted: ${name}`);
-  }
-}
-NODE
-
-"$SPIKE_DIR/../c2-generated-compute/run.sh"
-
-echo "dc1-compute-draw: oracle, prepared runtime, and C2 regression gates passed"
+jq -cn \
+  --slurpfile oracle "$scratch/oracle.json" \
+  --slurpfile native "$scratch/native.json" \
+  '{
+    schemaVersion: 1,
+    gate: "dc1-compute-draw-suite",
+    status: "passed",
+    oracle: {
+      contract: $oracle[0].contract,
+      packet: $oracle[0].packet,
+      scenarios: $oracle[0].scenarios,
+      positive: $oracle[0].positive
+    },
+    native: {
+      gate: $native[0].gate,
+      handoffSHA256: $native[0].handoffSha256,
+      librarySHA256: $native[0].metallibSha256,
+      programs: $native[0].programs,
+      connectedProbe: $native[0].probe
+    }
+  }'
