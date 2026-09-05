@@ -320,6 +320,8 @@ try inspect.set(\.values, to: allValues)
 
 Creating a view starts with `tailOffset + elementCount × stride`, applies the reflected `minimumBindingSize` and four-byte storage granularity, and rejects the result if the padding would change the length reported by `arrayLength()`. A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`; the specialized layout and binding types are only for a structure with a fixed prefix followed by a runtime array.
 
+The connected generated-compute canary exercises this exact example through Metal. `Values` has a 4-byte prefix and a 12-byte trailing-element stride, so the two-element and four-element views expose 28 and 52 bytes without reallocating the capacity-four storage. The shader observes lengths `2` and `4` and writes `[2, 202]` and `[4, 404]`; those results confirm that the runtime transports each binding's visible range rather than the allocation capacity.
+
 Bind a `VGPUTarget` directly when the resource must follow resize. The runtime observes its texture generation and rebuilds only the affected argument state. `target.color` returns the current concrete texture; code that binds that snapshot must call `set` again after `target.resize` replaces it.
 
 ## Next steps

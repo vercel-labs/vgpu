@@ -369,6 +369,8 @@ let submission = try update.dispatch(
 
 The first native compute API preserves the current JavaScript ordering boundary: `gpu.compute` creates and validates its compute pipeline synchronously, and `dispatch` creates and commits its own command buffer. It returns a discardable `VGPUSubmission`, just like a one-shot render. There is no separate compute `compile()` call. A render frame submitted afterward observes those writes through queue order.
 
+The generated-compute validation fixture exercises that boundary with two binding snapshots against one storage allocation. Its recording backend blocks inside `submitCompute` and proves the context has already registered the submission before a racing `gpu.settled()` takes its snapshot. The connected Metal gate then confirms synchronous encode and commit, independent visible ranges, deferred completion, and generation retention on the available Apple-silicon device. This validates one compute vertical slice; frame-integrated compute remains a separate API decision below.
+
 ```swift
 try update.dispatch(x: groupCount)
 

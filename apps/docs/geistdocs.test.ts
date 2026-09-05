@@ -119,6 +119,7 @@ describe("agent readiness metadata", () => {
     expect(rendering).toContain("public enum VGPUFramePassResult: Sendable");
     expect(rendering).toContain("throws -> VGPUSubmission");
     expect(rendering).toContain("let submission = try update.dispatch");
+    expect(rendering).toContain("blocks inside `submitCompute`");
     expect(rendering).toContain("do not expose an Apple-silicon mode");
     expect(rendering).toContain("Await each actor-owned instance in order");
     expect(rendering).not.toContain("The first native API is isolated to `@MainActor`");
@@ -158,7 +159,10 @@ describe("agent readiness metadata", () => {
     const build = docsContent("native/macos/build.md");
     expect(build).toContain("compiles the generated layout conformance from a separate SwiftPM package");
     expect(build).toContain("one additional typed Metal process");
-    expect(build).toContain("not generated program bindings, the production context and lifecycle");
+    expect(build).toContain("one external generated `VGPUComputeProgram`");
+    expect(build).toContain("depends only on `VGPUABI`");
+    expect(build).toContain("a racing `gpu.settled()` sees the registered work");
+    expect(build).toContain("requires byte-identical reports");
 
     const index = docsContent("index.mdx");
     expect(index).toContain("[Review the native API proposal](/docs/native)");
@@ -188,6 +192,11 @@ describe("agent readiness metadata", () => {
     expect(bindings).toContain(
       "A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`",
     );
+    expect(bindings).toContain(
+      "`Values` has a 4-byte prefix and a 12-byte trailing-element stride",
+    );
+    expect(bindings).toContain("views expose 28 and 52 bytes");
+    expect(bindings).toContain("writes `[2, 202]` and `[4, 404]`");
   });
 
   it("derives nested Native metadata from navigation groups", () => {
