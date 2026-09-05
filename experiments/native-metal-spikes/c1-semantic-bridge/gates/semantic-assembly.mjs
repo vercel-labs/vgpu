@@ -4282,6 +4282,14 @@ function runRuntimeSizedStorageMetalRuntime({
     readbackSha256,
     expectedSnapshots.runtimeSizedStorage.runtimeReadbackSha256
   );
+  const runtimeTailResourceProbe = settings.runtimeTailResourceProbe
+    ? runRuntimeTailResourceProbe({
+        executable: settings.runtimeTailResourceProbe,
+        libraryPath,
+        manifestPath,
+        scratch,
+      })
+    : undefined;
   return {
     status: "passed",
     deterministicProcesses: attempts.length,
@@ -4295,7 +4303,52 @@ function runRuntimeSizedStorageMetalRuntime({
     probeSha256,
     readbacks: report.readbacks,
     readbackSha256,
+    ...(runtimeTailResourceProbe && { runtimeTailResourceProbe }),
   };
+}
+
+function runRuntimeTailResourceProbe({
+  executable,
+  libraryPath,
+  manifestPath,
+  scratch,
+}) {
+  const attempt = runCommand(executable, [libraryPath, manifestPath], {
+    cwd: scratch,
+    timeout: 120_000,
+  });
+  if (attempt.error || attempt.signal || attempt.status !== 0) {
+    commandFailure("C2 runtime-tail resource Metal probe", attempt);
+  }
+  if (attempt.stderr !== "") {
+    fail(
+      `C2 runtime-tail resource Metal probe wrote stderr: ${attempt.stderr.trim()}`
+    );
+  }
+
+  let report;
+  try {
+    report = JSON.parse(attempt.stdout);
+  } catch (error) {
+    fail(
+      `C2 runtime-tail resource Metal probe returned invalid JSON: ${error.message}`
+    );
+  }
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    fail("C2 runtime-tail resource Metal probe report must be an object");
+  }
+  if (report.schemaVersion !== 1) {
+    fail(
+      "C2 runtime-tail resource Metal probe returned an unsupported schemaVersion"
+    );
+  }
+  if (report.gate !== "c2-runtime-tail-resource-metal") {
+    fail("C2 runtime-tail resource Metal probe returned the wrong gate identity");
+  }
+  if (report.status !== "passed") {
+    fail("C2 runtime-tail resource Metal probe did not report passed status");
+  }
+  return { status: "passed" };
 }
 
 function assertRuntimeSizedStorageManifestFailures({
@@ -4864,6 +4917,7 @@ function semanticSuccess(requestBytes, result) {
 function parseArguments(argv) {
   const parsed = {
     worker: undefined,
+    runtimeTailResourceProbe: undefined,
     requireWorker: false,
     requireOfflineMetal: false,
     requireMetalRuntime: false,
@@ -4875,6 +4929,7 @@ function parseArguments(argv) {
     if (["--help", "-h"].includes(argument)) {
       process.stdout.write(
         "Usage: node gates/semantic-assembly.mjs [--worker <Tint executable>] " +
+          "[--runtime-tail-resource-probe <executable>] " +
           "[--require-worker] [--require-offline-metal] " +
           "[--require-metal-runtime] [--skip-metal-runtime]\n"
       );
@@ -4908,6 +4963,16 @@ function parseArguments(argv) {
       parsed.worker = resolve(worker);
       continue;
     }
+    if (argument === "--runtime-tail-resource-probe") {
+      if (seen.has(argument)) fail(`${argument} may appear only once`);
+      seen.add(argument);
+      const executable = argv[++index];
+      if (!executable || executable.startsWith("--")) {
+        fail("--runtime-tail-resource-probe requires a value");
+      }
+      parsed.runtimeTailResourceProbe = resolve(executable);
+      continue;
+    }
     fail(`unknown argument ${argument}`);
   }
   if (
@@ -4916,6 +4981,27 @@ function parseArguments(argv) {
   ) {
     fail(`worker is not a regular file: ${parsed.worker}`);
   }
+  if (parsed.runtimeTailResourceProbe) {
+    if (
+      !existsSync(parsed.runtimeTailResourceProbe) ||
+      !lstatSync(parsed.runtimeTailResourceProbe).isFile()
+    ) {
+      fail(
+        `runtime-tail resource probe is not a regular file: ${parsed.runtimeTailResourceProbe}`
+      );
+    }
+    if ((lstatSync(parsed.runtimeTailResourceProbe).mode & 0o111) === 0) {
+      fail(
+        `runtime-tail resource probe is not executable: ${parsed.runtimeTailResourceProbe}`
+      );
+    }
+  }
+  if (parsed.runtimeTailResourceProbe && parsed.skipMetalRuntime) {
+    fail(
+      "--runtime-tail-resource-probe conflicts with --skip-metal-runtime"
+    );
+  }
+  if (parsed.runtimeTailResourceProbe) parsed.requireMetalRuntime = true;
   if (parsed.requireMetalRuntime && parsed.skipMetalRuntime) {
     fail("--require-metal-runtime conflicts with --skip-metal-runtime");
   }

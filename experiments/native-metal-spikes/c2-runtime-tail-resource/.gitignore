@@ -1,0 +1,4 @@
+.artifacts/
+.build/
+CrossPackageConsumer/.build/
+CrossPackageConsumer/.swiftpm/
