@@ -77,7 +77,7 @@ const expectedConnectedProbeReport = Object.freeze({
     red: Object.freeze([255, 0, 0, 255]),
     green: Object.freeze([0, 255, 0, 255]),
   }),
-  finalPacket: Object.freeze([3, 1, 0, 0]),
+  expectedPacket: Object.freeze([3, 1, 0, 0]),
   commitTrace: Object.freeze(["computeCommit", "frameCommit"]),
   viewRange: Object.freeze([16, 32]),
   consumerByteOffset: 0,
