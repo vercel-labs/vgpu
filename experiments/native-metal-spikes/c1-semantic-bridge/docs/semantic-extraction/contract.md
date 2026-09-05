@@ -14,10 +14,10 @@ lets the worker resolve cross-stage resource kinds atomically while TypeScript r
 
 The request uses `vgpu-native-tint-semantic-extraction/v1`:
 
-The placeholders below stand for values in the selected target shape for the next override slice;
-the checked-in request fixtures will contain concrete hashes, byte ranges, and source text. The
-current executable profile still requires an empty `overrideConfiguration`; its schema, JavaScript
-validator, C++ decoder, and oracles migrate to `identifier` together in that slice.
+The placeholders below stand for concrete fixture values; checked-in requests contain exact hashes,
+byte ranges, and source text. The `identifier` wire shape is executable and independently validated
+by the JavaScript producer and C++ decoder. The current worker profile still requires an empty
+`overrideConfiguration`; materialization and populated override responses land in the next slice.
 
 ```json
 {

@@ -90,7 +90,7 @@ struct SelectedEntryPoint {
 };
 
 struct ConfiguredOverride {
-  std::string name;
+  std::string identifier;
   std::variant<bool, double> value;
 };
 

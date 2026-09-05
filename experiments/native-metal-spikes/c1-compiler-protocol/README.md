@@ -16,7 +16,7 @@ projection.
 
 The full gate passes fifteen positive and twenty-two negative native canaries. Every native case is
 run twice, for 37 deterministic cases, and produces byte-identical status and output. A separate codec
-gate covers 25 fatal framing/complexity faults, nineteen decoded protocol failures, the 64/65 nesting
+gate covers 29 fatal framing/complexity faults, nineteen decoded protocol failures, the 64/65 nesting
 boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a known SHA-256
 vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
 
@@ -136,9 +136,9 @@ is only the schema/semantic-validating caller. Its raw invocation helper is name
 `decodeTintWorkerResponse` rejects any nonzero exit, signal, stderr, invalid JSON, or response that
 does not pass the supplied schema validator before returning a value. There are no temporary WGSL
 or mapping files and no typed CLI adaptation. The C++ process independently rejects unknown fields,
-crossed hashes and origin maps, noncanonical collection order, unsafe slot intervals, duplicate
-binding points, unsupported features, incoherent resource components, and emitted names outside
-the `vgpu_` domain.
+crossed hashes and origin maps, negative-zero JSON numbers, noncanonical collection order, unsafe
+slot intervals, duplicate binding points, unsupported features, incoherent resource components, and
+emitted names outside the `vgpu_` domain.
 
 Compiler diagnostics are bounded to 16,384 UTF-8 bytes at a code-point boundary before JSON
 serialization, with a 1 MiB aggregate message budget that preserves at least one error. Only the

@@ -415,23 +415,39 @@ function runStaticGate(validators, requests, responses) {
       "VGPU-C1-SEMANTIC-FEATURE-ORDER",
     ],
     [
-      "duplicate-override-name",
+      "duplicate-override-identifier",
       (value) =>
         (value.overrideConfiguration = [
-          { name: "VALUE", value: 1 },
-          { name: "VALUE", value: 2 },
+          { identifier: "17", value: 1 },
+          { identifier: "17", value: 2 },
+        ]),
+      "VGPU-C1-SEMANTIC-OVERRIDE-ORDER",
+    ],
+    [
+      "numeric-instead-of-ascii-override-order",
+      (value) =>
+        (value.overrideConfiguration = [
+          { identifier: "2", value: 1 },
+          { identifier: "17", value: 2 },
         ]),
       "VGPU-C1-SEMANTIC-OVERRIDE-ORDER",
     ],
     [
       "negative-zero-override",
-      (value) => (value.overrideConfiguration = [{ name: "VALUE", value: -0 }]),
+      (value) =>
+        (value.overrideConfiguration = [{ identifier: "VALUE", value: -0 }]),
       "VGPU-C1-SEMANTIC-WIRE",
     ],
     [
       "configured-override-profile",
-      (value) => (value.overrideConfiguration = [{ name: "VALUE", value: 1 }]),
+      (value) =>
+        (value.overrideConfiguration = [{ identifier: "VALUE", value: 1 }]),
       "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED",
+    ],
+    [
+      "legacy-override-name",
+      (value) => (value.overrideConfiguration = [{ name: "VALUE", value: 1 }]),
+      undefined,
     ],
   ];
   for (const [name, mutate, expectedCode] of prelaunchMutations) {
@@ -444,6 +460,53 @@ function runStaticGate(validators, requests, responses) {
     );
   }
   assert.equal(launches, 0);
+
+  const validOverrideSelectors = structuredClone(baseRequest);
+  validOverrideSelectors.overrideConfiguration = [
+    { identifier: "0", value: false },
+    { identifier: "17", value: 4 },
+    { identifier: "65535", value: 1 },
+    { identifier: "A_FIRST", value: 2 },
+    { identifier: "_value", value: 3 },
+    { identifier: "z_last", value: true },
+  ];
+  assertSchema(
+    validators.request,
+    validOverrideSelectors,
+    "valid override selectors request"
+  );
+  assertSemanticExtractionRequestSemantics(validOverrideSelectors);
+  assert.deepEqual(
+    semanticExtractionRequestForFinalizedCapsule(renderFinalized, {
+      overrideConfiguration: validOverrideSelectors.overrideConfiguration,
+    }),
+    validOverrideSelectors
+  );
+  expectRejected(
+    () => assertSemanticExtractionExecutableProfile(validOverrideSelectors),
+    "valid override selectors remain outside the executable profile",
+    "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  );
+
+  const invalidOverrideSelectors = ["+17", "-1", "00", "017", "65536"];
+  for (const identifier of invalidOverrideSelectors) {
+    const invalid = structuredClone(baseRequest);
+    invalid.overrideConfiguration = [{ identifier, value: 1 }];
+    expectRejected(
+      () =>
+        assertSchema(
+          validators.request,
+          invalid,
+          `invalid override selector ${identifier}`
+        ),
+      `schema accepted invalid override selector ${identifier}`
+    );
+    expectRejected(
+      () => assertSemanticExtractionRequestSemantics(invalid),
+      `semantics accepted invalid override selector ${identifier}`,
+      "VGPU-C1-SEMANTIC-OVERRIDE-ORDER"
+    );
+  }
 
   const responseMutations = [
     ["extra-response-field", (value) => (value.extra = true)],
@@ -812,6 +875,8 @@ function runStaticGate(validators, requests, responses) {
     requests: Object.keys(requests).length,
     responses: Object.keys(responses).length,
     prelaunchMutations: prelaunchMutations.length,
+    validOverrideSelectors: validOverrideSelectors.overrideConfiguration.length,
+    invalidOverrideSelectors: invalidOverrideSelectors.length,
     responseMutations:
       responseMutations.length + resourceResponseMutations.length + 4,
     authenticatedSuccesses: Object.keys(authenticated).length,
@@ -1178,7 +1243,7 @@ override INACTIVE_SIZE: u32;
   );
 
   const configured = structuredClone(requests["compute-interface"]);
-  configured.overrideConfiguration = [{ name: "VALUE", value: 1 }];
+  configured.overrideConfiguration = [{ identifier: "VALUE", value: 1 }];
   const configuredRun = await invokeRawSemantic(
     executable,
     configured,
@@ -1188,6 +1253,72 @@ override INACTIVE_SIZE: u32;
   assert.equal(
     configuredRun.response.diagnostics[0].code,
     "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  );
+
+  const boundaryOverrideIdentifiers = structuredClone(
+    requests["compute-interface"]
+  );
+  boundaryOverrideIdentifiers.overrideConfiguration = [
+    { identifier: "0", value: 1 },
+    { identifier: "17", value: 2 },
+    { identifier: "65535", value: 3 },
+    { identifier: "VALUE", value: 4 },
+  ];
+  const boundaryIdentifiersRun = await invokeRawSemantic(
+    executable,
+    boundaryOverrideIdentifiers,
+    validators
+  );
+  invocations += 1;
+  assert.equal(
+    boundaryIdentifiersRun.response.diagnostics[0].code,
+    "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  );
+
+  for (const identifier of ["+17", "-1", "00", "017", "65536"]) {
+    const invalidIdentifier = structuredClone(requests["compute-interface"]);
+    invalidIdentifier.overrideConfiguration = [{ identifier, value: 1 }];
+    const invalidIdentifierRun = await invokeRawSemantic(
+      executable,
+      invalidIdentifier,
+      validators
+    );
+    invocations += 1;
+    assert.equal(
+      invalidIdentifierRun.response.diagnostics[0].code,
+      "VGPU-NATIVE-TINT-PROTOCOL"
+    );
+  }
+
+  const legacyOverrideName = structuredClone(requests["compute-interface"]);
+  legacyOverrideName.overrideConfiguration = [{ name: "VALUE", value: 1 }];
+  const legacyOverrideNameRun = await invokeRawSemantic(
+    executable,
+    legacyOverrideName,
+    validators
+  );
+  invocations += 1;
+  assert.equal(
+    legacyOverrideNameRun.response.diagnostics[0].code,
+    "VGPU-NATIVE-TINT-PROTOCOL"
+  );
+
+  const duplicateOverrideIdentifier = structuredClone(
+    requests["compute-interface"]
+  );
+  duplicateOverrideIdentifier.overrideConfiguration = [
+    { identifier: "17", value: 1 },
+    { identifier: "17", value: 2 },
+  ];
+  const duplicateOverrideIdentifierRun = await invokeRawSemantic(
+    executable,
+    duplicateOverrideIdentifier,
+    validators
+  );
+  invocations += 1;
+  assert.equal(
+    duplicateOverrideIdentifierRun.response.diagnostics[0].code,
+    "VGPU-NATIVE-TINT-PROTOCOL"
   );
 
   const expression = structuredClone(requests["compute-interface"]);
@@ -1272,8 +1403,8 @@ override INACTIVE_SIZE: u32;
 
   const unorderedOverrides = structuredClone(requests["compute-interface"]);
   unorderedOverrides.overrideConfiguration = [
-    { name: "Z_LAST", value: 1 },
-    { name: "A_FIRST", value: 2 },
+    { identifier: "2", value: 1 },
+    { identifier: "17", value: 2 },
   ];
   const unorderedRun = await invokeRawSemantic(
     executable,
@@ -1297,9 +1428,9 @@ override INACTIVE_SIZE: u32;
     fixedResourceSuccesses: 4,
     unsupportedResourceFailures: 2,
     interfaceLimitFailures: 1,
-    workerProtocolFailures: 3,
+    workerProtocolFailures: 10,
     sourceLockedResponses: Object.keys(responses).length,
-    profileFailures: 4,
+    profileFailures: 5,
   };
 }
 

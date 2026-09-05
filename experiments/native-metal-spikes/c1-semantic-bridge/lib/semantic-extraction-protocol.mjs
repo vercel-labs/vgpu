@@ -21,6 +21,8 @@ export const SEMANTIC_EXTRACTION_REQUEST_IDENTITY_DOMAIN =
 export const SEMANTIC_EXTRACTION_COMPILER = INVENTORY_COMPILER;
 
 const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const canonicalOverrideId =
+  /^(?:0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/u;
 
 export class SemanticExtractionProtocolError extends Error {
   constructor(code, message) {
@@ -286,14 +288,15 @@ function assertOverrideConfiguration(configuration) {
   let previous;
   for (const configured of configuration) {
     if (
-      typeof configured?.name !== "string" ||
-      configured.name.length > 256 ||
-      !wgslIdentifier.test(configured.name) ||
-      (previous !== undefined && previous >= configured.name)
+      typeof configured?.identifier !== "string" ||
+      configured.identifier.length > 256 ||
+      (!wgslIdentifier.test(configured.identifier) &&
+        !canonicalOverrideId.test(configured.identifier)) ||
+      (previous !== undefined && previous >= configured.identifier)
     ) {
       semanticFail(
         "VGPU-C1-SEMANTIC-OVERRIDE-ORDER",
-        "override names are invalid, duplicated, or not in ASCII order"
+        "override identifiers are invalid, duplicated, or not in ASCII order"
       );
     }
     if (
@@ -307,7 +310,7 @@ function assertOverrideConfiguration(configuration) {
         "override value must be a finite canonical JSON number or boolean"
       );
     }
-    previous = configured.name;
+    previous = configured.identifier;
   }
 }
 

@@ -184,6 +184,8 @@ bool HasValidJsonLexemes(std::string_view text) {
         index += literal.size() - 1;
       } else if (character == '-' || (character >= '0' && character <= '9')) {
         size_t end = index;
+        const bool negative = text[end] == '-';
+        bool nonzero_significand = false;
         if (text[end] == '-') {
           ++end;
           if (end == text.size()) {
@@ -196,6 +198,7 @@ bool HasValidJsonLexemes(std::string_view text) {
             return false;
           }
         } else if (text[end] >= '1' && text[end] <= '9') {
+          nonzero_significand = true;
           do {
             ++end;
           } while (end < text.size() && text[end] >= '0' && text[end] <= '9');
@@ -206,6 +209,8 @@ bool HasValidJsonLexemes(std::string_view text) {
           ++end;
           const size_t fraction_start = end;
           while (end < text.size() && text[end] >= '0' && text[end] <= '9') {
+            nonzero_significand =
+                nonzero_significand || text[end] != '0';
             ++end;
           }
           if (end == fraction_start) {
@@ -225,7 +230,8 @@ bool HasValidJsonLexemes(std::string_view text) {
             return false;
           }
         }
-        if (!IsJsonValueDelimiter(text, end) ||
+        if ((negative && !nonzero_significand) ||
+            !IsJsonValueDelimiter(text, end) ||
             ++complexity_units > kMaxJsonComplexityUnits) {
           return false;
         }
@@ -283,8 +289,11 @@ bool ValidateDecodedValues(const Json::Value &value) {
   if (value.isString() && !InspectUtf8(value.asString()).valid) {
     return false;
   }
-  if (value.isDouble() && !std::isfinite(value.asDouble())) {
-    return false;
+  if (value.isDouble()) {
+    const double number = value.asDouble();
+    if (!std::isfinite(number) || (number == 0.0 && std::signbit(number))) {
+      return false;
+    }
   }
   if (value.isArray()) {
     for (const auto &item : value) {
@@ -414,6 +423,26 @@ bool IsAsciiIdentifier(std::string_view value, size_t maximum) {
     return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
            (value >= '0' && value <= '9') || value == '_';
   });
+}
+
+bool IsCanonicalOverrideId(std::string_view value) {
+  if (value.empty() || value.size() > 5 ||
+      (value.size() > 1 && value.front() == '0') ||
+      !std::all_of(value.begin(), value.end(), [](unsigned char character) {
+        return character >= '0' && character <= '9';
+      })) {
+    return false;
+  }
+  uint32_t parsed = 0;
+  const auto result =
+      std::from_chars(value.data(), value.data() + value.size(), parsed, 10);
+  return result.ec == std::errc{} &&
+         result.ptr == value.data() + value.size() &&
+         parsed <= std::numeric_limits<uint16_t>::max();
+}
+
+bool IsOverrideIdentifier(std::string_view value) {
+  return IsAsciiIdentifier(value, 256) || IsCanonicalOverrideId(value);
 }
 
 bool IsEmittedIdentifier(std::string_view value) {
@@ -1090,22 +1119,24 @@ private:
       return Fail("semantic extraction override configuration exceeds the "
                   "collection limit");
     }
-    std::optional<std::string> previous_name;
+    std::optional<std::string> previous_identifier;
     for (const auto &item : value) {
-      if (!HasExactMembers(item, {"name", "value"}) ||
-          !item["name"].isString() ||
+      if (!HasExactMembers(item, {"identifier", "value"}) ||
+          !item["identifier"].isString() ||
           (!item["value"].isBool() && !item["value"].isNumeric())) {
         return Fail("semantic extraction override configuration does not "
                     "implement the v1 shape");
       }
-      const std::string name = item["name"].asString();
-      if (!IsAsciiIdentifier(name, 256) ||
-          (previous_name && !Utf16Less(*previous_name, name))) {
-        return Fail("semantic extraction override names are duplicated or "
-                    "not strictly sorted");
+      const std::string identifier = item["identifier"].asString();
+      if (!IsOverrideIdentifier(identifier) ||
+          (previous_identifier &&
+           !Utf16Less(*previous_identifier, identifier))) {
+        return Fail(
+            "semantic extraction override identifiers are invalid, "
+            "duplicated, or not strictly sorted");
       }
-      previous_name = name;
-      ConfiguredOverride configured{.name = name};
+      previous_identifier = identifier;
+      ConfiguredOverride configured{.identifier = identifier};
       if (item["value"].isBool()) {
         configured.value = item["value"].asBool();
       } else {

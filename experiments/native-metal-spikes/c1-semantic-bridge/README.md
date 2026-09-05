@@ -108,14 +108,20 @@ per-entry lowered IR, and combines them with Inspector-owned active bindings and
 Runtime-sized buffers, resource binding arrays, configured or active overrides, and non-literal
 workgroup sizes still produce structured failures.
 
-The semantic gate freezes four request/response pairs, nine prelaunch mutations, thirty-one
+The semantic gate freezes four request/response pairs, eleven prelaunch mutations, thirty-one
 response mutations, and three static nominal authentications. Against the native worker it runs
-twenty-three one-shot requests. The primary resource fixture proves a numeric five-binding union at
+thirty-one one-shot requests. The primary resource fixture proves a numeric five-binding union at
 `b0`, `b1`, `b2`, `b3`, and `b10`, exact stage subsets, one shared uniform, seven content-addressed
 types, six layouts, and buffer minimum sizes of 8, 24, and 16 bytes. Additional canaries cover an
 authored fixed `@size`, a simple storage texture, cross-stage Dawn-like sampler/texture resolution,
 runtime-array and binding-array rejection, inactive declarations, deterministic interface-only
 successes, malformed protocol requests, and request-specific adapter authentication.
+
+The override-configuration wire now uses WGSL's single pipeline-overridable constant identifier:
+the canonical decimal authored `@id` when present, otherwise the declaration name. The schema,
+JavaScript producer checks, and native decoder agree on canonical IDs in `0...65535`, strict ASCII
+ordering, and rejection of the legacy `name` field. Non-empty configuration remains an explicit
+worker-profile failure until the exact-static materializer slice populates the response.
 
 The assembly gate resolves authored effect, multi-module draw, compute, and fixed-resource
 fixtures, retains nominal resolver declaration evidence, authenticates extraction, emits four
