@@ -376,15 +376,21 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    generation leases, and disposal overlap. Its connected Metal gate consumes C1's authenticated
    scratch output and reproduces the same two ranges and readbacks. This proves the proposed
    generated-compute and lifecycle integration in an isolated spike, not a production runtime or
-   artifact-loading contract. C3c must still package real C1 output into a relocatable generated
-   SwiftPM artifact consumed through the production module boundary, and C4 must still exercise
-   the two-entry compute and aliasing contract. The resource-free full-screen path consumes the
-   same nominal projection boundary for offline compilation and live function lookup. The Naga
+   artifact-loading contract. A C3c fixture now packages that real C1 output into a deterministic,
+   relocatable generated SwiftPM artifact and consumes it through `VGPUMetalCompute`. Its generated
+   `AppShaders` module depends only on `VGPUABI`; private descriptor and library bytes cross an
+   underscored witness with no public `Bundle`, URL, path, or loader closure. The runtime verifies
+   both SHA-256 digests, exact descriptor shape, ABI/model and semantic/projection relationships,
+   and exact Metal reflection before two native processes reproduce `[2, 202]` and `[4, 404]`. Six
+   negative canaries fail closed, and the `x86_64` gate is compile-only. This closes one connected
+   packaging seam, not C3 or the production package/runtime contract; C4 must still exercise the
+   two-entry compute and aliasing contract. The resource-free full-screen path consumes the same
+   nominal projection boundary for offline compilation and live function lookup. The Naga
    differential runner also compiles and links all 224
    of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
    corpus from the exact direct Tint worker through the same offline boundary, complete authored
    diagnostic mapping beyond the current module-only attribution, and pass deterministic connected
-   artifact output and pixel/buffer parity. Exact authored entry-declaration spans are already
+   artifact output across that corpus and pixel/buffer parity. Exact authored entry-declaration spans are already
    retained. Semantic v1 has no WGSL resource binding-array (`binding_array`)
    cardinality, so the alpha rejects all resource binding arrays; the sampled-texture writer and
    offline canary remain future evidence only. Keep Naga only as a differential oracle.
@@ -409,11 +415,22 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    no-op path. It is not the compare runner, WGSL-to-MSL evidence, or evidence for runtime size-table
    upload. C3a also carries a synthetic `SparseDraw` program and proves locations
    `3/7` and color indices `1/4` survive semantic/projection cross-validation, runtime
-   fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction. C3 remains
-   open until a real C1-connected artifact, production runtime and ABI package, supported toolchain
-   and hardware matrix, and newest-generator to oldest-runtime consumption pass. One product
-   decision also remains open: always emit the real compare runner, or emit it only when compare
-   testing is enabled.
+   fingerprinting, generated Swift, and arm64/x86_64 SwiftPM builds without compaction.
+
+   C3c now passes one genuinely connected compute artifact from real WGSL through C1, Tint, Apple's
+   `.metallib`, deterministic package assembly, a relocated SwiftPM package, and the
+   backend-complete `VGPUMetalCompute` product into the runtime. `AppShaders` depends only on
+   `VGPUABI`. Its `Bundle.module` access is private behind an underscored witness returning owned
+   bytes, and the public surface gains no URL, path, `Bundle`, or loader closure. Embedded
+   descriptor/library hashes, exact shape, ABI and model identities, semantic/projection/runtime
+   relationships, and Metal reflection all fail closed before dispatch. Two independent native
+   processes reproduce `[2, 202]` and `[4, 404]`; six negative canaries reject payload, descriptor,
+   ABI, model, root-shape, and sampling-pair mutations. The `x86_64` build remains compile-only.
+
+   C3 remains open until the production runtime and ABI package, complete distributable slice,
+   supported toolchain and physical-hardware matrix, and newest-generator to oldest-runtime
+   consumption pass. One product decision also remains open: always emit the real compare runner,
+   or emit it only when compare testing is enabled.
 
 3. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current

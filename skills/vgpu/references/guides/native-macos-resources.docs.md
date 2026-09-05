@@ -11,6 +11,7 @@ relatedSymbols:
   - Sampler
   - Buffer
   - Storage
+  - VGPUPingPongStorage
 ---
 
 # Resources and Metal interop
@@ -59,6 +60,48 @@ let snapshot: [Particle] = try await particles.read(range: 0..<512)
 `count`, write offsets, and read ranges are in elements; `stride` and `sizeInBytes` expose the packed allocation. Writes validate the complete range and commit it atomically. Resource identities and concrete texture or buffer generations are captured when a draw encodes. Value-owned uniforms keep one upload slot per program instance and frame, so the last successful update before submission wins for every use of that instance in the frame. Create two program instances when two passes need different values in one submission.
 
 Typed resource writes use the same strict `wgsl-host-shareable-v1` packer as generated bindings. It writes little-endian scalars and column-major matrices at reflected strides, packs each write into a zero-initialized temporary range so every padding byte is deterministic, and converts `Float` to WGSL `f16` with IEEE 754 round-to-nearest, ties-to-even. NaN payload bits are not a cross-runtime value contract. Shape, integer-range, or extent errors report the complete field and array-index path before changing resource contents.
+
+## Alternate storage between compute steps
+
+Iterative compute usually reads one storage allocation while writing the next. The proposed alpha contract creates both allocations together and keeps their current roles explicit:
+
+```swift
+let state: VGPUPingPongStorage<UInt32> = try gpu.pingPongStorage(
+  UInt32.self,
+  count: initialValues.count,
+  initialValues: initialValues
+)
+```
+
+`initialValues` initializes `state.read`. `state.write` is a distinct, zero-initialized scratch destination with the same element type and count. Seeding only the read side avoids a duplicate upload and makes a first-step kernel that fails to write its complete intended output observable instead of masking the omission with a second copy of the input. A kernel that intentionally depends on prior destination values must initialize or write them explicitly. Both properties return ordinary `VGPUStorage<UInt32>` resources, so generated bindings do not need a special ping-pong type.
+
+Calling `state.swap()` synchronously exchanges which allocation the `read` and `write` properties return. It does not copy bytes, wait for the GPU, or mutate any program binding. Call it immediately after `dispatch` returns successfully: an accepted dispatch has already snapshotted its concrete resource generations and committed its command buffer, so later role changes cannot redirect that work. If `dispatch` throws synchronously, execution does not reach the swap and the roles stay unchanged.
+
+Bindings remain explicit on every program instance. After a swap, update the affected generated bindings before the next dispatch:
+
+```swift
+state.swap()
+
+try step.set(\.source, to: state.read)
+try step.set(\.destination, to: state.write)
+```
+
+The helper therefore removes allocation bookkeeping without hiding dataflow. A program never watches a `VGPUPingPongStorage` or rebinds itself when the pair swaps.
+
+## Reject writable storage aliases at dispatch
+
+Individual `set` calls validate the selected binding, but they deliberately do not validate aliases across the rest of the binding set. Reversing a pair with two key-path updates necessarily passes through a temporary state in which both fields refer to the same allocation:
+
+```swift
+// Before these calls: source is A and destination is B.
+// After state.swap(): state.read is B and state.write is A.
+try step.set(\.source, to: state.read)       // source B, destination B
+try step.set(\.destination, to: state.write) // source B, destination A
+```
+
+That transient state is valid as long as it is not dispatched. The proposed runtime checks the complete binding snapshot in `dispatch`, after all updates and before accepting or encoding work.
+
+Aliasing uses the concrete storage generation identity, not Swift wrapper identity or an authored binding name. Binding views and ranges over the same generation still alias. Repeating one generation across multiple read-only storage bindings is allowed. Repeating it when any occurrence is writable is rejected synchronously with error code `VGPU-R1-STORAGE-ALIASING`. This rule is conservative even for disjoint views and prevents a backend from depending on access-order behavior that the portable shader contract does not define.
 
 ## Store a fixed prefix with a runtime array
 

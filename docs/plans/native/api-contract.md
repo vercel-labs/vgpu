@@ -232,9 +232,26 @@ split Core/Resources/Compute backend capabilities, generation leases, disposal o
 submission rollback, and error delivery before settlement. Its connected Metal gate consumes the
 authenticated C1 scratch artifact and reproduces those ranges and readbacks. This is isolated
 evidence for the generated-compute and lifecycle contract, not a production artifact resolver or
-runtime package. C3c must still connect real C1 output to a relocatable generated SwiftPM artifact
-consumed through the production module boundary; C4 must then validate the two-entry compute,
-aliasing, ping-pong, and WebGPU-oracle path. Broader resource shapes remain later integration gates.
+runtime package.
+
+A C3c connected-artifact fixture now begins with that real C1 WGSL-to-Tint result and carries its
+authenticated semantic contract, Metal projection, runtime manifest, and `.metallib` into a
+deterministic, relocatable SwiftPM package. The generated `AppShaders` module depends only on
+`VGPUABI`; a clean consumer selects `AppShaders` and the backend-complete `VGPUMetalCompute`
+product. The descriptor and library are private package resources loaded as owned bytes through an
+underscored generated witness, so no public `Bundle`, URL, path, or caller-supplied loader closure
+is introduced. The runtime checks both embedded SHA-256 digests, exact descriptor shape, ABI and
+model identities, semantic/projection/runtime-manifest relationships, and exact Metal reflection
+before dispatch. Two independent native processes reproduce `[2, 202]` and `[4, 404]`; six
+fail-closed negatives cover tampered library bytes, crossed descriptor bytes, rehashed unsupported
+ABI and model values, a rehashed unknown root field, and a rehashed non-empty sampling-pair set. The
+post-generation package remains relocatable and builds with Node.js, Tint, and Apple Metal tools
+poisoned. Its `x86_64` build is compile-only evidence.
+
+This closes the C1-to-package-to-runtime join for one fixture, not C3 or a production
+resolver/runtime contract. The full distributable slice, compare runner, supported toolchain and
+physical-hardware matrices, newest-generator to oldest-runtime consumption, general resource
+integration, and C4's two-entry compute, aliasing, ping-pong, and WebGPU-oracle path remain open.
 
 The Metal projection records:
 

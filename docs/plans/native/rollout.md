@@ -185,7 +185,7 @@ The isolated interface, binding-slot, runtime-size, and vertex-slot MSL now pass
 plus `metallib` for the macOS 14 target, and all 224 successful Naga differential outputs pass that
 boundary. Do not freeze the source pin or numeric slot profile until authored diagnostic mapping
 beyond current module-only provenance, the full shader corpus from the exact direct Tint worker,
-deterministic connected artifact output, and pixel/buffer parity pass. Exact authored
+deterministic connected artifact output across that corpus, and pixel/buffer parity pass. Exact authored
 entry-declaration spans are already retained. Semantic v1 cannot represent WGSL resource
 binding-array (`binding_array`) cardinality, so alpha rejects all resource binding arrays.
 The reproducible fixtures live in `experiments/native-metal-spikes/c1-translators`,
@@ -307,11 +307,26 @@ functions for `air64-apple-macos14.0`, links one `.metallib`, packages it throug
 the exact `Bundle.module` resource, hash, no-op function lookup, pipeline creation, slot use,
 dispatch, and `[0, 1, 2, 3]` readback on the Apple M4 Pro. The probe executes only the no-op path. It
 is not the compare runner, does not appear in `projection.testing`, and cannot prove that recorded
-WGSL produced the MSL or that the runtime uploaded storage-size words. C3 therefore remains open
-pending a C1-connected artifact, production
-`VGPUABI` and runtime, the supported Xcode/macOS and physical-hardware matrix, and
-newest-generator to oldest-runtime consumption. It is also still undecided whether production
-always emits the real compare runner or emits it only when compare testing is enabled.
+WGSL produced the MSL or that the runtime uploaded storage-size words.
+
+C3c now passes one connected compute fixture from real WGSL through C1 semantic assembly, Tint,
+Apple's `.metallib`, deterministic artifact and SwiftPM generation, package relocation, and the
+backend-complete `VGPUMetalCompute` product into the runtime. `AppShaders` depends only on
+`VGPUABI`. Its descriptor and library are private `Bundle.module` resources loaded as owned bytes
+through an underscored witness; no public URL, path, `Bundle`, or caller-supplied loader closure is
+introduced. The runtime validates descriptor and library hashes, exact descriptor shape, ABI and
+runtime-model identities, semantic/projection/runtime-manifest relationships, and exact Metal
+reflection before dispatch. Two independent native processes reproduce `[2, 202]` and `[4, 404]`.
+Six fail-closed canaries reject altered library bytes, crossed descriptor bytes, a rehashed
+unsupported ABI, a rehashed unsupported runtime model, a rehashed unknown root field, and a
+rehashed non-empty sampling-pair set. Builds after generation keep working with Node.js, Tint, and
+Apple Metal tools poisoned; the `x86_64` gate is compile-only evidence.
+
+C3c closes the missing C1-to-package-to-runtime join for this fixture, but it is not the production
+generator or runtime and does not complete C3. The complete distributable slice, production
+`VGPUABI` and runtime packages, supported Xcode/macOS and physical-hardware matrix, and
+newest-generator to oldest-runtime consumption remain. It is also still undecided whether
+production always emits the real compare runner or emits it only when compare testing is enabled.
 
 The matrix type-checks positive `@MainActor` and instance-actor `onError` handlers, rejects a
 non-`Sendable` capture, and exercises every async live-object method with the default `#isolation`

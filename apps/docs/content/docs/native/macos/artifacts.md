@@ -31,7 +31,7 @@ Generated/app-shaders/
         └── ArtifactCompatibilityTests.swift
 ```
 
-`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`, so generated code loads `AppShaders.metallib` through `Bundle.module`. During `0.x`, a remote vGPU dependency uses `.upToNextMinor(from: "<version>")`; runtime ABI integers still decide artifact compatibility independently from SwiftPM version selection. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications select only the runtime products they use and import their public modules explicitly.
+`Package.swift` makes only `VGPUABI` a dependency of `AppShaders` and processes `Resources`. Generated code resolves the descriptor and `AppShaders.metallib` through `Bundle.module` as a private implementation detail, reads both into owned bytes, and passes them through an underscored `VGPUABI` witness with their expected SHA-256 digests. The generated module exposes no `Bundle`, URL, file path, or caller-supplied loader closure. During `0.x`, a remote vGPU dependency uses `.upToNextMinor(from: "<version>")`; runtime ABI integers still decide artifact compatibility independently from SwiftPM version selection. Resource binding handles and their backend-neutral protocols live in that small contract product; factories and executors do not. Applications select only the runtime products they use and import their public modules explicitly.
 
 The generated package is also the shader-payload boundary. Omitting `VGPUCompute` avoids linking the compute executor, but it does not remove compute functions already packaged in `AppShaders.metallib`. Put programs for independently distributed features in separate configurations and generated packages.
 
@@ -234,6 +234,10 @@ The manifest contains no timestamps or absolute machine paths. Its root `files` 
 Canonical JSON uses RFC 8785, NFC strings, relative POSIX paths without `.` or `..`, and a defined order for programs, files, bindings, overrides, and capabilities. Semantically ordered arrays keep their order.
 
 The `.metallib` is an opaque Apple toolchain output. Its recorded file hash proves package integrity, but regenerating the same logical inputs is not required to reproduce identical `.metallib` bytes.
+
+The connected C3 fixture has exercised this proposed boundary end to end for one runtime-sized compute program. Real WGSL passes through C1 semantic assembly, Tint, and Apple's Metal compiler before a deterministic assembler emits a relocatable SwiftPM package. A clean consumer imports the generated `AppShaders` module and selects `VGPUMetalCompute`; after generation, its build and execution require no Node.js, Tint, source shader, or Metal compiler. The runtime verifies the descriptor and library hashes, the exact descriptor shape, ABI and model identities, the semantic-to-projection relationships, and Metal reflection before dispatch. Two independent native processes produced `[2, 202]` and `[4, 404]`; six negative canaries rejected altered library bytes, crossed descriptor bytes, a rehashed unsupported ABI, a rehashed unsupported runtime model, a rehashed unknown root field, and a rehashed non-empty sampling-pair set. An `x86_64` build is compile-only evidence and does not establish Intel GPU execution.
+
+That fixture validates one connected packaging seam; it is not the production generator or runtime and does not complete C3. The supported Xcode, macOS, and physical-hardware matrix, newest-generator to oldest-runtime consumption, and the compare-runner emission policy remain open.
 
 ## Validate capabilities at the right boundary
 

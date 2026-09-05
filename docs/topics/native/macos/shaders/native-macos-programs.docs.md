@@ -52,6 +52,14 @@ List every program exported by the generated Swift module:
       }
     },
     {
+      "name": "MeasureParticles",
+      "kind": "compute",
+      "source": "./Shaders/Particles.wgsl",
+      "entryPoints": {
+        "compute": "cs_measure"
+      }
+    },
+    {
       "name": "ParticleDraw",
       "kind": "draw",
       "source": "./Shaders/Particles.wgsl",
@@ -84,6 +92,28 @@ An effect selects one fragment entry point. If the resolved module has no vertex
 When exactly one entry point exists in a required stage, omit it from `entryPoints`. Multiple entries in that stage are never chosen by source order: `native check` requires an explicit selection. Entries in stages the program does not use do not create ambiguity. Interface compatibility is validated after selection against Tint's semantic result. The artifact records whether an effect's vertex stage was authored or injected.
 
 Render target formats, blend state, culling, depth state, sample count, geometry, and dispatch dimensions do not belong in this file. They are properties of targets and program instances at runtime.
+
+### Generate one Swift type per entry point
+
+Two records may select different entry points from the same WGSL source, as `StepParticles` and `MeasureParticles` do above. Native build generates a separate `VGPUComputeProgram` type for each record rather than one program with a runtime entry-point switch:
+
+```text
+public enum StepParticles: VGPUComputeProgram {
+  public struct Bindings: VGPUBindingSet {
+    public var source: VGPUStorage<UInt32>
+    public var destination: VGPUStorage<UInt32>
+  }
+}
+
+public enum MeasureParticles: VGPUComputeProgram {
+  public struct Bindings: VGPUBindingSet {
+    public var values: VGPUStorage<UInt32>
+    public var result: VGPUStorage<UInt32>
+  }
+}
+```
+
+Each type contains only the bindings statically used by its selected entry point and records that entry point's resolved workgroup size. The two descriptors may share generated value types and one packaged Metal library, but their binding state, semantic fingerprints, and pipeline identities remain independent. Application code cannot accidentally change an existing instance to an entry point with another interface.
 
 ### Select the WGSL language environment
 
@@ -135,6 +165,66 @@ The compiler substitutes the fully materialized values before WGSL-to-MSL transl
 Runtime specialization would require a separate artifact and API contract. It is not implicit in this proposal.
 
 Generated types, complete initialization, typed updates, resource ownership, and translated slot mappings are documented in [Bindings and generated types](/native/macos/bindings).
+
+## Dispatch iterative compute work
+
+The proposed alpha API keeps ping-pong roles and generated bindings separate. This example runs one entry point several times, then consumes the final generation with a second generated program:
+
+```swift
+let initialValues: [UInt32] = loadInitialValues()
+let state = try gpu.pingPongStorage(
+  UInt32.self,
+  count: initialValues.count,
+  initialValues: initialValues
+)
+
+let step = try gpu.compute(
+  StepParticles.self,
+  bindings: .init(
+    source: state.read,
+    destination: state.write
+  )
+)
+
+for iteration in 0..<4 {
+  if iteration > 0 {
+    // The first set is temporarily aliased; dispatch validates the final snapshot.
+    try step.set(\.source, to: state.read)
+    try step.set(\.destination, to: state.write)
+  }
+
+  _ = try step.dispatch(
+    x: (initialValues.count + 63) / 64,
+    y: 1,
+    z: 1
+  )
+  state.swap()
+}
+
+let result = try gpu.storage(
+  UInt32.self,
+  count: 1,
+  access: .readWrite
+)
+let measure = try gpu.compute(
+  MeasureParticles.self,
+  bindings: .init(
+    values: state.read,
+    result: result
+  )
+)
+
+_ = try measure.dispatch(x: 1, y: 1, z: 1)
+await gpu.settled()
+
+let measured = try await result.read(range: 0..<1)
+```
+
+`dispatch(x:y:z:)` snapshots bindings, validates storage aliases, and commits one command buffer before returning its `VGPUSubmission`. The immediate `swap()` only changes which allocation the pair returns; it cannot change an accepted dispatch. Before the following iteration, the two explicit `set` calls reverse the program's source and destination.
+
+Aliasing is checked at dispatch because `set` must permit the temporary source-B/destination-B state between those two calls. Multiple bindings may read the same concrete generation. If the same generation appears more than once and any of those bindings is writable, `dispatch` throws synchronously with code `VGPU-R1-STORAGE-ALIASING` and accepts no work.
+
+The final `gpu.settled()` snapshots every dispatch already accepted by this context and waits for their GPU completions and deferred error delivery. It does not throw those deferred errors; observe them with `gpu.onError`. In a steady-state simulation, omit the wait and rely on queue order between dispatches and later rendering.
 
 ## Programs compile for target signatures
 

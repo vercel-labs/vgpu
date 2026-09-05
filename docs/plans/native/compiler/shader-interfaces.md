@@ -209,9 +209,15 @@ nominal slot allocation, exact request projection, deterministic Tint translatio
 program projection, and offline Metal compilation and linking. In each of two live M4 Pro
 processes, two dispatches also reuse one backing allocation and binding offset with effective ranges
 `28` and `52`, upload the corresponding sparse size words, and produce exact `[2, 202]` and
-`[4, 404]` readbacks. Broader resource shapes,
-the exact direct worker's full corpus through that offline boundary, a real C1-connected artifact,
-general resource runtime binding, and broader pixel/buffer parity remain open.
+`[4, 404]` readbacks. A C3c follow-up carries that same authenticated C1 result through a
+descriptor-and-library-hashed, relocatable generated SwiftPM package into a clean
+`VGPUMetalCompute` consumer. The generated shader module depends only on `VGPUABI`; private
+resources cross the package boundary through an underscored witness without exposing `Bundle`, a
+URL, a path, or a loader closure. The runtime rejects descriptor-shape, ABI/model, semantic,
+projection, runtime-manifest, library, and reflection mismatches before dispatch. Broader resource
+shapes, the exact direct worker's full corpus through that offline boundary, general resource
+runtime binding, the production package/runtime contract, and broader pixel/buffer parity remain
+open.
 
 Two public render-target decisions remain intentionally outside this contract:
 
