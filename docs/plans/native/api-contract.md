@@ -196,8 +196,10 @@ exact per-entry compiler requests, native translation, authenticated program pro
 Metal linking. It preserves binding and override subsets, sampling pairs, visibility, authored
 presentation names, and reachable types/layouts; its allocation and final program fragment are
 independently verified against that authenticated graph. Six override entry translations compile
-and link without Metal function constants. A live override render observation, broader resource
-shapes, runtime resource binding, and the connected artifact remain deterministic integration gates.
+and link without Metal function constants. One render program also passes an exact four-pixel
+readback across two independent Metal processes, with two renders each, while the probe rejects
+runtime function-constant APIs. Broader resource shapes, general runtime resource binding, and the
+connected artifact remain deterministic integration gates.
 
 The Metal projection records:
 

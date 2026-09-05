@@ -88,8 +88,16 @@ const resourceSwiftProbePath = join(
   "gates",
   "resource-metal.swift"
 );
+const overrideSwiftProbePath = join(
+  spikeDirectory,
+  "gates",
+  "override-metal.swift"
+);
 const generatedPath = "Intermediate/semantic-assembly.resolved.wgsl";
 const metalTarget = "air64-apple-macos14.0";
+const overrideExpectedReadback = Object.freeze([
+  159, 96, 32, 96, 223, 96, 32, 96, 159, 159, 32, 96, 223, 159, 32, 96,
+]);
 const expectedSnapshots = Object.freeze({
   effect: Object.freeze({
     programFingerprint:
@@ -219,29 +227,33 @@ const expectedSnapshots = Object.freeze({
   }),
   overrideRender: Object.freeze({
     programFingerprint:
-      "3957a4b0d80ab1e98c08616aebd5a1267ce086503a1e7b6249bb5dcbc0d1fd5f",
+      "731070e8b66ed49ae38459490e426f554203aa3dc370fc805de15e733a4ce787",
     resolvedSourceSha256:
-      "87282982eac9577a941e9115e93146efd726fc04256fff1fa319b5debd1a458e",
+      "d82b0e72608fa6b6bb57168f6f9d39c2b0cf1878cd1bd3225c79ac3e8355de2e",
     semanticRequestSha256:
-      "bdc4927557eaf70fb897ddf4ec61f459dc5623a07a72257c4d1703d643de7b48",
+      "c55a6f4dcd3664a19623a535fc4b52183ce04beed97f83d0cdc7e82343576085",
     nativeResponseSha256:
-      "418c5be127418b122f4cedfc0921a8db1cdc21b43812d4c790714c7e1151c7ab",
+      "13e4184c67d5f7423e5368d6df97b38f8101eb3bf80dd98af086960e7c45aaa8",
+    runtimeProbeSha256:
+      "766b610391ed1323b3a0bccb3a57424e504cdc9fd7540ff5a99bafadb418c7e9",
+    runtimeReadbackSha256:
+      "c09bf995ecabe58508a0d9be2130be57de81710ddea084015f2e744e8f40eeee",
     translations: Object.freeze({
       vertex: Object.freeze({
         requestSha256:
-          "a8db74d6301f88c9d76f29646536d9f2677740b1a0f72b8d6c6a5281b353b8dc",
+          "75f0c34694150789e9893fbdf0c3a44edfc874ba89e86b54a1d35ae4160bad29",
         responseSha256:
-          "5f93dcaf06fc0e40d8f0d60f6c8bcd81d7b20deba0f894b84f9133dfa64daf06",
+          "6babd78c91a93bfe5f8372e0057a2238c29b1e613232f0d9584fb9484e7b808a",
         mslSha256:
-          "48c7ff6c0996da2541a877b317f60fcd028019063868e173315138310a7c3bbf",
+          "65a35637827af4ff71de45fae6bdf45a0a06bc28f4664737210534db870b425e",
       }),
       fragment: Object.freeze({
         requestSha256:
-          "227d2c492983f3c0620b26b5bbde0cf0699f1c55b6ab1cd327c65407cabba197",
+          "60c26bb6f5511c6966ca8a63eb861439d5dd00c50bea1416e50c0451f9f34d61",
         responseSha256:
-          "bb6c3c2e73ce7f10a0a760edba13c0808780420657bc989db2f59628513b7226",
+          "ce11f4af789b8fc1ba50af1d267bb8bb3c619c7cd99f2a8ad449a32fb15c2096",
         mslSha256:
-          "e99aed060c0b6a7a01bbd0d0c5beba489fe1c43b094d78aff04958caae3a9dc5",
+          "023faffa96a079ef343e23ddaba3ff4b12535cfb977cd329d2729e381ccf4e29",
       }),
     }),
   }),
@@ -599,7 +611,12 @@ const overrideRender = await makeFixture({
     { identifier: "VERTEX_ONLY", value: 0.625 },
   ],
   result() {
-    return semanticExtractionFixtureResult("override-render-union");
+    return JSON.parse(
+      readFileSync(
+        join(fixtureDirectory, "override-render-live-result.json"),
+        "utf8"
+      )
+    );
   },
 });
 
@@ -703,6 +720,7 @@ const projectionVerifierCanaries = assertIndependentProjectionVerifier({
 });
 const deviceRequirementChecks =
   assertMetalDeviceRequirementProjection(resource);
+const overrideRuntimeProbeChecks = assertOverrideRuntimeProbeSource();
 
 const native = options.worker
   ? {
@@ -725,9 +743,22 @@ const native = options.worker
       ),
     }
   : { status: "skipped", reason: "no Tint worker supplied" };
+if (options.requireMetalRuntime) {
+  for (const [label, status] of [
+    ["resource", native.resourceTranslation.metalRuntime.status],
+    ["override", native.overrideTranslation.metalRuntime.status],
+  ]) {
+    if (status !== "passed") {
+      fail(`${label} Metal runtime was required but reported ${status}`);
+    }
+  }
+}
 if (
   options.worker &&
-  native.resourceTranslation.metalRuntime.status !== "passed"
+  [
+    native.resourceTranslation.metalRuntime.status,
+    native.overrideTranslation.metalRuntime.status,
+  ].some((status) => status !== "passed")
 ) {
   native.status = "runtime-skipped";
 }
@@ -779,6 +810,7 @@ process.stdout.write(
         immediateWithoutRegionChecks: 1,
         responseAssemblyFailures,
         projectionVerifierCanaries,
+        overrideRuntimeProbeChecks,
         deviceRequirementChecks,
         runtimeResourceLayoutChecks,
         translatorLaunches: 0,
@@ -1144,6 +1176,10 @@ function assertOverrideAssembly(fixture, program) {
       "FRAGMENT_ONLY",
       "SHARED",
     ]);
+    for (const override of program.overrides) {
+      assert(override.default);
+      assert.notDeepEqual(override.selected, override.default);
+    }
   } else {
     assert.equal(fixture.label, "overrideScalars");
     assert.deepEqual(
@@ -3325,42 +3361,36 @@ async function assertNativeOverrideTranslations(
     evidenceByLabel.get("overrideBypass")
   );
 
+  const metal = compileOverrideMetalPrograms(metalPrograms, settings);
+
   return {
     invocations: translationWorkerLaunches - initialLaunches,
     deterministicEntries: observed.length,
     projectedPrograms: fixtures.length,
     semanticEquivalenceChecks: 2,
     observed,
-    offlineMetal: compileOverrideMetalPrograms(metalPrograms, settings),
+    offlineMetal: metal.offlineMetal,
+    metalRuntime: metal.metalRuntime,
   };
 }
 
 function compileOverrideMetalPrograms(programs, settings) {
   if (process.platform !== "darwin") {
-    if (settings.requireOfflineMetal) {
-      fail("offline Metal override compilation requires macOS");
-    }
-    return { status: "skipped", reason: "host-is-not-macos" };
+    return skippedOverrideMetal(settings, "host-is-not-macos");
   }
   const missing = ["metal", "metallib"].filter((tool) => !xcrunToolWorks(tool));
   if (missing.length > 0) {
-    if (settings.requireOfflineMetal) {
-      fail(
-        `offline Metal override compilation is required: missing ${missing.join(
-          ","
-        )}`
-      );
-    }
-    return {
-      status: "skipped",
-      reason: `missing-xcrun-tools:${missing.join(",")}`,
-    };
+    return skippedOverrideMetal(
+      settings,
+      `missing-xcrun-tools:${missing.join(",")}`
+    );
   }
 
   const scratch = mkdtempSync(join(tmpdir(), "vgpu-override-metal-"));
   try {
     const libraries = [];
     let shaderCount = 0;
+    let renderRuntimeInput;
     for (const program of programs) {
       const airFiles = program.sources.map(({ stage, msl }) => {
         const sourcePath = join(scratch, `${program.label}-${stage}.metal`);
@@ -3398,17 +3428,158 @@ function compileOverrideMetalPrograms(programs, settings) {
         label: program.label,
         bytes: lstatSync(libraryPath).size,
       });
+      if (program.label === "overrideRender") {
+        assert.equal(renderRuntimeInput, undefined);
+        renderRuntimeInput = { libraryPath, sources: program.sources };
+      }
     }
+    assert(renderRuntimeInput, "override render program was not compiled");
+    const metalRuntime = settings.skipMetalRuntime
+      ? { status: "skipped", reason: "requested-by-flag" }
+      : runOverrideMetalRuntime({
+          ...renderRuntimeInput,
+          scratch,
+          settings,
+        });
     return {
-      status: "passed",
-      programs: programs.length,
-      shaders: shaderCount,
-      target: metalTarget,
-      libraries,
+      offlineMetal: {
+        status: "passed",
+        programs: programs.length,
+        shaders: shaderCount,
+        target: metalTarget,
+        libraries,
+      },
+      metalRuntime,
     };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+function skippedOverrideMetal(settings, reason) {
+  if (settings.requireOfflineMetal) {
+    fail(`offline Metal override compilation is required: ${reason}`);
+  }
+  return {
+    offlineMetal: { status: "skipped", reason },
+    metalRuntime: { status: "skipped", reason: `offline-metal:${reason}` },
+  };
+}
+
+function assertOverrideRuntimeProbeSource() {
+  const source = readFileSync(overrideSwiftProbePath, "utf8");
+  assert.equal(
+    sha256(source),
+    expectedSnapshots.overrideRender.runtimeProbeSha256
+  );
+  assert.doesNotMatch(source, /MTLFunctionConstantValues/u);
+  assert.doesNotMatch(source, /constantValues\s*:/u);
+  assert.equal(source.match(/makeFunction\(name:/gu)?.length, 2);
+  assert.equal(
+    createHash("sha256")
+      .update(Buffer.from(overrideExpectedReadback))
+      .digest("hex"),
+    expectedSnapshots.overrideRender.runtimeReadbackSha256
+  );
+  return 5;
+}
+
+function runOverrideMetalRuntime({ libraryPath, sources, scratch, settings }) {
+  if (!xcrunToolWorks("swiftc")) {
+    if (settings.requireMetalRuntime) {
+      fail("override Metal runtime requires xcrun swiftc");
+    }
+    return { status: "skipped", reason: "missing-xcrun-tool:swiftc" };
+  }
+  const architecture = { arm64: "arm64", x64: "x86_64" }[process.arch];
+  if (!architecture) {
+    if (settings.requireMetalRuntime) {
+      fail(`unsupported override Metal runtime architecture ${process.arch}`);
+    }
+    return {
+      status: "skipped",
+      reason: `unsupported-architecture:${process.arch}`,
+    };
+  }
+
+  const entryPoints = Object.fromEntries(
+    sources.map(({ stage, entryPoint }) => [stage, entryPoint])
+  );
+  assert.deepEqual(Object.keys(entryPoints).sort(), ["fragment", "vertex"]);
+  const executable = join(scratch, "override-metal-probe");
+  checkedCommand("Swift override Metal probe compilation", "xcrun", [
+    "swiftc",
+    "-O",
+    "-target",
+    `${architecture}-apple-macosx14.0`,
+    "-framework",
+    "Foundation",
+    "-framework",
+    "Metal",
+    overrideSwiftProbePath,
+    "-o",
+    executable,
+  ]);
+
+  const args = [libraryPath, entryPoints.vertex, entryPoints.fragment];
+  const attempts = [
+    runCommand(executable, args, { timeout: 120_000 }),
+    runCommand(executable, args, { timeout: 120_000 }),
+  ];
+  if (
+    attempts.every(
+      (attempt) =>
+        attempt.status !== 0 &&
+        `${attempt.stdout}${attempt.stderr}`.includes(
+          "No default Metal device is available"
+        )
+    )
+  ) {
+    if (settings.requireMetalRuntime) {
+      fail("override Metal runtime found no default device");
+    }
+    return { status: "skipped", reason: "no-metal-device" };
+  }
+  for (const attempt of attempts) {
+    if (
+      attempt.error ||
+      attempt.signal ||
+      attempt.status !== 0 ||
+      attempt.stderr !== ""
+    ) {
+      commandFailure("override Metal runtime probe", attempt);
+    }
+  }
+  assert.equal(
+    attempts[0].stdout,
+    attempts[1].stdout,
+    "override Metal runtime output is not deterministic"
+  );
+  const report = JSON.parse(attempts[0].stdout);
+  assert.deepEqual(Object.keys(report).sort(), ["device", "readbacks"]);
+  assert.deepEqual(report.readbacks, [
+    [...overrideExpectedReadback],
+    [...overrideExpectedReadback],
+  ]);
+  assert.equal(typeof report.device, "string");
+  assert(report.device.length > 0);
+  const readbackSha256 = createHash("sha256")
+    .update(Buffer.from(report.readbacks[0]))
+    .digest("hex");
+  assert.equal(
+    readbackSha256,
+    expectedSnapshots.overrideRender.runtimeReadbackSha256
+  );
+  return {
+    status: "passed",
+    deterministicProcesses: attempts.length,
+    rendersPerProcess: report.readbacks.length,
+    device: report.device,
+    pixelsPerReadback: report.readbacks[0].length / 4,
+    probeSha256: expectedSnapshots.overrideRender.runtimeProbeSha256,
+    readback: report.readbacks[0],
+    readbackSha256,
+  };
 }
 
 async function assertNativeResourceTranslations(

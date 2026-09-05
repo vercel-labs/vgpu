@@ -160,8 +160,10 @@ linking. It retains exact binding and override subsets, derives stage visibility
 resolver-owned authored presentation names without treating resolver layouts as authority,
 preserves the reachable Tint type/layout graphs, and fingerprints the complete program closure.
 Compilation consumes retained MSL only from the nominal projection. Six override entries translate
-deterministically and compile without Metal function constants. A live override render observation,
-broader resource shapes, and runtime resource use remain open.
+deterministically and compile without Metal function constants. One render program additionally
+passes an exact four-pixel readback in two independent Metal processes, with two renders each, and
+the probe rejects runtime function-constant APIs. Broader resource shapes and general runtime
+resource use remain open.
 
 The shader-interface follow-up proves the required split. Its isolated experiment extracts the
 complete portable interface from core IR before Metal lowering and established equivalent writer

@@ -1,0 +1,129 @@
+{
+  "entryPoints": [
+    {
+      "stage": "vertex",
+      "wgsl": "vs_main",
+      "semanticInterface": {
+        "kind": "vertex",
+        "inputs": [
+          {
+            "type": {
+              "scalar": "u32",
+              "width": 1
+            },
+            "invariant": false,
+            "builtin": "vertex_index"
+          }
+        ],
+        "outputs": [
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 2
+            },
+            "invariant": false,
+            "location": 0,
+            "interpolation": {
+              "type": "flat",
+              "sampling": "first"
+            }
+          },
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 4
+            },
+            "invariant": false,
+            "builtin": "position"
+          }
+        ]
+      },
+      "bindings": [],
+      "samplingPairs": [],
+      "overrides": ["SHARED", "VERTEX_ONLY"]
+    },
+    {
+      "stage": "fragment",
+      "wgsl": "fs_main",
+      "semanticInterface": {
+        "kind": "fragment",
+        "inputs": [
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 2
+            },
+            "invariant": false,
+            "location": 0,
+            "interpolation": {
+              "type": "flat",
+              "sampling": "first"
+            }
+          },
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 4
+            },
+            "invariant": false,
+            "builtin": "position"
+          }
+        ],
+        "outputs": [
+          {
+            "type": {
+              "scalar": "f32",
+              "width": 4
+            },
+            "invariant": false,
+            "location": 0
+          }
+        ]
+      },
+      "bindings": [],
+      "samplingPairs": [],
+      "overrides": ["FRAGMENT_ONLY", "SHARED"]
+    }
+  ],
+  "bindings": [],
+  "overrides": [
+    {
+      "name": "FRAGMENT_ONLY",
+      "type": "f32",
+      "default": {
+        "type": "f32",
+        "bits": "3f400000"
+      },
+      "selected": {
+        "type": "f32",
+        "bits": "3e000000"
+      }
+    },
+    {
+      "name": "SHARED",
+      "type": "f32",
+      "default": {
+        "type": "f32",
+        "bits": "3e800000"
+      },
+      "selected": {
+        "type": "f32",
+        "bits": "3ec00000"
+      }
+    },
+    {
+      "name": "VERTEX_ONLY",
+      "type": "f32",
+      "default": {
+        "type": "f32",
+        "bits": "3f000000"
+      },
+      "selected": {
+        "type": "f32",
+        "bits": "3f200000"
+      }
+    }
+  ],
+  "types": {},
+  "layouts": {}
+}

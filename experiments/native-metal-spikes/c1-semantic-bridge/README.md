@@ -5,7 +5,8 @@ Its executable slices now cover authenticated entry inventory, program selection
 source finalization, authenticated fixed-resource and exact-static override extraction,
 `semantic-v1` assembly for both profiles, deterministic Metal slot allocation, exact per-entry
 projection, native translation, offline Metal compilation, and fixed direct-resource binding
-through an exact live Metal readback path. The same one-shot Tint worker supplies inventory,
+through an exact live Metal readback path. A second live path observes baked, stage-specific
+override values without runtime specialization. The same one-shot Tint worker supplies inventory,
 extraction, and translation without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
@@ -163,8 +164,10 @@ then translates six exact-static override entries twice each across five project
 response is authenticated against its exact per-entry request. The override programs preserve a
 dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
 render-stage subsets, and all five scalar kinds including `f16`. Their six retained MSL sources
-contain no `function_constant`, compile to AIR, and link into five metallibs. This is offline Metal
-evidence; the current override render fixture is not a live-render oracle.
+contain no `function_constant`, compile to AIR, and link into five metallibs. The render program also
+passes an exact four-pixel readback in two independent Swift/Metal processes, with two renders per
+process. Its functions are loaded directly by emitted name without `MTLFunctionConstantValues`. See
+[`docs/semantic-extraction/override-metal.md`](./docs/semantic-extraction/override-metal.md).
 
 The fixed-resource path compiles both retained MSL sources to AIR and links one metallib exclusively
 through the nominal program-projection accessor. It then derives the joined runtime layout from that
@@ -192,9 +195,10 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
 interfaces, and generated full-screen source. Resource-free effect, draw, and compute requests plus
 one fixed-resource render pair and five exact-static override programs are now derived through
-offline Metal. A live override render observation, the broader resource profile, and repository
-corpus coverage remain. Once every request is derived, run the repository corpus through the same
-bridge and compile every successful MSL result for the `air64-apple-macos14.0` target.
+offline Metal, and one override render program additionally passes an exact live readback. The
+broader resource profile and repository corpus coverage remain. Once every request is derived, run
+the repository corpus through the same bridge and compile every successful MSL result for the
+`air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
@@ -210,7 +214,9 @@ The semantic work is split by responsibility so the growing design remains revie
   TypeScript join, render linking, and fingerprint exclusions; and
 - [`docs/semantic-extraction/exact-static-overrides.md`](./docs/semantic-extraction/exact-static-overrides.md)
   records executable override materialization, assembly, exact per-entry projection, offline Metal
-  evidence, and the remaining live observation; and
+  evidence, and live observation; and
+- [`docs/semantic-extraction/override-metal.md`](./docs/semantic-extraction/override-metal.md)
+  records the exact live override signature and the absence of runtime specialization; and
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
   freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
@@ -241,16 +247,16 @@ The semantic work is split by responsibility so the growing design remains revie
 8. Compile and link every accepted MSL source offline. The fixed-resource and exact-static override
    fixtures are executable; the authenticated repository corpus remains open.
 9. Join semantic resource constraints to projected slots, prepare a complete logical resource set,
-   and bind the fixed-resource render pair at runtime. This fixed direct-resource slice is
-   executable; general resources and the production Swift runtime remain open.
+   bind the fixed-resource render pair, and observe baked override values at runtime. Both live
+   canaries are executable; general resources and the production Swift runtime remain open.
 10. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
-This spike does not yet observe baked overrides through a live render, connect runtime-sized
-resources or the broader resource profile through nominal assembly and runtime binding, run the
-integrated repository corpus, package a production artifact, implement the production Swift
-runtime, freeze a Dawn/Tint source revision, or establish Intel or AMD GPU support. It also does not
+This spike does not yet connect runtime-sized resources or the broader resource profile through
+nominal assembly and runtime binding, run the integrated repository corpus, package a production
+artifact, implement the production Swift runtime, freeze a Dawn/Tint source revision, or establish
+Intel or AMD GPU support. It also does not
 recover general authored diagnostic spans from the current module-only origin map. Exact authored
 entry-declaration spans come from resolver tokens and use 1-based locations, UTF-16-code-unit
 columns, and an end-exclusive boundary. Tint diagnostics instead report UTF-8 byte columns;

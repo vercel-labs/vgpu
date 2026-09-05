@@ -184,6 +184,8 @@ inventory, two semantic extractions, four successful translations, two structure
 translations, combines a resource-free program projection, and performs live readback. Its compiler
 requests come from the nominal assembly, while the checked-in interface JSON remains a static
 oracle. The authored fragment's resolver-owned
-end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. A live
-override render observation, broader resource runtime coverage, repository corpus integration,
-production artifact packaging, and Intel/AMD hardware evidence remain open.
+end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. The override
+render companion also observes baked stage-local and shared values in an exact live readback without
+runtime specialization. Broader resource runtime coverage, repository corpus integration,
+production artifact packaging, and Intel/AMD hardware evidence remain open. See
+[`override-metal.md`](./override-metal.md) for that companion's exact runtime oracle.

@@ -183,8 +183,8 @@ being regenerated from translator responses. Actual compiler requests must be de
 authenticated assembly. Fixed singular-resource extraction, assembly, nominal slot allocation,
 exact per-entry projection, translation, offline compilation, and one fixed direct runtime readback
 now establish the resource path. Exact-static overrides also pass extraction, assembly, per-entry
-projection, deterministic translation, and offline compilation. Their live render observation,
-broader resource shapes and runtime behavior, corpus, and packaging fixtures remain to be connected.
+projection, deterministic translation, offline compilation, and an exact live render observation.
+Broader resource shapes and runtime behavior, corpus, and packaging fixtures remain to be connected.
 
 ## Repository corpus
 

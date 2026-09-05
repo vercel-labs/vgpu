@@ -1,8 +1,8 @@
 # Exact-static override integration
 
 Status: native semantic extraction, authenticated assembly, exact per-entry translator projection,
-deterministic translation, and offline Metal compilation passed. A live override observation remains
-open.
+deterministic translation, offline Metal compilation, and live render observation passed on the
+available Apple M4 Pro.
 
 This slice validates the docs-first override contract already proposed for native programs. Override
 values are fixed while building the shader artifact. They are not Swift runtime state, Metal
@@ -10,8 +10,9 @@ function constants, or pipeline options.
 
 The program-scoped semantic extractor materializes the exact typed static override sets for all
 selected entries. TypeScript now carries those authenticated facts through `semantic-v1`, projects
-them into the existing one-entry translator, and reaches offline Metal without parsing or evaluating
-WGSL. A separate live-render fixture must still observe the baked values on a Metal device.
+them into the existing one-entry translator, and reaches Metal without parsing or evaluating WGSL.
+One nondegenerate render fixture observes the configured values after they have been baked into the
+artifact.
 
 ## Keep one configuration and two semantic views
 
@@ -179,8 +180,8 @@ request or semantic selected values.
 
 ## Connected fixtures
 
-The connected gate keeps three complementary designs. All three pass through offline Metal; only the
-render observation remains a separate next slice.
+The connected gate keeps three complementary designs. All three pass through offline Metal, and the
+render fixture additionally passes a live observation.
 
 ### Compute materialization
 
@@ -201,16 +202,16 @@ compute binder, dispatch ownership, and buffer readback would test a separate ru
 
 ### Render union and observation
 
-The current render source uses `SHARED`, `VERTEX_ONLY`, and `FRAGMENT_ONLY`. Both stages use
-`SHARED`; each also uses its stage-local declaration. Assembly preserves the different per-entry
-subsets and their canonical program union, and each compiler request receives only its own exact
-subset. Both sources compile and link offline.
+The render source uses `SHARED`, `VERTEX_ONLY`, and `FRAGMENT_ONLY`, with configured values that all
+differ from their defaults. Both stages use `SHARED`; each also uses its stage-local declaration.
+Assembly preserves the different per-entry subsets and their canonical program union, and each
+compiler request receives only its own exact subset. Both sources compile and link offline.
 
-That source is deliberately an assembly and offline-compilation fixture, not a live-render oracle.
-The next fixture must use a nondegenerate full-screen vertex path and make configured non-default
-values affect the rendered color. Its Metal harness must check an exact `2 × 2` readback. This will
-observe the baked result without adding an override API to Swift or using
-`MTLFunctionConstantValues`.
+Its oversized full-screen vertex path carries the vertex-stage values through a flat varying. The
+fragment combines them with its own values and integer pixel coordinates to produce an exact
+`2 × 2` signature. Two independent Metal processes each reproduce that signature twice after
+loading both functions directly by emitted name. The complete oracle and runtime boundary are
+recorded in [`override-metal.md`](./override-metal.md).
 
 ### All scalar kinds
 
@@ -219,9 +220,9 @@ through assembly, projection, deterministic translation, and offline compilation
 request explicitly selects `languageFeatures: ["f16"]`. It reuses the existing materializer and
 compiler edge tables rather than introducing another numeric conversion policy.
 
-For every connected fixture, retained MSL does not declare a `function_constant`. The future live
-probe must not construct `MTLFunctionConstantValues`; pipeline creation will consume the
-already-baked functions directly.
+For every connected fixture, retained MSL does not declare a `function_constant`. The live probe is
+also hash-locked, rejects `MTLFunctionConstantValues` and the `constantValues:` overload, and creates
+the already-baked functions directly by emitted name.
 
 ## Failure matrix
 
@@ -240,18 +241,17 @@ The extraction gate fails closed for:
 Native extraction and translation successes run in fresh processes and must be byte deterministic.
 Checked-in responses and hashes remain reviewed oracles rather than being regenerated as part of the
 assertion path. Resolver joins, Swift presentation collisions, translator request mutations, Metal
-workgroup agreement, exact-union validation, and offline-specialization rejection are now executable.
-Live specialization rejection remains part of the next render observation.
+workgroup agreement, exact-union validation, offline-specialization rejection, and live runtime
+specialization rejection are now executable.
 
 ## Exit condition
 
-The extraction and offline connected portions are closed: native extraction returns exact typed
-records, exact entry subsets, their canonical union, and resolved workgroup dimensions from real
-requests; assembly reprojects exactly to that authenticated result; every one-entry translator
-request contains the correct subset; and retained MSL compiles offline without
-`function_constant`. The live portion remains open until a nondegenerate render observes configured
-values without `MTLFunctionConstantValues`.
+The exact-static connected slice is closed: native extraction returns exact typed records, exact
+entry subsets, their canonical union, and resolved workgroup dimensions from real requests;
+assembly reprojects exactly to that authenticated result; every one-entry translator request
+contains the correct subset; retained MSL compiles offline without `function_constant`; and a
+nondegenerate render observes configured values without `MTLFunctionConstantValues`.
 
-Passing this connected offline slice does not add runtime specialization, a public Swift override
-API, compute runtime execution, runtime-sized resources, resource binding arrays, repository-corpus
+Passing this connected slice does not add runtime specialization, a public Swift override API,
+compute runtime execution, runtime-sized resources, resource binding arrays, repository-corpus
 coverage, or production artifact generation.

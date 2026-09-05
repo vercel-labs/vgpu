@@ -107,7 +107,10 @@ different render-stage subsets despite a shared union, carries `bool`, `i32`, `u
 MSL sources contain no `function_constant`, compile to AIR, and link into five metallibs. Twelve
 independent projection mutations include missing and redistributed membership, crossed request
 subsets, and changed selected values. This is executable evidence for the override portions of
-conditions 4 through 7, 10, and 12. It is not a live Metal observation.
+conditions 4 through 7, 10, and 12. The render fixture additionally runs two independent Swift/Metal
+processes with two renders each and requires one exact four-pixel result. The hash-locked probe loads
+both functions by emitted name and rejects `MTLFunctionConstantValues` and the function-constant
+overload, so the observed selected values cannot be changed at runtime.
 
 The integrated Metal companion adds nine one-shot Tint processes: one inventory, two byte-identical
 semantic extractions, four deterministic successful translations, and two byte-identical runs of one
@@ -132,8 +135,8 @@ projection, response authentication, program projection, offline compilation, an
 binding/readback for that fixture.
 
 Exact-static override extraction, authenticated assembly into `semantic-v1`, exact per-entry
-translation projection, deterministic native translation, and offline Metal compilation have
-passed. A nondegenerate live override render observation, compute-resource translation and runtime
-parity, broader resource shapes, the integrated repository corpus, production artifact packaging,
-and the production Swift runtime remain open. The recorded GPU evidence is not an Intel, AMD, or
+translation projection, deterministic native translation, offline Metal compilation, and a
+nondegenerate live render observation have passed. Compute-resource translation and runtime parity,
+broader resource shapes, the integrated repository corpus, production artifact packaging, and the
+production Swift runtime remain open. The recorded GPU evidence is not an Intel, AMD, or
 cross-machine result.

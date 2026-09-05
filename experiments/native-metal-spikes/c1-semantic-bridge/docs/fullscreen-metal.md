@@ -128,5 +128,6 @@ authenticates one compiler result per selected stage and both offline compilatio
 function lookup consume only the frozen `{ stage, entryPoint, msl }` records retained by that
 nominal projection. The sibling semantic-assembly gate proves fixed singular-resource allocation,
 translation, exact program projection, offline linking, and one fixed direct-resource
-binding/readback path. Broader resource runtime coverage, overrides, repository-corpus integration,
-and production artifact packaging remain open.
+binding/readback path. It also observes one exact-static override render without runtime
+specialization. Broader resource runtime coverage, override-dependent compute execution,
+repository-corpus integration, and production artifact packaging remain open.

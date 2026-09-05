@@ -93,7 +93,7 @@ forms and validates the canonical module union without reinferring or replacing 
 
 The combiner neither requires nor inspects an empty override set. Exact per-entry overrides are
 authenticated when each nominal compiler request is minted, and the Metal program projection has
-no override field. A future program with baked overrides follows this identical combination path.
+no override field. The connected baked-override programs follow this identical combination path.
 
 Internal slots are grouped by role across responses and regain the selected stage omitted by the
 one-entry wire shape. A role may contribute at most one slot per stage. Storage-size regions remain
@@ -155,5 +155,6 @@ the nominal program projection, combines the retained semantic constraints with 
 slots, and binds only through a program that owns that layout and its pipeline. The runtime never
 recreates a slot union from per-entry responses. See
 [`runtime-resource-binding.md`](./runtime-resource-binding.md) for the executable proof and its
-fixed-profile limits. Exact-static overrides can join request construction later without changing
-this combination boundary.
+fixed-profile limits. Exact-static overrides now cross the same combination boundary, compile and
+link offline, and one render program passes a live readback without runtime specialization. See
+[`exact-static-overrides.md`](./exact-static-overrides.md) for that connected evidence.

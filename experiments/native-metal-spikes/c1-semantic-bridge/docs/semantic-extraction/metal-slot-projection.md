@@ -96,9 +96,10 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.
 ```
 
 This evidence includes pipeline creation, direct fixed-resource binding, and readback for the one
-resource render fixture. Exact-static override assembly and offline linking now pass in the same
-gate, but their live render observation remains open. Artifact packaging, runtime-sized storage
-integration, compute-resource encoding, the repository corpus, production Swift runtime, and
-additional hardware also remain open. The numeric canary ceilings are not a supported-device profile. See
+resource render fixture. Exact-static override assembly, offline linking, and an exact live render
+observation now pass in the same gate without runtime function constants. Artifact packaging,
+runtime-sized storage integration, compute-resource encoding, the repository corpus, production
+Swift runtime, and additional hardware remain open. The numeric canary ceilings are not a
+supported-device profile. See
 [`runtime-resource-binding.md`](./runtime-resource-binding.md) for the runtime ownership and
 limitations.
