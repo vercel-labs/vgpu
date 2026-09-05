@@ -11,6 +11,64 @@ struct ProbeError: Error, CustomStringConvertible {
   let description: String
 }
 
+enum AdvanceState: VGPUComputeProgram {
+  struct Bindings: VGPUBindingSet {
+    var source: VGPUStorage<UInt32>
+    var mask: VGPUStorage<UInt32>
+    var destination: VGPUStorage<UInt32>
+    var audit: VGPUStorage<UInt32>
+
+    func _vgpuEncodeBindings(to encoder: inout _VGPUBindingEncoder) throws {
+      try encoder.runtimeSizedStorage(source, at: 0)
+      try encoder.runtimeSizedStorage(mask, at: 1)
+      try encoder.runtimeSizedStorage(destination, at: 2)
+      try encoder.runtimeSizedStorage(audit, at: 3)
+    }
+  }
+
+  static let _vgpuProgramDescriptor = _VGPUProgramDescriptor(
+    artifactID: "recording-two-program-storage",
+    programID: "AdvanceState",
+    entryPointID: "advance",
+    bindings: [
+      _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 1, access: .read, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 2, access: .readWrite, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 3, access: .readWrite, runtimeSized: true),
+    ],
+    workgroupSize: (2, 1, 1)
+  )
+}
+
+enum MixState: VGPUComputeProgram {
+  struct Bindings: VGPUBindingSet {
+    var source: VGPUStorage<UInt32>
+    var mask: VGPUStorage<UInt32>
+    var destination: VGPUStorage<UInt32>
+    var audit: VGPUStorage<UInt32>
+
+    func _vgpuEncodeBindings(to encoder: inout _VGPUBindingEncoder) throws {
+      try encoder.runtimeSizedStorage(source, at: 0)
+      try encoder.runtimeSizedStorage(mask, at: 1)
+      try encoder.runtimeSizedStorage(destination, at: 2)
+      try encoder.runtimeSizedStorage(audit, at: 3)
+    }
+  }
+
+  static let _vgpuProgramDescriptor = _VGPUProgramDescriptor(
+    artifactID: "recording-two-program-storage",
+    programID: "MixState",
+    entryPointID: "mix",
+    bindings: [
+      _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 1, access: .read, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 2, access: .readWrite, runtimeSized: true),
+      _VGPULogicalBindingDescriptor(ordinal: 3, access: .readWrite, runtimeSized: true),
+    ],
+    workgroupSize: (1, 2, 1)
+  )
+}
+
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws {
   if try !condition() { throw ProbeError(description: message) }
 }
@@ -95,6 +153,7 @@ enum RecordingBackendError: Error, Sendable {
   case invalidCommand
   case missingAllocation
   case invalidRange
+  case injectedAllocationFailure
   case injectedSubmitFailure
   case injectedExecutionFailure
 }
@@ -111,12 +170,16 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
   let executionGate = RecordingExecutionGate()
   private let lock = NSLock()
   private var nextHandle: UInt64 = 1
+  private var nextProgramHandle: UInt64 = 1
   private var allocations: [VGPUBackendStorageHandle: Allocation] = [:]
+  private var programs: [VGPUBackendProgramHandle: _VGPUProgramDescriptor] = [:]
   private var releasedIdentities: [UInt64] = []
   private var commands: [VGPUBackendComputeCommand] = []
+  private var submitAttempts = 0
   private var prepareCount = 0
   private var shouldFailNextSubmit = false
   private var shouldFailNextExecution = false
+  private var successfulAllocationsBeforeFailure: Int?
   private var nextSubmitBarrier: SubmitBarrier?
 
   init(contextIdentity: UInt64) { self.contextIdentity = contextIdentity }
@@ -127,6 +190,13 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
   ) throws -> VGPUBackendStorageHandle {
     lock.lock()
     defer { lock.unlock() }
+    if let remaining = successfulAllocationsBeforeFailure {
+      guard remaining > 0 else {
+        successfulAllocationsBeforeFailure = nil
+        throw RecordingBackendError.injectedAllocationFailure
+      }
+      successfulAllocationsBeforeFailure = remaining - 1
+    }
     let handle = VGPUBackendStorageHandle(rawValue: nextHandle)
     nextHandle += 1
     allocations[handle] = Allocation(
@@ -196,26 +266,29 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
   func prepareCompute(
     _ program: _VGPUProgramDescriptor
   ) throws -> VGPUBackendProgramHandle {
-    guard
-      program.artifactID == "assembly-runtime-sized-storage",
-      program.entryPointID == "inspect-values",
-      program.bindings.count == 2
-    else {
+    guard isKnownProgram(program) else {
       throw RecordingBackendError.invalidProgram
     }
     lock.lock()
     prepareCount += 1
+    let handle = VGPUBackendProgramHandle(rawValue: nextProgramHandle)
+    nextProgramHandle += 1
+    programs[handle] = program
     lock.unlock()
-    return VGPUBackendProgramHandle(rawValue: 1)
+    return handle
   }
 
   func submitCompute(
     _ command: VGPUBackendComputeCommand
   ) throws -> any VGPUBackendExecution {
-    guard command.programHandle == VGPUBackendProgramHandle(rawValue: 1) else {
+    lock.lock()
+    submitAttempts += 1
+    let preparedProgram = programs[command.programHandle]
+    lock.unlock()
+    guard preparedProgram == command.program else {
       throw RecordingBackendError.invalidProgram
     }
-    guard command.bindings.map(\.ordinal) == [0, 1] else {
+    guard command.bindings.map(\.ordinal) == command.program.bindings.map(\.ordinal) else {
       throw RecordingBackendError.invalidCommand
     }
     lock.lock()
@@ -240,6 +313,7 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
   }
 
   func emulate(_ command: VGPUBackendComputeCommand) throws {
+    guard command.program.programID == "AssemblyRuntimeSizedStorage" else { return }
     let input = command.bindings[0]
     let output = command.bindings[1]
     let count = (input.boundByteCount - 4) / 12
@@ -280,6 +354,18 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
     return prepareCount
   }
 
+  var submittedCommands: [VGPUBackendComputeCommand] {
+    lock.lock()
+    defer { lock.unlock() }
+    return commands
+  }
+
+  var submitAttemptCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return submitAttempts
+  }
+
   var liveAllocationIdentities: [UInt64] {
     lock.lock()
     defer { lock.unlock() }
@@ -301,6 +387,12 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
   func failNextSubmit() {
     lock.lock()
     shouldFailNextSubmit = true
+    lock.unlock()
+  }
+
+  func failAllocation(afterSuccessfulAllocations count: Int) {
+    lock.lock()
+    successfulAllocationsBeforeFailure = count
     lock.unlock()
   }
 
@@ -330,6 +422,12 @@ final class RecordingBackend: VGPUResourceBackend, VGPUComputeBackend, @unchecke
     }
     return allocation.bytes.subdata(in: range)
   }
+
+  private func isKnownProgram(_ program: _VGPUProgramDescriptor) -> Bool {
+    program == InspectValues._vgpuProgramDescriptor
+      || program == AdvanceState._vgpuProgramDescriptor
+      || program == MixState._vgpuProgramDescriptor
+  }
 }
 
 final class ErrorRecorder: @unchecked Sendable {
@@ -358,6 +456,21 @@ func expectFailure(_ operation: () throws -> Void, _ message: String) throws {
   } catch {}
 }
 
+func expectVGPUFailure(
+  code: VGPUErrorCode,
+  _ operation: () throws -> Void,
+  _ message: String
+) throws {
+  do {
+    try operation()
+    throw ProbeError(description: message)
+  } catch let error as VGPUError {
+    try require(error.code == code, "\(message): received \(error.code.rawValue)")
+  } catch {
+    throw ProbeError(description: "\(message): received \(error)")
+  }
+}
+
 func emit(_ report: [String: Any]) throws {
   let data = try JSONSerialization.data(
     withJSONObject: report,
@@ -367,6 +480,184 @@ func emit(_ report: [String: Any]) throws {
     throw ProbeError(description: "could not encode JSON")
   }
   print(json)
+}
+
+@MainActor
+func verifyComputeStorageContracts() async throws {
+  let rollbackBackend = RecordingBackend(contextIdentity: 400)
+  let rollbackGPU = VGPU(backend: rollbackBackend)
+  rollbackBackend.failAllocation(afterSuccessfulAllocations: 1)
+  try expectFailure(
+    {
+      _ = try rollbackGPU.pingPongStorage(
+        UInt32.self,
+        count: 2,
+        initialValues: [7, 9]
+      )
+    },
+    "a ping-pong pair survived its second allocation failure"
+  )
+  try require(
+    rollbackBackend.liveAllocationIdentities.isEmpty,
+    "a failed ping-pong allocation leaked its read generation"
+  )
+  try require(
+    rollbackBackend.releaseCount(allocationIdentity: 1) == 1,
+    "a failed ping-pong allocation did not close its read generation exactly once"
+  )
+  try rollbackGPU.dispose()
+
+  let backend = RecordingBackend(contextIdentity: 500)
+  let gpu = VGPU(backend: backend)
+  let initial: [UInt32] = [1, 3, 5, 7, 9, 11, 13, 15]
+  let state = try gpu.pingPongStorage(
+    UInt32.self,
+    count: initial.count,
+    initialValues: initial
+  )
+  let originalRead = state.read
+  let originalWrite = state.write
+  let readInitialValues = try await originalRead.read()
+  let writeInitialValues = try await originalWrite.read()
+  try require(readInitialValues == initial, "ping-pong read initialization drifted")
+  try require(
+    writeInitialValues == [UInt32](repeating: 0, count: initial.count),
+    "ping-pong write storage was not zero initialized"
+  )
+
+  let advanceAudit = try gpu.storage(UInt32.self, count: 4)
+  let mixAudit = try gpu.storage(UInt32.self, count: 4)
+  let advance = try gpu.compute(
+    AdvanceState.self,
+    bindings: .init(
+      source: state.read,
+      mask: state.read,
+      destination: state.write,
+      audit: advanceAudit
+    )
+  )
+  let errors = ErrorRecorder()
+  let unsubscribe = gpu.onError { error in errors.record(error) }
+  let first = try advance.dispatch(x: 2, y: 1, z: 2)
+
+  state.swap()
+  try require(
+    state.read === originalWrite && state.write === originalRead,
+    "ping-pong swap did not reverse its resource roles"
+  )
+  try advance.set(\.source, to: state.read)
+  let transientPending = gpu._pendingWorkCount
+  let transientSubmits = backend.submitAttemptCount
+  try expectVGPUFailure(
+    code: .storageAliasing,
+    { _ = try advance.dispatch(x: 2, y: 1, z: 2) },
+    "a transient writable alias reached dispatch"
+  )
+  try require(
+    gpu._pendingWorkCount == transientPending,
+    "a transient alias registered work"
+  )
+  try require(
+    backend.submitAttemptCount == transientSubmits && errors.count == 0,
+    "a transient alias reached the backend or onError"
+  )
+  try advance.set(\.mask, to: state.read)
+  try advance.set(\.destination, to: state.write)
+
+  let mix = try gpu.compute(
+    MixState.self,
+    bindings: .init(
+      source: state.read,
+      mask: state.read,
+      destination: state.write,
+      audit: mixAudit
+    )
+  )
+  let second = try mix.dispatch(x: 2, y: 2, z: 1)
+  let commands = backend.submittedCommands
+  try require(commands.count == 2, "compute-storage submissions drifted")
+  let advanceCommand = commands[0]
+  let mixCommand = commands[1]
+  try require(
+    advanceCommand.program.artifactID == mixCommand.program.artifactID
+      && advanceCommand.program.programID != mixCommand.program.programID,
+    "two programs in one artifact lost independent program identity"
+  )
+  try require(
+    advanceCommand.bindings.map(\.ordinal) == [0, 1, 2, 3]
+      && mixCommand.bindings.map(\.ordinal) == [0, 1, 2, 3],
+    "program-local binding ordinals drifted"
+  )
+  try require(
+    advanceCommand.bindings.map(\.elementCount) == [8, 8, 8, 4]
+      && mixCommand.bindings.map(\.elementCount) == [8, 8, 8, 4],
+    "root runtime-sized storage lost its element count"
+  )
+  try require(
+    advanceCommand.threadgroups.x == 2 && advanceCommand.threadgroups.y == 1
+      && advanceCommand.threadgroups.z == 2 && mixCommand.threadgroups.x == 2
+      && mixCommand.threadgroups.y == 2 && mixCommand.threadgroups.z == 1,
+    "three-dimensional dispatch snapshots drifted"
+  )
+  let firstIdentities = advanceCommand.bindings.map {
+    ($0.snapshot.allocationIdentity, $0.snapshot.generation)
+  }
+  let secondIdentities = mixCommand.bindings.map {
+    ($0.snapshot.allocationIdentity, $0.snapshot.generation)
+  }
+  try require(
+    firstIdentities[0] == firstIdentities[1]
+      && firstIdentities[0] != firstIdentities[2]
+      && secondIdentities[0] == secondIdentities[1]
+      && secondIdentities[0] == firstIdentities[2]
+      && secondIdentities[2] == firstIdentities[0],
+    "dispatch snapshots did not preserve read/read aliases across a role swap"
+  )
+
+  await backend.executionGate.releaseAll()
+  await first.settled()
+  await second.settled()
+
+  let beforeAlias = Set(backend.liveAllocationIdentities)
+  let aliased = try gpu.storage(UInt32.self, count: 8)
+  let aliasedIdentity = try requireOnly(
+    Array(Set(backend.liveAllocationIdentities).subtracting(beforeAlias))
+  )
+  let aliasAudit = try gpu.storage(UInt32.self, count: 4)
+  let aliasCompute = try gpu.compute(
+    AdvanceState.self,
+    bindings: .init(
+      source: aliased,
+      mask: aliased,
+      destination: aliased,
+      audit: aliasAudit
+    )
+  )
+  let aliasPending = gpu._pendingWorkCount
+  let aliasSubmits = backend.submitAttemptCount
+  try expectVGPUFailure(
+    code: .storageAliasing,
+    { _ = try aliasCompute.dispatch(x: 2, y: 1, z: 2) },
+    "a writable full-generation alias succeeded"
+  )
+  try require(
+    gpu._pendingWorkCount == aliasPending && backend.submitAttemptCount == aliasSubmits
+      && errors.count == 0,
+    "an alias failure escaped preflight"
+  )
+  try aliased.dispose()
+  try require(
+    backend.releaseCount(allocationIdentity: aliasedIdentity) == 1,
+    "an alias failure retained a prepared lease"
+  )
+  try aliasAudit.dispose()
+  unsubscribe()
+
+  try originalRead.dispose()
+  try originalWrite.dispose()
+  try advanceAudit.dispose()
+  try mixAudit.dispose()
+  try gpu.dispose()
 }
 
 @MainActor
@@ -587,14 +878,18 @@ func run() async throws {
     { _ = try closeStorage.readForSynchronousGate() },
     "a child resource remained usable after context close"
   )
+  try await verifyComputeStorageContracts()
   try emit([
     "accessGateFailFast": true,
     "accessGateStackReentrancy": true,
     "atomicSetRollback": true,
     "deferredErrorDelivery": true,
+    "computeStorageAliasing": true,
+    "computeStorageProgramIdentity": true,
     "effectiveRanges": [28, 52],
     "gate": "c2-generated-compute-recording",
     "generationReleaseAfterCompletion": true,
+    "pingPongStorage": true,
     "contextClosesChildren": true,
     "synchronousSubmitRollback": true,
     "pipelinePrepareCount": backend.pipelinePrepareCount,

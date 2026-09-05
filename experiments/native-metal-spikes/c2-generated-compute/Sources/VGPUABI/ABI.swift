@@ -135,6 +135,7 @@ public struct _VGPUProgramArtifact: Equatable, Sendable {
 
 public struct _VGPUProgramDescriptor: Equatable, Sendable {
   package let artifactID: String
+  package let programID: String
   package let entryPointID: String
   package let bindings: [_VGPULogicalBindingDescriptor]
   package let workgroupSize: (x: Int, y: Int, z: Int)
@@ -142,12 +143,14 @@ public struct _VGPUProgramDescriptor: Equatable, Sendable {
 
   public init(
     artifactID: String,
+    programID: String,
     entryPointID: String,
     bindings: [_VGPULogicalBindingDescriptor],
     workgroupSize: (x: Int, y: Int, z: Int),
     artifact: _VGPUProgramArtifact? = nil
   ) {
     self.artifactID = artifactID
+    self.programID = programID
     self.entryPointID = entryPointID
     self.bindings = bindings
     self.workgroupSize = workgroupSize
@@ -155,7 +158,8 @@ public struct _VGPUProgramDescriptor: Equatable, Sendable {
   }
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.artifactID == rhs.artifactID && lhs.entryPointID == rhs.entryPointID
+    lhs.artifactID == rhs.artifactID && lhs.programID == rhs.programID
+      && lhs.entryPointID == rhs.entryPointID
       && lhs.artifact == rhs.artifact && lhs.bindings == rhs.bindings
       && lhs.workgroupSize.x == rhs.workgroupSize.x
       && lhs.workgroupSize.y == rhs.workgroupSize.y
@@ -366,6 +370,33 @@ public struct _VGPUBindingEncoder {
         try box.prepare(
           boundByteCount: byteCount,
           elementCount: nil,
+          requiredAccess: requiredAccess
+        )
+      }
+    )
+  }
+
+  public mutating func runtimeSizedStorage<Element: VGPUScalar>(
+    _ storage: VGPUStorage<Element>,
+    at ordinal: Int
+  ) throws {
+    let box = storage._box
+    let byteCount = storage.sizeInBytes
+    let elementCount = storage.count
+    try append(
+      ordinal: ordinal,
+      kind: .runtimeSized,
+      validate: { requiredAccess, contextIdentity in
+        try box.validate(
+          boundByteCount: byteCount,
+          requiredAccess: requiredAccess,
+          contextIdentity: contextIdentity
+        )
+      },
+      prepare: { requiredAccess in
+        try box.prepare(
+          boundByteCount: byteCount,
+          elementCount: elementCount,
           requiredAccess: requiredAccess
         )
       }

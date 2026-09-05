@@ -73,6 +73,15 @@ public final class VGPUComputeInstance<Program: VGPUComputeProgram> {
       }
       let validated = try validateBindings(bindings, for: Program.self, gpu: gpu)
       let prepared = try prepareBindingsForDispatch(validated, gpu: gpu)
+      do {
+        try validateStorageAliasing(
+          prepared.backendBindings,
+          requirements: validated.expected
+        )
+      } catch {
+        release(prepared.leases)
+        throw error
+      }
       let command = VGPUBackendComputeCommand(
         programHandle: programHandle,
         program: descriptor,
@@ -186,6 +195,34 @@ private func prepareBindingsForDispatch(
     backendBindings: backendBindings,
     leases: preparedValues.map(\.lease)
   )
+}
+
+private struct StorageGenerationIdentity: Hashable {
+  let allocationIdentity: UInt64
+  let generation: UInt64
+}
+
+private func validateStorageAliasing(
+  _ bindings: [VGPUBackendComputeBinding],
+  requirements: [_VGPULogicalBindingDescriptor]
+) throws {
+  var accessByGeneration: [StorageGenerationIdentity: VGPUStorageAccess] = [:]
+  for (binding, requirement) in zip(bindings, requirements) {
+    let identity = StorageGenerationIdentity(
+      allocationIdentity: binding.snapshot.allocationIdentity,
+      generation: binding.snapshot.generation
+    )
+    if let existingAccess = accessByGeneration[identity] {
+      guard existingAccess == .read, requirement.access == .read else {
+        throw VGPUError(
+          code: .storageAliasing,
+          message: "A writable storage generation is bound more than once."
+        )
+      }
+    } else {
+      accessByGeneration[identity] = requirement.access
+    }
+  }
 }
 
 private func release(_ leases: [any _VGPUResourceLease]) {

@@ -247,7 +247,46 @@ private final class StorageBox: _VGPUStorageBox, _VGPUContextChild, @unchecked S
   }
 }
 
+public final class VGPUPingPongStorage<Element: VGPUScalar> {
+  public private(set) var read: VGPUStorage<Element>
+  public private(set) var write: VGPUStorage<Element>
+
+  fileprivate init(read: VGPUStorage<Element>, write: VGPUStorage<Element>) {
+    self.read = read
+    self.write = write
+  }
+
+  public func swap() {
+    (read, write) = (write, read)
+  }
+}
+
+@available(*, unavailable)
+extension VGPUPingPongStorage: Sendable {}
+
 extension VGPU {
+  public func pingPongStorage<Element: VGPUScalar>(
+    _ element: Element.Type,
+    count: Int,
+    initialValues: [Element] = []
+  ) throws -> VGPUPingPongStorage<Element> {
+    try withOpenAccess {
+      let read = try storage(
+        element,
+        count: count,
+        access: .readWrite,
+        initialValues: initialValues
+      )
+      do {
+        let write = try storage(element, count: count, access: .readWrite)
+        return VGPUPingPongStorage(read: read, write: write)
+      } catch {
+        try? read.dispose()
+        throw error
+      }
+    }
+  }
+
   public func storage<Layout: VGPURuntimeArrayLayout>(
     _ layout: Layout.Type,
     prefix: Layout.Prefix,

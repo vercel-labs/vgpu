@@ -247,7 +247,7 @@ private struct ConnectedArtifact: Decodable {
     }
     try runtimeManifest.validate()
     guard
-      runtimeManifest.semanticProgram == "AssemblyRuntimeSizedStorage",
+      runtimeManifest.semanticProgram == descriptor.programID,
       descriptor.entryPointID == "compute_main",
       runtimeManifest.entryPoint.stage == "compute"
     else {
@@ -439,6 +439,7 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
     _ descriptor: _VGPUProgramDescriptor
   ) throws -> VGPUBackendProgramHandle {
     guard descriptor.artifactID == "assembly-runtime-sized-storage",
+      descriptor.programID == "AssemblyRuntimeSizedStorage",
       descriptor.bindings == [
         _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),
         _VGPULogicalBindingDescriptor(ordinal: 1, access: .readWrite, runtimeSized: false),

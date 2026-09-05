@@ -18,6 +18,7 @@ public struct VGPUErrorCode: RawRepresentable, Hashable, Sendable {
   public static let concurrentAccess = Self(rawValue: "VGPU-NATIVE-CONCURRENT-ACCESS")
   public static let gpuDisposed = Self(rawValue: "VGPU-GPU-DISPOSED")
   public static let contextMismatch = Self(rawValue: "VGPU-NATIVE-CONTEXT-MISMATCH")
+  public static let storageAliasing = Self(rawValue: "VGPU-R1-STORAGE-ALIASING")
   package static let invalidBindings = Self(rawValue: "VGPU-NATIVE-INVALID-BINDINGS")
   package static let invalidDispatch = Self(rawValue: "VGPU-NATIVE-INVALID-DISPATCH")
   package static let backendOperationFailed = Self(

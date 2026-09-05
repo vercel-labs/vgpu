@@ -74,6 +74,7 @@ public enum InspectValues: VGPUComputeProgram {
 
   public static let _vgpuProgramDescriptor = _VGPUProgramDescriptor(
     artifactID: "assembly-runtime-sized-storage",
+    programID: "AssemblyRuntimeSizedStorage",
     entryPointID: "inspect-values",
     bindings: [
       _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),

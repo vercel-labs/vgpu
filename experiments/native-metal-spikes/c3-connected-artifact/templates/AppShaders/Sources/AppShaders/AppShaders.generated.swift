@@ -114,6 +114,7 @@ public enum __PROGRAM_SWIFT_NAME__: VGPUComputeProgram {
 
   public static let _vgpuProgramDescriptor = _VGPUProgramDescriptor(
     artifactID: "assembly-runtime-sized-storage",
+    programID: "AssemblyRuntimeSizedStorage",
     entryPointID: "compute_main",
     bindings: [
       _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),
