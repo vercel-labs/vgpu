@@ -460,19 +460,30 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    compile-only. Production C4 remains open until the same gate runs through the distributable
    implementation and declared toolchain/hardware matrix.
 
-4. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
+4. DC1 is the next proposed gate, not a passing result. Storage declares
+   `additionalUsage: [.indirect]` independently from `access`; `VGPUStorage.buffer` and
+   `VGPUBuffer.slice(bytes:)` create bounded, non-allocating views over the same generation without
+   introducing another allocation owner. Draw and future dispatch consumers acquire the normal
+   generation lease and
+   validate their 16-, 20-, or 12-byte packets
+   synchronously. Invalid usage, alignment, or range reports `VGPU-INDIRECT-INVALID`; cross-context
+   use preserves `VGPU-NATIVE-CONTEXT-MISMATCH`. Compute and render remain two submissions ordered on
+   one queue without CPU synchronization. This runtime state adds nothing to semantic or projection
+   artifacts. DC1 is one direct gate, with no DC1a. See
+   [Compute-to-draw indirect](./render/indirect.md).
+5. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.
-5. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
+6. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.
-6. The Swift representation for sparse color attachments. Indexed records make the semantic slot
+7. The Swift representation for sparse color attachments. Indexed records make the semantic slot
    explicit and remain extensible; a nullable positional array resembles WebGPU more closely. Both
    preserve holes correctly, so this is a public API choice rather than a compiler question.
-7. The behavior when a shader writes a color location with no attachment. Metal silently discards
+8. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
-8. The public representation of structured error details and authored-source paths: typed details
+9. The public representation of structured error details and authored-source paths: typed details
    per error case versus an extensible payload, and structured path components versus one rendered
    diagnostic path. The isolated lifecycle kernel proves deterministic mapping for representative
    codes and messages while keeping backend metadata package-only; it does not make message text or
