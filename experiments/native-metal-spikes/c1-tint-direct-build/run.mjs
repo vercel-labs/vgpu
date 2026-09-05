@@ -159,6 +159,7 @@ const resourceGraphOracleInputIds = [
   "semanticExtractionRequestSchema",
   "semanticExtractionResponseSchema",
   "semanticActiveResourceResponse",
+  "semanticRuntimeSizedStorageResponse",
 ];
 const currentOracleInputIds = [
   ...inventoryOracleInputIds,
@@ -173,6 +174,7 @@ const currentOracleInputIds = [
   "semanticOverrideConfiguredBypassResponse",
   "semanticOverrideConfiguredDependentResponse",
   "semanticOverrideRenderUnionResponse",
+  "semanticRuntimeSizedStorageResponse",
 ];
 const oracleInputs = [
   {
@@ -285,6 +287,11 @@ const oracleInputs = [
     path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-render-union.json",
     mutable: true,
   },
+  {
+    id: "semanticRuntimeSizedStorageResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/runtime-sized-storage.json",
+    mutable: true,
+  },
 ];
 const legacyOracleRequestRoot = "../c1-compiler-protocol/fixtures/requests";
 const legacyOracleRequestPaths = [
@@ -376,6 +383,11 @@ const oracleFixtures = [
     path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
   },
   {
+    id: "semantic-runtime-sized-storage",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/runtime-sized-storage.json",
+  },
+  {
     id: "compute-builtins",
     ok: true,
     path: "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
@@ -449,6 +461,7 @@ const resourceGraphOracleFixtureIds = [
   "semantic-active-resource",
   "semantic-compute-interface",
   "semantic-render-interface",
+  "semantic-runtime-sized-storage",
   "compute-builtins",
   "dual-source",
   "fragment-sparse",
@@ -473,6 +486,7 @@ const currentOracleFixtureIds = [
   "semantic-override-configured-dependent",
   "semantic-override-render-union",
   "semantic-render-interface",
+  "semantic-runtime-sized-storage",
   "compute-builtins",
   "dual-source",
   "fragment-sparse",
@@ -951,6 +965,12 @@ function assertJsonOrMeasure(actual, expected, label, jsonPointer) {
 }
 
 function assertOracleFixtureDefinitions() {
+  assertEqual(oracleFixtures.length, 23, "current oracle fixture count");
+  assertEqual(
+    oracleFixtures.filter(({ id }) => id.startsWith("semantic-")).length,
+    9,
+    "current semantic-extraction fixture count"
+  );
   assertEqual(
     JSON.stringify(oracleInputs.map(({ id }) => id)),
     JSON.stringify(currentOracleInputIds),
@@ -3077,6 +3097,18 @@ function verifyOracleBranchEvidence(id, response) {
           )
         ),
         `${id} exact active resource graph evidence`
+      );
+      break;
+    case "semantic-runtime-sized-storage":
+      assertExactJSON(
+        response,
+        readJSON(
+          resolve(
+            fixtureDirectory,
+            "../c1-semantic-bridge/fixtures/semantic-extraction/responses/runtime-sized-storage.json"
+          )
+        ),
+        `${id} exact runtime-sized storage graph evidence`
       );
       break;
     case "semantic-override-all-scalars":
