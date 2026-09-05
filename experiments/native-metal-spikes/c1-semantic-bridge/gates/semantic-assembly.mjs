@@ -4290,6 +4290,14 @@ function runRuntimeSizedStorageMetalRuntime({
         scratch,
       })
     : undefined;
+  const generatedComputeProbe = settings.generatedComputeProbe
+    ? runGeneratedComputeProbe({
+        executable: settings.generatedComputeProbe,
+        libraryPath,
+        manifestPath,
+        scratch,
+      })
+    : undefined;
   return {
     status: "passed",
     deterministicProcesses: attempts.length,
@@ -4304,6 +4312,7 @@ function runRuntimeSizedStorageMetalRuntime({
     readbacks: report.readbacks,
     readbackSha256,
     ...(runtimeTailResourceProbe && { runtimeTailResourceProbe }),
+    ...(generatedComputeProbe && { generatedComputeProbe }),
   };
 }
 
@@ -4343,12 +4352,74 @@ function runRuntimeTailResourceProbe({
     );
   }
   if (report.gate !== "c2-runtime-tail-resource-metal") {
-    fail("C2 runtime-tail resource Metal probe returned the wrong gate identity");
+    fail(
+      "C2 runtime-tail resource Metal probe returned the wrong gate identity"
+    );
   }
   if (report.status !== "passed") {
     fail("C2 runtime-tail resource Metal probe did not report passed status");
   }
   return { status: "passed" };
+}
+
+function runGeneratedComputeProbe({
+  executable,
+  libraryPath,
+  manifestPath,
+  scratch,
+}) {
+  const attempts = [
+    runCommand(executable, [libraryPath, manifestPath], {
+      cwd: scratch,
+      timeout: 120_000,
+    }),
+    runCommand(executable, [libraryPath, manifestPath], {
+      cwd: scratch,
+      timeout: 120_000,
+    }),
+  ];
+  for (const attempt of attempts) {
+    if (attempt.error || attempt.signal || attempt.status !== 0) {
+      commandFailure("C2 generated-compute Metal probe", attempt);
+    }
+    if (attempt.stderr !== "") {
+      fail(
+        `C2 generated-compute Metal probe wrote stderr: ${attempt.stderr.trim()}`
+      );
+    }
+  }
+  assert.equal(
+    attempts[0].stdout,
+    attempts[1].stdout,
+    "C2 generated-compute Metal probe output is not deterministic"
+  );
+
+  let report;
+  try {
+    report = JSON.parse(attempts[0].stdout);
+  } catch (error) {
+    fail(
+      `C2 generated-compute Metal probe returned invalid JSON: ${error.message}`
+    );
+  }
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    fail("C2 generated-compute Metal probe report must be an object");
+  }
+  if (report.schemaVersion !== 1) {
+    fail(
+      "C2 generated-compute Metal probe returned an unsupported schemaVersion"
+    );
+  }
+  if (report.gate !== "c2-generated-compute-metal") {
+    fail("C2 generated-compute Metal probe returned the wrong gate identity");
+  }
+  if (report.status !== "passed") {
+    fail("C2 generated-compute Metal probe did not report passed status");
+  }
+  assert.deepEqual(report.effectiveRanges, [28, 52]);
+  assert.deepEqual(report.readbacks, runtimeSizedStorageExpectedReadbacks);
+  assert.equal(report.sameBackingBuffer, true);
+  return { status: "passed", deterministicProcesses: attempts.length };
 }
 
 function assertRuntimeSizedStorageManifestFailures({
@@ -4918,6 +4989,7 @@ function parseArguments(argv) {
   const parsed = {
     worker: undefined,
     runtimeTailResourceProbe: undefined,
+    generatedComputeProbe: undefined,
     requireWorker: false,
     requireOfflineMetal: false,
     requireMetalRuntime: false,
@@ -4930,6 +5002,7 @@ function parseArguments(argv) {
       process.stdout.write(
         "Usage: node gates/semantic-assembly.mjs [--worker <Tint executable>] " +
           "[--runtime-tail-resource-probe <executable>] " +
+          "[--generated-compute-probe <executable>] " +
           "[--require-worker] [--require-offline-metal] " +
           "[--require-metal-runtime] [--skip-metal-runtime]\n"
       );
@@ -4973,6 +5046,16 @@ function parseArguments(argv) {
       parsed.runtimeTailResourceProbe = resolve(executable);
       continue;
     }
+    if (argument === "--generated-compute-probe") {
+      if (seen.has(argument)) fail(`${argument} may appear only once`);
+      seen.add(argument);
+      const executable = argv[++index];
+      if (!executable || executable.startsWith("--")) {
+        fail("--generated-compute-probe requires a value");
+      }
+      parsed.generatedComputeProbe = resolve(executable);
+      continue;
+    }
     fail(`unknown argument ${argument}`);
   }
   if (
@@ -4996,12 +5079,30 @@ function parseArguments(argv) {
       );
     }
   }
-  if (parsed.runtimeTailResourceProbe && parsed.skipMetalRuntime) {
-    fail(
-      "--runtime-tail-resource-probe conflicts with --skip-metal-runtime"
-    );
+  if (parsed.generatedComputeProbe) {
+    if (
+      !existsSync(parsed.generatedComputeProbe) ||
+      !lstatSync(parsed.generatedComputeProbe).isFile()
+    ) {
+      fail(
+        `generated-compute probe is not a regular file: ${parsed.generatedComputeProbe}`
+      );
+    }
+    if ((lstatSync(parsed.generatedComputeProbe).mode & 0o111) === 0) {
+      fail(
+        `generated-compute probe is not executable: ${parsed.generatedComputeProbe}`
+      );
+    }
   }
-  if (parsed.runtimeTailResourceProbe) parsed.requireMetalRuntime = true;
+  if (parsed.runtimeTailResourceProbe && parsed.skipMetalRuntime) {
+    fail("--runtime-tail-resource-probe conflicts with --skip-metal-runtime");
+  }
+  if (parsed.generatedComputeProbe && parsed.skipMetalRuntime) {
+    fail("--generated-compute-probe conflicts with --skip-metal-runtime");
+  }
+  if (parsed.runtimeTailResourceProbe || parsed.generatedComputeProbe) {
+    parsed.requireMetalRuntime = true;
+  }
   if (parsed.requireMetalRuntime && parsed.skipMetalRuntime) {
     fail("--require-metal-runtime conflicts with --skip-metal-runtime");
   }
