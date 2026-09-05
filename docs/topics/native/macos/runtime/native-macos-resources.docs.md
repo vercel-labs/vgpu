@@ -60,7 +60,7 @@ Typed resource writes use the same strict `wgsl-host-shareable-v1` packer as gen
 
 ## Keep runtime-array extent separate
 
-The reflected runtime-sized layout records its alignment and fixed zero-element prefix as `layout.minimumSize`; its trailing array records the element layout and stride. The binding's `minimumBindingSize` additionally includes one complete trailing element and any enclosing-structure padding. Neither value contains an allocation-specific element count or final byte size. Those values belong to each storage resource and bound buffer range.
+The reflected runtime-sized layout records its alignment and fixed zero-element prefix as `layout.minimumSize`; its trailing array records an explicit element-layout reference and stride. The explicit edge prevents a consumer from guessing among physical layouts that share one logical element type. The binding's `minimumBindingSize` additionally includes one complete trailing element and any enclosing-structure padding. Neither value contains an allocation-specific element count or final byte size. Those values belong to each storage resource and bound buffer range.
 
 For a typed allocation, `count` produces a checked byte length from the fixed prefix plus `count × stride`. Writes preserve that declared extent. At binding time, the runtime validates the effective offset and range without changing the canonical layout to make the array appear statically sized. The range must be at least `minimumBindingSize`, fit inside the logical buffer from that offset, fit in `UInt32`, and be a multiple of four bytes for a storage binding. It does not need to be an exact multiple of the runtime array's stride. Raw buffers provide the equivalent extent through their explicit byte range.
 

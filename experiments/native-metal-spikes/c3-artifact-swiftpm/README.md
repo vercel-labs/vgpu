@@ -101,16 +101,18 @@ WGSL input IDs and hashes, `layoutModel`, the semantic program without its finge
 presentation names, source spans, interface diagnostic names, or redundant source list, and only
 the forward type/layout closure reachable from that program's bindings and interfaces. The traversal
 starts from interface and binding types plus each buffer binding's explicit layout, follows only
-type element/member references and layout type/member/layout references, and never discovers a
-layout by scanning for a matching type. Capabilities remain in the program. Arrays declared as
-unordered unique sets by the schema, including every entry's override-name subset, are sorted before
-hashing; semantically ordered arrays retain their order. Executable self-checks require referenced
-WGSL, layout-model, language-feature,
+type element/member references and layout type/member/layout references, including every array
+layout's explicit `elementLayout`, and never discovers a layout by scanning for a matching type.
+Capabilities remain in the program. Arrays declared as unordered unique sets by the schema,
+including every entry's override-name subset, are sorted before hashing; semantically ordered arrays
+retain their order. Executable self-checks require referenced WGSL, layout-model, language-feature,
 binding-root-layout, and explicitly member-linked child-layout changes to change the fingerprint.
 `SparseDraw` proves that an interface-only program has an empty layout closure, while `Noop` proves
-that a same-type layout reachable only from another program does not change its fingerprint. An
-unreachable type/layout addition must likewise not change it. Separate canaries prove that changing
-an interface location, type, or normalized interpolation changes the owning program fingerprint.
+that a same-type layout reachable only from another program does not change its fingerprint. The
+runtime-array fixture also contains a same-type foreign layout that must remain outside the closure,
+proving that `elementLayout` owns the physical choice. An unreachable type/layout addition must
+likewise not change it. Separate canaries prove that changing an interface location, type, or
+normalized interpolation changes the owning program fingerprint.
 Interface diagnostic names are removed through a directed projection: rename/removal and
 non-mutation canaries prove the exclusion, while program, resolved entry, binding, reachable member,
 and override names remain covered. `Noop` uses an authored `@id` override to resolve its workgroup

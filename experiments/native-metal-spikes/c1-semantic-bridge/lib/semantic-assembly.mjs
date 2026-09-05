@@ -722,6 +722,7 @@ function assertSemanticProgramClosure(semantic, program) {
       }
       reachableLayouts.add(id);
       pendingTypes.push(layout.type);
+      if (layout.elementLayout) pendingLayouts.push(layout.elementLayout);
       for (const member of layout.members) {
         pendingTypes.push(member.type);
         pendingLayouts.push(member.layout);

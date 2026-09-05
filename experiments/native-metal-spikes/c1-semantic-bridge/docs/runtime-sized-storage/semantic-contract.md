@@ -24,9 +24,16 @@ footprint, and omits `size`:
   "minimumSize": 0,
   "runtimeSized": true,
   "arrayStride": 4,
+  "elementLayout": "l_<element>",
   "members": []
 }
 ```
+
+Every fixed or runtime array layout carries `elementLayout`. The type graph identifies the logical
+element type, while this explicit layout edge identifies its physical representation. Looking up an
+element layout by type ID would be ambiguous because type identity deliberately excludes authored
+`@align`, `@size`, member offsets, and other use-specific layout facts. Graph closure, layout IDs,
+and program fingerprints therefore traverse `elementLayout` directly.
 
 A structure may contain a runtime array only as its final member. The root structure layout is also
 runtime-sized. Its `minimumSize` is the fixed zero-element prefix, while the trailing member has its
@@ -48,10 +55,11 @@ For a runtime-sized root layout:
 For example, a structure containing one `u32` prefix followed by `array<u32>` has a root
 `minimumSize` of `4`, an array stride of `4`, and a binding `minimumBindingSize` of `8`.
 
-The validator requires the root binding type/layout pair to agree, preserves the exact reachable
-graph, and rejects a runtime-sized record that is not reached by a storage buffer. A uniform cannot
-contain a runtime-sized layout. That address-space restriction is validation; it does not rewrite
-the intrinsic layout.
+The validator requires every array's `elementLayout` to reference a fixed layout for the array
+element type. It also requires the root binding type/layout pair to agree, preserves the exact
+reachable graph, and rejects a runtime-sized record that is not reached by a storage buffer. A
+uniform cannot contain a runtime-sized layout. That address-space restriction is validation; it
+does not rewrite the intrinsic layout.
 
 ## Entry-local use
 

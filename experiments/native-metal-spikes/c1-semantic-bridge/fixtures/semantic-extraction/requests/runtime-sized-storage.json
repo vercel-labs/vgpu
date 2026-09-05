@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/semantic-runtime-sized-storage.wgsl",
+    "sha256": "e82f205c70fe843f3b38a543b046fbe68dc5f29f7403f35b690cc8502d6b9a06",
+    "text": "struct Particle {\n  @size(8) mass: u32,\n  id: u32,\n}\n\nstruct Values {\n  prefix: u32,\n  particles: array<Particle>,\n}\n\n@group(0) @binding(0) var<storage, read> values: Values;\n\n@compute @workgroup_size(1) fn compute_main() {\n  _ = values.prefix + values.particles[0].mass + arrayLength(&values.particles);\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/semantic-runtime-sized-storage.wgsl",
+      "sha256": "e82f205c70fe843f3b38a543b046fbe68dc5f29f7403f35b690cc8502d6b9a06"
+    },
+    "sources": [
+      {
+        "input": "semantic-runtime-sized-storage-wgsl",
+        "sha256": "e82f205c70fe843f3b38a543b046fbe68dc5f29f7403f35b690cc8502d6b9a06"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 307
+        },
+        "origin": {
+          "input": "semantic-runtime-sized-storage-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "ea7197fa9809d820ceca59fcf356e1bf63fd766433ec0bc0aea45b6315b5d43c",
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "compute_main"
+    }
+  ],
+  "overrideConfiguration": [],
+  "languageFeatures": []
+}

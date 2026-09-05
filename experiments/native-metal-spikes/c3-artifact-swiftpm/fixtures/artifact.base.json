@@ -78,6 +78,14 @@
         "runtimeSized": false,
         "members": []
       },
+      "u32-foreign": {
+        "type": "u32",
+        "alignment": 4,
+        "minimumSize": 4,
+        "size": 4,
+        "runtimeSized": false,
+        "members": []
+      },
       "f32": {
         "type": "f32",
         "alignment": 4,
@@ -109,6 +117,7 @@
         "size": 16,
         "runtimeSized": false,
         "arrayStride": 4,
+        "elementLayout": "u32",
         "members": []
       },
       "runtime-u32": {
@@ -117,6 +126,7 @@
         "minimumSize": 0,
         "runtimeSized": true,
         "arrayStride": 4,
+        "elementLayout": "u32",
         "members": []
       },
       "runtime-values": {

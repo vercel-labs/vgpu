@@ -124,6 +124,8 @@ The semantic contract records:
   sample and storage types, and sampler kinds;
 - the `wgsl-host-shareable-v1` layout model and Tint-reflected intrinsic WGSL minimum sizes,
   alignments, field offsets, array strides, and matrix strides, independently of address space;
+  every fixed or runtime array layout explicitly references the physical layout of its element,
+  rather than resolving one by its logical type ID;
   `layout.minimumSize` covers the fixed prefix of a runtime-sized value, while a buffer binding's
   `minimumBindingSize` additionally covers one complete trailing element and any enclosing
   structure padding;

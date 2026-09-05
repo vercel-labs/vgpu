@@ -131,13 +131,13 @@ const expectedSnapshots = Object.freeze({
   }),
   resource: Object.freeze({
     programFingerprint:
-      "f101049b2433c539ad1f777071f8beac977f8652966f11a6095ee26d0b9fffcb",
+      "f31f760ab59d019b6be9264c6f000734ddec36c42e74589c1ac96ea999d2fa7a",
     resolvedSourceSha256:
       "e60666167ae415d142aaaac8789abb65f4ceb93b213649e551202193fe3b5ba3",
     semanticRequestSha256:
       "87b0038071d35f5cfe3d458d51ff7e786cf59d22fad99f04abebbdaf7583529a",
     nativeResponseSha256:
-      "087864dfa7fb592686bb146469935235606d7b433deea804f938049a311124cb",
+      "c9af6cc67387ab6d0336e5902eb8bc589801a0ec8d044ce638ad982a6718f433",
     runtimeLayoutSha256:
       "6bcc46e2f24801df346251b6d6bab34d3de95e3a044b54aae8159a5577826e1d",
     runtimeManifestSha256:

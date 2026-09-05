@@ -2,12 +2,13 @@
 
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
-source finalization, authenticated fixed-resource and exact-static override extraction,
-`semantic-v1` assembly for both profiles, deterministic Metal slot allocation, exact per-entry
-projection, native translation, offline Metal compilation, and fixed direct-resource binding
-through an exact live Metal readback path. A second live path observes baked, stage-specific
-override values without runtime specialization. The same one-shot Tint worker supplies inventory,
-extraction, and translation without turning TypeScript into a second WGSL compiler.
+source finalization, and authenticated semantic extraction for fixed resources, runtime-sized
+storage, and exact-static overrides. The fixed-resource and override profiles additionally pass
+`semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry projection, native
+translation, and offline Metal compilation. Fixed direct-resource binding passes an exact live
+Metal readback; a second live path observes baked, stage-specific override values without runtime
+specialization. The same one-shot Tint worker supplies inventory, extraction, and translation
+without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -103,22 +104,25 @@ remaining semantic gates.
 
 `vgpu-native-tint-semantic-extraction/v1` is now implemented as the worker's third contract. Its
 current executable profile accepts one selected compute entry or one selected vertex-fragment pair
-with singular fixed-size active resources and scalar exact-static overrides. It extracts canonical
-stage interfaces, exact per-entry override subsets, their typed program union, and positive compute
-workgroup dimensions resolved from constant or override-dependent expressions in fresh per-entry
-lowered IR. Inspector-owned active bindings and sampling pairs remain part of the same result.
-Runtime-sized buffers and resource binding arrays still produce structured failures.
+with singular active resources, including runtime-sized storage buffers, and scalar exact-static
+overrides. It extracts canonical stage interfaces, exact per-entry override subsets, their typed
+program union, and positive compute workgroup dimensions resolved from constant or
+override-dependent expressions in fresh per-entry lowered IR. Inspector-owned active bindings and
+sampling pairs remain part of the same result. Resource binding arrays and runtime-sized uniform
+layouts still fail closed.
 
-The passing semantic gate freezes eight request/response pairs. Its static run covers ten prelaunch
-failures, twenty-four override-response mutations, and thirty-one existing response mutations. The
-native run reports forty-seven invocations, nine deterministic repeats, eight crossed-request
-checks, five fixture successes, two inactive-configuration successes, one constant-expression
-success, seven semantic failures, and ten protocol failures. The primary resource fixture proves a
+The passing semantic gate freezes nine request/response pairs. Its static run covers ten prelaunch
+failures, twenty-four override-response mutations, thirty-three response mutations, and six focused
+runtime-graph checks. The native run reports fifty invocations, ten deterministic repeats, nine
+crossed-request checks, five override-fixture successes, two runtime-sized resource successes, two
+inactive-configuration successes, one constant-expression success, seven override-semantic
+failures, one unsupported-resource failure, and ten protocol failures. The primary resource fixture proves a
 numeric five-binding union at
 `b0`, `b1`, `b2`, `b3`, and `b10`, exact stage subsets, one shared uniform, seven content-addressed
 types, six layouts, and buffer minimum sizes of 8, 24, and 16 bytes. Additional canaries cover an
 authored fixed `@size`, a simple storage texture, cross-stage Dawn-like sampler/texture resolution,
-runtime-array and binding-array rejection, inactive declarations and configurations, typed
+a root runtime array, a fixed prefix plus runtime array of authored-size structs, binding-array
+rejection, inactive declarations and configurations, typed
 override defaults and selections, authored `@id`, exact override unions and subsets, deterministic
 successes, malformed protocol requests, and request-specific adapter authentication.
 
@@ -235,9 +239,9 @@ The semantic work is split by responsibility so the growing design remains revie
 3. Inject the versioned full-screen source when required and finalize the exact source, source hash,
    origin map, and origin-map hash. This source-finalization slice is executable; resolver-owned
    entry declarations remain unchanged alongside it until program assembly.
-4. Add a multi-entry semantic-extraction operation. The fixed singular-resource profile is
-   executable, including exact-static scalar overrides and resolved constant-expression workgroup
-   dimensions; runtime-sized layouts and binding arrays remain open.
+4. Add a multi-entry semantic-extraction operation. Singular fixed and runtime-sized storage
+   resources are executable, including explicit array-element layout edges, exact-static scalar
+   overrides, and resolved constant-expression workgroup dimensions; binding arrays remain open.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven entry spans and resource-symbol evidence. Resource-free effect, multi-module draw, and
    compute programs, fixed singular resources, and exact-static overrides are executable.

@@ -1019,7 +1019,7 @@ function runStaticGate(validators, requests, responses) {
           )
         );
       },
-      "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
+      "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
     ],
     [
       "fixed-layout-minimum-size",
@@ -1102,6 +1102,167 @@ function runStaticGate(validators, requests, responses) {
   const scalarId = semanticTypeId(scalarDescriptor);
   const runtimeArrayDescriptor = { kind: "array", element: scalarId };
   const runtimeArrayId = semanticTypeId(runtimeArrayDescriptor);
+  const scalarLayout = {
+    type: scalarId,
+    alignment: 4,
+    minimumSize: 4,
+    runtimeSized: false,
+    size: 4,
+    members: [],
+  };
+  const scalarLayoutId = semanticLayoutId(scalarLayout);
+  const runtimeLayout = {
+    type: runtimeArrayId,
+    alignment: 4,
+    minimumSize: 0,
+    runtimeSized: true,
+    arrayStride: 4,
+    elementLayout: scalarLayoutId,
+    members: [],
+  };
+  const runtimeLayoutId = semanticLayoutId(runtimeLayout);
+  const validRuntimeGraph = {
+    entryPoints: [{ bindings: ["g0b0"], samplingPairs: [] }],
+    bindings: [
+      {
+        id: "g0b0",
+        name: "values",
+        group: 0,
+        binding: 0,
+        kind: "buffer",
+        addressSpace: "storage",
+        access: "read",
+        type: runtimeArrayId,
+        layout: runtimeLayoutId,
+        minimumBindingSize: 4,
+      },
+    ],
+    types: Object.fromEntries(
+      [
+        [scalarId, scalarDescriptor],
+        [runtimeArrayId, runtimeArrayDescriptor],
+      ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    ),
+    layouts: Object.fromEntries(
+      [
+        [runtimeLayoutId, runtimeLayout],
+        [scalarLayoutId, scalarLayout],
+      ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    ),
+  };
+  const graphFailure = (code, message) => {
+    throw Object.assign(new Error(message), { code });
+  };
+  assert.equal(
+    assertSemanticResourceGraph(validRuntimeGraph, {
+      failWith: graphFailure,
+    }),
+    validRuntimeGraph
+  );
+  const runtimeUniform = structuredClone(validRuntimeGraph);
+  runtimeUniform.bindings[0].addressSpace = "uniform";
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(runtimeUniform, { failWith: graphFailure }),
+    "runtime-array-uniform-address-space",
+    "VGPU-C1-SEMANTIC-BUFFER-LAYOUT"
+  );
+  const runtimeBindingMinimum = structuredClone(validRuntimeGraph);
+  runtimeBindingMinimum.bindings[0].minimumBindingSize = 8;
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(runtimeBindingMinimum, {
+        failWith: graphFailure,
+      }),
+    "runtime-array-binding-minimum",
+    "VGPU-C1-SEMANTIC-BUFFER-LAYOUT"
+  );
+  const runtimeNonzeroMinimum = structuredClone(validRuntimeGraph);
+  const oldRuntimeLayoutId = runtimeNonzeroMinimum.bindings[0].layout;
+  const nonzeroMinimumLayout =
+    runtimeNonzeroMinimum.layouts[oldRuntimeLayoutId];
+  nonzeroMinimumLayout.minimumSize = 4;
+  const nonzeroMinimumLayoutId = semanticLayoutId(nonzeroMinimumLayout);
+  delete runtimeNonzeroMinimum.layouts[oldRuntimeLayoutId];
+  runtimeNonzeroMinimum.layouts[nonzeroMinimumLayoutId] = nonzeroMinimumLayout;
+  runtimeNonzeroMinimum.layouts = Object.fromEntries(
+    Object.entries(runtimeNonzeroMinimum.layouts).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )
+  );
+  runtimeNonzeroMinimum.bindings[0].layout = nonzeroMinimumLayoutId;
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(runtimeNonzeroMinimum, {
+        failWith: graphFailure,
+      }),
+    "runtime-array-nonzero-layout-minimum",
+    "VGPU-C1-SEMANTIC-LAYOUT-SHAPE"
+  );
+  const runtimeMissingElementLayout = structuredClone(validRuntimeGraph);
+  const missingElementOldId = runtimeMissingElementLayout.bindings[0].layout;
+  const missingElementLayout =
+    runtimeMissingElementLayout.layouts[missingElementOldId];
+  delete missingElementLayout.elementLayout;
+  const missingElementNewId = semanticLayoutId(missingElementLayout);
+  delete runtimeMissingElementLayout.layouts[missingElementOldId];
+  runtimeMissingElementLayout.layouts[missingElementNewId] =
+    missingElementLayout;
+  runtimeMissingElementLayout.layouts = Object.fromEntries(
+    Object.entries(runtimeMissingElementLayout.layouts).sort(
+      ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)
+    )
+  );
+  runtimeMissingElementLayout.bindings[0].layout = missingElementNewId;
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(runtimeMissingElementLayout, {
+        failWith: graphFailure,
+      }),
+    "runtime-array-missing-element-layout",
+    "VGPU-C1-SEMANTIC-LAYOUT-SHAPE"
+  );
+  const runtimeCrossedElementLayout = structuredClone(validRuntimeGraph);
+  const integerDescriptor = { kind: "scalar", scalar: "u32" };
+  const integerId = semanticTypeId(integerDescriptor);
+  const integerLayout = {
+    type: integerId,
+    alignment: 4,
+    minimumSize: 4,
+    runtimeSized: false,
+    size: 4,
+    members: [],
+  };
+  const integerLayoutId = semanticLayoutId(integerLayout);
+  const crossedElementOldId = runtimeCrossedElementLayout.bindings[0].layout;
+  const crossedElementLayout =
+    runtimeCrossedElementLayout.layouts[crossedElementOldId];
+  crossedElementLayout.elementLayout = integerLayoutId;
+  const crossedElementNewId = semanticLayoutId(crossedElementLayout);
+  delete runtimeCrossedElementLayout.layouts[crossedElementOldId];
+  runtimeCrossedElementLayout.layouts[crossedElementNewId] =
+    crossedElementLayout;
+  runtimeCrossedElementLayout.layouts[integerLayoutId] = integerLayout;
+  runtimeCrossedElementLayout.layouts = Object.fromEntries(
+    Object.entries(runtimeCrossedElementLayout.layouts).sort(
+      ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)
+    )
+  );
+  runtimeCrossedElementLayout.types[integerId] = integerDescriptor;
+  runtimeCrossedElementLayout.types = Object.fromEntries(
+    Object.entries(runtimeCrossedElementLayout.types).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )
+  );
+  runtimeCrossedElementLayout.bindings[0].layout = crossedElementNewId;
+  expectRejected(
+    () =>
+      assertSemanticResourceGraph(runtimeCrossedElementLayout, {
+        failWith: graphFailure,
+      }),
+    "runtime-array-crossed-element-layout",
+    "VGPU-C1-SEMANTIC-LAYOUT-SHAPE"
+  );
   const fixedPretenderLayout = {
     type: runtimeArrayId,
     alignment: 4,
@@ -1109,6 +1270,7 @@ function runStaticGate(validators, requests, responses) {
     size: 4,
     runtimeSized: false,
     arrayStride: 4,
+    elementLayout: scalarLayoutId,
     members: [],
   };
   const fixedPretenderLayoutId = semanticLayoutId(fixedPretenderLayout);
@@ -1139,7 +1301,14 @@ function runStaticGate(validators, requests, responses) {
               left < right ? -1 : left > right ? 1 : 0
             )
           ),
-          layouts: { [fixedPretenderLayoutId]: fixedPretenderLayout },
+          layouts: Object.fromEntries(
+            [
+              [fixedPretenderLayoutId, fixedPretenderLayout],
+              [scalarLayoutId, scalarLayout],
+            ].sort(([left], [right]) =>
+              left < right ? -1 : left > right ? 1 : 0
+            )
+          ),
         },
         {
           failWith(code, message) {
@@ -1148,7 +1317,7 @@ function runStaticGate(validators, requests, responses) {
         }
       ),
     "runtime-array-type-with-fixed-layout",
-    "VGPU-C1-SEMANTIC-FIXED-LAYOUT"
+    "VGPU-C1-SEMANTIC-LAYOUT-SHAPE"
   );
   const computeWithoutWorkgroup = structuredClone(
     responses["compute-interface"]
@@ -1202,8 +1371,9 @@ function runStaticGate(validators, requests, responses) {
     populatedOverrideSuccesses: 4,
     overrideResponseMutations: overrideResponseMutations.length + 7,
     responseMutations:
-      responseMutations.length + resourceResponseMutations.length + 4,
+      responseMutations.length + resourceResponseMutations.length + 6,
     authenticatedSuccesses: Object.keys(authenticated).length,
+    runtimeGraphChecks: 6,
     workerLaunches: launches,
   };
 }
@@ -1634,11 +1804,13 @@ override INACTIVE_SIZE: u32;
   replaceRequestSource(
     runtimeArray,
     `struct Values {
-  values: array<vec4f>,
+  prefix: u32,
+  values: array<u32>,
 }
 @group(0) @binding(0) var<storage, read> values: Values;
 @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
-  return values.values[index];
+  let value = f32(values.prefix + values.values[index]);
+  return vec4f(value, 0.0, 0.0, 1.0);
 }
 @fragment fn fs_main() -> @location(0) vec4f {
   return vec4f(1.0);
@@ -1651,10 +1823,152 @@ override INACTIVE_SIZE: u32;
     validators
   );
   invocations += 1;
-  assert.equal(runtimeArrayRun.response.ok, false);
   assert.equal(
-    runtimeArrayRun.response.diagnostics[0].code,
-    "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED"
+    runtimeArrayRun.response.ok,
+    true,
+    JSON.stringify(runtimeArrayRun.response.diagnostics)
+  );
+  const runtimeScalar = { kind: "scalar", scalar: "u32" };
+  const runtimeScalarId = semanticTypeId(runtimeScalar);
+  const runtimeTail = { kind: "array", element: runtimeScalarId };
+  const runtimeTailId = semanticTypeId(runtimeTail);
+  const runtimeStruct = {
+    kind: "struct",
+    members: [
+      { name: "prefix", type: runtimeScalarId },
+      { name: "values", type: runtimeTailId },
+    ],
+    wgslName: "Values",
+  };
+  const runtimeStructId = semanticTypeId(runtimeStruct);
+  const runtimeScalarLayout = {
+    alignment: 4,
+    members: [],
+    minimumSize: 4,
+    runtimeSized: false,
+    size: 4,
+    type: runtimeScalarId,
+  };
+  const runtimeScalarLayoutId = semanticLayoutId(runtimeScalarLayout);
+  const runtimeTailLayout = {
+    alignment: 4,
+    arrayStride: 4,
+    elementLayout: runtimeScalarLayoutId,
+    members: [],
+    minimumSize: 0,
+    runtimeSized: true,
+    type: runtimeTailId,
+  };
+  const runtimeTailLayoutId = semanticLayoutId(runtimeTailLayout);
+  const runtimeStructLayout = {
+    alignment: 4,
+    members: [
+      {
+        alignment: 4,
+        layout: runtimeScalarLayoutId,
+        minimumSize: 4,
+        name: "prefix",
+        offset: 0,
+        runtimeSized: false,
+        size: 4,
+        type: runtimeScalarId,
+      },
+      {
+        alignment: 4,
+        layout: runtimeTailLayoutId,
+        minimumSize: 0,
+        name: "values",
+        offset: 4,
+        runtimeSized: true,
+        type: runtimeTailId,
+      },
+    ],
+    minimumSize: 4,
+    runtimeSized: true,
+    type: runtimeStructId,
+  };
+  const runtimeStructLayoutId = semanticLayoutId(runtimeStructLayout);
+  assert.deepEqual(runtimeArrayRun.response.result.bindings, [
+    {
+      binding: 0,
+      group: 0,
+      id: "g0b0",
+      kind: "buffer",
+      name: "values",
+      addressSpace: "storage",
+      access: "read",
+      layout: runtimeStructLayoutId,
+      minimumBindingSize: 8,
+      type: runtimeStructId,
+    },
+  ]);
+  assert.deepEqual(
+    runtimeArrayRun.response.result.types,
+    Object.fromEntries(
+      [
+        [runtimeScalarId, runtimeScalar],
+        [runtimeTailId, runtimeTail],
+        [runtimeStructId, runtimeStruct],
+      ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    )
+  );
+  assert.deepEqual(
+    runtimeArrayRun.response.result.layouts,
+    Object.fromEntries(
+      [
+        [runtimeScalarLayoutId, runtimeScalarLayout],
+        [runtimeTailLayoutId, runtimeTailLayout],
+        [runtimeStructLayoutId, runtimeStructLayout],
+      ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    )
+  );
+
+  const rootRuntimeArray = structuredClone(requests["compute-interface"]);
+  replaceRequestSource(
+    rootRuntimeArray,
+    `@group(0) @binding(0) var<storage, read> values: array<u32>;
+@compute @workgroup_size(1) fn compute_builtins() {
+  _ = values[0];
+}
+`
+  );
+  const rootRuntimeArrayRun = await invokeSemantic(
+    executable,
+    rootRuntimeArray,
+    validators
+  );
+  invocations += 1;
+  assert.equal(
+    rootRuntimeArrayRun.response.ok,
+    true,
+    JSON.stringify(rootRuntimeArrayRun.response.diagnostics)
+  );
+  assert.deepEqual(rootRuntimeArrayRun.response.result.bindings, [
+    {
+      binding: 0,
+      group: 0,
+      id: "g0b0",
+      kind: "buffer",
+      name: "values",
+      addressSpace: "storage",
+      access: "read",
+      layout: runtimeTailLayoutId,
+      minimumBindingSize: 4,
+      type: runtimeTailId,
+    },
+  ]);
+  assert.deepEqual(rootRuntimeArrayRun.response.result.types, {
+    [runtimeTailId]: runtimeTail,
+    [runtimeScalarId]: runtimeScalar,
+  });
+  assert.deepEqual(
+    rootRuntimeArrayRun.response.result.layouts,
+    Object.fromEntries(
+      [
+        [runtimeTailLayoutId, runtimeTailLayout],
+        [runtimeScalarLayoutId, runtimeScalarLayout],
+      ].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    )
   );
 
   const bindingArray = structuredClone(requests["active-resource"]);
@@ -2006,7 +2320,8 @@ override INACTIVE_SIZE: u32;
     authenticatedFullscreenSuccesses: 1,
     inactiveDeclarationsSuccesses: 1,
     fixedResourceSuccesses: 4,
-    unsupportedResourceFailures: 2,
+    runtimeSizedResourceSuccesses: 2,
+    unsupportedResourceFailures: 1,
     interfaceLimitFailures: 1,
     workerProtocolFailures: 10,
     sourceLockedResponses: Object.keys(responses).length,

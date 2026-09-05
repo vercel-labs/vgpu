@@ -113,6 +113,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   oracle for intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride. A
   layout carries no address space; each buffer binding carries `uniform` or `storage`, and the
   compiler validates that use separately without inserting address-space-dependent padding.
+- Every fixed or runtime array layout references its `elementLayout` explicitly. The type graph
+  identifies the logical element type but cannot select a physical layout because type identity
+  deliberately excludes authored `@align`, `@size`, member offsets, and other use-specific layout
+  facts. Layout closure and fingerprints follow this edge; they never scan layouts by type ID.
 - For a runtime-sized layout, `layout.minimumSize` is the fixed prefix with zero trailing elements;
   the buffer binding's `minimumBindingSize` adds one complete element stride and any enclosing
   structure padding. The runtime validates the effective binding range against the latter, the

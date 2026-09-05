@@ -178,12 +178,6 @@ export function assertSemanticResourceGraph(result, { failWith }) {
         "semantic type ID does not match its content"
       );
     }
-    if (descriptor.kind === "array" && !Object.hasOwn(descriptor, "count")) {
-      fail(
-        "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
-        "resource profile contains a runtime-sized array type"
-      );
-    }
   }
   for (const [id, descriptor] of Object.entries(layouts)) {
     if (semanticLayoutId(descriptor) !== id) {
@@ -192,24 +186,14 @@ export function assertSemanticResourceGraph(result, { failWith }) {
         "semantic layout ID does not match its content"
       );
     }
-    if (descriptor.runtimeSized || !Object.hasOwn(descriptor, "size")) {
-      fail(
-        "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
-        "resource profile contains a runtime-sized layout"
-      );
-    }
-    if (descriptor.minimumSize !== descriptor.size) {
-      fail(
-        "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
-        "fixed layout minimum size differs from its size"
-      );
-    }
   }
 
   const reachableTypes = new Set();
   const reachableLayouts = new Set();
   const visitingTypes = new Set();
   const visitingLayouts = new Set();
+  const runtimeTypes = new Map();
+  const visitingRuntimeTypes = new Set();
   const visitType = (id) => {
     if (reachableTypes.has(id)) return;
     const descriptor = types[id];
@@ -225,6 +209,54 @@ export function assertSemanticResourceGraph(result, { failWith }) {
     visitingTypes.delete(id);
     reachableTypes.add(id);
   };
+  const isRuntimeSizedType = (id) => {
+    if (runtimeTypes.has(id)) return runtimeTypes.get(id);
+    const descriptor = types[id];
+    if (!descriptor || visitingRuntimeTypes.has(id)) {
+      fail("VGPU-C1-SEMANTIC-TYPE-GRAPH", "type graph is dangling or cyclic");
+    }
+    visitingRuntimeTypes.add(id);
+    let runtimeSized = false;
+    if (["atomic", "vector", "matrix"].includes(descriptor.kind)) {
+      if (isRuntimeSizedType(descriptor.element)) {
+        fail(
+          "VGPU-C1-SEMANTIC-TYPE-SHAPE",
+          "runtime-sized type appears inside a fixed-shape type"
+        );
+      }
+    } else if (descriptor.kind === "array") {
+      if (isRuntimeSizedType(descriptor.element)) {
+        fail(
+          "VGPU-C1-SEMANTIC-TYPE-SHAPE",
+          "array element type cannot be runtime-sized"
+        );
+      }
+      runtimeSized = !Object.hasOwn(descriptor, "count");
+    } else if (descriptor.kind === "struct") {
+      const runtimeMembers = descriptor.members
+        .map((member, index) => [member, index])
+        .filter(([member]) => isRuntimeSizedType(member.type));
+      if (runtimeMembers.length > 0) {
+        const [member, index] = runtimeMembers[0];
+        const memberType = types[member.type];
+        if (
+          runtimeMembers.length !== 1 ||
+          index !== descriptor.members.length - 1 ||
+          memberType?.kind !== "array" ||
+          Object.hasOwn(memberType, "count")
+        ) {
+          fail(
+            "VGPU-C1-SEMANTIC-TYPE-SHAPE",
+            "runtime array must be the direct final member of a structure"
+          );
+        }
+        runtimeSized = true;
+      }
+    }
+    visitingRuntimeTypes.delete(id);
+    runtimeTypes.set(id, runtimeSized);
+    return runtimeSized;
+  };
   const visitLayout = (id) => {
     if (reachableLayouts.has(id)) return;
     const layout = layouts[id];
@@ -237,6 +269,22 @@ export function assertSemanticResourceGraph(result, { failWith }) {
     visitingLayouts.add(id);
     visitType(layout.type);
     const type = types[layout.type];
+    const runtimeSized = isRuntimeSizedType(layout.type);
+    if (
+      layout.runtimeSized !== runtimeSized ||
+      Object.hasOwn(layout, "size") === runtimeSized
+    ) {
+      fail(
+        "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+        "layout runtime marker or size differs from its type"
+      );
+    }
+    if (!runtimeSized && layout.minimumSize !== layout.size) {
+      fail(
+        "VGPU-C1-SEMANTIC-FIXED-LAYOUT",
+        "fixed layout minimum size differs from its size"
+      );
+    }
     if ((type.kind === "struct") !== layout.members.length > 0) {
       fail(
         "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
@@ -253,12 +301,15 @@ export function assertSemanticResourceGraph(result, { failWith }) {
       for (let index = 0; index < type.members.length; index += 1) {
         const typeMember = type.members[index];
         const layoutMember = layout.members[index];
+        const memberRuntimeSized = isRuntimeSizedType(typeMember.type);
         if (
           typeMember.name !== layoutMember.name ||
           typeMember.type !== layoutMember.type ||
-          layoutMember.runtimeSized ||
-          !Object.hasOwn(layoutMember, "size") ||
-          layoutMember.minimumSize !== layoutMember.size
+          layoutMember.runtimeSized !== memberRuntimeSized ||
+          Object.hasOwn(layoutMember, "size") === memberRuntimeSized ||
+          (memberRuntimeSized && index !== type.members.length - 1) ||
+          (!memberRuntimeSized &&
+            layoutMember.minimumSize !== layoutMember.size)
         ) {
           fail(
             "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
@@ -273,16 +324,54 @@ export function assertSemanticResourceGraph(result, { failWith }) {
             "layout member and child layout disagree on type"
           );
         }
+        const childLayout = layouts[layoutMember.layout];
+        if (
+          childLayout.runtimeSized !== memberRuntimeSized ||
+          (memberRuntimeSized &&
+            layoutMember.minimumSize !== childLayout.minimumSize) ||
+          (!memberRuntimeSized &&
+            layoutMember.minimumSize < childLayout.minimumSize)
+        ) {
+          fail(
+            "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+            "layout member footprint disagrees with its child layout"
+          );
+        }
       }
+      if (runtimeSized) {
+        const tail = layout.members.at(-1);
+        if (layout.minimumSize !== tail.offset + tail.minimumSize) {
+          fail(
+            "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+            "runtime-sized structure minimum is not its zero-element prefix"
+          );
+        }
+      }
+    } else if (runtimeSized && layout.minimumSize !== 0) {
+      fail(
+        "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+        "runtime array layout minimum must be zero"
+      );
     }
     if (
       Object.hasOwn(layout, "arrayStride") !== (type.kind === "array") ||
+      Object.hasOwn(layout, "elementLayout") !== (type.kind === "array") ||
       Object.hasOwn(layout, "matrixStride") !== (type.kind === "matrix")
     ) {
       fail(
         "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
-        "array or matrix stride appears on the wrong type"
+        "array element layout or composite stride appears on the wrong type"
       );
+    }
+    if (type.kind === "array") {
+      visitLayout(layout.elementLayout);
+      const elementLayout = layouts[layout.elementLayout];
+      if (elementLayout.type !== type.element || elementLayout.runtimeSized) {
+        fail(
+          "VGPU-C1-SEMANTIC-LAYOUT-SHAPE",
+          "array element layout disagrees with its fixed-footprint element type"
+        );
+      }
     }
     visitingLayouts.delete(id);
     reachableLayouts.add(id);
@@ -293,14 +382,36 @@ export function assertSemanticResourceGraph(result, { failWith }) {
     visitType(binding.type);
     visitLayout(binding.layout);
     const layout = layouts[binding.layout];
+    const runtimeSized = isRuntimeSizedType(binding.type);
+    let expectedMinimumBindingSize = layout.size;
+    if (runtimeSized) {
+      if (binding.addressSpace !== "storage") {
+        fail(
+          "VGPU-C1-SEMANTIC-BUFFER-LAYOUT",
+          "runtime-sized buffer layout is only valid in storage address space"
+        );
+      }
+      const type = types[binding.type];
+      if (type.kind === "array") {
+        expectedMinimumBindingSize = layout.arrayStride;
+      } else if (type.kind === "struct") {
+        const tail = layout.members.at(-1);
+        const tailLayout = layouts[tail.layout];
+        expectedMinimumBindingSize = roundUp(
+          layout.alignment,
+          tail.offset + tailLayout.arrayStride
+        );
+      }
+    }
     if (
       layout.type !== binding.type ||
-      layout.minimumSize !== binding.minimumBindingSize ||
-      layout.size !== binding.minimumBindingSize
+      !Number.isSafeInteger(expectedMinimumBindingSize) ||
+      (runtimeSized && expectedMinimumBindingSize <= layout.minimumSize) ||
+      expectedMinimumBindingSize !== binding.minimumBindingSize
     ) {
       fail(
         "VGPU-C1-SEMANTIC-BUFFER-LAYOUT",
-        "fixed buffer binding and root layout disagree"
+        "buffer binding minimum and root layout disagree"
       );
     }
   }
@@ -341,4 +452,8 @@ function compareTuple(left, right) {
     if (left[index] > right[index]) return 1;
   }
   return 0;
+}
+
+function roundUp(alignment, value) {
+  return Math.ceil(value / alignment) * alignment;
 }

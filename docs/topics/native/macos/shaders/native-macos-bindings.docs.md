@@ -96,7 +96,7 @@ Packing is strict and deterministic:
 - a failure identifies the complete value path, including member names and array indices, before any GPU-visible state changes;
 - conversion from `Float` to WGSL `f16` uses IEEE 754 binary16 round-to-nearest, ties-to-even; a NaN stays a quiet NaN, but its payload bits are not portable.
 
-A runtime-sized array keeps its reflected element stride in the layout. For a containing struct, `layout.minimumSize` is the fixed zero-element prefix while the binding's `minimumBindingSize` includes one complete trailing element and any enclosing padding. The allocation-specific element count and checked byte length belong to the resource instance and bound buffer range, so allocating a larger buffer never changes the program's semantic layout. See [Resources and Metal interop](/native/macos/resources) for the runtime extent rules.
+A fixed or runtime array keeps both its reflected element layout and stride. The explicit layout edge matters for element structs whose authored alignment or size attributes do not participate in logical type identity. For a struct ending in a runtime-sized array, `layout.minimumSize` is the fixed zero-element prefix while the binding's `minimumBindingSize` includes one complete trailing element and any enclosing padding. The allocation-specific element count and checked byte length belong to the resource instance and bound buffer range, so allocating a larger buffer never changes the program's semantic layout. See [Resources and Metal interop](/native/macos/resources) for the runtime extent rules.
 
 ## Initialize every binding
 

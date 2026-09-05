@@ -66,18 +66,20 @@ generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inv
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
 
-The implemented semantic-extraction slice now freezes eight request/response pairs, ten prelaunch
-failures, twenty-four override-response mutations, and thirty-one existing response mutations. Its
-native run reports forty-seven invocations, nine deterministic repeats, eight crossed-request
-checks, five fixture successes, two inactive-configuration successes, one constant-expression
-workgroup success, seven semantic failures, and ten protocol failures. It proves program-scoped
+The implemented semantic-extraction slice now freezes nine request/response pairs, ten prelaunch
+failures, twenty-four override-response mutations, thirty-three response mutations, and six focused
+runtime-graph checks. Its native run reports fifty invocations, ten deterministic repeats, nine
+crossed-request checks, five override-fixture successes, two runtime-sized resource successes, two
+inactive-configuration successes, one constant-expression workgroup success, seven override
+semantic failures, one unsupported-resource failure, and ten protocol failures. It proves program-scoped
 render and compute interfaces; configured, defaulted, and active exact-static override unions;
 exact per-entry override subsets; authored `@id` handling; omission of inactive configured
 declarations; and
 positive workgroup dimensions resolved from constant and override-dependent expressions. The
-existing resource evidence still includes the numeric five-binding graph, authored fixed `@size`,
-storage-texture reflection, cross-stage sampler/texture resolution, and structured runtime-array and
-binding-array rejection. This closes the native extraction portion of condition 4 and adds evidence
+existing resource evidence now includes the numeric five-binding graph, authored fixed `@size`,
+storage-texture reflection, cross-stage sampler/texture resolution, a root runtime array, a fixed
+prefix plus runtime array of authored-size structs, explicit array-element layout edges, and
+structured binding-array rejection. This closes the native extraction portion of condition 4 and adds evidence
 for conditions 3 and 10. The connected override assembly and offline translation path described
 below now extend that evidence through conditions 5, 6, 7, and 12 for the five override fixtures.
 

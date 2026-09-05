@@ -6,6 +6,10 @@ resource-symbol evidence, and deterministic presentation policy. It does not par
 mutable `ResolvedShader.reflection` after that evidence is minted. The executable profile accepts
 singular resources with fixed-size layouts and scalar exact-static overrides.
 
+The sibling extractor now accepts runtime-sized storage layouts. This assembly profile does not yet
+consume that fixture; runtime-sized assembly, projection, and binding remain the next connected
+slice.
+
 ## Ownership of the join
 
 The adapter adds facts that Tint cannot or should not own:

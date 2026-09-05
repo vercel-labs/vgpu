@@ -97,7 +97,7 @@
         "name": "vertices",
         "addressSpace": "storage",
         "access": "read",
-        "layout": "l_7d462e87433898fd0cf9bf1758034c143726ab793893533b5c8ce64940d7784e",
+        "layout": "l_f60cd7a0fcba2319a9d8c9d812a8754232076eef4bb262eb8317050a0e0cca91",
         "minimumBindingSize": 24,
         "type": "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece"
       },
@@ -204,34 +204,6 @@
         "size": 8,
         "type": "t_416e569492d90696e31673639330eb6700eb7e4bb4b8a2ee101ac8f43663b1b1"
       },
-      "l_7d462e87433898fd0cf9bf1758034c143726ab793893533b5c8ce64940d7784e": {
-        "alignment": 8,
-        "members": [
-          {
-            "alignment": 8,
-            "layout": "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3",
-            "minimumSize": 24,
-            "name": "values",
-            "offset": 0,
-            "runtimeSized": false,
-            "size": 24,
-            "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
-          }
-        ],
-        "minimumSize": 24,
-        "runtimeSized": false,
-        "size": 24,
-        "type": "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece"
-      },
-      "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3": {
-        "alignment": 8,
-        "arrayStride": 8,
-        "members": [],
-        "minimumSize": 24,
-        "runtimeSized": false,
-        "size": 24,
-        "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
-      },
       "l_b4350ee6e958a516d064668aa339de2c2c4c6ca87207d3f21aec914127085ada": {
         "alignment": 16,
         "members": [
@@ -259,6 +231,16 @@
         "size": 8,
         "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
       },
+      "l_b9302e9cd04641d0dc403a2578d3774c00b8515a81a6e46ecf1f750d70e7ad16": {
+        "alignment": 8,
+        "arrayStride": 8,
+        "elementLayout": "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039",
+        "members": [],
+        "minimumSize": 24,
+        "runtimeSized": false,
+        "size": 24,
+        "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+      },
       "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f": {
         "alignment": 16,
         "members": [],
@@ -266,6 +248,25 @@
         "runtimeSized": false,
         "size": 16,
         "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
+      },
+      "l_f60cd7a0fcba2319a9d8c9d812a8754232076eef4bb262eb8317050a0e0cca91": {
+        "alignment": 8,
+        "members": [
+          {
+            "alignment": 8,
+            "layout": "l_b9302e9cd04641d0dc403a2578d3774c00b8515a81a6e46ecf1f750d70e7ad16",
+            "minimumSize": 24,
+            "name": "values",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 24,
+            "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
+          }
+        ],
+        "minimumSize": 24,
+        "runtimeSized": false,
+        "size": 24,
+        "type": "t_78d30e4fc0775b2d6a5fe478507bf77264120c9ecd6bb8ec3d6c279375d40ece"
       }
     }
   }

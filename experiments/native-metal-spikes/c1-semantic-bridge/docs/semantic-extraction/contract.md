@@ -228,29 +228,34 @@ inactive in every selected entry does not appear in either view.
 
 ### Current executable profile
 
-The current implementation accepts interface-only programs plus singular active resources whose
-buffer graphs have fixed host-shareable layouts. It also accepts configured and active scalar
-overrides, materializes one canonical typed program union, and reports each entry's exact-static
-name subset. Compute workgroup dimensions may be constant expressions, including expressions that
-depend on overrides; the response contains their resolved positive values after substitution. It
-also extracts complete stage I/O, exact entry-local binding subsets and sampling pairs, the numeric
-program binding union, and the reachable content-addressed type and layout graphs.
+The current implementation accepts interface-only programs plus singular active resources. Buffer
+graphs may be fixed-size or contain a trailing runtime array when the root binding is storage. It
+also accepts configured and active scalar overrides, materializes one canonical typed program
+union, and reports each entry's exact-static name subset. Compute workgroup dimensions may be
+constant expressions, including expressions that depend on overrides; the response contains their
+resolved positive values after substitution. It also extracts complete stage I/O, exact entry-local
+binding subsets and sampling pairs, the numeric program binding union, and the reachable
+content-addressed type and layout graphs.
 
 The primary render fixture contains bindings `b0`, `b1`, `b2`, `b3`, and `b10`. Its vertex subset
 contains the shared frame uniform and vertex storage buffer; its fragment subset contains the same
 frame uniform, sampled texture, sampler, and material uniform. The response contains seven types,
 six layouts, and fixed buffer minimum sizes of 8, 24, and 16 bytes. Separate native canaries prove
 an authored fixed `@size`, a storage texture, and cross-stage unknown sampler/texture resolution.
+One checked response additionally proves a four-byte fixed prefix followed by a runtime array of
+twelve-byte structs, an explicit element-layout edge, a four-byte root `minimumSize`, and a
+sixteen-byte binding minimum. A native-only sibling proves a root runtime array.
 
-Runtime-sized buffers and resource binding arrays produce structured unsupported failures rather
-than approximate success. Those resource limits are executable-profile restrictions, not omissions
-from the v1 response shape.
+Resource binding arrays and runtime-sized uniform layouts remain unsupported rather than being
+represented approximately. Those resource limits are executable-profile restrictions, not
+omissions from the v1 response shape.
 
-The passing extraction gate covers eight request fixtures and eight response fixtures, ten
-prelaunch failures, twenty-four override-response mutations, and thirty-one existing response
-mutations. Its native run reports forty-seven invocations, nine deterministic repeats, eight
-crossed-request checks, five fixture successes, two inactive-configuration successes, one
-constant-expression success, seven semantic failures, and ten protocol failures.
+The passing extraction gate covers nine request fixtures and nine response fixtures, ten prelaunch
+failures, twenty-four override-response mutations, thirty-three response mutations, and six focused
+runtime-graph checks. Its native run reports fifty invocations, ten deterministic repeats, nine
+crossed-request checks, five override-fixture successes, two runtime-sized resource successes, two
+inactive-configuration successes, one constant-expression success, seven override-semantic
+failures, one unsupported-resource failure, and ten protocol failures.
 
 The selected integration contract, three-fixture gate, and failure matrix are specified in
 [`exact-static-overrides.md`](./exact-static-overrides.md).

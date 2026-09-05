@@ -503,12 +503,20 @@
         "size": { "$ref": "#/$defs/nonNegativeSafeInteger" },
         "runtimeSized": { "type": "boolean" },
         "arrayStride": { "$ref": "#/$defs/positiveSafeInteger" },
+        "elementLayout": {
+          "description": "Explicit physical layout of an array element. Required exactly when arrayStride is present; consumers must not infer this edge by searching for a layout with the element type.",
+          "$ref": "#/$defs/layoutId"
+        },
         "matrixStride": { "$ref": "#/$defs/positiveSafeInteger" },
         "members": {
           "type": "array",
           "maxItems": 65536,
           "items": { "$ref": "#/$defs/layoutMember" }
         }
+      },
+      "dependentRequired": {
+        "arrayStride": ["elementLayout"],
+        "elementLayout": ["arrayStride"]
       },
       "allOf": [
         {

@@ -156,12 +156,13 @@ the fingerprint.
 
 ## Executable evidence
 
-The passing semantic-extraction gate freezes eight request fixtures and eight response fixtures. Its
+The passing semantic-extraction gate freezes nine request fixtures and nine response fixtures. Its
 static matrix covers ten prelaunch failures, twenty-four override-response mutations, and
-thirty-one existing response mutations. The native run reports forty-seven invocations, including
-nine deterministic repeats and eight crossed-request checks. It records five fixture successes,
+thirty-three response mutations plus six focused runtime-graph checks. The native run reports fifty
+invocations, including ten deterministic repeats and nine crossed-request checks. It records five override fixture successes,
 two inactive-configuration successes, one constant-expression workgroup success, seven semantic
-failures, and ten protocol failures.
+failures, two runtime-sized resource successes, one unsupported-resource failure, and ten protocol
+failures.
 
 The extraction evidence covers exact per-entry name subsets and their canonical result-level union,
 configured and defaulted typed values, authored `@id` selection and provenance, omission of inactive
@@ -253,5 +254,6 @@ contains the correct subset; retained MSL compiles offline without `function_con
 nondegenerate render observes configured values without `MTLFunctionConstantValues`.
 
 Passing this connected slice does not add runtime specialization, a public Swift override API,
-compute runtime execution, runtime-sized resources, resource binding arrays, repository-corpus
-coverage, or production artifact generation.
+compute runtime execution, runtime-sized resource assembly or binding, resource binding arrays,
+repository-corpus coverage, or production artifact generation. Runtime-sized storage extraction is
+covered by the sibling resource slice but does not change this override-specific exit condition.

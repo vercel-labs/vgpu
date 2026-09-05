@@ -20,13 +20,16 @@ as the corresponding `semantic-v1` variants, but omit adapter-owned `swiftName` 
 - external textures contain only their common binding identity.
 
 For a binding active in both render stages, its declaration fields must agree. Visibility is not a
-Tint response field: TypeScript derives it from the entry subsets. The current executable profile
-accepts only fixed buffers, so each `minimumBindingSize` equals its root layout size. The primary
-fixture proves sizes 8, 24, and 16 for its three buffers. The response shape reserves runtime-sized
-layout facts for a later slice.
+Tint response field: TypeScript derives it from the entry subsets. For a fixed buffer,
+`minimumBindingSize` equals its root layout size. For runtime-sized storage it instead includes one
+complete trailing element and any enclosing-structure padding, while the root layout's
+`minimumSize` remains its zero-element footprint. The primary fixed-resource fixture proves sizes
+8, 24, and 16 for its three buffers; the runtime fixture proves a four-byte root prefix, a
+twelve-byte element stride, and a sixteen-byte binding minimum.
 
-Resource binding arrays, runtime-sized buffers, texel buffers, and input attachments fail the
-current extraction profile. Singular storage textures are accepted, including the simple
+Runtime-sized layouts are accepted only for storage buffers. Resource binding arrays, texel
+buffers, input attachments, and runtime-sized uniform layouts fail the current extraction profile.
+Singular storage textures are accepted, including the simple
 `texture_storage_2d<rgba8unorm, write>` canary. An unsupported shape is never represented
 approximately.
 
@@ -92,20 +95,23 @@ content collision, or an unreachable extra record. Content addressing lets separ
 extractions merge identical facts without order-dependent remapping.
 
 The extractor's graph closure starts at active buffer bindings. It follows atomic elements, vector
-and matrix elements, array elements, structure members, each referenced layout, and every layout
-member. Selected interface leaves instead use the compiler protocol's inline scalar/vector shape;
-TypeScript interns those descriptors with the same type-ID function while assembling
-`semantic-v1`. If an interface type also appears in a buffer graph, content addressing deduplicates
-it exactly. An interface-only extraction has no host-shareable layout roots, so its `layouts` object
-is empty. A semantic module made only from such programs also has an empty layout table; TypeScript
-must not synthesize `AlignOf` or `SizeOf`.
+and matrix elements, array elements, structure members, each referenced layout, every array
+layout's explicit `elementLayout`, and every layout member. Selected interface leaves instead use
+the compiler protocol's inline scalar/vector shape; TypeScript interns those descriptors with the
+same type-ID function while assembling `semantic-v1`. If an interface type also appears in a buffer
+graph, content addressing deduplicates it exactly. An interface-only extraction has no
+host-shareable layout roots, so its `layouts` object is empty. A semantic module made only from such
+programs also has an empty layout table; TypeScript must not synthesize `AlignOf` or `SizeOf`.
 
-Layouts retain intrinsic WGSL alignment, fixed size, array and matrix strides, member offsets, and
-effective member sizes. A dedicated `@size(16)` canary proves that member, root layout, and buffer
-minimum sizes all retain the authored fixed footprint. The validator rejects a missing fixed-array
-count, any runtime-sized marker, unequal fixed size/minimum size, crossed child layouts, dangling or
-cyclic references, and unreachable records. Address-space constraints are validated separately;
-uniform or storage use never rewrites the intrinsic layout.
+Layouts retain intrinsic WGSL alignment, fixed size, zero-element runtime minimum, array and matrix
+strides, member offsets, effective member sizes, and explicit array-element layout edges. A
+dedicated `@size(16)` canary proves that member, root layout, and buffer minimum sizes all retain the
+authored fixed footprint. The runtime fixture additionally proves that a struct can have a fixed
+prefix plus a trailing runtime array whose element struct contains authored `@size`. The validator
+rejects a missing fixed-array count, a count on a runtime array, inconsistent fixed or runtime size
+fields, a missing or crossed `elementLayout`, crossed child layouts, dangling or cyclic references,
+unreachable records, runtime-sized uniform layouts, and incorrect binding minima. Address-space
+constraints are validated separately; uniform or storage use never rewrites the intrinsic layout.
 
 ## Overrides and workgroup size
 

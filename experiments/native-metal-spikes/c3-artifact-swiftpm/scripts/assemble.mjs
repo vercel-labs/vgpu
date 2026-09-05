@@ -199,6 +199,7 @@ function reachableTypeAndLayoutClosure(program, semantic) {
       if (!layout)
         fail(`program ${program.name} references unknown layout ${id}`);
       addType(layout.type);
+      addLayout(layout.elementLayout);
       for (const member of layout.members) {
         addType(member.type);
         addLayout(member.layout);

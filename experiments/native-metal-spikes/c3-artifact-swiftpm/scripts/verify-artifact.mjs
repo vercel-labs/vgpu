@@ -277,6 +277,7 @@ function reachableTypeAndLayoutClosure(program, semantic) {
       if (!layout)
         fail(`program ${program.name} references unknown layout ${id}`);
       addType(layout.type);
+      addLayout(layout.elementLayout);
       for (const member of layout.members) {
         addType(member.type);
         addLayout(member.layout);
@@ -459,9 +460,13 @@ function assertProgramFingerprintSensitivity(program, semantic, inputs) {
   const bindingLayoutSet = new Set(bindingLayoutIds);
   const childLayoutIds = [
     ...new Set(
-      reachableLayouts.flatMap((layoutId) =>
-        semantic.layouts[layoutId].members.map((member) => member.layout)
-      )
+      reachableLayouts.flatMap((layoutId) => {
+        const layout = semantic.layouts[layoutId];
+        return [
+          ...(layout.elementLayout ? [layout.elementLayout] : []),
+          ...layout.members.map((member) => member.layout),
+        ];
+      })
     ),
   ].filter((layoutId) => !bindingLayoutSet.has(layoutId));
   if (program.name === "RuntimeArray" && childLayoutIds.length === 0) {
@@ -504,14 +509,15 @@ function assertSameTypeUnreachableLayoutExclusion(semantic, inputs) {
   if (!elementType) {
     fail("Noop same-type layout canary needs an elemental binding type");
   }
+  const closure = reachableTypeAndLayoutClosure(program, semantic);
   const foreignLayout = Object.entries(semantic.layouts).find(
-    ([id, layout]) => id !== binding.layout && layout.type === elementType
+    ([id, layout]) =>
+      !Object.hasOwn(closure.layouts, id) && layout.type === elementType
   );
   if (!foreignLayout) {
     fail("Noop same-type layout canary needs an unrelated elemental layout");
   }
   const [foreignLayoutId] = foreignLayout;
-  const closure = reachableTypeAndLayoutClosure(program, semantic);
   if (
     !Object.hasOwn(closure.types, elementType) ||
     Object.hasOwn(closure.layouts, foreignLayoutId)
@@ -2417,6 +2423,7 @@ const requireType = (type, owner) => {
 const requireLayout = (layout, owner) => {
   if (!layoutIds.has(layout))
     fail(`${owner} references unknown layout ${layout}`);
+  return artifact.semantic.layouts[layout];
 };
 
 for (const [typeId, type] of Object.entries(artifact.semantic.types)) {
@@ -2427,6 +2434,23 @@ for (const [typeId, type] of Object.entries(artifact.semantic.types)) {
 }
 for (const [layoutId, layout] of Object.entries(artifact.semantic.layouts)) {
   requireType(layout.type, `layout ${layoutId}`);
+  const layoutType = artifact.semantic.types[layout.type];
+  const hasElementLayout = typeof layout.elementLayout === "string";
+  if (hasElementLayout !== (layoutType.kind === "array")) {
+    fail(`layout ${layoutId} element edge does not match its type`);
+  }
+  if (hasElementLayout) {
+    const elementLayout = requireLayout(
+      layout.elementLayout,
+      `layout ${layoutId} element`
+    );
+    if (
+      elementLayout.type !== layoutType.element ||
+      elementLayout.runtimeSized
+    ) {
+      fail(`layout ${layoutId} has an incompatible element layout`);
+    }
+  }
   for (const member of layout.members) {
     requireType(member.type, `layout ${layoutId} member ${member.name}`);
     requireLayout(member.layout, `layout ${layoutId} member ${member.name}`);

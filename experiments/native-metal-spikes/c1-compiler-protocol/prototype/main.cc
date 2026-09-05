@@ -7,7 +7,8 @@
 //
 // The inventory operation reports only canonical WGSL entry names and stages.
 // The semantic-extraction operation reports program-scoped compiler facts; its
-// current executable profile accepts fixed-size singular resources.
+// current executable profile accepts singular resources, including
+// runtime-sized storage-buffer layouts.
 // The translation operation owns the Metal ABI instead of accepting
 // translator-selected internals. External buffer intervals are restricted to
 // 0..<30. Tint receives one shared immediate-data binding at buffer(30), with
@@ -1688,15 +1689,19 @@ GraphIdResult InternSemanticType(const tint::core::type::Type *type,
         ",\"kind\":\"matrix\",\"rows\":" + std::to_string(matrix->Rows()) + "}";
   } else if (const auto *array = type->As<tint::core::type::Array>()) {
     const auto count = array->ConstantCount();
-    if (!count || *count == 0) {
-      return {.error = "buffer graph contains a runtime-sized array"};
-    }
     auto element = InternSemanticType(array->ElemType(), graph);
     if (!element.value)
       return element;
-    descriptor = "{\"count\":" + std::to_string(*count) +
-                 ",\"element\":" + JsonString(*element.value) +
-                 ",\"kind\":\"array\"}";
+    if (count && *count > 0) {
+      descriptor = "{\"count\":" + std::to_string(*count) +
+                   ",\"element\":" + JsonString(*element.value) +
+                   ",\"kind\":\"array\"}";
+    } else if (array->Count()->Is<tint::core::type::RuntimeArrayCount>()) {
+      descriptor =
+          "{\"element\":" + JsonString(*element.value) + ",\"kind\":\"array\"}";
+    } else {
+      return {.error = "buffer graph contains an unresolved array count"};
+    }
   } else if (const auto *structure = type->As<tint::core::type::Struct>()) {
     if (structure->IsWgslInternal() ||
         !IsInventoryIdentifier(structure->Name().Name())) {
@@ -1730,18 +1735,53 @@ GraphIdResult InternSemanticType(const tint::core::type::Type *type,
   return {.value = id};
 }
 
+std::optional<uint32_t>
+SemanticLayoutMinimumSize(const tint::core::type::Type *type) {
+  if (type->HasFixedFootprint()) {
+    return type->Size();
+  }
+  if (const auto *array = type->As<tint::core::type::Array>()) {
+    if (array->Count()->Is<tint::core::type::RuntimeArrayCount>()) {
+      return 0;
+    }
+    return std::nullopt;
+  }
+  if (const auto *structure = type->As<tint::core::type::Struct>()) {
+    if (structure->Members().IsEmpty()) {
+      return std::nullopt;
+    }
+    const auto *last = structure->Members().Back();
+    const auto child = SemanticLayoutMinimumSize(last->Type());
+    if (!child ||
+        *child > std::numeric_limits<uint32_t>::max() - last->Offset()) {
+      return std::nullopt;
+    }
+    return last->Offset() + *child;
+  }
+  return std::nullopt;
+}
+
 GraphIdResult InternSemanticLayout(const tint::core::type::Type *type,
                                    SemanticGraph &graph) {
-  if (!type->IsHostShareable() || !type->HasFixedFootprint()) {
-    return {.error = "buffer graph contains a non-fixed host layout"};
+  if (!type->IsHostShareable()) {
+    return {.error = "buffer graph contains a non-host-shareable layout"};
   }
+  const auto minimum_size = SemanticLayoutMinimumSize(type);
+  if (!minimum_size) {
+    return {.error = "buffer graph contains an unsupported runtime layout"};
+  }
+  const bool runtime_sized = !type->HasFixedFootprint();
   auto type_id = InternSemanticType(type, graph);
   if (!type_id.value)
     return type_id;
   std::ostringstream descriptor;
   descriptor << "{\"alignment\":" << type->Align();
   if (const auto *array = type->As<tint::core::type::Array>()) {
-    descriptor << ",\"arrayStride\":" << array->ImplicitStride();
+    auto element_layout = InternSemanticLayout(array->ElemType(), graph);
+    if (!element_layout.value)
+      return element_layout;
+    descriptor << ",\"arrayStride\":" << array->ImplicitStride()
+               << ",\"elementLayout\":" << JsonString(*element_layout.value);
   }
   const auto *structure = type->As<tint::core::type::Struct>();
   const auto *matrix = type->As<tint::core::type::Matrix>();
@@ -1758,20 +1798,32 @@ GraphIdResult InternSemanticLayout(const tint::core::type::Type *type,
       auto child_layout = InternSemanticLayout(member->Type(), graph);
       if (!child_layout.value)
         return child_layout;
+      const auto child_minimum = SemanticLayoutMinimumSize(member->Type());
+      if (!child_minimum) {
+        return {.error = "buffer graph contains an unsupported member layout"};
+      }
+      const bool member_runtime_sized = !member->Type()->HasFixedFootprint();
       if (index > 0)
         descriptor << ',';
       descriptor << "{\"alignment\":" << member->Align()
                  << ",\"layout\":" << JsonString(*child_layout.value)
-                 << ",\"minimumSize\":" << member->Size()
+                 << ",\"minimumSize\":"
+                 << (member_runtime_sized ? *child_minimum : member->Size())
                  << ",\"name\":" << JsonString(member->Name().Name())
-                 << ",\"offset\":" << member->Offset()
-                 << ",\"runtimeSized\":false,\"size\":" << member->Size()
-                 << ",\"type\":" << JsonString(*child_type.value) << '}';
+                 << ",\"offset\":" << member->Offset() << ",\"runtimeSized\":"
+                 << (member_runtime_sized ? "true" : "false");
+      if (!member_runtime_sized) {
+        descriptor << ",\"size\":" << member->Size();
+      }
+      descriptor << ",\"type\":" << JsonString(*child_type.value) << '}';
     }
   }
-  descriptor << "],\"minimumSize\":" << type->Size()
-             << ",\"runtimeSized\":false,\"size\":" << type->Size()
-             << ",\"type\":" << JsonString(*type_id.value) << '}';
+  descriptor << "],\"minimumSize\":" << *minimum_size
+             << ",\"runtimeSized\":" << (runtime_sized ? "true" : "false");
+  if (!runtime_sized) {
+    descriptor << ",\"size\":" << type->Size();
+  }
+  descriptor << ",\"type\":" << JsonString(*type_id.value) << '}';
   const auto json = descriptor.str();
   const auto id = SemanticId("l_", kSemanticLayoutIdDomain, json);
   if (!InsertGraphRecord(graph.layouts, id, json)) {
@@ -2625,11 +2677,12 @@ int Run(const SemanticExtractionRequest &request) {
         const auto store =
             BufferStoreType(ir, resource.bind_group, resource.binding);
         const auto *store_type = store.type;
-        if (!store_type || store.duplicate ||
-            !store_type->HasFixedFootprint()) {
-          diagnostics.push_back(Error(
-              "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-              "selected program uses a runtime-sized or unlowered buffer"));
+        if (!store_type || store.duplicate || !store_type->IsHostShareable() ||
+            (!store_type->HasFixedFootprint() &&
+             resource.resource_type == ResourceType::kUniformBuffer)) {
+          diagnostics.push_back(
+              Error("VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+                    "selected program uses an unsupported host buffer layout"));
           WriteSemanticExtractionFailure(request.identity, diagnostics);
           return 1;
         }
@@ -2647,7 +2700,7 @@ int Run(const SemanticExtractionRequest &request) {
         if (resource.size != store_type->Size()) {
           diagnostics.push_back(
               Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                    "Inspector and IR disagree on fixed buffer size"));
+                    "Inspector and IR disagree on minimum buffer size"));
           WriteSemanticExtractionFailure(request.identity, diagnostics);
           return 1;
         }

@@ -39,6 +39,11 @@ fixed-prefix `minimumSize` distinct from the binding's prefix-plus-one-element
 `minimumBindingSize`. It does not predict which backend lowering needs a length query. That choice
 belongs to the selected backend projection and compiler result.
 
+Every array layout links directly to its element layout. Logical type identity is not enough to
+recover that edge because it excludes authored alignment and size attributes and concrete member
+offsets. The semantic closure and fingerprints traverse the explicit link, so an unrelated layout
+for the same logical type cannot affect a program.
+
 The Metal compiler configures deterministic user slots and candidate internal capacity before
 calling Tint. Compiler protocol v1 carries a shared immediate-data candidate and size-region offset
 for every selected entry; these inputs do not assert that generated code needs them. The current

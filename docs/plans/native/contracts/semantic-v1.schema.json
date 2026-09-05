@@ -289,6 +289,10 @@
           "minimum": 1,
           "maximum": 9007199254740991
         },
+        "elementLayout": {
+          "description": "Explicit physical layout of an array element. Required exactly when arrayStride is present; consumers must not infer this edge by searching for a layout with the element type.",
+          "$ref": "#/$defs/layoutId"
+        },
         "matrixStride": {
           "type": "integer",
           "minimum": 1,
@@ -298,6 +302,10 @@
           "type": "array",
           "items": { "$ref": "#/$defs/layoutMember" }
         }
+      },
+      "dependentRequired": {
+        "arrayStride": ["elementLayout"],
+        "elementLayout": ["arrayStride"]
       },
       "allOf": [
         {

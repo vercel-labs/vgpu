@@ -79,7 +79,7 @@
       "name": "vertices",
       "addressSpace": "storage",
       "access": "read",
-      "layout": "l_f1c6be1c7f92a5361a53e32323213b67ea87bb3491958659bb80956c3f48cb62",
+      "layout": "l_f6c6f8b1bd6d977b1e7c3449499ea2750c2464ca6acb9bdf5e1f21e79b702455",
       "minimumBindingSize": 24,
       "type": "t_0259a75c102aa4b57ddf860dfc6e8e1582643e9ea9d8828a520be5efa4b19d9c"
     },
@@ -186,15 +186,6 @@
       "size": 16,
       "type": "t_a0fb55445e460843c38556ca99c0a1815f55b13791f7c6f78d86c196c84fd37b"
     },
-    "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3": {
-      "alignment": 8,
-      "arrayStride": 8,
-      "members": [],
-      "minimumSize": 24,
-      "runtimeSized": false,
-      "size": 24,
-      "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb"
-    },
     "l_b4b3506169d48389caa7f1ab98128f703469e23a8285b3fce25945b5ac70f2b3": {
       "alignment": 8,
       "members": [
@@ -222,6 +213,16 @@
       "size": 8,
       "type": "t_5cea819c230c111356a65739c8af348f0476491df474c8e102e9dd0d1d350429"
     },
+    "l_b9302e9cd04641d0dc403a2578d3774c00b8515a81a6e46ecf1f750d70e7ad16": {
+      "alignment": 8,
+      "arrayStride": 8,
+      "members": [],
+      "minimumSize": 24,
+      "runtimeSized": false,
+      "size": 24,
+      "type": "t_bd1fba1108a0343623cfabb7c327a0ef334e43f699003b882b58b64cd367a4eb",
+      "elementLayout": "l_b8294d75366c4076c0814cef46126989bdc6e602b45d49b1976b312a96a8c039"
+    },
     "l_c804fbafcb72b61bb51988940facc0c675e7efebdd12997e2fcc80e0814b852f": {
       "alignment": 16,
       "members": [],
@@ -230,12 +231,12 @@
       "size": 16,
       "type": "t_65d2b712eb2774515dab9fdb9aad6fcfc7f0f364ec2f8be43adc9b26cd65b7dc"
     },
-    "l_f1c6be1c7f92a5361a53e32323213b67ea87bb3491958659bb80956c3f48cb62": {
+    "l_f6c6f8b1bd6d977b1e7c3449499ea2750c2464ca6acb9bdf5e1f21e79b702455": {
       "alignment": 8,
       "members": [
         {
           "alignment": 8,
-          "layout": "l_88f2c2968ff4246c912ec8c70ae02675df4a453b3f49a495b6d3cd3cc90b20b3",
+          "layout": "l_b9302e9cd04641d0dc403a2578d3774c00b8515a81a6e46ecf1f750d70e7ad16",
           "minimumSize": 24,
           "name": "values",
           "offset": 0,
