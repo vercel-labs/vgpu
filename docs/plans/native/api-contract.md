@@ -68,8 +68,10 @@ vertex selection when more than one exists.
 - `VGPU` and live objects created from it are non-`Sendable` and stay in one application-selected
   isolation domain. Public encoding remains synchronous inside that owner.
 - A context-wide, non-blocking access gate permits reentrant calls in one synchronous stack and
-  throws `VGPU-NATIVE-CONCURRENT-ACCESS` when another thread overlaps it. The gate detects misuse;
-  it does not make the graph safe to share.
+  throws `VGPU-NATIVE-CONCURRENT-ACCESS` when another thread overlaps encoding, resource work, or
+  lifecycle mutation. Immutable snapshots, `gpu.onError`, its unsubscribe closure,
+  `gpu.settled()`, and `VGPUSubmission.settled()` use a separately synchronized, non-throwing
+  control lane. That lane may overlap gated work; it does not make the graph safe to share.
 - Async methods on live objects accept
   `isolation: isolated (any Actor)? = #isolation`. They validate and register immutable work before
   suspending, then return a `Sendable` result to the caller's actor.
@@ -87,10 +89,17 @@ vertex selection when more than one exists.
   its deferred error deliveries. A serial or shared queue still makes it observe earlier queue
   commands before its own command buffer completes, without adopting their readbacks or error
   deliveries. Context-wide `gpu.settled()` tracks every vgpu submission and snapshots all known work.
+  Work registration and the context snapshot are linearizable, so racing work is fully included or
+  fully excluded.
+- Error publication takes one atomic snapshot of active subscriptions. There is no backlog. A
+  subscription added after close can observe only later publications from work accepted before
+  close. Unsubscribe is idempotent and guarantees that a handler body which has not started when it
+  returns will not start later; a running handler may finish and may unsubscribe itself.
 - Core `dispose()` methods throw, close synchronously, and never wait for the GPU. They are
-  idempotent after success, retain already submitted resources until completion, reject overlap,
-  and leave `settled()` available to drain known work. Main-actor host adapters can expose
-  non-throwing disposal because they stop and serialize their own scheduler first.
+  idempotent after success, retain already submitted resources until completion, reject overlap
+  with another gated operation, and leave error subscription and settlement available to drain
+  known work. Main-actor host adapters can expose non-throwing disposal because they stop and
+  serialize their own scheduler first.
 - `VGPUMetalInterop` converts `MTLBuffer` and `MTLTexture` objects into context-owned neutral
   wrappers. Shared Resources, Render, Compute, and generated programs never expose Metal types.
 - `VGPUFramePassResult` distinguishes `.encoded` from normal drawable `.unavailable` without using

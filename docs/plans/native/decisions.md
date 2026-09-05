@@ -20,14 +20,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   actor for offscreen work. Encoding stays synchronous within either owner.
 - Internal synchronization covers native completions, in-flight retention, error publication,
   lazy compilation, and lifecycle coordination. A separate context-wide access gate is
-  non-blocking and reentrant only within one synchronous call stack; overlapping access fails with
-  `VGPU-NATIVE-CONCURRENT-ACCESS`. Neither mechanism makes live objects safe to share, and user
+  non-blocking and reentrant only within one synchronous call stack; overlapping encoding,
+  resource operations, or lifecycle mutation fails with `VGPU-NATIVE-CONCURRENT-ACCESS`.
+  Immutable snapshots, `gpu.onError`, unsubscribe, `gpu.settled()`, and
+  `VGPUSubmission.settled()` use a separately synchronized, non-throwing control lane and may
+  overlap a gated operation. Neither mechanism makes live objects safe to share, and user
   callbacks never run while an internal lock is held.
 - `gpu.onError` accepts an `@isolated(any) @Sendable` handler and returns an idempotent `@Sendable`
   unsubscribe closure. `@Sendable` rejects unsafe mutable captures, while `@isolated(any)` records
   the subscriber's actor for delivery. Each subscription observes publication order without
-  overlapping handler invocations; delivery is enqueued to active handlers in subscription order
-  and never invokes user code from a native completion callback. The first public API keeps the
+  overlapping handler invocations. Subscription changes and publication snapshots are
+  linearizable. Once unsubscribe returns, a handler body that had not started cannot start later;
+  an invocation already running may finish, including when it unsubscribes itself. Delivery is
+  enqueued to active handlers in subscription order and never invokes user code from a native
+  completion callback. There is no backlog for later subscribers. The first public API keeps the
   stream that transports errors internal.
 - For macOS 14 back-deployment, the runtime stores each `@isolated(any) @Sendable` callback inside a concrete
   subscription record rather than using that function type directly as a generic collection
@@ -35,7 +41,8 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 - `gpu.settled(isolation: isolated (any Actor)? = #isolation)` inherits the caller's actor, snapshots
   work already known to the context, and waits for its lazy compilation, native completions, every
   error that work later publishes, and corresponding handler delivery without throwing. Work
-  registered later is not included.
+  registration and the snapshot are linearizable, so racing work is either fully included or fully
+  excluded. Work registered later is not included.
 - Every successful frame, one-shot effect, one-shot draw, and compute dispatch returns a
   discardable `VGPUSubmission`. The token is `Sendable`; its non-throwing
   `settled(isolation: isolated (any Actor)? = #isolation)` waits only for that logical submission and
@@ -62,8 +69,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   MetalKit, and future backend failure.
 - Core contexts and resources expose synchronous throwing `dispose()`. A successful close is
   idempotent, stops new work without waiting for the GPU, and retains submitted resources until
-  completion. Concurrent disposal fails before mutation; disposal from an active encoding scope
-  fails with its own coded state error. `settled()` remains valid after close.
+  completion. Disposal concurrent with another gated operation fails before mutation; disposal
+  from an active encoding scope fails with its own coded state error. Error subscription,
+  unsubscribe, and both settlement waits remain valid after close.
 - Main-actor host adapters keep non-throwing disposal because they own and stop their scheduler
   before teardown. Required UI cleanup is explicit; a normal deinitializer may release only
   thread-safe internals and never relies on Swift 6.2 `isolated deinit`.
@@ -411,3 +419,9 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 6. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
+7. The public representation of structured error details and authored-source paths: typed details
+   per error case versus an extensible payload, and structured path components versus one rendered
+   diagnostic path. The isolated lifecycle kernel proves deterministic mapping for representative
+   codes and messages while keeping backend metadata package-only; it does not make message text or
+   metadata part of the public ABI. Defer this choice until integrated compiler and runtime
+   diagnostics can compare both representations.

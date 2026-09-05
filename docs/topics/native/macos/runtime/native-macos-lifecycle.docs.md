@@ -68,15 +68,15 @@ A view-backed surface follows the same ownership rule. `VGPUSurface` is a backen
 
 ## Fail on overlapping access
 
-Non-`Sendable` prevents ordinary actor crossings, but it cannot detect every unsafe capture. The runtime therefore rejects overlapping public access across different threads or isolation domains with `VGPUError.concurrentAccess` instead of blocking or racing.
+Non-`Sendable` prevents ordinary actor crossings, but it cannot detect every unsafe capture. The runtime therefore places encoding, resource operations, and lifecycle mutation behind one context-wide access gate. A gated operation that overlaps another owner fails with `VGPUError.concurrentAccess` instead of blocking or racing.
 
-The check belongs to the context and is shared by all of its children. Transitive calls in one synchronous stack remain valid, including `gpu.frame`, `frame.pass`, `pass.draw`, and a binding update from the same callback. A call that overlaps from another thread fails immediately. Once the first call returns, the owner may continue using the graph normally.
+The check belongs to the context and is shared by all of its children. Transitive calls in one synchronous stack remain valid, including `gpu.frame`, `frame.pass`, `pass.draw`, and a binding update from the same callback. A gated call that overlaps from another thread fails immediately. Once the first call returns, the owner may continue using the graph normally.
 
 The implementation only locks long enough to claim or release logical access. It never holds that lock while running application code, encoding a callback, or awaiting Metal. Native completion callbacks, in-flight retains, pipeline cache publication, and error delivery use separate internal synchronization and never re-enter the public gate.
 
 Async methods validate, snapshot their resource generation, and register immutable work while they own access. They release access before their first suspension. Rendering may therefore continue while an already registered readback or pipeline compilation is in flight.
 
-Immutable getters such as capabilities and independently synchronized numeric snapshots do not throw. This exception keeps ordinary reads usable; it does not make the live object graph transferable.
+Observation and waiting use a separate, non-throwing control lane. Immutable lifecycle and capability snapshots, `gpu.onError`, its returned unsubscribe closure, `gpu.settled()`, and `submission.settled()` may overlap a gated operation without throwing `.concurrentAccess`. The error subscription and both waits remain usable after the context closes so already accepted work can drain. This control lane exposes immutable state or completion; it does not make the live object graph transferable or permit concurrent encoding and mutation.
 
 ## Keep frame values inside their scopes
 
@@ -145,7 +145,7 @@ Errors with the same observable meaning reuse JavaScript's code. Native-only own
 | `.gpuDisposed` | `VGPU-GPU-DISPOSED` | New work used a disposed context. |
 | `.frameReentrant` | `VGPU-FRAME-REENTRANT` | A frame was opened from an active frame. |
 | `.framePassActive` | `VGPU-FRAME-PASS-ACTIVE` | Submission was attempted before the pass returned. |
-| `.concurrentAccess` | `VGPU-NATIVE-CONCURRENT-ACCESS` | Public access overlaps another owner. |
+| `.concurrentAccess` | `VGPU-NATIVE-CONCURRENT-ACCESS` | A gated graph operation overlaps another owner. |
 | `.contextMismatch` | `VGPU-NATIVE-CONTEXT-MISMATCH` | A wrapper belongs to another context. |
 | `.nestedSubmission` | `VGPU-NATIVE-NESTED-SUBMISSION` | A one-shot submission was attempted inside a frame. |
 | `.nestedPass` | `VGPU-NATIVE-NESTED-PASS` | A pass was opened from another pass. |
@@ -157,6 +157,8 @@ Errors with the same observable meaning reuse JavaScript's code. Native-only own
 | `.resourceImportInvalid` | `VGPU-NATIVE-RESOURCE-IMPORT-INVALID` | A Metal resource cannot satisfy its declared vgpu use. |
 
 Synchronous setup, validation, and encoding failures are thrown to the caller. They are not delivered again through the asynchronous error channel.
+
+A resource readback failure follows the same single-delivery rule: it throws to its awaiting caller and is not also published through `gpu.onError`.
 
 ## Observe deferred errors
 
@@ -206,9 +208,9 @@ actor RenderWorker {
 }
 ```
 
-Retain the unsubscribe closure until teardown. It is `Sendable`, idempotent, and safe to call from any isolation domain. It invalidates future deliveries and queued invocations that have not started; a handler already running may finish. Each subscription observes publication order without overlapping its own invocations. Different actors may finish handling one error in a different order.
+Retain the unsubscribe closure until teardown. It is `Sendable`, idempotent, and safe to call from any isolation domain, including from inside its own handler. An error publication takes one atomic snapshot of active subscriptions. Unsubscribe invalidates future publications and cancels any selected invocation whose handler body has not begun by the time unsubscribe returns; a handler body that already started may finish. Each subscription observes publication order without overlapping its own invocations. Different actors may finish handling one error in a different order.
 
-A Metal completion only publishes an immutable error and schedules delivery. It never invokes application code directly or while an internal lock is held. If no handler was active when an error was published, vgpu writes one diagnostic to the platform error log rather than retaining a backlog for future subscribers.
+A Metal completion only publishes an immutable error and schedules delivery. It never invokes application code directly or while an internal lock is held. If no handler was active when an error was published, vgpu writes one diagnostic to the platform error log rather than retaining a backlog for future subscribers. A handler added after context disposal therefore receives no earlier errors, but it can receive a later error from work that the context accepted before closing.
 
 ## Wait for submitted work
 
@@ -254,7 +256,7 @@ public extension VGPU {
 }
 ```
 
-The default argument keeps execution on the caller's actor. `gpu.settled()` snapshots all work already known to the context and waits without throwing for its compilation, readbacks, submissions, native completions, every error they later publish, and the corresponding handler invocations. Work registered after the call is not part of that snapshot. Swift deliberately registers every vgpu frame, one-shot render, and compute submission. This is stronger than the current TypeScript implementation, where a plain one-shot or compute queue completion may be absent unless another tracked fence covers it. Use `submission.settled()` instead when unrelated context work must continue independently.
+The default argument keeps execution on the caller's actor. `gpu.settled()` snapshots all work already known to the context and waits without throwing for its compilation, readbacks, submissions, native completions, every error they later publish, and the corresponding handler invocations. Work registration and a racing context snapshot have one observable order, so the work is either fully included or fully excluded. Work registered after the snapshot is not included. Swift deliberately registers every vgpu frame, one-shot render, and compute submission. This is stronger than the current TypeScript implementation, where a plain one-shot or compute queue completion may be absent unless another tracked fence covers it. Use `submission.settled()` instead when unrelated context work must continue independently.
 
 `settled()` remains valid after disposal so teardown can drain work that the context had already accepted. It is not an error channel; observe deferred failures with `onError`.
 
@@ -272,7 +274,7 @@ public extension VGPUTarget {
 }
 ```
 
-Disposal is idempotent after a successful close. It prevents new work immediately, invalidates child wrappers, and releases context-owned native objects only after command buffers that already reference them complete. It does not wait for the GPU. Calling `dispose()` concurrently with another public operation throws `.concurrentAccess`; calling it from an active frame or pass throws `.frameActive` instead of partially tearing down an encoder.
+Disposal is idempotent after a successful close. It prevents new work immediately, invalidates child wrappers, and releases context-owned native objects only after command buffers that already reference them complete. It does not wait for the GPU. Calling `dispose()` concurrently with another gated encoding, resource, or lifecycle operation throws `.concurrentAccess`; control-lane observation and waiting may continue. Calling it from an active frame or pass throws `.frameActive` instead of partially tearing down an encoder.
 
 Dispose retained children when their lifetime ends, then dispose their context:
 

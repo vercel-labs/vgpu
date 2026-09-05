@@ -350,18 +350,28 @@ goldens, and inspects a plane-only release link map. Where platform trigonometry
 byte identity, the fixture declares a narrow ULP tolerance or adopts deterministic math; production
 does not ship pre-generated mesh blobs merely to make the test byte-exact.
 
-L1 verifies submission completion independently from the context drain. Auto-submit returns one
-token even for an empty normal frame; repeated `frame.submit()` calls and the outer normal return
-refer to the same stable logical submission; every one-shot effect, draw, and dispatch returns its
-own token. A token settles only after that submission's GPU completion and deferred error deliveries,
-never throws, and does not wait for unrelated logical submissions, compilation, readbacks, or later
-work. The borrowed-queue fixture proves that earlier host commands still precede token completion
-without enrolling host readbacks or error delivery. A separate context fixture proves that
-`gpu.settled()` includes plain one-shot render and compute submissions without another tracked fence.
-Throwing before submit cancels the frame and exposes no token. Explicit submit followed by a callback
-throw preserves the original error and leaves the token observable only when the callback captured
-the `submit()` result. Performance fixtures must keep multiple animation frames in flight rather
-than awaiting each token inside the frame loop.
+The isolated lifecycle-kernel follow-up proves the access and control lanes, synchronous
+registration before suspension, generation leases, partial-acquisition rollback, idempotent
+completion, submission and context snapshots, deferred error mapping and actor-preserving delivery,
+linearizable subscribe/unsubscribe, cancellation before handler start, and post-close drain under
+Swift 6 strict concurrency. Its deterministic probe also cross-builds for arm64 and x86_64. It does
+not freeze a public module or ABI and does not exercise Metal command buffers or completion
+callbacks, frame or pass semantics, generated bindings or production-runtime integration,
+borrowed-queue ordering, imported-resource handoff, or UI teardown. The x86_64 result is compile
+evidence rather than an Intel runtime result. L1 remains open for those connected fixtures.
+
+The remaining connected L1 fixture must verify submission completion independently from the context
+drain. Auto-submit returns one token even for an empty normal frame; repeated `frame.submit()` calls
+and the outer normal return refer to the same stable logical submission; every one-shot effect,
+draw, and dispatch returns its own token. A token settles only after that submission's GPU completion
+and deferred error deliveries, never throws, and does not wait for unrelated logical submissions,
+compilation, readbacks, or later work. The borrowed-queue fixture proves that earlier host commands
+still precede token completion without enrolling host readbacks or error delivery. A separate
+context fixture proves that `gpu.settled()` includes plain one-shot render and compute submissions
+without another tracked fence. Throwing before submit cancels the frame and exposes no token.
+Explicit submit followed by a callback throw preserves the original error and leaves the token
+observable only when the callback captured the `submit()` result. Performance fixtures must keep
+multiple animation frames in flight rather than awaiting each token inside the frame loop.
 
 ### 4. Compute milestone
 
