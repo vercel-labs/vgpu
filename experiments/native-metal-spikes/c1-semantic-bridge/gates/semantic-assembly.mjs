@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -3996,8 +3996,14 @@ async function assertNativeRuntimeSizedStorageTranslation(
     expectedSnapshots.runtimeSizedStorage.runtimeLayoutSha256
   );
   const metal = runRuntimeSizedStorageMetal({
+    semantic: fixture.assembly.semantic,
     projection,
     request,
+    translationEvidence: {
+      requestSha256: observed.requestSha256,
+      responseSha256: observed.responseSha256,
+      mslSha256: observed.mslSha256,
+    },
     settings,
   });
   return {
@@ -4014,7 +4020,13 @@ async function assertNativeRuntimeSizedStorageTranslation(
   };
 }
 
-function runRuntimeSizedStorageMetal({ projection, request, settings }) {
+function runRuntimeSizedStorageMetal({
+  semantic,
+  projection,
+  request,
+  translationEvidence,
+  settings,
+}) {
   const [source] = metalSourcesForProgramProjection(projection);
   assert.equal(source.stage, "compute");
   const manifest = runtimeSizedStorageRuntimeManifest({ projection, request });
@@ -4067,6 +4079,21 @@ function runRuntimeSizedStorageMetal({ projection, request, settings }) {
       libraryPath,
     ]);
     assertNonEmptyFile(libraryPath, "runtime-sized storage metallib");
+    const handoff = connectedArtifactHandoff({
+      semantic,
+      projection,
+      runtimeManifest: manifest,
+      translationEvidence,
+      metallibSha256: sha256(readFileSync(libraryPath)),
+      msl: source.msl,
+      wgsl: request.source.text,
+    });
+    const handoffBytes = JSON.stringify(handoff);
+    const handoffPath = join(
+      scratch,
+      "runtime-sized-storage-connected-artifact-handoff.json"
+    );
+    writeFileSync(handoffPath, handoffBytes, "utf8");
     const offlineMetal = {
       status: "passed",
       shaders: 1,
@@ -4084,6 +4111,7 @@ function runRuntimeSizedStorageMetal({ projection, request, settings }) {
           libraryPath,
           manifestPath,
           manifestBytes,
+          handoffPath,
           scratch,
           settings,
         });
@@ -4093,6 +4121,74 @@ function runRuntimeSizedStorageMetal({ projection, request, settings }) {
     };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function connectedArtifactHandoff({
+  semantic,
+  projection,
+  runtimeManifest,
+  translationEvidence,
+  metallibSha256,
+  msl,
+  wgsl,
+}) {
+  const handoff = {
+    schemaVersion: 1,
+    contractId: "vgpu-native-c1-connected-artifact-handoff/v1",
+    semantic,
+    projection,
+    runtimeManifest,
+    evidence: {
+      requestSha256: translationEvidence.requestSha256,
+      responseSha256: translationEvidence.responseSha256,
+      mslSha256: translationEvidence.mslSha256,
+      metallibSha256,
+    },
+  };
+  assert.deepEqual(Object.keys(handoff), [
+    "schemaVersion",
+    "contractId",
+    "semantic",
+    "projection",
+    "runtimeManifest",
+    "evidence",
+  ]);
+  assert.deepEqual(Object.keys(handoff.evidence), [
+    "requestSha256",
+    "responseSha256",
+    "mslSha256",
+    "metallibSha256",
+  ]);
+  for (const digest of Object.values(handoff.evidence)) {
+    assert.match(digest, /^[a-f0-9]{64}$/u);
+  }
+  assert.equal(handoff.evidence.mslSha256, sha256(msl));
+  const serialized = JSON.stringify(handoff);
+  assert.equal(serialized.includes(JSON.stringify(msl)), false);
+  assert.equal(serialized.includes(JSON.stringify(wgsl)), false);
+  assertNoAbsolutePathStrings(handoff);
+  return handoff;
+}
+
+function assertNoAbsolutePathStrings(value) {
+  if (typeof value === "string") {
+    assert.equal(
+      isAbsolute(value) ||
+        /^file:\/\//u.test(value) ||
+        /^[a-zA-Z]:[\\/]/u.test(value) ||
+        /^\\\\/u.test(value),
+      false,
+      `connected artifact handoff contains an absolute path: ${value}`
+    );
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoAbsolutePathStrings(item);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) assertNoAbsolutePathStrings(item);
   }
 }
 
@@ -4160,6 +4256,7 @@ function runRuntimeSizedStorageMetalRuntime({
   libraryPath,
   manifestPath,
   manifestBytes,
+  handoffPath,
   scratch,
   settings,
 }) {
@@ -4298,6 +4395,14 @@ function runRuntimeSizedStorageMetalRuntime({
         scratch,
       })
     : undefined;
+  const connectedArtifactProbe = settings.connectedArtifactProbe
+    ? runConnectedArtifactProbe({
+        executable: settings.connectedArtifactProbe,
+        libraryPath,
+        handoffPath,
+        scratch,
+      })
+    : undefined;
   return {
     status: "passed",
     deterministicProcesses: attempts.length,
@@ -4313,6 +4418,7 @@ function runRuntimeSizedStorageMetalRuntime({
     readbackSha256,
     ...(runtimeTailResourceProbe && { runtimeTailResourceProbe }),
     ...(generatedComputeProbe && { generatedComputeProbe }),
+    ...(connectedArtifactProbe && { connectedArtifactProbe }),
   };
 }
 
@@ -4419,6 +4525,59 @@ function runGeneratedComputeProbe({
   assert.deepEqual(report.effectiveRanges, [28, 52]);
   assert.deepEqual(report.readbacks, runtimeSizedStorageExpectedReadbacks);
   assert.equal(report.sameBackingBuffer, true);
+  return { status: "passed", deterministicProcesses: attempts.length };
+}
+
+function runConnectedArtifactProbe({
+  executable,
+  libraryPath,
+  handoffPath,
+  scratch,
+}) {
+  const attempts = [
+    runCommand(executable, [libraryPath, handoffPath], {
+      cwd: scratch,
+      timeout: 120_000,
+    }),
+    runCommand(executable, [libraryPath, handoffPath], {
+      cwd: scratch,
+      timeout: 120_000,
+    }),
+  ];
+  for (const attempt of attempts) {
+    if (attempt.error || attempt.signal || attempt.status !== 0) {
+      commandFailure("C3 connected-artifact probe", attempt);
+    }
+    if (attempt.stderr !== "") {
+      fail(
+        `C3 connected-artifact probe wrote stderr: ${attempt.stderr.trim()}`
+      );
+    }
+  }
+  assert.equal(
+    attempts[0].stdout,
+    attempts[1].stdout,
+    "C3 connected-artifact probe output is not deterministic"
+  );
+
+  let report;
+  try {
+    report = JSON.parse(attempts[0].stdout);
+  } catch (error) {
+    fail(`C3 connected-artifact probe returned invalid JSON: ${error.message}`);
+  }
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    fail("C3 connected-artifact probe report must be an object");
+  }
+  if (report.schemaVersion !== 1) {
+    fail("C3 connected-artifact probe returned an unsupported schemaVersion");
+  }
+  if (report.gate !== "c3-connected-artifact") {
+    fail("C3 connected-artifact probe returned the wrong gate identity");
+  }
+  if (report.status !== "passed") {
+    fail("C3 connected-artifact probe did not report passed status");
+  }
   return { status: "passed", deterministicProcesses: attempts.length };
 }
 
@@ -4990,6 +5149,7 @@ function parseArguments(argv) {
     worker: undefined,
     runtimeTailResourceProbe: undefined,
     generatedComputeProbe: undefined,
+    connectedArtifactProbe: undefined,
     requireWorker: false,
     requireOfflineMetal: false,
     requireMetalRuntime: false,
@@ -5003,6 +5163,7 @@ function parseArguments(argv) {
         "Usage: node gates/semantic-assembly.mjs [--worker <Tint executable>] " +
           "[--runtime-tail-resource-probe <executable>] " +
           "[--generated-compute-probe <executable>] " +
+          "[--connected-artifact-probe <executable>] " +
           "[--require-worker] [--require-offline-metal] " +
           "[--require-metal-runtime] [--skip-metal-runtime]\n"
       );
@@ -5056,6 +5217,16 @@ function parseArguments(argv) {
       parsed.generatedComputeProbe = resolve(executable);
       continue;
     }
+    if (argument === "--connected-artifact-probe") {
+      if (seen.has(argument)) fail(`${argument} may appear only once`);
+      seen.add(argument);
+      const executable = argv[++index];
+      if (!executable || executable.startsWith("--")) {
+        fail("--connected-artifact-probe requires a value");
+      }
+      parsed.connectedArtifactProbe = resolve(executable);
+      continue;
+    }
     fail(`unknown argument ${argument}`);
   }
   if (
@@ -5094,13 +5265,35 @@ function parseArguments(argv) {
       );
     }
   }
+  if (parsed.connectedArtifactProbe) {
+    if (
+      !existsSync(parsed.connectedArtifactProbe) ||
+      !lstatSync(parsed.connectedArtifactProbe).isFile()
+    ) {
+      fail(
+        `connected-artifact probe is not a regular file: ${parsed.connectedArtifactProbe}`
+      );
+    }
+    if ((lstatSync(parsed.connectedArtifactProbe).mode & 0o111) === 0) {
+      fail(
+        `connected-artifact probe is not executable: ${parsed.connectedArtifactProbe}`
+      );
+    }
+  }
   if (parsed.runtimeTailResourceProbe && parsed.skipMetalRuntime) {
     fail("--runtime-tail-resource-probe conflicts with --skip-metal-runtime");
   }
   if (parsed.generatedComputeProbe && parsed.skipMetalRuntime) {
     fail("--generated-compute-probe conflicts with --skip-metal-runtime");
   }
-  if (parsed.runtimeTailResourceProbe || parsed.generatedComputeProbe) {
+  if (parsed.connectedArtifactProbe && parsed.skipMetalRuntime) {
+    fail("--connected-artifact-probe conflicts with --skip-metal-runtime");
+  }
+  if (
+    parsed.runtimeTailResourceProbe ||
+    parsed.generatedComputeProbe ||
+    parsed.connectedArtifactProbe
+  ) {
     parsed.requireMetalRuntime = true;
   }
   if (parsed.requireMetalRuntime && parsed.skipMetalRuntime) {
