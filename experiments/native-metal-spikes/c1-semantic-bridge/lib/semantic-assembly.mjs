@@ -69,8 +69,8 @@ export class SemanticAssemblyError extends Error {
 
 /**
  * Assembles one complete semantic-v1 module containing one selected program.
- * The current profile accepts singular fixed-size resources and exact-static
- * overrides while keeping backend slot projection downstream.
+ * The current profile accepts singular host-shareable resources and
+ * exact-static overrides while keeping backend slot projection downstream.
  */
 export function assembleSemanticProgram({
   presentation,

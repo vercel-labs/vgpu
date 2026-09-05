@@ -1,0 +1,145 @@
+{
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "compute_main",
+      "semanticInterface": {
+        "kind": "compute",
+        "inputs": [],
+        "outputs": []
+      },
+      "bindings": ["g0b0"],
+      "samplingPairs": [],
+      "overrides": [],
+      "workgroupSize": { "x": 1, "y": 1, "z": 1 }
+    }
+  ],
+  "bindings": [
+    {
+      "binding": 0,
+      "group": 0,
+      "id": "g0b0",
+      "kind": "buffer",
+      "name": "values",
+      "addressSpace": "storage",
+      "access": "read",
+      "layout": "l_f627c2b392d26b60a44037e1bd186dc8a781859a1bf0a6fb4ab7c7b4ed4b494b",
+      "minimumBindingSize": 16,
+      "type": "t_4c3f367f56aa3c79e7e987868b0820d8895c317e058b5ed0e7cb4cf563ff4e8b"
+    }
+  ],
+  "overrides": [],
+  "types": {
+    "t_4c3f367f56aa3c79e7e987868b0820d8895c317e058b5ed0e7cb4cf563ff4e8b": {
+      "kind": "struct",
+      "members": [
+        {
+          "name": "prefix",
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        },
+        {
+          "name": "particles",
+          "type": "t_85899a8331a72e36b64480caad8052806b10d2e52c3dd75d79ee3a5afc8219bb"
+        }
+      ],
+      "wgslName": "_vgsl_01fd982d__Values"
+    },
+    "t_7186fbd39ff96216d5f8beb671654439665a102426e79aa2d7549ec113560d6b": {
+      "kind": "struct",
+      "members": [
+        {
+          "name": "mass",
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        },
+        {
+          "name": "id",
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        }
+      ],
+      "wgslName": "_vgsl_01fd982d__Particle"
+    },
+    "t_85899a8331a72e36b64480caad8052806b10d2e52c3dd75d79ee3a5afc8219bb": {
+      "element": "t_7186fbd39ff96216d5f8beb671654439665a102426e79aa2d7549ec113560d6b",
+      "kind": "array"
+    },
+    "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155": {
+      "kind": "scalar",
+      "scalar": "u32"
+    }
+  },
+  "layouts": {
+    "l_1d9654abf0a933195c540feee9d7e7627201f90ff7eeb2f1bad17034a4027494": {
+      "alignment": 4,
+      "members": [
+        {
+          "alignment": 4,
+          "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+          "minimumSize": 8,
+          "name": "mass",
+          "offset": 0,
+          "runtimeSized": false,
+          "size": 8,
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        },
+        {
+          "alignment": 4,
+          "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+          "minimumSize": 4,
+          "name": "id",
+          "offset": 8,
+          "runtimeSized": false,
+          "size": 4,
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        }
+      ],
+      "minimumSize": 12,
+      "runtimeSized": false,
+      "size": 12,
+      "type": "t_7186fbd39ff96216d5f8beb671654439665a102426e79aa2d7549ec113560d6b"
+    },
+    "l_4c92107cb8b763ac200662d6b187648d3d204d6af5efa7aaf2aba2767ccb4cfa": {
+      "alignment": 4,
+      "arrayStride": 12,
+      "elementLayout": "l_1d9654abf0a933195c540feee9d7e7627201f90ff7eeb2f1bad17034a4027494",
+      "members": [],
+      "minimumSize": 0,
+      "runtimeSized": true,
+      "type": "t_85899a8331a72e36b64480caad8052806b10d2e52c3dd75d79ee3a5afc8219bb"
+    },
+    "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0": {
+      "alignment": 4,
+      "members": [],
+      "minimumSize": 4,
+      "runtimeSized": false,
+      "size": 4,
+      "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+    },
+    "l_f627c2b392d26b60a44037e1bd186dc8a781859a1bf0a6fb4ab7c7b4ed4b494b": {
+      "alignment": 4,
+      "members": [
+        {
+          "alignment": 4,
+          "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+          "minimumSize": 4,
+          "name": "prefix",
+          "offset": 0,
+          "runtimeSized": false,
+          "size": 4,
+          "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+        },
+        {
+          "alignment": 4,
+          "layout": "l_4c92107cb8b763ac200662d6b187648d3d204d6af5efa7aaf2aba2767ccb4cfa",
+          "minimumSize": 0,
+          "name": "particles",
+          "offset": 4,
+          "runtimeSized": true,
+          "type": "t_85899a8331a72e36b64480caad8052806b10d2e52c3dd75d79ee3a5afc8219bb"
+        }
+      ],
+      "minimumSize": 4,
+      "runtimeSized": true,
+      "type": "t_4c3f367f56aa3c79e7e987868b0820d8895c317e058b5ed0e7cb4cf563ff4e8b"
+    }
+  }
+}

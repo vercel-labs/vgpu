@@ -165,6 +165,16 @@ const expectedSnapshots = Object.freeze({
       }),
     }),
   }),
+  runtimeSizedStorage: Object.freeze({
+    programFingerprint:
+      "637cf1e5bf1c24bc297098038516ab22f53375f5bb6643f55932edccda04eeb5",
+    resolvedSourceSha256:
+      "5bb23714199201ad811c66e0d5df941fe69fcc33e44db6f63aeba61a192e82e3",
+    semanticRequestSha256:
+      "dabc80a7fdf36e3ed0f8cb182f8b6d81567eeaac75989b9967ab9a4a1bd4e526",
+    nativeResponseSha256:
+      "b750ce574d2418d0f2ab6c1d1672c721633ab3f97c4fbcf38f88888e58d1325f",
+  }),
   overrideDependent: Object.freeze({
     programFingerprint:
       "770c84f76e8dbe3bb95c676cb2c231671065eb25964db3dd954a333a8fce0733",
@@ -526,6 +536,29 @@ const resource = await makeFixture({
   },
 });
 
+const runtimeSizedStorage = await makeFixture({
+  label: "runtimeSizedStorage",
+  file: "runtime-sized-storage.wgsl",
+  input: "semantic-assembly-runtime-sized-storage-wgsl",
+  configSource: "Shaders/runtime-sized-storage.wgsl",
+  generatedVirtualPath:
+    "Intermediate/semantic-runtime-sized-storage.resolved.wgsl",
+  selection: {
+    name: "AssemblyRuntimeSizedStorage",
+    source: "Shaders/runtime-sized-storage.wgsl",
+    kind: "compute",
+  },
+  expectedInventory: [{ stage: "compute", wgsl: "compute_main" }],
+  result() {
+    return JSON.parse(
+      readFileSync(
+        join(fixtureDirectory, "runtime-sized-storage-result.json"),
+        "utf8"
+      )
+    );
+  },
+});
+
 const overrideDependent = await makeFixture({
   label: "overrideDependent",
   metalLabel: "overrides",
@@ -650,12 +683,19 @@ const fixtures = [
   draw,
   compute,
   resource,
+  runtimeSizedStorage,
   overrideDependent,
   overrideBypass,
   overrideEquivalent,
   overrideRender,
   overrideScalars,
 ];
+// Keep the runtime-sized fixture out of synthetic compiler-response assembly.
+// Its arrayLength use requires a real Tint response to establish the effective
+// immediate-data reservation and storage-buffer-size region.
+const projectionFixtures = fixtures.filter(
+  (fixture) => fixture !== runtimeSizedStorage
+);
 const overrideFixtures = [
   overrideDependent,
   overrideBypass,
@@ -704,7 +744,8 @@ assertResourceSlotAllocation(resource);
 assertStageLocalSlotAllocation(resource);
 assertSlotAllocationFailures(effect, resource);
 assertProjectionFailures(effect);
-const staticMetalPrograms = assertStaticCompilerResponseAssembly([...fixtures]);
+const staticMetalPrograms =
+  assertStaticCompilerResponseAssembly(projectionFixtures);
 const runtimeResourceLayoutChecks = assertRuntimeResourceLayouts(
   staticMetalPrograms.projections
 );
@@ -801,12 +842,14 @@ process.stdout.write(
         slotStageIsolationChecks: 1,
         slotAllocationFailures: 4,
         projectionFailures: 2,
-        compilerTranslations: fixtures.reduce(
+        compilerTranslations: projectionFixtures.reduce(
           (total, fixture) => total + fixture.compilerRequests.length,
           0
         ),
-        metalProgramProjections: fixtures.length,
-        projectionPermutationChecks: fixtures.length,
+        deferredCompilerTranslations:
+          runtimeSizedStorage.compilerRequests.length,
+        metalProgramProjections: projectionFixtures.length,
+        projectionPermutationChecks: projectionFixtures.length,
         immediateWithoutRegionChecks: 1,
         responseAssemblyFailures,
         projectionVerifierCanaries,
@@ -992,14 +1035,10 @@ function assertAcceptedFixture(fixture) {
     fixture.assembly.semantic
   );
   assert.equal(fixture.assembly.semantic.contractId, "vgpu-native-semantic/v1");
-  if (fixture.label === "resource") {
-    assert.deepEqual(
-      fixture.assembly.semantic.layouts,
-      fixture.expectedResult.layouts
-    );
-  } else {
-    assert.deepEqual(fixture.assembly.semantic.layouts, {});
-  }
+  assert.deepEqual(
+    fixture.assembly.semantic.layouts,
+    fixture.expectedResult.layouts
+  );
   assert.deepEqual(fixture.assembly.semantic.capabilities, {
     vocabulary: 1,
     languageFeatures: [...fixture.semanticRequest.languageFeatures],
@@ -1009,7 +1048,9 @@ function assertAcceptedFixture(fixture) {
   assert.equal(program.name, fixture.plan.name);
   assert.equal(fixture.allocation.semanticProgram, program.name);
   assert.equal(fixture.allocation.bindingModel, "vgpu-metal-binding-slots-v1");
-  if (fixture.label !== "resource") assert.deepEqual(program.bindings, []);
+  if (fixture.expectedResult.bindings.length === 0) {
+    assert.deepEqual(program.bindings, []);
+  }
   assert.deepEqual(
     program.overrides,
     fixture.expectedResult.overrides.map(({ name, ...override }) => {
@@ -1108,6 +1149,8 @@ function assertAcceptedFixture(fixture) {
     assert.equal(Object.keys(fixture.assembly.semantic.types).length, 2);
   } else if (fixture.label === "resource") {
     assertResourceAssembly(fixture, program);
+  } else if (fixture.label === "runtimeSizedStorage") {
+    assertRuntimeSizedStorageAssembly(fixture, program);
   } else {
     assertOverrideAssembly(fixture, program);
   }
@@ -1124,6 +1167,82 @@ function assertAcceptedFixture(fixture) {
   });
   assert.deepEqual(repeatedAllocation, fixture.allocation);
   assert(isMetalSlotAllocation(repeatedAllocation));
+}
+
+function assertRuntimeSizedStorageAssembly(fixture, program) {
+  assert.deepEqual(program.sources, [
+    "semantic-assembly-runtime-sized-storage-wgsl",
+  ]);
+  assert.deepEqual(program.entryPoints.compute.bindings, ["g0b0"]);
+  assert.deepEqual(program.entryPoints.compute.workgroupSize, {
+    x: 1,
+    y: 1,
+    z: 1,
+  });
+  assert.deepEqual(program.entryPoints.compute.source, {
+    input: "semantic-assembly-runtime-sized-storage-wgsl",
+    start: { line: 13, column: 1 },
+    end: { line: 15, column: 2 },
+  });
+  assert.deepEqual(
+    program.bindings.map(
+      ({ id, addressSpace, access, minimumBindingSize, visibility }) => ({
+        id,
+        addressSpace,
+        access,
+        minimumBindingSize,
+        visibility,
+      })
+    ),
+    [
+      {
+        id: "g0b0",
+        addressSpace: "storage",
+        access: "read",
+        minimumBindingSize: 16,
+        visibility: ["compute"],
+      },
+    ]
+  );
+  assert.deepEqual(
+    Object.values(fixture.assembly.semantic.types)
+      .filter((type) => type.kind === "struct")
+      .map((type) => type.swiftName)
+      .sort(),
+    ["Particle", "Values"]
+  );
+  const rootLayout =
+    fixture.assembly.semantic.layouts[program.bindings[0].layout];
+  assert.equal(rootLayout.runtimeSized, true);
+  assert.equal(rootLayout.minimumSize, 4);
+  const tail = rootLayout.members[1];
+  assert.deepEqual(
+    {
+      name: tail.name,
+      offset: tail.offset,
+      minimumSize: tail.minimumSize,
+      runtimeSized: tail.runtimeSized,
+    },
+    {
+      name: "particles",
+      offset: 4,
+      minimumSize: 0,
+      runtimeSized: true,
+    }
+  );
+  const tailLayout = fixture.assembly.semantic.layouts[tail.layout];
+  assert.equal(tailLayout.arrayStride, 12);
+  assert.equal(tailLayout.runtimeSized, true);
+  assert.equal(
+    fixture.assembly.semantic.layouts[tailLayout.elementLayout].size,
+    12
+  );
+  assert.deepEqual(fixture.allocation.bindings, [
+    {
+      semanticBinding: "g0b0",
+      slots: [directSlot("compute", "buffer", 0)],
+    },
+  ]);
 }
 
 function assertOverrideAssembly(fixture, program) {
