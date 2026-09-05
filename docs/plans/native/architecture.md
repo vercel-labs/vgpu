@@ -137,9 +137,9 @@ platform backend:
 AppShaders       -> VGPUABI
 _VGPUBackendSPI  -> VGPUABI
 VGPUCore         -> VGPUABI + _VGPUBackendSPI
-VGPUResources    -> VGPUCore + VGPUABI
-VGPURender       -> VGPUCore + VGPUResources + VGPUABI
-VGPUCompute      -> VGPUCore + VGPUResources + VGPUABI
+VGPUResources    -> VGPUCore + VGPUABI + _VGPUBackendSPI
+VGPURender       -> VGPUCore + VGPUABI + _VGPUBackendSPI
+VGPUCompute      -> VGPUCore + VGPUABI + _VGPUBackendSPI
 VGPUScene        -> VGPURender
 VGPUQueries      -> VGPURender + VGPUResources
 VGPUTesting      -> only the features exercised by its test runner
@@ -174,6 +174,10 @@ lifecycle. `VGPUResources`, `VGPURender`, and `VGPUCompute` add their `gpu.*` fa
 extensions in their own modules. `VGPUMetal` owns the concrete backend, core conformance, and
 explicit constructors. Package-scoped extensions in the three capability implementation targets
 add the resource, render, and compute conformances to that same backend type.
+
+The neutral Render and Compute modules name resource handles through `VGPUABI`; neither imports
+`VGPUResources` or its factories. Backend-complete Render and Compute products still compose the
+physical Resources implementation because their encoders must resolve and retain those handles.
 
 C0 showed that separate conformances in separate files of one Metal target still retain all four
 protocol witness graphs under Release WMO, `-Osize`, dead stripping, and full LTO. Physical targets
@@ -217,8 +221,8 @@ following dependencies even when their measured size is small:
 | `VGPUABI`                 | `VGPUCore`, `VGPUResources`, `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI                           |
 | `VGPUCore`                | `VGPUResources`, `VGPURender`, `VGPUCompute`, any backend, UI, Scene, Queries, Testing                       |
 | `VGPUResources`           | `VGPURender`, `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                               |
-| `VGPURender`              | `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                                             |
-| `VGPUCompute`             | `VGPURender`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                                              |
+| `VGPURender`              | `VGPUResources`, `VGPUCompute`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                            |
+| `VGPUCompute`             | `VGPUResources`, `VGPURender`, Metal, MetalKit, SwiftUI, Scene, Queries, Testing                             |
 | `VGPUMetal`               | `VGPUResources`, `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing |
 | `_VGPUMetalResourcesImpl` | `VGPURender`, `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing                  |
 | `_VGPUMetalRenderImpl`    | `VGPUCompute`, `VGPUMetalInterop`, MetalKit, SwiftUI, Scene, Queries, Testing                                |

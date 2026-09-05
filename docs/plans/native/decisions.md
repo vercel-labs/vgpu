@@ -368,11 +368,19 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    resource at a nonzero offset inside a larger backing, and passes portable arm64/x86_64 builds.
    One typed M4 Pro process then consumes C1's authenticated scratch metallib and manifest and
    reproduces both ranges and readbacks through immutable element-count views. This validates the
-   proposed typed seam; production context, lifecycle, error, generated binding, and compute
-   integration remain open. The resource-free
-   full-screen path consumes the same nominal projection boundary for offline compilation and live
-   function lookup. The Naga differential runner also
-   compiles and links all 224
+   proposed typed seam. A second C2 vertical slice compiles a generated `Bindings` witness in a
+   module that depends only on `VGPUABI`, then drives it through `gpu.compute`, atomic key-path
+   `set`, immutable dispatch snapshots, split Core/Resources/Compute capabilities, and the accepted
+   lifecycle kernel. Its portable gate covers synchronous registration and submission, racing
+   `gpu.settled()` snapshots, synchronous rollback, deferred `onError` delivery before settlement,
+   generation leases, and disposal overlap. Its connected Metal gate consumes C1's authenticated
+   scratch output and reproduces the same two ranges and readbacks. This proves the proposed
+   generated-compute and lifecycle integration in an isolated spike, not a production runtime or
+   artifact-loading contract. C3c must still package real C1 output into a relocatable generated
+   SwiftPM artifact consumed through the production module boundary, and C4 must still exercise
+   the two-entry compute and aliasing contract. The resource-free full-screen path consumes the
+   same nominal projection boundary for offline compilation and live function lookup. The Naga
+   differential runner also compiles and links all 224
    of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
    corpus from the exact direct Tint worker through the same offline boundary, complete authored
    diagnostic mapping beyond the current module-only attribution, and pass deterministic connected

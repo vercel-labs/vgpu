@@ -1,8 +1,8 @@
 # Runtime-sized storage resources
 
-Status: accepted public API shape; the isolated C2 runtime-tail resource spike passed its portable
-gates and one integrated Metal run on the available Apple M4 Pro. Production implementation remains
-pending.
+Status: accepted public API shape; the isolated C2 runtime-tail resource spike and generated-compute
+vertical slice passed their portable gates and connected Metal runs on the available Apple M4 Pro.
+Production implementation and artifact packaging remain pending.
 
 This document owns the Swift representation of a generated WGSL storage structure whose final
 member is a runtime-sized array. The semantic artifact remains the layout oracle. Generated Swift
@@ -221,8 +221,17 @@ The isolated C2 spike now provides executable evidence for this shape:
   C1's scratch directory. Its two dispatches upload `[0, 28]` and `[0, 52]` and read back
   `[2, 202]` and `[4, 404]` through the proposed resource-to-Metal seam.
 
-The handwritten spike does not yet contain generated program `Bindings`, `gpu.compute`, the
-production context/access gate, in-flight generation retention, concurrent-disposal behavior, or
-production `VGPUError` mapping and nested diagnostic paths. Its x86_64 result is a cross-build, not
-an Intel or AMD runtime claim. Those remain production and lifecycle integration work rather than
-alternatives to the accepted capacity/view API.
+The first handwritten runtime-tail package intentionally stopped at the typed resource-to-Metal
+seam. A second C2 vertical slice now compiles generated program `Bindings` against only `VGPUABI`
+and exercises them through `gpu.compute`, atomic key-path `set`, independent dispatch snapshots,
+the context access and control lanes, in-flight generation retention, synchronous submit rollback,
+deferred error delivery, and concurrent disposal. Its connected Metal gate consumes C1's
+authenticated scratch output and reproduces both effective ranges and readbacks.
+
+That closes the isolated generated-binding, compute, and lifecycle integration question; it does
+not turn either fixture into production code. C3c must still package real C1 output into a
+relocatable generated SwiftPM artifact and load it through the production runtime without the test
+catalog or caller-provided artifact URLs. C4 must then cover two compute entry points, aliasing,
+ping-pong resources, and its WebGPU oracle. Production readback queue ordering, complete error
+mapping and nested diagnostic paths also remain implementation work. The x86_64 result is a
+cross-build, not an Intel or AMD runtime claim.

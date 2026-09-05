@@ -226,8 +226,15 @@ runtime function-constant APIs. The connected runtime-sized program also passes 
 binding and readback in two M4 Pro processes: within each process, two dispatches reuse one backing
 allocation and binding offset; effective ranges `28` and `52` upload `[0, 28]` and `[0, 52]`,
 producing `[2, 202]` and `[4, 404]`.
-Broader resource shapes, general runtime resource binding, and the connected artifact remain
-deterministic integration gates.
+A separate C2 vertical slice compiles generated `Bindings` in a module that depends only on
+`VGPUABI`, then exercises `gpu.compute`, atomic key-path `set`, independent dispatch snapshots,
+split Core/Resources/Compute backend capabilities, generation leases, disposal overlap, synchronous
+submission rollback, and error delivery before settlement. Its connected Metal gate consumes the
+authenticated C1 scratch artifact and reproduces those ranges and readbacks. This is isolated
+evidence for the generated-compute and lifecycle contract, not a production artifact resolver or
+runtime package. C3c must still connect real C1 output to a relocatable generated SwiftPM artifact
+consumed through the production module boundary; C4 must then validate the two-entry compute,
+aliasing, ping-pong, and WebGPU-oracle path. Broader resource shapes remain later integration gates.
 
 The Metal projection records:
 
