@@ -1,6 +1,8 @@
 # Runtime-sized storage resources
 
-Status: accepted public API shape; production implementation pending the C2 resource spike.
+Status: accepted public API shape; the isolated C2 runtime-tail resource spike passed its portable
+gates and one integrated Metal run on the available Apple M4 Pro. Production implementation remains
+pending.
 
 This document owns the Swift representation of a generated WGSL storage structure whose final
 member is a runtime-sized array. The semantic artifact remains the layout oracle. Generated Swift
@@ -196,20 +198,31 @@ compiler-required size transport.
 No shared signature contains `MTLBuffer`, a Metal slot, immediate data, or a storage-size word. A
 future backend can consume the same typed resource and effective range through its own projection.
 
-## Spike contract
+## Spike result
 
-The C2 runtime-tail resource spike must prove:
+The isolated C2 spike now provides executable evidence for this shape:
 
-- generated prefix and element packers consume reflected offsets rather than `MemoryLayout`;
-- a generated package depending only on `VGPUABI` compiles from a separate SwiftPM package while
-  naming the public storage and binding aliases;
-- capacity four allocates 52 logical bytes for the fixture above, while binding views for two and
-  four elements produce count-preserving ranges 28 and 52 over one backing allocation;
-- prefix writes, partial element writes, and asynchronous reads preserve padding and bounds;
-- validation and packing failures leave bytes and resource metadata unchanged;
-- reflected minima and four-byte storage granularity round only within one count's byte interval,
-  rejecting an aligned minimum that changes the count while accepting safe trailing padding;
-- a two-byte `f16` tail stride rejects counts whose required four-byte range would expose another
-  element; and
-- the typed views drive the C1-produced Metal function so `arrayLength()` and last-element reads
-  observe the selected element count.
+- two `RecordingProbe` runs produce byte-identical JSON while exercising reflected prefix and
+  element packing, zero padding, partial writes and asynchronous reads, access compatibility,
+  failure atomicity, idempotent disposal, `UInt32` limits, and checked multiply, add, and round-up
+  overflow;
+- capacity four owns a 52-byte logical extent, while immutable views for two and four elements use
+  ranges 28 and 52 over the same identity, generation, and offset;
+- a suballocation canary places that 52-byte logical extent at offset 16 inside an 88-byte backing,
+  preserves sentinel bytes on both sides, and keeps binding ranges relative to the resource offset;
+- minimum-size, four-byte-granularity, safe-padding, and two-byte-stride canaries accept only ranges
+  for which WGSL's truncating calculation preserves the requested element count;
+- `GeneratedFixture` depends only on `VGPUABI`; a byte-identical fixture is compiled in a separate
+  SwiftPM package against the public `VGPUABI` product, where its generated storage and binding
+  aliases and underscored witnesses remain usable without runtime-package access;
+- the shared resource, ABI, generated-fixture, and external-consumer targets cross-build for both
+  `arm64-apple-macosx14.0` and `x86_64-apple-macosx14.0`; and
+- one additional typed Metal process consumes the authenticated metallib and manifest produced in
+  C1's scratch directory. Its two dispatches upload `[0, 28]` and `[0, 52]` and read back
+  `[2, 202]` and `[4, 404]` through the proposed resource-to-Metal seam.
+
+The handwritten spike does not yet contain generated program `Bindings`, `gpu.compute`, the
+production context/access gate, in-flight generation retention, concurrent-disposal behavior, or
+production `VGPUError` mapping and nested diagnostic paths. Its x86_64 result is a cross-build, not
+an Intel or AMD runtime claim. Those remain production and lifecycle integration work rather than
+alternatives to the accepted capacity/view API.

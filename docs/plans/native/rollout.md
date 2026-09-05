@@ -229,13 +229,18 @@ diverges for those four canaries, including a valid four-byte root struct; repla
 with the semantic layout model is a prerequisite to closing C2. No compatibility alias is part of
 the native contract.
 
-The runtime-tail resource follow-up covers generated storage structures whose final field is a
-runtime-sized array. Its public contract separates immutable allocation `capacity` from immutable
-binding `elementCount`, retains one allocation across different views, and derives the smallest
-minimum- and four-byte-aligned range that still produces the requested WGSL `arrayLength()`.
-Alignment padding and two-byte `f16` strides make some counts unrepresentable; the gate must accept
-safe padding, reject padding that changes the observed count, and drive the authenticated C1 Metal
-function through the typed resource rather than its earlier raw binder.
+The runtime-tail resource follow-up passed for generated storage structures whose final field is a
+runtime-sized array. Its proposed public contract separates immutable allocation `capacity` from
+immutable binding `elementCount`, retains one logical allocation across different views and a
+larger physical backing at a nonzero offset, and derives the smallest minimum- and four-byte-aligned
+range that still produces the requested WGSL `arrayLength()`. Alignment padding and two-byte `f16`
+strides make some counts unrepresentable; the portable gate accepts safe padding, rejects padding
+that changes the observed count, checks arithmetic and `UInt32` failures before allocation or
+mutation, and compiles the generated conformance from a separate SwiftPM package against only
+`VGPUABI`. The connected C1 gate additionally ran one typed C2 process with the authenticated
+scratch metallib and manifest. Its two dispatches reproduced ranges `28` and `52` and readbacks
+`[2, 202]` and `[4, 404]`. This is distinct from C1's two deterministic raw-binder processes and
+does not close the broader C2 layout work or the pending TypeScript layout replacement.
 
 Both packers must validate the complete value before writing: fixed shapes and counts are exact,
 integers are integral and in range, and a runtime array's element count and byte extent are checked

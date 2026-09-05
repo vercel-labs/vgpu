@@ -155,6 +155,11 @@ describe("agent readiness metadata", () => {
     expect(artifacts).toContain("it does not remove compute functions already packaged");
     expect(artifacts).not.toContain("VGPUKit");
 
+    const build = docsContent("native/macos/build.md");
+    expect(build).toContain("compiles the generated layout conformance from a separate SwiftPM package");
+    expect(build).toContain("one additional typed Metal process");
+    expect(build).toContain("not generated program bindings, the production context and lifecycle");
+
     const index = docsContent("index.mdx");
     expect(index).toContain("[Review the native API proposal](/docs/native)");
   });

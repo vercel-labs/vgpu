@@ -173,7 +173,10 @@ runtime-sized translations are byte-identical, assemble one authenticated projec
 `buffer(0)`, effective immediate-data `buffer(30)`, and a size region at byte `4`, and compile and
 link offline. In each of two live M4 Pro processes, two dispatches reuse one backing allocation and
 binding offset with effective ranges `28` and `52`, upload immediate words `[0, 28]` and `[0, 52]`,
-and read back `[2, 202]` and `[4, 404]`. The override programs preserve a
+and read back `[2, 202]` and `[4, 404]`. The optional runtime-tail hook also hands that exact scratch
+metallib and manifest to one additional typed C2 process. Its immutable two- and four-element views
+reproduce the same ranges and readbacks without treating the backing allocation length as the
+binding length. The override programs preserve a
 dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
 render-stage subsets, and all five scalar kinds including `f16`. Their six retained MSL sources
 contain no `function_constant`, compile to AIR, and link into five metallibs. The render program also
@@ -264,8 +267,9 @@ The semantic work is split by responsibility so the growing design remains revie
    exact-static override fixtures are executable; the authenticated repository corpus remains open.
 9. Join semantic resource constraints to projected slots, prepare complete logical resource sets,
    bind the fixed-resource render pair and runtime-sized compute buffer, and observe baked override
-   values at runtime. These live canaries are executable; general resources and the production Swift
-   runtime remain open.
+   values at runtime. These live canaries are executable, and the runtime-tail hook now validates the
+   proposed typed resource-to-Metal seam; general resources and the production Swift runtime remain
+   open.
 10. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals

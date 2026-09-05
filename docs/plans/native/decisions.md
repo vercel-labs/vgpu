@@ -355,7 +355,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    instead preserves external `buffer(0)`, effective immediate-data `buffer(30)`, and its byte-`4`
    size region. In each of two live M4 Pro processes, two dispatches reuse one allocation and
    binding offset with ranges `28` and `52`, upload `[0, 28]` and `[0, 52]`, and read back
-   `[2, 202]` and `[4, 404]`. The resource-free
+   `[2, 202]` and `[4, 404]`. The C2 runtime-tail follow-up additionally compiles its generated
+   conformance in an external SwiftPM package against only `VGPUABI`, accepts a 52-byte logical
+   resource at a nonzero offset inside a larger backing, and passes portable arm64/x86_64 builds.
+   One typed M4 Pro process then consumes C1's authenticated scratch metallib and manifest and
+   reproduces both ranges and readbacks through immutable element-count views. This validates the
+   proposed typed seam; production context, lifecycle, error, generated binding, and compute
+   integration remain open. The resource-free
    full-screen path consumes the same nominal projection boundary for offline compilation and live
    function lookup. The Naga differential runner also
    compiles and links all 224
