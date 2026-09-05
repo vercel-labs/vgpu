@@ -112,7 +112,7 @@ DC1 creates storage with immutable additional indirect usage:
 ```swift
 let arguments = try gpu.storage(
   UInt32.self,
-  count: 9,
+  count: 8,
   access: .readWrite,
   additionalUsage: [.indirect]
 )
@@ -123,11 +123,11 @@ try pass.draw(draw, indirect: packet)
 
 Storage access remains independent from buffer usage. `VGPUStorage.buffer` is a bounded
 `VGPUBuffer` view over the same allocation and owner; it performs no copy.
-`buffer.slice(bytes:)` creates a relative bounded view while preserving context, generation, usage,
-and logical extent. The consuming operation acquires the generation lease and validates the complete packet: 16 bytes for a
+`buffer.slice(bytes:)` creates a relative bounded view that preserves context, generation, and usage
+while deriving a narrower logical extent. The consuming operation acquires the generation lease and validates the complete packet: 16 bytes for a
 non-indexed draw, 20 for an indexed draw, and 12 for future `dispatch(indirect:)`.
 
-Missing usage, four-byte alignment, overflow, and range failures throw
+Missing usage, absolute four-byte alignment, overflow, and range failures throw
 `VGPU-INDIRECT-INVALID` synchronously, before registration, submission, or `onError`; a buffer from
 another context preserves the shared `VGPU-NATIVE-CONTEXT-MISMATCH` error. A one-shot
 compute submission followed by a render frame is ordered on the same queue without an await or

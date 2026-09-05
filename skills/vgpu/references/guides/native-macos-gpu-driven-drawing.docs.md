@@ -29,13 +29,12 @@ will also supply command arguments:
 ```swift
 let arguments = try gpu.storage(
   UInt32.self,
-  count: 9,
+  count: 8,
   access: .readWrite,
   additionalUsage: [.indirect],
   initial: [
     0, 0, 0, 0, // Control packet: draw nothing.
     3, 1, 3, 0, // Stale packet: draw three vertices starting at vertex 3.
-    0,          // Color signal read by the fragment program.
   ]
 )
 ```
@@ -53,15 +52,15 @@ let drawArguments = try arguments.buffer.slice(bytes: 16..<32)
 ```
 
 The range is relative to the buffer view, not to its underlying allocation. The slice preserves
-the same context, usage, resource generation, and effective extent as its source. This makes a
+the same context, usage, and resource generation while deriving a narrower effective extent. This makes a
 subrange safe to pass around without exposing bytes outside the source view. Creating the slice
 does not register GPU work or acquire an in-flight lease.
 
 ## Write on the GPU, then draw
 
-Create the compute and draw instances once. In this example, `PrepareDraw` writes words `4...8` of
-`arguments`. `IndirectTriangles` contains two procedural full-screen triangles and reads word `8`
-as its color signal:
+Create the compute and draw instances once. In this example, `PrepareDraw` writes words `4...7` of
+`arguments`. `IndirectTriangles` contains two procedural full-screen triangles and assigns their
+colors from `vertex_index`, so the indirect `firstVertex` selects red or green:
 
 ```swift
 let prepare = try gpu.compute(
@@ -71,7 +70,7 @@ let prepare = try gpu.compute(
 
 let triangles = try gpu.draw(
   IndirectTriangles.self,
-  bindings: .init(consumed: arguments)
+  vertices: 0
 )
 ```
 
@@ -118,7 +117,8 @@ The same `VGPUBuffer` and `slice(bytes:)` API can represent any of these packets
 `dispatch(indirect:)` consumes the 12-byte layout; the buffer view itself does not encode one
 specific command kind.
 
-Offsets must be multiples of four bytes. A slice may be larger than the packet, but the complete
+The effective absolute offset, including every parent view's base, must be a multiple of four bytes.
+A slice may be larger than the packet, but the complete
 layout required by the selected draw or dispatch must fit inside its bounded range.
 
 ## Handle validation errors
@@ -142,8 +142,8 @@ let pixels = try await output.read()
 XCTAssertEqual(pixels, expectedGreenPixels)
 ```
 
-For a diagnostic fixture, clear the target blue, initialize the active packet and signal so stale
-data renders red, and have compute replace them with a packet that renders green. Blue means the
+For a diagnostic fixture, clear the target blue, initialize the active packet so `firstVertex = 3`
+renders red, and have compute replace it with a packet whose `firstVertex = 0` renders green. Blue means the
 indirect draw did not execute, red means it consumed stale data, and green proves that the render
 submission consumed the compute-produced values. This readback is a test boundary, not part of the
 GPU-driven frame loop.

@@ -9,7 +9,7 @@ Indirect capability is an immutable creation-time buffer usage, separate from WG
 ```swift
 let arguments = try gpu.storage(
   UInt32.self,
-  count: 9,
+  count: 8,
   access: .readWrite,
   additionalUsage: [.indirect]
 )
@@ -37,8 +37,8 @@ let secondPacket = try arguments.buffer.slice(bytes: 16..<32)
 try pass.draw(draw, indirect: secondPacket)
 ```
 
-A slice preserves the same context, concrete generation, usage set, and logical extent as its
-source. An accepted consumer acquires the normal generation lease while encoding; creating a view
+A slice preserves the same context, concrete generation, and usage set as its source while deriving
+a narrower logical extent from the requested subrange. An accepted consumer acquires the normal generation lease while encoding; creating a view
 does not itself register in-flight work. Nested slices remain relative to their immediate receiver. Bounds are never inferred from a Metal
 allocation's physical length. This keeps imported subranges and runtime-sized storage views from
 silently exposing bytes outside their effective range.
@@ -49,8 +49,8 @@ of those consumers because one allocation may contain packets for several operat
 
 ## Validation and ordering
 
-The consuming draw or dispatch validates context identity, `.indirect` usage, four-byte alignment,
-integer overflow, and the complete required byte range synchronously. Missing usage, bad alignment,
+The consuming draw or dispatch validates context identity, `.indirect` usage, the effective absolute
+offset's four-byte alignment, integer overflow, and the complete required byte range synchronously. Missing usage, bad alignment,
 overflow, or an insufficient range throws `VGPU-INDIRECT-INVALID`; a resource from another context
 preserves the shared `VGPU-NATIVE-CONTEXT-MISMATCH` error. Either failure occurs before work
 registration, backend submission, or `onError` delivery.
@@ -79,13 +79,12 @@ backend-neutral semantic contract or Metal projection.
 
 ## DC1 falsifiable fixture
 
-DC1 uses one nine-`u32` allocation. Words `0...3` are the zero-count decoy
-`[0, 0, 0, 0]`. Words `4...7`, at bytes `16..<32`, are the real non-indexed draw packet; word `8`
-is a color signal read by the fragment program through the complete storage view. The target clears
+DC1 uses one eight-`u32` allocation. Words `0...3` are the zero-count decoy
+`[0, 0, 0, 0]`. Words `4...7`, at bytes `16..<32`, are the real non-indexed draw packet. The target clears
 blue, and the draw instance's direct vertex count is zero so ignoring the indirect overload is also
-observable. The vertex program contains two full-screen triangles. The initial tail
-`[3, 1, 3, 0, 0]` selects the second triangle and red; compute replaces it with
-`[3, 1, 0, 0, 1]`, selecting the first triangle and green. Passing the bounded
+observable. The vertex program contains two full-screen triangles and derives their colors from
+`vertex_index`. The initial packet `[3, 1, 3, 0]` selects the red triangle; compute replaces it with
+`[3, 1, 0, 0]`, selecting the green triangle. Passing the bounded
 `slice(bytes: 16..<32)` proves the non-zero offset path; accidentally consuming byte zero selects
 the decoy and leaves the target blue. The observable outcomes are therefore distinct:
 

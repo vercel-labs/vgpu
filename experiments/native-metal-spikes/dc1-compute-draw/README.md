@@ -1,9 +1,9 @@
 # DC1 compute-to-draw
 
-DC1 validates a GPU-only compute-to-render dependency through a non-indexed indirect draw. The
-canonical WGSL fixture contains two program views over one nine-`u32` allocation: compute writes the
-real draw packet at bytes `16..<32` and a signal at word 8, while render reads that signal through a
-separate read-only shader binding.
+This directory defines DC1, a GPU-only compute-to-render dependency through a non-indexed indirect draw. The
+canonical WGSL fixture contains a compute program and a render program over one eight-`u32`
+allocation. Compute writes the real draw packet at bytes `16..<32`; render has no resource binding
+and colors its two procedural triangles from `vertex_index`, making `firstVertex` observable.
 
 The public WebGPU oracle uses three fresh scenarios:
 
@@ -11,9 +11,11 @@ The public WebGPU oracle uses three fresh scenarios:
 - offset 16 consumes the initial real packet and renders red;
 - compute dispatch followed immediately by a frame drawing from offset 16 renders green.
 
-In the positive scenario there is no packet readback, settlement, or other `await` between the
-compute dispatch and render frame. The first await after those calls is the target readback. The
-oracle runs twice and requires byte-identical output.
+In the positive scenario the application makes no packet readback, settlement, or other `await`
+between the compute dispatch and render frame. The first await after those calls is the target
+readback. The oracle runs twice and requires byte-identical output. Its report records public call
+order, not internal queue instrumentation; the pending native recording backend owns the exact
+submission and wait trace.
 
 Run the currently executable layer with:
 

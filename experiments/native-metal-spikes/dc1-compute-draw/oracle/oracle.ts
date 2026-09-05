@@ -10,12 +10,11 @@ import { readFile } from "node:fs/promises";
 
 const WIDTH = 2;
 const HEIGHT = 2;
-const PACKET_BYTES = 9 * Uint32Array.BYTES_PER_ELEMENT;
+const PACKET_BYTES = 8 * Uint32Array.BYTES_PER_ELEMENT;
 const REAL_PACKET_OFFSET = 4 * Uint32Array.BYTES_PER_ELEMENT;
 const INITIAL_PACKET = Uint32Array.of(
   0, 0, 0, 0,
   3, 1, 3, 0,
-  0,
 );
 
 const BLUE = [0, 0, 255, 255] as const;
@@ -71,7 +70,7 @@ async function runScenario(
       shader,
       label: `dc1.${scenario}.consume`,
       entry: { vertex: "vertexMain", fragment: "fragmentMain" },
-      set: { consumed: packet },
+      vertices: 0,
     });
     const callsBeforeFirstAwait: string[] = [];
 
@@ -128,10 +127,9 @@ async function main(): Promise<void> {
     status: "passed",
     api: ["init", "storage", "compute", "draw", "frame", "target"],
     packet: {
-      words: 9,
+      words: 8,
       decoyByteRange: [0, 16],
       realByteRange: [16, 32],
-      signalWord: 8,
     },
     scenarios: { blue, red, green },
     positive: {

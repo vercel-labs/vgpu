@@ -466,7 +466,7 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    introducing another allocation owner. Draw and future dispatch consumers acquire the normal
    generation lease and
    validate their 16-, 20-, or 12-byte packets
-   synchronously. Invalid usage, alignment, or range reports `VGPU-INDIRECT-INVALID`; cross-context
+   synchronously. Invalid usage, absolute alignment, or range reports `VGPU-INDIRECT-INVALID`; cross-context
    use preserves `VGPU-NATIVE-CONTEXT-MISMATCH`. Compute and render remain two submissions ordered on
    one queue without CPU synchronization. This runtime state adds nothing to semantic or projection
    artifacts. DC1 is one direct gate, with no DC1a. See
