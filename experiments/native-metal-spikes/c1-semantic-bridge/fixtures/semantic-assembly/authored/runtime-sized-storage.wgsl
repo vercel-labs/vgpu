@@ -9,7 +9,10 @@ struct Values {
 }
 
 @group(0) @binding(0) var<storage, read> values: Values;
+@group(0) @binding(1) var<storage, read_write> output: array<u32, 2>;
 
 @compute @workgroup_size(1) fn compute_main() {
-  _ = values.prefix + values.particles[0].mass + arrayLength(&values.particles);
+  let count = arrayLength(&values.particles);
+  output[0] = count;
+  output[1] = values.particles[count - 1u].id;
 }

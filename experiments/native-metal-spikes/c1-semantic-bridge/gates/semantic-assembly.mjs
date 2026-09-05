@@ -93,10 +93,19 @@ const overrideSwiftProbePath = join(
   "gates",
   "override-metal.swift"
 );
+const runtimeSizedStorageSwiftProbePath = join(
+  spikeDirectory,
+  "gates",
+  "runtime-sized-storage-metal.swift"
+);
 const generatedPath = "Intermediate/semantic-assembly.resolved.wgsl";
 const metalTarget = "air64-apple-macos14.0";
 const overrideExpectedReadback = Object.freeze([
   159, 96, 32, 96, 223, 96, 32, 96, 159, 159, 32, 96, 223, 159, 32, 96,
+]);
+const runtimeSizedStorageExpectedReadbacks = Object.freeze([
+  Object.freeze([2, 202]),
+  Object.freeze([4, 404]),
 ]);
 const expectedSnapshots = Object.freeze({
   effect: Object.freeze({
@@ -167,25 +176,31 @@ const expectedSnapshots = Object.freeze({
   }),
   runtimeSizedStorage: Object.freeze({
     programFingerprint:
-      "637cf1e5bf1c24bc297098038516ab22f53375f5bb6643f55932edccda04eeb5",
+      "a20b33fe12e4bf7f4753d4eb70a4c9af04b2bb6d60f106df7cb7387ee9c04a31",
     resolvedSourceSha256:
-      "5bb23714199201ad811c66e0d5df941fe69fcc33e44db6f63aeba61a192e82e3",
+      "2ae5a97bb1c71f797fa8e9a0ce88c49aa9913d39a20faf71884d5832bbecb8f5",
     semanticRequestSha256:
-      "dabc80a7fdf36e3ed0f8cb182f8b6d81567eeaac75989b9967ab9a4a1bd4e526",
+      "6ef7731857574d50a98aabb2e9a680273d91f843c88d4dd738c938958f9cabce",
     nativeResponseSha256:
-      "b750ce574d2418d0f2ab6c1d1672c721633ab3f97c4fbcf38f88888e58d1325f",
+      "348cf82f7970bf525f0d47ec0543c9f82051de7e231e1932dd6c071fc25e64f3",
     metalProjectionSha256:
-      "0cbc8ea70617babb93b866ffcf95cb57d655194b657ad0250988352a60d86f47",
+      "3def553b0be6d871a72bf7f33c453f19a2267aa0db442eb9aefabb573387541b",
     runtimeLayoutSha256:
-      "7cdac4742ab4bc881f6b3061edeb64a87a897eb159f6aece0033e1189d2e30da",
+      "c2b998b55a8a35ee6e0a25dca65b9943f47cbe0adf263f1377bacd6a7440e6eb",
+    runtimeManifestSha256:
+      "ef98988b19e22cb4b0d89d451d4bb6c646d107499e1c772777212cb8e06b342f",
+    runtimeProbeSha256:
+      "be8feb42b784831567855375a056acc939a2de7270865fa2dc14e84695367bab",
+    runtimeReadbackSha256:
+      "0971f2afd18cee2e371c8b16f314c8bb321bdec884fb2805dda820b3d7a84221",
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "c87ae7e5e375d5cf25ca1aeb78cbb7a947f8a53b52e8a89c7d3514b17a96043b",
+          "7a34ce5693febbbcb210790d6e8606ee9422528ce5a68b6a35e28ba1ab07bdbd",
         responseSha256:
-          "98b6796c1cd01b71e02855bc300c3fd69ee85cd2ad8b66918cd7bb7324b4c621",
+          "28503b4631793fd0d1f7a204e3a4d4a7302ce088a616ca1624923a499bd99e7a",
         mslSha256:
-          "49fc6ee1a7e29b66e968291e516ba5c228766340ed24aadf01ed77963df4d960",
+          "829be5cb2e7f79fa16ec7f924581a1bb89746395a085d6609e263c79ca0ec688",
       }),
     }),
   }),
@@ -808,6 +823,10 @@ const native = options.worker
 if (options.requireMetalRuntime) {
   for (const [label, status] of [
     ["resource", native.resourceTranslation.metalRuntime.status],
+    [
+      "runtime-sized storage",
+      native.runtimeSizedStorageTranslation.metalRuntime.status,
+    ],
     ["override", native.overrideTranslation.metalRuntime.status],
   ]) {
     if (status !== "passed") {
@@ -819,6 +838,7 @@ if (
   options.worker &&
   [
     native.resourceTranslation.metalRuntime.status,
+    native.runtimeSizedStorageTranslation.metalRuntime.status,
     native.overrideTranslation.metalRuntime.status,
   ].some((status) => status !== "passed")
 ) {
@@ -1194,7 +1214,7 @@ function assertRuntimeSizedStorageAssembly(fixture, program) {
   assert.deepEqual(program.sources, [
     "semantic-assembly-runtime-sized-storage-wgsl",
   ]);
-  assert.deepEqual(program.entryPoints.compute.bindings, ["g0b0"]);
+  assert.deepEqual(program.entryPoints.compute.bindings, ["g0b0", "g0b1"]);
   assert.deepEqual(program.entryPoints.compute.workgroupSize, {
     x: 1,
     y: 1,
@@ -1202,8 +1222,8 @@ function assertRuntimeSizedStorageAssembly(fixture, program) {
   });
   assert.deepEqual(program.entryPoints.compute.source, {
     input: "semantic-assembly-runtime-sized-storage-wgsl",
-    start: { line: 13, column: 1 },
-    end: { line: 15, column: 2 },
+    start: { line: 14, column: 1 },
+    end: { line: 18, column: 2 },
   });
   assert.deepEqual(
     program.bindings.map(
@@ -1221,6 +1241,13 @@ function assertRuntimeSizedStorageAssembly(fixture, program) {
         addressSpace: "storage",
         access: "read",
         minimumBindingSize: 16,
+        visibility: ["compute"],
+      },
+      {
+        id: "g0b1",
+        addressSpace: "storage",
+        access: "read_write",
+        minimumBindingSize: 8,
         visibility: ["compute"],
       },
     ]
@@ -1262,6 +1289,10 @@ function assertRuntimeSizedStorageAssembly(fixture, program) {
     {
       semanticBinding: "g0b0",
       slots: [directSlot("compute", "buffer", 0)],
+    },
+    {
+      semanticBinding: "g0b1",
+      slots: [directSlot("compute", "buffer", 1)],
     },
   ]);
 }
@@ -3883,6 +3914,7 @@ async function assertNativeRuntimeSizedStorageTranslation(
     { stage: "compute", immediateDataByteOffset: 4 },
   ]);
   assert.match(result.msl, /values \[\[buffer\(0\)\]\]/u);
+  assert.match(result.msl, /output \[\[buffer\(1\)\]\]/u);
   assert.match(result.msl, /tint_immediate_data \[\[buffer\(30\)\]\]/u);
   assert.match(result.msl, /tint_storage_buffer_sizes\[0u\] - 4u\) \/ 12u/u);
 
@@ -3906,6 +3938,10 @@ async function assertNativeRuntimeSizedStorageTranslation(
       {
         semanticBinding: "g0b0",
         slots: [directSlot("compute", "buffer", 0)],
+      },
+      {
+        semanticBinding: "g0b1",
+        slots: [directSlot("compute", "buffer", 1)],
       },
     ],
     internalBindings: [
@@ -3941,6 +3977,17 @@ async function assertNativeRuntimeSizedStorageTranslation(
         },
         slots: [directSlot("compute", "buffer", 0)],
       },
+      {
+        semanticBinding: "g0b1",
+        descriptor: {
+          kind: "buffer",
+          addressSpace: "storage",
+          access: "read_write",
+          minimumBindingSize: 8,
+          runtimeSized: false,
+        },
+        slots: [directSlot("compute", "buffer", 1)],
+      },
     ],
     samplingPairs: [],
   });
@@ -3948,8 +3995,9 @@ async function assertNativeRuntimeSizedStorageTranslation(
     sha256(JSON.stringify(runtimeLayout)),
     expectedSnapshots.runtimeSizedStorage.runtimeLayoutSha256
   );
-  const offlineMetal = compileRuntimeSizedStorageMetal({
+  const metal = runRuntimeSizedStorageMetal({
     projection,
+    request,
     settings,
   });
   return {
@@ -3961,38 +4009,33 @@ async function assertNativeRuntimeSizedStorageTranslation(
       expectedSnapshots.runtimeSizedStorage.metalProjectionSha256,
     runtimeLayoutSha256:
       expectedSnapshots.runtimeSizedStorage.runtimeLayoutSha256,
-    offlineMetal,
-    metalRuntime: {
-      status: "deferred",
-      reason: "internal-raw-runtime-binder-not-yet-connected",
-    },
+    offlineMetal: metal.offlineMetal,
+    metalRuntime: metal.metalRuntime,
   };
 }
 
-function compileRuntimeSizedStorageMetal({ projection, settings }) {
+function runRuntimeSizedStorageMetal({ projection, request, settings }) {
   const [source] = metalSourcesForProgramProjection(projection);
   assert.equal(source.stage, "compute");
+  const manifest = runtimeSizedStorageRuntimeManifest({ projection, request });
+  const manifestBytes = JSON.stringify(manifest);
+  assert.equal(
+    sha256(manifestBytes),
+    expectedSnapshots.runtimeSizedStorage.runtimeManifestSha256
+  );
+  assert.equal(
+    sha256(readFileSync(runtimeSizedStorageSwiftProbePath, "utf8")),
+    expectedSnapshots.runtimeSizedStorage.runtimeProbeSha256
+  );
   if (process.platform !== "darwin") {
-    if (settings.requireOfflineMetal) {
-      fail(
-        "runtime-sized storage offline Metal is required: host-is-not-macos"
-      );
-    }
-    return { status: "skipped", reason: "host-is-not-macos" };
+    return skippedRuntimeSizedStorageMetal(settings, "host-is-not-macos");
   }
   const missing = ["metal", "metallib"].filter((tool) => !xcrunToolWorks(tool));
   if (missing.length > 0) {
-    if (settings.requireOfflineMetal) {
-      fail(
-        `runtime-sized storage offline Metal is required: missing-xcrun-tools:${missing.join(
-          ","
-        )}`
-      );
-    }
-    return {
-      status: "skipped",
-      reason: `missing-xcrun-tools:${missing.join(",")}`,
-    };
+    return skippedRuntimeSizedStorageMetal(
+      settings,
+      `missing-xcrun-tools:${missing.join(",")}`
+    );
   }
 
   const scratch = mkdtempSync(join(tmpdir(), "vgpu-runtime-storage-metal-"));
@@ -4024,15 +4067,351 @@ function compileRuntimeSizedStorageMetal({ projection, settings }) {
       libraryPath,
     ]);
     assertNonEmptyFile(libraryPath, "runtime-sized storage metallib");
-    return {
+    const offlineMetal = {
       status: "passed",
       shaders: 1,
       target: metalTarget,
       libraryBytes: lstatSync(libraryPath).size,
     };
+    const manifestPath = join(
+      scratch,
+      "runtime-sized-storage-runtime-manifest.json"
+    );
+    writeFileSync(manifestPath, manifestBytes, "utf8");
+    const metalRuntime = settings.skipMetalRuntime
+      ? { status: "skipped", reason: "requested-by-flag" }
+      : runRuntimeSizedStorageMetalRuntime({
+          libraryPath,
+          manifestPath,
+          manifestBytes,
+          scratch,
+          settings,
+        });
+    return {
+      offlineMetal,
+      metalRuntime,
+    };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+function skippedRuntimeSizedStorageMetal(settings, reason) {
+  if (settings.requireOfflineMetal) {
+    fail(`runtime-sized storage offline Metal is required: ${reason}`);
+  }
+  return {
+    offlineMetal: { status: "skipped", reason },
+    metalRuntime: { status: "skipped", reason: `offline-metal:${reason}` },
+  };
+}
+
+function runtimeSizedStorageRuntimeManifest({ projection, request }) {
+  assert(isMetalProgramProjection(projection));
+  const runtimeLayout =
+    runtimeResourceLayoutForMetalProgramProjection(projection);
+  const sources = metalSourcesForProgramProjection(projection);
+  assert(isRuntimeResourceLayout(runtimeLayout));
+  assert.equal(request.entryPoint.stage, "compute");
+  const manifest = {
+    schemaVersion: 1,
+    immediateDataLayoutModel: request.metal.immediateDataLayoutModel,
+    storageBufferSizeModel: request.metal.storageBufferSizes.model,
+    semanticProgram: runtimeLayout.semanticProgram,
+    kind: runtimeLayout.kind,
+    entryPoints: sources.map(({ stage, entryPoint }) => ({
+      stage,
+      metal: entryPoint,
+    })),
+    bindings: runtimeLayout.bindings,
+    samplingPairs: runtimeLayout.samplingPairs,
+    internalBindings: projection.internalBindings,
+    storageBufferSizeRegions: projection.storageBufferSizeRegions,
+    resolvedWorkgroupSize: projection.resolvedWorkgroupSize,
+  };
+  assert.deepEqual(
+    manifest.entryPoints.map(({ stage }) => stage),
+    ["compute"]
+  );
+  assert.deepEqual(
+    manifest.bindings.map(({ semanticBinding }) => semanticBinding),
+    ["g0b0", "g0b1"]
+  );
+  assert.deepEqual(
+    manifest.bindings.map(({ descriptor }) => descriptor.runtimeSized),
+    [true, false]
+  );
+  const serialized = JSON.stringify(manifest);
+  for (const forbidden of [
+    '"msl"',
+    '"allocation"',
+    '"request"',
+    '"response"',
+    '"rangeBytes"',
+    '"wordCount"',
+    '"words"',
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+  return manifest;
+}
+
+function runRuntimeSizedStorageMetalRuntime({
+  libraryPath,
+  manifestPath,
+  manifestBytes,
+  scratch,
+  settings,
+}) {
+  if (!xcrunToolWorks("swiftc")) {
+    if (settings.requireMetalRuntime) {
+      fail("runtime-sized storage Metal runtime requires xcrun swiftc");
+    }
+    return { status: "skipped", reason: "missing-xcrun-tool:swiftc" };
+  }
+  const architecture = { arm64: "arm64", x64: "x86_64" }[process.arch];
+  if (!architecture) {
+    if (settings.requireMetalRuntime) {
+      fail(
+        `unsupported runtime-sized storage Metal architecture ${process.arch}`
+      );
+    }
+    return {
+      status: "skipped",
+      reason: `unsupported-architecture:${process.arch}`,
+    };
+  }
+
+  const executable = join(scratch, "runtime-sized-storage-metal-probe");
+  checkedCommand(
+    "Swift runtime-sized storage Metal probe compilation",
+    "xcrun",
+    [
+      "swiftc",
+      "-O",
+      "-target",
+      `${architecture}-apple-macosx14.0`,
+      "-framework",
+      "Foundation",
+      "-framework",
+      "Metal",
+      runtimeSizedStorageSwiftProbePath,
+      "-o",
+      executable,
+    ]
+  );
+  const manifestFailures = assertRuntimeSizedStorageManifestFailures({
+    executable,
+    libraryPath,
+    manifestBytes,
+    scratch,
+  });
+  const args = [libraryPath, manifestPath];
+  const attempts = [
+    runCommand(executable, args, { timeout: 120_000 }),
+    runCommand(executable, args, { timeout: 120_000 }),
+  ];
+  if (
+    attempts.every(
+      (attempt) =>
+        attempt.status !== 0 &&
+        `${attempt.stdout}${attempt.stderr}`.includes(
+          "No default Metal device is available"
+        )
+    )
+  ) {
+    if (settings.requireMetalRuntime) {
+      fail("runtime-sized storage Metal runtime found no default device");
+    }
+    return { status: "skipped", reason: "no-metal-device" };
+  }
+  for (const attempt of attempts) {
+    if (
+      attempt.error ||
+      attempt.signal ||
+      attempt.status !== 0 ||
+      attempt.stderr !== ""
+    ) {
+      commandFailure("runtime-sized storage Metal runtime probe", attempt);
+    }
+  }
+  assert.equal(
+    attempts[0].stdout,
+    attempts[1].stdout,
+    "runtime-sized storage Metal runtime output is not deterministic"
+  );
+  const report = JSON.parse(attempts[0].stdout);
+  assert.deepEqual(Object.keys(report).sort(), [
+    "device",
+    "effectiveRanges",
+    "immediateUploads",
+    "negativePreparationChecks",
+    "readbacks",
+    "reflection",
+    "sameBackingBuffer",
+  ]);
+  assert.deepEqual(report.effectiveRanges, [28, 52]);
+  assert.deepEqual(report.immediateUploads, [
+    "000000001c000000",
+    "0000000034000000",
+  ]);
+  assert.deepEqual(report.negativePreparationChecks, [
+    "below-minimum",
+    "out-of-bounds",
+    "uint32-overflow",
+    "storage-alignment",
+  ]);
+  assert.deepEqual(report.readbacks, runtimeSizedStorageExpectedReadbacks);
+  assert.equal(report.sameBackingBuffer, true);
+  assert.equal(typeof report.device, "string");
+  assert(report.device.length > 0);
+  const manifestSha256 = sha256(manifestBytes);
+  const probeSha256 = sha256(
+    readFileSync(runtimeSizedStorageSwiftProbePath, "utf8")
+  );
+  const readbackSha256 = sha256(JSON.stringify(report.readbacks));
+  assert.equal(
+    manifestSha256,
+    expectedSnapshots.runtimeSizedStorage.runtimeManifestSha256
+  );
+  assert.equal(
+    probeSha256,
+    expectedSnapshots.runtimeSizedStorage.runtimeProbeSha256
+  );
+  assert.equal(
+    readbackSha256,
+    expectedSnapshots.runtimeSizedStorage.runtimeReadbackSha256
+  );
+  return {
+    status: "passed",
+    deterministicProcesses: attempts.length,
+    dispatchesPerProcess: report.readbacks.length,
+    device: report.device,
+    effectiveRanges: report.effectiveRanges,
+    manifestFailures,
+    preparationFailures: report.negativePreparationChecks.length,
+    reflection: report.reflection,
+    manifestSha256,
+    probeSha256,
+    readbacks: report.readbacks,
+    readbackSha256,
+  };
+}
+
+function assertRuntimeSizedStorageManifestFailures({
+  executable,
+  libraryPath,
+  manifestBytes,
+  scratch,
+}) {
+  const mutations = [
+    {
+      label: "extra-root-key",
+      expected:
+        "runtime-sized storage manifest has unexpected or missing properties",
+      mutate(manifest) {
+        manifest.unexpected = true;
+      },
+    },
+    {
+      label: "caller-authored-size-words",
+      expected:
+        "runtime-sized storage manifest has unexpected or missing properties",
+      mutate(manifest) {
+        manifest.words = [28];
+      },
+    },
+    {
+      label: "missing-layout-model",
+      expected:
+        "runtime-sized storage manifest has unexpected or missing properties",
+      mutate(manifest) {
+        delete manifest.immediateDataLayoutModel;
+      },
+    },
+    {
+      label: "missing-size-model",
+      expected:
+        "runtime-sized storage manifest has unexpected or missing properties",
+      mutate(manifest) {
+        delete manifest.storageBufferSizeModel;
+      },
+    },
+    {
+      label: "unknown-layout-model",
+      expected: "unsupported immediate-data layout model",
+      mutate(manifest) {
+        manifest.immediateDataLayoutModel =
+          "vgpu-metal-immediate-data-layout-v2";
+      },
+    },
+    {
+      label: "unknown-size-model",
+      expected: "unsupported storage-buffer-size model",
+      mutate(manifest) {
+        manifest.storageBufferSizeModel =
+          "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2";
+      },
+    },
+    {
+      label: "region-without-immediate-slot",
+      expected: "storage-buffer-size region requires one immediate-data slot",
+      mutate(manifest) {
+        manifest.internalBindings = [];
+      },
+    },
+    {
+      label: "wrong-region-offset",
+      expected:
+        "compute immediate-data layout v1 requires its size region at byte 4",
+      mutate(manifest) {
+        manifest.storageBufferSizeRegions[0].immediateDataByteOffset = 8;
+      },
+    },
+    {
+      label: "internal-external-slot-collision",
+      expected: "internal and external Metal buffer slots collide",
+      mutate(manifest) {
+        manifest.internalBindings[0].slots[0].index = 0;
+      },
+    },
+    {
+      label: "missing-effective-region",
+      expected: "runtime-sized storage manifest differs from the fixed fixture",
+      mutate(manifest) {
+        manifest.storageBufferSizeRegions = [];
+      },
+    },
+    {
+      label: "wrong-effective-slot",
+      expected: "runtime-sized storage manifest differs from the fixed fixture",
+      mutate(manifest) {
+        manifest.internalBindings[0].slots[0].index = 29;
+      },
+    },
+  ];
+  for (const { label, expected, mutate } of mutations) {
+    const manifest = JSON.parse(manifestBytes);
+    mutate(manifest);
+    const path = join(
+      scratch,
+      `runtime-sized-storage-runtime-manifest-${label}.json`
+    );
+    writeFileSync(path, JSON.stringify(manifest), "utf8");
+    const attempt = runCommand(executable, [libraryPath, path], {
+      timeout: 120_000,
+    });
+    assert.equal(attempt.error, undefined);
+    assert(
+      attempt.signal || attempt.status !== 0,
+      `${label} runtime-sized storage manifest escaped its negative gate`
+    );
+    assert(
+      `${attempt.stdout}${attempt.stderr}`.includes(expected),
+      `${label} runtime-sized storage manifest omitted its expected diagnostic`
+    );
+  }
+  return mutations.length;
 }
 
 function invokeTranslation(workerPath, request) {
