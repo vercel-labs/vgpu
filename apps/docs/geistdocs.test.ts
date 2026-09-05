@@ -94,6 +94,7 @@ describe("agent readiness metadata", () => {
       "bindings",
       "resources",
       "rendering",
+      "gpu-driven-drawing",
       "views",
       "lifecycle",
       "artifacts",
@@ -123,6 +124,14 @@ describe("agent readiness metadata", () => {
     expect(rendering).toContain("do not expose an Apple-silicon mode");
     expect(rendering).toContain("Await each actor-owned instance in order");
     expect(rendering).not.toContain("The first native API is isolated to `@MainActor`");
+
+    const gpuDrivenDrawing = docsContent("native/macos/gpu-driven-drawing.md");
+    expect(gpuDrivenDrawing).toContain("additionalUsage: [.indirect]");
+    expect(gpuDrivenDrawing).toContain("slice(bytes: 16..<32)");
+    expect(gpuDrivenDrawing).toContain("Do not await the compute submission");
+    expect(gpuDrivenDrawing).toContain("`VGPU-INDIRECT-INVALID`");
+    expect(gpuDrivenDrawing).toContain("`VGPUError.contextMismatch`");
+    expect(gpuDrivenDrawing).not.toContain("VGPUIndirectArguments");
 
     const views = docsContent("native/macos/views.md");
     expect(views).toContain("`@MainActor` is a contract of the view adapter");

@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: cbb1f698843a63153e0d229d021658423b00c594
-generatedAt: 2026-09-05T16:55:52.896Z
+gitSha: 59da1e1674701d202778f4c77a6e0a052647834b
+generatedAt: 2026-09-05T17:20:41.823Z
 ---
 
 # vgpu
@@ -61,6 +61,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Bindings and generated types** — vgpu native build turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles.  `references/guides/native-macos-bindings.docs.md`
 - **Build and verify** — Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison.  `references/guides/native-macos-build.docs.md`
 - **Compare WebGPU and Metal** — native compare renders an explicit fixture through vgpu/node and the generated Metal package.  `references/guides/native-macos-compare.docs.md`
+- **GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
 - **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
 - **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
 - **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`

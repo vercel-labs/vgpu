@@ -59,6 +59,10 @@ let snapshot: [Particle] = try await particles.read(range: 0..<512)
 
 Typed resource writes use the same strict `wgsl-host-shareable-v1` packer as generated bindings. It writes little-endian scalars and column-major matrices at reflected strides, packs each write into a zero-initialized temporary range so every padding byte is deterministic, and converts `Float` to WGSL `f16` with IEEE 754 round-to-nearest, ties-to-even. NaN payload bits are not a cross-runtime value contract. Shape, integer-range, or extent errors report the complete field and array-index path before changing resource contents.
 
+Storage can also expose a bounded buffer view for command, vertex, or index data when those roles
+are declared at creation. See [GPU-driven drawing](/native/macos/gpu-driven-drawing) for
+`additionalUsage: [.indirect]` and byte-relative slices.
+
 ## Alternate storage between compute steps
 
 Iterative compute usually reads one storage allocation while writing the next. The proposed alpha contract creates both allocations together and keeps their current roles explicit:
@@ -267,5 +271,6 @@ When host Metal code and vgpu use the resource repeatedly, prefer one shared com
 ## Next steps
 
 - [Compose effects, geometry, and render passes](/native/macos/rendering)
+- [Generate draw arguments with compute](/native/macos/gpu-driven-drawing)
 - [Understand ownership, errors, and cleanup](/native/macos/lifecycle)
 - [Integrate a renderer with SwiftUI or MetalKit](/native/macos/views)

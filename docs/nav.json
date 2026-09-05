@@ -230,6 +230,7 @@
             { "title": "Bindings and generated types", "href": "/native/macos/bindings" },
             { "title": "Resources and Metal interop", "href": "/native/macos/resources" },
             { "title": "Rendering primitives", "href": "/native/macos/rendering" },
+            { "title": "GPU-driven drawing", "href": "/native/macos/gpu-driven-drawing" },
             { "title": "SwiftUI and MetalKit", "href": "/native/macos/views" },
             { "title": "Ownership and lifecycle", "href": "/native/macos/lifecycle" },
             { "title": "Generated artifacts", "href": "/native/macos/artifacts" },
