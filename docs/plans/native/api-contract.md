@@ -249,9 +249,11 @@ post-generation package remains relocatable and builds with Node.js, Tint, and A
 poisoned. Its `x86_64` build is compile-only evidence.
 
 This closes the C1-to-package-to-runtime join for one fixture, not C3 or a production
-resolver/runtime contract. The full distributable slice, compare runner, supported toolchain and
-physical-hardware matrices, newest-generator to oldest-runtime consumption, general resource
-integration, and C4's two-entry compute, aliasing, ping-pong, and WebGPU-oracle path remain open.
+resolver/runtime contract. A separate C4 spike now carries two generated compute programs in one
+artifact, matches its ping-pong storage results and writable-alias rejection against the public
+WebGPU oracle, and keeps generated code on the `VGPUABI` boundary. The full distributable slice,
+compare runner, supported toolchain and physical-hardware matrices, newest-generator to
+oldest-runtime consumption, and production resource integration remain open.
 
 The Metal projection records:
 

@@ -390,13 +390,21 @@ multiple animation frames in flight rather than awaiting each token inside the f
 
 ### 4. Compute milestone
 
-Run C4 and DC1. Initially preserve the JavaScript ordering boundary: a one-shot compute dispatch
-commits its own command buffer, and a following render frame is ordered by the queue. Do not add a
-Swift-only `frame.compute` until the same shared semantic is designed for JavaScript.
+The isolated C4 gate now passes the same two-entry storage simulation through the public
+`vgpu/node` API and the connected Swift-to-Metal prototype. It proves two ordered one-shot
+dispatches without a CPU wait, explicit ping-pong swaps and rebinding, read/read aliasing,
+synchronous writable-alias rejection, and byte-exact final state and audits. Its native run is on
+the available Apple-silicon machine; `x86_64` remains compile-only. See
+[Compute storage](./compute/storage.md) for the exact boundary and evidence.
+
+Carry that fixture into the production runtime, then run DC1. Preserve the JavaScript ordering
+boundary: a one-shot compute dispatch commits its own command buffer, and a following render frame
+is ordered by the queue. Do not add a Swift-only `frame.compute` until the same shared semantic is
+designed for JavaScript.
 
 ### 5. Advanced parity
 
-Add storage textures, ping-pong helpers, indirect commands, MRT, MSAA, bundles, timers, and
+Add storage textures, indirect commands, MRT, MSAA, bundles, timers, and
 visibility only with dedicated parity and lifecycle fixtures. Metal implementation details do not
 need a one-to-one WebGPU type when the observable vgpu contract can remain the same.
 

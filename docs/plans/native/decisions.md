@@ -85,6 +85,18 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   top-origin RGBA8 before applying `maxChannelDelta` and `maxDifferentPixels`.
 - One generated package depends on the shared, compatible `VGPUABI` product; it never embeds a
   private runtime copy or depends on a rendering, compute, UI, or backend executor.
+- Every selected shader entry point generates its own nominal Swift program type. Multiple program
+  types may share one authenticated descriptor and `.metallib`; the runtime selects each record by
+  both generated `programID` and authored `entryPointID`, never through a caller-supplied runtime
+  entry string.
+- `VGPUPingPongStorage<Element>` belongs to the Resources capability and owns two ordinary writable
+  storage allocations. Initial values seed only `read`; `write` starts zeroed. `swap()` exchanges
+  roles without copying, waiting, or changing any program binding, so rebinding remains explicit.
+- Storage aliasing is validated over the complete dispatch snapshot, after individual `set` calls
+  and before work registration or backend submission. Repeated reads of one concrete allocation
+  generation are valid. Any repeated generation with a writable occurrence fails synchronously as
+  `VGPU-R1-STORAGE-ALIASING`, even for disjoint views. The static error member is supplied by
+  `VGPUCompute`, not Core.
 - The native manifest is a generic `vgpu-native-artifact/v1` envelope containing one
   `vgpu-native-semantic/v1` object and one selected `vgpu-native-metal-projection/v1` object. The
   root `files` entries contain only path, size, and hash. Metal toolchains, emitted names, slots,
@@ -383,8 +395,8 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    both SHA-256 digests, exact descriptor shape, ABI/model and semantic/projection relationships,
    and exact Metal reflection before two native processes reproduce `[2, 202]` and `[4, 404]`. Six
    negative canaries fail closed, and the `x86_64` gate is compile-only. This closes one connected
-   packaging seam, not C3 or the production package/runtime contract; C4 must still exercise the
-   two-entry compute and aliasing contract. The resource-free full-screen path consumes the same
+   packaging seam, not C3 or the production package/runtime contract. The separate C4 fixture now
+   exercises the two-entry compute and aliasing contract described below. The resource-free full-screen path consumes the same
    nominal projection boundary for offline compilation and live function lookup. The Naga
    differential runner also compiles and links all 224
    of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
@@ -432,19 +444,35 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    consumption pass. One product decision also remains open: always emit the real compare runner,
    or emit it only when compare testing is enabled.
 
-3. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
+3. The isolated C4 compute-storage gate passed against one canonical WGSL module. The public
+   `vgpu/node` oracle and connected Swift/Metal path both ran `advance` then `mix` without a CPU wait
+   and produced final state `[6, 14, 22, 30, 38, 46, 54, 62]`, with audits `[101, 2, 1, 2]` and
+   `[202, 2, 2, 1]`. The fixture proves one Swift type per selected entry, two programs sharing one
+   authenticated artifact, program-local ordinals, explicit ping-pong roles and rebinding,
+   read/read aliasing, and synchronous writable-alias rejection before work registration or Metal
+   submission. The generated module still depends only on `VGPUABI`; the clean consumer selects
+   `AppShaders` plus `VGPUMetalCompute`. Two native processes and the WebGPU oracle were
+   deterministic, while descriptor/library/model/order mutations failed closed. See
+   [Compute storage](./compute/storage.md) for the contract and hashes.
+
+   This validates the API and connected spike boundary, not the production runtime or artifact
+   format. The Apple-silicon run does not establish Intel or AMD execution; its `x86_64` result is
+   compile-only. Production C4 remains open until the same gate runs through the distributable
+   implementation and declared toolchain/hardware matrix.
+
+4. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
    supported Xcode versions before the patch floor is published.
-4. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
+5. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.
-5. The Swift representation for sparse color attachments. Indexed records make the semantic slot
+6. The Swift representation for sparse color attachments. Indexed records make the semantic slot
    explicit and remain extensible; a nullable positional array resembles WebGPU more closely. Both
    preserve holes correctly, so this is a public API choice rather than a compiler question.
-6. The behavior when a shader writes a color location with no attachment. Metal silently discards
+7. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
-7. The public representation of structured error details and authored-source paths: typed details
+8. The public representation of structured error details and authored-source paths: typed details
    per error case versus an extensible payload, and structured path components versus one rendered
    diagnostic path. The isolated lifecycle kernel proves deterministic mapping for representative
    codes and messages while keeping backend metadata package-only; it does not make message text or

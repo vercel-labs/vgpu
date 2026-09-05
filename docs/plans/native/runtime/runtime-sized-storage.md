@@ -228,10 +228,10 @@ the context access and control lanes, in-flight generation retention, synchronou
 deferred error delivery, and concurrent disposal. Its connected Metal gate consumes C1's
 authenticated scratch output and reproduces both effective ranges and readbacks.
 
-That closes the isolated generated-binding, compute, and lifecycle integration question; it does
-not turn either fixture into production code. C3c must still package real C1 output into a
-relocatable generated SwiftPM artifact and load it through the production runtime without the test
-catalog or caller-provided artifact URLs. C4 must then cover two compute entry points, aliasing,
-ping-pong resources, and its WebGPU oracle. Production readback queue ordering, complete error
-mapping and nested diagnostic paths also remain implementation work. The x86_64 result is a
-cross-build, not an Intel or AMD runtime claim.
+That closed the isolated generated-binding, compute, and lifecycle integration question; it did not
+turn the fixture into production code. C3c subsequently packaged real C1 output into a relocatable
+generated SwiftPM artifact without the test catalog or caller-provided artifact URLs. The isolated
+C4 gate now extends that seam to two compute entry points, ping-pong resources, dispatch-time
+aliasing, and a public WebGPU oracle. Production integration, complete error mapping, nested
+diagnostic paths, and the declared hardware matrix remain implementation work. The x86_64 result is
+a cross-build, not an Intel or AMD runtime claim.

@@ -56,6 +56,8 @@ WGSL modules
   compiler validation boundary, and the minimal Metal runtime projection.
 - [Runtime-sized storage](./runtime/runtime-sized-storage.md) defines the typed Swift resource for
   a fixed structure prefix followed by a runtime-sized array.
+- [Compute storage](./compute/storage.md) records the two-entry C4 contract, WebGPU oracle, native
+  Metal evidence, ping-pong roles, and dispatch-time aliasing rule.
 
 ## Compiler contracts
 
