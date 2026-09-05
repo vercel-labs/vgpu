@@ -15,17 +15,18 @@ Four clean Release builds passed: A and B for `arm64`, then A and B for `x86_64`
 builds were byte-identical within each architecture. Combining each pair with `lipo` also produced
 byte-identical universal executables.
 
-The accepted baseline includes the exact shader-interface handshake, authenticated entry inventory,
-and semantic extraction for fixed-size resources, runtime-sized storage graphs, and exact static
-overrides. It passed the ordinary publication gate after an independently reviewed candidate
-rebaseline. Candidate generation remains a separate non-publishing mode described below;
-measurements do not become accepted provenance by themselves.
+The accepted baseline includes the exact shader-interface handshake, the versioned Metal
+immediate-data layout, authenticated entry inventory, and semantic extraction for fixed-size
+resources, runtime-sized storage graphs, and exact static overrides. It passed the ordinary
+publication gate after an independently reviewed candidate rebaseline. Candidate generation
+remains a separate non-publishing mode described below; measurements do not become accepted
+provenance by themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  6,105,504 | `37f6c13cd657c70fa0d45b517002621b499a6a3fd3d978e6ce543b63ddfcbf44` |
-| x86_64    |  7,203,664 | `cd83dd186717fdbf5b9190c27cc9b5b28197abb2513ba9baff1ac64b6b89d51d` |
-| universal | 13,314,464 | `106de51530c3c54cf5d73aa521307622d25dd43581a829b9a8f5ac3fd691369a` |
+| arm64     |  6,105,504 | `140be4d7a517a5de1d9dcaa188d7a2c71975de5d3fa354e58375ec31af191e7b` |
+| x86_64    |  7,203,664 | `066a37e056bca72dd75697fdf36e5a3053bf7a055f8f2af6600d17efc907d2df` |
+| universal | 13,314,464 | `448af648d70941a278d627809c9ab65b8ce52e8cb09c9c9fca13d592978cc8eb` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
 against the previously verified monolithic release archive. The locked request closure contains
