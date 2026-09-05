@@ -67,9 +67,12 @@ public enum Values: VGPURuntimeArrayLayout {
 }
 ```
 
-`Values` is not instantiated. Its generated conformance privately supplies the reflected prefix
-packer, element packer, tail offset, element stride, binding minimum, and diagnostic names. Neither
-the conformance nor the runtime derives layout from Swift `MemoryLayout`.
+`Values` is not instantiated. Its generated conformance supplies ABI-reserved, underscored public
+witnesses for the reflected prefix packer, element packer, tail offset, element stride, binding
+minimum, and diagnostic names. Public visibility is required because the generated package conforms
+to a public `VGPUABI` protocol across a package boundary; the underscore marks those witnesses as
+generator/runtime contract rather than application-facing API. Neither the conformance nor the
+runtime derives layout from Swift `MemoryLayout`.
 
 A root `array<Particle>` has no distinct fixed prefix and remains `VGPUStorage<Particle>`. The
 specialized resource exists only when the WGSL root is a structure with a runtime-sized tail.
@@ -198,6 +201,8 @@ future backend can consume the same typed resource and effective range through i
 The C2 runtime-tail resource spike must prove:
 
 - generated prefix and element packers consume reflected offsets rather than `MemoryLayout`;
+- a generated package depending only on `VGPUABI` compiles from a separate SwiftPM package while
+  naming the public storage and binding aliases;
 - capacity four allocates 52 logical bytes for the fixture above, while binding views for two and
   four elements produce count-preserving ranges 28 and 52 over one backing allocation;
 - prefix writes, partial element writes, and asynchronous reads preserve padding and bounds;

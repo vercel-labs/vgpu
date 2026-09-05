@@ -175,6 +175,8 @@ describe("agent readiness metadata", () => {
 
     const bindings = docsContent("native/macos/bindings.md");
     expect(bindings).toContain("public enum Values: VGPURuntimeArrayLayout");
+    expect(bindings).toContain("omitted from the WGSL excerpt");
+    expect(bindings).toContain("underscored descriptor and packer witnesses");
     expect(bindings).toContain("public typealias Binding = VGPURuntimeStorageBinding<Values>");
     expect(bindings).toContain("public var values: VGPURuntimeStorageBinding<Values>");
     expect(bindings).toContain("let visibleValues = try values.binding(elementCount: 2)");

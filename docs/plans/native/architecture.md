@@ -161,12 +161,13 @@ VGPUSwiftUI                -> VGPUMetalKit
 application dependency.
 
 `VGPUABI` contains only generated-program descriptors, binding wrappers, semantic layouts, runtime
-array layout witnesses, and artifact references. It does not import Metal, MetalKit, SwiftUI,
-Render, or Compute. A generated module can therefore describe effects, draws, and compute programs
-without linking an executor. Backend-neutral resource handle declarations also live in `VGPUABI`
-when generated signatures need to name them; `VGPUResources` adds their factories and operations.
-Those handles contain only ABI-owned erased state and do not pull resource execution or a backend
-into the generated package.
+array layout protocols and descriptor types, and artifact references. It does not import Metal,
+MetalKit, SwiftUI, Render, or Compute. A generated module can therefore describe effects, draws, and
+compute programs without linking an executor. Backend-neutral resource handle declarations also
+live in `VGPUABI` when generated signatures need to name them; `VGPUResources` adds their factories
+and operations. Those handles contain only ABI-owned erased state and do not pull resource execution
+or a backend into the generated package. The generated package emits the public underscored
+conformance witnesses required by that cross-package ABI.
 
 `VGPUCore` owns context identity, ordered submission, the clock, errors, capabilities, and
 lifecycle. `VGPUResources`, `VGPURender`, and `VGPUCompute` add their `gpu.*` factories through

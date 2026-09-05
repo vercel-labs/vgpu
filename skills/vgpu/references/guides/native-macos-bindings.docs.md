@@ -107,7 +107,7 @@ fn inspect_values() {
 }
 ```
 
-When `Values` is shared by more than one generated program, its simplified module-level interface is:
+Assume another selected program, omitted from the WGSL excerpt, also binds `Values`. Because the type is then shared by more than one generated program, its simplified module-level interface is:
 
 ```text
 public enum Values: VGPURuntimeArrayLayout {
@@ -123,7 +123,7 @@ public enum Values: VGPURuntimeArrayLayout {
 }
 ```
 
-The enum is a layout namespace, not a value to pack. `Prefix` contains every member before the runtime array, while `Element` preserves the array's generated element type. If the layout is used by only one program, the same namespace is nested under that program according to the normal type-placement rule.
+The enum is a layout namespace, not a value to pack. `Prefix` contains every member before the runtime array, while `Element` preserves the array's generated element type. Its public conformance also contains underscored descriptor and packer witnesses reserved for the generated-package/runtime ABI; application code does not call them. If the layout is used by only one program, the same namespace is nested under that program according to the normal type-placement rule.
 
 The generated program accepts an immutable binding view rather than the capacity-bearing resource itself:
 
