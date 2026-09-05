@@ -62,65 +62,56 @@
     },
     {
       "id": "uniform-root-small-struct",
-      "productParity": false,
+      "productParity": true,
       "semanticByteLength": 4,
       "semanticLayoutSha256": "a0def1ad5ee64e745431d5e98a0518562e36f446f744d7b8504cd45d0dac5efb",
-      "semanticBytesSha256": "7373b180351aa034c90eabe4045aca2ca9413123f1a834834f48dc7e7678fc2f",
-      "currentTypeScriptProduct": {
-        "byteLength": 16,
-        "layoutSha256": "855e5cb77410146ac785347e1febd15fb79c1146c1f12b01bb99ce372e44dc27",
-        "bytesSha256": "f9dcac4d493b0865f0d16fad230587e3bc14409ccac7961014608b4f02f63c34",
-        "semanticBytesArePrefix": true
-      }
+      "semanticBytesSha256": "7373b180351aa034c90eabe4045aca2ca9413123f1a834834f48dc7e7678fc2f"
     },
     {
       "id": "uniform-standard-scalar-array",
-      "productParity": false,
+      "productParity": true,
       "semanticByteLength": 20,
       "semanticLayoutSha256": "91b89813bf529b5f98f1b2f8f58f5ac2edf93befb8105af69aa22982f5a513ed",
       "semanticBytesSha256": "0f0fcd7ac25b46f0b354529ced3e25ccbecce8a2303030a929c224c8a60a3a2e",
-      "currentTypeScriptProduct": {
-        "byteLength": 32,
-        "layoutSha256": "f2006ec33b3ab34cecf247a889d7b486442206d60d00872ff59ff80ea650d8d8",
-        "bytesSha256": "7a4e76ff43309b938452d073140e76f497ded8ab790bd1248aaaffdf30e2de9a",
-        "semanticBytesArePrefix": false
-      },
       "legacyUniformViolations": [
-        { "code": "UNIFORM_MEMBER_OFFSET_ALIGNMENT", "path": "$.values" },
-        { "code": "UNIFORM_ARRAY_STRIDE_ALIGNMENT", "path": "$.values" }
+        {
+          "code": "UNIFORM_MEMBER_OFFSET_ALIGNMENT",
+          "path": "$.values"
+        },
+        {
+          "code": "UNIFORM_ARRAY_STRIDE_ALIGNMENT",
+          "path": "$.values"
+        }
       ]
     },
     {
       "id": "uniform-standard-nested-small",
-      "productParity": false,
+      "productParity": true,
       "semanticByteLength": 12,
       "semanticLayoutSha256": "ba2fb18926fdb1585926e2aaaff295a01194272e3f1d7f75cb54a80b2ba12c2e",
       "semanticBytesSha256": "4078361cb3662a9fb3da27e1da7cb1e941921ebb0cccd9d10312b71fced54ecc",
-      "currentTypeScriptProduct": {
-        "byteLength": 48,
-        "layoutSha256": "0d7585262dbd711b96cc0db29bde31a0aa0f23b1d7b2d06c7d873ac493140c4c",
-        "bytesSha256": "0bec4484e25616dcb7ccf01543e6692a478d7875837d76706c3c28c2205b0dd5",
-        "semanticBytesArePrefix": false
-      },
       "legacyUniformViolations": [
-        { "code": "UNIFORM_MEMBER_OFFSET_ALIGNMENT", "path": "$.small" },
-        { "code": "UNIFORM_NESTED_STRUCT_GAP", "path": "$.small" }
+        {
+          "code": "UNIFORM_MEMBER_OFFSET_ALIGNMENT",
+          "path": "$.small"
+        },
+        {
+          "code": "UNIFORM_NESTED_STRUCT_GAP",
+          "path": "$.small"
+        }
       ]
     },
     {
       "id": "uniform-standard-small-struct-array",
-      "productParity": false,
+      "productParity": true,
       "semanticByteLength": 12,
       "semanticLayoutSha256": "26544a477ff3529dd72aac7b5ce3ff5d112b0adaf83b318c8e143d6d7c0d8144",
       "semanticBytesSha256": "f9e046dca26d943930cb3db8a236a2469925a5da616c5a4490153c2a3b90000b",
-      "currentTypeScriptProduct": {
-        "byteLength": 48,
-        "layoutSha256": "8b27be96449a0495bdcd9c3696f001b0d31f8e651b23efe3991d31b0dd7baad1",
-        "bytesSha256": "b7687f537b5c34ce60f52f2cac633c64c708e48d55aa14a1e5831cb2c7864fcd",
-        "semanticBytesArePrefix": false
-      },
       "legacyUniformViolations": [
-        { "code": "UNIFORM_ARRAY_STRIDE_ALIGNMENT", "path": "$.items" }
+        {
+          "code": "UNIFORM_ARRAY_STRIDE_ALIGNMENT",
+          "path": "$.items"
+        }
       ]
     },
     {
@@ -132,31 +123,94 @@
     }
   ],
   "typescriptUniformLayout": {
-    "status": "known-hybrid-layout-bug",
-    "currentLayoutModes": ["naga-standard"],
-    "divergentCases": [
-      "uniform-root-small-struct",
-      "uniform-standard-scalar-array",
-      "uniform-standard-nested-small",
-      "uniform-standard-small-struct-array"
+    "status": "passed",
+    "layoutModels": [
+      "wgsl-host-shareable-v1"
     ],
-    "correction": "use-intrinsic-layout-and-validate-feature-state-without-repacking"
+    "divergentCases": [],
+    "contract": "intrinsic-layout-with-feature-state-validation-without-repacking"
   },
   "negativeDiagnostics": [
-    { "id": "short-vec3", "code": "ABI_SHAPE_MISMATCH", "path": "$.b" },
-    { "id": "short-fixed-array", "code": "ABI_SHAPE_MISMATCH", "path": "$.weights" },
-    { "id": "long-fixed-array", "code": "ABI_SHAPE_MISMATCH", "path": "$.weights" },
-    { "id": "negative-u32", "code": "ABI_INTEGER_RANGE", "path": "$.u" },
-    { "id": "overflowing-i32", "code": "ABI_INTEGER_RANGE", "path": "$.i" },
-    { "id": "runtime-byte-length", "code": "ABI_EXTENT_MISMATCH", "path": "$" }
+    {
+      "id": "short-vec3",
+      "code": "ABI_SHAPE_MISMATCH",
+      "path": "$.b"
+    },
+    {
+      "id": "short-fixed-array",
+      "code": "ABI_SHAPE_MISMATCH",
+      "path": "$.weights"
+    },
+    {
+      "id": "long-fixed-array",
+      "code": "ABI_SHAPE_MISMATCH",
+      "path": "$.weights"
+    },
+    {
+      "id": "negative-u32",
+      "code": "ABI_INTEGER_RANGE",
+      "path": "$.u"
+    },
+    {
+      "id": "overflowing-i32",
+      "code": "ABI_INTEGER_RANGE",
+      "path": "$.i"
+    },
+    {
+      "id": "runtime-byte-length",
+      "code": "ABI_EXTENT_MISMATCH",
+      "path": "$"
+    }
   ],
   "typescriptNegativeObservations": [
-    { "id": "runtime-unsized-product-rejection", "outcome": "threw", "errorName": "VGPUError" },
-    { "id": "short-vec3-product-zero-fill", "outcome": "packed" },
-    { "id": "short-fixed-array-product-zero-fill", "outcome": "packed" },
-    { "id": "one-extra-fixed-array-product-writes-tail-padding", "outcome": "packed" },
-    { "id": "oversized-fixed-array-product-range", "outcome": "threw", "errorName": "RangeError" },
-    { "id": "negative-u32-product-wrap", "outcome": "packed" }
+    {
+      "id": "short-vec3",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "shape",
+      "path": "$.b"
+    },
+    {
+      "id": "short-fixed-array",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "shape",
+      "path": "$.weights"
+    },
+    {
+      "id": "long-fixed-array",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "shape",
+      "path": "$.weights"
+    },
+    {
+      "id": "negative-u32",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "integer-range",
+      "path": "$.u"
+    },
+    {
+      "id": "overflowing-i32",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "integer-range",
+      "path": "$.i"
+    },
+    {
+      "id": "runtime-byte-length",
+      "outcome": "threw",
+      "errorName": "VGPUError",
+      "code": "VGPU-SET-VALUE-INVALID",
+      "reason": "extent",
+      "path": "$"
+    }
   ],
   "gpuReadback": {
     "policy": "gate-when-available-explicit-skip-otherwise",
@@ -167,7 +221,9 @@
         "id": "root-small-struct-intrinsic-size",
         "fixtureCase": "uniform-root-small-struct",
         "requiresStandardLayout": false,
-        "expected": [7.25],
+        "expected": [
+          7.25
+        ],
         "inputByteLength": 4,
         "sentinels": []
       },
@@ -175,64 +231,186 @@
         "id": "scalar-array-natural-offsets",
         "fixtureCase": "uniform-standard-scalar-array",
         "requiresStandardLayout": true,
-        "expected": [1, 2, 3, 4],
+        "expected": [
+          1,
+          2,
+          3,
+          4
+        ],
         "inputByteLength": 32,
         "sentinels": [
-          { "offset": 16, "value": 99 },
-          { "offset": 20, "value": 98 },
-          { "offset": 24, "value": 97 }
+          {
+            "offset": 16,
+            "value": 99
+          },
+          {
+            "offset": 20,
+            "value": 98
+          },
+          {
+            "offset": 24,
+            "value": 97
+          }
         ]
       },
       {
         "id": "nested-small-natural-offsets",
         "fixtureCase": "uniform-standard-nested-small",
         "requiresStandardLayout": true,
-        "expected": [1.25, 2.5, 3.75],
+        "expected": [
+          1.25,
+          2.5,
+          3.75
+        ],
         "inputByteLength": 48,
         "sentinels": [
-          { "offset": 16, "value": 99 },
-          { "offset": 32, "value": 98 }
+          {
+            "offset": 16,
+            "value": 99
+          },
+          {
+            "offset": 32,
+            "value": 98
+          }
         ]
       },
       {
         "id": "small-struct-array-natural-offsets",
         "fixtureCase": "uniform-standard-small-struct-array",
         "requiresStandardLayout": true,
-        "expected": [4.25, 5.5, 6.75],
+        "expected": [
+          4.25,
+          5.5,
+          6.75
+        ],
         "inputByteLength": 48,
         "sentinels": [
-          { "offset": 16, "value": 99 },
-          { "offset": 32, "value": 98 }
+          {
+            "offset": 16,
+            "value": 99
+          },
+          {
+            "offset": 32,
+            "value": 98
+          }
         ]
       }
     ]
   },
   "f16": {
-    "status": "known-typescript-packer-bug",
+    "status": "passed",
     "semantic": "ieee754-binary16-round-to-nearest-ties-even",
     "probes": [
-      { "id": "positive-zero", "inputFloat32Bits": "00000000", "currentProductBits": "0000", "expectedIEEEBits": "0000", "productMatchesSemantic": true },
-      { "id": "negative-zero", "inputFloat32Bits": "80000000", "currentProductBits": "8000", "expectedIEEEBits": "8000", "productMatchesSemantic": true },
-      { "id": "exact-one", "inputFloat32Bits": "3f800000", "currentProductBits": "3c00", "expectedIEEEBits": "3c00", "productMatchesSemantic": true },
-      { "id": "tie-even-lower", "inputFloat32Bits": "3f801000", "currentProductBits": "3c00", "expectedIEEEBits": "3c00", "productMatchesSemantic": true },
-      { "id": "tie-even-upper", "inputFloat32Bits": "3f803000", "currentProductBits": "3c01", "expectedIEEEBits": "3c02", "productMatchesSemantic": false },
-      { "id": "ordinary-round-up", "inputFloat32Bits": "3f801800", "currentProductBits": "3c00", "expectedIEEEBits": "3c01", "productMatchesSemantic": false },
-      { "id": "half-min-subnormal-tie-zero", "inputFloat32Bits": "33000000", "currentProductBits": "0000", "expectedIEEEBits": "0000", "productMatchesSemantic": true },
-      { "id": "just-above-half-min-subnormal", "inputFloat32Bits": "33000001", "currentProductBits": "0000", "expectedIEEEBits": "0001", "productMatchesSemantic": false },
-      { "id": "subnormal-round-up", "inputFloat32Bits": "33c00000", "currentProductBits": "0001", "expectedIEEEBits": "0002", "productMatchesSemantic": false },
-      { "id": "min-subnormal", "inputFloat32Bits": "33800000", "currentProductBits": "0001", "expectedIEEEBits": "0001", "productMatchesSemantic": true },
-      { "id": "max-finite", "inputFloat32Bits": "477fe000", "currentProductBits": "7bff", "expectedIEEEBits": "7bff", "productMatchesSemantic": true },
-      { "id": "overflow-rounding-boundary", "inputFloat32Bits": "477ff000", "currentProductBits": "7bff", "expectedIEEEBits": "7c00", "productMatchesSemantic": false },
-      { "id": "positive-infinity", "inputFloat32Bits": "7f800000", "currentProductBits": "7c00", "expectedIEEEBits": "7c00", "productMatchesSemantic": true },
-      { "id": "negative-infinity", "inputFloat32Bits": "ff800000", "currentProductBits": "fc00", "expectedIEEEBits": "fc00", "productMatchesSemantic": true },
-      { "id": "quiet-nan", "inputFloat32Bits": "7fc12345", "currentProductBits": "7e00", "expectedIEEEBits": "7e00", "productMatchesSemantic": true }
+      {
+        "id": "positive-zero",
+        "inputFloat32Bits": "00000000",
+        "currentProductBits": "0000",
+        "expectedIEEEBits": "0000",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "negative-zero",
+        "inputFloat32Bits": "80000000",
+        "currentProductBits": "8000",
+        "expectedIEEEBits": "8000",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "exact-one",
+        "inputFloat32Bits": "3f800000",
+        "currentProductBits": "3c00",
+        "expectedIEEEBits": "3c00",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "tie-even-lower",
+        "inputFloat32Bits": "3f801000",
+        "currentProductBits": "3c00",
+        "expectedIEEEBits": "3c00",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "tie-even-upper",
+        "inputFloat32Bits": "3f803000",
+        "currentProductBits": "3c02",
+        "expectedIEEEBits": "3c02",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "ordinary-round-up",
+        "inputFloat32Bits": "3f801800",
+        "currentProductBits": "3c01",
+        "expectedIEEEBits": "3c01",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "half-min-subnormal-tie-zero",
+        "inputFloat32Bits": "33000000",
+        "currentProductBits": "0000",
+        "expectedIEEEBits": "0000",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "just-above-half-min-subnormal",
+        "inputFloat32Bits": "33000001",
+        "currentProductBits": "0001",
+        "expectedIEEEBits": "0001",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "subnormal-round-up",
+        "inputFloat32Bits": "33c00000",
+        "currentProductBits": "0002",
+        "expectedIEEEBits": "0002",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "min-subnormal",
+        "inputFloat32Bits": "33800000",
+        "currentProductBits": "0001",
+        "expectedIEEEBits": "0001",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "max-finite",
+        "inputFloat32Bits": "477fe000",
+        "currentProductBits": "7bff",
+        "expectedIEEEBits": "7bff",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "overflow-rounding-boundary",
+        "inputFloat32Bits": "477ff000",
+        "currentProductBits": "7c00",
+        "expectedIEEEBits": "7c00",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "positive-infinity",
+        "inputFloat32Bits": "7f800000",
+        "currentProductBits": "7c00",
+        "expectedIEEEBits": "7c00",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "negative-infinity",
+        "inputFloat32Bits": "ff800000",
+        "currentProductBits": "fc00",
+        "expectedIEEEBits": "fc00",
+        "productMatchesSemantic": true
+      },
+      {
+        "id": "quiet-nan",
+        "inputFloat32Bits": "7fc12345",
+        "currentProductBits": "7e00",
+        "expectedIEEEBits": "7e00",
+        "productMatchesSemantic": true
+      }
     ]
   },
-  "openDecision": {
-    "id": "layout-mode-migration-after-semantic-fix",
-    "prerequisite": "correct-wgsl-layout-semantics",
-    "current": "naga-standard",
-    "neutralCandidate": "wgsl-host-shareable-v1",
-    "compatibilityChoices": ["replace", "temporary-deprecated-alias"]
+  "layoutModeMigration": {
+    "status": "resolved",
+    "selected": "wgsl-host-shareable-v1",
+    "compatibilityAlias": false
   }
 }

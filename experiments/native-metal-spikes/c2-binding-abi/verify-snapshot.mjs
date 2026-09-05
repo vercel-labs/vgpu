@@ -77,10 +77,10 @@ const actual = {
     };
   }),
   typescriptUniformLayout: {
-    status: "known-hybrid-layout-bug",
-    currentLayoutModes: layoutModes,
+    status: "passed",
+    layoutModels: layoutModes,
     divergentCases: productDivergences,
-    correction: "use-intrinsic-layout-and-validate-feature-state-without-repacking",
+    contract: "intrinsic-layout-with-feature-state-validation-without-repacking",
   },
   negativeDiagnostics: swift.negativeDiagnostics.map((item) => ({
     id: item.id,
@@ -91,6 +91,9 @@ const actual = {
     id: item.id,
     outcome: item.outcome,
     ...(item.errorName ? { errorName: item.errorName } : {}),
+    ...(item.code ? { code: item.code } : {}),
+    ...(item.reason ? { reason: item.reason } : {}),
+    ...(item.path ? { path: item.path } : {}),
   })),
   gpuReadback: {
     policy: "gate-when-available-explicit-skip-otherwise",
@@ -106,7 +109,7 @@ const actual = {
     })),
   },
   f16: {
-    status: "known-typescript-packer-bug",
+    status: "passed",
     semantic: "ieee754-binary16-round-to-nearest-ties-even",
     probes: swift.f16ConversionProbes.map((item) => ({
       id: item.id,
@@ -116,12 +119,10 @@ const actual = {
       productMatchesSemantic: item.productMatchesSemantic,
     })),
   },
-  openDecision: {
-    id: "layout-mode-migration-after-semantic-fix",
-    prerequisite: "correct-wgsl-layout-semantics",
-    current: "naga-standard",
-    neutralCandidate: "wgsl-host-shareable-v1",
-    compatibilityChoices: ["replace", "temporary-deprecated-alias"],
+  layoutModeMigration: {
+    status: "resolved",
+    selected: "wgsl-host-shareable-v1",
+    compatibilityAlias: false,
   },
 };
 
@@ -138,9 +139,9 @@ const gpuSummary = gpu.status === "passed"
   : `GPU readback skipped (${gpu.reason})`;
 process.stdout.write(
   `C2 snapshot: ${actual.cases.length} WGSL ABI cases pass; `
-  + `${parityCount} match the current TypeScript product and ${productDivergences.length} expose its hybrid uniform bug; `
+  + `${parityCount} match the TypeScript product and ${productDivergences.length} diverge; `
   + `${actual.negativeDiagnostics.length} strict diagnostics pass; `
-  + `${f16Divergences}/${actual.f16.probes.length} f16 probes reproduce the known TypeScript bug; `
+  + `${actual.f16.probes.length - f16Divergences}/${actual.f16.probes.length} f16 probes match IEEE binary16; `
   + `${gpuSummary}.\n`,
 );
 

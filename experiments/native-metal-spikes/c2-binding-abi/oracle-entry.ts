@@ -48,8 +48,8 @@ for (const item of fixture.cases) {
   });
   const binding = shader.reflection.bindings.find((candidate) => candidate.name === "params");
   if (!binding?.layout) throw new Error(`${item.id}: product reflection did not expose params layout`);
-  if (binding.layout.addressSpace !== item.addressSpace) {
-    throw new Error(`${item.id}: fixture says ${item.addressSpace}, reflection says ${binding.layout.addressSpace}`);
+  if (binding.addressSpace !== item.addressSpace) {
+    throw new Error(`${item.id}: fixture says ${item.addressSpace}, reflection says ${binding.addressSpace}`);
   }
 
   const packed = packWithRuntimeProjection(binding.layout, item.value);
@@ -74,39 +74,45 @@ for (const item of fixture.cases) {
 
 const byID = new Map(resolvedCases.map((item) => [item.fixture.id, item]));
 const diagnostics = [
-  capture("runtime-unsized-product-rejection", () => {
-    const item = requiredCase(byID, "runtime-array-storage");
-    return writeLayoutValue(item.layout, item.fixture.value);
-  }),
-  capture("short-vec3-product-zero-fill", () => {
+  capture("short-vec3", () => {
     const item = requiredCase(byID, "vectors-uniform-tail-packing");
     const value = structuredClone(item.fixture.value) as Record<string, unknown>;
     value.b = [3, 4];
     return writeLayoutValue(item.layout, value);
   }),
-  capture("short-fixed-array-product-zero-fill", () => {
+  capture("short-fixed-array", () => {
     const item = requiredCase(byID, "fixed-arrays-storage");
     const value = structuredClone(item.fixture.value) as Record<string, unknown>;
     value.weights = [[9, 10], [11, 12]];
     return writeLayoutValue(item.layout, value);
   }),
-  capture("one-extra-fixed-array-product-writes-tail-padding", () => {
+  capture("long-fixed-array", () => {
     const item = requiredCase(byID, "fixed-arrays-storage");
     const value = structuredClone(item.fixture.value) as Record<string, unknown>;
     value.weights = [[9, 10], [11, 12], [13, 14], [15, 16]];
     return writeLayoutValue(item.layout, value);
   }),
-  capture("oversized-fixed-array-product-range", () => {
-    const item = requiredCase(byID, "fixed-arrays-storage");
-    const value = structuredClone(item.fixture.value) as Record<string, unknown>;
-    value.weights = Array.from({ length: 100 }, (_, i) => [i, i + 1]);
-    return writeLayoutValue(item.layout, value);
-  }),
-  capture("negative-u32-product-wrap", () => {
+  capture("negative-u32", () => {
     const item = requiredCase(byID, "scalars-storage");
     const value = structuredClone(item.fixture.value) as Record<string, unknown>;
     value.u = -1;
     return writeLayoutValue(item.layout, value);
+  }),
+  capture("overflowing-i32", () => {
+    const item = requiredCase(byID, "scalars-storage");
+    const value = structuredClone(item.fixture.value) as Record<string, unknown>;
+    value.i = 2_147_483_648;
+    return writeLayoutValue(item.layout, value);
+  }),
+  capture("runtime-byte-length", () => {
+    const item = requiredCase(byID, "runtime-array-storage");
+    if (!Array.isArray(item.fixture.value) || item.layout.stride === undefined) {
+      throw new Error("runtime-array-storage fixture is malformed");
+    }
+    return writeLayoutValue(
+      { ...item.layout, size: item.layout.stride * item.fixture.value.length - 1 },
+      item.fixture.value,
+    );
   }),
 ];
 
@@ -272,11 +278,18 @@ function capture(id: string, operation: () => ArrayBuffer): Record<string, unkno
       sha256: createHash("sha256").update(bytes).digest("hex"),
     };
   } catch (error) {
+    const structured = error as {
+      readonly code?: unknown;
+      readonly detail?: { readonly reason?: unknown; readonly path?: unknown };
+    };
     return {
       id,
       outcome: "threw",
       errorName: error instanceof Error ? error.name : typeof error,
       message: error instanceof Error ? error.message : String(error),
+      ...(typeof structured.code === "string" ? { code: structured.code } : {}),
+      ...(typeof structured.detail?.reason === "string" ? { reason: structured.detail.reason } : {}),
+      ...(typeof structured.detail?.path === "string" ? { path: structured.detail.path } : {}),
     };
   }
 }

@@ -1,7 +1,7 @@
 # C2 binding ABI
 
 This spike defines a backend-neutral Swift 6 layout and packing contract from WGSL semantics, then
-characterizes where the current TypeScript product agrees or diverges.
+verifies that the TypeScript product agrees with it.
 
 From the repository root:
 
@@ -49,55 +49,56 @@ deterministic repeated execution, and `expected/snapshot.json`.
 
 The 13 cases cover scalars, f16, vectors, vec3 tail packing, square and non-square matrices, matrix
 column padding, nested structures, fixed and runtime-sized arrays, explicit `@align` and `@size`,
-uniform, and storage. Six strict negative cases freeze both diagnostic code and structured value
-path for shape, integer-range, and runtime-extent failures.
+uniform, and storage. Six strict negative cases freeze the Swift diagnostic code and the equivalent
+TypeScript error reason and complete value path for shape, integer-range, and runtime-extent
+failures.
 
-## Current TypeScript layout bug
+## TypeScript layout closure
 
-The current TypeScript uniform layout is hybrid. It retains the natural four-byte scalar-array
+The previous TypeScript uniform layout was hybrid. It retained the natural four-byte scalar-array
 stride accepted with `uniform_buffer_standard_layout`, while also applying legacy 16-byte array and
-structure alignment, root-size padding, and nested-structure gaps. That result is neither the
+structure alignment, root-size padding, and nested-structure gaps. That result was neither the
 standard-layout ABI nor a valid fallback for implementations without the feature.
 
 Four canaries make the difference observable:
 
-| Case | WGSL semantic offsets and size | Current TypeScript product |
+| Case | WGSL semantic offsets and size | Previous TypeScript product |
 | --- | --- | --- |
 | Root `struct { x: f32 }` | `x` at `0`; align `4`, size `4` | `x` at `0`; align `16`, size `16` |
 | `lead`, `array<f32, 3>`, `tail` | `0`, `4`, `16`; size `20` | `0`, `16`, `28`; size `32` |
 | `lead`, `Small`, `tail` | `0`, `4`, `8`; size `12` | `0`, `16`, `32`; size `48` |
 | `array<Small, 2>`, `tail` | elements `0`, `4`; tail `8`; size `12` | elements `0`, `16`; tail `32`; size `48` |
 
-The root-small-structure case is valid with or without the feature. Its useful four-byte payload is
-a prefix of the product's 16-byte allocation, but reflected alignment, size, and minimum binding
-size still diverge. The other three canaries declare `requires uniform_buffer_standard_layout;`.
+The root-small-structure case is valid with or without the feature. Its useful four-byte payload was
+a prefix of the old 16-byte allocation, but reflected alignment, size, and minimum binding size
+still diverged. The other three canaries declare `requires uniform_buffer_standard_layout;`.
 
 `gpu-readback.mjs` uploads the Swift semantic bytes and runs real Dawn/Metal compute pipelines. The
-three feature-dependent cases also write different sentinels at the current product offsets. A
+three feature-dependent cases also write different sentinels at the former product offsets. A
 supported host must read the semantic values and ignore those hybrid sentinels. The default runner
 records a stable skip when that GPU path is unavailable;
 `C2_REQUIRE_GPU=1` turns any skip into failure.
 
-The fix is to use one intrinsic WGSL layout engine, then validate the chosen address space and
-feature state without mutating offsets or strides. The product output in this fixture is retained
-only as current-behavior characterization.
+The TypeScript reflection path now uses one intrinsic WGSL layout engine and records
+`layoutMode: "wgsl-host-shareable-v1"` without embedding an address space in the layout. The binding
+still records `uniform` or `storage`; feature-state validation remains separate and never mutates
+offsets or strides. All 13 product layouts and packed byte sequences match the independent Swift
+implementation.
 
 ## f16 result
 
 The f16 contract is IEEE 754 binary16 round-to-nearest-ties-even. Fifteen probes cover ties,
 subnormals, overflow, signed zero, infinities, and NaN.
 
-The current TypeScript helper truncates instead of rounding. For example, input f32 bits `3f803000`
-produce `3c01` instead of `3c02`, and `477ff000` produces `7bff` instead of `7c00`. Node
-`Float16Array`, native arm64 Swift `Float16`, and the portable Swift converter agree on the semantic
-result. The truncation is a product bug, not compatibility behavior for Swift to preserve.
+The TypeScript helper, Node `Float16Array`, native arm64 Swift `Float16`, and the portable Swift
+converter now agree on all 15 semantic probes. In particular, input f32 bits `3f803000` rounds to
+`3c02`, and the overflow boundary `477ff000` rounds to `7c00`.
 
-## Remaining decision
+## Resolved migration
 
-Layout semantics must be corrected first. After that, the only open compatibility decision in this
-spike is whether to replace the misleading `layoutMode: "naga-standard"` name immediately with a
-neutral name such as `wgsl-host-shareable-v1`, or retain the old string temporarily as a deprecated
-alias. That migration policy does not change the corrected byte ABI.
+The public layout identity was replaced directly with `wgsl-host-shareable-v1`. There is no
+`naga-standard` compatibility alias. The snapshot rejects either the old identity or any return of
+address-space-dependent offsets.
 
 ## Normative references
 

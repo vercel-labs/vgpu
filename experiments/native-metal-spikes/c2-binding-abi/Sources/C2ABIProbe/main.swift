@@ -841,7 +841,7 @@ func run() throws {
     guard expected.addressSpace == item.addressSpace else {
       throw ProbeError.mismatch("\(item.id): address spaces differ")
     }
-    guard expected.layoutMode == "naga-standard" else {
+    guard expected.layoutMode == "wgsl-host-shareable-v1" else {
       throw ProbeError.mismatch("\(item.id): unexpected product layout mode \(expected.layoutMode)")
     }
     let layout = try SemanticLayoutEngine().layout(of: item.root)
@@ -984,9 +984,6 @@ func run() throws {
       throw ProbeError.mismatch("\(item.id): portable Swift IEEE converter != native Swift Float16")
     }
     #endif
-    guard legacyBits == productBits || (isF16NaN(legacyBits) && isF16NaN(productBits)) else {
-      throw ProbeError.mismatch("\(item.id): legacy Swift characterization != product helper")
-    }
     let productMatchesSemantic = productBits == nodeBits || (isF16NaN(productBits) && isF16NaN(nodeBits))
     guard productMatchesSemantic == (item.sameBits || item.sameNaNClass) else {
       throw ProbeError.mismatch("\(item.id): oracle f16 classification is inconsistent")

@@ -59,7 +59,7 @@ export function reflect(modules: readonly MangleModule[], resolveImport?: Import
       const type = resolveType(variable.type, variable.path, moduleSymbols, registry);
       const kind = bindingKind(type, variable.addressSpace);
       const layout = variable.addressSpace === "uniform" || variable.addressSpace === "storage"
-        ? layoutOf(type, variable.addressSpace, variable.name, variable.mangledName, registry)
+        ? layoutOf(type, variable.name, variable.mangledName, registry)
         : undefined;
       if (layout) hostShareableLayouts.push(layout);
       bindings.push({

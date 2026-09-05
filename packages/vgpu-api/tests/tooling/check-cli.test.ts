@@ -26,7 +26,7 @@ test("vgpu check emits reflection JSON for WGSL files", async () => {
         binding: 0,
         name: "globals",
         kind: "buffer",
-        layout: expect.objectContaining({ size: 16, align: 16 }),
+        layout: expect.objectContaining({ layoutMode: "wgsl-host-shareable-v1", size: 16, align: 8 }),
       }),
     ]),
   );

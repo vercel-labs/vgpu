@@ -18,11 +18,11 @@ export interface Reflection {
 /** Public alias re-exported for backwards compatibility with the old `ReflectionFacade` name. */
 export type ReflectionFacade = Reflection;
 
-/** Layout strategy currently mirrors naga's host-shareable layout calculation. */
-export type LayoutMode = "naga-standard";
+/** Versioned intrinsic WGSL host-shareable layout contract. */
+export type LayoutMode = "wgsl-host-shareable-v1";
 
 /** Default layout mode used whenever a layout calculation is requested. */
-export const DEFAULT_LAYOUT_MODE: LayoutMode = "naga-standard";
+export const DEFAULT_LAYOUT_MODE: LayoutMode = "wgsl-host-shareable-v1";
 
 export type BindingKind = "buffer" | "texture" | "sampler" | "externalTexture" | "unknown";
 export type AddressSpace = "function" | "private" | "workgroup" | "uniform" | "storage" | "handle";
@@ -132,7 +132,6 @@ export type WGSLType =
 export interface HostShareableLayout {
   readonly name: string;
   readonly mangledName: string;
-  readonly addressSpace: "uniform" | "storage";
   readonly layoutMode: LayoutMode;
   readonly type: WGSLType;
   readonly align: number;
