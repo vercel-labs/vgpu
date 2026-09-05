@@ -93,7 +93,8 @@ The `semantic` object is independent of Metal. It records:
 - the Swift module and public names;
 - effect, draw, and compute program kinds;
 - authored and resolved WGSL entry points and their complete portable stage interfaces, including
-  built-ins, exact user locations, semantic types, normalized interpolation, and invariance;
+  built-ins, exact user locations, semantic types, normalized interpolation, invariance, and each
+  entry's exact static override-name subset;
 - the fixed `wgsl-host-shareable-v1` layout model, host-shareable types, and intrinsic WGSL alignment, size, offset, and stride values reflected by Tint;
 - WGSL resource bindings, including their address space and access independently from the referenced intrinsic layout;
 - typed, evaluated override defaults and the exact selected values for overrides statically used by the selected entry points, baked before translation;
@@ -107,7 +108,7 @@ A semantic `workgroupSize` contains only resolved `x`, `y`, and `z` values. It d
 
 Override configuration is resolved at module scope, so a valid key is accepted even when one selected entry point does not use it. Required values are checked against each entry point's static interface before lowering or pruning. Configured values are then substituted before omitted initializers are evaluated. The semantic program retains the canonical union of those static typed sets; a module override unused by every selected entry is omitted. Later compiler pruning does not redefine the required interface or the semantic v1 record.
 
-An override's resolved WGSL name is its program-local identity. Its authored numeric `@id` is recorded as optional `wgslId` provenance when present; the artifact does not invent a second opaque override ID. Resolved names use the same ASCII identifier vocabulary as compiler requests. Overrides are stored in strict ascending resolved-name order, with unique resolved names and authored IDs within the program.
+An override's resolved WGSL name is its program-local identity. Its authored numeric `@id` is recorded as optional `wgslId` provenance when present; the artifact does not invent a second opaque override ID. Resolved names use the same ASCII identifier vocabulary as compiler requests. Overrides are stored in strict ascending resolved-name order, with unique resolved names and authored IDs within the program. Every entry point stores an `overrides` array, including `[]`, containing its strictly ordered unique subset of those resolved names. The program array is the exact typed union of all entry subsets.
 
 The `projection` object records only the selected Metal result:
 
@@ -218,7 +219,7 @@ Each program fingerprint is the SHA-256 of the `JCS-RFC8785+VGPU-PATHS-v1` canon
 - the normalized semantic program without its fingerprint, redundant source list, Swift presentation names, source spans, or optional interface-value diagnostic names; and
 - only the transitive `types` and `layouts` closure reachable from the program's bindings and entry-point inputs and outputs.
 
-The closure traverses structure members, composite element types, layouts, and member layouts. A change to a directly referenced layout or a transitively reached elemental layout therefore changes the fingerprint; adding an unreachable type or layout does not. Capabilities remain in the normalized program. Interface-value names are diagnostic metadata and are removed with a directed projection; program, entry, binding, override, type-member, and layout-member names are not removed. Feature, language-feature, visibility, and entry binding-ID arrays defined by this contract as unordered sets are sorted before hashing, while arrays whose order is semantic retain that order.
+The closure traverses structure members, composite element types, layouts, and member layouts. A change to a directly referenced layout or a transitively reached elemental layout therefore changes the fingerprint; adding an unreachable type or layout does not. Capabilities remain in the normalized program. Interface-value names are diagnostic metadata and are removed with a directed projection; program, entry, binding, override, type-member, and layout-member names are not removed. Feature, language-feature, visibility, entry binding-ID, and entry override-name arrays defined by this contract as unordered sets are sorted before hashing, while arrays whose order is semantic retain that order. Redistributing override membership between entries therefore changes the fingerprint even when the program union is unchanged.
 
 The logical fingerprint covers canonical resolved WGSL and normalized program configuration, including the selected language features. The semantic fingerprint covers the complete backend-neutral semantic object, including `layoutModel` and its intrinsic layouts. The application build fingerprint additionally covers `@vgpu/native`, the `vgpu-tint-compiler` protocol and binary, pinned Dawn/Tint revision, translator flags, generated API and ABI versions, the Metal compiler target triple, minimum OS, macOS SDK, and Apple Metal compiler identity. Toolchain changes therefore invalidate the build cache even when shader semantics did not change.
 

@@ -32,6 +32,7 @@ import {
   assertResolvedDeclarationsForFinalizedCapsule,
   isResolvedDeclarationIndex,
   resolvedDeclarationForSelectedEntry,
+  resolvedOverridePresentationForExtraction,
   resolvedResourcePresentationForExtraction,
 } from "./resolved-declarations.mjs";
 import { assertSwiftPresentationForProgramAssembly } from "./swift-presentation.mjs";
@@ -68,8 +69,8 @@ export class SemanticAssemblyError extends Error {
 
 /**
  * Assembles one complete semantic-v1 module containing one selected program.
- * The current profile accepts singular fixed-size resources but keeps
- * overrides and backend slot projection fail-closed.
+ * The current profile accepts singular fixed-size resources and exact-static
+ * overrides while keeping backend slot projection downstream.
  */
 export function assembleSemanticProgram({
   presentation,
@@ -80,10 +81,16 @@ export function assembleSemanticProgram({
   assertPresentation(presentation, finalized);
   assertAssemblyAssociations(finalized, extraction, declarations);
   const extractionRequest = retainedExtractionRequest(extraction);
-  assertFixedResourceAssemblyProfile(extractionRequest, extraction.result);
+  assertAssemblyProfile(extractionRequest);
   let resourcePresentation;
+  let overridePresentation;
   try {
     resourcePresentation = resolvedResourcePresentationForExtraction(
+      declarations,
+      finalized,
+      extraction.result
+    );
+    overridePresentation = resolvedOverridePresentationForExtraction(
       declarations,
       finalized,
       extraction.result
@@ -140,6 +147,10 @@ export function assembleSemanticProgram({
     rawEntriesByStage,
     resourcePresentation.bindings
   );
+  const overrides = assembleOverrides(
+    extraction.result.overrides,
+    overridePresentation
+  );
   const program = {
     name: finalized.selection.name,
     swiftName: presentation.program.swiftName,
@@ -150,7 +161,7 @@ export function assembleSemanticProgram({
     fingerprint: { domain: PROGRAM_FINGERPRINT_DOMAIN, sha256: "0".repeat(64) },
     entryPoints: entries,
     bindings,
-    overrides: [],
+    overrides,
     capabilities: structuredClone(capabilities),
   };
   const semantic = {
@@ -173,6 +184,7 @@ export function assembleSemanticProgram({
       module: semantic.module,
       program,
       bindings,
+      overrides,
       types: semantic.types,
     },
     { failWith: assemblyFail }
@@ -280,6 +292,9 @@ export function compilerRequestForAssembledEntry({
       `assembled program has no ${quoted(stage)} entry`
     );
   }
+  const overridesByName = new Map(
+    program.overrides.map((override) => [override.names.wgsl, override])
+  );
   const rehydrated = semanticInterfaceFromAssembly(
     semanticEntry,
     assembly.semantic.types
@@ -312,7 +327,19 @@ export function compilerRequestForAssembledEntry({
       metal: metalEntryPoint,
     },
     semanticInterface: structuredClone(rawEntry.semanticInterface),
-    overrides: [],
+    overrides: semanticEntry.overrides.map((name) => {
+      const override = overridesByName.get(name);
+      if (!override) {
+        assemblyFail(
+          "VGPU-C1-ASSEMBLY-PROJECTION",
+          `assembled entry references unknown override ${quoted(name)}`
+        );
+      }
+      return {
+        name,
+        value: structuredClone(override.selected),
+      };
+    }),
     languageFeatures: [...record.finalized.capsule.languageFeatures],
     metal: structuredClone(metal),
   };
@@ -377,21 +404,11 @@ function retainedExtractionRequest(extraction) {
   return request;
 }
 
-function assertFixedResourceAssemblyProfile(request, result) {
+function assertAssemblyProfile(request) {
   if (request.languageFeatures.includes("dual_source_blending")) {
     assemblyFail(
       "VGPU-C1-ASSEMBLY-PROFILE",
       "the first-alpha assembly profile rejects dual_source_blending"
-    );
-  }
-  if (
-    request.overrideConfiguration.length !== 0 ||
-    result.overrides.length !== 0 ||
-    result.entryPoints.some((entry) => entry.overrides.length !== 0)
-  ) {
-    assemblyFail(
-      "VGPU-C1-ASSEMBLY-PROFILE",
-      "this assembly slice accepts fixed resources but not overrides"
     );
   }
 }
@@ -420,6 +437,7 @@ function assembleEntry({ stage, raw, finalized, declarations, typeInterner }) {
     ),
     bindings: [...raw.bindings],
     samplingPairs: structuredClone(raw.samplingPairs),
+    overrides: [...raw.overrides],
     ...(stage === "compute"
       ? { workgroupSize: structuredClone(raw.workgroupSize) }
       : {}),
@@ -477,6 +495,31 @@ function assembleBindings(extracted, rawEntriesByStage, presentation) {
       ...structuredClone(raw),
       swiftName: names.authoredName,
       visibility,
+    };
+  });
+}
+
+function assembleOverrides(extracted, presentation) {
+  return extracted.map((raw) => {
+    const names = presentation[raw.name];
+    if (!names || typeof names.authoredName !== "string") {
+      assemblyFail(
+        "VGPU-C1-ASSEMBLY-PRESENTATION",
+        `override ${quoted(raw.name)} has no exact authored presentation`
+      );
+    }
+    return {
+      names: {
+        authored: names.authoredName,
+        wgsl: raw.name,
+      },
+      swiftName: names.authoredName,
+      ...(raw.wgslId === undefined ? {} : { wgslId: raw.wgslId }),
+      type: raw.type,
+      ...(raw.default === undefined
+        ? {}
+        : { default: structuredClone(raw.default) }),
+      selected: structuredClone(raw.selected),
     };
   });
 }
@@ -722,7 +765,7 @@ function assertExtractionProjection(semantic, extracted) {
         semanticInterface: semanticInterfaceFromAssembly(entry, semantic.types),
         bindings: [...entry.bindings],
         samplingPairs: structuredClone(entry.samplingPairs),
-        overrides: [],
+        overrides: [...entry.overrides],
         ...(raw.stage === "compute"
           ? { workgroupSize: structuredClone(entry.workgroupSize) }
           : {}),
@@ -731,7 +774,12 @@ function assertExtractionProjection(semantic, extracted) {
     bindings: program.bindings.map(({ swiftName, visibility, ...binding }) =>
       structuredClone(binding)
     ),
-    overrides: [],
+    overrides: program.overrides.map(
+      ({ names, swiftName: _swiftName, ...override }) => ({
+        name: names.wgsl,
+        ...structuredClone(override),
+      })
+    ),
     types: Object.fromEntries(
       Object.keys(extracted.types).map((id) => [
         id,
@@ -818,6 +866,8 @@ function normalizeSemanticSets(value, key = "") {
     const isStringSet =
       ["languageFeatures", "features", "visibility"].includes(key) ||
       (key === "bindings" &&
+        normalized.every((child) => typeof child === "string")) ||
+      (key === "overrides" &&
         normalized.every((child) => typeof child === "string"));
     return isStringSet ? normalized.sort(compare) : normalized;
   }

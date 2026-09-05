@@ -101,7 +101,7 @@
       }
     },
     "programFingerprint": {
-      "description": "SHA-256 of the JCS-RFC8785+VGPU-PATHS-v1 canonical preimage containing the vgpu-native-program/v1 domain, referenced WGSL input IDs and content hashes, layout model, resolved language features, executable program semantics and capabilities, and the transitively reachable types and intrinsic layouts. The preimage excludes its own fingerprint, redundant source IDs, Swift presentation names, source spans, interface-value diagnostic names, and unreachable declarations; feature, language-feature, visibility, and entry binding-ID sets are sorted before hashing.",
+      "description": "SHA-256 of the JCS-RFC8785+VGPU-PATHS-v1 canonical preimage containing the vgpu-native-program/v1 domain, referenced WGSL input IDs and content hashes, layout model, resolved language features, executable program semantics and capabilities, and the transitively reachable types and intrinsic layouts. The preimage excludes its own fingerprint, redundant source IDs, Swift presentation names, source spans, interface-value diagnostic names, and unreachable declarations; feature, language-feature, visibility, entry binding-ID, and entry override-name sets are sorted before hashing.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],
@@ -586,6 +586,13 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/bindingId" }
     },
+    "entryOverrides": {
+      "description": "Strict ascending resolved-name order. Each name references one record in the containing program override union.",
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/wgslIdentifier" }
+    },
     "entrySamplingPairs": {
       "type": "array",
       "items": { "$ref": "#/$defs/samplingPair" }
@@ -600,7 +607,8 @@
         "inputs",
         "outputs",
         "bindings",
-        "samplingPairs"
+        "samplingPairs",
+        "overrides"
       ],
       "properties": {
         "stage": { "const": "vertex" },
@@ -610,7 +618,8 @@
         "inputs": { "$ref": "#/$defs/vertexInputs" },
         "outputs": { "$ref": "#/$defs/vertexOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
-        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" }
       },
       "allOf": [
         {
@@ -651,7 +660,8 @@
         "inputs",
         "outputs",
         "bindings",
-        "samplingPairs"
+        "samplingPairs",
+        "overrides"
       ],
       "properties": {
         "stage": { "const": "vertex" },
@@ -661,7 +671,8 @@
         "inputs": { "$ref": "#/$defs/vertexInputs" },
         "outputs": { "$ref": "#/$defs/vertexOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
-        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" }
       }
     },
     "fragmentEntry": {
@@ -675,7 +686,8 @@
         "inputs",
         "outputs",
         "bindings",
-        "samplingPairs"
+        "samplingPairs",
+        "overrides"
       ],
       "properties": {
         "stage": { "const": "fragment" },
@@ -685,7 +697,8 @@
         "inputs": { "$ref": "#/$defs/fragmentInputs" },
         "outputs": { "$ref": "#/$defs/fragmentOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
-        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" }
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" }
       }
     },
     "positiveUint32": {
@@ -716,6 +729,7 @@
         "outputs",
         "bindings",
         "samplingPairs",
+        "overrides",
         "workgroupSize"
       ],
       "properties": {
@@ -727,6 +741,7 @@
         "outputs": { "$ref": "#/$defs/computeOutputs" },
         "bindings": { "$ref": "#/$defs/entryBindings" },
         "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" },
         "workgroupSize": { "$ref": "#/$defs/workgroupSize" }
       }
     },
@@ -1105,8 +1120,9 @@
       "items": { "$ref": "#/$defs/binding" }
     },
     "programOverrides": {
-      "description": "Strict ascending ASCII names.wgsl order, matching the native compiler request. names.wgsl values and authored wgslId values are each unique within the program.",
+      "description": "The exact union of the containing entries' override-name sets, in strict ascending ASCII names.wgsl order. names.wgsl values and authored wgslId values are each unique within the program.",
       "type": "array",
+      "maxItems": 4096,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/override" }
     },

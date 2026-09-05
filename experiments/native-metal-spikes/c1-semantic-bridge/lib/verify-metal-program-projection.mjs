@@ -70,6 +70,11 @@ export function verifyMetalProgramProjection({
     semanticProgram,
     semanticLayouts
   );
+  const semanticOverrides = validateSemanticOverrides(
+    semanticProgram,
+    semanticEntries,
+    expectedStages
+  );
   validateAllocation({
     semanticProgram,
     semanticEntries,
@@ -117,6 +122,13 @@ export function verifyMetalProgramProjection({
     });
     if (!isDeepStrictEqual(requestMetal.bindings, expectedRequestBindings)) {
       fail(`${owner} request bindings differ from the allocated ${stage} view`);
+    }
+    const expectedRequestOverrides = semanticEntry.overrides.map((name) => ({
+      name,
+      value: structuredClone(semanticOverrides.get(name).selected),
+    }));
+    if (!isDeepStrictEqual(request.overrides, expectedRequestOverrides)) {
+      fail(`${owner} request overrides differ from the semantic ${stage} view`);
     }
 
     if (response.ok !== true) {
@@ -276,9 +288,61 @@ function validateSemanticEntries(semanticProgram, expectedStages) {
       entry.bindings,
       `semanticProgram.entryPoints.${stage}.bindings`
     );
+    requireArray(
+      entry.overrides,
+      `semanticProgram.entryPoints.${stage}.overrides`
+    );
+    assertStrictlyOrderedStrings(
+      entry.overrides,
+      `semanticProgram.entryPoints.${stage}.overrides`
+    );
     entries.set(stage, entry);
   }
   return entries;
+}
+
+function validateSemanticOverrides(
+  semanticProgram,
+  semanticEntries,
+  expectedStages
+) {
+  const overrides = requireArray(
+    semanticProgram.overrides,
+    "semanticProgram.overrides"
+  );
+  const byName = new Map();
+  let previousName;
+  for (const [index, override] of overrides.entries()) {
+    const owner = `semanticProgram.overrides[${index}]`;
+    requireRecord(override, owner);
+    const names = requireRecord(override.names, `${owner}.names`);
+    const name = names.wgsl;
+    if (
+      typeof name !== "string" ||
+      (previousName !== undefined && compareText(previousName, name) >= 0)
+    ) {
+      fail("semantic program overrides repeat or are not canonically ordered");
+    }
+    requireRecord(override.selected, `${owner}.selected`);
+    previousName = name;
+    byName.set(name, override);
+  }
+
+  const union = new Set();
+  for (const stage of expectedStages) {
+    for (const name of semanticEntries.get(stage).overrides) {
+      if (!byName.has(name)) {
+        fail(
+          `semantic ${stage} entry references unknown override ${quoted(name)}`
+        );
+      }
+      union.add(name);
+    }
+  }
+  if (!isDeepStrictEqual([...union].sort(compareText), [...byName.keys()])) {
+    fail("semantic program overrides are not the exact entry-set union");
+  }
+  return byName;
 }
 
 function validateSupportedSemanticProgram(semanticProgram, semanticLayouts) {
@@ -753,6 +817,19 @@ function requireRecord(value, owner) {
 function requireArray(value, owner) {
   if (!Array.isArray(value)) fail(`${owner} must be an array`);
   return value;
+}
+
+function assertStrictlyOrderedStrings(values, owner) {
+  let previous;
+  for (const [index, value] of values.entries()) {
+    if (
+      typeof value !== "string" ||
+      (previous !== undefined && compareText(previous, value) >= 0)
+    ) {
+      fail(`${owner}[${index}] repeats or is not canonically ordered`);
+    }
+    previous = value;
+  }
 }
 
 function requireExactKeys(value, keys, owner) {

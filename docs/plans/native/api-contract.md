@@ -118,8 +118,8 @@ The semantic contract records:
 
 - module and generated Swift names;
 - `effect`, `draw`, and `compute` program records;
-- authored and resolved WGSL entry points, stage inputs and outputs, built-ins, interpolation, and
-  invariance;
+- authored and resolved WGSL entry points, stage inputs and outputs, built-ins, interpolation,
+  invariance, and each entry's exact static override-name subset;
 - WGSL binding names, groups, bindings, address spaces, access, active stages, resource shapes,
   sample and storage types, and sampler kinds;
 - the `wgsl-host-shareable-v1` layout model and Tint-reflected intrinsic WGSL minimum sizes,
@@ -166,7 +166,9 @@ The resolved WGSL name is the override's program-local identity. An authored num
 present, is retained only as `wgslId` provenance; semantic v1 does not invent a parallel opaque ID.
 Resolved names use the compiler request's ASCII identifier vocabulary. Programs store overrides in
 strict ascending resolved-name order and require both resolved names and authored numeric IDs to be
-unique within that program.
+unique within that program. Every entry point stores an `overrides` array, including `[]`, containing
+its strictly ordered unique subset of those resolved names. The program array is the exact typed
+union of all entry subsets.
 
 The build configuration uses WGSL's single pipeline-overridable constant identifier string: the
 canonical base-10 `@id` when one is authored, and otherwise the declaration name. The semantic
@@ -188,14 +190,14 @@ extraction wire now also passes against the source-built worker. Its eight locke
 successful render, compute, and fixed-resource interfaces plus five exact-static override profiles.
 The override profiles prove every supported scalar kind, selected and default values, authored
 numeric IDs, canonical program unions and per-entry subsets, configured initializer semantics, and
-resolved workgroup dimensions. The connected bridge carries the fixed-size singular resources
-through semantic v1, nominal program-level slot
-allocation, exact per-entry compiler requests, native translation, authenticated program
-projection, and offline Metal linking. It preserves entry subsets, sampling pairs, visibility,
-authored presentation names, and reachable types/layouts; its allocation and final program fragment
-are independently verified against that authenticated graph. Exact-static override assembly,
-broader resource shapes, runtime resource binding, and the connected artifact remain deterministic
-integration gates.
+resolved workgroup dimensions. The connected bridge carries both fixed-size singular resources and
+five exact-static override programs through semantic v1, nominal program-level slot allocation,
+exact per-entry compiler requests, native translation, authenticated program projection, and offline
+Metal linking. It preserves binding and override subsets, sampling pairs, visibility, authored
+presentation names, and reachable types/layouts; its allocation and final program fragment are
+independently verified against that authenticated graph. Six override entry translations compile
+and link without Metal function constants. A live override render observation, broader resource
+shapes, runtime resource binding, and the connected artifact remain deterministic integration gates.
 
 The Metal projection records:
 
@@ -327,8 +329,9 @@ the executable semantic program and its capabilities, but omits `fingerprint`, t
 ID list, every `swiftName`, source spans, and optional interface-value diagnostic names. Other
 semantic `name` fields remain in the preimage. `types` and `layouts` contain only the complete
 transitive closure reachable from that program's bindings and entry-point interfaces. Arrays that
-represent `features`, `languageFeatures`, `visibility`, or an entry point's binding-ID set are sorted
-before canonicalization; ordered arrays keep their authored semantic order. The value is serialized
+represent `features`, `languageFeatures`, `visibility`, or an entry point's binding-ID or
+override-name set are sorted before canonicalization; ordered arrays keep their authored semantic
+order. The value is serialized
 with the artifact's `JCS-RFC8785+VGPU-PATHS-v1` canonicalization and then hashed. Consequently,
 changing referenced WGSL bytes, `layoutModel`, an enabled language feature such as
 `uniform_buffer_standard_layout`, executable program semantics, or a reachable type or intrinsic

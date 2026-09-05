@@ -218,6 +218,8 @@ function normalizeSemanticSets(value, key = "") {
     const isStringSet =
       ["languageFeatures", "features", "visibility"].includes(key) ||
       (key === "bindings" &&
+        normalized.every((child) => typeof child === "string")) ||
+      (key === "overrides" &&
         normalized.every((child) => typeof child === "string"));
     return isStringSet
       ? normalized.sort((left, right) =>
@@ -684,12 +686,13 @@ function assertOverrideProgramFingerprintSensitivity(semantic, inputs) {
       (current) => current.names.wgsl === overrideName
     );
     if (!override) fail(`${programName} override ${overrideName} is missing`);
-    change(override);
+    change(override, program);
     return { candidate, program };
   };
 
-  const renamed = mutate((override) => {
+  const renamed = mutate((override, program) => {
     override.names.wgsl = "C3_WORKGROUP_Y";
+    program.entryPoints.compute.overrides = ["C3_WORKGROUP_Y"];
   });
   if (
     fingerprintProgram(renamed.program, renamed.candidate, inputs) === baseline
@@ -719,6 +722,45 @@ function assertOverrideProgramFingerprintSensitivity(semantic, inputs) {
     baseline,
     `${programName} override Swift-name fingerprint exclusion`
   );
+}
+
+function assertOverrideEntryMembershipFingerprintSensitivity(semantic, inputs) {
+  const firstSemantic = clone(semantic);
+  const firstProgram = requireSemanticProgram(firstSemantic, "SparseDraw");
+  firstProgram.overrides = [
+    {
+      names: { authored: "FRAGMENT_ONLY", wgsl: "FRAGMENT_ONLY" },
+      swiftName: "fragmentOnly",
+      type: "bool",
+      default: { type: "bool", value: true },
+      selected: { type: "bool", value: true },
+    },
+    {
+      names: { authored: "SHARED", wgsl: "SHARED" },
+      swiftName: "shared",
+      type: "bool",
+      default: { type: "bool", value: true },
+      selected: { type: "bool", value: true },
+    },
+  ];
+  firstProgram.entryPoints.vertex.overrides = ["SHARED"];
+  firstProgram.entryPoints.fragment.overrides = ["FRAGMENT_ONLY", "SHARED"];
+  validateSemanticOverrides(firstSemantic);
+
+  const secondSemantic = clone(firstSemantic);
+  const secondProgram = requireSemanticProgram(secondSemantic, "SparseDraw");
+  secondProgram.entryPoints.vertex.overrides = ["FRAGMENT_ONLY", "SHARED"];
+  secondProgram.entryPoints.fragment.overrides = ["SHARED"];
+  validateSemanticOverrides(secondSemantic);
+
+  if (
+    fingerprintProgram(firstProgram, firstSemantic, inputs) ===
+    fingerprintProgram(secondProgram, secondSemantic, inputs)
+  ) {
+    fail(
+      "SparseDraw fingerprint ignored entry override membership with an unchanged program union"
+    );
+  }
 }
 
 function runtimeProjectionInput(projection, librarySHA256) {
@@ -872,9 +914,15 @@ function compareCanonicalStrings(left, right) {
 
 function validateSemanticOverrides(semantic) {
   const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const moduleLanguageFeatures = new Set(
+    semantic.capabilities.languageFeatures
+  );
   for (const program of semantic.programs) {
     const names = new Set();
     const authoredIds = new Set();
+    const programLanguageFeatures = new Set(
+      program.capabilities.languageFeatures
+    );
     let previousName;
     for (const override of program.overrides) {
       const name = override.names?.wgsl;
@@ -892,6 +940,14 @@ function validateSemanticOverrides(semantic) {
       names.add(name);
       previousName = name;
 
+      if (
+        override.type === "f16" &&
+        (!programLanguageFeatures.has("f16") ||
+          !moduleLanguageFeatures.has("f16"))
+      ) {
+        fail(`${program.name} uses an f16 override without the f16 feature`);
+      }
+
       if (Object.hasOwn(override, "wgslId")) {
         if (authoredIds.has(override.wgslId)) {
           fail(
@@ -900,6 +956,38 @@ function validateSemanticOverrides(semantic) {
         }
         authoredIds.add(override.wgslId);
       }
+    }
+
+    const union = new Set();
+    for (const entry of Object.values(program.entryPoints)) {
+      if (!Array.isArray(entry.overrides)) {
+        fail(`${program.name}/${entry.stage} has no override-name set`);
+      }
+      let previousEntryName;
+      for (const name of entry.overrides) {
+        if (
+          typeof name !== "string" ||
+          !wgslIdentifier.test(name) ||
+          (previousEntryName !== undefined && previousEntryName >= name)
+        ) {
+          fail(
+            `${program.name}/${entry.stage} overrides repeat or are not canonically name ordered`
+          );
+        }
+        if (!names.has(name)) {
+          fail(
+            `${program.name}/${entry.stage} references unknown override ${name}`
+          );
+        }
+        previousEntryName = name;
+        union.add(name);
+      }
+    }
+    if (
+      union.size !== names.size ||
+      [...names].some((name) => !union.has(name))
+    ) {
+      fail(`${program.name} overrides are not the exact entry-set union`);
     }
   }
 }
@@ -1669,6 +1757,8 @@ const finiteOverrideProgram = requireSemanticProgram(
   finiteOverrideArtifact.semantic,
   "Noop"
 );
+finiteOverrideArtifact.semantic.capabilities.languageFeatures.push("f16");
+finiteOverrideProgram.capabilities.languageFeatures.push("f16");
 finiteOverrideProgram.overrides.push(
   {
     names: { authored: "FIXTURE_F16", wgsl: "FIXTURE_F16" },
@@ -1686,6 +1776,11 @@ finiteOverrideProgram.overrides.push(
     selected: { type: "f32", bits: "80000000" },
   }
 );
+finiteOverrideProgram.entryPoints.compute.overrides = [
+  "C3_WORKGROUP_X",
+  "FIXTURE_F16",
+  "FIXTURE_F32",
+];
 if (!validateArtifact(finiteOverrideArtifact)) {
   fail(
     `finite override edge values must remain structurally valid:\n${ajv.errorsText(
@@ -1695,6 +1790,86 @@ if (!validateArtifact(finiteOverrideArtifact)) {
   );
 }
 validateSemanticOverrides(finiteOverrideArtifact.semantic);
+for (const [label, removeFeature] of [
+  [
+    "f16 override without program feature",
+    (semantic) => {
+      requireSemanticProgram(semantic, "Noop").capabilities.languageFeatures =
+        [];
+    },
+  ],
+  [
+    "f16 override without module feature",
+    (semantic) => {
+      semantic.capabilities.languageFeatures = [];
+    },
+  ],
+]) {
+  requireSemanticOverrideMutationFailure(
+    finiteOverrideArtifact.semantic,
+    removeFeature,
+    "uses an f16 override without the f16 feature",
+    label
+  );
+}
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    delete requireSemanticProgram(semantic, "Noop").entryPoints.compute
+      .overrides;
+  },
+  "has no override-name set",
+  "missing entry override-name set"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    requireSemanticProgram(semantic, "Noop").entryPoints.compute.overrides = [
+      "C3_WORKGROUP_X",
+      "FIXTURE_F16",
+      "FIXTURE_F32",
+      "UNKNOWN_OVERRIDE",
+    ];
+  },
+  "references unknown override",
+  "dangling entry override reference"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    requireSemanticProgram(semantic, "Noop").entryPoints.compute.overrides = [
+      "FIXTURE_F16",
+      "C3_WORKGROUP_X",
+      "FIXTURE_F32",
+    ];
+  },
+  "repeat or are not canonically name ordered",
+  "non-canonical entry override order"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    requireSemanticProgram(semantic, "Noop").entryPoints.compute.overrides = [
+      "C3_WORKGROUP_X",
+      "C3_WORKGROUP_X",
+      "FIXTURE_F16",
+      "FIXTURE_F32",
+    ];
+  },
+  "repeat or are not canonically name ordered",
+  "duplicate entry override reference"
+);
+requireSemanticOverrideMutationFailure(
+  finiteOverrideArtifact.semantic,
+  (semantic) => {
+    requireSemanticProgram(semantic, "Noop").entryPoints.compute.overrides = [
+      "C3_WORKGROUP_X",
+      "FIXTURE_F16",
+    ];
+  },
+  "not the exact entry-set union",
+  "incomplete entry override union"
+);
 requireSemanticOverrideMutationFailure(
   finiteOverrideArtifact.semantic,
   (semantic) => {
@@ -2002,6 +2177,35 @@ for (const [label, mutate] of [
     (candidate) => {
       requireSemanticProgram(candidate.semantic, "Noop").overrides[0].id =
         "fixture_bool";
+    },
+  ],
+  [
+    "semantic override record limit",
+    (candidate) => {
+      requireSemanticProgram(candidate.semantic, "Noop").overrides = Array.from(
+        { length: 4_097 },
+        (_, index) => {
+          const name = `OVERRIDE_${String(index).padStart(4, "0")}`;
+          return {
+            names: { authored: name, wgsl: name },
+            swiftName: name,
+            type: "u32",
+            selected: { type: "u32", value: 1 },
+          };
+        }
+      );
+    },
+  ],
+  [
+    "entry override membership limit",
+    (candidate) => {
+      requireSemanticProgram(
+        candidate.semantic,
+        "Noop"
+      ).entryPoints.compute.overrides = Array.from(
+        { length: 4_097 },
+        (_, index) => `OVERRIDE_${String(index).padStart(4, "0")}`
+      );
     },
   ],
   [
@@ -2347,6 +2551,10 @@ assertRetainedNameProgramFingerprintSensitivity(
   artifact.inputs
 );
 assertOverrideProgramFingerprintSensitivity(artifact.semantic, artifact.inputs);
+assertOverrideEntryMembershipFingerprintSensitivity(
+  artifact.semantic,
+  artifact.inputs
+);
 
 const runtimeArraySemantic = artifact.semantic.programs.find(
   (program) => program.name === "RuntimeArray"

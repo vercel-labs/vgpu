@@ -1,16 +1,17 @@
 # Exact-static override integration
 
-Status: native semantic extraction passed; authenticated assembly, translator projection, and Metal
-evidence remain open.
+Status: native semantic extraction, authenticated assembly, exact per-entry translator projection,
+deterministic translation, and offline Metal compilation passed. A live override observation remains
+open.
 
 This slice validates the docs-first override contract already proposed for native programs. Override
 values are fixed while building the shader artifact. They are not Swift runtime state, Metal
 function constants, or pipeline options.
 
-The program-scoped semantic extractor now materializes the exact typed static override sets for all
-selected entries. The remaining hypothesis is whether TypeScript can carry those authenticated
-facts through `semantic-v1`, project them into the existing one-entry translator, and reach offline
-and runtime Metal evidence without parsing or evaluating WGSL.
+The program-scoped semantic extractor materializes the exact typed static override sets for all
+selected entries. TypeScript now carries those authenticated facts through `semantic-v1`, projects
+them into the existing one-entry translator, and reaches offline Metal without parsing or evaluating
+WGSL. A separate live-render fixture must still observe the baked values on a Metal device.
 
 ## Keep one configuration and two semantic views
 
@@ -105,7 +106,7 @@ override facts to come from different parses.
 
 ## Assemble without reevaluating
 
-The next assembly slice joins every extracted override to resolver-owned declaration evidence. Its
+Assembly joins every extracted override to resolver-owned declaration evidence. Its
 declaration index must retain the authored name, resolved WGSL name, and optional authored `@id`;
 raw initializer text remains provenance and is never a value source.
 
@@ -152,7 +153,7 @@ produce the same normalized semantic program and program fingerprint, even thoug
 request identities differ. A different selected value or resolved workgroup dimension must change
 the fingerprint.
 
-## Executable extraction evidence
+## Executable evidence
 
 The passing semantic-extraction gate freezes eight request fixtures and eight response fixtures. Its
 static matrix covers ten prelaunch failures, twenty-four override-response mutations, and
@@ -161,60 +162,65 @@ nine deterministic repeats and eight crossed-request checks. It records five fix
 two inactive-configuration successes, one constant-expression workgroup success, seven semantic
 failures, and ten protocol failures.
 
-The native evidence covers exact per-entry name subsets and their canonical result-level union,
+The extraction evidence covers exact per-entry name subsets and their canonical result-level union,
 configured and defaulted typed values, authored `@id` selection and provenance, omission of inactive
 configured declarations, and positive workgroup dimensions resolved from constant and
 override-dependent expressions. The worker installs the exact typed values into fresh IR before
 entry pruning, substitutes overrides, and independently compares the resolved compute dimensions
 with the materializer result.
 
-This evidence ends at authenticated semantic extraction. It does not yet prove resolver assembly,
-`semantic-v1` storage, per-entry compiler-request projection, deterministic translation, AIR or
-metallib compilation, absence of Metal function constants, or a live Metal observation for the
-override fixtures.
+The connected assembly gate adds five override programs to the four existing programs. Nine nominal
+assemblies project thirteen compiler requests in total. For overrides specifically, twelve native
+translator launches prove six deterministic per-entry translations across five programs. Six
+retained MSL sources contain no `function_constant`, compile to AIR for
+`air64-apple-macos14.0`, and link into five metallibs. Independent mutations reject missing,
+redistributed, or crossed entry subsets even when the program union is unchanged, and reject changed
+request or semantic selected values.
 
-## Remaining connected evidence
+## Connected fixtures
 
-The next gate keeps the three-program design below. These are acceptance targets, not evidence from
-the passing extraction gate.
+The connected gate keeps three complementary designs. All three pass through offline Metal; only the
+render observation remains a separate next slice.
 
 ### Compute materialization
 
-The compute source declares `@id(17) REQUIRED`, `DEP = REQUIRED + 1u`, and unrelated entry
-overrides. Selecting `needs_required` will exercise two configurations:
+The compute source declares `@id(17) REQUIRED`, `DEP = REQUIRED + 1u`, and an unrelated entry
+override. Selecting `needs_required` exercises two configurations:
 
 - `"17" = 4` must preserve exact-static `DEP = 5, REQUIRED = 4` and workgroup size `5 × 1 × 1`;
 - `"17" = 4, DEP = 9` must bypass `DEP`'s initializer, preserve the same static membership, and
   produce workgroup size `9 × 1 × 1`.
 
-An unrelated valid configured override must remain omitted, and omitting `REQUIRED` must fail before
-translation. Each success must cross nominal extraction, semantic assembly, exact compiler-request
+An unrelated valid configured override remains omitted, and omitting `REQUIRED` fails before
+translation. Each success crosses nominal extraction, semantic assembly, exact compiler-request
 projection, two deterministic translator processes, AIR compilation, and metallib linking. The
-translated resolved workgroup dimensions must exactly equal the semantic dimensions.
+translated resolved workgroup dimensions exactly equal the semantic dimensions.
 
 This fixture deliberately stops before a live compute dispatch. Adding `MetalComputeProgram`, a
 compute binder, dispatch ownership, and buffer readback would test a separate runtime contract.
 
 ### Render union and observation
 
-The render source will use `SHARED`, `VERTEX_ONLY`, and `FRAGMENT_ONLY`. Both stages use `SHARED`;
-each also uses its stage-local declaration. Assembly must preserve the different per-entry subsets
-and their canonical program union, and each compiler request must receive only its own exact subset.
+The current render source uses `SHARED`, `VERTEX_ONLY`, and `FRAGMENT_ONLY`. Both stages use
+`SHARED`; each also uses its stage-local declaration. Assembly preserves the different per-entry
+subsets and their canonical program union, and each compiler request receives only its own exact
+subset. Both sources compile and link offline.
 
-Configured non-default values must affect the rendered color. Both retained MSL sources must compile
-and link before the Metal harness creates a pipeline and checks an exact `2 × 2` readback. This
-observes the baked result without adding an override API to Swift or using
+That source is deliberately an assembly and offline-compilation fixture, not a live-render oracle.
+The next fixture must use a nondegenerate full-screen vertex path and make configured non-default
+values affect the rendered color. Its Metal harness must check an exact `2 × 2` readback. This will
+observe the baked result without adding an override API to Swift or using
 `MTLFunctionConstantValues`.
 
 ### All scalar kinds
 
-An all-scalar companion will carry `bool`, `i32`, `u32`, `f16`, and `f32` from authenticated
-extraction through assembly, projection, deterministic translation, and offline compilation. Its
-semantic request explicitly selects `languageFeatures: ["f16"]`. It must reuse the existing
-materializer and compiler edge tables rather than introduce another numeric conversion policy.
+An all-scalar companion carries `bool`, `i32`, `u32`, `f16`, and `f32` from authenticated extraction
+through assembly, projection, deterministic translation, and offline compilation. Its semantic
+request explicitly selects `languageFeatures: ["f16"]`. It reuses the existing materializer and
+compiler edge tables rather than introducing another numeric conversion policy.
 
-For every connected fixture, retained MSL must not declare a `function_constant`, and the Swift
-runtime probe must not construct `MTLFunctionConstantValues`. Pipeline creation consumes the
+For every connected fixture, retained MSL does not declare a `function_constant`. The future live
+probe must not construct `MTLFunctionConstantValues`; pipeline creation will consume the
 already-baked functions directly.
 
 ## Failure matrix
@@ -231,20 +237,21 @@ The extraction gate fails closed for:
   `wgslId` collision;
 - extraction crossed between two configurations of the same source.
 
-Native extraction successes run in fresh processes and must be byte deterministic. Checked-in
-responses and hashes remain reviewed oracles rather than being regenerated as part of the assertion
-path. Resolver joins, Swift presentation collisions, translator request mutations, Metal workgroup
-agreement, and runtime-specialization rejection belong to the remaining connected gate.
+Native extraction and translation successes run in fresh processes and must be byte deterministic.
+Checked-in responses and hashes remain reviewed oracles rather than being regenerated as part of the
+assertion path. Resolver joins, Swift presentation collisions, translator request mutations, Metal
+workgroup agreement, exact-union validation, and offline-specialization rejection are now executable.
+Live specialization rejection remains part of the next render observation.
 
 ## Exit condition
 
-The extraction portion is closed: native extraction returns exact typed records, exact entry
-subsets, their canonical union, and resolved workgroup dimensions from real requests. The connected
-slice remains open until assembly reprojects exactly to that authenticated result, every one-entry
-translator request contains the correct subset, retained MSL compiles offline without
-`function_constant`, and the selected Metal observation passes without
-`MTLFunctionConstantValues`.
+The extraction and offline connected portions are closed: native extraction returns exact typed
+records, exact entry subsets, their canonical union, and resolved workgroup dimensions from real
+requests; assembly reprojects exactly to that authenticated result; every one-entry translator
+request contains the correct subset; and retained MSL compiles offline without
+`function_constant`. The live portion remains open until a nondegenerate render observes configured
+values without `MTLFunctionConstantValues`.
 
-Passing extraction does not add runtime specialization, a public Swift override API, compute
-runtime execution, runtime-sized resources, resource binding arrays, repository-corpus coverage, or
-production artifact generation.
+Passing this connected offline slice does not add runtime specialization, a public Swift override
+API, compute runtime execution, runtime-sized resources, resource binding arrays, repository-corpus
+coverage, or production artifact generation.

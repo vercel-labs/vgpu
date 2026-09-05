@@ -76,7 +76,7 @@ const swift6ForbiddenIdentifiers = new Set([
  * scopes that are already known.
  */
 export function assertSwiftPresentationForProgramAssembly(
-  { module, program, bindings, types },
+  { module, program, bindings, overrides, types },
   { failWith }
 ) {
   const fail = (message) => failWith("VGPU-C1-ASSEMBLY-PRESENTATION", message);
@@ -95,6 +95,17 @@ export function assertSwiftPresentationForProgramAssembly(
   assertScope(
     bindings.map((binding) => [`binding ${binding.id}`, binding.swiftName]),
     `program ${JSON.stringify(program.name)} bindings`,
+    fail
+  );
+  if (!Array.isArray(overrides)) {
+    fail(`program ${JSON.stringify(program.name)} overrides must be an array`);
+  }
+  assertScope(
+    overrides.map((override) => [
+      `override ${override.names.wgsl}`,
+      override.swiftName,
+    ]),
+    `program ${JSON.stringify(program.name)} overrides`,
     fail
   );
 

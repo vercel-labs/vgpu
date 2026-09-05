@@ -78,24 +78,36 @@ positive workgroup dimensions resolved from constant and override-dependent expr
 existing resource evidence still includes the numeric five-binding graph, authored fixed `@size`,
 storage-texture reflection, cross-stage sampler/texture resolution, and structured runtime-array and
 binding-array rejection. This closes the native extraction portion of condition 4 and adds evidence
-for conditions 3 and 10; override assembly and the connected downstream path remain open.
+for conditions 3 and 10. The connected override assembly and offline translation path described
+below now extend that evidence through conditions 5, 6, 7, and 12 for the five override fixtures.
 
-The executable assembly slice adds four programs: resource-free effect, multi-module draw, and
-compute fixtures plus one fixed singular-resource draw. Four nominal allocations produce seven
-compiler requests. The gate covers five nominal failures, five declaration failures, three
-resolver-symbol failures, three resolver-resource-join failures, two retained-resolver-snapshot
-checks, one profile failure, one render-link failure, five fingerprint checks, twelve Swift-name
-failures, one stage-isolation check, four slot-allocation failures, and two projection failures. Its
-eight semantic invocations are two byte-identical extractions for each fixture; the resource pair
-adds four deterministic translations. It proves declaration v2 entry spans and
-binding, struct, and member symbol evidence; exact authored Swift presentation with Swift 6 and
-helper/generated-module namespace rejection plus binding-local and member-local collision checks;
-schema-valid interface interning and fixed resource graphs; program fingerprints; and exact
+The executable assembly slice now contains nine programs: resource-free effect, multi-module draw,
+compute, one fixed singular-resource draw, and five exact-static override configurations. Nine
+nominal allocations produce thirteen compiler requests. The gate covers five nominal failures, five
+declaration failures, three resolver-symbol failures, three resolver-resource-join failures, fifteen
+resolver-override checks, two retained-resolver-snapshot checks, six override-configuration checks,
+one profile failure, one render-link failure, five fingerprint checks, fourteen Swift-name failures,
+one stage-isolation check, four slot-allocation failures, and two projection failures. Its eighteen
+semantic invocations are two byte-identical extractions for each fixture. It proves declaration v3
+entry spans plus binding, struct, member, and override symbol evidence; exact authored Swift
+presentation with Swift 6 and helper/generated-module namespace rejection plus binding-local,
+override-local, and member-local collision checks; schema-valid interface interning and fixed
+resource graphs; exact per-entry override subsets and typed unions; program fingerprints; and exact
 extraction reprojection. Final aggregation still owns collisions created by local/shared type
-placement and generated program API names. The resource fixture retains numeric
-bindings `b0`, `b1`, `b2`, `b3`, and `b10`, exact entry subsets, sampling pair and visibility, seven
-extracted types expanded to eight semantic types, six layouts, and minimum buffer sizes of 8, 24,
-and 16 bytes. This is partial evidence for conditions 3 through 6 and 10.
+placement and generated program API names. The resource fixture retains numeric bindings `b0`,
+`b1`, `b2`, `b3`, and `b10`, exact entry subsets, sampling pair and visibility, seven extracted types
+expanded to eight semantic types, six layouts, and minimum buffer sizes of 8, 24, and 16 bytes. This
+is partial evidence for conditions 3 through 7, 10, and 12.
+
+The connected override companion adds twelve deterministic translation processes covering six
+entries and five programs. It preserves dependent defaults and initializer bypass, proves that an
+omitted default and the equivalent explicit value converge on identical downstream semantics, keeps
+different render-stage subsets despite a shared union, carries `bool`, `i32`, `u32`, `f16`, and
+`f32`, and requires translated workgroup dimensions to equal semantic dimensions. Its six retained
+MSL sources contain no `function_constant`, compile to AIR, and link into five metallibs. Twelve
+independent projection mutations include missing and redistributed membership, crossed request
+subsets, and changed selected values. This is executable evidence for the override portions of
+conditions 4 through 7, 10, and 12. It is not a live Metal observation.
 
 The integrated Metal companion adds nine one-shot Tint processes: one inventory, two byte-identical
 semantic extractions, four deterministic successful translations, and two byte-identical runs of one
@@ -119,8 +131,9 @@ cover the current fixed direct profile. This closes fixed singular-resource allo
 projection, response authentication, program projection, offline compilation, and runtime
 binding/readback for that fixture.
 
-Exact-static override extraction has passed. Its authenticated assembly into `semantic-v1`, exact
-per-entry translation projection, offline and runtime Metal evidence, compute-resource translation
-and runtime parity, broader resource shapes, the integrated repository corpus, production artifact
-packaging, and the production Swift runtime remain open. The recorded GPU evidence is not an Intel,
-AMD, or cross-machine result.
+Exact-static override extraction, authenticated assembly into `semantic-v1`, exact per-entry
+translation projection, deterministic native translation, and offline Metal compilation have
+passed. A nondegenerate live override render observation, compute-resource translation and runtime
+parity, broader resource shapes, the integrated repository corpus, production artifact packaging,
+and the production Swift runtime remain open. The recorded GPU evidence is not an Intel, AMD, or
+cross-machine result.

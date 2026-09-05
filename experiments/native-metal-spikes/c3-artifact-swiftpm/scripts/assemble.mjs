@@ -140,6 +140,8 @@ function normalizeSemanticSets(value, key = "") {
     const isStringSet =
       ["languageFeatures", "features", "visibility"].includes(key) ||
       (key === "bindings" &&
+        normalized.every((child) => typeof child === "string")) ||
+      (key === "overrides" &&
         normalized.every((child) => typeof child === "string"));
     return isStringSet
       ? normalized.sort((left, right) =>
@@ -314,9 +316,15 @@ function compareCanonicalStrings(left, right) {
 
 function validateSemanticOverrides(semantic) {
   const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const moduleLanguageFeatures = new Set(
+    semantic.capabilities.languageFeatures
+  );
   for (const program of semantic.programs) {
     const names = new Set();
     const authoredIds = new Set();
+    const programLanguageFeatures = new Set(
+      program.capabilities.languageFeatures
+    );
     let previousName;
     for (const override of program.overrides) {
       const name = override.names?.wgsl;
@@ -334,6 +342,14 @@ function validateSemanticOverrides(semantic) {
       names.add(name);
       previousName = name;
 
+      if (
+        override.type === "f16" &&
+        (!programLanguageFeatures.has("f16") ||
+          !moduleLanguageFeatures.has("f16"))
+      ) {
+        fail(`${program.name} uses an f16 override without the f16 feature`);
+      }
+
       if (Object.hasOwn(override, "wgslId")) {
         if (authoredIds.has(override.wgslId)) {
           fail(
@@ -342,6 +358,38 @@ function validateSemanticOverrides(semantic) {
         }
         authoredIds.add(override.wgslId);
       }
+    }
+
+    const union = new Set();
+    for (const entry of Object.values(program.entryPoints)) {
+      if (!Array.isArray(entry.overrides)) {
+        fail(`${program.name}/${entry.stage} has no override-name set`);
+      }
+      let previousEntryName;
+      for (const name of entry.overrides) {
+        if (
+          typeof name !== "string" ||
+          !wgslIdentifier.test(name) ||
+          (previousEntryName !== undefined && previousEntryName >= name)
+        ) {
+          fail(
+            `${program.name}/${entry.stage} overrides repeat or are not canonically name ordered`
+          );
+        }
+        if (!names.has(name)) {
+          fail(
+            `${program.name}/${entry.stage} references unknown override ${name}`
+          );
+        }
+        previousEntryName = name;
+        union.add(name);
+      }
+    }
+    if (
+      union.size !== names.size ||
+      [...names].some((name) => !union.has(name))
+    ) {
+      fail(`${program.name} overrides are not the exact entry-set union`);
     }
   }
 }

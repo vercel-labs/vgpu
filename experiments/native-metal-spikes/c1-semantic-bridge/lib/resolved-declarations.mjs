@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { resolveVirtualShader } from "../../c1-compiler-protocol/lib/virtual-resolver.mjs";
 
 export const RESOLVED_DECLARATIONS_CONTRACT =
-  "vgpu-c1-resolved-declarations/v2";
+  "vgpu-c1-resolved-declarations/v3";
 
 const declarationIndexes = new WeakMap();
 const stages = new Set(["vertex", "fragment", "compute"]);
@@ -15,6 +15,7 @@ const stageOrder = new Map([
 ]);
 const wgslIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const uint32Maximum = 4_294_967_295;
+const overrideIdMaximum = 65_535;
 
 export class ResolvedDeclarationsError extends Error {
   constructor(code, message) {
@@ -82,6 +83,7 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
   const reflectedEntries = graph.resolved.reflection.entryPoints;
   const bindings = captureBindings(graph.resolved.reflection.bindings);
   const structs = captureStructs(graph.resolved.reflection.structs);
+  const overrides = captureOverrides(graph.resolved.reflection.overrides);
   const entries = [];
   const seen = new Set();
   for (const module of graph.resolved.ast.modules) {
@@ -179,7 +181,7 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
       compare(left.names.wgsl, right.names.wgsl)
   );
   const snapshot = freezeJson({
-    schemaVersion: 2,
+    schemaVersion: 3,
     contractId: RESOLVED_DECLARATIONS_CONTRACT,
     resolvedSource: {
       virtualPath: graph.originMap.generatedSource.virtualPath,
@@ -189,6 +191,7 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
     entries,
     bindings,
     structs,
+    overrides,
   });
   const record = {
     resolvedText: graph.resolved.wgsl,
@@ -205,6 +208,9 @@ function createResolvedDeclarationIndex(graph, authorize = true) {
     ),
     structsByWgslName: new Map(
       snapshot.structs.map((struct) => [struct.names.wgsl, struct])
+    ),
+    overridesByWgslName: new Map(
+      snapshot.overrides.map((override) => [override.names.wgsl, override])
     ),
   };
   if (authorize) declarationIndexes.set(snapshot, record);
@@ -436,6 +442,107 @@ export function resolvedResourcePresentationForExtraction(
   return freezeJson({ bindings, types });
 }
 
+/**
+ * Joins authenticated Tint override identities to resolver-owned authored
+ * presentation. Types and values remain exclusively owned by extraction.
+ */
+export function resolvedOverridePresentationForExtraction(
+  declarations,
+  finalized,
+  overrideGraph
+) {
+  const record = requireIndex(declarations);
+  assertResolvedDeclarationsForFinalizedCapsule(declarations, finalized);
+  if (
+    typeof overrideGraph !== "object" ||
+    overrideGraph === null ||
+    !Array.isArray(overrideGraph.overrides)
+  ) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-OVERRIDE",
+      "override presentation requires one extracted override graph"
+    );
+  }
+
+  const overrides = [];
+  let previousName;
+  for (const extracted of overrideGraph.overrides) {
+    assertExtractedOverrideIdentity(extracted);
+    if (
+      previousName !== undefined &&
+      compare(previousName, extracted.name) >= 0
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-OVERRIDE",
+        "extracted overrides repeat a name or are not canonically ordered"
+      );
+    }
+    previousName = extracted.name;
+
+    const reflected = record.overridesByWgslName.get(extracted.name);
+    if (!reflected || reflected.wgslId !== extracted.wgslId) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-OVERRIDE",
+        `extracted override ${quoted(
+          extracted.name
+        )} has no exact resolver symbol and authored ID`
+      );
+    }
+    overrides.push([
+      extracted.name,
+      { authoredName: reflected.names.authored },
+    ]);
+  }
+  return freezeJson(Object.fromEntries(overrides));
+}
+
+function captureOverrides(reflectedOverrides) {
+  if (!Array.isArray(reflectedOverrides) || reflectedOverrides.length > 4_096) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-RESOLVER",
+      "resolver reflection contains an invalid override collection"
+    );
+  }
+  const overrides = [];
+  const authoredNames = new Set();
+  const resolvedNames = new Set();
+  const authoredIds = new Set();
+  for (const reflected of reflectedOverrides) {
+    if (
+      !wgslIdentifier.test(reflected?.name ?? "") ||
+      !wgslIdentifier.test(reflected?.mangledName ?? "") ||
+      (reflected.id !== undefined && !isOverrideId(reflected.id)) ||
+      (reflected.defaultValue !== undefined &&
+        (typeof reflected.defaultValue !== "string" ||
+          reflected.defaultValue.length === 0 ||
+          !reflected.defaultValue.isWellFormed())) ||
+      authoredNames.has(reflected.name) ||
+      resolvedNames.has(reflected.mangledName) ||
+      (reflected.id !== undefined && authoredIds.has(reflected.id))
+    ) {
+      declarationFail(
+        "VGPU-C1-DECLARATIONS-RESOLVER",
+        "resolver reflection contains a malformed or duplicated override symbol"
+      );
+    }
+    authoredNames.add(reflected.name);
+    resolvedNames.add(reflected.mangledName);
+    if (reflected.id !== undefined) authoredIds.add(reflected.id);
+    overrides.push({
+      names: {
+        authored: reflected.name,
+        wgsl: reflected.mangledName,
+      },
+      ...(reflected.id === undefined ? {} : { wgslId: reflected.id }),
+      ...(reflected.defaultValue === undefined
+        ? {}
+        : { initializer: reflected.defaultValue }),
+    });
+  }
+  overrides.sort((left, right) => compare(left.names.wgsl, right.names.wgsl));
+  return overrides;
+}
+
 function captureBindings(reflectedBindings) {
   const bindings = [];
   const resolvedNames = new Set();
@@ -538,6 +645,7 @@ function assertResolverGraph(graph) {
     !Array.isArray(graph.resolved?.reflection?.entryPoints) ||
     !Array.isArray(graph.resolved?.reflection?.bindings) ||
     !Array.isArray(graph.resolved?.reflection?.structs) ||
+    !Array.isArray(graph.resolved?.reflection?.overrides) ||
     !Array.isArray(graph.originMap?.sources) ||
     !Array.isArray(graph.originMap?.segments)
   ) {
@@ -674,6 +782,24 @@ function assertExtractedBindingIdentity(binding) {
       "extracted binding has a malformed symbol identity"
     );
   }
+}
+
+function assertExtractedOverrideIdentity(override) {
+  if (
+    !wgslIdentifier.test(override?.name ?? "") ||
+    (override.wgslId !== undefined && !isOverrideId(override.wgslId))
+  ) {
+    declarationFail(
+      "VGPU-C1-DECLARATIONS-OVERRIDE",
+      "extracted override has a malformed symbol identity"
+    );
+  }
+}
+
+function isOverrideId(value) {
+  return (
+    Number.isSafeInteger(value) && value >= 0 && value <= overrideIdMaximum
+  );
 }
 
 function isUint32(value) {

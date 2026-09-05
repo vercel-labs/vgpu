@@ -4,7 +4,7 @@ Assembly is a pure TypeScript join. It consumes one authenticated extraction, th
 selection/finalization objects that produced its request, resolver-owned authored declaration and
 resource-symbol evidence, and deterministic presentation policy. It does not parse WGSL or consult
 mutable `ResolvedShader.reflection` after that evidence is minted. The executable profile accepts
-singular resources with fixed-size layouts and programs without overrides.
+singular resources with fixed-size layouts and scalar exact-static overrides.
 
 ## Ownership of the join
 
@@ -41,7 +41,8 @@ The complete adapter must prove all of the following before producing `semantic-
    binding is active in at least one selected entry. Derived visibility is exactly the set of those
    stages.
 5. The result override array is exactly the union of the entry override sets, and selected/default
-   values agree wherever an override is shared.
+   values agree wherever an override is shared. Every entry serializes its canonical `overrides`
+   array even when that subset is empty.
 6. Types and layouts have valid content IDs and form exactly the reachable transitive closure. No
    dangling or extra graph node is accepted.
 7. Entry interfaces, binding arrays, override arrays, features, and root unions use their contract
@@ -53,9 +54,9 @@ The complete adapter must prove all of the following before producing `semantic-
 The executable profile applies the association, entry, source-span, resource-symbol join, link,
 canonical ordering, transitive type/layout closure, capability, exact reprojection, and fingerprint
 checks now. It copies the authenticated program binding union, entry subsets, sampling pairs, types,
-and layouts exactly, then derives only stage visibility and Swift presentation. It accepts singular
-fixed-size resources and rejects `dual_source_blending`. Exact-static override unions remain a
-later slice rather than a partially populated success; their selected join is specified in
+layouts, entry override subsets, and typed override union exactly, then derives only stage visibility
+and Swift presentation. It accepts singular fixed-size resources and scalar exact-static overrides,
+and rejects `dual_source_blending`. The override join is specified in
 [`exact-static-overrides.md`](./exact-static-overrides.md). Metal slots are derived only after this
 backend-neutral assembly is complete.
 
@@ -100,8 +101,9 @@ first implementation omits these names rather than manufacturing lowered symbols
 The program fingerprint includes selected resolved WGSL IDs and hashes, the layout model, explicit
 language features, normalized executable program semantics and capabilities, and only the reachable
 type/layout closure. It excludes its own value, redundant `sources`, Swift names, source spans, and
-interface diagnostic names. Arrays declared as sets are sorted before hashing; interface and member
-arrays keep their semantic order.
+interface diagnostic names. Arrays declared as sets, including every entry's override-name subset,
+are sorted before hashing; interface and member arrays keep their semantic order. Redistributing one
+override between entries therefore changes the fingerprint even when the program union is unchanged.
 
 ## Translator projection
 
@@ -116,8 +118,9 @@ The projector rehydrates every interface type from the assembled content IDs, th
 equality with the retained authenticated extraction before it can return a compiler request. It
 also requires a frozen nominal Metal allocation minted for that exact assembly. A clone, a
 hand-written map, or an allocation belonging to a structurally equal but distinct assembly fails
-before translation. Resource-free and fixed-size singular-resource programs now use the same
-projection path; only their derived external slot sets differ.
+before translation. Resource-free, fixed-size singular-resource, and exact-static override programs
+now use the same projection path; only their semantic entry subsets and derived external slot sets
+differ.
 
 For each interface leaf, projection resolves the semantic type ID, proves that it is a scalar or
 vector of one scalar, and emits the original authenticated inline `{ scalar, width }` shape. It
@@ -126,31 +129,33 @@ translator then starts in a fresh process, parses the same bytes, materializes t
 and compares the complete entry interface and resource mapping before MSL generation. A local
 projection bug therefore fails closed instead of silently changing the runtime artifact.
 
-The connected resource gate now authenticates each one-shot response against its schema and exact
-nominal request, including the external map and empty effective internal result expected by the
-fixture. It combines the complete stage set into the exact `$defs/program` fragment, preserving
+The connected gate authenticates each one-shot response against its schema and exact nominal
+request. It combines the complete stage set into the exact `$defs/program` fragment, preserving
 sparse interface indices, stage-local slots, effective internal resources, storage-size regions,
-and resolved compute dimensions. Broad extraction facts remain in `semantic-v1`; they are not
-copied into the runtime projection. Top-level target, toolchain, metallib, fingerprint, and module
+and resolved compute dimensions. For override programs, the independent verifier also proves that
+each request contains exactly its semantic entry's selected subset and that all entry subsets form
+the exact semantic program union. Broad extraction facts remain in `semantic-v1`; they are not copied
+into the runtime projection. Top-level target, toolchain, metallib, fingerprint, and module
 aggregation remain a subsequent artifact slice. Slot ownership and the candidate-versus-effective
 split are detailed in [`metal-slot-projection.md`](./metal-slot-projection.md).
 
 ## Executable evidence
 
-The static assembly gate resolves effect, multi-module draw, compute, and fixed-resource fixtures,
-mints declaration evidence only through those real resolver calls, authenticates reviewed
-extraction responses, and assembles four schema-valid programs. The resolved-declarations v2
-snapshot retains entry spans plus binding, struct, and member symbol evidence. Four nominal slot
-allocations project seven compiler requests, including both fixed-resource render stages. The gate
-covers five nominal failures, five declaration failures including a cross-module span
-mutation, three resolver-symbol failures, three resolver-resource-join failures, two retained
-resolver-snapshot checks, one rejected profile, one broken render link, five fingerprint checks,
-twelve Swift-name failures, four slot-allocation failures, and two projection failures. One
-additional mutation proves stage-local buffer indices can differ for a shared semantic binding.
-None of those checks launches the translator. The draw case
-also proves that the resolver preserves public entry names while mangling imported helpers and
-module-local types; `names.authored` and `names.wgsl` retain their separate authorities even when
-their current values are equal.
+The static assembly gate resolves effect, multi-module draw, compute, fixed-resource, dependent and
+bypassed compute-override, equivalent-default, render-override, and all-scalar fixtures. It mints
+declaration evidence only through those real resolver calls, authenticates reviewed extraction
+responses, and assembles nine schema-valid programs. The resolved-declarations v3 snapshot retains
+entry spans plus binding, struct, member, and override symbol evidence. Nine nominal slot allocations
+project thirteen compiler requests, including both fixed-resource and override-render stages. The
+gate covers five nominal failures, five declaration failures including a cross-module span mutation,
+three resolver-symbol failures, three resolver-resource-join failures, fifteen resolver-override
+checks, two retained resolver-snapshot checks, six override-configuration checks, one rejected
+profile, one broken render link, five fingerprint checks, fourteen Swift-name failures, four
+slot-allocation failures, and two projection failures. One additional mutation proves stage-local
+buffer indices can differ for a shared semantic binding. None of those checks launches the
+translator. The draw case also proves that the resolver preserves public entry names while mangling
+imported helpers and module-local types; `names.authored` and `names.wgsl` retain their separate
+authorities even when their current values are equal.
 
 The resource fixture has the numeric binding union `b0`, `b1`, `b2`, `b3`, and `b10`, exact entry
 subsets, one filtering sampling pair, and visibility derived from those subsets. Its seven extracted
@@ -158,23 +163,27 @@ types become eight semantic types after interface interning, while all six layou
 the three buffer minimum sizes are 8, 24, and 16 bytes. Reprojection removes only adapter-owned
 presentation and visibility and must reproduce the complete authenticated extraction exactly.
 
-With the accepted native worker, the gate performs eight semantic-extraction invocations: two
-byte-identical runs for each of four fixtures. Seven static compiler translations assemble four
+With the accepted native worker, the gate performs eighteen semantic-extraction invocations: two
+byte-identical runs for each of nine fixtures. Thirteen static compiler translations assemble nine
 schema-valid program projections, with nineteen authentication/combination failures and independent
-slot, runtime-region, workgroup, and requirements canaries. It then translates the resource vertex
-and fragment twice each, authenticates one result per stage, compiles two AIR files for the macOS 14
-target through the projection source accessor, and links one metallib. The resulting program
-preserves the requested external slots and reports no effective internal binding or size region. A
-nominal join derives its runtime layout from that program alone; two Swift processes then prepare
-five logical resources into six stage-local commands and each validate two renders against the
-exact expected readback. Pipeline reflection remains an independent oracle rather than binding
-authority. The complete fixed-resource evidence is recorded in
+slot, override-subset, runtime-region, workgroup, and requirements canaries. It translates the
+resource vertex and fragment twice each, then performs twelve override translations covering six
+entries and five programs. The six retained override MSL sources contain no `function_constant`,
+compile to AIR for the macOS 14 target, and link into five metallibs. Equivalent omitted and explicit
+defaults produce identical semantic programs, compiler requests, translations, and projections;
+bypassing the initializer with a different value changes them.
+
+The fixed-resource result preserves the requested external slots and reports no effective internal
+binding or size region. A nominal join derives its runtime layout from that program alone; two Swift
+processes then prepare five logical resources into six stage-local commands and each validate two
+renders against the exact expected readback. Pipeline reflection remains an independent oracle
+rather than binding authority. The complete fixed-resource evidence is recorded in
 [`runtime-resource-binding.md`](./runtime-resource-binding.md).
 The independently integrated full-screen companion runs one
 inventory, two semantic extractions, four successful translations, two structured-negative
 translations, combines a resource-free program projection, and performs live readback. Its compiler
 requests come from the nominal assembly, while the checked-in interface JSON remains a static
 oracle. The authored fragment's resolver-owned
-end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. Exact-static
-overrides, broader resource runtime coverage, repository corpus integration, production artifact
-packaging, and Intel/AMD hardware evidence remain open.
+end-exclusive span is exactly `6:1–9:2`; the injected vertex omits authored provenance. A live
+override render observation, broader resource runtime coverage, repository corpus integration,
+production artifact packaging, and Intel/AMD hardware evidence remain open.

@@ -55,8 +55,11 @@ The runner:
    domain, legacy arbitrary override IDs, invalid resolved override identifiers, non-finite override
    constants, repeated or non-canonical per-stage binding intervals, stages incompatible with the
    program kind, and components that disagree with their Metal resource class; verifier negatives
-   also require override WGSL names to be unique and strictly ordered, and authored `@id` values to
-   be unique when present;
+   also require every entry's override-name subset, including `[]`, to be present, unique, strictly
+   ordered, bounded to 4096 members, and drawn from the program union; the program union must be the
+   exact union of those subsets, its WGSL names must be unique and strictly ordered, authored `@id`
+   values must be unique when present, and an `f16` override requires the feature in both the
+   semantic program and its source module;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
    the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size
@@ -100,8 +103,9 @@ the forward type/layout closure reachable from that program's bindings and inter
 starts from interface and binding types plus each buffer binding's explicit layout, follows only
 type element/member references and layout type/member/layout references, and never discovers a
 layout by scanning for a matching type. Capabilities remain in the program. Arrays declared as
-unordered unique sets by the schema are sorted before hashing; semantically ordered arrays retain
-their order. Executable self-checks require referenced WGSL, layout-model, language-feature,
+unordered unique sets by the schema, including every entry's override-name subset, are sorted before
+hashing; semantically ordered arrays retain their order. Executable self-checks require referenced
+WGSL, layout-model, language-feature,
 binding-root-layout, and explicitly member-linked child-layout changes to change the fingerprint.
 `SparseDraw` proves that an interface-only program has an empty layout closure, while `Noop` proves
 that a same-type layout reachable only from another program does not change its fingerprint. An
@@ -111,7 +115,9 @@ Interface diagnostic names are removed through a directed projection: rename/rem
 non-mutation canaries prove the exclusion, while program, resolved entry, binding, reachable member,
 and override names remain covered. `Noop` uses an authored `@id` override to resolve its workgroup
 width; separate canaries prove that the resolved override name and selected value affect its program
-fingerprint while its generated Swift name does not.
+fingerprint while its generated Swift name does not. Another canary redistributes override
+membership between entries without changing the program union and still changes the owning program
+fingerprint.
 
 The projection requires a versioned `storageBufferSizeModel` string and every projected program
 contains a canonical `storageBufferSizeRegions` array. `Noop` uses an empty array. `RuntimeArray`

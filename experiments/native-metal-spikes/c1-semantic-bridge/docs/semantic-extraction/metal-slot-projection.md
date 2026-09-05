@@ -39,8 +39,9 @@ The program allocation is a union. Projection filters it to the selected entry's
 binding set, removes the now-implicit stage field from every direct slot, restores numeric WGSL
 group and binding coordinates from the semantic graph, and rejects missing or extra stage slots.
 Source bytes, origin map, entry identity, interface, and language features still come from evidence
-retained by the nominal assembly. Overrides remain explicitly empty under the current executable
-assembly profile; exact-static override projection is a later slice.
+retained by the nominal assembly. For exact-static programs, projection selects only the entry's
+canonical override-name subset from the program's typed union and sends those selected values to the
+one-entry translator.
 
 Compiler protocol v1 currently carries a candidate stage-local `immediate-data` reservation and a
 storage-size transport offset on every request. The integration canary uses Metal `buffer(30)` and
@@ -95,8 +96,9 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.
 ```
 
 This evidence includes pipeline creation, direct fixed-resource binding, and readback for the one
-render fixture. It stops before artifact packaging, exact-static override assembly, runtime-sized
-storage integration, compute-resource encoding, the repository corpus, production Swift runtime,
-and additional hardware. The numeric canary ceilings are not a supported-device profile. See
+resource render fixture. Exact-static override assembly and offline linking now pass in the same
+gate, but their live render observation remains open. Artifact packaging, runtime-sized storage
+integration, compute-resource encoding, the repository corpus, production Swift runtime, and
+additional hardware also remain open. The numeric canary ceilings are not a supported-device profile. See
 [`runtime-resource-binding.md`](./runtime-resource-binding.md) for the runtime ownership and
 limitations.

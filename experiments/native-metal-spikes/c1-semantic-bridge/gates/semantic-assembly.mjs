@@ -48,6 +48,7 @@ import {
 import { selectProgramEntries } from "../lib/program-selection.mjs";
 import {
   isResolvedDeclarationIndex,
+  resolvedOverridePresentationForExtraction,
   resolvedResourcePresentationForExtraction,
   resolveVirtualShaderWithDeclarations,
   validateResolvedDeclarationCandidate,
@@ -77,6 +78,11 @@ import {
 
 const spikeDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirectory = join(spikeDirectory, "fixtures", "semantic-assembly");
+const semanticExtractionFixtureDirectory = join(
+  spikeDirectory,
+  "fixtures",
+  "semantic-extraction"
+);
 const resourceSwiftProbePath = join(
   spikeDirectory,
   "gates",
@@ -87,7 +93,7 @@ const metalTarget = "air64-apple-macos14.0";
 const expectedSnapshots = Object.freeze({
   effect: Object.freeze({
     programFingerprint:
-      "aa8cb703d9eb09320f37e3ff89856625d662fc1f950f3212fdd7a15facfaff6d",
+      "fc80f8fb8c2b23e5c4527f70dab06512575c2356731cd2a36e818f7991de03b3",
     resolvedSourceSha256:
       "c65624bf6dff3255ae2da0ec055d8810810185e5cf51284a4bacf625ac192627",
     semanticRequestSha256:
@@ -97,7 +103,7 @@ const expectedSnapshots = Object.freeze({
   }),
   draw: Object.freeze({
     programFingerprint:
-      "8bb06404a2c4f490e5a959b58b4f9abfc4c583caff76c226bc950f745d858810",
+      "87dd95f210e6aabc9b2285f3c8a7a50aa7ea0aab554f13ed27c766dbbef29675",
     resolvedSourceSha256:
       "78ac180f55f95c1ed894fade30eb14ab0ad3d9a5c8075241addf0c55d39c735f",
     semanticRequestSha256:
@@ -107,7 +113,7 @@ const expectedSnapshots = Object.freeze({
   }),
   compute: Object.freeze({
     programFingerprint:
-      "21c4ce880f30b107e8540c9c977f9425e628057a365ecd8775ea456ad1824a3b",
+      "7b8d18cc88d21419ce2db625535fa84694d6b92c452d33ec1a17cb96f05e08d4",
     resolvedSourceSha256:
       "fa3de3a17d1ef58d68bd67f66af3aa9a5217043962bd98db5235aa34aa18cef3",
     semanticRequestSha256:
@@ -117,7 +123,7 @@ const expectedSnapshots = Object.freeze({
   }),
   resource: Object.freeze({
     programFingerprint:
-      "49b77712d6d6a5f3a0011fd132149f4aa9a1b6c5a3a991384c6ebaacd8ec7e85",
+      "f101049b2433c539ad1f777071f8beac977f8652966f11a6095ee26d0b9fffcb",
     resolvedSourceSha256:
       "e60666167ae415d142aaaac8789abb65f4ceb93b213649e551202193fe3b5ba3",
     semanticRequestSha256:
@@ -148,6 +154,114 @@ const expectedSnapshots = Object.freeze({
           "2c9cea9098c73ec00c14f695219e5b5f7342de28fe06bba239f68b1d15eb9ca0",
         mslSha256:
           "d5f73664b2feb9c9f693622cef7c76699b6f70d41e05f35156c8b47322f1c64b",
+      }),
+    }),
+  }),
+  overrideDependent: Object.freeze({
+    programFingerprint:
+      "770c84f76e8dbe3bb95c676cb2c231671065eb25964db3dd954a333a8fce0733",
+    resolvedSourceSha256:
+      "020fc81dad56eee7213b000f91c7eda5924ac38f732568667060b6a718644738",
+    semanticRequestSha256:
+      "599b8a8b53e0930cf988ed4ab1fa575b1f4a25a07a779c9b93a779932ab02dbd",
+    nativeResponseSha256:
+      "8daad067a06abbec820ede5d621649aadf2f36f0b82296048c49f0ffd5ae9a6a",
+    translations: Object.freeze({
+      compute: Object.freeze({
+        requestSha256:
+          "2c8ac152d2395d423a852ad67b2289765781027e4c0aff9050c9e355771380cc",
+        responseSha256:
+          "a1c92c74d2c2723ae407fa0f388bcedc13d33dac047e7eb2a357ea1e9d5677c7",
+        mslSha256:
+          "885bcd67515cac3e55775004ad7693e5a532bdeee5e33ed6dccd2528a6f762e0",
+      }),
+    }),
+  }),
+  overrideBypass: Object.freeze({
+    programFingerprint:
+      "38a849e55c756e4e9819e3ab5dde2a8d3caf8ce7bd6c67237f9b8e49ffd0b93a",
+    resolvedSourceSha256:
+      "020fc81dad56eee7213b000f91c7eda5924ac38f732568667060b6a718644738",
+    semanticRequestSha256:
+      "771c575e190592c3e47b1732f360da32e831ac8962271e42e9a1d1c4f136d515",
+    nativeResponseSha256:
+      "1472b81e3943f5b3035265faf8b1444928558284b9cc65797ea39ffe1dc0338c",
+    translations: Object.freeze({
+      compute: Object.freeze({
+        requestSha256:
+          "6aca22eeb66898720f71aefbc1267eefd2f177716a40847df2eeffb266322b1f",
+        responseSha256:
+          "838fd22a045f5297ec0adf9534f6a0f318a4789e059b9397eb6bf3fc801f7f29",
+        mslSha256:
+          "9312a852587f3ea2e9f689a4fdaceaf07d520320033ec376f8193ffc98d30db4",
+      }),
+    }),
+  }),
+  overrideEquivalent: Object.freeze({
+    programFingerprint:
+      "770c84f76e8dbe3bb95c676cb2c231671065eb25964db3dd954a333a8fce0733",
+    resolvedSourceSha256:
+      "020fc81dad56eee7213b000f91c7eda5924ac38f732568667060b6a718644738",
+    semanticRequestSha256:
+      "399719a2478833a7a6593f20da1173e711925b1a0fe1e313ba6e25f322a44599",
+    nativeResponseSha256:
+      "d50076d564c9e43d9862bdf4056b4fa89915f570c71cfc427679a114a3cc2ca3",
+    translations: Object.freeze({
+      compute: Object.freeze({
+        requestSha256:
+          "2c8ac152d2395d423a852ad67b2289765781027e4c0aff9050c9e355771380cc",
+        responseSha256:
+          "a1c92c74d2c2723ae407fa0f388bcedc13d33dac047e7eb2a357ea1e9d5677c7",
+        mslSha256:
+          "885bcd67515cac3e55775004ad7693e5a532bdeee5e33ed6dccd2528a6f762e0",
+      }),
+    }),
+  }),
+  overrideRender: Object.freeze({
+    programFingerprint:
+      "3957a4b0d80ab1e98c08616aebd5a1267ce086503a1e7b6249bb5dcbc0d1fd5f",
+    resolvedSourceSha256:
+      "87282982eac9577a941e9115e93146efd726fc04256fff1fa319b5debd1a458e",
+    semanticRequestSha256:
+      "bdc4927557eaf70fb897ddf4ec61f459dc5623a07a72257c4d1703d643de7b48",
+    nativeResponseSha256:
+      "418c5be127418b122f4cedfc0921a8db1cdc21b43812d4c790714c7e1151c7ab",
+    translations: Object.freeze({
+      vertex: Object.freeze({
+        requestSha256:
+          "a8db74d6301f88c9d76f29646536d9f2677740b1a0f72b8d6c6a5281b353b8dc",
+        responseSha256:
+          "5f93dcaf06fc0e40d8f0d60f6c8bcd81d7b20deba0f894b84f9133dfa64daf06",
+        mslSha256:
+          "48c7ff6c0996da2541a877b317f60fcd028019063868e173315138310a7c3bbf",
+      }),
+      fragment: Object.freeze({
+        requestSha256:
+          "227d2c492983f3c0620b26b5bbde0cf0699f1c55b6ab1cd327c65407cabba197",
+        responseSha256:
+          "bb6c3c2e73ce7f10a0a760edba13c0808780420657bc989db2f59628513b7226",
+        mslSha256:
+          "e99aed060c0b6a7a01bbd0d0c5beba489fe1c43b094d78aff04958caae3a9dc5",
+      }),
+    }),
+  }),
+  overrideScalars: Object.freeze({
+    programFingerprint:
+      "a28bea8a966064a535586ca4f05fa12f9ad4d0407fcfc86ee115c9f2f2e98760",
+    resolvedSourceSha256:
+      "2863be0abcb219b3224330352d2e2a72308fd60900139505ec3c3dfb1a1864ce",
+    semanticRequestSha256:
+      "7197d5e904f4411fef74baf90269d69529e7e3a9d94043ea5596966533e5f300",
+    nativeResponseSha256:
+      "7869d02f004a11873099dc0448264658d42cf9b5ba277e02d23f3b77d9ad6b9c",
+    translations: Object.freeze({
+      compute: Object.freeze({
+        requestSha256:
+          "53041016cb1c9b0377fa8b5a67dc2974d3b2b324a199031ac03527e67b2b9a37",
+        responseSha256:
+          "eec952ce28d39bb4d3ccb4dc83a342470caa83fb2be498f038f789a7e4732475",
+        mslSha256:
+          "967bd264e8acebff6e22697cc5e625c4f9b4691ef33ff69b3b7cb1021fed11cb",
       }),
     }),
   }),
@@ -400,15 +514,170 @@ const resource = await makeFixture({
   },
 });
 
-for (const fixture of [effect, draw, compute, resource]) {
+const overrideDependent = await makeFixture({
+  label: "overrideDependent",
+  metalLabel: "overrides",
+  file: "override/compute.wgsl",
+  input: "semantic-assembly-override-compute-wgsl",
+  configSource: "Shaders/override/compute.wgsl",
+  selection: {
+    name: "AssemblyOverrides",
+    source: "Shaders/override/compute.wgsl",
+    kind: "compute",
+  },
+  expectedInventory: [{ stage: "compute", wgsl: "needs_required" }],
+  overrideConfiguration: [
+    { identifier: "17", value: 4 },
+    { identifier: "UNUSED", value: 99 },
+  ],
+  result() {
+    return semanticExtractionFixtureResult("override-configured-dependent");
+  },
+});
+
+const overrideBypass = await makeFixture({
+  label: "overrideBypass",
+  metalLabel: "overrides",
+  file: "override/compute.wgsl",
+  input: "semantic-assembly-override-compute-wgsl",
+  configSource: "Shaders/override/compute.wgsl",
+  selection: {
+    name: "AssemblyOverrides",
+    source: "Shaders/override/compute.wgsl",
+    kind: "compute",
+  },
+  expectedInventory: [{ stage: "compute", wgsl: "needs_required" }],
+  overrideConfiguration: [
+    { identifier: "17", value: 4 },
+    { identifier: "DEP", value: 9 },
+    { identifier: "UNUSED", value: 99 },
+  ],
+  result() {
+    return semanticExtractionFixtureResult("override-configured-bypass");
+  },
+});
+
+const overrideEquivalent = await makeFixture({
+  label: "overrideEquivalent",
+  metalLabel: "overrides",
+  file: "override/compute.wgsl",
+  input: "semantic-assembly-override-compute-wgsl",
+  configSource: "Shaders/override/compute.wgsl",
+  selection: {
+    name: "AssemblyOverrides",
+    source: "Shaders/override/compute.wgsl",
+    kind: "compute",
+  },
+  expectedInventory: [{ stage: "compute", wgsl: "needs_required" }],
+  overrideConfiguration: [
+    { identifier: "17", value: 4 },
+    { identifier: "DEP", value: 5 },
+    { identifier: "UNUSED", value: 99 },
+  ],
+  result() {
+    return semanticExtractionFixtureResult("override-configured-dependent");
+  },
+});
+
+const overrideRender = await makeFixture({
+  label: "overrideRender",
+  file: "override/render.wgsl",
+  input: "semantic-assembly-override-render-wgsl",
+  configSource: "Shaders/override/render.wgsl",
+  selection: {
+    name: "AssemblyOverrideRender",
+    source: "Shaders/override/render.wgsl",
+    kind: "draw",
+  },
+  expectedInventory: [
+    { stage: "vertex", wgsl: "vs_main" },
+    { stage: "fragment", wgsl: "fs_main" },
+  ],
+  overrideConfiguration: [
+    { identifier: "FRAGMENT_ONLY", value: 0.125 },
+    { identifier: "SHARED", value: 0.375 },
+    { identifier: "VERTEX_ONLY", value: 0.625 },
+  ],
+  result() {
+    return semanticExtractionFixtureResult("override-render-union");
+  },
+});
+
+const overrideScalars = await makeFixture({
+  label: "overrideScalars",
+  file: "override/all-scalars.wgsl",
+  input: "semantic-assembly-override-scalars-wgsl",
+  configSource: "Shaders/override/all-scalars.wgsl",
+  selection: {
+    name: "AssemblyOverrideScalars",
+    source: "Shaders/override/all-scalars.wgsl",
+    kind: "compute",
+  },
+  expectedInventory: [{ stage: "compute", wgsl: "all_scalars" }],
+  overrideConfiguration: [
+    { identifier: "A_BOOL", value: false },
+    { identifier: "B_I32", value: -7 },
+    { identifier: "C_U32", value: 4 },
+    { identifier: "D_F16", value: 0.5 },
+    { identifier: "E_F32", value: 2.25 },
+  ],
+  languageFeatures: ["f16"],
+  result() {
+    return semanticExtractionFixtureResult("override-all-scalars");
+  },
+});
+
+const resolverOverrideFixture = await makeResolverOverrideFixture();
+const fixtures = [
+  effect,
+  draw,
+  compute,
+  resource,
+  overrideDependent,
+  overrideBypass,
+  overrideEquivalent,
+  overrideRender,
+  overrideScalars,
+];
+const overrideFixtures = [
+  overrideDependent,
+  overrideBypass,
+  overrideEquivalent,
+  overrideRender,
+  overrideScalars,
+];
+
+for (const fixture of fixtures) {
   assertAcceptedFixture(fixture);
 }
+assert.deepEqual(overrideDependent.assembly, overrideEquivalent.assembly);
+assert.deepEqual(overrideDependent.allocation, overrideEquivalent.allocation);
+assert.deepEqual(
+  overrideDependent.compilerRequests,
+  overrideEquivalent.compilerRequests
+);
+assert.notDeepEqual(
+  overrideDependent.compilerRequests,
+  overrideBypass.compilerRequests
+);
+assert.notEqual(
+  sha256(overrideDependent.semanticRequestBytes),
+  sha256(overrideEquivalent.semanticRequestBytes)
+);
+assert.notEqual(
+  overrideDependent.assembly.semantic.programs[0].fingerprint.sha256,
+  overrideBypass.assembly.semantic.programs[0].fingerprint.sha256
+);
 assertNominalFailures(effect, compute);
 assertDeclarationFailures(effect);
 assertCrossModuleDeclarationFailure(draw);
 assertResolverSymbolFailures(resource);
 assertRetainedResolverResourceSymbols(resource);
 assertResolverResourceJoinFailures(resource);
+const resolverOverrideChecks = assertResolverOverrideSymbols(
+  resolverOverrideFixture,
+  compute
+);
 assertProfileFailures(effect);
 assertLinkFailure(effect);
 assertFingerprintRules(effect);
@@ -418,12 +687,7 @@ assertResourceSlotAllocation(resource);
 assertStageLocalSlotAllocation(resource);
 assertSlotAllocationFailures(effect, resource);
 assertProjectionFailures(effect);
-const staticMetalPrograms = assertStaticCompilerResponseAssembly([
-  effect,
-  draw,
-  compute,
-  resource,
-]);
+const staticMetalPrograms = assertStaticCompilerResponseAssembly([...fixtures]);
 const runtimeResourceLayoutChecks = assertRuntimeResourceLayouts(
   staticMetalPrograms.projections
 );
@@ -432,24 +696,32 @@ const responseAssemblyFailures = assertCompilerResponseAssemblyFailures({
   resource,
   staticMetalPrograms,
 });
-const projectionVerifierCanaries = assertIndependentProjectionVerifier();
+const projectionVerifierCanaries = assertIndependentProjectionVerifier({
+  fixture: overrideRender,
+  projection: staticMetalPrograms.projections.overrideRender,
+  translations: staticMetalPrograms.translations.overrideRender,
+});
 const deviceRequirementChecks =
   assertMetalDeviceRequirementProjection(resource);
 
 const native = options.worker
   ? {
       status: "passed",
-      semanticExtraction: await assertNativeExtractions(options.worker, [
-        effect,
-        draw,
-        compute,
-        resource,
-      ]),
+      semanticExtraction: await assertNativeExtractions(
+        options.worker,
+        fixtures
+      ),
       resourceTranslation: await assertNativeResourceTranslations(
         options.worker,
         resource,
         options,
         staticMetalPrograms.projections.resource
+      ),
+      overrideTranslation: await assertNativeOverrideTranslations(
+        options.worker,
+        overrideFixtures,
+        staticMetalPrograms.projections,
+        options
       ),
     }
   : { status: "skipped", reason: "no Tint worker supplied" };
@@ -468,7 +740,7 @@ process.stdout.write(
     {
       gate: "semantic-assembly",
       status: options.worker ? native.status : "static-passed",
-      fixtures: [effect, draw, compute, resource].map((fixture) => ({
+      fixtures: fixtures.map((fixture) => ({
         label: fixture.label,
         programFingerprint:
           fixture.assembly.semantic.programs[0].fingerprint.sha256,
@@ -478,24 +750,32 @@ process.stdout.write(
         projectedEntries: fixture.compilerRequests.length,
       })),
       static: {
-        assemblies: 4,
-        slotAllocations: 4,
-        compilerRequests: 7,
+        assemblies: fixtures.length,
+        slotAllocations: fixtures.length,
+        compilerRequests: fixtures.reduce(
+          (total, fixture) => total + fixture.compilerRequests.length,
+          0
+        ),
         nominalFailures: 5,
         declarationFailures: 5,
         resolverSymbolFailures: 3,
         resolverResourceJoinFailures: 3,
+        resolverOverrideChecks,
         retainedResolverSnapshotChecks: 2,
+        overrideConfigurationChecks: 6,
         profileFailures: 1,
         linkFailures: 1,
         fingerprintChecks: 5,
-        swiftNameFailures: 12,
+        swiftNameFailures: 14,
         slotStageIsolationChecks: 1,
         slotAllocationFailures: 4,
         projectionFailures: 2,
-        compilerTranslations: 7,
-        metalProgramProjections: 4,
-        projectionPermutationChecks: 4,
+        compilerTranslations: fixtures.reduce(
+          (total, fixture) => total + fixture.compilerRequests.length,
+          0
+        ),
+        metalProgramProjections: fixtures.length,
+        projectionPermutationChecks: fixtures.length,
         immediateWithoutRegionChecks: 1,
         responseAssemblyFailures,
         projectionVerifierCanaries,
@@ -512,6 +792,7 @@ process.stdout.write(
 
 async function makeFixture({
   label,
+  metalLabel = label,
   file,
   input,
   configSource,
@@ -519,6 +800,8 @@ async function makeFixture({
   sources,
   selection,
   expectedInventory,
+  overrideConfiguration = [],
+  languageFeatures = [],
   result,
 }) {
   const authoredSources = sources ?? [
@@ -544,7 +827,7 @@ async function makeFixture({
     resolverInput
   );
   assert(isResolvedDeclarationIndex(declarations));
-  const request = inventoryRequest(graph);
+  const request = inventoryRequest(graph, languageFeatures);
   const inventory = authenticateSuccessfulInventory({
     configSource,
     request,
@@ -553,8 +836,10 @@ async function makeFixture({
   });
   const plan = selectProgramEntries(selection, inventory);
   const finalized = finalizeProgramCapsule({ inventory, selection: plan });
-  const semanticRequest =
-    semanticExtractionRequestForFinalizedCapsule(finalized);
+  const semanticRequest = semanticExtractionRequestForFinalizedCapsule(
+    finalized,
+    { overrideConfiguration }
+  );
   const semanticRequestBytes = encodeSemanticExtractionRequest(semanticRequest);
   const expectedResult = result(finalized);
   const response = semanticSuccess(
@@ -585,7 +870,7 @@ async function makeFixture({
       assembly,
       allocation,
       stage,
-      metalEntryPoint: `vgpu_assembly_${label}_${stage}`,
+      metalEntryPoint: `vgpu_assembly_${metalLabel}_${stage}`,
     })
   );
   return {
@@ -607,6 +892,58 @@ async function makeFixture({
     allocation,
     compilerRequests,
   };
+}
+
+async function makeResolverOverrideFixture() {
+  const text = `@id(17) override REQUIRED: u32;
+override DEP: u32 = REQUIRED + 1u;
+override UNUSED: u32 = 11u;
+override __proto__: u32 = 1u;
+
+@compute @workgroup_size(DEP)
+fn needs_required() {}
+`;
+  const configSource = "Shaders/resolver-overrides.wgsl";
+  const { graph, declarations } = await resolveVirtualShaderWithDeclarations({
+    entry: configSource,
+    generatedVirtualPath: "Intermediate/resolver-overrides.resolved.wgsl",
+    sources: [
+      {
+        id: "resolver-overrides-wgsl",
+        virtualPath: configSource,
+        text,
+        sha256: sha256(text),
+      },
+    ],
+  });
+  const request = inventoryRequest(graph);
+  const inventory = authenticateSuccessfulInventory({
+    configSource,
+    request,
+    requestBytes: encodeInventoryRequest(request),
+    response: inventorySuccess(request, [
+      { stage: "compute", wgsl: "needs_required" },
+    ]),
+  });
+  const plan = selectProgramEntries(
+    {
+      name: "ResolverOverrides",
+      source: configSource,
+      kind: "compute",
+    },
+    inventory
+  );
+  const finalized = finalizeProgramCapsule({ inventory, selection: plan });
+  return { graph, declarations, finalized };
+}
+
+function semanticExtractionFixtureResult(name) {
+  return JSON.parse(
+    readFileSync(
+      join(semanticExtractionFixtureDirectory, "responses", `${name}.json`),
+      "utf8"
+    )
+  ).result;
 }
 
 function assertAcceptedFixture(fixture) {
@@ -633,7 +970,7 @@ function assertAcceptedFixture(fixture) {
   }
   assert.deepEqual(fixture.assembly.semantic.capabilities, {
     vocabulary: 1,
-    languageFeatures: [],
+    languageFeatures: [...fixture.semanticRequest.languageFeatures],
     features: [],
   });
   const program = fixture.assembly.semantic.programs[0];
@@ -641,7 +978,20 @@ function assertAcceptedFixture(fixture) {
   assert.equal(fixture.allocation.semanticProgram, program.name);
   assert.equal(fixture.allocation.bindingModel, "vgpu-metal-binding-slots-v1");
   if (fixture.label !== "resource") assert.deepEqual(program.bindings, []);
-  assert.deepEqual(program.overrides, []);
+  assert.deepEqual(
+    program.overrides,
+    fixture.expectedResult.overrides.map(({ name, ...override }) => {
+      const symbol = fixture.declarations.overrides.find(
+        (candidate) => candidate.names.wgsl === name
+      );
+      assert(symbol, `missing resolver override ${name}`);
+      return {
+        names: structuredClone(symbol.names),
+        swiftName: symbol.names.authored,
+        ...structuredClone(override),
+      };
+    })
+  );
   assert.match(program.fingerprint.sha256, /^[a-f0-9]{64}$/u);
   assert.equal(program.fingerprint.sha256, snapshot.programFingerprint);
   assert.equal(fixture.request.source.sha256, snapshot.resolvedSourceSha256);
@@ -660,7 +1010,16 @@ function assertAcceptedFixture(fixture) {
     );
     assert(extracted);
     assert.deepEqual(request.semanticInterface, extracted.semanticInterface);
-    assert.deepEqual(request.overrides, []);
+    assert.deepEqual(
+      request.overrides,
+      extracted.overrides.map((name) => {
+        const override = fixture.expectedResult.overrides.find(
+          (candidate) => candidate.name === name
+        );
+        assert(override, `missing extracted override ${name}`);
+        return { name, value: structuredClone(override.selected) };
+      })
+    );
     assert.equal(request.source.text, fixture.finalized.capsule.source.text);
     assert.deepEqual(request.originMap, fixture.finalized.capsule.originMap);
   }
@@ -715,8 +1074,10 @@ function assertAcceptedFixture(fixture) {
     });
     assert.deepEqual(entry.workgroupSize, { x: 4, y: 2, z: 1 });
     assert.equal(Object.keys(fixture.assembly.semantic.types).length, 2);
-  } else {
+  } else if (fixture.label === "resource") {
     assertResourceAssembly(fixture, program);
+  } else {
+    assertOverrideAssembly(fixture, program);
   }
   const repeated = assembleSemanticProgram({
     presentation: fixture.presentation,
@@ -731,6 +1092,72 @@ function assertAcceptedFixture(fixture) {
   });
   assert.deepEqual(repeatedAllocation, fixture.allocation);
   assert(isMetalSlotAllocation(repeatedAllocation));
+}
+
+function assertOverrideAssembly(fixture, program) {
+  assert(program.overrides.length > 0);
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(program.entryPoints).map(([stage, entry]) => [
+        stage,
+        entry.overrides,
+      ])
+    ),
+    Object.fromEntries(
+      fixture.expectedResult.entryPoints.map((entry) => [
+        entry.stage,
+        entry.overrides,
+      ])
+    )
+  );
+  assert.deepEqual(
+    program.overrides.map((override) => override.swiftName),
+    program.overrides.map((override) => override.names.authored)
+  );
+
+  if (
+    ["overrideDependent", "overrideBypass", "overrideEquivalent"].includes(
+      fixture.label
+    )
+  ) {
+    assert.deepEqual(program.entryPoints.compute.overrides, [
+      "DEP",
+      "REQUIRED",
+    ]);
+    assert.equal(
+      program.overrides.find((override) => override.names.wgsl === "REQUIRED")
+        ?.wgslId,
+      17
+    );
+    assert.deepEqual(
+      program.entryPoints.compute.workgroupSize,
+      fixture.label === "overrideBypass"
+        ? { x: 9, y: 1, z: 1 }
+        : { x: 5, y: 1, z: 1 }
+    );
+  } else if (fixture.label === "overrideRender") {
+    assert.deepEqual(program.entryPoints.vertex.overrides, [
+      "SHARED",
+      "VERTEX_ONLY",
+    ]);
+    assert.deepEqual(program.entryPoints.fragment.overrides, [
+      "FRAGMENT_ONLY",
+      "SHARED",
+    ]);
+  } else {
+    assert.equal(fixture.label, "overrideScalars");
+    assert.deepEqual(
+      program.overrides.map(({ type, selected }) => ({ type, selected })),
+      [
+        { type: "bool", selected: { type: "bool", value: false } },
+        { type: "i32", selected: { type: "i32", value: -7 } },
+        { type: "u32", selected: { type: "u32", value: 4 } },
+        { type: "f16", selected: { type: "f16", bits: "3800" } },
+        { type: "f32", selected: { type: "f32", bits: "40100000" } },
+      ]
+    );
+    assert.deepEqual(program.capabilities.languageFeatures, ["f16"]);
+  }
 }
 
 function assertResourceAssembly(fixture, program) {
@@ -814,10 +1241,10 @@ function assertResourceAssembly(fixture, program) {
     fixture.declarations.structs.map((type) => type.names.authored).sort(),
     ["Frame", "Material", "Vertices"]
   );
-  assert.equal(fixture.declarations.schemaVersion, 2);
+  assert.equal(fixture.declarations.schemaVersion, 3);
   assert.equal(
     fixture.declarations.contractId,
-    "vgpu-c1-resolved-declarations/v2"
+    "vgpu-c1-resolved-declarations/v3"
   );
 }
 
@@ -1191,6 +1618,151 @@ function assertResolverResourceJoinFailures(fixture) {
   }
 }
 
+function assertResolverOverrideSymbols(fixture, unrelatedFixture) {
+  assert.deepEqual(fixture.declarations.overrides, [
+    {
+      names: { authored: "DEP", wgsl: "DEP" },
+      initializer: "REQUIRED+1u",
+    },
+    {
+      names: { authored: "REQUIRED", wgsl: "REQUIRED" },
+      wgslId: 17,
+    },
+    {
+      names: { authored: "UNUSED", wgsl: "UNUSED" },
+      initializer: "11u",
+    },
+    {
+      names: { authored: "__proto__", wgsl: "__proto__" },
+      initializer: "1u",
+    },
+  ]);
+  assert(Object.isFrozen(fixture.declarations.overrides));
+  for (const override of fixture.declarations.overrides) {
+    assert(Object.isFrozen(override));
+    assert(Object.isFrozen(override.names));
+  }
+
+  const extracted = {
+    overrides: [
+      { name: "DEP", type: "u32", selected: { type: "u32", value: 5 } },
+      {
+        name: "REQUIRED",
+        wgslId: 17,
+        type: "u32",
+        selected: { type: "u32", value: 4 },
+      },
+      {
+        name: "__proto__",
+        type: "u32",
+        selected: { type: "u32", value: 1 },
+      },
+    ],
+  };
+  const expectedPresentation = Object.fromEntries([
+    ["DEP", { authoredName: "DEP" }],
+    ["REQUIRED", { authoredName: "REQUIRED" }],
+    ["__proto__", { authoredName: "__proto__" }],
+  ]);
+  const presentation = resolvedOverridePresentationForExtraction(
+    fixture.declarations,
+    fixture.finalized,
+    extracted
+  );
+  assert.deepEqual(presentation, expectedPresentation);
+  assert(Object.hasOwn(presentation, "__proto__"));
+  assert(Object.isFrozen(presentation));
+
+  const originalReflection = structuredClone(
+    fixture.graph.resolved.reflection.overrides
+  );
+  fixture.graph.resolved.reflection.overrides.reverse();
+  fixture.graph.resolved.reflection.overrides[0].name = "post_mint_override";
+  try {
+    assert.deepEqual(
+      resolvedOverridePresentationForExtraction(
+        fixture.declarations,
+        fixture.finalized,
+        extracted
+      ),
+      expectedPresentation
+    );
+  } finally {
+    fixture.graph.resolved.reflection.overrides = originalReflection;
+  }
+
+  const resolverMutations = [
+    (graph) => {
+      delete graph.resolved.reflection.overrides;
+    },
+    (graph) => {
+      graph.resolved.reflection.overrides.push(
+        structuredClone(graph.resolved.reflection.overrides[0])
+      );
+    },
+    (graph) => {
+      graph.resolved.reflection.overrides[1].mangledName =
+        graph.resolved.reflection.overrides[0].mangledName;
+    },
+    (graph) => {
+      graph.resolved.reflection.overrides[1].id = 17;
+    },
+    (graph) => {
+      graph.resolved.reflection.overrides[0].id = 65_536;
+    },
+    (graph) => {
+      graph.resolved.reflection.overrides[1].defaultValue = "";
+    },
+  ];
+  for (const mutate of resolverMutations) {
+    const graph = structuredClone(fixture.graph);
+    mutate(graph);
+    expectCode(
+      () => validateResolvedDeclarationCandidate(graph),
+      "VGPU-C1-DECLARATIONS-RESOLVER"
+    );
+  }
+
+  const joinMutations = [
+    (overrideGraph) => {
+      overrideGraph.overrides[0].name = "MISSING";
+    },
+    (overrideGraph) => {
+      overrideGraph.overrides[1].wgslId = 18;
+    },
+    (overrideGraph) => {
+      delete overrideGraph.overrides[1].wgslId;
+    },
+    (overrideGraph) => {
+      overrideGraph.overrides.reverse();
+    },
+  ];
+  for (const mutate of joinMutations) {
+    const overrideGraph = structuredClone(extracted);
+    mutate(overrideGraph);
+    expectCode(
+      () =>
+        resolvedOverridePresentationForExtraction(
+          fixture.declarations,
+          fixture.finalized,
+          overrideGraph
+        ),
+      "VGPU-C1-DECLARATIONS-OVERRIDE"
+    );
+  }
+  expectCode(
+    () =>
+      resolvedOverridePresentationForExtraction(
+        fixture.declarations,
+        unrelatedFixture.finalized,
+        extracted
+      ),
+    "VGPU-C1-DECLARATIONS-CAPSULE"
+  );
+
+  return 15;
+}
+
 function assertProfileFailures(fixture) {
   const inventoryRequestWithDualSource = inventoryRequest(fixture.graph, [
     "dual_source_blending",
@@ -1366,6 +1938,33 @@ function assertSwiftNameFailures(fixture) {
     );
   }
 
+  for (const overrides of [
+    [{ names: { wgsl: "RESERVED" }, swiftName: "await" }],
+    [
+      { names: { wgsl: "FIRST" }, swiftName: "value" },
+      { names: { wgsl: "SECOND" }, swiftName: "Value" },
+    ],
+  ]) {
+    expectCode(
+      () =>
+        assertSwiftPresentationForProgramAssembly(
+          {
+            module: { swiftName: "OverrideNameFixture" },
+            program: {
+              name: "OverrideNameProgram",
+              swiftName: "OverrideNameProgram",
+              kind: "compute",
+            },
+            bindings: [],
+            overrides,
+            types: {},
+          },
+          { failWith: throwCodedError }
+        ),
+      "VGPU-C1-ASSEMBLY-PRESENTATION"
+    );
+  }
+
   expectCode(
     () =>
       assertSwiftPresentationForProgramAssembly(
@@ -1376,6 +1975,7 @@ function assertSwiftNameFailures(fixture) {
             { id: "g0b0", swiftName: "color" },
             { id: "g0b1", swiftName: "Color" },
           ],
+          overrides: [],
           types: {},
         },
         { failWith: throwCodedError }
@@ -1395,6 +1995,7 @@ function assertSwiftNameFailures(fixture) {
               kind: "effect",
             },
             bindings: [],
+            overrides: [],
             types: {
               fixture_type: { kind: "struct", swiftName, members: [] },
             },
@@ -1420,6 +2021,7 @@ function assertSwiftNameFailures(fixture) {
               kind: "effect",
             },
             bindings: [{ id: "g0b0", swiftName: binding }],
+            overrides: [],
             types: {
               fixture_type: {
                 kind: "struct",
@@ -1462,6 +2064,7 @@ function assertSwiftNameFailures(fixture) {
               kind: "effect",
             },
             bindings: [],
+            overrides: [],
             types: {
               fixture_type: { kind: "struct", swiftName: type, members: [] },
             },
@@ -1485,6 +2088,7 @@ function assertSwiftNameFailures(fixture) {
           { id: "g0b0", swiftName: "artifact" },
           { id: "g0b1", swiftName: "Swift" },
         ],
+        overrides: [],
         types: {
           fixture_type: {
             kind: "struct",
@@ -1507,6 +2111,7 @@ function assertSwiftNameFailures(fixture) {
           kind: "draw",
         },
         bindings: [],
+        overrides: [],
         types: {
           bindings_type: {
             kind: "struct",
@@ -1545,6 +2150,7 @@ function assertSwiftNameFailures(fixture) {
             kind: "effect",
           },
           bindings: [],
+          overrides: [],
           types: {
             fixture_type: {
               kind: "struct",
@@ -2244,7 +2850,7 @@ function minimalMslEntry(request) {
   return `${stage} float4 ${metal}() { return float4(0.0); }`;
 }
 
-function assertIndependentProjectionVerifier() {
+function assertIndependentProjectionVerifier(overrideEvidence) {
   const baseline = runtimeSizedProjectionVerifierFixture();
   assert.equal(verifyMetalProgramProjection(baseline), true);
   let checks = 1;
@@ -2286,6 +2892,60 @@ function assertIndependentProjectionVerifier() {
   reject((candidate) => {
     candidate.semanticLayouts.l_runtime.runtimeSized = false;
   });
+
+  const overrideBaseline = {
+    semanticProgram: structuredClone(
+      overrideEvidence.fixture.assembly.semantic.programs[0]
+    ),
+    semanticLayouts: structuredClone(
+      overrideEvidence.fixture.assembly.semantic.layouts
+    ),
+    allocation: structuredClone(overrideEvidence.fixture.allocation),
+    translations: overrideEvidence.fixture.compilerRequests.map(
+      (request, index) => ({
+        request: structuredClone(request),
+        response: structuredClone(
+          compilerResponseForTranslation(overrideEvidence.translations[index])
+        ),
+      })
+    ),
+    projection: structuredClone(overrideEvidence.projection),
+  };
+  assert.equal(verifyMetalProgramProjection(overrideBaseline), true);
+  checks += 1;
+  const rejectOverride = (mutate) => {
+    const candidate = structuredClone(overrideBaseline);
+    mutate(candidate);
+    expectCode(
+      () => verifyMetalProgramProjection(candidate),
+      "VGPU-C1-METAL-PROJECTION-VERIFY"
+    );
+    checks += 1;
+  };
+  rejectOverride((candidate) => {
+    candidate.semanticProgram.entryPoints.vertex.overrides = ["SHARED"];
+  });
+  rejectOverride((candidate) => {
+    candidate.semanticProgram.entryPoints.vertex.overrides = [
+      "FRAGMENT_ONLY",
+      "SHARED",
+      "VERTEX_ONLY",
+    ];
+    candidate.semanticProgram.entryPoints.fragment.overrides = ["SHARED"];
+  });
+  rejectOverride((candidate) => {
+    candidate.translations[0].request.overrides = structuredClone(
+      candidate.translations[1].request.overrides
+    );
+  });
+  rejectOverride((candidate) => {
+    candidate.translations[0].request.overrides[0].value.bits = "3e800000";
+  });
+  rejectOverride((candidate) => {
+    candidate.semanticProgram.overrides.find(
+      (override) => override.names.wgsl === "SHARED"
+    ).selected.bits = "3e800000";
+  });
   return checks;
 }
 
@@ -2315,6 +2975,7 @@ function runtimeSizedProjectionVerifierFixture() {
   const request = {
     entryPoint: structuredClone(entryPoint),
     semanticInterface: { kind: "compute", inputs: [], outputs: [] },
+    overrides: [],
     metal: {
       bindingModel: "vgpu-metal-binding-slots-v1",
       bindings: structuredClone(requestBindings),
@@ -2355,6 +3016,7 @@ function runtimeSizedProjectionVerifierFixture() {
           inputs: [],
           outputs: [],
           bindings: ["g0b0"],
+          overrides: [],
           workgroupSize: { x: 1, y: 1, z: 1 },
         },
       },
@@ -2368,6 +3030,7 @@ function runtimeSizedProjectionVerifierFixture() {
           layout: "l_runtime",
         },
       ],
+      overrides: [],
       capabilities: { features: [] },
     },
     semanticLayouts: {
@@ -2574,12 +3237,187 @@ async function invokeSemantic(workerPath, fixture) {
   return { extraction, stdout: attempt.stdout };
 }
 
+async function assertNativeOverrideTranslations(
+  workerPath,
+  fixtures,
+  expectedProjections,
+  settings
+) {
+  const initialLaunches = translationWorkerLaunches;
+  const observed = [];
+  const metalPrograms = [];
+  const evidenceByLabel = new Map();
+
+  for (const fixture of fixtures) {
+    const translations = [];
+    const responses = [];
+    for (const request of fixture.compilerRequests) {
+      const attempts = await Promise.all([
+        invokeTranslation(workerPath, request),
+        invokeTranslation(workerPath, request),
+      ]);
+      assert.equal(attempts[0].stdout, attempts[1].stdout);
+      const authenticated = attempts.map((attempt) => {
+        let translation;
+        decodeTintWorkerResponse(attempt, (response) => {
+          translation = authenticateSuccessfulCompilerTranslation({
+            request,
+            response,
+          });
+          return true;
+        });
+        assert(translation);
+        return translation;
+      });
+      const retained = authenticated.map(compilerResponseForTranslation);
+      assert.deepEqual(retained[0], retained[1]);
+      assert.doesNotMatch(retained[0].result.msl, /function_constant/iu);
+      if (request.entryPoint.stage === "compute") {
+        assert.deepEqual(
+          retained[0].result.resolvedWorkgroupSize,
+          fixture.assembly.semantic.programs[0].entryPoints.compute
+            .workgroupSize
+        );
+      }
+      const observation = {
+        label: fixture.label,
+        stage: request.entryPoint.stage,
+        deterministicRuns: attempts.length,
+        requestSha256: sha256(JSON.stringify(request)),
+        responseSha256: sha256(attempts[0].stdout),
+        mslSha256: sha256(retained[0].result.msl),
+      };
+      assert.deepEqual(
+        {
+          requestSha256: observation.requestSha256,
+          responseSha256: observation.responseSha256,
+          mslSha256: observation.mslSha256,
+        },
+        expectedSnapshots[fixture.label].translations[request.entryPoint.stage]
+      );
+      observed.push(observation);
+      translations.push(authenticated[0]);
+      responses.push(retained[0]);
+    }
+
+    const projection = assembleMetalProgramProjection({
+      assembly: fixture.assembly,
+      allocation: fixture.allocation,
+      translations,
+    });
+    assert.deepEqual(projection, expectedProjections[fixture.label]);
+    assert.equal(JSON.stringify(projection).includes('"overrides"'), false);
+    const sources = metalSourcesForProgramProjection(projection);
+    metalPrograms.push({ label: fixture.label, sources });
+    evidenceByLabel.set(fixture.label, {
+      requests: fixture.compilerRequests,
+      responses,
+      projection,
+    });
+  }
+
+  assert.deepEqual(
+    evidenceByLabel.get("overrideDependent"),
+    evidenceByLabel.get("overrideEquivalent")
+  );
+  assert.notDeepEqual(
+    evidenceByLabel.get("overrideDependent"),
+    evidenceByLabel.get("overrideBypass")
+  );
+
+  return {
+    invocations: translationWorkerLaunches - initialLaunches,
+    deterministicEntries: observed.length,
+    projectedPrograms: fixtures.length,
+    semanticEquivalenceChecks: 2,
+    observed,
+    offlineMetal: compileOverrideMetalPrograms(metalPrograms, settings),
+  };
+}
+
+function compileOverrideMetalPrograms(programs, settings) {
+  if (process.platform !== "darwin") {
+    if (settings.requireOfflineMetal) {
+      fail("offline Metal override compilation requires macOS");
+    }
+    return { status: "skipped", reason: "host-is-not-macos" };
+  }
+  const missing = ["metal", "metallib"].filter((tool) => !xcrunToolWorks(tool));
+  if (missing.length > 0) {
+    if (settings.requireOfflineMetal) {
+      fail(
+        `offline Metal override compilation is required: missing ${missing.join(
+          ","
+        )}`
+      );
+    }
+    return {
+      status: "skipped",
+      reason: `missing-xcrun-tools:${missing.join(",")}`,
+    };
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), "vgpu-override-metal-"));
+  try {
+    const libraries = [];
+    let shaderCount = 0;
+    for (const program of programs) {
+      const airFiles = program.sources.map(({ stage, msl }) => {
+        const sourcePath = join(scratch, `${program.label}-${stage}.metal`);
+        const airPath = join(scratch, `${program.label}-${stage}.air`);
+        writeFileSync(sourcePath, msl, "utf8");
+        checkedCommand(
+          `offline Metal override compilation for ${program.label}/${stage}`,
+          "xcrun",
+          [
+            "-sdk",
+            "macosx",
+            "metal",
+            "-c",
+            sourcePath,
+            "-o",
+            airPath,
+            "-std=macos-metal2.4",
+            "-Wno-unused-variable",
+            "-target",
+            metalTarget,
+          ]
+        );
+        assertNonEmptyFile(airPath, `${program.label}/${stage} AIR`);
+        shaderCount += 1;
+        return airPath;
+      });
+      const libraryPath = join(scratch, `${program.label}.metallib`);
+      checkedCommand(
+        `offline Metal override link for ${program.label}`,
+        "xcrun",
+        ["-sdk", "macosx", "metallib", ...airFiles, "-o", libraryPath]
+      );
+      assertNonEmptyFile(libraryPath, `${program.label} metallib`);
+      libraries.push({
+        label: program.label,
+        bytes: lstatSync(libraryPath).size,
+      });
+    }
+    return {
+      status: "passed",
+      programs: programs.length,
+      shaders: shaderCount,
+      target: metalTarget,
+      libraries,
+    };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 async function assertNativeResourceTranslations(
   workerPath,
   fixture,
   settings,
   expectedProjection
 ) {
+  const initialLaunches = translationWorkerLaunches;
   const observed = [];
   const translations = [];
   for (const request of fixture.compilerRequests) {
@@ -2649,7 +3487,7 @@ async function assertNativeResourceTranslations(
     expectedSnapshots.resource.runtimeLayoutSha256
   );
   return {
-    invocations: translationWorkerLaunches,
+    invocations: translationWorkerLaunches - initialLaunches,
     deterministicEntries: fixture.compilerRequests.length,
     projectedPrograms: 1,
     sources: sources.length,
