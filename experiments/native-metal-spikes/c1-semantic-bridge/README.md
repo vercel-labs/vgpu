@@ -223,7 +223,10 @@ The semantic work is split by responsibility so the growing design remains revie
   records the executable nominal response-to-program-projection boundary; and
 - [`docs/semantic-extraction/runtime-resource-binding.md`](./docs/semantic-extraction/runtime-resource-binding.md)
   records the executable nominal semantic/slot join, program ownership, and prepare/encode boundary
-  for the fixed direct-resource gate.
+  for the fixed direct-resource gate; and
+- [`docs/runtime-sized-storage/`](./docs/runtime-sized-storage/README.md) separates the proposed
+  runtime-sized semantic contract, stable Metal immediate-data layout, and dynamic binding path
+  before that next slice is connected.
 
 ## Implementation order
 
