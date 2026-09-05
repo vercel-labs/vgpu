@@ -84,7 +84,7 @@
     "closure": {
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
       "files": 6,
-      "sha256": "859e0e1383c5e28ed5e62a3ef47091ebf73b009440996bc8f72d74cd3260b653",
+      "sha256": "9fb1bfadb4922a383ab8621b17607440c7281b26b8df5f989fb70fc4bd51c691",
       "paths": [
         "json-codec.cc",
         "json-codec.h",
@@ -164,8 +164,8 @@
       },
       "semanticResourceGraph": {
         "path": "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
-        "bytes": 10747,
-        "sha256": "bea356cffd70c9e2e9302e67554dee2fc2cc3bde4d639865d4dd13912ac2114a"
+        "bytes": 15073,
+        "sha256": "ccf08dbdf27b5847e313cc1515fc14ed8f95c416c44a448ffb408e83dd4ffe15"
       },
       "semanticExtractionRequestSchema": {
         "path": "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
@@ -174,8 +174,8 @@
       },
       "semanticExtractionResponseSchema": {
         "path": "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
-        "bytes": 21835,
-        "sha256": "960270e71103338ad8090d45c62b603a5d9c151aa6426acc7c52cfa2136ba729"
+        "bytes": 22235,
+        "sha256": "85eb4b3daf79afce26446969bcc2acdfbb48ce9f33aa8d37443c3610385d1339"
       },
       "semanticActiveOverrideResponse": {
         "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-override.json",
@@ -184,8 +184,8 @@
       },
       "semanticActiveResourceResponse": {
         "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json",
-        "bytes": 8298,
-        "sha256": "e9d27229f6dfe4a3a3c4191b1bef483ba0ec0f44c4236dc218c8078d14b2c935"
+        "bytes": 8393,
+        "sha256": "7427e674c48894994da4fc075d516e91cce47aed6b14b21abe0fefdca4a93a20"
       },
       "semanticOverrideAllScalarsResponse": {
         "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-all-scalars.json",
@@ -206,14 +206,19 @@
         "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-render-union.json",
         "bytes": 2357,
         "sha256": "40f31944db3247e37c4d1874bde7ab3d54482a36083ec36267b4194a1da79d44"
+      },
+      "semanticRuntimeSizedStorageResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/runtime-sized-storage.json",
+        "bytes": 5433,
+        "sha256": "98a7104e2ce444e7e97b6ded6cfa18e158068f96427c751732336161e00bff4f"
       }
     },
     "requests": {
       "root": "..",
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
-      "files": 22,
-      "bytes": 46530,
-      "sha256": "6fd25ee693823dc1ecc2252bf6c8eaec4b863a9367b0e0e38530ec7d000e6126",
+      "files": 23,
+      "bytes": 48057,
+      "sha256": "4ef93b402555eedb7fbe39a0732d62fa0131da0bc416dab12ceae6d8642e478e",
       "paths": [
         "c1-compiler-protocol/fixtures/requests/generate-failure.json",
         "c1-compiler-protocol/fixtures/requests/noop.json",
@@ -231,6 +236,7 @@
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-dependent.json",
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-render-union.json",
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/runtime-sized-storage.json",
         "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
         "c1-tint-direct-build/fixtures/requests/dual-source.json",
         "c1-tint-direct-build/fixtures/requests/fragment-sparse.json",
@@ -296,8 +302,8 @@
       },
       "semantic-active-resource": {
         "requestSha256": "c8ec843bf783512dcfe6ff789d2ac5ffb8c4801a0623243b557327267e992e25",
-        "responseBytes": 5859,
-        "responseSha256": "34c3f4825b0b2b86c86f3df27983ce698a828d9d92c9ec1e0501387886c17665",
+        "responseBytes": 5944,
+        "responseSha256": "f800e18647e7afa9002f1a4c985d561677f0dd12f570ebab4ea57b5725155300",
         "ok": true
       },
       "semantic-compute-interface": {
@@ -334,6 +340,12 @@
         "requestSha256": "0208d7a7733a99d34917dbe5025d5e057ba154a70b32c176b335affe425d0be3",
         "responseBytes": 2833,
         "responseSha256": "d7642766faa953b8b02129e61fc599b4f53b624010ea0c2c589591dad5b54dd7",
+        "ok": true
+      },
+      "semantic-runtime-sized-storage": {
+        "requestSha256": "f0dfa84c4258f467ba719bdac62f99f409a92d0d09c0ae486b96d4d30b79fe00",
+        "responseBytes": 3980,
+        "responseSha256": "4345d42687984587a4c134a191d7c82027eac43ec4007b2873aaac94bfe9dfe3",
         "ok": true
       },
       "compute-builtins": {
@@ -402,8 +414,8 @@
       "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
       "objects": 408,
       "files": 922,
-      "bytes": 8855291,
-      "sha256": "0566646c4b36deaaf642fccd72783a6b708fb5da50cc35c5791ab3bd7803832b",
+      "bytes": 8857361,
+      "sha256": "8e2a53c663bda71b95251a5cb000d64490eecba1ca9290a92aa2f485c07b16d0",
       "repositories": {
         "dawn": {
           "files": 804,
@@ -427,8 +439,8 @@
         },
         "worker": {
           "files": 6,
-          "bytes": 244328,
-          "sha256": "859e0e1383c5e28ed5e62a3ef47091ebf73b009440996bc8f72d74cd3260b653"
+          "bytes": 246398,
+          "sha256": "9fb1bfadb4922a383ab8621b17607440c7281b26b8df5f989fb70fc4bd51c691"
         }
       }
     }
@@ -452,16 +464,16 @@
     },
     "outputs": {
       "arm64": {
-        "bytes": 6105392,
-        "sha256": "3b4929f2a7e8a343a75c25b767c4573f9b618129b3490dbeb170ddb31814c342"
+        "bytes": 6105504,
+        "sha256": "37f6c13cd657c70fa0d45b517002621b499a6a3fd3d978e6ce543b63ddfcbf44"
       },
       "x86_64": {
-        "bytes": 7199464,
-        "sha256": "2bfdd8947a568245f5c27887a90c423e113cc1e025ebc92e49d272e56991c77e"
+        "bytes": 7203664,
+        "sha256": "cd83dd186717fdbf5b9190c27cc9b5b28197abb2513ba9baff1ac64b6b89d51d"
       },
       "universal": {
-        "bytes": 13314352,
-        "sha256": "f3f29ed71b4fc6aa0570ddee755abea1f631232dd25b37175fc87d3322a60aea"
+        "bytes": 13314464,
+        "sha256": "106de51530c3c54cf5d73aa521307622d25dd43581a829b9a8f5ac3fd691369a"
       }
     },
     "architectures": [
