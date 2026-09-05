@@ -17,9 +17,9 @@
 // raised entry interface / writer output uses them.
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -34,7 +34,6 @@
 
 #include "src/tint/api/common/bindings.h"
 #include "src/tint/api/tint.h"
-#include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/override.h"
 #include "src/tint/lang/core/ir/referenced_module_vars.h"
 #include "src/tint/lang/core/ir/transform/single_entry_point.h"
@@ -47,8 +46,8 @@
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
-#include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/matrix.h"
+#include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/struct.h"
@@ -57,16 +56,12 @@
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/msl/writer/writer.h"
-#include "src/tint/lang/wgsl/ast/attribute.h"
-#include "src/tint/lang/wgsl/ast/function.h"
-#include "src/tint/lang/wgsl/ast/literal_expression.h"
-#include "src/tint/lang/wgsl/ast/module.h"
-#include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 #include "src/tint/utils/diagnostic/diagnostic.h"
 
 #include "json-codec.h"
+#include "override-materializer.h"
 #include "request.h"
 
 #ifdef _WIN32
@@ -106,6 +101,7 @@ using RequestIdentity = vgpu::native::RequestIdentity;
 using SelectedEntryPoint = vgpu::native::SelectedEntryPoint;
 using SemanticInterface = vgpu::native::SemanticInterface;
 using SemanticExtractionRequest = vgpu::native::SemanticExtractionRequest;
+namespace OverrideMaterializer = vgpu::native::overrides;
 
 struct Location {
   std::string virtual_path;
@@ -147,7 +143,8 @@ struct SemanticExtractionEntryResult {
   SemanticInterface semantic_interface;
   std::vector<std::string> bindings;
   std::vector<std::string> sampling_pairs;
-  std::optional<tint::inspector::WorkgroupSize> workgroup_size;
+  std::vector<std::string> overrides;
+  std::optional<std::array<uint32_t, 3>> workgroup_size;
 };
 
 struct SemanticGraph {
@@ -328,6 +325,100 @@ Diagnostic Error(std::string code, std::string phase, std::string message) {
   };
 }
 
+Diagnostic
+MaterializerError(const OverrideMaterializer::Diagnostic &diagnostic) {
+  const char *suffix = "INTERNAL";
+  switch (diagnostic.code) {
+  case OverrideMaterializer::DiagnosticCode::kNone:
+  case OverrideMaterializer::DiagnosticCode::kInternal:
+    suffix = "INTERNAL";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kRequest:
+    suffix = "REQUEST";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kEntry:
+    suffix = "ENTRY";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kUnknown:
+    suffix = "UNKNOWN";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kDuplicateConfiguration:
+    suffix = "DUPLICATE-CONFIGURATION";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kWrongType:
+    suffix = "WRONG-TYPE";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kNonFinite:
+    suffix = "NONFINITE";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kOutOfRange:
+    suffix = "OUT-OF-RANGE";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kMissingRequired:
+    suffix = "MISSING-REQUIRED";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kIr:
+    suffix = "IR";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kSingleEntry:
+    suffix = "SINGLE-ENTRY";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kInvalidInitializer:
+    suffix = "INVALID-INITIALIZER";
+    break;
+  case OverrideMaterializer::DiagnosticCode::kSubstitute:
+    suffix = "SUBSTITUTE";
+    break;
+  }
+  const char *phase = "internal";
+  switch (diagnostic.phase) {
+  case OverrideMaterializer::DiagnosticPhase::kRequest:
+    phase = "protocol";
+    break;
+  case OverrideMaterializer::DiagnosticPhase::kInspect:
+  case OverrideMaterializer::DiagnosticPhase::kConfiguration:
+    phase = "inspect";
+    break;
+  case OverrideMaterializer::DiagnosticPhase::kMaterialize:
+  case OverrideMaterializer::DiagnosticPhase::kVerify:
+    phase = "lower";
+    break;
+  case OverrideMaterializer::DiagnosticPhase::kInternal:
+    phase = "internal";
+    break;
+  }
+  return Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-" + std::string(suffix),
+               phase, diagnostic.message);
+}
+
+std::optional<OverrideMaterializer::PipelineStage>
+MaterializerStage(std::string_view stage) {
+  if (stage == "vertex") {
+    return OverrideMaterializer::PipelineStage::kVertex;
+  }
+  if (stage == "fragment") {
+    return OverrideMaterializer::PipelineStage::kFragment;
+  }
+  if (stage == "compute") {
+    return OverrideMaterializer::PipelineStage::kCompute;
+  }
+  return std::nullopt;
+}
+
+tint::core::ir::Function *FindEntryFunction(tint::core::ir::Module &module,
+                                            std::string_view name) {
+  tint::core::ir::Function *result = nullptr;
+  for (auto *function : module.functions) {
+    if (function->IsEntryPoint() &&
+        module.NameOf(function).NameView() == name) {
+      if (result != nullptr)
+        return nullptr;
+      result = function;
+    }
+  }
+  return result;
+}
+
 const char *StageName(tint::inspector::PipelineStage stage) {
   switch (stage) {
   case tint::inspector::PipelineStage::kVertex:
@@ -352,57 +443,22 @@ const char *SeverityName(tint::diag::Severity severity) {
   return "error";
 }
 
-const char *OverrideTypeName(tint::inspector::Override::Type type) {
+std::optional<OverrideMaterializer::ScalarType>
+OverrideScalarType(tint::inspector::Override::Type type) {
   using Type = tint::inspector::Override::Type;
   switch (type) {
   case Type::kBool:
-    return "bool";
+    return OverrideMaterializer::ScalarType::kBool;
   case Type::kInt32:
-    return "i32";
+    return OverrideMaterializer::ScalarType::kI32;
   case Type::kUint32:
-    return "u32";
+    return OverrideMaterializer::ScalarType::kU32;
   case Type::kFloat16:
-    return "f16";
+    return OverrideMaterializer::ScalarType::kF16;
   case Type::kFloat32:
-    return "f32";
+    return OverrideMaterializer::ScalarType::kF32;
   }
-  return "unknown";
-}
-
-tint::core::ir::Constant *
-MakeOverrideConstant(tint::core::ir::Builder &builder,
-                     const tint::core::type::Type *type, double value) {
-  // The decoder widens finite f32 values to double and reconstructs finite f16
-  // values as exact binary rationals. Both conversions are lossless (including
-  // subnormals), so narrowing to the reflected type recovers the request bits;
-  // Tint's f16 quantizer also preserves the sign of zero.
-  if (type->Is<tint::core::type::Bool>()) {
-    return builder.Constant(value != 0.0);
-  }
-  if (type->Is<tint::core::type::I32>()) {
-    return builder.Constant(tint::core::i32{static_cast<int32_t>(value)});
-  }
-  if (type->Is<tint::core::type::U32>()) {
-    return builder.Constant(tint::core::u32{static_cast<uint32_t>(value)});
-  }
-  if (type->Is<tint::core::type::F16>()) {
-    const tint::core::f16 narrowed(value);
-    const float roundtrip = static_cast<float>(narrowed);
-    if (static_cast<double>(roundtrip) != value ||
-        std::signbit(roundtrip) != std::signbit(value)) {
-      return nullptr;
-    }
-    return builder.Constant(narrowed);
-  }
-  if (type->Is<tint::core::type::F32>()) {
-    const float narrowed = static_cast<float>(value);
-    if (static_cast<double>(narrowed) != value ||
-        std::signbit(narrowed) != std::signbit(value)) {
-      return nullptr;
-    }
-    return builder.Constant(tint::core::f32{narrowed});
-  }
-  return nullptr;
+  return std::nullopt;
 }
 
 std::vector<Diagnostic>
@@ -882,8 +938,7 @@ bool InterfaceValueLess(const InterfaceValue &left,
     return left.location.has_value();
   }
   if (left.location) {
-    const uint32_t left_blend =
-        left.blend_source ? *left.blend_source + 1 : 0;
+    const uint32_t left_blend = left.blend_source ? *left.blend_source + 1 : 0;
     const uint32_t right_blend =
         right.blend_source ? *right.blend_source + 1 : 0;
     return std::tie(*left.location, left_blend) <
@@ -892,10 +947,8 @@ bool InterfaceValueLess(const InterfaceValue &left,
   return *left.builtin < *right.builtin;
 }
 
-bool SameInterfaceKey(const InterfaceValue &left,
-                      const InterfaceValue &right) {
-  return !InterfaceValueLess(left, right) &&
-         !InterfaceValueLess(right, left);
+bool SameInterfaceKey(const InterfaceValue &left, const InterfaceValue &right) {
+  return !InterfaceValueLess(left, right) && !InterfaceValueLess(right, left);
 }
 
 InterfaceResult ExtractSemanticInterface(tint::core::ir::Module &ir) {
@@ -935,8 +988,8 @@ InterfaceResult ExtractSemanticInterface(tint::core::ir::Module &ir) {
     }
   }
   if (!entry->ReturnType()->Is<tint::core::type::Void>() &&
-      !AppendInterfaceType(entry->ReturnType(), entry->ReturnAttributes(),
-                           kind, false, result.outputs, error)) {
+      !AppendInterfaceType(entry->ReturnType(), entry->ReturnAttributes(), kind,
+                           false, result.outputs, error)) {
     return {.error = std::move(error)};
   }
   const size_t maximum_inputs = kind == "compute" ? 5 : 64;
@@ -998,27 +1051,6 @@ void WriteSemanticInterface(std::ostream &output,
   output << "]}";
 }
 
-bool HasLiteralWorkgroupSize(const tint::Program &program,
-                             std::string_view entry_point) {
-  const auto *function =
-      program.AST().Functions().Find(program.Symbols().Get(entry_point));
-  if (function == nullptr) {
-    return false;
-  }
-  const auto *attribute =
-      tint::ast::GetAttribute<tint::ast::WorkgroupAttribute>(
-          function->attributes);
-  if (attribute == nullptr) {
-    return false;
-  }
-  const auto values = attribute->Values();
-  return values[0] != nullptr &&
-         std::all_of(values.begin(), values.end(),
-                     [](const tint::ast::Expression *value) {
-           return value == nullptr || value->Is<tint::ast::LiteralExpression>();
-         });
-}
-
 void WriteShaderInterface(std::ostream &output,
                           const SemanticInterface &shader_interface) {
   output << "{\"kind\": " << JsonString(shader_interface.kind);
@@ -1034,8 +1066,7 @@ void WriteShaderInterface(std::ostream &output,
       }
       first = false;
       output << "{\"semantic\": {\"location\": " << *input.location
-             << "}, \"metal\": {\"attribute\": " << *input.location
-             << "}}";
+             << "}, \"metal\": {\"attribute\": " << *input.location << "}}";
     }
     output << ']';
   } else if (shader_interface.kind == "fragment") {
@@ -1049,8 +1080,7 @@ void WriteShaderInterface(std::ostream &output,
         output << ", ";
       }
       first = false;
-      output << "{\"semantic\": {\"location\": "
-             << *shader_output.location;
+      output << "{\"semantic\": {\"location\": " << *shader_output.location;
       if (shader_output.blend_source) {
         output << ", \"blendSource\": " << *shader_output.blend_source;
       }
@@ -1073,9 +1103,8 @@ void WriteSlot(std::ostream &output, std::string_view resource_class,
          << ", \"index\": " << index << ", \"count\": " << count << '}';
 }
 
-void EnableLanguageFeatures(
-    const std::set<std::string> &features,
-    tint::wgsl::reader::Options &reader_options) {
+void EnableLanguageFeatures(const std::set<std::string> &features,
+                            tint::wgsl::reader::Options &reader_options) {
   for (const auto &feature : features) {
     if (feature == "dual_source_blending") {
       reader_options.allowed_features.extensions.insert(
@@ -1288,7 +1317,6 @@ int Run(const Arguments &arguments) {
     }
   }
 
-  tint::SubstituteOverridesConfig override_config;
   const auto named_override_ids = inspector.GetNamedOverrideIds();
   if (inspector.has_error()) {
     diagnostics.push_back(
@@ -1303,6 +1331,7 @@ int Run(const Arguments &arguments) {
     WriteFailure(diagnostics);
     return 1;
   }
+  std::set<uint16_t> reflected_override_ids;
   for (const auto &reflected_override : selected->overrides) {
     const auto value = arguments.overrides.find(reflected_override.name);
     const auto id = named_override_ids.find(reflected_override.name);
@@ -1314,18 +1343,19 @@ int Run(const Arguments &arguments) {
       WriteFailure(diagnostics);
       return 1;
     }
-    if (value->second.type != OverrideTypeName(reflected_override.type)) {
+    const auto reflected_type = OverrideScalarType(reflected_override.type);
+    if (!reflected_type ||
+        OverrideMaterializer::ScalarTypeOf(value->second) != *reflected_type) {
       diagnostics.push_back(
           Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
                 "request override type differs from Tint reflection"));
       WriteFailure(diagnostics);
       return 1;
     }
-    if (!override_config.map.emplace(reflected_override.id, value->second.value)
-             .second) {
+    if (!reflected_override_ids.insert(reflected_override.id.value).second) {
       diagnostics.push_back(
           Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                "Tint reflected a duplicate selected-entry override"));
+                "Tint reflected a duplicate selected-entry override ID"));
       WriteFailure(diagnostics);
       return 1;
     }
@@ -1340,49 +1370,14 @@ int Run(const Arguments &arguments) {
   }
   auto &ir = ir_result.Get();
 
-  // Replace the materialized exact-static values before pruning. Their
-  // declared initializers are not evaluated, and replacing them here lets
-  // SingleEntryPoint remove both inactive overrides and initializer-only
-  // dependencies before constant evaluation.
-  tint::core::ir::Builder override_builder(ir);
-  std::set<uint16_t> materialized_override_ids;
-  for (auto *instruction : *ir.root_block) {
-    auto *item = instruction->As<tint::core::ir::Override>();
-    if (item == nullptr || !item->OverrideId()) {
-      continue;
-    }
-    const auto selection = override_config.map.find(*item->OverrideId());
-    if (selection == override_config.map.end()) {
-      continue;
-    }
-    auto *constant = MakeOverrideConstant(
-        override_builder, item->Result()->Type(), selection->second);
-    if (constant == nullptr) {
-      diagnostics.push_back(
-          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                "exact-static override could not be represented exactly in "
-                "its IR scalar type"));
-      WriteFailure(diagnostics);
-      return 1;
-    }
-    item->SetInitializer(constant);
-    if (!materialized_override_ids.insert(item->OverrideId()->value).second) {
-      diagnostics.push_back(
-          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                "Tint IR contains a duplicate exact-static override ID"));
-      WriteFailure(diagnostics);
-      return 1;
-    }
-  }
-  for (const auto &[id, value] : override_config.map) {
-    static_cast<void>(value);
-    if (!materialized_override_ids.contains(id.value)) {
-      diagnostics.push_back(
-          Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                "exact-static override could not be materialized in Tint IR"));
-      WriteFailure(diagnostics);
-      return 1;
-    }
+  // Install bit-exact values before pruning so configured initializers are not
+  // evaluated and inactive initializer-only dependencies can be removed.
+  if (const auto install =
+          OverrideMaterializer::InstallValues(ir, arguments.overrides)) {
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal", install->message));
+    WriteFailure(diagnostics);
+    return 1;
   }
 
   auto single_entry =
@@ -1414,15 +1409,15 @@ int Run(const Arguments &arguments) {
 
   const auto core_interface = ExtractSemanticInterface(ir);
   if (!core_interface.value) {
-    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
-                                core_interface.error));
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERFACE", "inspect", core_interface.error));
     WriteFailure(diagnostics);
     return 1;
   }
   if (*core_interface.value != arguments.semantic_interface) {
-    diagnostics.push_back(
-        Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
-              "request semantic interface differs from selected-entry core IR"));
+    diagnostics.push_back(Error(
+        "VGPU-NATIVE-TINT-INTERFACE", "inspect",
+        "request semantic interface differs from selected-entry core IR"));
     WriteFailure(diagnostics);
     return 1;
   }
@@ -1467,8 +1462,8 @@ int Run(const Arguments &arguments) {
   }
   const auto raised_interface = ExtractSemanticInterface(ir);
   if (!raised_interface.value) {
-    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                                raised_interface.error));
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal", raised_interface.error));
     WriteFailure(diagnostics);
     return 1;
   }
@@ -1564,8 +1559,8 @@ int Run(const EntryInventoryRequest &request) {
   tint::wgsl::reader::Options reader_options;
   EnableLanguageFeatures(request.features, reader_options);
   auto program = tint::wgsl::reader::Parse(&source_file, reader_options);
-  auto diagnostics =
-      ConvertDiagnostics(program.Diagnostics(), source_file, request.source_name);
+  auto diagnostics = ConvertDiagnostics(program.Diagnostics(), source_file,
+                                        request.source_name);
   if (!program.IsValid()) {
     if (diagnostics.empty()) {
       diagnostics.push_back(Error("VGPU-NATIVE-WGSL-INVALID", "wgsl",
@@ -1584,9 +1579,8 @@ int Run(const EntryInventoryRequest &request) {
     return 1;
   }
   if (inspected.size() > kMaxInventoryEntryPoints) {
-    diagnostics.push_back(
-        Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
-              "entry points exceed the collection limit"));
+    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
+                                "entry points exceed the collection limit"));
     WriteEntryInventoryFailure(request.identity, diagnostics);
     return 1;
   }
@@ -1617,9 +1611,8 @@ int Run(const EntryInventoryRequest &request) {
                            return left.stage == right.stage &&
                                   left.wgsl == right.wgsl;
                          }) != entry_points.end()) {
-    diagnostics.push_back(
-        Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-              "Tint returned a duplicate entry point"));
+    diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                                "Tint returned a duplicate entry point"));
     WriteEntryInventoryFailure(request.identity, diagnostics);
     return 1;
   }
@@ -1666,36 +1659,41 @@ GraphIdResult InternSemanticType(const tint::core::type::Type *type,
     descriptor = "{\"kind\":\"scalar\",\"scalar\":\"u32\"}";
   } else if (const auto *atomic = type->As<tint::core::type::Atomic>()) {
     auto element = InternSemanticType(atomic->Type(), graph);
-    if (!element.value) return element;
-    descriptor = "{\"element\":" + JsonString(*element.value) +
-                 ",\"kind\":\"atomic\"}";
+    if (!element.value)
+      return element;
+    descriptor =
+        "{\"element\":" + JsonString(*element.value) + ",\"kind\":\"atomic\"}";
   } else if (const auto *vector = type->As<tint::core::type::Vector>()) {
     auto element = InternSemanticType(vector->Type(), graph);
-    if (!element.value) return element;
+    if (!element.value)
+      return element;
     if (vector->Packed() || vector->Width() < 2 || vector->Width() > 4) {
       return {.error = "buffer graph contains an unsupported vector"};
     }
-    descriptor = "{\"element\":" + JsonString(*element.value) +
-                 ",\"kind\":\"vector\",\"width\":" +
-                 std::to_string(vector->Width()) + "}";
+    descriptor =
+        "{\"element\":" + JsonString(*element.value) +
+        ",\"kind\":\"vector\",\"width\":" + std::to_string(vector->Width()) +
+        "}";
   } else if (const auto *matrix = type->As<tint::core::type::Matrix>()) {
     auto element = InternSemanticType(matrix->Type(), graph);
-    if (!element.value) return element;
+    if (!element.value)
+      return element;
     if (matrix->Columns() < 2 || matrix->Columns() > 4 || matrix->Rows() < 2 ||
         matrix->Rows() > 4) {
       return {.error = "buffer graph contains an unsupported matrix"};
     }
-    descriptor = "{\"columns\":" + std::to_string(matrix->Columns()) +
-                 ",\"element\":" + JsonString(*element.value) +
-                 ",\"kind\":\"matrix\",\"rows\":" +
-                 std::to_string(matrix->Rows()) + "}";
+    descriptor =
+        "{\"columns\":" + std::to_string(matrix->Columns()) +
+        ",\"element\":" + JsonString(*element.value) +
+        ",\"kind\":\"matrix\",\"rows\":" + std::to_string(matrix->Rows()) + "}";
   } else if (const auto *array = type->As<tint::core::type::Array>()) {
     const auto count = array->ConstantCount();
     if (!count || *count == 0) {
       return {.error = "buffer graph contains a runtime-sized array"};
     }
     auto element = InternSemanticType(array->ElemType(), graph);
-    if (!element.value) return element;
+    if (!element.value)
+      return element;
     descriptor = "{\"count\":" + std::to_string(*count) +
                  ",\"element\":" + JsonString(*element.value) +
                  ",\"kind\":\"array\"}";
@@ -1712,15 +1710,16 @@ GraphIdResult InternSemanticType(const tint::core::type::Type *type,
         return {.error = "buffer graph contains an unsupported member name"};
       }
       auto child = InternSemanticType(member->Type(), graph);
-      if (!child.value) return child;
-      if (index > 0) members << ',';
+      if (!child.value)
+        return child;
+      if (index > 0)
+        members << ',';
       members << "{\"name\":" << JsonString(member->Name().Name())
               << ",\"type\":" << JsonString(*child.value) << '}';
     }
     members << ']';
     descriptor = "{\"kind\":\"struct\",\"members\":" + members.str() +
-                 ",\"wgslName\":" + JsonString(structure->Name().Name()) +
-                 "}";
+                 ",\"wgslName\":" + JsonString(structure->Name().Name()) + "}";
   } else {
     return {.error = "buffer graph contains a type outside semantic v1"};
   }
@@ -1737,7 +1736,8 @@ GraphIdResult InternSemanticLayout(const tint::core::type::Type *type,
     return {.error = "buffer graph contains a non-fixed host layout"};
   }
   auto type_id = InternSemanticType(type, graph);
-  if (!type_id.value) return type_id;
+  if (!type_id.value)
+    return type_id;
   std::ostringstream descriptor;
   descriptor << "{\"alignment\":" << type->Align();
   if (const auto *array = type->As<tint::core::type::Array>()) {
@@ -1753,10 +1753,13 @@ GraphIdResult InternSemanticLayout(const tint::core::type::Type *type,
     for (size_t index = 0; index < structure->Members().Length(); ++index) {
       const auto *member = structure->Members()[index];
       auto child_type = InternSemanticType(member->Type(), graph);
-      if (!child_type.value) return child_type;
+      if (!child_type.value)
+        return child_type;
       auto child_layout = InternSemanticLayout(member->Type(), graph);
-      if (!child_layout.value) return child_layout;
-      if (index > 0) descriptor << ',';
+      if (!child_layout.value)
+        return child_layout;
+      if (index > 0)
+        descriptor << ',';
       descriptor << "{\"alignment\":" << member->Align()
                  << ",\"layout\":" << JsonString(*child_layout.value)
                  << ",\"minimumSize\":" << member->Size()
@@ -1785,88 +1788,145 @@ const char *TextureDimensionName(
     tint::inspector::ResourceBinding::TextureDimension dimension) {
   using Dimension = tint::inspector::ResourceBinding::TextureDimension;
   switch (dimension) {
-  case Dimension::k1d: return "1d";
-  case Dimension::k2d: return "2d";
-  case Dimension::k2dArray: return "2d-array";
-  case Dimension::k3d: return "3d";
-  case Dimension::kCube: return "cube";
-  case Dimension::kCubeArray: return "cube-array";
-  case Dimension::kNone: break;
+  case Dimension::k1d:
+    return "1d";
+  case Dimension::k2d:
+    return "2d";
+  case Dimension::k2dArray:
+    return "2d-array";
+  case Dimension::k3d:
+    return "3d";
+  case Dimension::kCube:
+    return "cube";
+  case Dimension::kCubeArray:
+    return "cube-array";
+  case Dimension::kNone:
+    break;
   }
   return nullptr;
 }
 
-std::optional<std::string> InitialSampleType(
-    const tint::inspector::ResourceBinding &resource) {
+std::optional<std::string>
+InitialSampleType(const tint::inspector::ResourceBinding &resource) {
   using Kind = tint::inspector::ResourceBinding::SampledKind;
   switch (resource.sampled_kind) {
   case Kind::kFloat:
-  case Kind::kFilterable: return "float";
-  case Kind::kUnfilterable: return "unfilterable-float";
-  case Kind::kUInt: return "uint";
-  case Kind::kSInt: return "sint";
-  case Kind::kUnknownFilterable: return "unknown";
+  case Kind::kFilterable:
+    return "float";
+  case Kind::kUnfilterable:
+    return "unfilterable-float";
+  case Kind::kUInt:
+    return "uint";
+  case Kind::kSInt:
+    return "sint";
+  case Kind::kUnknownFilterable:
+    return "unknown";
   }
   return std::nullopt;
 }
 
-std::optional<std::string> InitialSamplerKind(
-    const tint::inspector::ResourceBinding &resource) {
+std::optional<std::string>
+InitialSamplerKind(const tint::inspector::ResourceBinding &resource) {
   using Kind = tint::inspector::ResourceBinding::SamplerType;
   switch (resource.sampler_type) {
-  case Kind::kComparison: return "comparison";
-  case Kind::kFiltering: return "filtering";
-  case Kind::kNonFiltering: return "non-filtering";
-  case Kind::kUnknownFiltering: return "unknown";
+  case Kind::kComparison:
+    return "comparison";
+  case Kind::kFiltering:
+    return "filtering";
+  case Kind::kNonFiltering:
+    return "non-filtering";
+  case Kind::kUnknownFiltering:
+    return "unknown";
   }
   return std::nullopt;
 }
 
-std::optional<std::string> StorageTextureFormat(
-    tint::inspector::ResourceBinding::TexelFormat format) {
+std::optional<std::string>
+StorageTextureFormat(tint::inspector::ResourceBinding::TexelFormat format) {
   using Format = tint::inspector::ResourceBinding::TexelFormat;
   switch (format) {
-  case Format::kR8Snorm: return "r8snorm";
-  case Format::kR8Unorm: return "r8unorm";
-  case Format::kR8Uint: return "r8uint";
-  case Format::kR8Sint: return "r8sint";
-  case Format::kRg8Unorm: return "rg8unorm";
-  case Format::kRg8Snorm: return "rg8snorm";
-  case Format::kRg8Uint: return "rg8uint";
-  case Format::kRg8Sint: return "rg8sint";
-  case Format::kR16Unorm: return "r16unorm";
-  case Format::kR16Snorm: return "r16snorm";
-  case Format::kR16Uint: return "r16uint";
-  case Format::kR16Sint: return "r16sint";
-  case Format::kR16Float: return "r16float";
-  case Format::kRg16Unorm: return "rg16unorm";
-  case Format::kRg16Snorm: return "rg16snorm";
-  case Format::kRg16Uint: return "rg16uint";
-  case Format::kRg16Sint: return "rg16sint";
-  case Format::kRg16Float: return "rg16float";
-  case Format::kBgra8Unorm: return "bgra8unorm";
-  case Format::kRgba8Unorm: return "rgba8unorm";
-  case Format::kRgba8Snorm: return "rgba8snorm";
-  case Format::kRgba8Uint: return "rgba8uint";
-  case Format::kRgba8Sint: return "rgba8sint";
-  case Format::kRgba16Unorm: return "rgba16unorm";
-  case Format::kRgba16Snorm: return "rgba16snorm";
-  case Format::kRgba16Uint: return "rgba16uint";
-  case Format::kRgba16Sint: return "rgba16sint";
-  case Format::kRgba16Float: return "rgba16float";
-  case Format::kR32Uint: return "r32uint";
-  case Format::kR32Sint: return "r32sint";
-  case Format::kR32Float: return "r32float";
-  case Format::kRg32Uint: return "rg32uint";
-  case Format::kRg32Sint: return "rg32sint";
-  case Format::kRg32Float: return "rg32float";
-  case Format::kRgba32Uint: return "rgba32uint";
-  case Format::kRgba32Sint: return "rgba32sint";
-  case Format::kRgba32Float: return "rgba32float";
-  case Format::kRgb10A2Uint: return "rgb10a2uint";
-  case Format::kRgb10A2Unorm: return "rgb10a2unorm";
-  case Format::kRg11B10Ufloat: return "rg11b10ufloat";
-  case Format::kNone: return std::nullopt;
+  case Format::kR8Snorm:
+    return "r8snorm";
+  case Format::kR8Unorm:
+    return "r8unorm";
+  case Format::kR8Uint:
+    return "r8uint";
+  case Format::kR8Sint:
+    return "r8sint";
+  case Format::kRg8Unorm:
+    return "rg8unorm";
+  case Format::kRg8Snorm:
+    return "rg8snorm";
+  case Format::kRg8Uint:
+    return "rg8uint";
+  case Format::kRg8Sint:
+    return "rg8sint";
+  case Format::kR16Unorm:
+    return "r16unorm";
+  case Format::kR16Snorm:
+    return "r16snorm";
+  case Format::kR16Uint:
+    return "r16uint";
+  case Format::kR16Sint:
+    return "r16sint";
+  case Format::kR16Float:
+    return "r16float";
+  case Format::kRg16Unorm:
+    return "rg16unorm";
+  case Format::kRg16Snorm:
+    return "rg16snorm";
+  case Format::kRg16Uint:
+    return "rg16uint";
+  case Format::kRg16Sint:
+    return "rg16sint";
+  case Format::kRg16Float:
+    return "rg16float";
+  case Format::kBgra8Unorm:
+    return "bgra8unorm";
+  case Format::kRgba8Unorm:
+    return "rgba8unorm";
+  case Format::kRgba8Snorm:
+    return "rgba8snorm";
+  case Format::kRgba8Uint:
+    return "rgba8uint";
+  case Format::kRgba8Sint:
+    return "rgba8sint";
+  case Format::kRgba16Unorm:
+    return "rgba16unorm";
+  case Format::kRgba16Snorm:
+    return "rgba16snorm";
+  case Format::kRgba16Uint:
+    return "rgba16uint";
+  case Format::kRgba16Sint:
+    return "rgba16sint";
+  case Format::kRgba16Float:
+    return "rgba16float";
+  case Format::kR32Uint:
+    return "r32uint";
+  case Format::kR32Sint:
+    return "r32sint";
+  case Format::kR32Float:
+    return "r32float";
+  case Format::kRg32Uint:
+    return "rg32uint";
+  case Format::kRg32Sint:
+    return "rg32sint";
+  case Format::kRg32Float:
+    return "rg32float";
+  case Format::kRgba32Uint:
+    return "rgba32uint";
+  case Format::kRgba32Sint:
+    return "rgba32sint";
+  case Format::kRgba32Float:
+    return "rgba32float";
+  case Format::kRgb10A2Uint:
+    return "rgb10a2uint";
+  case Format::kRgb10A2Unorm:
+    return "rgb10a2unorm";
+  case Format::kRg11B10Ufloat:
+    return "rg11b10ufloat";
+  case Format::kNone:
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -1876,16 +1936,18 @@ struct BufferStoreTypeResult {
   bool duplicate = false;
 };
 
-BufferStoreTypeResult BufferStoreType(
-    tint::core::ir::Module &ir, uint32_t group, uint32_t binding) {
+BufferStoreTypeResult BufferStoreType(tint::core::ir::Module &ir,
+                                      uint32_t group, uint32_t binding) {
   BufferStoreTypeResult result;
   for (const auto *instruction : *ir.root_block) {
     const auto *variable = instruction->As<tint::core::ir::Var>();
-    if (!variable) continue;
+    if (!variable)
+      continue;
     const auto point = variable->BindingPoint();
     const auto *pointer =
         variable->Result()->Type()->As<tint::core::type::Pointer>();
-    if (point && point->group == group && point->binding == binding && pointer) {
+    if (point && point->group == group && point->binding == binding &&
+        pointer) {
       if (result.type) {
         result.duplicate = true;
       } else {
@@ -1902,33 +1964,35 @@ bool SameSemanticBinding(const SemanticBindingRecord &left,
   const auto &b = right.reflected;
   return a.resource_type == b.resource_type && a.bind_group == b.bind_group &&
          a.binding == b.binding && a.variable_name == b.variable_name &&
-         a.dim == b.dim &&
-         left.type == right.type && left.layout == right.layout &&
-         left.sample_type == right.sample_type &&
+         a.dim == b.dim && left.type == right.type &&
+         left.layout == right.layout && left.sample_type == right.sample_type &&
          left.sampler_kind == right.sampler_kind &&
          left.storage_format == right.storage_format;
 }
 
-std::optional<std::string> SemanticBindingJson(
-    const SemanticBindingRecord &binding) {
+std::optional<std::string>
+SemanticBindingJson(const SemanticBindingRecord &binding) {
   using Resource = tint::inspector::ResourceBinding;
   const auto &value = binding.reflected;
   const auto id = BindingId(value.bind_group, value.binding);
   std::ostringstream output;
-  output << "{\"binding\":" << value.binding << ",\"group\":"
-         << value.bind_group << ",\"id\":" << JsonString(id);
+  output << "{\"binding\":" << value.binding
+         << ",\"group\":" << value.bind_group << ",\"id\":" << JsonString(id);
   switch (value.resource_type) {
   case Resource::ResourceType::kUniformBuffer:
   case Resource::ResourceType::kStorageBuffer:
   case Resource::ResourceType::kReadOnlyStorageBuffer:
-    if (!binding.type || !binding.layout) return std::nullopt;
+    if (!binding.type || !binding.layout)
+      return std::nullopt;
     output << ",\"kind\":\"buffer\",\"name\":"
            << JsonString(value.variable_name) << ",\"addressSpace\":"
-           << JsonString(value.resource_type == Resource::ResourceType::kUniformBuffer
+           << JsonString(value.resource_type ==
+                                 Resource::ResourceType::kUniformBuffer
                              ? "uniform"
                              : "storage")
            << ",\"access\":"
-           << JsonString(value.resource_type == Resource::ResourceType::kStorageBuffer
+           << JsonString(value.resource_type ==
+                                 Resource::ResourceType::kStorageBuffer
                              ? "read_write"
                              : "read")
            << ",\"layout\":" << JsonString(*binding.layout)
@@ -1940,30 +2004,31 @@ std::optional<std::string> SemanticBindingJson(
       return std::nullopt;
     }
     output << ",\"kind\":\"sampler\",\"name\":"
-           << JsonString(value.variable_name) << ",\"samplerKind\":"
-           << JsonString(*binding.sampler_kind) << '}';
+           << JsonString(value.variable_name)
+           << ",\"samplerKind\":" << JsonString(*binding.sampler_kind) << '}';
     return output.str();
   case Resource::ResourceType::kSampledTexture:
   case Resource::ResourceType::kMultisampledTexture:
   case Resource::ResourceType::kDepthTexture:
   case Resource::ResourceType::kDepthMultisampledTexture: {
     const auto *dimension = TextureDimensionName(value.dim);
-    const bool depth = value.resource_type == Resource::ResourceType::kDepthTexture ||
-                       value.resource_type ==
-                           Resource::ResourceType::kDepthMultisampledTexture;
-    if (!dimension || (!depth &&
-                       (!binding.sample_type || *binding.sample_type == "unknown"))) {
+    const bool depth =
+        value.resource_type == Resource::ResourceType::kDepthTexture ||
+        value.resource_type ==
+            Resource::ResourceType::kDepthMultisampledTexture;
+    if (!dimension || (!depth && (!binding.sample_type ||
+                                  *binding.sample_type == "unknown"))) {
       return std::nullopt;
     }
     const bool multisampled =
         value.resource_type == Resource::ResourceType::kMultisampledTexture ||
-        value.resource_type == Resource::ResourceType::kDepthMultisampledTexture;
+        value.resource_type ==
+            Resource::ResourceType::kDepthMultisampledTexture;
     output << ",\"kind\":\"texture\",\"name\":"
-           << JsonString(value.variable_name) << ",\"dimension\":"
-           << JsonString(dimension) << ",\"sampleType\":"
+           << JsonString(value.variable_name)
+           << ",\"dimension\":" << JsonString(dimension) << ",\"sampleType\":"
            << JsonString(depth ? "depth" : *binding.sample_type)
-           << ",\"multisampled\":" << (multisampled ? "true" : "false")
-           << '}';
+           << ",\"multisampled\":" << (multisampled ? "true" : "false") << '}';
     return output.str();
   }
   case Resource::ResourceType::kExternalTexture:
@@ -1982,15 +2047,14 @@ std::optional<std::string> SemanticBindingJson(
     const auto access =
         value.resource_type == Resource::ResourceType::kWriteOnlyStorageTexture
             ? "write"
-        : value.resource_type ==
-                  Resource::ResourceType::kReadOnlyStorageTexture
+        : value.resource_type == Resource::ResourceType::kReadOnlyStorageTexture
             ? "read"
             : "read_write";
     output << ",\"kind\":\"storage-texture\",\"name\":"
-           << JsonString(value.variable_name) << ",\"dimension\":"
-           << JsonString(dimension) << ",\"format\":"
-           << JsonString(*binding.storage_format) << ",\"access\":"
-           << JsonString(access) << '}';
+           << JsonString(value.variable_name)
+           << ",\"dimension\":" << JsonString(dimension)
+           << ",\"format\":" << JsonString(*binding.storage_format)
+           << ",\"access\":" << JsonString(access) << '}';
     return output.str();
   }
   default:
@@ -2031,7 +2095,8 @@ void ResolveUnknownBindingKinds(
     }
   }
   for (auto &[id, binding] : bindings) {
-    if (binding.sampler_kind == "unknown") binding.sampler_kind = "filtering";
+    if (binding.sampler_kind == "unknown")
+      binding.sampler_kind = "filtering";
   }
   for (const auto &[texture_id, sampler_id] : pairs) {
     auto texture = bindings.find(texture_id);
@@ -2078,12 +2143,104 @@ bool ResolvedPairsAreCoherent(
   return true;
 }
 
+std::string ScalarValueJson(const OverrideMaterializer::ScalarValue &value) {
+  std::ostringstream output;
+  output << "{\"type\":"
+         << JsonString(OverrideMaterializer::ScalarTypeName(
+                OverrideMaterializer::ScalarTypeOf(value)));
+  if (const auto *boolean = std::get_if<bool>(&value)) {
+    output << ",\"value\":" << (*boolean ? "true" : "false");
+  } else if (const auto *integer = std::get_if<int32_t>(&value)) {
+    output << ",\"value\":" << *integer;
+  } else if (const auto *integer = std::get_if<uint32_t>(&value)) {
+    output << ",\"value\":" << *integer;
+  } else if (const auto *f16 =
+                 std::get_if<OverrideMaterializer::F16Bits>(&value)) {
+    output << ",\"bits\":\"" << std::hex << std::setfill('0') << std::setw(4)
+           << f16->bits << '\"';
+  } else {
+    const auto &f32 = std::get<OverrideMaterializer::F32Bits>(value);
+    output << ",\"bits\":\"" << std::hex << std::setfill('0') << std::setw(8)
+           << f32.bits << '\"';
+  }
+  output << '}';
+  return output.str();
+}
+
+std::optional<std::string> PreflightSemanticOverrides(
+    const OverrideMaterializer::Materialization &materialization,
+    const std::vector<SemanticExtractionEntryResult> &entries) {
+  if (materialization.overrides.size() > 4096 ||
+      materialization.entries.size() != entries.size()) {
+    return "materialized override response exceeds its collection shape";
+  }
+  std::map<std::string, const OverrideMaterializer::OverrideRecord *> records;
+  std::set<uint16_t> authored_ids;
+  std::optional<std::string> previous_name;
+  for (const auto &record : materialization.overrides) {
+    if (!IsInventoryIdentifier(record.name) ||
+        (previous_name && *previous_name >= record.name) ||
+        !records.emplace(record.name, &record).second ||
+        (record.wgsl_id && !authored_ids.insert(*record.wgsl_id).second) ||
+        (record.default_result.status ==
+         OverrideMaterializer::DefaultStatus::kValue) !=
+            record.default_result.value.has_value() ||
+        (record.default_result.value &&
+         OverrideMaterializer::ScalarTypeOf(*record.default_result.value) !=
+             OverrideMaterializer::ScalarTypeOf(record.selected))) {
+      return "materialized override record cannot be represented on the wire";
+    }
+    previous_name = record.name;
+  }
+  size_t memberships = 0;
+  std::set<std::string> union_names;
+  for (size_t index = 0; index < entries.size(); ++index) {
+    if (materialization.entries[index].name !=
+            entries[index].entry_point.wgsl ||
+        OverrideMaterializer::PipelineStageName(
+            materialization.entries[index].stage) !=
+            entries[index].entry_point.stage ||
+        materialization.entries[index].exact_override_names !=
+            entries[index].overrides) {
+      return "materialized override entry projection drifted";
+    }
+    const bool compute = entries[index].entry_point.stage == "compute";
+    if (compute != entries[index].workgroup_size.has_value() ||
+        (entries[index].workgroup_size &&
+         std::any_of(entries[index].workgroup_size->begin(),
+                     entries[index].workgroup_size->end(),
+                     [](uint32_t value) { return value == 0; }))) {
+      return "materialized workgroup size cannot be represented on the wire";
+    }
+    memberships += entries[index].overrides.size();
+    if (memberships > 8192 ||
+        !std::is_sorted(entries[index].overrides.begin(),
+                        entries[index].overrides.end()) ||
+        std::adjacent_find(entries[index].overrides.begin(),
+                           entries[index].overrides.end()) !=
+            entries[index].overrides.end()) {
+      return "materialized override memberships cannot be represented";
+    }
+    for (const auto &name : entries[index].overrides) {
+      if (!records.contains(name)) {
+        return "materialized override membership has no program record";
+      }
+      union_names.insert(name);
+    }
+  }
+  if (union_names.size() != records.size()) {
+    return "materialized program overrides are not the exact entry union";
+  }
+  return std::nullopt;
+}
+
 void WriteSemanticExtractionSuccess(
     const SemanticExtractionRequest &request,
     const std::vector<Diagnostic> &diagnostics,
     const std::vector<SemanticExtractionEntryResult> &entry_points,
     const std::map<std::string, SemanticBindingRecord> &bindings,
-    const SemanticGraph &graph) {
+    const SemanticGraph &graph,
+    const OverrideMaterializer::Materialization &materialization) {
   std::ostringstream output;
   output << "{\n"
          << "  \"schemaVersion\": 1,\n"
@@ -2103,20 +2260,29 @@ void WriteSemanticExtractionSuccess(
     output << ", \"bindings\": [";
     for (size_t binding_index = 0; binding_index < entry.bindings.size();
          ++binding_index) {
-      if (binding_index > 0) output << ", ";
+      if (binding_index > 0)
+        output << ", ";
       output << JsonString(entry.bindings[binding_index]);
     }
     output << "], \"samplingPairs\": [";
     for (size_t pair_index = 0; pair_index < entry.sampling_pairs.size();
          ++pair_index) {
-      if (pair_index > 0) output << ", ";
+      if (pair_index > 0)
+        output << ", ";
       output << entry.sampling_pairs[pair_index];
     }
-    output << "], \"overrides\": []";
+    output << "], \"overrides\": [";
+    for (size_t override_index = 0; override_index < entry.overrides.size();
+         ++override_index) {
+      if (override_index > 0)
+        output << ", ";
+      output << JsonString(entry.overrides[override_index]);
+    }
+    output << ']';
     if (entry.workgroup_size) {
-      output << ", \"workgroupSize\": {\"x\": " << entry.workgroup_size->x
-             << ", \"y\": " << entry.workgroup_size->y
-             << ", \"z\": " << entry.workgroup_size->z << '}';
+      output << ", \"workgroupSize\": {\"x\": " << (*entry.workgroup_size)[0]
+             << ", \"y\": " << (*entry.workgroup_size)[1]
+             << ", \"z\": " << (*entry.workgroup_size)[2] << '}';
     }
     output << '}' << (index + 1 == entry_points.size() ? "\n" : ",\n");
   }
@@ -2129,25 +2295,48 @@ void WriteSemanticExtractionSuccess(
   bool first = true;
   std::vector<const SemanticBindingRecord *> ordered_bindings;
   ordered_bindings.reserve(bindings.size());
-  for (const auto &[id, binding] : bindings) ordered_bindings.push_back(&binding);
-  std::sort(ordered_bindings.begin(), ordered_bindings.end(),
-            [](const auto *left, const auto *right) {
-              return std::tie(left->reflected.bind_group,
-                              left->reflected.binding) <
-                     std::tie(right->reflected.bind_group,
-                              right->reflected.binding);
-            });
+  for (const auto &[id, binding] : bindings)
+    ordered_bindings.push_back(&binding);
+  std::sort(
+      ordered_bindings.begin(), ordered_bindings.end(),
+      [](const auto *left, const auto *right) {
+        return std::tie(left->reflected.bind_group, left->reflected.binding) <
+               std::tie(right->reflected.bind_group, right->reflected.binding);
+      });
   for (const auto *binding : ordered_bindings) {
     const auto json = SemanticBindingJson(*binding);
-    if (!json) continue;
-    if (!first) output << ",";
+    if (!json)
+      continue;
+    if (!first)
+      output << ",";
     output << "\n      " << *json;
     first = false;
   }
   if (!bindings.empty()) {
     output << '\n' << "    ],\n";
   }
-  output << "    \"overrides\": [],\n";
+  output << "    \"overrides\": [";
+  for (size_t index = 0; index < materialization.overrides.size(); ++index) {
+    const auto &record = materialization.overrides[index];
+    if (index > 0)
+      output << ',';
+    output << "\n      {\"name\":" << JsonString(record.name);
+    if (record.wgsl_id) {
+      output << ",\"wgslId\":" << *record.wgsl_id;
+    }
+    output << ",\"type\":"
+           << JsonString(OverrideMaterializer::ScalarTypeName(
+                  OverrideMaterializer::ScalarTypeOf(record.selected)));
+    if (record.default_result.status ==
+        OverrideMaterializer::DefaultStatus::kValue) {
+      output << ",\"default\":"
+             << ScalarValueJson(*record.default_result.value);
+    }
+    output << ",\"selected\":" << ScalarValueJson(record.selected) << '}';
+  }
+  if (!materialization.overrides.empty())
+    output << '\n' << "    ";
+  output << "],\n";
   if (graph.types.empty()) {
     output << "    \"types\": {},\n";
   } else {
@@ -2155,11 +2344,13 @@ void WriteSemanticExtractionSuccess(
   }
   first = true;
   for (const auto &[id, descriptor] : graph.types) {
-    if (!first) output << ',';
+    if (!first)
+      output << ',';
     output << "\n      " << JsonString(id) << ": " << descriptor;
     first = false;
   }
-  if (!graph.types.empty()) output << "\n    },\n";
+  if (!graph.types.empty())
+    output << "\n    },\n";
   if (graph.layouts.empty()) {
     output << "    \"layouts\": {}\n";
   } else {
@@ -2167,11 +2358,13 @@ void WriteSemanticExtractionSuccess(
   }
   first = true;
   for (const auto &[id, descriptor] : graph.layouts) {
-    if (!first) output << ',';
+    if (!first)
+      output << ',';
     output << "\n      " << JsonString(id) << ": " << descriptor;
     first = false;
   }
-  if (!graph.layouts.empty()) output << "\n    }\n";
+  if (!graph.layouts.empty())
+    output << "\n    }\n";
   output << "  }\n}\n";
   EmitResponse(output.str());
 }
@@ -2181,8 +2374,8 @@ int Run(const SemanticExtractionRequest &request) {
   tint::wgsl::reader::Options reader_options;
   EnableLanguageFeatures(request.features, reader_options);
   auto program = tint::wgsl::reader::Parse(&source_file, reader_options);
-  auto diagnostics =
-      ConvertDiagnostics(program.Diagnostics(), source_file, request.source_name);
+  auto diagnostics = ConvertDiagnostics(program.Diagnostics(), source_file,
+                                        request.source_name);
   if (!program.IsValid()) {
     if (diagnostics.empty()) {
       diagnostics.push_back(Error("VGPU-NATIVE-WGSL-INVALID", "wgsl",
@@ -2204,14 +2397,12 @@ int Run(const SemanticExtractionRequest &request) {
   std::vector<const tint::inspector::EntryPoint *> selected;
   selected.reserve(request.entry_points.size());
   for (const auto &requested : request.entry_points) {
-    const auto match = std::find_if(inspected.begin(), inspected.end(),
-                                    [&](const auto &entry) {
-                                      return entry.name == requested.wgsl;
-                                    });
+    const auto match = std::find_if(
+        inspected.begin(), inspected.end(),
+        [&](const auto &entry) { return entry.name == requested.wgsl; });
     if (match == inspected.end()) {
-      diagnostics.push_back(
-          Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
-                "selected WGSL entry point was not found"));
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-INSPECT", "inspect",
+                                  "selected WGSL entry point was not found"));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
@@ -2225,13 +2416,41 @@ int Run(const SemanticExtractionRequest &request) {
     selected.push_back(&*match);
   }
 
-  if (!request.override_configuration.empty()) {
-    diagnostics.push_back(Error(
-        "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED", "inspect",
-        "selected program configures overrides outside the fixed-resource "
-        "profile"));
+  std::vector<OverrideMaterializer::SelectedEntry> materializer_entries;
+  materializer_entries.reserve(request.entry_points.size());
+  for (const auto &entry : request.entry_points) {
+    const auto stage = MaterializerStage(entry.stage);
+    if (!stage) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-ENTRY", "inspect",
+                "selected entry has no materializer pipeline stage"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    materializer_entries.push_back(OverrideMaterializer::SelectedEntry{
+        .name = entry.wgsl, .stage = *stage});
+  }
+  const auto materializer_result = OverrideMaterializer::Materialize(
+      program, materializer_entries, request.override_configuration);
+  const auto *materializer_diagnostic =
+      std::get_if<OverrideMaterializer::Diagnostic>(&materializer_result);
+  if (materializer_diagnostic != nullptr) {
+    diagnostics.push_back(MaterializerError(*materializer_diagnostic));
     WriteSemanticExtractionFailure(request.identity, diagnostics);
     return 1;
+  }
+  const auto &materialization =
+      std::get<OverrideMaterializer::Materialization>(materializer_result);
+  std::map<std::string, OverrideMaterializer::ScalarValue>
+      program_override_values;
+  for (const auto &record : materialization.overrides) {
+    if (!program_override_values.emplace(record.name, record.selected).second) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                "materializer returned duplicate program override names"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
   }
 
   std::vector<std::vector<tint::inspector::ResourceBinding>> entry_resources;
@@ -2267,39 +2486,15 @@ int Run(const SemanticExtractionRequest &request) {
     }
     if (resources.size() > kMaxSemanticRecords ||
         pairs.size() > kMaxSemanticSamplingPairs) {
-      diagnostics.push_back(Error(
-          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-          "selected entry exceeds a semantic resource collection limit"));
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+                "selected entry exceeds a semantic resource collection limit"));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
     entry_resources.push_back(resources);
     entry_pair_points.push_back(std::move(pairs));
   }
-  if (std::any_of(selected.begin(), selected.end(), [](const auto *entry) {
-        return !entry->overrides.empty();
-      })) {
-    diagnostics.push_back(Error(
-        "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED", "inspect",
-        "selected program uses overrides outside the fixed-resource profile"));
-    WriteSemanticExtractionFailure(request.identity, diagnostics);
-    return 1;
-  }
-
-  if (selected.size() == 1) {
-    const auto &workgroup = selected[0]->workgroup_size;
-    if (!workgroup || workgroup->x == 0 || workgroup->y == 0 ||
-        workgroup->z == 0 ||
-        !HasLiteralWorkgroupSize(program, selected[0]->name)) {
-      diagnostics.push_back(Error(
-          "VGPU-NATIVE-TINT-SEMANTIC-WORKGROUP-UNSUPPORTED", "inspect",
-          "selected compute entry requires a literal positive workgroup size "
-          "in the fixed-resource profile"));
-      WriteSemanticExtractionFailure(request.identity, diagnostics);
-      return 1;
-    }
-  }
-
   std::vector<SemanticExtractionEntryResult> results;
   SemanticGraph graph;
   std::map<std::string, SemanticBindingRecord> bindings;
@@ -2315,6 +2510,36 @@ int Run(const SemanticExtractionRequest &request) {
       return 1;
     }
     auto &ir = ir_result.Get();
+    if (index >= materialization.entries.size() ||
+        materialization.entries[index].name != requested.wgsl) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                "materializer entry ordering differs from the request"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    const auto &materialized_entry = materialization.entries[index];
+    std::map<std::string, OverrideMaterializer::ScalarValue> selected_values;
+    for (const auto &name : materialized_entry.exact_override_names) {
+      const auto value = program_override_values.find(name);
+      if (value == program_override_values.end() ||
+          !selected_values.emplace(name, value->second).second) {
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                  "entry override projection differs from the program union"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+    }
+    if (const auto install =
+            OverrideMaterializer::InstallValues(ir, selected_values)) {
+      diagnostics.push_back(Error(
+          "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+          "materialized entry values no longer match the fresh Tint IR: " +
+              install->message));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
     auto single_entry =
         tint::core::ir::transform::SingleEntryPoint(ir, requested.wgsl);
     if (single_entry != tint::Success) {
@@ -2324,9 +2549,8 @@ int Run(const SemanticExtractionRequest &request) {
       return 1;
     }
     tint::SubstituteOverridesConfig empty_override_config;
-    auto substituted =
-        tint::core::ir::transform::SubstituteOverrides(ir,
-                                                       empty_override_config);
+    auto substituted = tint::core::ir::transform::SubstituteOverrides(
+        ir, empty_override_config);
     if (substituted != tint::Success) {
       diagnostics.push_back(Error("VGPU-NATIVE-TINT-SEMANTIC-LOWER", "lower",
                                   substituted.Failure().reason));
@@ -2335,8 +2559,8 @@ int Run(const SemanticExtractionRequest &request) {
     }
     bool contains_override = false;
     for (const auto *instruction : ir.Instructions()) {
-      contains_override = contains_override ||
-                          instruction->Is<tint::core::ir::Override>();
+      contains_override =
+          contains_override || instruction->Is<tint::core::ir::Override>();
     }
     if (contains_override) {
       diagnostics.push_back(
@@ -2345,11 +2569,48 @@ int Run(const SemanticExtractionRequest &request) {
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
+    auto *lowered_entry = FindEntryFunction(ir, requested.wgsl);
+    if (lowered_entry == nullptr) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                "override substitution lost the selected entry"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
+    std::optional<std::array<uint32_t, 3>> resolved_workgroup;
+    if (requested.stage == "compute") {
+      const auto ir_workgroup = lowered_entry->WorkgroupSizeAsConst();
+      if (!ir_workgroup || !materialized_entry.workgroup_axes) {
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                  "compute workgroup evidence is incomplete"));
+        WriteSemanticExtractionFailure(request.identity, diagnostics);
+        return 1;
+      }
+      resolved_workgroup.emplace();
+      for (size_t axis = 0; axis < resolved_workgroup->size(); ++axis) {
+        (*resolved_workgroup)[axis] = (*ir_workgroup)[axis];
+        if ((*resolved_workgroup)[axis] !=
+            (*materialized_entry.workgroup_axes)[axis].resolved) {
+          diagnostics.push_back(
+              Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                    "worker and materializer workgroup values differ"));
+          WriteSemanticExtractionFailure(request.identity, diagnostics);
+          return 1;
+        }
+      }
+    } else if (materialized_entry.workgroup_axes ||
+               lowered_entry->IsCompute()) {
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL", "internal",
+                "non-compute entry has compute workgroup evidence"));
+      WriteSemanticExtractionFailure(request.identity, diagnostics);
+      return 1;
+    }
     auto semantic_interface = ExtractSemanticInterface(ir);
     if (!semantic_interface.value) {
-      diagnostics.push_back(
-          Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
-                std::move(semantic_interface.error)));
+      diagnostics.push_back(Error("VGPU-NATIVE-TINT-INTERFACE", "inspect",
+                                  std::move(semantic_interface.error)));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
@@ -2384,9 +2645,9 @@ int Run(const SemanticExtractionRequest &request) {
         binding.type = std::move(*type.value);
         binding.layout = std::move(*layout.value);
         if (resource.size != store_type->Size()) {
-          diagnostics.push_back(Error(
-              "VGPU-NATIVE-TINT-INTERNAL", "internal",
-              "Inspector and IR disagree on fixed buffer size"));
+          diagnostics.push_back(
+              Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                    "Inspector and IR disagree on fixed buffer size"));
           WriteSemanticExtractionFailure(request.identity, diagnostics);
           return 1;
         }
@@ -2395,27 +2656,29 @@ int Run(const SemanticExtractionRequest &request) {
       } else if (resource.resource_type == ResourceType::kSampledTexture ||
                  resource.resource_type == ResourceType::kMultisampledTexture) {
         binding.sample_type = InitialSampleType(resource);
-      } else if (
-          resource.resource_type == ResourceType::kWriteOnlyStorageTexture ||
-          resource.resource_type == ResourceType::kReadOnlyStorageTexture ||
-          resource.resource_type == ResourceType::kReadWriteStorageTexture) {
+      } else if (resource.resource_type ==
+                     ResourceType::kWriteOnlyStorageTexture ||
+                 resource.resource_type ==
+                     ResourceType::kReadOnlyStorageTexture ||
+                 resource.resource_type ==
+                     ResourceType::kReadWriteStorageTexture) {
         binding.storage_format = StorageTextureFormat(resource.image_format);
       } else if (resource.resource_type != ResourceType::kDepthTexture &&
                  resource.resource_type !=
                      ResourceType::kDepthMultisampledTexture &&
                  resource.resource_type != ResourceType::kExternalTexture) {
-        diagnostics.push_back(Error(
-            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-            "selected program uses a resource kind outside semantic v1"));
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+                  "selected program uses a resource kind outside semantic v1"));
         WriteSemanticExtractionFailure(request.identity, diagnostics);
         return 1;
       }
       const auto id = BindingId(resource.bind_group, resource.binding);
       const auto [existing, inserted] = bindings.emplace(id, binding);
       if (!inserted && !SameSemanticBinding(existing->second, binding)) {
-        diagnostics.push_back(Error(
-            "VGPU-NATIVE-TINT-INTERNAL", "internal",
-            "selected entries disagree on one resource binding"));
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                  "selected entries disagree on one resource binding"));
         WriteSemanticExtractionFailure(request.identity, diagnostics);
         return 1;
       }
@@ -2424,9 +2687,9 @@ int Run(const SemanticExtractionRequest &request) {
             std::max(existing->second.reflected.size, resource.size);
       }
       if (bindings.size() > kMaxSemanticRecords) {
-        diagnostics.push_back(Error(
-            "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-            "selected program exceeds the binding collection limit"));
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+                  "selected program exceeds the binding collection limit"));
         WriteSemanticExtractionFailure(request.identity, diagnostics);
         return 1;
       }
@@ -2448,17 +2711,17 @@ int Run(const SemanticExtractionRequest &request) {
     }
 
     auto pair_points = entry_pair_points[index];
-    std::sort(pair_points.begin(), pair_points.end(), [](const auto &a,
-                                                        const auto &b) {
-      return std::tie(a.texture_binding_point.group,
-                      a.texture_binding_point.binding,
-                      a.sampler_binding_point.group,
-                      a.sampler_binding_point.binding) <
-             std::tie(b.texture_binding_point.group,
-                      b.texture_binding_point.binding,
-                      b.sampler_binding_point.group,
-                      b.sampler_binding_point.binding);
-    });
+    std::sort(pair_points.begin(), pair_points.end(),
+              [](const auto &a, const auto &b) {
+                return std::tie(a.texture_binding_point.group,
+                                a.texture_binding_point.binding,
+                                a.sampler_binding_point.group,
+                                a.sampler_binding_point.binding) <
+                       std::tie(b.texture_binding_point.group,
+                                b.texture_binding_point.binding,
+                                b.sampler_binding_point.group,
+                                b.sampler_binding_point.binding);
+              });
     std::vector<std::string> sampling_pairs;
     for (const auto &pair : pair_points) {
       const auto texture_id = BindingId(pair.texture_binding_point.group,
@@ -2472,21 +2735,19 @@ int Run(const SemanticExtractionRequest &request) {
                     texture_id) == active_bindings.end() ||
           std::find(active_bindings.begin(), active_bindings.end(),
                     sampler_id) == active_bindings.end() ||
-          !IsTextureBinding(texture->second) ||
-          !sampler->second.sampler_kind) {
-        diagnostics.push_back(Error(
-            "VGPU-NATIVE-TINT-INTERNAL", "internal",
-            "Inspector returned an incoherent sampler-texture pair"));
+          !IsTextureBinding(texture->second) || !sampler->second.sampler_kind) {
+        diagnostics.push_back(
+            Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+                  "Inspector returned an incoherent sampler-texture pair"));
         WriteSemanticExtractionFailure(request.identity, diagnostics);
         return 1;
       }
       const auto mode = sampler->second.sampler_kind == "comparison"
                             ? "comparison"
                             : "filtering";
-      sampling_pairs.push_back(
-          "{\"texture\":" + JsonString(texture_id) +
-          ",\"sampler\":" + JsonString(sampler_id) +
-          ",\"mode\":" + JsonString(mode) + "}");
+      sampling_pairs.push_back("{\"texture\":" + JsonString(texture_id) +
+                               ",\"sampler\":" + JsonString(sampler_id) +
+                               ",\"mode\":" + JsonString(mode) + "}");
       all_pairs.emplace_back(texture_id, sampler_id);
       if (all_pairs.size() >
           request.entry_points.size() * kMaxSemanticSamplingPairs) {
@@ -2505,29 +2766,36 @@ int Run(const SemanticExtractionRequest &request) {
         .semantic_interface = std::move(*semantic_interface.value),
         .bindings = std::move(active_bindings),
         .sampling_pairs = std::move(sampling_pairs),
-        .workgroup_size = selected[index]->workgroup_size,
+        .overrides = materialized_entry.exact_override_names,
+        .workgroup_size = resolved_workgroup,
     });
   }
 
   ResolveUnknownBindingKinds(bindings, all_pairs);
   if (!ResolvedPairsAreCoherent(bindings, all_pairs)) {
-    diagnostics.push_back(Error(
-        "VGPU-NATIVE-TINT-INTERNAL", "internal",
-        "resolved sampler and texture classes are incoherent"));
+    diagnostics.push_back(
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
+              "resolved sampler and texture classes are incoherent"));
     WriteSemanticExtractionFailure(request.identity, diagnostics);
     return 1;
   }
   for (const auto &[id, binding] : bindings) {
     if (!SemanticBindingJson(binding)) {
-      diagnostics.push_back(Error(
-          "VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
-          "selected program left an unsupported resource shape"));
+      diagnostics.push_back(
+          Error("VGPU-NATIVE-TINT-SEMANTIC-RESOURCE-UNSUPPORTED", "inspect",
+                "selected program left an unsupported resource shape"));
       WriteSemanticExtractionFailure(request.identity, diagnostics);
       return 1;
     }
   }
-  WriteSemanticExtractionSuccess(request, diagnostics, results, bindings,
-                                 graph);
+  if (const auto error = PreflightSemanticOverrides(materialization, results)) {
+    diagnostics.push_back(Error("VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-INTERNAL",
+                                "internal", *error));
+    WriteSemanticExtractionFailure(request.identity, diagnostics);
+    return 1;
+  }
+  WriteSemanticExtractionSuccess(request, diagnostics, results, bindings, graph,
+                                 materialization);
   return 0;
 }
 
@@ -2562,9 +2830,8 @@ int main(int argc, char **) {
   }
   if (!decoded.value) {
     if (decoded.failure == vgpu::native::RequestFailureKind::kProtocol) {
-      const auto diagnostics =
-          std::vector{Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol",
-                            decoded.error)};
+      const auto diagnostics = std::vector{
+          Error("VGPU-NATIVE-TINT-PROTOCOL", "protocol", decoded.error)};
       if (decoded.operation ==
               vgpu::native::RequestOperation::kEntryInventory &&
           decoded.request_identity) {
@@ -2588,9 +2855,8 @@ int main(int argc, char **) {
 
   tint::Initialize();
   const auto write_internal_failure = [&](std::string message) {
-    const auto diagnostics =
-        std::vector{Error("VGPU-NATIVE-TINT-INTERNAL", "internal",
-                          std::move(message))};
+    const auto diagnostics = std::vector{
+        Error("VGPU-NATIVE-TINT-INTERNAL", "internal", std::move(message))};
     if (std::holds_alternative<EntryInventoryRequest>(*decoded.value)) {
       WriteEntryInventoryFailure(
           std::get<EntryInventoryRequest>(*decoded.value).identity,

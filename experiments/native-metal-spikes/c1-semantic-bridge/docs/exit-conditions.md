@@ -66,15 +66,19 @@ generated-gap provenance, authored-vertex no-op behavior, exact nominal plan/inv
 prelaunch validation of the final request, and two byte-identical final inventories containing only
 the derived vertex plus authored fragment. This is partial evidence for conditions 3 and 10.
 
-The implemented fixed-resource extraction slice adds four frozen request/response pairs, nine
-prelaunch failures with zero launches, thirty-one response failures, three static nominal
-authentications, and twenty-three native invocations. It proves program-scoped render and compute
-interfaces, literal workgroup dimensions, and one five-binding resource graph with numeric order,
-exact stage subsets, one shared binding, seven types, six layouts, and fixed buffer minimum sizes of
-8, 24, and 16 bytes. Additional canaries prove an authored fixed `@size`, simple storage-texture
-reflection, Dawn-like cross-stage sampler/texture resolution, and explicit runtime-array and
-binding-array rejection. Configured and active overrides remain structured failures. This is
-partial evidence for conditions 3, 4, and 10.
+The implemented semantic-extraction slice now freezes eight request/response pairs, ten prelaunch
+failures, twenty-four override-response mutations, and thirty-one existing response mutations. Its
+native run reports forty-seven invocations, nine deterministic repeats, eight crossed-request
+checks, five fixture successes, two inactive-configuration successes, one constant-expression
+workgroup success, seven semantic failures, and ten protocol failures. It proves program-scoped
+render and compute interfaces; configured, defaulted, and active exact-static override unions;
+exact per-entry override subsets; authored `@id` handling; omission of inactive configured
+declarations; and
+positive workgroup dimensions resolved from constant and override-dependent expressions. The
+existing resource evidence still includes the numeric five-binding graph, authored fixed `@size`,
+storage-texture reflection, cross-stage sampler/texture resolution, and structured runtime-array and
+binding-array rejection. This closes the native extraction portion of condition 4 and adds evidence
+for conditions 3 and 10; override assembly and the connected downstream path remain open.
 
 The executable assembly slice adds four programs: resource-free effect, multi-module draw, and
 compute fixtures plus one fixed singular-resource draw. Four nominal allocations produce seven
@@ -115,6 +119,8 @@ cover the current fixed direct profile. This closes fixed singular-resource allo
 projection, response authentication, program projection, offline compilation, and runtime
 binding/readback for that fixture.
 
-Exact-static overrides, compute-resource translation and runtime parity, broader resource shapes,
-the integrated repository corpus, production artifact packaging, and the production Swift runtime
-remain open. The recorded GPU evidence is not an Intel, AMD, or cross-machine result.
+Exact-static override extraction has passed. Its authenticated assembly into `semantic-v1`, exact
+per-entry translation projection, offline and runtime Metal evidence, compute-resource translation
+and runtime parity, broader resource shapes, the integrated repository corpus, production artifact
+packaging, and the production Swift runtime remain open. The recorded GPU evidence is not an Intel,
+AMD, or cross-machine result.

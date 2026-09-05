@@ -4,7 +4,7 @@
   "ok": true,
   "requestIdentity": {
     "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
-    "sha256": "0101a54f522a258bac516a50201e3b99e1a5bc444b9380f2cd24648decf6c0bd"
+    "sha256": "85a0bfd8c41e254febcfe5900eaf3f70f546d374467cc4debff7c1861f1e5660"
   },
   "compiler": {
     "name": "vgpu-tint-compiler",
@@ -20,7 +20,7 @@
     "entryPoints": [
       {
         "stage": "compute",
-        "wgsl": "first",
+        "wgsl": "needs_required",
         "semanticInterface": {
           "kind": "compute",
           "inputs": [],
@@ -28,9 +28,9 @@
         },
         "bindings": [],
         "samplingPairs": [],
-        "overrides": ["FIRST"],
+        "overrides": ["DEP", "REQUIRED"],
         "workgroupSize": {
-          "x": 2,
+          "x": 5,
           "y": 1,
           "z": 1
         }
@@ -39,15 +39,20 @@
     "bindings": [],
     "overrides": [
       {
-        "name": "FIRST",
+        "name": "DEP",
         "type": "u32",
-        "default": {
-          "type": "u32",
-          "value": 2
-        },
         "selected": {
           "type": "u32",
-          "value": 2
+          "value": 5
+        }
+      },
+      {
+        "name": "REQUIRED",
+        "wgslId": 17,
+        "type": "u32",
+        "selected": {
+          "type": "u32",
+          "value": 4
         }
       }
     ],

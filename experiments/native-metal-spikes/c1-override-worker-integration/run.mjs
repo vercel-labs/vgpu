@@ -324,12 +324,14 @@ function runStaticGate() {
       `materializer source omits required integration seam ${token}`
     );
   }
-  const workerText = readFileSync(
+  const workerText = `${readFileSync(
     join(compilerFixtureDirectory, "prototype", "main.cc"),
     "utf8"
-  );
+  )}\n${readFileSync(materializerEngineSource, "utf8")}`;
   for (const token of [
     "SetInitializer",
+    "OverrideMaterializer::InstallValues",
+    "OverrideMaterializer::Materialize",
     "SingleEntryPoint",
     "SubstituteOverrides",
     "SubstituteOverrides left a live override",

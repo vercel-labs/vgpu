@@ -15,9 +15,9 @@ lets the worker resolve cross-stage resource kinds atomically while TypeScript r
 The request uses `vgpu-native-tint-semantic-extraction/v1`:
 
 The placeholders below stand for concrete fixture values; checked-in requests contain exact hashes,
-byte ranges, and source text. The `identifier` wire shape is executable and independently validated
-by the JavaScript producer and C++ decoder. The current worker profile still requires an empty
-`overrideConfiguration`; materialization and populated override responses land in the next slice.
+byte ranges, and source text. The `identifier` wire shape and non-empty configuration path are
+executable and independently validated by the JavaScript producer, C++ decoder, and Tint
+materializer.
 
 ```json
 {
@@ -147,7 +147,7 @@ A success has the common compiler identity and diagnostic envelope plus one sema
         },
         "bindings": [],
         "samplingPairs": [],
-        "overrides": []
+        "overrides": ["SAMPLE_COUNT"]
       },
       {
         "stage": "fragment",
@@ -172,11 +172,25 @@ A success has the common compiler identity and diagnostic envelope plus one sema
         },
         "bindings": [],
         "samplingPairs": [],
-        "overrides": []
+        "overrides": ["SAMPLE_COUNT", "USE_DITHER"]
       }
     ],
     "bindings": [],
-    "overrides": [],
+    "overrides": [
+      {
+        "name": "SAMPLE_COUNT",
+        "wgslId": 17,
+        "type": "u32",
+        "default": { "type": "u32", "value": 5 },
+        "selected": { "type": "u32", "value": 9 }
+      },
+      {
+        "name": "USE_DITHER",
+        "type": "bool",
+        "default": { "type": "bool", "value": false },
+        "selected": { "type": "bool", "value": true }
+      }
+    ],
     "types": {},
     "layouts": {}
   }
@@ -205,13 +219,22 @@ interned from their inline facts instead of redundantly appearing in that graph.
 normalization rules live in
 [Sampling, resources, and types](./sampling-and-types.md).
 
+Each result-level override has a resolved WGSL `name`, scalar `type`, and typed `selected` value.
+It includes `default` only when Tint can evaluate the all-omitted initializer, and includes
+`wgslId` only for an authored numeric `@id`. Boolean and integer values use their JSON scalar;
+finite `f16` and `f32` values use canonical lowercase IEEE bit strings. Entry-local `overrides`
+arrays are strict ordered subsets of that result-level union. A configured declaration that is
+inactive in every selected entry does not appear in either view.
+
 ### Current executable profile
 
 The current implementation accepts interface-only programs plus singular active resources whose
-buffer graphs have fixed host-shareable layouts. `overrideConfiguration` must remain empty and no
-selected entry may use an active override. It extracts complete stage I/O, literal compute
-workgroup sizes, exact entry-local binding subsets and sampling pairs, the numeric program binding
-union, and the reachable content-addressed type and layout graphs.
+buffer graphs have fixed host-shareable layouts. It also accepts configured and active scalar
+overrides, materializes one canonical typed program union, and reports each entry's exact-static
+name subset. Compute workgroup dimensions may be constant expressions, including expressions that
+depend on overrides; the response contains their resolved positive values after substitution. It
+also extracts complete stage I/O, exact entry-local binding subsets and sampling pairs, the numeric
+program binding union, and the reachable content-addressed type and layout graphs.
 
 The primary render fixture contains bindings `b0`, `b1`, `b2`, `b3`, and `b10`. Its vertex subset
 contains the shared frame uniform and vertex storage buffer; its fragment subset contains the same
@@ -220,9 +243,14 @@ six layouts, and fixed buffer minimum sizes of 8, 24, and 16 bytes. Separate nat
 an authored fixed `@size`, a storage texture, and cross-stage unknown sampler/texture resolution.
 
 Runtime-sized buffers and resource binding arrays produce structured unsupported failures rather
-than approximate success. Configured overrides and active overrides also remain unsupported.
-Constant-expression and override-expression workgroup dimensions join the override slice. These
-are executable-profile restrictions, not omissions from the v1 response shape.
+than approximate success. Those resource limits are executable-profile restrictions, not omissions
+from the v1 response shape.
+
+The passing extraction gate covers eight request fixtures and eight response fixtures, ten
+prelaunch failures, twenty-four override-response mutations, and thirty-one existing response
+mutations. Its native run reports forty-seven invocations, nine deterministic repeats, eight
+crossed-request checks, five fixture successes, two inactive-configuration successes, one
+constant-expression success, seven semantic failures, and ten protocol failures.
 
 The selected integration contract, three-fixture gate, and failure matrix are specified in
 [`exact-static-overrides.md`](./exact-static-overrides.md).

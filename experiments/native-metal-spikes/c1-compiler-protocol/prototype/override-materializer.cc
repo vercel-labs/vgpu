@@ -1,5 +1,5 @@
-// Exact-static override materialization staged beside the native Tint worker.
-// The standalone feasibility adapter uses it now; worker linking follows.
+// Exact-static override materialization shared by the standalone feasibility
+// adapter and the native Tint worker.
 
 #include "override-materializer.h"
 

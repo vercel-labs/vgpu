@@ -9,6 +9,7 @@
 #include <variant>
 #include <vector>
 
+#include "override-materializer.h"
 #include "src/tint/api/common/bindings.h"
 
 namespace vgpu::native {
@@ -22,10 +23,7 @@ struct Mapping {
   uint32_t count;
 };
 
-struct OverrideValue {
-  std::string type;
-  double value;
-};
+using OverrideValue = overrides::ScalarValue;
 
 struct InterfaceType {
   std::string scalar;
@@ -89,10 +87,7 @@ struct SelectedEntryPoint {
   std::string wgsl;
 };
 
-struct ConfiguredOverride {
-  std::string identifier;
-  std::variant<bool, double> value;
-};
+using ConfiguredOverride = overrides::Configuration;
 
 struct SemanticExtractionRequest {
   std::string source_text;
@@ -103,9 +98,8 @@ struct SemanticExtractionRequest {
   RequestIdentity identity;
 };
 
-using WorkerRequest =
-    std::variant<CompilerRequest, EntryInventoryRequest,
-                 SemanticExtractionRequest>;
+using WorkerRequest = std::variant<CompilerRequest, EntryInventoryRequest,
+                                   SemanticExtractionRequest>;
 
 enum class RequestOperation {
   kCompiler,

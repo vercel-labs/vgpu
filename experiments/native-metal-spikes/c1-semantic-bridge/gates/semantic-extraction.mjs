@@ -26,6 +26,7 @@ import {
   SEMANTIC_EXTRACTION_COMPILER,
   semanticExtractionRequestIdentity,
 } from "../lib/semantic-extraction-protocol.mjs";
+import { assertSemanticOverrideGraph } from "../lib/semantic-override-graph.mjs";
 import {
   assertSemanticResourceGraph,
   semanticLayoutId,
@@ -371,15 +372,26 @@ function runStaticGate(validators, requests, responses) {
     "crossed finalized capsule",
     "VGPU-C1-SEMANTIC-CAPSULE"
   );
+  const failedComputeResponse = structuredClone(responses["compute-interface"]);
+  failedComputeResponse.ok = false;
+  delete failedComputeResponse.result;
+  failedComputeResponse.diagnostics = [
+    {
+      code: "VGPU-NATIVE-TINT-INSPECT",
+      severity: "error",
+      phase: "inspect",
+      message: "selected WGSL entry point was not found",
+    },
+  ];
   expectRejected(
     () =>
       authenticateSuccessfulSemanticExtraction({
         finalized: computeFinalized,
-        request: requests["active-override"],
+        request: requests["compute-interface"],
         requestBytes: encodeSemanticExtractionRequest(
-          requests["active-override"]
+          requests["compute-interface"]
         ),
-        response: responses["active-override"],
+        response: failedComputeResponse,
       }),
     "failed response authentication",
     "VGPU-C1-SEMANTIC-NOT-SUCCESS"
@@ -439,12 +451,6 @@ function runStaticGate(validators, requests, responses) {
       "VGPU-C1-SEMANTIC-WIRE",
     ],
     [
-      "configured-override-profile",
-      (value) =>
-        (value.overrideConfiguration = [{ identifier: "VALUE", value: 1 }]),
-      "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED",
-    ],
-    [
       "legacy-override-name",
       (value) => (value.overrideConfiguration = [{ name: "VALUE", value: 1 }]),
       undefined,
@@ -482,10 +488,9 @@ function runStaticGate(validators, requests, responses) {
     }),
     validOverrideSelectors
   );
-  expectRejected(
-    () => assertSemanticExtractionExecutableProfile(validOverrideSelectors),
-    "valid override selectors remain outside the executable profile",
-    "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  assert.equal(
+    assertSemanticExtractionExecutableProfile(validOverrideSelectors),
+    validOverrideSelectors
   );
 
   const invalidOverrideSelectors = ["+17", "-1", "00", "017", "65536"];
@@ -507,6 +512,323 @@ function runStaticGate(validators, requests, responses) {
       "VGPU-C1-SEMANTIC-OVERRIDE-ORDER"
     );
   }
+
+  const overrideRequest = structuredClone(baseRequest);
+  overrideRequest.overrideConfiguration = [
+    { identifier: "17", value: 123 },
+    { identifier: "BOOL_VALUE", value: false },
+    { identifier: "INACTIVE", value: 1 },
+  ];
+  const overrideRequestBytes = encodeSemanticExtractionRequest(overrideRequest);
+  const overrideResponse = structuredClone(responses["render-interface"]);
+  overrideResponse.requestIdentity =
+    semanticExtractionRequestIdentity(overrideRequestBytes);
+  overrideResponse.result.overrides = [
+    {
+      name: "BOOL_VALUE",
+      type: "bool",
+      default: { type: "bool", value: false },
+      selected: { type: "bool", value: true },
+    },
+    {
+      name: "EXPLICIT",
+      wgslId: 17,
+      type: "u32",
+      default: { type: "u32", value: 5 },
+      selected: { type: "u32", value: 9 },
+    },
+    {
+      name: "FLOAT_VALUE",
+      type: "f32",
+      default: { type: "f32", bits: "80000000" },
+      selected: { type: "f32", bits: "00000000" },
+    },
+    {
+      name: "INT_VALUE",
+      type: "i32",
+      default: { type: "i32", value: -2_147_483_648 },
+      selected: { type: "i32", value: 2_147_483_647 },
+    },
+    {
+      name: "UINT_VALUE",
+      type: "u32",
+      selected: { type: "u32", value: 4_294_967_295 },
+    },
+  ];
+  overrideResponse.result.entryPoints[0].overrides = [
+    "EXPLICIT",
+    "FLOAT_VALUE",
+    "INT_VALUE",
+  ];
+  overrideResponse.result.entryPoints[1].overrides = [
+    "BOOL_VALUE",
+    "FLOAT_VALUE",
+    "UINT_VALUE",
+  ];
+  assertSchema(
+    validators.request,
+    overrideRequest,
+    "populated override request"
+  );
+  assertSemanticExtractionExecutableProfile(overrideRequest);
+  assertSchema(
+    validators.response,
+    overrideResponse,
+    "populated override response"
+  );
+  assertSemanticExtractionResponseSemantics(
+    overrideRequest,
+    overrideRequestBytes,
+    overrideResponse
+  );
+
+  const changedSelected = structuredClone(overrideResponse);
+  changedSelected.result.overrides[1].selected.value = 4_000_000_000;
+  assertSchema(
+    validators.response,
+    changedSelected,
+    "coherently changed selected override response"
+  );
+  assertSemanticExtractionResponseSemantics(
+    overrideRequest,
+    overrideRequestBytes,
+    changedSelected
+  );
+
+  const boundaryIdRequest = structuredClone(overrideRequest);
+  boundaryIdRequest.overrideConfiguration = [
+    { identifier: "0", value: false },
+    { identifier: "17", value: 123 },
+    { identifier: "INACTIVE", value: 1 },
+  ];
+  const boundaryIdBytes = encodeSemanticExtractionRequest(boundaryIdRequest);
+  const boundaryIdResponse = structuredClone(overrideResponse);
+  boundaryIdResponse.requestIdentity =
+    semanticExtractionRequestIdentity(boundaryIdBytes);
+  boundaryIdResponse.result.overrides[0].wgslId = 0;
+  boundaryIdResponse.result.overrides[4].wgslId = 65_535;
+  assertSchema(
+    validators.response,
+    boundaryIdResponse,
+    "boundary authored override ID response"
+  );
+  assertSemanticExtractionResponseSemantics(
+    boundaryIdRequest,
+    boundaryIdBytes,
+    boundaryIdResponse
+  );
+
+  const f16Request = structuredClone(overrideRequest);
+  f16Request.languageFeatures = ["f16"];
+  const f16RequestBytes = encodeSemanticExtractionRequest(f16Request);
+  const f16Response = structuredClone(overrideResponse);
+  f16Response.requestIdentity =
+    semanticExtractionRequestIdentity(f16RequestBytes);
+  f16Response.result.overrides.splice(3, 0, {
+    name: "HALF_VALUE",
+    type: "f16",
+    default: { type: "f16", bits: "8000" },
+    selected: { type: "f16", bits: "0000" },
+  });
+  f16Response.result.entryPoints[0].overrides.splice(2, 0, "HALF_VALUE");
+  assertSchema(
+    validators.response,
+    f16Response,
+    "finite f16 override response"
+  );
+  assertSemanticExtractionResponseSemantics(
+    f16Request,
+    f16RequestBytes,
+    f16Response
+  );
+
+  const expectOverrideResponseRejected = (
+    response,
+    label,
+    expectedCode,
+    request = overrideRequest,
+    requestBytes = overrideRequestBytes
+  ) =>
+    expectRejected(
+      () =>
+        assertSemanticExtractionResponseSemantics(
+          request,
+          requestBytes,
+          response
+        ),
+      label,
+      expectedCode
+    );
+  const overrideResponseMutations = [
+    [
+      "override-program-order",
+      (value) => value.result.overrides.reverse(),
+      "VGPU-C1-SEMANTIC-OVERRIDE-ORDER",
+    ],
+    [
+      "override-entry-order",
+      (value) => value.result.entryPoints[0].overrides.reverse(),
+      "VGPU-C1-SEMANTIC-OVERRIDE-ORDER",
+    ],
+    [
+      "override-dangling-entry-reference",
+      (value) =>
+        (value.result.entryPoints[0].overrides = ["EXPLICIT", "MISSING"]),
+      "VGPU-C1-SEMANTIC-OVERRIDE-REFERENCE",
+    ],
+    [
+      "override-inexact-union",
+      (value) => value.result.entryPoints[0].overrides.pop(),
+      "VGPU-C1-SEMANTIC-OVERRIDE-UNION",
+    ],
+    [
+      "override-authored-id-collision",
+      (value) => (value.result.overrides[4].wgslId = 17),
+      "VGPU-C1-SEMANTIC-OVERRIDE-ID",
+    ],
+    [
+      "override-authored-id-out-of-range",
+      (value) => (value.result.overrides[1].wgslId = 65_536),
+      "VGPU-C1-SEMANTIC-OVERRIDE-ID",
+    ],
+    [
+      "override-selected-type-mismatch",
+      (value) => (value.result.overrides[1].selected.type = "i32"),
+      "VGPU-C1-SEMANTIC-OVERRIDE-TYPE",
+    ],
+    [
+      "override-default-type-mismatch",
+      (value) => (value.result.overrides[3].default.type = "u32"),
+      "VGPU-C1-SEMANTIC-OVERRIDE-TYPE",
+    ],
+    [
+      "override-invalid-bool",
+      (value) => (value.result.overrides[0].selected.value = 1),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-i32-underflow",
+      (value) => (value.result.overrides[3].selected.value = -2_147_483_649),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-i32-overflow",
+      (value) => (value.result.overrides[3].selected.value = 2_147_483_648),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-u32-underflow",
+      (value) => (value.result.overrides[4].selected.value = -1),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-u32-overflow",
+      (value) => (value.result.overrides[4].selected.value = 4_294_967_296),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-uppercase-f32-bits",
+      (value) => (value.result.overrides[2].selected.bits = "3F800000"),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-nonstring-f32-bits",
+      (value) => (value.result.overrides[2].selected.bits = 12345678),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-infinite-f32-bits",
+      (value) => (value.result.overrides[2].selected.bits = "7f800000"),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+    [
+      "override-negative-nan-f32-bits",
+      (value) => (value.result.overrides[2].selected.bits = "ffc00000"),
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+    ],
+  ];
+  for (const [name, mutate, expectedCode] of overrideResponseMutations) {
+    const response = structuredClone(overrideResponse);
+    mutate(response);
+    expectOverrideResponseRejected(response, name, expectedCode);
+  }
+
+  const f16WithoutFeature = structuredClone(f16Response);
+  f16WithoutFeature.requestIdentity =
+    semanticExtractionRequestIdentity(overrideRequestBytes);
+  expectOverrideResponseRejected(
+    f16WithoutFeature,
+    "f16 override without feature",
+    "VGPU-C1-SEMANTIC-OVERRIDE-TYPE"
+  );
+  for (const [name, bits] of [
+    ["uppercase-f16-bits", "3C00"],
+    ["infinite-f16-bits", "7c00"],
+    ["negative-nan-f16-bits", "fe00"],
+  ]) {
+    const response = structuredClone(f16Response);
+    response.result.overrides[3].selected.bits = bits;
+    expectOverrideResponseRejected(
+      response,
+      name,
+      "VGPU-C1-SEMANTIC-OVERRIDE-VALUE",
+      f16Request,
+      f16RequestBytes
+    );
+  }
+
+  const configuredExplicitByName = structuredClone(overrideRequest);
+  configuredExplicitByName.overrideConfiguration = [
+    { identifier: "EXPLICIT", value: 9 },
+  ];
+  const configuredExplicitByNameBytes = encodeSemanticExtractionRequest(
+    configuredExplicitByName
+  );
+  const configuredExplicitByNameResponse = structuredClone(overrideResponse);
+  configuredExplicitByNameResponse.requestIdentity =
+    semanticExtractionRequestIdentity(configuredExplicitByNameBytes);
+  expectOverrideResponseRejected(
+    configuredExplicitByNameResponse,
+    "authored override ID configured by name",
+    "VGPU-C1-SEMANTIC-OVERRIDE-CONFIGURATION",
+    configuredExplicitByName,
+    configuredExplicitByNameBytes
+  );
+
+  const graphFailWith = (code, message) => {
+    throw Object.assign(new Error(message), { code });
+  };
+  const excessiveOverrideRecords = {
+    overrides: Array.from({ length: 4_097 }, (_, index) => ({
+      name: `O${String(index).padStart(4, "0")}`,
+      type: "bool",
+      selected: { type: "bool", value: false },
+    })),
+    entryPoints: [],
+  };
+  expectRejected(
+    () =>
+      assertSemanticOverrideGraph(excessiveOverrideRecords, {
+        failWith: graphFailWith,
+      }),
+    "override-record-resource-limit",
+    "VGPU-C1-SEMANTIC-RESOURCE-LIMIT"
+  );
+  const excessiveOverrideMemberships = {
+    overrides: [],
+    entryPoints: [
+      { overrides: Array(4_096).fill("VALUE") },
+      { overrides: Array(4_097).fill("VALUE") },
+    ],
+  };
+  expectRejected(
+    () =>
+      assertSemanticOverrideGraph(excessiveOverrideMemberships, {
+        failWith: graphFailWith,
+      }),
+    "override-membership-resource-limit",
+    "VGPU-C1-SEMANTIC-RESOURCE-LIMIT"
+  );
 
   const responseMutations = [
     ["extra-response-field", (value) => (value.extra = true)],
@@ -877,6 +1199,8 @@ function runStaticGate(validators, requests, responses) {
     prelaunchMutations: prelaunchMutations.length,
     validOverrideSelectors: validOverrideSelectors.overrideConfiguration.length,
     invalidOverrideSelectors: invalidOverrideSelectors.length,
+    populatedOverrideSuccesses: 4,
+    overrideResponseMutations: overrideResponseMutations.length + 7,
     responseMutations:
       responseMutations.length + resourceResponseMutations.length + 4,
     authenticatedSuccesses: Object.keys(authenticated).length,
@@ -948,18 +1272,177 @@ async function runNativeGate(executable, validators, requests, responses) {
     };
   }
   let invocations = 0;
+  const fixtureNames = Object.keys(requests);
   const firstRuns = {};
-  for (const name of Object.keys(requests)) {
+  for (const name of fixtureNames) {
     const run = await invokeSemantic(executable, requests[name], validators);
     invocations += 1;
+    assert.equal(run.response.ok, true, `${name} fixture did not succeed`);
     assert.deepEqual(run.response, responses[name], `${name} response drifted`);
     firstRuns[name] = run;
   }
-  for (const name of ["compute-interface", "render-interface"]) {
+  for (const name of fixtureNames) {
     const second = await invokeSemantic(executable, requests[name], validators);
     invocations += 1;
     assert.equal(second.stdout, firstRuns[name].stdout);
   }
+  for (let index = 0; index < fixtureNames.length; index += 1) {
+    const requestName = fixtureNames[index];
+    const crossedResponseName = fixtureNames[(index + 1) % fixtureNames.length];
+    expectRejected(
+      () =>
+        assertSemanticExtractionResponseSemantics(
+          requests[requestName],
+          firstRuns[requestName].requestBytes,
+          responses[crossedResponseName]
+        ),
+      `${requestName} accepted ${crossedResponseName} response association`,
+      "VGPU-C1-SEMANTIC-REQUEST-IDENTITY"
+    );
+  }
+
+  assert.deepEqual(
+    {
+      entries: responses["active-override"].result.entryPoints[0].overrides,
+      union: responses["active-override"].result.overrides,
+      workgroup:
+        responses["active-override"].result.entryPoints[0].workgroupSize,
+    },
+    {
+      entries: ["FIRST"],
+      union: [
+        {
+          name: "FIRST",
+          type: "u32",
+          default: { type: "u32", value: 2 },
+          selected: { type: "u32", value: 2 },
+        },
+      ],
+      workgroup: { x: 2, y: 1, z: 1 },
+    }
+  );
+  assert.deepEqual(responses["override-configured-dependent"].result, {
+    entryPoints: [
+      {
+        stage: "compute",
+        wgsl: "needs_required",
+        semanticInterface: { kind: "compute", inputs: [], outputs: [] },
+        bindings: [],
+        samplingPairs: [],
+        overrides: ["DEP", "REQUIRED"],
+        workgroupSize: { x: 5, y: 1, z: 1 },
+      },
+    ],
+    bindings: [],
+    overrides: [
+      {
+        name: "DEP",
+        type: "u32",
+        selected: { type: "u32", value: 5 },
+      },
+      {
+        name: "REQUIRED",
+        wgslId: 17,
+        type: "u32",
+        selected: { type: "u32", value: 4 },
+      },
+    ],
+    types: {},
+    layouts: {},
+  });
+  assert.deepEqual(
+    {
+      entries:
+        responses["override-configured-bypass"].result.entryPoints[0].overrides,
+      union: responses["override-configured-bypass"].result.overrides,
+      workgroup:
+        responses["override-configured-bypass"].result.entryPoints[0]
+          .workgroupSize,
+    },
+    {
+      entries: ["DEP", "REQUIRED"],
+      union: [
+        {
+          name: "DEP",
+          type: "u32",
+          selected: { type: "u32", value: 9 },
+        },
+        {
+          name: "REQUIRED",
+          wgslId: 17,
+          type: "u32",
+          selected: { type: "u32", value: 4 },
+        },
+      ],
+      workgroup: { x: 9, y: 1, z: 1 },
+    }
+  );
+  assert.deepEqual(
+    {
+      entries: responses["override-render-union"].result.entryPoints.map(
+        (entry) => entry.overrides
+      ),
+      union: responses["override-render-union"].result.overrides,
+    },
+    {
+      entries: [
+        ["SHARED", "VERTEX_ONLY"],
+        ["FRAGMENT_ONLY", "SHARED"],
+      ],
+      union: [
+        {
+          name: "FRAGMENT_ONLY",
+          type: "f32",
+          default: { type: "f32", bits: "3f400000" },
+          selected: { type: "f32", bits: "3e000000" },
+        },
+        {
+          name: "SHARED",
+          type: "f32",
+          default: { type: "f32", bits: "3e800000" },
+          selected: { type: "f32", bits: "3ec00000" },
+        },
+        {
+          name: "VERTEX_ONLY",
+          type: "f32",
+          default: { type: "f32", bits: "3f000000" },
+          selected: { type: "f32", bits: "3f200000" },
+        },
+      ],
+    }
+  );
+  assert.deepEqual(responses["override-all-scalars"].result.overrides, [
+    {
+      name: "A_BOOL",
+      type: "bool",
+      default: { type: "bool", value: true },
+      selected: { type: "bool", value: false },
+    },
+    {
+      name: "B_I32",
+      type: "i32",
+      default: { type: "i32", value: -2 },
+      selected: { type: "i32", value: -7 },
+    },
+    {
+      name: "C_U32",
+      type: "u32",
+      default: { type: "u32", value: 3 },
+      selected: { type: "u32", value: 4 },
+    },
+    {
+      name: "D_F16",
+      type: "f16",
+      default: { type: "f16", bits: "3e00" },
+      selected: { type: "f16", bits: "3800" },
+    },
+    {
+      name: "E_F32",
+      type: "f32",
+      default: { type: "f32", bits: "00000000" },
+      selected: { type: "f32", bits: "40100000" },
+    },
+  ]);
 
   const scalarRender = structuredClone(requests["render-interface"]);
   scalarRender.entryPoints[1].wgsl = "scalar_fragment";
@@ -1242,6 +1725,64 @@ override INACTIVE_SIZE: u32;
     [[["g0b1", "g0b2", "filtering"]], [["g0b0", "g0b2", "filtering"]]]
   );
 
+  const overrideFailureCases = [
+    {
+      name: "authored override name instead of ID",
+      configuration: [
+        { identifier: "REQUIRED", value: 4 },
+        { identifier: "UNUSED", value: 99 },
+      ],
+      code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNKNOWN",
+      phase: "inspect",
+    },
+    {
+      name: "missing required override",
+      configuration: [{ identifier: "UNUSED", value: 99 }],
+      code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-MISSING-REQUIRED",
+      phase: "lower",
+    },
+    {
+      name: "wrong override scalar kind",
+      configuration: [
+        { identifier: "17", value: true },
+        { identifier: "UNUSED", value: 99 },
+      ],
+      code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-WRONG-TYPE",
+      phase: "inspect",
+    },
+    {
+      name: "override value outside u32 range",
+      configuration: [
+        { identifier: "17", value: 4_294_967_296 },
+        { identifier: "UNUSED", value: 99 },
+      ],
+      code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-OUT-OF-RANGE",
+      phase: "inspect",
+    },
+    {
+      name: "unknown override selector",
+      configuration: [
+        { identifier: "17", value: 4 },
+        { identifier: "MISSING", value: 1 },
+        { identifier: "UNUSED", value: 99 },
+      ],
+      code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNKNOWN",
+      phase: "inspect",
+    },
+  ];
+  for (const failure of overrideFailureCases) {
+    const request = structuredClone(requests["override-configured-dependent"]);
+    request.overrideConfiguration = failure.configuration;
+    const run = await invokeSemantic(executable, request, validators);
+    invocations += 1;
+    assert.equal(run.response.ok, false, failure.name);
+    assert.deepEqual(
+      run.response.diagnostics.map(({ code, phase }) => ({ code, phase })),
+      [{ code: failure.code, phase: failure.phase }],
+      failure.name
+    );
+  }
+
   const configured = structuredClone(requests["compute-interface"]);
   configured.overrideConfiguration = [{ identifier: "VALUE", value: 1 }];
   const configuredRun = await invokeRawSemantic(
@@ -1250,9 +1791,18 @@ override INACTIVE_SIZE: u32;
     validators
   );
   invocations += 1;
-  assert.equal(
-    configuredRun.response.diagnostics[0].code,
-    "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  assert.equal(configuredRun.response.ok, false);
+  assert.deepEqual(
+    configuredRun.response.diagnostics.map(({ code, phase }) => ({
+      code,
+      phase,
+    })),
+    [
+      {
+        code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNKNOWN",
+        phase: "inspect",
+      },
+    ]
   );
 
   const boundaryOverrideIdentifiers = structuredClone(
@@ -1270,9 +1820,18 @@ override INACTIVE_SIZE: u32;
     validators
   );
   invocations += 1;
-  assert.equal(
-    boundaryIdentifiersRun.response.diagnostics[0].code,
-    "VGPU-NATIVE-TINT-SEMANTIC-CONFIGURATION-UNSUPPORTED"
+  assert.equal(boundaryIdentifiersRun.response.ok, false);
+  assert.deepEqual(
+    boundaryIdentifiersRun.response.diagnostics.map(({ code, phase }) => ({
+      code,
+      phase,
+    })),
+    [
+      {
+        code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNKNOWN",
+        phase: "inspect",
+      },
+    ]
   );
 
   for (const identifier of ["+17", "-1", "00", "017", "65536"]) {
@@ -1335,10 +1894,26 @@ override INACTIVE_SIZE: u32;
     validators
   );
   invocations += 1;
-  assert.equal(
-    expressionRun.response.diagnostics[0].code,
-    "VGPU-NATIVE-TINT-SEMANTIC-WORKGROUP-UNSUPPORTED"
+  assert.equal(expressionRun.response.ok, true);
+  assert.deepEqual(
+    {
+      entryOverrides: expressionRun.response.result.entryPoints[0].overrides,
+      programOverrides: expressionRun.response.result.overrides,
+      workgroupSize: expressionRun.response.result.entryPoints[0].workgroupSize,
+    },
+    {
+      entryOverrides: [],
+      programOverrides: [],
+      workgroupSize: { x: 1, y: 1, z: 1 },
+    }
   );
+  const expressionRepeat = await invokeSemantic(
+    executable,
+    expression,
+    validators
+  );
+  invocations += 1;
+  assert.equal(expressionRepeat.stdout, expressionRun.stdout);
 
   const unknownEntry = structuredClone(requests["compute-interface"]);
   unknownEntry.entryPoints[0].wgsl = "missing_entry";
@@ -1420,7 +1995,12 @@ override INACTIVE_SIZE: u32;
   return {
     status: "passed",
     invocations,
-    deterministicSuccessRuns: 2,
+    deterministicSuccessRuns: fixtureNames.length + 1,
+    crossRequestAssociationFailures: fixtureNames.length,
+    overrideFixtureSuccesses: 5,
+    inactiveConfiguredOverrideSuccesses: 2,
+    constantExpressionSuccesses: 1,
+    overrideSemanticFailures: overrideFailureCases.length + 2,
     nonLinkingExtractionSuccesses: 1,
     fullscreenExtractionSuccesses: 1,
     authenticatedFullscreenSuccesses: 1,
@@ -1430,7 +2010,6 @@ override INACTIVE_SIZE: u32;
     interfaceLimitFailures: 1,
     workerProtocolFailures: 10,
     sourceLockedResponses: Object.keys(responses).length,
-    profileFailures: 5,
   };
 }
 

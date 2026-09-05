@@ -12,6 +12,7 @@ import {
   INVENTORY_COMPILER,
   InventoryProtocolError,
 } from "./protocol.mjs";
+import { assertSemanticOverrideGraph } from "./semantic-override-graph.mjs";
 import { assertSemanticResourceGraph } from "./semantic-resource-graph.mjs";
 
 export const SEMANTIC_EXTRACTION_CONTRACT =
@@ -108,14 +109,7 @@ export function assertSemanticExtractionRequestSemantics(request) {
 }
 
 export function assertSemanticExtractionExecutableProfile(request) {
-  assertSemanticExtractionRequestSemantics(request);
-  if (request.overrideConfiguration.length !== 0) {
-    semanticFail(
-      "VGPU-C1-SEMANTIC-CONFIGURATION-UNSUPPORTED",
-      "configured overrides are outside the fixed-resource executable profile"
-    );
-  }
-  return request;
+  return assertSemanticExtractionRequestSemantics(request);
 }
 
 export function assertSemanticExtractionResponseSemantics(
@@ -183,13 +177,6 @@ export function assertSemanticExtractionResponseSemantics(
       "success has an error or no result"
     );
   }
-  if (request.overrideConfiguration.length !== 0) {
-    semanticFail(
-      "VGPU-C1-SEMANTIC-PROFILE",
-      "the fixed-resource profile cannot succeed with configured overrides"
-    );
-  }
-
   const result = response.result;
   if (result.entryPoints.length !== request.entryPoints.length) {
     semanticFail(
@@ -214,12 +201,6 @@ export function assertSemanticExtractionResponseSemantics(
       extracted.semanticInterface,
       request.languageFeatures
     );
-    if (extracted.overrides.length !== 0) {
-      semanticFail(
-        "VGPU-C1-SEMANTIC-PROFILE",
-        "fixed-resource entry contains overrides"
-      );
-    }
     if (
       requested.stage === "compute" &&
       (!Number.isInteger(extracted.workgroupSize?.x) ||
@@ -235,12 +216,11 @@ export function assertSemanticExtractionResponseSemantics(
       );
     }
   }
-  if (result.overrides.length !== 0) {
-    semanticFail(
-      "VGPU-C1-SEMANTIC-PROFILE",
-      "fixed-resource result contains overrides"
-    );
-  }
+  assertSemanticOverrideGraph(result, {
+    overrideConfiguration: request.overrideConfiguration,
+    languageFeatures: request.languageFeatures,
+    failWith: semanticFail,
+  });
   assertSemanticResourceGraph(result, { failWith: semanticFail });
   return response;
 }

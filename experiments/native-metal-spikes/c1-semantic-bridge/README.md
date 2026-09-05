@@ -3,10 +3,11 @@
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
 source finalization, authenticated fixed-resource semantic extraction, fixed singular-resource
-`semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry projection, native
-translation, offline Metal compilation, and fixed direct-resource binding through an exact live
-Metal readback path. The same one-shot Tint worker supplies inventory, extraction, and translation without
-turning TypeScript into a second WGSL compiler.
+and exact-static override extraction, fixed singular-resource `semantic-v1` assembly, deterministic
+Metal slot allocation, exact per-entry projection, native translation, offline Metal compilation,
+and fixed direct-resource binding through an exact live Metal readback path. The same one-shot Tint
+worker supplies inventory, extraction, and translation without turning TypeScript into a second
+WGSL compiler.
 
 ## Hypothesis
 
@@ -102,26 +103,31 @@ remaining semantic gates.
 
 `vgpu-native-tint-semantic-extraction/v1` is now implemented as the worker's third contract. Its
 current executable profile accepts one selected compute entry or one selected vertex-fragment pair
-when that program has no active overrides and every active resource is singular with a fixed-size
-layout. It extracts canonical stage interfaces and literal compute workgroup sizes from fresh
-per-entry lowered IR, and combines them with Inspector-owned active bindings and sampling pairs.
-Runtime-sized buffers, resource binding arrays, configured or active overrides, and non-literal
-workgroup sizes still produce structured failures.
+with singular fixed-size active resources and scalar exact-static overrides. It extracts canonical
+stage interfaces, exact per-entry override subsets, their typed program union, and positive compute
+workgroup dimensions resolved from constant or override-dependent expressions in fresh per-entry
+lowered IR. Inspector-owned active bindings and sampling pairs remain part of the same result.
+Runtime-sized buffers and resource binding arrays still produce structured failures.
 
-The semantic gate freezes four request/response pairs, eleven prelaunch mutations, thirty-one
-response mutations, and three static nominal authentications. Against the native worker it runs
-thirty-one one-shot requests. The primary resource fixture proves a numeric five-binding union at
+The passing semantic gate freezes eight request/response pairs. Its static run covers ten prelaunch
+failures, twenty-four override-response mutations, and thirty-one existing response mutations. The
+native run reports forty-seven invocations, nine deterministic repeats, eight crossed-request
+checks, five fixture successes, two inactive-configuration successes, one constant-expression
+success, seven semantic failures, and ten protocol failures. The primary resource fixture proves a
+numeric five-binding union at
 `b0`, `b1`, `b2`, `b3`, and `b10`, exact stage subsets, one shared uniform, seven content-addressed
 types, six layouts, and buffer minimum sizes of 8, 24, and 16 bytes. Additional canaries cover an
 authored fixed `@size`, a simple storage texture, cross-stage Dawn-like sampler/texture resolution,
-runtime-array and binding-array rejection, inactive declarations, deterministic interface-only
+runtime-array and binding-array rejection, inactive declarations and configurations, typed
+override defaults and selections, authored `@id`, exact override unions and subsets, deterministic
 successes, malformed protocol requests, and request-specific adapter authentication.
 
 The override-configuration wire now uses WGSL's single pipeline-overridable constant identifier:
 the canonical decimal authored `@id` when present, otherwise the declaration name. The schema,
 JavaScript producer checks, and native decoder agree on canonical IDs in `0...65535`, strict ASCII
-ordering, and rejection of the legacy `name` field. Non-empty configuration remains an explicit
-worker-profile failure until the exact-static materializer slice populates the response.
+ordering, and rejection of the legacy `name` field. Non-empty configuration is executable. A valid
+configured declaration that is inactive in the selected program is accepted but omitted from the
+result; result records retain typed `selected` values, evaluable defaults, and authored numeric IDs.
 
 The assembly gate resolves authored effect, multi-module draw, compute, and fixed-resource
 fixtures, retains nominal resolver declaration evidence, authenticates extraction, emits four
@@ -177,9 +183,10 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
 interfaces, and generated full-screen source. Resource-free effect, draw, and compute requests plus
-one fixed-resource render pair are now derived; exact-static overrides and the broader resource
-profile remain. Once every request is derived, run the repository corpus through the same bridge
-and compile every successful MSL result for the `air64-apple-macos14.0` target.
+one fixed-resource render pair are now derived; exact-static override extraction has passed, while
+its assembly-to-translation-to-Metal path and the broader resource profile remain. Once every
+request is derived, run the repository corpus through the same bridge and compile every successful
+MSL result for the `air64-apple-macos14.0` target.
 
 The fixture inventory and mutation matrix are specified in
 [`docs/fixtures.md`](./docs/fixtures.md). The exact conditions for accepting or discarding this
@@ -194,7 +201,8 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/assembly.md`](./docs/semantic-extraction/assembly.md) freezes the pure
   TypeScript join, render linking, and fingerprint exclusions; and
 - [`docs/semantic-extraction/exact-static-overrides.md`](./docs/semantic-extraction/exact-static-overrides.md)
-  selects the next connected override materialization, union, projection, and Metal evidence; and
+  records executable override materialization and the remaining connected assembly, projection,
+  and Metal evidence; and
 - [`docs/semantic-extraction/metal-slot-projection.md`](./docs/semantic-extraction/metal-slot-projection.md)
   freezes slot ownership, per-entry compiler projection, and the connected offline evidence; and
 - [`docs/semantic-extraction/compiler-response-assembly.md`](./docs/semantic-extraction/compiler-response-assembly.md)
@@ -211,8 +219,8 @@ The semantic work is split by responsibility so the growing design remains revie
    origin map, and origin-map hash. This source-finalization slice is executable; resolver-owned
    entry declarations remain unchanged alongside it until program assembly.
 4. Add a multi-entry semantic-extraction operation. The fixed singular-resource profile is
-   executable; runtime-sized layouts, binding arrays, and the existing exact-static override
-   materializer remain next.
+   executable, including exact-static scalar overrides and resolved constant-expression workgroup
+   dimensions; runtime-sized layouts and binding arrays remain open.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven entry spans and resource-symbol evidence. Resource-free effect, multi-module draw, and
    compute programs plus fixed singular resources are executable.

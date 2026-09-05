@@ -166,7 +166,18 @@ export function compileTintPrototype({
   const prototypeDirectory = join(fixtureDirectory, "prototype");
   const source = join(prototypeDirectory, "main.cc");
   const codecSource = join(prototypeDirectory, "json-codec.cc");
-  const sourceText = ["main.cc", "json-codec.cc", "json-codec.h", "request.h"]
+  const materializerSource = join(
+    prototypeDirectory,
+    "override-materializer.cc"
+  );
+  const sourceText = [
+    "main.cc",
+    "json-codec.cc",
+    "json-codec.h",
+    "request.h",
+    "override-materializer.cc",
+    "override-materializer.h",
+  ]
     .map((name) => readFileSync(join(prototypeDirectory, name), "utf8"))
     .join("\n");
   for (const forbidden of [
@@ -214,6 +225,7 @@ export function compileTintPrototype({
     "-Werror",
     source,
     codecSource,
+    materializerSource,
     join(jsoncppRoot, "src", "lib_json", "json_reader.cpp"),
     join(jsoncppRoot, "src", "lib_json", "json_value.cpp"),
     join(jsoncppRoot, "src", "lib_json", "json_writer.cpp"),

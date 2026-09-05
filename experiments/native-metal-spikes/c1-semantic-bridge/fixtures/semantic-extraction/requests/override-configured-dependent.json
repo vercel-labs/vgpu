@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/override-configured-dependent.wgsl",
+    "sha256": "8e8012205ea8c47cf594c4804c1e7cdc97f5c8c2306f38f5d63ddf3cb5edd4dd",
+    "text": "@id(17) override REQUIRED: u32;\noverride DEP: u32 = REQUIRED + 1u;\noverride UNUSED: u32 = 11u;\n\n@compute @workgroup_size(DEP)\nfn needs_required() {}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/override-configured-dependent.wgsl",
+      "sha256": "8e8012205ea8c47cf594c4804c1e7cdc97f5c8c2306f38f5d63ddf3cb5edd4dd"
+    },
+    "sources": [
+      {
+        "input": "override-configured-dependent-wgsl",
+        "sha256": "8e8012205ea8c47cf594c4804c1e7cdc97f5c8c2306f38f5d63ddf3cb5edd4dd"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 149
+        },
+        "origin": {
+          "input": "override-configured-dependent-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "fa929850e0d671e417843cdd781d5112471c85708d7ae2eff6dda7b0a1959435",
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "needs_required"
+    }
+  ],
+  "overrideConfiguration": [
+    {
+      "identifier": "17",
+      "value": 4
+    },
+    {
+      "identifier": "UNUSED",
+      "value": 99
+    }
+  ],
+  "languageFeatures": []
+}

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": true,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "cf07f4ea3037c4b7dd51c0e8748763d13c558f1237b75743b00fa4678d455539"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "entryPoints": [
+      {
+        "stage": "compute",
+        "wgsl": "all_scalars",
+        "semanticInterface": {
+          "kind": "compute",
+          "inputs": [],
+          "outputs": []
+        },
+        "bindings": [],
+        "samplingPairs": [],
+        "overrides": ["A_BOOL", "B_I32", "C_U32", "D_F16", "E_F32"],
+        "workgroupSize": {
+          "x": 4,
+          "y": 1,
+          "z": 1
+        }
+      }
+    ],
+    "bindings": [],
+    "overrides": [
+      {
+        "name": "A_BOOL",
+        "type": "bool",
+        "default": {
+          "type": "bool",
+          "value": true
+        },
+        "selected": {
+          "type": "bool",
+          "value": false
+        }
+      },
+      {
+        "name": "B_I32",
+        "type": "i32",
+        "default": {
+          "type": "i32",
+          "value": -2
+        },
+        "selected": {
+          "type": "i32",
+          "value": -7
+        }
+      },
+      {
+        "name": "C_U32",
+        "type": "u32",
+        "default": {
+          "type": "u32",
+          "value": 3
+        },
+        "selected": {
+          "type": "u32",
+          "value": 4
+        }
+      },
+      {
+        "name": "D_F16",
+        "type": "f16",
+        "default": {
+          "type": "f16",
+          "bits": "3e00"
+        },
+        "selected": {
+          "type": "f16",
+          "bits": "3800"
+        }
+      },
+      {
+        "name": "E_F32",
+        "type": "f32",
+        "default": {
+          "type": "f32",
+          "bits": "00000000"
+        },
+        "selected": {
+          "type": "f32",
+          "bits": "40100000"
+        }
+      }
+    ],
+    "types": {},
+    "layouts": {}
+  }
+}

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -209,8 +208,7 @@ bool HasValidJsonLexemes(std::string_view text) {
           ++end;
           const size_t fraction_start = end;
           while (end < text.size() && text[end] >= '0' && text[end] <= '9') {
-            nonzero_significand =
-                nonzero_significand || text[end] != '0';
+            nonzero_significand = nonzero_significand || text[end] != '0';
             ++end;
           }
           if (end == fraction_start) {
@@ -321,10 +319,9 @@ bool HasExactMembers(const Json::Value &value,
   });
 }
 
-bool HasAllowedMembers(
-    const Json::Value &value,
-    std::initializer_list<std::string_view> required,
-    std::initializer_list<std::string_view> optional = {}) {
+bool HasAllowedMembers(const Json::Value &value,
+                       std::initializer_list<std::string_view> required,
+                       std::initializer_list<std::string_view> optional = {}) {
   if (!value.isObject()) {
     return false;
   }
@@ -758,8 +755,7 @@ std::string CanonicalOriginMap(const Json::Value &value) {
     }
     output << "{\"generated\":{\"endByte\":"
            << segment["generated"]["endByte"].asUInt64()
-           << ",\"startByte\":"
-           << segment["generated"]["startByte"].asUInt64()
+           << ",\"startByte\":" << segment["generated"]["startByte"].asUInt64()
            << "},\"origin\":{\"input\":"
            << CanonicalJsonString(segment["origin"]["input"].asString())
            << "},\"precision\":"
@@ -772,10 +768,9 @@ std::string CanonicalOriginMap(const Json::Value &value) {
     if (index > 0) {
       output << ',';
     }
-    output << "{\"input\":"
-           << CanonicalJsonString(source["input"].asString())
-           << ",\"sha256\":"
-           << CanonicalJsonString(source["sha256"].asString()) << '}';
+    output << "{\"input\":" << CanonicalJsonString(source["input"].asString())
+           << ",\"sha256\":" << CanonicalJsonString(source["sha256"].asString())
+           << '}';
   }
   output << "]}";
   return output.str();
@@ -808,9 +803,8 @@ class Decoder final {
 public:
   std::optional<CompilerRequest> DecodeCompiler(const Json::Value &root) {
     if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
-                                "originMap", "entryPoint",
-                                "semanticInterface", "overrides",
-                                "languageFeatures", "metal"})) {
+                                "originMap", "entryPoint", "semanticInterface",
+                                "overrides", "languageFeatures", "metal"})) {
       return Reject("request has missing or unknown top-level fields");
     }
     const auto schema_version = ReadUnsignedInteger(root["schemaVersion"], 1);
@@ -838,9 +832,9 @@ public:
   std::optional<EntryInventoryRequest>
   DecodeEntryInventory(const Json::Value &root,
                        const RequestIdentity &identity) {
-    if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
-                                "originMap", "originMapSha256",
-                                "languageFeatures"})) {
+    if (!HasExactMembers(root,
+                         {"schemaVersion", "contractId", "source", "originMap",
+                          "originMapSha256", "languageFeatures"})) {
       return Reject<EntryInventoryRequest>(
           "entry inventory request has missing or unknown top-level fields");
     }
@@ -881,9 +875,8 @@ public:
   DecodeSemanticExtraction(const Json::Value &root,
                            const RequestIdentity &identity) {
     if (!HasExactMembers(root, {"schemaVersion", "contractId", "source",
-                                "originMap", "originMapSha256",
-                                "entryPoints", "overrideConfiguration",
-                                "languageFeatures"})) {
+                                "originMap", "originMapSha256", "entryPoints",
+                                "overrideConfiguration", "languageFeatures"})) {
       return Reject<SemanticExtractionRequest>(
           "semantic extraction request has missing or unknown top-level "
           "fields");
@@ -1102,10 +1095,9 @@ private:
     }
     const bool compute = request.entry_points.size() == 1 &&
                          request.entry_points[0].stage == "compute";
-    const bool render =
-        request.entry_points.size() == 2 &&
-        request.entry_points[0].stage == "vertex" &&
-        request.entry_points[1].stage == "fragment";
+    const bool render = request.entry_points.size() == 2 &&
+                        request.entry_points[0].stage == "vertex" &&
+                        request.entry_points[1].stage == "fragment";
     if (!compute && !render) {
       return Fail("semantic extraction entry tuple is not compute or "
                   "vertex-fragment order");
@@ -1131,9 +1123,8 @@ private:
       if (!IsOverrideIdentifier(identifier) ||
           (previous_identifier &&
            !Utf16Less(*previous_identifier, identifier))) {
-        return Fail(
-            "semantic extraction override identifiers are invalid, "
-            "duplicated, or not strictly sorted");
+        return Fail("semantic extraction override identifiers are invalid, "
+                    "duplicated, or not strictly sorted");
       }
       previous_identifier = identifier;
       ConfiguredOverride configured{.identifier = identifier};
@@ -1168,13 +1159,13 @@ private:
         return Fail("override value has no scalar type");
       }
       const std::string type = encoded["type"].asString();
-      double numeric_value = 0;
+      std::optional<OverrideValue> value;
       if (type == "bool") {
         if (!HasExactMembers(encoded, {"type", "value"}) ||
             !encoded["value"].isBool()) {
           return Fail("bool override payload is invalid");
         }
-        numeric_value = encoded["value"].asBool() ? 1.0 : 0.0;
+        value = encoded["value"].asBool();
       } else if (type == "i32") {
         if (!HasExactMembers(encoded, {"type", "value"})) {
           return Fail("i32 override payload is invalid");
@@ -1185,7 +1176,7 @@ private:
         if (!parsed) {
           return Fail("i32 override payload is invalid");
         }
-        numeric_value = static_cast<double>(*parsed);
+        value = static_cast<int32_t>(*parsed);
       } else if (type == "u32") {
         if (!HasExactMembers(encoded, {"type", "value"})) {
           return Fail("u32 override payload is invalid");
@@ -1195,7 +1186,7 @@ private:
         if (!parsed) {
           return Fail("u32 override payload is invalid");
         }
-        numeric_value = static_cast<double>(*parsed);
+        value = static_cast<uint32_t>(*parsed);
       } else if (type == "f16" || type == "f32") {
         const size_t digits = type == "f16" ? 4 : 8;
         if (!HasExactMembers(encoded, {"type", "bits"}) ||
@@ -1208,34 +1199,22 @@ private:
           return Fail("floating-point override bits are invalid");
         }
         if (type == "f32") {
-          const float converted =
-              std::bit_cast<float>(static_cast<uint32_t>(*parsed));
-          if (!std::isfinite(converted)) {
+          const uint32_t bits = static_cast<uint32_t>(*parsed);
+          if ((bits & 0x7f800000U) == 0x7f800000U) {
             return Fail("floating-point override must be finite");
           }
-          numeric_value = converted;
+          value = overrides::F32Bits{.bits = bits};
         } else {
           const uint16_t bits = static_cast<uint16_t>(*parsed);
-          const uint16_t exponent = (bits >> 10U) & 0x1fU;
-          const uint16_t fraction = bits & 0x03ffU;
-          if (exponent == 0x1fU) {
+          if ((bits & 0x7c00U) == 0x7c00U) {
             return Fail("floating-point override must be finite");
           }
-          numeric_value = exponent == 0
-                              ? std::ldexp(static_cast<double>(fraction), -24)
-                              : std::ldexp(static_cast<double>(1024 + fraction),
-                                           static_cast<int>(exponent) - 25);
-          if ((bits & 0x8000U) != 0) {
-            numeric_value = -numeric_value;
-          }
+          value = overrides::F16Bits{.bits = bits};
         }
       } else {
         return Fail("override scalar type is unsupported");
       }
-      if (!request.overrides
-               .emplace(name,
-                        OverrideValue{.type = type, .value = numeric_value})
-               .second) {
+      if (!value || !request.overrides.emplace(name, *value).second) {
         return Fail("override names are duplicated");
       }
     }
@@ -1291,8 +1270,8 @@ private:
     if (!width || *width == 0) {
       return Fail("shader interface vector width is unsupported");
     }
-    type = InterfaceType{.scalar = scalar,
-                         .width = static_cast<uint32_t>(*width)};
+    type =
+        InterfaceType{.scalar = scalar, .width = static_cast<uint32_t>(*width)};
     return true;
   }
 
@@ -1300,9 +1279,9 @@ private:
                             std::string_view direction,
                             const std::set<std::string> &features,
                             InterfaceValue &decoded) {
-    if (!HasAllowedMembers(value, {"type", "invariant"},
-                           {"location", "builtin", "interpolation",
-                            "blendSource"}) ||
+    if (!HasAllowedMembers(
+            value, {"type", "invariant"},
+            {"location", "builtin", "interpolation", "blendSource"}) ||
         !value["invariant"].isBool() ||
         !DecodeInterfaceType(value["type"], decoded.type)) {
       return Fail("shader interface value does not implement the v1 shape");
@@ -1342,8 +1321,7 @@ private:
           ((type == "perspective" || type == "linear") &&
            (sampling == "center" || sampling == "centroid" ||
             sampling == "sample")) ||
-          (type == "flat" &&
-           (sampling == "first" || sampling == "either"));
+          (type == "flat" && (sampling == "first" || sampling == "either"));
       if (!valid) {
         return Fail("shader interface interpolation pair is unsupported");
       }
@@ -1359,9 +1337,8 @@ private:
     }
 
     const bool linked_location =
-        decoded.location &&
-        ((stage == "vertex" && direction == "outputs") ||
-         (stage == "fragment" && direction == "inputs"));
+        decoded.location && ((stage == "vertex" && direction == "outputs") ||
+                             (stage == "fragment" && direction == "inputs"));
     if (linked_location != decoded.interpolation.has_value()) {
       return Fail("shader interface interpolation is not normalized by role");
     }
@@ -1418,15 +1395,15 @@ private:
       }
     }
 
-    const bool may_be_invariant =
-        stage == "vertex" && direction == "outputs" && decoded.builtin &&
-        *decoded.builtin == "position";
+    const bool may_be_invariant = stage == "vertex" && direction == "outputs" &&
+                                  decoded.builtin &&
+                                  *decoded.builtin == "position";
     if (decoded.invariant && !may_be_invariant) {
       return Fail("shader interface invariant is unsupported in this role");
     }
     if (decoded.blend_source &&
-        (stage != "fragment" || direction != "outputs" ||
-         !decoded.location || *decoded.location != 0)) {
+        (stage != "fragment" || direction != "outputs" || !decoded.location ||
+         *decoded.location != 0)) {
       return Fail("shader interface blend source is unsupported in this role");
     }
     if (stage == "vertex" && direction == "inputs" && decoded.location &&
@@ -1440,14 +1417,12 @@ private:
     return true;
   }
 
-  bool DecodeInterfaceValues(const Json::Value &value,
-                             std::string_view stage,
+  bool DecodeInterfaceValues(const Json::Value &value, std::string_view stage,
                              std::string_view direction,
                              const std::set<std::string> &features,
                              std::vector<InterfaceValue> &decoded) {
-    const size_t maximum = stage == "compute" && direction == "inputs"
-                               ? 5
-                               : kMaxInterfaceValues;
+    const size_t maximum =
+        stage == "compute" && direction == "inputs" ? 5 : kMaxInterfaceValues;
     if (!value.isArray() || value.size() > maximum ||
         (stage == "compute" && direction == "outputs" && !value.empty())) {
       return Fail("shader interface values exceed the role limit");
@@ -1504,8 +1479,7 @@ private:
         std::count_if(request.semantic_interface.outputs.begin(),
                       request.semantic_interface.outputs.end(),
                       [](const auto &output) {
-                        return output.builtin &&
-                               *output.builtin == "position";
+                        return output.builtin && *output.builtin == "position";
                       }) != 1) {
       return Fail("vertex shader interface must have one position output");
     }
@@ -1523,8 +1497,7 @@ private:
       if (!dual_source.empty() &&
           (!request.features.contains("dual_source_blending") ||
            color_outputs.size() != 2 || dual_source.size() != 2 ||
-           *dual_source[0]->location != 0 ||
-           *dual_source[1]->location != 0 ||
+           *dual_source[0]->location != 0 || *dual_source[1]->location != 0 ||
            *dual_source[0]->blend_source != 0 ||
            *dual_source[1]->blend_source != 1 ||
            dual_source[0]->type != dual_source[1]->type)) {
@@ -1782,8 +1755,8 @@ DecodedRequest ReadRequest(std::istream &input) {
               .request_identity = identity};
     }
     return {
-        .value = WorkerRequest(
-            std::in_place_type<EntryInventoryRequest>, std::move(*request)),
+        .value = WorkerRequest(std::in_place_type<EntryInventoryRequest>,
+                               std::move(*request)),
         .operation = RequestOperation::kEntryInventory,
         .request_identity = identity,
     };

@@ -34,6 +34,8 @@ foreach(required_file IN ITEMS
     "${VGPU_WORKER_ROOT}/main.cc"
     "${VGPU_WORKER_ROOT}/json-codec.cc"
     "${VGPU_WORKER_ROOT}/json-codec.h"
+    "${VGPU_WORKER_ROOT}/override-materializer.cc"
+    "${VGPU_WORKER_ROOT}/override-materializer.h"
     "${VGPU_WORKER_ROOT}/request.h")
   if(NOT EXISTS "${required_file}")
     message(FATAL_ERROR "Required source is missing: ${required_file}")
@@ -137,6 +139,7 @@ add_subdirectory("${VGPU_DAWN_ROOT}" dawn EXCLUDE_FROM_ALL)
 add_executable(vgpu-tint-worker
   "${VGPU_WORKER_ROOT}/main.cc"
   "${VGPU_WORKER_ROOT}/json-codec.cc"
+  "${VGPU_WORKER_ROOT}/override-materializer.cc"
   "${VGPU_JSONCPP_ROOT}/src/lib_json/json_reader.cpp"
   "${VGPU_JSONCPP_ROOT}/src/lib_json/json_value.cpp"
   "${VGPU_JSONCPP_ROOT}/src/lib_json/json_writer.cpp")
