@@ -23,9 +23,9 @@ measurements do not become accepted provenance by themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  6,105,392 | `3b4929f2a7e8a343a75c25b767c4573f9b618129b3490dbeb170ddb31814c342` |
-| x86_64    |  7,199,464 | `2bfdd8947a568245f5c27887a90c423e113cc1e025ebc92e49d272e56991c77e` |
-| universal | 13,314,352 | `f3f29ed71b4fc6aa0570ddee755abea1f631232dd25b37175fc87d3322a60aea` |
+| arm64     |  6,105,504 | `37f6c13cd657c70fa0d45b517002621b499a6a3fd3d978e6ce543b63ddfcbf44` |
+| x86_64    |  7,203,664 | `cd83dd186717fdbf5b9190c27cc9b5b28197abb2513ba9baff1ac64b6b89d51d` |
+| universal | 13,314,464 | `106de51530c3c54cf5d73aa521307622d25dd43581a829b9a8f5ac3fd691369a` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
 against the previously verified monolithic release archive. The locked request closure contains

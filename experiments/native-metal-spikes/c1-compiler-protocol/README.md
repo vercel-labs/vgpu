@@ -40,8 +40,8 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
 This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
 `libwebgpu_dawn.a`. The companion direct-source gate now covers this exact worker revision,
 authenticated entry inventory, the semantic-interface handshake, and semantic extraction for fixed
-singular resources and exact-static overrides. Its ordinary publication gate authenticates a
-twenty-two-canary request closure, produces byte-reproducible arm64, x86_64, and universal
+and runtime-sized storage resources plus exact-static overrides. Its ordinary publication gate
+authenticates a twenty-three-canary request closure, produces byte-reproducible arm64, x86_64, and universal
 executables, and passes response parity with the arm64-native monolithic oracle across eight direct
 variants. The x86_64 executions run through Rosetta and establish compiler-process behavior, not
 Intel or AMD GPU support.
@@ -242,9 +242,9 @@ authenticated graph and verified independently before the projector can use it.
 
 The remaining gates are:
 
-- carry extracted exact-static overrides through semantic assembly and projection;
-- extend the connected bridge to runtime-sized and broader resource shapes, then run the full
-  corpus through Apple's offline compiler; and
+- carry extracted runtime-sized storage through semantic assembly, projection, and binding;
+- extend the connected bridge to broader resource shapes, then run the full corpus through Apple's
+  offline compiler; and
 - connect this compiler response to the deterministic Swift package artifact spike.
 
 There is no Intel GPU result. Rosetta covers the x86_64 compiler executable path, but it cannot

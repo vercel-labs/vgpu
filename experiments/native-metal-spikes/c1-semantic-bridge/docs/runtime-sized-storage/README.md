@@ -43,7 +43,7 @@ The detailed contracts are split by owner:
 | Semantic extraction     | Passed  | A root runtime array and a structure with a fixed prefix plus trailing runtime array produce exact content-addressed types and layouts. Invalid uniform use and resource binding arrays still fail.              |
 | Assembly and projection | Pending | A compute program assembles from authenticated extraction, projects an exact storage slot, and records an effective size region only when Tint reports one. A sibling fixed-prefix-only entry records no region. |
 | Runtime                 | Pending | Two concrete bound ranges produce different `arrayLength()` and last-element results without changing the artifact. The table contains the bound range, not `MTLBuffer.length`.                                  |
-| Reproducibility         | Partial | Semantic extraction and the writer feasibility canary are deterministic. The integrated AIR, metallib, and two-process live path remains pending.                                                                |
+| Reproducibility         | Partial | Semantic extraction is source-locked and byte-identical across eight direct variants; the writer canary is also deterministic. The integrated AIR, metallib, and two-process live path remains pending.          |
 
 The first live integration may use an internal/raw buffer binder. The public Swift representation of
 a generated structure with a fixed prefix and runtime array tail remains an API decision; it must

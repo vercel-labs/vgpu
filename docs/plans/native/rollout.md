@@ -144,12 +144,12 @@ than public ABI or hardware-support claims.
 
 The current accepted direct-source revision builds the worker from Tint's `tint_api` root for macOS
 14 as byte-reproducible arm64, x86_64, and universal executables. Its ordinary publication gate
-authenticates twenty-two branch-specific canaries—ten translations, four entry inventories, and eight
-semantic extraction requests covering successful render, compute, and fixed-resource interfaces
-plus five exact-static override profiles. It matches the arm64-native monolithic
+authenticates twenty-three branch-specific canaries—ten translations, four entry inventories, and
+nine semantic extraction requests covering successful render, compute, fixed-resource, and
+runtime-sized storage interfaces plus five exact-static override profiles. It matches the arm64-native monolithic
 oracle across eight direct variants without linking WebGPU, runtime backends, or frameworks. This
-proof covers the exact semantic-interface handshake and the resource-free, fixed-resource, and
-exact-static override extraction profiles. Rosetta validates the x86_64 compiler process, not Intel
+proof covers the exact semantic-interface handshake and the resource-free, fixed-resource,
+runtime-sized storage, and exact-static override extraction profiles. Rosetta validates the x86_64 compiler process, not Intel
 or AMD GPU behavior, and the paired dual-source canary remains internal evidence rather than alpha
 support.
 
