@@ -109,25 +109,26 @@ private struct RuntimeTailManifest: Decodable {
       throw MetalComputeBackendError.invalidManifest("storage-size model")
     }
     guard
-      semanticProgram == "AssemblyRuntimeSizedStorage",
+      !semanticProgram.isEmpty,
       kind == "compute",
       entryPoints.count == 1,
       entryPoint.stage == "compute",
-      entryPoint.metal == "vgpu_assembly_runtime_sized_storage_compute"
+      !entryPoint.metal.isEmpty
     else {
       throw MetalComputeBackendError.invalidManifest("entry point")
     }
     guard
-      bindings.count == 2,
+      !bindings.isEmpty,
       samplingPairs.isEmpty,
-      bindings.map(\.semanticBinding) == ["g0b0", "g0b1"],
-      bindings.allSatisfy({ $0.slots.count == 1 }),
-      bindings[0].descriptor.runtimeSized,
-      !bindings[1].descriptor.runtimeSized,
-      bindings[0].descriptor.access == "read",
-      bindings[1].descriptor.access == "read_write",
-      bindings[0].descriptor.minimumBindingSize == 16,
-      bindings[1].descriptor.minimumBindingSize == 8
+      Set(bindings.map(\.semanticBinding)).count == bindings.count,
+      bindings.allSatisfy({
+        !$0.semanticBinding.isEmpty
+          && $0.slots.count == 1
+          && $0.descriptor.minimumBindingSize > 0
+          && $0.descriptor.minimumBindingSize % 4 == 0
+          && ($0.descriptor.access == "read" || $0.descriptor.access == "read_write")
+      }),
+      bindings.contains(where: { $0.descriptor.runtimeSized })
     else {
       throw MetalComputeBackendError.invalidManifest("external bindings")
     }
@@ -146,6 +147,7 @@ private struct RuntimeTailManifest: Decodable {
         throw MetalComputeBackendError.invalidManifest("external location")
       }
     }
+    let externalIndices = bindings.map { $0.slots[0].index }
     guard
       internalBindings.count == 1,
       internalBindings[0].role == "immediate-data",
@@ -159,13 +161,33 @@ private struct RuntimeTailManifest: Decodable {
       storageBufferSizeRegions.count == 1,
       sizeRegion.stage == "compute",
       sizeRegion.immediateDataByteOffset == 4,
-      resolvedWorkgroupSize.x == 1,
-      resolvedWorkgroupSize.y == 1,
-      resolvedWorkgroupSize.z == 1,
-      Set([bindings[0].slots[0].index, bindings[1].slots[0].index, immediate.index]).count
-        == 3
+      resolvedWorkgroupSize.x > 0,
+      resolvedWorkgroupSize.y > 0,
+      resolvedWorkgroupSize.z > 0,
+      Set(externalIndices).count == externalIndices.count,
+      !externalIndices.contains(immediate.index)
     else {
       throw MetalComputeBackendError.invalidManifest("internal bindings")
+    }
+  }
+
+  fileprivate func validateLegacyRuntimeTail() throws {
+    guard
+      semanticProgram == "AssemblyRuntimeSizedStorage",
+      entryPoint.metal == "vgpu_assembly_runtime_sized_storage_compute",
+      bindings.count == 2,
+      bindings.map(\.semanticBinding) == ["g0b0", "g0b1"],
+      bindings[0].descriptor.runtimeSized,
+      !bindings[1].descriptor.runtimeSized,
+      bindings[0].descriptor.access == "read",
+      bindings[1].descriptor.access == "read_write",
+      bindings[0].descriptor.minimumBindingSize == 16,
+      bindings[1].descriptor.minimumBindingSize == 8,
+      resolvedWorkgroupSize.x == 1,
+      resolvedWorkgroupSize.y == 1,
+      resolvedWorkgroupSize.z == 1
+    else {
+      throw MetalComputeBackendError.invalidManifest("legacy runtime tail")
     }
   }
 }
@@ -246,6 +268,7 @@ private struct ConnectedArtifact: Decodable {
       throw MetalComputeBackendError.invalidManifest("library hash")
     }
     try runtimeManifest.validate()
+    try runtimeManifest.validateLegacyRuntimeTail()
     guard
       runtimeManifest.semanticProgram == descriptor.programID,
       descriptor.entryPointID == "compute_main",
@@ -253,6 +276,139 @@ private struct ConnectedArtifact: Decodable {
     else {
       throw MetalComputeBackendError.invalidProgram
     }
+  }
+
+  func validateLibrary(_ data: Data, artifact: _VGPUProgramArtifact) throws {
+    guard sha256(data) == artifact.librarySHA256 else {
+      throw MetalComputeBackendError.invalidManifest("library hash")
+    }
+  }
+}
+
+private struct C4ConnectedArtifact: Decodable {
+  struct Program: Decodable {
+    let programID: String
+    let entryPointID: String
+    let projection: ConnectedArtifact.Fingerprint
+    let runtimeManifest: RuntimeTailManifest
+  }
+
+  struct Evidence: Decodable {
+    struct Program: Decodable {
+      let semanticProgram: String
+      let semanticRequestSha256: String
+      let semanticResponseSha256: String
+      let requestSha256: String
+      let responseSha256: String
+      let mslSha256: String
+    }
+
+    let sourceSha256: String
+    let programs: [Program]
+    let metallibSha256: String
+  }
+
+  let schemaVersion: Int
+  let contractId: String
+  let artifactID: String
+  let abi: ConnectedArtifact.ABI
+  let semantic: ConnectedArtifact.Fingerprint
+  let library: ConnectedArtifact.Library
+  let programs: [Program]
+  let evidence: Evidence
+
+  init(
+    data: Data,
+    descriptor: _VGPUProgramDescriptor,
+    artifact: _VGPUProgramArtifact
+  ) throws {
+    guard sha256(data) == artifact.descriptorSHA256 else {
+      throw MetalComputeBackendError.invalidManifest("descriptor hash")
+    }
+    try validateC4ConnectedArtifactJSONShape(data)
+    self = try JSONDecoder().decode(Self.self, from: data)
+    guard
+      schemaVersion == 1,
+      contractId == "vgpu-native-c4-compute-storage-artifact/v1",
+      artifactID == "c4-compute-storage",
+      artifactID == descriptor.artifactID,
+      abi.semanticSchemaVersion == 1,
+      abi.metalProjectionABI == 1,
+      abi.generatedSwiftABI == 1,
+      abi.bindingLayoutABI == 1,
+      abi.requiredVGPUABIVersion == 1,
+      programs.map(\.programID) == ["AdvanceState", "MixState"],
+      programs.map(\.entryPointID) == ["advance", "mix"],
+      evidence.programs.map(\.semanticProgram) == ["AdvanceState", "MixState"]
+    else {
+      throw MetalComputeBackendError.invalidManifest("C4 connected artifact ABI")
+    }
+    var digests = [
+      semantic.sha256,
+      library.sha256,
+      evidence.sourceSha256,
+      evidence.metallibSha256,
+      artifact.descriptorSHA256,
+      artifact.librarySHA256,
+    ]
+    digests.append(contentsOf: programs.map(\.projection.sha256))
+    digests.append(
+      contentsOf: evidence.programs.flatMap {
+        [
+          $0.semanticRequestSha256,
+          $0.semanticResponseSha256,
+          $0.requestSha256,
+          $0.responseSha256,
+          $0.mslSha256,
+        ]
+      }
+    )
+    for digest in digests where !isLowercaseSHA256(digest) {
+      throw MetalComputeBackendError.invalidManifest("digest")
+    }
+    guard
+      library.sha256 == evidence.metallibSha256,
+      library.sha256 == artifact.librarySHA256
+    else {
+      throw MetalComputeBackendError.invalidManifest("library hash")
+    }
+    let expectedSemanticBindings = [
+      ["g0b0", "g0b1", "g0b2", "g0b3"],
+      ["g0b0", "g0b1", "g0b2", "g0b4"],
+    ]
+    let expectedMetalEntryPoints = ["vgpu_c4_advance", "vgpu_c4_mix"]
+    let expectedWorkgroupSizes = [(x: 2, y: 1, z: 1), (x: 1, y: 2, z: 1)]
+    for (index, program) in programs.enumerated() {
+      try program.runtimeManifest.validate()
+      let manifest = program.runtimeManifest
+      let workgroupSize = expectedWorkgroupSizes[index]
+      guard
+        manifest.semanticProgram == program.programID,
+        manifest.entryPoint.metal == expectedMetalEntryPoints[index],
+        manifest.bindings.map(\.semanticBinding) == expectedSemanticBindings[index],
+        manifest.bindings.map({ $0.slots[0].index }) == [0, 1, 2, 3],
+        manifest.bindings.map(\.descriptor.access)
+          == ["read", "read", "read_write", "read_write"],
+        manifest.bindings.allSatisfy({
+          $0.descriptor.runtimeSized && $0.descriptor.minimumBindingSize == 4
+        }),
+        manifest.resolvedWorkgroupSize.x == workgroupSize.x,
+        manifest.resolvedWorkgroupSize.y == workgroupSize.y,
+        manifest.resolvedWorkgroupSize.z == workgroupSize.z
+      else {
+        throw MetalComputeBackendError.invalidManifest("C4 program manifest")
+      }
+    }
+  }
+
+  func manifest(for descriptor: _VGPUProgramDescriptor) throws -> RuntimeTailManifest {
+    guard
+      let program = programs.first(where: { $0.programID == descriptor.programID }),
+      program.entryPointID == descriptor.entryPointID
+    else {
+      throw MetalComputeBackendError.invalidProgram
+    }
+    return program.runtimeManifest
   }
 
   func validateLibrary(_ data: Data, artifact: _VGPUProgramArtifact) throws {
@@ -301,8 +457,72 @@ private func validateConnectedArtifactJSONShape(_ data: Data) throws {
     keys: ["requestSha256", "responseSha256", "mslSha256", "metallibSha256"]
   )
 
+  try validateRuntimeManifestJSONShape(root["runtimeManifest"])
+}
+
+private func validateC4ConnectedArtifactJSONShape(_ data: Data) throws {
+  let value: Any
+  do {
+    value = try JSONSerialization.jsonObject(with: data)
+  } catch {
+    throw MetalComputeBackendError.invalidManifest("descriptor JSON")
+  }
+  let root = try exactObject(
+    value,
+    keys: [
+      "schemaVersion",
+      "contractId",
+      "artifactID",
+      "abi",
+      "semantic",
+      "library",
+      "programs",
+      "evidence",
+    ]
+  )
+  _ = try exactObject(
+    root["abi"],
+    keys: [
+      "semanticSchemaVersion",
+      "metalProjectionABI",
+      "generatedSwiftABI",
+      "bindingLayoutABI",
+      "requiredVGPUABIVersion",
+    ]
+  )
+  for key in ["semantic", "library"] {
+    _ = try exactObject(root[key], keys: ["sha256"])
+  }
+  for programValue in try exactArray(root["programs"]) {
+    let program = try exactObject(
+      programValue,
+      keys: ["programID", "entryPointID", "projection", "runtimeManifest"]
+    )
+    _ = try exactObject(program["projection"], keys: ["sha256"])
+    try validateRuntimeManifestJSONShape(program["runtimeManifest"])
+  }
+  let evidence = try exactObject(
+    root["evidence"],
+    keys: ["sourceSha256", "programs", "metallibSha256"]
+  )
+  for programValue in try exactArray(evidence["programs"]) {
+    _ = try exactObject(
+      programValue,
+      keys: [
+        "semanticProgram",
+        "semanticRequestSha256",
+        "semanticResponseSha256",
+        "requestSha256",
+        "responseSha256",
+        "mslSha256",
+      ]
+    )
+  }
+}
+
+private func validateRuntimeManifestJSONShape(_ value: Any?) throws {
   let manifest = try exactObject(
-    root["runtimeManifest"],
+    value,
     keys: [
       "schemaVersion",
       "immediateDataLayoutModel",
@@ -376,6 +596,81 @@ private func isLowercaseSHA256(_ value: String) -> Bool {
     }
 }
 
+private func artifactContractID(in data: Data) throws -> String {
+  let value: Any
+  do {
+    value = try JSONSerialization.jsonObject(with: data)
+  } catch {
+    throw MetalComputeBackendError.invalidManifest("descriptor JSON")
+  }
+  guard
+    let object = value as? [String: Any],
+    let contractID = object["contractId"] as? String
+  else {
+    throw MetalComputeBackendError.invalidManifest("descriptor contract")
+  }
+  return contractID
+}
+
+private func logicalAccess(_ access: String) throws -> VGPUStorageAccess {
+  switch access {
+  case "read": .read
+  case "read_write": .readWrite
+  default: throw MetalComputeBackendError.invalidManifest("binding access")
+  }
+}
+
+private func metalAccess(_ access: String) throws -> MTLBindingAccess {
+  switch access {
+  case "read": .readOnly
+  case "read_write": .readWrite
+  default: throw MetalComputeBackendError.invalidManifest("binding access")
+  }
+}
+
+private func validateProgramDescriptor(
+  _ descriptor: _VGPUProgramDescriptor,
+  manifest: RuntimeTailManifest
+) throws {
+  guard
+    descriptor.programID == manifest.semanticProgram,
+    descriptor.bindings.count == manifest.bindings.count,
+    descriptor.workgroupSize.x == manifest.resolvedWorkgroupSize.x,
+    descriptor.workgroupSize.y == manifest.resolvedWorkgroupSize.y,
+    descriptor.workgroupSize.z == manifest.resolvedWorkgroupSize.z
+  else {
+    throw MetalComputeBackendError.invalidProgram
+  }
+  for (ordinal, pair) in zip(descriptor.bindings, manifest.bindings).enumerated() {
+    guard
+      pair.0.ordinal == ordinal,
+      pair.0.access == (try logicalAccess(pair.1.descriptor.access)),
+      pair.0.runtimeSized == pair.1.descriptor.runtimeSized
+    else {
+      throw MetalComputeBackendError.invalidProgram
+    }
+  }
+}
+
+private func immediateDataSize(for manifest: RuntimeTailManifest) throws -> Int {
+  guard
+    let runtimeSizedSlot = manifest.bindings
+      .filter(\.descriptor.runtimeSized)
+      .map({ $0.slots[0].index })
+      .max()
+  else {
+    throw MetalComputeBackendError.invalidManifest("storage-size slots")
+  }
+  let (sizeTableWords, slotOverflow) = runtimeSizedSlot.addingReportingOverflow(1)
+  let (sizeTableBytes, tableOverflow) = sizeTableWords.multipliedReportingOverflow(by: 4)
+  let (size, immediateOverflow) = manifest.sizeRegion.immediateDataByteOffset
+    .addingReportingOverflow(sizeTableBytes)
+  guard !slotOverflow, !tableOverflow, !immediateOverflow else {
+    throw MetalComputeBackendError.invalidManifest("storage-size span")
+  }
+  return size
+}
+
 private struct PreparedMetalProgram {
   let descriptor: _VGPUProgramDescriptor
   let pipeline: MTLComputePipelineState
@@ -438,32 +733,38 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
   package func prepareCompute(
     _ descriptor: _VGPUProgramDescriptor
   ) throws -> VGPUBackendProgramHandle {
-    guard descriptor.artifactID == "assembly-runtime-sized-storage",
-      descriptor.programID == "AssemblyRuntimeSizedStorage",
-      descriptor.bindings == [
-        _VGPULogicalBindingDescriptor(ordinal: 0, access: .read, runtimeSized: true),
-        _VGPULogicalBindingDescriptor(ordinal: 1, access: .readWrite, runtimeSized: false),
-      ],
-      descriptor.workgroupSize.x == 1,
-      descriptor.workgroupSize.y == 1,
-      descriptor.workgroupSize.z == 1
-    else {
-      throw MetalComputeBackendError.invalidProgram
-    }
     let manifest: RuntimeTailManifest
     let metallibData: Data
     if let artifact = descriptor.artifact {
       let descriptorData = try artifact.descriptorData()
-      let connected = try ConnectedArtifact(
-        data: descriptorData,
-        descriptor: descriptor,
-        artifact: artifact
-      )
+      guard sha256(descriptorData) == artifact.descriptorSHA256 else {
+        throw MetalComputeBackendError.invalidManifest("descriptor hash")
+      }
       metallibData = try artifact.libraryData()
-      try connected.validateLibrary(metallibData, artifact: artifact)
-      manifest = connected.runtimeManifest
+      switch try artifactContractID(in: descriptorData) {
+      case "vgpu-native-connected-artifact-spike/v1":
+        let connected = try ConnectedArtifact(
+          data: descriptorData,
+          descriptor: descriptor,
+          artifact: artifact
+        )
+        try connected.validateLibrary(metallibData, artifact: artifact)
+        manifest = connected.runtimeManifest
+      case "vgpu-native-c4-compute-storage-artifact/v1":
+        let connected = try C4ConnectedArtifact(
+          data: descriptorData,
+          descriptor: descriptor,
+          artifact: artifact
+        )
+        try connected.validateLibrary(metallibData, artifact: artifact)
+        manifest = try connected.manifest(for: descriptor)
+      default:
+        throw MetalComputeBackendError.invalidManifest("descriptor contract")
+      }
     } else {
       guard
+        descriptor.artifactID == "assembly-runtime-sized-storage",
+        descriptor.programID == "AssemblyRuntimeSizedStorage",
         descriptor.entryPointID == "inspect-values",
         let fallbackMetallibData,
         let fallbackManifestData
@@ -472,7 +773,9 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
       }
       metallibData = fallbackMetallibData
       manifest = try RuntimeTailManifest(data: fallbackManifestData)
+      try manifest.validateLegacyRuntimeTail()
     }
+    try validateProgramDescriptor(descriptor, manifest: manifest)
     let libraryData = metallibData.withUnsafeBytes { DispatchData(bytes: $0) }
     let library = try core.device.makeLibrary(data: libraryData)
     guard let function = library.makeFunction(name: manifest.entryPoint.metal) else {
@@ -485,11 +788,13 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
       reflection: &pipelineReflection
     )
     guard let pipelineReflection else { throw MetalComputeBackendError.invalidProgram }
-    let expectedAccessByBufferIndex: [Int: MTLBindingAccess] = [
-      manifest.bindings[0].slots[0].index: .readOnly,
-      manifest.bindings[1].slots[0].index: .readWrite,
-      manifest.immediate.index: .readOnly,
-    ]
+    var expectedAccessByBufferIndex: [Int: MTLBindingAccess] = [:]
+    for binding in manifest.bindings {
+      expectedAccessByBufferIndex[binding.slots[0].index] = try metalAccess(
+        binding.descriptor.access
+      )
+    }
+    expectedAccessByBufferIndex[manifest.immediate.index] = .readOnly
     let reflection = try pipelineReflection.bindings
       .filter(\.isUsed)
       .map { binding -> String in
@@ -503,27 +808,14 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
         return "buffer/\(buffer.index)/\(buffer.bufferDataSize)/\(buffer.bufferAlignment)"
       }
       .sorted()
-    let runtimeSizedSlot = manifest.bindings
-      .filter(\.descriptor.runtimeSized)
-      .flatMap(\.slots)
-      .filter { $0.resourceClass == "buffer" }
-      .map(\.index)
-      .max()
-    guard let runtimeSizedSlot else {
-      throw MetalComputeBackendError.invalidManifest("storage-size slots")
+    let immediateDataSize = try immediateDataSize(for: manifest)
+    var expectedReflection = manifest.bindings.map {
+      "buffer/\($0.slots[0].index)/\($0.descriptor.minimumBindingSize)/4"
     }
-    let (sizeTableWords, slotOverflow) = runtimeSizedSlot.addingReportingOverflow(1)
-    let (sizeTableBytes, tableOverflow) = sizeTableWords.multipliedReportingOverflow(by: 4)
-    let (immediateDataSize, immediateOverflow) = manifest.sizeRegion.immediateDataByteOffset
-      .addingReportingOverflow(sizeTableBytes)
-    guard !slotOverflow, !tableOverflow, !immediateOverflow else {
-      throw MetalComputeBackendError.invalidManifest("storage-size span")
-    }
-    let expectedReflection = [
-      "buffer/\(manifest.bindings[0].slots[0].index)/\(manifest.bindings[0].descriptor.minimumBindingSize)/4",
-      "buffer/\(manifest.bindings[1].slots[0].index)/\(manifest.bindings[1].descriptor.minimumBindingSize)/4",
-      "buffer/\(manifest.immediate.index)/\(immediateDataSize)/4",
-    ].sorted()
+    expectedReflection.append(
+      "buffer/\(manifest.immediate.index)/\(immediateDataSize)/4"
+    )
+    expectedReflection.sort()
     guard reflection == expectedReflection else {
       throw MetalComputeBackendError.invalidProgram
     }
@@ -551,35 +843,49 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
       throw MetalComputeBackendError.invalidProgram
     }
     guard
-      command.bindings.count == 2,
-      command.bindings.map(\.ordinal) == [0, 1],
-      command.bindings[0].elementCount != nil,
-      command.bindings[1].elementCount == nil,
-      command.bindings[1].boundByteCount >= 8,
       command.threadgroups.x > 0,
       command.threadgroups.y > 0,
       command.threadgroups.z > 0
     else {
-      throw MetalComputeBackendError.invalidBindings
+      throw MetalComputeBackendError.invalidDispatch
     }
-    let input = command.bindings[0]
-    let output = command.bindings[1]
     guard
-      input.boundByteCount >= program.manifest.bindings[0].descriptor.minimumBindingSize,
-      input.boundByteCount <= Int(UInt32.max),
-      input.boundByteCount % 4 == 0
+      command.bindings.count == program.manifest.bindings.count,
+      command.bindings.map(\.ordinal) == Array(program.manifest.bindings.indices)
     else {
       throw MetalComputeBackendError.invalidBindings
     }
-    let inputBuffer = try resources.buffer(for: input.snapshot)
-    let outputBuffer = try resources.buffer(for: output.snapshot)
-    guard
-      inputBuffer.device === core.device,
-      outputBuffer.device === core.device,
-      input.snapshot.offset + input.boundByteCount <= inputBuffer.length,
-      output.snapshot.offset + output.boundByteCount <= outputBuffer.length
-    else {
-      throw MetalComputeBackendError.invalidBindings
+
+    var metalBuffers: [MTLBuffer] = []
+    metalBuffers.reserveCapacity(command.bindings.count)
+    for (binding, manifestBinding) in zip(
+      command.bindings, program.manifest.bindings
+    ) {
+      let elementCountMatches =
+        manifestBinding.descriptor.runtimeSized
+        ? binding.elementCount.map { $0 > 0 } == true
+        : binding.elementCount == nil
+      guard
+        elementCountMatches,
+        binding.boundByteCount >= manifestBinding.descriptor.minimumBindingSize,
+        binding.boundByteCount <= Int(UInt32.max),
+        binding.boundByteCount % 4 == 0
+      else {
+        throw MetalComputeBackendError.invalidBindings
+      }
+      let metalBuffer = try resources.buffer(for: binding.snapshot)
+      let (boundEnd, overflow) = binding.snapshot.offset.addingReportingOverflow(
+        binding.boundByteCount
+      )
+      guard
+        !overflow,
+        binding.snapshot.offset >= 0,
+        metalBuffer.device === core.device,
+        boundEnd <= metalBuffer.length
+      else {
+        throw MetalComputeBackendError.invalidBindings
+      }
+      metalBuffers.append(metalBuffer)
     }
     guard
       let commandBuffer = queue.makeCommandBuffer(),
@@ -588,20 +894,23 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
       throw MetalComputeBackendError.commandResources
     }
     encoder.setComputePipelineState(program.pipeline)
-    encoder.setBuffer(
-      inputBuffer,
-      offset: input.snapshot.offset,
-      index: program.manifest.bindings[0].slots[0].index
-    )
-    encoder.setBuffer(
-      outputBuffer,
-      offset: output.snapshot.offset,
-      index: program.manifest.bindings[1].slots[0].index
-    )
+    for ((binding, manifestBinding), metalBuffer) in zip(
+      zip(command.bindings, program.manifest.bindings), metalBuffers
+    ) {
+      encoder.setBuffer(
+        metalBuffer,
+        offset: binding.snapshot.offset,
+        index: manifestBinding.slots[0].index
+      )
+    }
     let wordOffset = program.manifest.sizeRegion.immediateDataByteOffset / 4
-    let inputIndex = program.manifest.bindings[0].slots[0].index
-    var words = [UInt32](repeating: 0, count: wordOffset + inputIndex + 1)
-    words[wordOffset + inputIndex] = UInt32(input.boundByteCount).littleEndian
+    let immediateWordCount = try immediateDataSize(for: program.manifest) / 4
+    var words = [UInt32](repeating: 0, count: immediateWordCount)
+    for (binding, manifestBinding) in zip(command.bindings, program.manifest.bindings)
+    where manifestBinding.descriptor.runtimeSized {
+      let slot = manifestBinding.slots[0].index
+      words[wordOffset + slot] = UInt32(binding.boundByteCount).littleEndian
+    }
     words.withUnsafeBytes { bytes in
       encoder.setBytes(
         bytes.baseAddress!,
@@ -622,6 +931,7 @@ package final class MetalComputeBackend: VGPUComputeBackend, @unchecked Sendable
       )
     )
     encoder.endEncoding()
+    let input = command.bindings[0]
     lock.lock()
     submittedInputs.append(
       (
