@@ -3,12 +3,13 @@
 This spike connects vgpu's resolved WGSL graph to the accepted one-entry Tint compiler protocol.
 Its executable slices now cover authenticated entry inventory, program selection, full-screen
 source finalization, and authenticated semantic extraction for fixed resources, runtime-sized
-storage, and exact-static overrides. The fixed-resource and override profiles additionally pass
-`semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry projection, native
-translation, and offline Metal compilation. Fixed direct-resource binding passes an exact live
-Metal readback; a second live path observes baked, stage-specific override values without runtime
-specialization. The same one-shot Tint worker supplies inventory, extraction, and translation
-without turning TypeScript into a second WGSL compiler.
+storage, and exact-static overrides. The fixed-resource, runtime-sized, and override profiles
+additionally pass `semantic-v1` assembly, deterministic Metal slot allocation, exact per-entry
+projection, native translation, and offline Metal compilation. Fixed direct-resource binding
+passes an exact live Metal readback; a second live path observes baked, stage-specific override
+values without runtime specialization; and the runtime-sized compute path passes live range packing,
+binding, dispatch, and readback. The same one-shot Tint worker supplies inventory, extraction, and
+translation without turning TypeScript into a second WGSL compiler.
 
 ## Hypothesis
 
@@ -133,12 +134,12 @@ ordering, and rejection of the legacy `name` field. Non-empty configuration is e
 configured declaration that is inactive in the selected program is accepted but omitted from the
 result; result records retain typed `selected` values, evaluable defaults, and authored numeric IDs.
 
-The assembly gate resolves authored effect, multi-module draw, compute, fixed-resource, and five
-exact-static override fixtures. It retains nominal resolver declaration evidence, authenticates
-extraction, emits nine schema-valid `semantic-v1` programs, and checks render linking, resource and
-override joins, exact extraction reprojection, and fingerprints. All nine fixtures receive nominal
-program-level Metal allocations and project thirteen compiler requests without launching the
-translator.
+The assembly gate resolves authored effect, multi-module draw, compute, fixed-resource,
+runtime-sized storage, and five exact-static override fixtures. It retains nominal resolver
+declaration evidence, authenticates extraction, emits ten schema-valid `semantic-v1` programs, and
+checks render linking, resource and override joins, exact extraction reprojection, and
+fingerprints. All ten fixtures receive nominal program-level Metal allocations and project fourteen
+compiler requests without launching the translator.
 Its numeric `b0`, `b1`, `b2`, `b3`, and `b10` union preserves exact subsets, sampling pair, and
 derived visibility. Seven extracted types become eight semantic types after interface interning;
 six layouts and buffer minima of 8, 24, and 16 bytes remain exact. Declaration v3 also retains
@@ -153,19 +154,26 @@ The static matrix covers five nominal, five declaration, three resolver-symbol, 
 resolver-resource-join, fifteen resolver-override, two retained-snapshot, six override-configuration,
 one profile, one link, five fingerprint, fourteen Swift-name, four slot-allocation, and two
 projection failures. A separate stage-isolation check proves that one semantic buffer can receive
-different vertex and fragment indices. Thirteen authenticated compiler translations assemble nine
-exact `metal-projection-v1` program fragments under nominal ownership. Their permutations remain
-canonical. Nineteen response/combination failures, twelve independent verifier canaries, and four
+different vertex and fragment indices. Thirteen authenticated static compiler translations
+assemble nine exact `metal-projection-v1` program fragments under nominal ownership; the
+runtime-sized request is intentionally not backed by a synthetic compiler response. Their
+permutations remain canonical. Nineteen response/combination failures, fourteen independent
+verifier canaries, and four
 device-requirement checks cover response association, exact entry override subsets and their union,
 stage closure, compiler identity, internal reservations, slot collisions, runtime-size regions,
 compute dimensions, and fail-closed requirements. Twenty-seven runtime-resource-layout checks cover
 nominal ownership, canonical projection, exact fixed-resource descriptors and slots, and exclusion
 of MSL, presentation names, and inactive candidate bindings.
 
-With the native worker the gate performs eighteen semantic-extraction invocations for nine
+With the native worker the gate performs twenty semantic-extraction invocations for ten
 deterministic fixtures. It translates the fixed-resource vertex and fragment entries twice each,
-then translates six exact-static override entries twice each across five projected programs. Every
-response is authenticated against its exact per-entry request. The override programs preserve a
+the runtime-sized compute entry twice, then six exact-static override entries twice each across
+five projected programs. Every response is authenticated against its exact per-entry request. The
+runtime-sized translations are byte-identical, assemble one authenticated projection with external
+`buffer(0)`, effective immediate-data `buffer(30)`, and a size region at byte `4`, and compile and
+link offline. In each of two live M4 Pro processes, two dispatches reuse one backing allocation and
+binding offset with effective ranges `28` and `52`, upload immediate words `[0, 28]` and `[0, 52]`,
+and read back `[2, 202]` and `[4, 404]`. The override programs preserve a
 dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
 render-stage subsets, and all five scalar kinds including `f16`. Their six retained MSL sources
 contain no `function_constant`, compile to AIR, and link into five metallibs. The render program also
@@ -198,9 +206,10 @@ on Apple M4 Pro. See [`docs/fullscreen-metal.md`](./docs/fullscreen-metal.md).
 
 Start with a small multi-module closure that covers render, compute, resources, overrides, sparse
 interfaces, and generated full-screen source. Resource-free effect, draw, and compute requests plus
-one fixed-resource render pair and five exact-static override programs are now derived through
-offline Metal, and one override render program additionally passes an exact live readback. The
-broader resource profile and repository corpus coverage remain. Once every request is derived, run
+one fixed-resource render pair, one runtime-sized compute program, and five exact-static override
+programs are now derived through offline Metal. The runtime-sized compute program and one override
+render program additionally pass exact live readbacks. The broader resource profile and repository
+corpus coverage remain. Once every request is derived, run
 the repository corpus through the same bridge and compile every successful MSL result for the
 `air64-apple-macos14.0` target.
 
@@ -228,9 +237,8 @@ The semantic work is split by responsibility so the growing design remains revie
 - [`docs/semantic-extraction/runtime-resource-binding.md`](./docs/semantic-extraction/runtime-resource-binding.md)
   records the executable nominal semantic/slot join, program ownership, and prepare/encode boundary
   for the fixed direct-resource gate; and
-- [`docs/runtime-sized-storage/`](./docs/runtime-sized-storage/README.md) separates the proposed
-  runtime-sized semantic contract, stable Metal immediate-data layout, and dynamic binding path
-  before that next slice is connected.
+- [`docs/runtime-sized-storage/`](./docs/runtime-sized-storage/README.md) separates the connected
+  runtime-sized semantic, projection, translation, offline, and live-binding boundaries.
 
 ## Implementation order
 
@@ -244,25 +252,27 @@ The semantic work is split by responsibility so the growing design remains revie
    overrides, and resolved constant-expression workgroup dimensions; binding arrays remain open.
 5. Assemble and schema-validate `semantic-v1` from that authenticated response and the resolver's
    proven entry spans and resource-symbol evidence. Resource-free effect, multi-module draw, and
-   compute programs, fixed singular resources, and exact-static overrides are executable.
+   compute programs, fixed and runtime-sized singular resources, and exact-static overrides are
+   executable.
 6. Allocate program-level slots and derive one existing compiler request per entry point. This is
-   executable for resource-free programs, singular fixed-size resources, and exact-static
-   overrides.
+   executable for resource-free programs, singular fixed-size and runtime-sized resources, and
+   exact-static overrides.
 7. Authenticate translator responses without compacting indices and combine the exact selected
    stage set into `$defs/program` of `metal-projection-v1`. Resource-free effect/draw, compute, and
-   the fixed-resource and exact-static override fixtures are executable.
-8. Compile and link every accepted MSL source offline. The fixed-resource and exact-static override
-   fixtures are executable; the authenticated repository corpus remains open.
-9. Join semantic resource constraints to projected slots, prepare a complete logical resource set,
-   bind the fixed-resource render pair, and observe baked override values at runtime. Both live
-   canaries are executable; general resources and the production Swift runtime remain open.
+   the fixed-resource, runtime-sized, and exact-static override fixtures are executable.
+8. Compile and link every accepted MSL source offline. The fixed-resource, runtime-sized, and
+   exact-static override fixtures are executable; the authenticated repository corpus remains open.
+9. Join semantic resource constraints to projected slots, prepare complete logical resource sets,
+   bind the fixed-resource render pair and runtime-sized compute buffer, and observe baked override
+   values at runtime. These live canaries are executable; general resources and the production Swift
+   runtime remain open.
 10. Run the authenticated repository corpus and record expected failures separately.
 
 ## Non-goals
 
-This spike does not yet connect runtime-sized resources or the broader resource profile through
-nominal assembly and runtime binding, run the integrated repository corpus, package a production
-artifact, implement the production Swift runtime, freeze a Dawn/Tint source revision, or establish
+This spike does not yet connect the broader resource profile, run the integrated repository corpus,
+package a production artifact, implement the production Swift runtime, freeze a Dawn/Tint source
+revision, or establish
 Intel or AMD GPU support. It also does not
 recover general authored diagnostic spans from the current module-only origin map. Exact authored
 entry-declaration spans come from resolver tokens and use 1-based locations, UTF-16-code-unit

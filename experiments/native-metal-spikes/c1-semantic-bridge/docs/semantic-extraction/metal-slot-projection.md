@@ -43,17 +43,14 @@ retained by the nominal assembly. For exact-static programs, projection selects 
 canonical override-name subset from the program's typed union and sends those selected values to the
 one-entry translator.
 
-Compiler protocol v1 currently carries a candidate stage-local `immediate-data` reservation and a
-storage-size transport offset on every request. The integration canary uses Metal `buffer(30)` and
-byte offset `4`; these are fixture/profile inputs, not public ABI or hardware-limit claims. They
-reserve capacity before Tint generation but do not claim that the selected entry uses either
-feature. Only the generated response can populate effective `internalBindings` or
-`storageBufferSizeRegions`.
-
-Before general runtime-sized resources join this bridge, a versioned immediate-layout planner must
-derive the pipeline-specific byte offset and persist the effective result in the Metal artifact.
-The current fixed-size resource slice deliberately does not promote its canary offset into that
-future production rule.
+Compiler protocol v1 carries the versioned `vgpu-metal-immediate-data-layout-v1` model, a candidate
+stage-local `immediate-data` reservation, and that model's storage-size transport offset on every
+request. The v1 offsets are fixed at byte `4` for vertex/compute and byte `12` for fragment; unused
+roles never compact later fields. The integration canary uses Metal `buffer(30)`, which is a
+fixture/profile reservation rather than a public hardware-limit claim. Candidate capacity does not
+claim that the selected entry uses either feature. Only the generated response can populate
+effective `internalBindings` or `storageBufferSizeRegions`, and its region must match the model's
+stage offset.
 
 ## Executable evidence
 
@@ -72,9 +69,11 @@ separate mutation makes `g0b10` active in both stages and proves `buffer(2)` in 
 `buffer(1)` in fragment, so stage isolation is not inferred from the fixture's coincidental
 `g0b0 -> buffer(0)` pair.
 
-The static gate assembles four programs, mints four nominal allocations, and projects seven
-schema-valid compiler requests. It rejects cloned and crossed allocations, a missing allocation,
-and external texture lowering without launching Tint.
+The static gate assembles ten programs, mints ten nominal allocations, and projects fourteen
+schema-valid compiler requests. Thirteen synthetic compiler translations assemble nine static
+program projections; the runtime-sized request is deliberately reserved for real Tint. Fourteen
+independent verifier canaries protect the combined projection boundary. The gate rejects cloned and
+crossed allocations, a missing allocation, and external texture lowering without launching Tint.
 
 With the accepted native worker, the resource entry pair is translated twice per stage. Request,
 response, and MSL bytes are deterministic snapshots. Each response reproduces the exact validated
@@ -84,6 +83,13 @@ fixed-size fixture. Both MSL sources compile with Metal 2.4 for
 derives semantic constraints plus these exact slots from the nominal program projection. Two Swift
 processes each prepare six commands for five logical resources and validate two renders against the
 exact readback.
+
+The runtime-sized compute request translates twice with byte-identical real Tint results and
+assembles a tenth authenticated projection with external `buffer(0)`, effective immediate-data
+`buffer(30)`, and a storage-size region at byte `4`. The retained MSL compiles and links offline. A
+live M4 Pro gate then runs two processes. Within each process, two dispatches reuse one backing
+allocation and binding offset with effective ranges `28` and `52`; they upload sparse immediate
+words `[0, 28]` and `[0, 52]` and read back `[2, 202]` then `[4, 404]`.
 
 Run the strong gate from the repository root after building the direct worker:
 
@@ -95,11 +101,11 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.
   --require-metal-runtime
 ```
 
-This evidence includes pipeline creation, direct fixed-resource binding, and readback for the one
-resource render fixture. Exact-static override assembly, offline linking, and an exact live render
-observation now pass in the same gate without runtime function constants. Artifact packaging,
-runtime-sized storage integration, compute-resource encoding, the repository corpus, production
-Swift runtime, and additional hardware remain open. The numeric canary ceilings are not a
+This evidence includes pipeline creation, direct fixed-resource binding, runtime-sized compute
+binding, and exact readback. Exact-static override assembly, offline linking, and an exact live
+render observation also pass in the same gate without runtime function constants. Artifact
+packaging, broader compute-resource encoding, the repository corpus, production Swift runtime, and
+additional hardware remain open. The numeric canary ceilings are not a
 supported-device profile. See
 [`runtime-resource-binding.md`](./runtime-resource-binding.md) for the runtime ownership and
 limitations.

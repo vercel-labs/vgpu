@@ -15,10 +15,10 @@ Metal lowering, and returns either a structured compiler failure or MSL plus the
 projection.
 
 The full gate passes fifteen positive and twenty-two negative native canaries. Every native case is
-run twice, for 37 deterministic cases, and produces byte-identical status and output. A separate codec
-gate covers 29 fatal framing/complexity faults, nineteen decoded protocol failures, the 64/65 nesting
-boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a known SHA-256
-vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
+run twice, for 37 deterministic cases, and produces byte-identical status and output. A separate
+codec gate covers 29 fatal framing/complexity faults, twenty-one decoded protocol failures, the
+64/65 nesting boundary, fragmented UTF-8, EOF blocking, pipe backpressure, cancellation, timeout, a
+known SHA-256 vector, and rejection at 128 MiB plus one byte. The covered compiler cases include:
 
 - a resolver-to-compiler request made entirely from relocatable virtual paths;
 - module-attributed WGSL diagnostics without invented authored line or column positions;
@@ -28,7 +28,8 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
   initializer and a required declaration used only by another entry point;
 - independent Metal buffer, texture, and sampler namespaces;
 - one sampled texture binding array as translator evidence;
-- runtime storage-array sizes through the shared immediate-data binding at `buffer(30)`;
+- runtime storage-array sizes through the versioned shared immediate-data layout and the effective
+  internal binding at `buffer(30)`;
 - exact sparse vertex attributes `3/7`, inter-stage locations `2/5/6`, fragment colors `1/4`, a
   direct scalar fragment input and unnamed return, and the core compute built-ins;
 - effective interpolation defaults, explicit interpolation, built-ins, types, widths, and
@@ -60,10 +61,12 @@ resolved source and one selected entry point. Its variable inputs are:
 - an explicit allowlist of WGSL language features; and
 - one direct Metal component interval for every reflected WGSL resource binding.
 
-The v1 Metal writer profile is deliberately fixed. Every request carries the candidate
-`immediate-data` reservation at Metal buffer index `30` and storage-size byte offset `4`. This
-configures Tint; it does not assert that the generated entry point uses the binding. The success
-response reports the internal binding and size region only when they are effective.
+The v1 Metal writer profile is deliberately fixed. Every request carries
+`vgpu-metal-immediate-data-layout-v1`, the candidate `immediate-data` reservation at Metal buffer
+index `30`, and the stage-specific storage-size offset: byte `4` for vertex and compute, and byte
+`12` for fragment. This configures Tint; it does not assert that the generated entry point uses the
+binding. The success response reports the internal binding and size region only when they are
+effective.
 
 [`contracts/response-v1.schema.json`](./contracts/response-v1.schema.json) separates expected
 compiler failures from successes. Both include the compiler and exact upstream revision. A success
@@ -233,16 +236,18 @@ The override integration follow-up now connects the materializer's exact static 
 request, binds it to the resolved-source hash, and proves that missing, extra, or stale values fail
 before or inside the independently validating worker.
 
-The semantic-bridge follow-up now carries the authenticated fixed-size singular-resource union
-through semantic assembly, nominal slot allocation, per-entry request projection, native
-translation, and offline Metal linking. It preserves exact binding subsets and sampling pairs,
-derives per-binding stage visibility, joins resolver-owned authored names, retains the reachable
-type and layout graphs, and fingerprints those semantics. The slot map is derived only from that
-authenticated graph and verified independently before the projector can use it.
+The semantic-bridge follow-up now carries the authenticated fixed-size singular-resource union and
+a runtime-sized storage program through semantic assembly, nominal slot allocation, per-entry
+request projection, native translation, authenticated program projection, and offline Metal
+linking. Its raw runtime probe also binds one backing allocation at two effective ranges and reads
+back the two distinct runtime-array lengths and final element IDs. It preserves exact binding
+subsets and sampling pairs, derives per-binding stage visibility, joins resolver-owned authored
+names, retains the reachable type and layout graphs, and fingerprints those semantics. The slot map
+is derived only from that authenticated graph and verified independently before the projector can
+use it.
 
 The remaining gates are:
 
-- carry extracted runtime-sized storage through semantic assembly, projection, and binding;
 - extend the connected bridge to broader resource shapes, then run the full corpus through Apple's
   offline compiler; and
 - connect this compiler response to the deterministic Swift package artifact spike.

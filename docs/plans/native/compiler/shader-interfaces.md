@@ -204,9 +204,14 @@ allocation, exact per-entry projection and translation, authenticated program as
 compilations, and one metallib link. The resource-free full-screen companion consumes the same
 nominal program boundary for offline compilation and live function lookup. Five exact-static
 override programs also pass assembly, projection, translation, and offline compilation, with one
-live render observation. Runtime-sized storage beyond extraction, broader resource shapes, the exact
-direct worker's full corpus through that offline boundary, a real C1-connected artifact, general
-resource runtime binding, and pixel/buffer parity remain open.
+live render observation. One runtime-sized compute program now also passes semantic assembly,
+nominal slot allocation, exact request projection, deterministic Tint translation, authenticated
+program projection, and offline Metal compilation and linking. In each of two live M4 Pro
+processes, two dispatches also reuse one backing allocation and binding offset with effective ranges
+`28` and `52`, upload the corresponding sparse size words, and produce exact `[2, 202]` and
+`[4, 404]` readbacks. Broader resource shapes,
+the exact direct worker's full corpus through that offline boundary, a real C1-connected artifact,
+general resource runtime binding, and broader pixel/buffer parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 

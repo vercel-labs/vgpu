@@ -103,6 +103,9 @@ The live result covers the local Apple-silicon device only. It does not
 establish behavior on Intel Macs or discrete AMD GPUs. The canary uses one
 runtime-sized storage word and the currently selected internal roles; adding
 user immediates or new internal roles would require either compatible reserved
-space or a new layout version. Full integration still needs to encode the
-layout identifier and effective regions in the Metal projection, not in the
-backend-neutral semantic graph.
+space or a new layout version. The connected compiler and artifact contracts
+now encode the layout identifier and effective regions in the Metal projection,
+not in the backend-neutral semantic graph. The connected semantic bridge also
+passes live binding and readback for an assembled runtime-sized program using
+this compute layout. Production API integration and broader internal-role
+coverage remain separate work.

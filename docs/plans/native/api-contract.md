@@ -188,20 +188,26 @@ omitted. Each translation request receives the corresponding exact static per-en
 may later prune initializer-only dependencies, but that optimization does not redefine either the
 required interface or semantic v1. Evaluated-default extraction, partial-configuration ordering,
 and the exact-static materializer-to-worker boundary have passed their C1 gates. The program-scoped
-extraction wire now also passes against the source-built worker. Its eight locked requests cover
-successful render, compute, and fixed-resource interfaces plus five exact-static override profiles.
+extraction wire now also passes against the source-built worker. Its nine locked requests cover
+successful render, compute, fixed-resource, and runtime-sized storage interfaces plus five
+exact-static override profiles.
 The override profiles prove every supported scalar kind, selected and default values, authored
 numeric IDs, canonical program unions and per-entry subsets, configured initializer semantics, and
-resolved workgroup dimensions. The connected bridge carries both fixed-size singular resources and
-five exact-static override programs through semantic v1, nominal program-level slot allocation,
-exact per-entry compiler requests, native translation, authenticated program projection, and offline
-Metal linking. It preserves binding and override subsets, sampling pairs, visibility, authored
+resolved workgroup dimensions. The connected bridge carries fixed-size singular resources, one
+runtime-sized storage program, and five exact-static override programs through semantic v1,
+nominal program-level slot allocation, and exact per-entry compiler requests. Those resource and
+override entries also pass deterministic native translation, authenticated program projection, and
+offline Metal compilation and linking. It preserves binding and override subsets, sampling pairs, visibility, authored
 presentation names, and reachable types/layouts; its allocation and final program fragment are
 independently verified against that authenticated graph. Six override entry translations compile
 and link without Metal function constants. One render program also passes an exact four-pixel
 readback across two independent Metal processes, with two renders each, while the probe rejects
-runtime function-constant APIs. Broader resource shapes, general runtime resource binding, and the
-connected artifact remain deterministic integration gates.
+runtime function-constant APIs. The connected runtime-sized program also passes live compute
+binding and readback in two M4 Pro processes: within each process, two dispatches reuse one backing
+allocation and binding offset; effective ranges `28` and `52` upload `[0, 28]` and `[0, 52]`,
+producing `[2, 202]` and `[4, 404]`.
+Broader resource shapes, general runtime resource binding, and the connected artifact remain
+deterministic integration gates.
 
 The Metal projection records:
 
@@ -214,8 +220,8 @@ The Metal projection records:
 - emitted function names;
 - the exact direct Metal buffer, texture, and sampler slots allocated by the versioned vgpu
   binding policy, including backend-internal bindings required by Metal lowering or the vgpu ABI;
-- the versioned storage-buffer-size model and any per-program, per-stage regions placed inside an
-  `immediate-data` internal binding;
+- the versioned Metal immediate-data layout model, the independent storage-buffer-size model, and
+  any per-program, per-stage regions placed inside an `immediate-data` internal binding;
 - the versioned pipeline-local vertex-buffer policy and its exclusive external-buffer ceiling;
 - the versioned shader-interface model and exact vertex-location to Metal-attribute and
   fragment-location to Metal-color mappings;
@@ -240,11 +246,12 @@ complete contract and canonical validation rules are in
 
 The production native compiler constructs the user binding map and configures candidate internal
 capacity before translation, then passes that configuration to Tint. Compiler protocol v1 always
-carries a stage-local `immediate-data` candidate and a storage-size offset; this is fail-closed
-writer capacity, not proof that either is part of the emitted interface. The current bridge canary
-uses `buffer(30)` and byte offset `4`, but neither number is a public ABI or general immediate-layout
-rule. A production planner must derive the pipeline-specific offset before general runtime-sized
-resources use this path. Tint's final raised interface and writer result are authoritative. The
+carries the required `vgpu-metal-immediate-data-layout-v1` identity, a stage-local
+`immediate-data` candidate, and the model's storage-size offset: byte `4` for vertex and compute,
+and byte `12` for fragment. These fields are fail-closed writer capacity, not proof that either an
+internal binding or a size region is part of the emitted interface. The current profile reserves
+`buffer(30)` as candidate capacity, but callers consume only the effective slot recorded in the
+projection. Tint's final raised interface and writer result are authoritative. The
 compiler records an `immediate-data` internal binding only when the generated entry uses it, and
 records a `storageBufferSizeRegions` entry only when Tint reports that the selected stage needs the
 size transport. It does not serialize a redundant `needsStorageBufferSizes` boolean.
@@ -252,7 +259,8 @@ size transport. It does not serialize a redundant `needsStorageBufferSizes` bool
 The accepted production contract requires each translation request to contain one resolved virtual WGSL source, its module-precision origin map,
 one selected WGSL and vgpu-owned emitted entry name, the exact statically used typed override set
 after module-level configuration and required-value validation, declared language features, direct
-external slots, the candidate internal profile, and the exact semantic interface. The worker
+external slots, the candidate internal profile, the immediate-data layout identity, the
+storage-buffer-size identity and its stage-specific offset, and the exact semantic interface. The worker
 compares the portable interface before calling `Generate()`. The official writer path preserves
 Tint's `CanGenerate` preflight and performs Metal lowering and MSL generation on that same IR; the
 worker then validates the complete lowered interface privately on the now-raised IR. A success
@@ -352,7 +360,8 @@ resolution state, and build state are rejected.
 
 Generated Swift embeds the semantic contract and a separately fingerprinted runtime subset of the
 Metal projection. That runtime fingerprint includes the semantic fingerprint, Metal ABI and
-binding and shader-interface models, deployment target, `.metallib` hash, emitted names, exact
+binding and shader-interface models, the immediate-data layout model, deployment target,
+`.metallib` hash, emitted names, exact
 vertex-attribute and fragment-color maps, vertex-buffer policy and ceiling, external and internal
 slots, the storage-buffer-size model and stage regions, resolved workgroup sizes, and static device
 requirements. Its projection-specific input does not directly add provenance, root inputs, source
@@ -360,11 +369,14 @@ maps, generated sources, tests, `projection.testing`, or any dynamic packed size
 semantic object still affects it transitively through the semantic fingerprint. An incompatible
 runner blocks `native compare` only; it does not block application use.
 
-Compatibility is determined by understood schemas, the named layout, binding, shader-interface,
-and vertex-buffer policy models, and integer ABI contracts. Shader-interface-model support is
-required for every entry point. Support for a storage-buffer-size model is checked only when the
-selected program and stage has a size region; a structurally understood artifact with a future
-model can still load a program whose selected stage has no such region. The artifact requires the
+Compatibility is determined by understood schemas, the named semantic-layout, binding,
+shader-interface, immediate-data-layout, and vertex-buffer policy models, and integer ABI contracts.
+Shader-interface-model support is required for every entry point. Support for an
+immediate-data-layout model is checked only when the selected program and stage has an effective
+`immediate-data` internal binding, whether or not it has a size region. Support for a
+storage-buffer-size model is checked independently and only when that selected stage has a size
+region. Both model identities remain serialized and fingerprinted even when a particular stage does
+not require runtime support for them. The artifact requires the
 small shared `VGPUABI` product and one ABI integer; the runtime advertises the integer range it
 supports rather than comparing package release versions for exact equality. During `0.x`, generated remote package dependencies use
 `.upToNextMinor(from:)` so compatible patch releases remain selectable without admitting

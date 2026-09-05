@@ -1,6 +1,6 @@
 # Metal immediate-data layout
 
-The proposed Metal projection uses one stable, versioned internal layout instead of reproducing
+The Metal projection uses one stable, versioned internal layout instead of reproducing
 Dawn's pipeline-specific compact `ImmediateMask` or asking the compiler worker to plan the ABI in a
 second pass.
 
@@ -17,14 +17,14 @@ defines its own push-constant or internal-data layout.
 
 Offsets do not change when a role is unused:
 
-| Stage | Byte offset | Role | Type |
-| --- | ---: | --- | --- |
-| vertex / compute | `0` | `nonConstantZero` | `u32` |
-| vertex / compute | `4` | `storageBufferSizes` | trailing `array<u32>` |
-| fragment | `0` | `nonConstantZero` | `u32` |
-| fragment | `4` | `fragDepthMin` | `f32` |
-| fragment | `8` | `fragDepthMax` | `f32` |
-| fragment | `12` | `storageBufferSizes` | trailing `array<u32>` |
+| Stage            | Byte offset | Role                 | Type                  |
+| ---------------- | ----------: | -------------------- | --------------------- |
+| vertex / compute |         `0` | `nonConstantZero`    | `u32`                 |
+| vertex / compute |         `4` | `storageBufferSizes` | trailing `array<u32>` |
+| fragment         |         `0` | `nonConstantZero`    | `u32`                 |
+| fragment         |         `4` | `fragDepthMin`       | `f32`                 |
+| fragment         |         `8` | `fragDepthMax`       | `f32`                 |
+| fragment         |        `12` | `storageBufferSizes` | trailing `array<u32>` |
 
 The storage-size table is the final variable-length field. Adding a new fixed role or changing an
 offset is an incompatible layout and requires a new model version. The layout intentionally does

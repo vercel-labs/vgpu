@@ -171,8 +171,10 @@ override-dependent expressions. The worker installs the exact typed values into 
 entry pruning, substitutes overrides, and independently compares the resolved compute dimensions
 with the materializer result.
 
-The connected assembly gate adds five override programs to the four existing programs. Nine nominal
-assemblies project thirteen compiler requests in total. For overrides specifically, twelve native
+The connected assembly gate adds five override programs to the five other programs. Ten nominal
+assemblies project fourteen compiler requests in total. Thirteen synthetic translations still
+assemble nine static projections, while the runtime-sized request uses real Tint; fourteen verifier
+canaries protect the combined projection boundary. For overrides specifically, twelve native
 translator launches prove six deterministic per-entry translations across five programs. Six
 retained MSL sources contain no `function_constant`, compile to AIR for
 `air64-apple-macos14.0`, and link into five metallibs. Independent mutations reject missing,
@@ -254,6 +256,7 @@ contains the correct subset; retained MSL compiles offline without `function_con
 nondegenerate render observes configured values without `MTLFunctionConstantValues`.
 
 Passing this connected slice does not add runtime specialization, a public Swift override API,
-compute runtime execution, runtime-sized resource assembly or binding, resource binding arrays,
-repository-corpus coverage, or production artifact generation. Runtime-sized storage extraction is
-covered by the sibling resource slice but does not change this override-specific exit condition.
+override-dependent compute runtime execution, resource binding arrays, repository-corpus coverage,
+or production artifact generation. Runtime-sized storage now passes the sibling assembly,
+projection, translation, offline, and live-binding slice but does not change this override-specific
+exit condition.

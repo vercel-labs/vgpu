@@ -24,8 +24,10 @@ The compute canary has five runtime arrays at Metal indices `0`, `2`, `3`, `4`, 
 fixed result buffer interleaved at index `1`. The canonical words are
 `[32, 0, 32, 36, 20, 112]`. The fixture's immediate block has a non-constant-zero word at byte zero,
 so the size region begins at byte `4`; its 24-byte payload is uploaded as a 32-byte block after
-alignment. Offset `4` is evidence for this pipeline layout, not a universal constant: artifacts
-must record the per-stage offset calculated from that pipeline's immediate mask.
+alignment. That compute offset is now fixed by `vgpu-metal-immediate-data-layout-v1`. The accepted
+model also fixes byte `4` for vertex and byte `12` for fragment; offsets do not compact when an
+earlier role is unused. The dedicated [immediate-layout spike](../c1-immediate-layout/README.md)
+supersedes this experiment's earlier pipeline-mask choice for fragment.
 
 The minimum binding sizes include the layout through one full runtime-array stride, including any
 member or element padding: `A` is `4`, `B` is `16`, `C` is `32`, `D` is `16`, and `E` is `24`
@@ -75,14 +77,20 @@ maximum word visibly read by the generated MSL.
 
 ## Candidate boundaries
 
-The Metal projection root retains the size-table model. When Tint requests the transport, each
-program/stage region retains only its byte offset, while the physical slot lives once in the
-stage's `immediate-data` internal binding. `wordCount` is then derived as
+The Metal projection root retains separate immediate-data-layout and size-table model identities.
+When Tint requests the transport, each program/stage region retains the layout-model-fixed byte
+offset, while the physical slot lives once in the stage's `immediate-data` internal binding.
+`wordCount` is then derived as
 `max(runtime-sized projected Metal slots) + 1`; it is not serialized in the artifact. Bound ranges,
 packed words, derived extent, upload padding, and whether the runtime uses `set*Bytes` or a ring
 buffer are runtime state, not shader identity or artifact fingerprints. The snapshot in this spike
 intentionally includes those dynamic values because it tests the runtime packer; it is not an
 artifact schema.
+
+The later connected semantic-bridge gate confirms the same rule on the assembled program: one
+backing allocation at the same offset produces array lengths `2` and `4` from effective ranges `28`
+and `52`, with packed immediate words `[0, 28]` and `[0, 52]`. A fixed output at Metal `buffer(1)`
+does not extend that one-entry runtime-size table.
 
 `runtimeSized`, `immediate-data`, and `storageBufferSizes` are separate concepts. One fixture
 program has `immediate-data` at `buffer(30)` and no storage-size region, demonstrating that other
@@ -137,10 +145,10 @@ reflection, and readback. Its generated compute MSL also compiles to AIR for
 The native result is from the local Apple-silicon machine only. It does not establish behavior on
 Intel Macs, discrete AMD GPUs, or Windows/Vulkan. The official Dawn archive is an arm64 feasibility
 dependency with a macOS 26 deployment target, not the production compiler artifact. The offline
-result covers this one generated MSL source and does not establish a full-corpus gate. The fixture values
-(`buffer(30)`, offset `4`, and the buffer ceilings) validate this candidate profile; only the slot
-partition is supported by the pinned Dawn backend, while the immediate-region offset remains
-pipeline-specific.
+result covers this one generated MSL source and does not establish a full-corpus gate. The slot
+reservation at `buffer(30)` and the buffer ceilings validate this profile rather than public device
+limits. This older spike supplied offset `4` as a fixture input for every stage; the accepted
+immediate-layout v1 keeps it for compute and vertex but replaces the fragment choice with byte `12`.
 
 Primary pinned implementation references:
 

@@ -1,7 +1,8 @@
 # Compiler response assembly
 
-Status: executable for resource-free effect/draw and compute programs, plus the current singular
-fixed buffer, sampled-texture, and sampler profile with empty projected requirements.
+Status: executable for resource-free effect/draw and compute programs, singular fixed buffer,
+sampled-texture, and sampler resources, and runtime-sized compute storage with effective immediate
+data and an authenticated storage-size region.
 
 This slice converts validated one-entry Tint results into one nominal program fragment matching
 `$defs/program` in `metal-projection-v1`. It deliberately does not construct the top-level Metal
@@ -100,6 +101,12 @@ one-entry wire shape. A role may contribute at most one slot per stage. Storage-
 stage-local and require one effective compatible `immediate-data` slot. An effective immediate slot
 without a size region remains valid for ordinary immediate values.
 
+The later top-level projection always serializes and fingerprints both
+`immediateDataLayoutModel` and `storageBufferSizeModel`. Runtime compatibility is intentionally
+conditional at a finer boundary: support for the immediate layout model is required when the
+selected stage has an effective `immediate-data` slot, even with no size region; support for the
+storage-size model is required only when that stage has a `storageBufferSizeRegions` record.
+
 Every response in one program must report the same compiler identity. The combiner retains that
 identity privately for the later top-level toolchain check. Emitted Metal names must be unique
 within the program; module-wide emitted-name uniqueness belongs to final aggregation.
@@ -126,8 +133,10 @@ model.
 
 ## Executable gate
 
-The gate emits four program fragments from seven authenticated translations: resource-free effect
-and draw, compute, and fixed-resource draw. Every input permutation normalizes to the same program.
+The static gate emits nine program fragments from thirteen authenticated synthetic translations;
+the full assembly matrix contains ten programs, ten nominal allocations, and fourteen compiler
+requests. The runtime-sized request is deliberately reserved for real Tint. Every input permutation
+normalizes to the same program.
 The fixed-resource fragment preserves its five-binding allocation and emits empty
 `internalBindings`, `storageBufferSizeRegions`, and device requirements. The candidate `buffer(30)`
 reservation does not leak into that effective projection. Two retained MSL sources compile to AIR
@@ -143,7 +152,7 @@ immediate slot with no size region. An independent positive canary validates a r
 storage buffer, effective immediate slot, and size region together; mutations cover the same
 region without a runtime-sized layout, an unreserved internal slot, an external/internal collision,
 an extra stage, and caller-authored device requirements. The current run records nineteen
-authentication/combination failures, six independent verifier canaries, and four requirements
+authentication/combination failures, fourteen independent verifier canaries, and four requirements
 projector checks.
 
 The resource-free full-screen gate crosses the same boundary before execution. Both AIR
@@ -158,3 +167,10 @@ recreates a slot union from per-entry responses. See
 fixed-profile limits. Exact-static overrides now cross the same combination boundary, compile and
 link offline, and one render program passes a live readback without runtime specialization. See
 [`exact-static-overrides.md`](./exact-static-overrides.md) for that connected evidence.
+
+The runtime-sized compute entry translates twice with byte-identical real Tint responses and
+assembles the tenth nominal projection. It preserves external `buffer(0)`, effective immediate-data
+`buffer(30)`, and a size region at byte `4`, then compiles and links offline. On the available M4
+Pro, each of two live processes runs two dispatches that reuse one backing allocation and binding
+offset with effective ranges `28` and `52`, upload `[0, 28]` and `[0, 52]`, and read back
+`[2, 202]` and `[4, 404]` respectively.

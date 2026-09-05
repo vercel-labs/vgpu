@@ -13,11 +13,11 @@ change an override value after the artifact has been built.
 The authored source retains three overrides with defaults that differ from the selected
 configuration:
 
-| Override        | Default | Selected | Static use                  | Readback channel |
-| --------------- | ------- | -------- | --------------------------- | ---------------- |
-| `VERTEX_ONLY`   | `0.5`   | `0.625`  | vertex only                 | red              |
-| `SHARED`        | `0.25`  | `0.375`  | vertex and fragment         | green and alpha  |
-| `FRAGMENT_ONLY` | `0.75`  | `0.125`  | fragment only               | blue             |
+| Override        | Default | Selected | Static use          | Readback channel |
+| --------------- | ------- | -------- | ------------------- | ---------------- |
+| `VERTEX_ONLY`   | `0.5`   | `0.625`  | vertex only         | red              |
+| `SHARED`        | `0.25`  | `0.375`  | vertex and fragment | green and alpha  |
+| `FRAGMENT_ONLY` | `0.75`  | `0.125`  | fragment only       | blue             |
 
 The vertex entry uses `vertex_index` to emit one oversized full-screen triangle. It carries
 `VERTEX_ONLY` and its use of `SHARED` through a constant flat `vec2f` varying. The fragment entry
@@ -62,7 +62,7 @@ node experiments/native-metal-spikes/c1-semantic-bridge/gates/semantic-assembly.
   --require-metal-runtime
 ```
 
-The complete gate reports eighteen semantic extractions across all nine assembly fixtures. Its
+The complete gate reports twenty semantic extractions across all ten assembly fixtures. Its
 override branch reports twelve translations across six entries and five programs, six AIR files,
 five metallibs, and four live renders. The exact override readback hash is
 `c09bf995ecabe58508a0d9be2130be57de81710ddea084015f2e744e8f40eeee`.

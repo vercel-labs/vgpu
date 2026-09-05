@@ -117,7 +117,7 @@ assembly gates.
 
 ## Executable semantic assembly slice
 
-The assembly gate resolves nine authored fixtures and captures their declaration evidence in real
+The assembly gate resolves ten authored fixtures and captures their declaration evidence in real
 resolver calls. One effect exercises generated full-screen vertex injection, render linking, and an
 authored fragment. One draw imports its fragment from a second module, proving auxiliary-symbol
 mangling, preserved public entry names, and exact spans in separate authored inputs. One compute
@@ -125,11 +125,13 @@ program exercises an authored compute entry and resolved `4 x 2 x 1` workgroup d
 multi-module draw fixture exercises five fixed singular resources at `b0`, `b1`, `b2`, `b3`, and
 `b10`, exact stage subsets, one shared binding, one filtering sampling pair, and derived visibility.
 Its seven extracted types become eight semantic types after interface interning, its six layouts
-remain exact, and its buffer minimum sizes are 8, 24, and 16 bytes. Five override fixtures exercise a
-dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
-render-stage subsets, and all scalar kinds including `f16`. The nine fixtures produce schema-valid
-`semantic-v1` programs and fixed program fingerprints. Nine nominal program allocations produce
-thirteen compiler requests.
+remain exact, and its buffer minimum sizes are 8, 24, and 16 bytes. A runtime-sized compute fixture
+exercises a fixed prefix plus trailing array, external `buffer(0)`, candidate and effective
+immediate-data `buffer(30)`, and a storage-size region at byte `4`. Five override fixtures exercise
+a dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
+render-stage subsets, and all scalar kinds including `f16`. The ten fixtures produce schema-valid
+`semantic-v1` programs and fixed program fingerprints. Ten nominal program allocations produce
+fourteen compiler requests.
 
 The static matrix covers five nominal-association failures, five declaration failures including a
 cross-module span mutation, three resolver-symbol failures, three resolver-resource-join failures,
@@ -143,10 +145,14 @@ the `_vgpu` helper namespace, generated module namespaces in nominal positions, 
 case-insensitive collisions within one binding set, one override set, or one struct's members. Final
 aggregation owns collisions created by local/shared type placement and generated program API names.
 Neither stage recases, suffixes, or adds backticks. Pre-translation failures launch no translator.
-With the accepted arm64 worker, two deterministic native extractions per fixture add eighteen
+With the accepted arm64 worker, two deterministic native extractions per fixture add twenty
 one-shot invocations and must assemble to the same reviewed semantic objects and fingerprints. Every
-graph must reproject exactly to its authenticated extraction. The resource pair then runs twice per
-entry through translation. Six override entries across five programs also run twice each; their
+graph must reproject exactly to its authenticated extraction. Thirteen static translations assemble
+nine projections; the runtime-sized request deliberately has no synthetic response. The resource
+pair then runs twice per entry through translation, and the runtime-sized compute entry runs twice
+through real Tint to one authenticated projection and offline metallib. It then runs in two live M4
+Pro processes. Within each process, two dispatches reuse one backing allocation and binding offset
+with ranges `28` and `52`, producing `[2, 202]` and `[4, 404]`. Six override entries across five programs also run twice each; their
 exact request, response, and MSL hashes are frozen before six AIR files link into five metallibs.
 The same nominal resource-program projection supplies the runtime layout and MSL to a Swift probe.
 Five logical resources prepare into six commands; two processes must each validate two renders
@@ -190,10 +196,11 @@ initial closure must contain:
 
 Expected semantic objects, fingerprints, and request hashes remain reviewed oracles rather than
 being regenerated from translator responses. Actual compiler requests must be derived from the
-authenticated assembly. Fixed singular-resource extraction, assembly, nominal slot allocation,
-exact per-entry projection, translation, offline compilation, and one fixed direct runtime readback
-now establish the resource path. Exact-static overrides also pass extraction, assembly, per-entry
-projection, deterministic translation, offline compilation, and an exact live render observation.
+authenticated assembly. Fixed and runtime-sized singular-resource extraction, assembly, nominal
+slot allocation, exact per-entry projection, translation, and offline compilation now establish
+both resource paths. The fixed and runtime-sized profiles additionally pass their direct runtime
+readbacks. Exact-static overrides also pass extraction, assembly, per-entry projection,
+deterministic translation, offline compilation, and an exact live render observation.
 Broader resource shapes and runtime behavior, corpus, and packaging fixtures remain to be connected.
 
 ## Repository corpus

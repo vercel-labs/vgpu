@@ -45,16 +45,18 @@ The fixture uses these provisional rules:
 
 The candidate profile reserves buffer index `30` for one stage-local `immediate-data` block and
 keeps the external buffer interval at `0..<30`. Tint receives that binding through
-`immediate_binding_point` and places the storage-buffer-size array at byte offset `4` through
-`buffer_sizes_offset`. A canary forces the ordinary non-constant-zero immediate and a runtime
-storage-size query together, then confirms that both fields share the same generated struct and
-single `buffer(30)` parameter. Two companion programs use the same runtime-sized storage type but
+`immediate_binding_point`. `vgpu-metal-immediate-data-layout-v1` places the storage-buffer-size
+array at byte `4` for vertex and compute and byte `12` for fragment through
+`buffer_sizes_offset`. A compute canary forces the ordinary non-constant-zero immediate and a
+runtime storage-size query together, then confirms that both fields share the same generated struct
+and single `buffer(30)` parameter. Two companion programs use the same runtime-sized storage type but
 read only its fixed prefix. Tint reports `needs_storage_buffer_sizes = false` for both: the plain
 program emits no internal binding, while the u32 division workaround emits ordinary immediate data
 at `buffer(30)` without a size-table read. The emitted physical role and size region are therefore
 not inferred from the storage type alone. The exact-capacity fixture occupies all 30 external buffer
-indices. These numbers and the fixture ceilings of 31 buffers, 128 textures, and 16 samplers are
-test inputs, not frozen public limits or a claim about every supported Metal device.
+indices. The slot reservation and fixture ceilings of 31 buffers, 128 textures, and 16 samplers are
+profile inputs, not public API or a claim about every supported Metal device; the byte offsets are
+owned separately by the versioned immediate-data layout.
 
 The wrapper safely configures the immediate binding and size-table offset whenever reflection finds
 a runtime-sized storage type, including the fixed-prefix-only programs. It does not treat that type
@@ -112,8 +114,10 @@ macOS 26 deployment target, exposes a monolithic `libwebgpu_dawn.a`, and omits o
 by its installed Tint headers. It is not the production compiler artifact.
 
 The direct-target Tint build now passes the macOS 14 baseline for arm64 and x86_64, and the
-pipeline-local vertex-stream follow-up closes the slot-partition question. Before this ABI can be
-frozen, the exact direct worker must pass the full shader corpus through the offline Apple compiler
-and a connected artifact. Detailed size-table packing and runtime upload behavior remain separate
-from this binding-projection spike. There is no Intel hardware result; an x86_64 build and Rosetta
-execution can reduce CPU-path risk but cannot establish Intel or AMD GPU behavior.
+pipeline-local vertex-stream follow-up closes the slot-partition question. The connected semantic
+bridge now passes fixed and runtime-sized resources through authenticated projection and offline
+Metal compilation, and its raw runtime-sized probe passes two effective ranges on one backing
+allocation. A connected artifact, broader shader corpus, and general production runtime binding
+remain before this ABI can be frozen. Detailed size-table packing and upload behavior remain
+separate from this binding-projection spike. There is no Intel hardware result; an x86_64 build and
+Rosetta execution can reduce CPU-path risk but cannot establish Intel or AMD GPU behavior.

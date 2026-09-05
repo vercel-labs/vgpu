@@ -103,12 +103,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   blend-source fields for future profiles and fixtures. The internal worker protocol allowlists and
   tests the paired lowering, but translator and current-device acceptance do not enable the product
   feature.
-- The Metal projection names its storage-buffer-size model once and records a canonical
-  `storageBufferSizeRegions` array for every program. A region contains only its stage and byte
-  offset inside that stage's `immediate-data` internal binding. Programs without a required size
-  transport keep the array empty. There is no dedicated size-table binding, serialized word count,
-  or `needsStorageBufferSizes` boolean, and the model string versions the algorithm without another
-  integer ABI.
+- The Metal projection names `vgpu-metal-immediate-data-layout-v1` separately from its
+  storage-buffer-size model. The layout fixes the storage-size region at byte `4` for vertex and
+  compute and byte `12` for fragment, without compacting unused fixed roles. Every program records a
+  canonical `storageBufferSizeRegions` array. A region contains only its stage and byte offset inside
+  that stage's `immediate-data` internal binding. Programs without a required size transport keep
+  the array empty. There is no dedicated size-table binding, serialized word count, or
+  `needsStorageBufferSizes` boolean.
 - `wgsl-host-shareable-v1` is the canonical semantic layout model. Tint semantic types are the
   oracle for intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride. A
   layout carries no address space; each buffer binding carries `uniform` or `storage`, and the
@@ -167,11 +168,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 - Compare-runner metadata lives under `projection.testing`, uses the explicitly Metal-specific
   `vgpu-native-metal-runner/v1` protocol, and is excluded from runtime compatibility.
 - The runtime-projection fingerprint covers the shader-interface model and exact vertex-attribute
-  and fragment-color maps, as well as the storage-buffer-size model, every per-program stage region,
-  and the shared `immediate-data` physical slot. Concrete range bytes, packed table words, derived
+  and fragment-color maps, the immediate-data layout model, the storage-buffer-size model, every
+  per-program stage region, and the shared `immediate-data` physical slot. Concrete range bytes, packed table words, derived
   word count, upload padding, and upload strategy are runtime state and stay outside the artifact and
-  fingerprints. Shader-interface-model support is unconditional; storage-size-model support is
-  required only when the selected program stage has a size region.
+  fingerprints. Shader-interface-model support is unconditional; immediate-layout-model support is
+  required only when the selected program stage has an effective `immediate-data` slot, while
+  storage-size-model support is required independently only when it has a size region. Both model
+  identities remain serialized and fingerprinted.
 - Generated packages use `.upToNextMinor(from:)` for remote package dependencies during `0.x`.
   Runtime ABI integers remain authoritative for artifact compatibility; package version selection
   separately limits Swift source and binary drift.
@@ -241,11 +244,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   claim an authored line or column. Inspect, lower, and generate failures carry no invented location.
   Apple compiler diagnostics remain located in generated MSL unless a real WGSL-to-MSL map exists.
 - The compiler distinguishes writer configuration from the effective projection. Compiler protocol
-  v1 supplies user slots plus a stage-local shared-immediate candidate and size offset on every
-  request; those fields reserve capacity and do not assert that the entry needs it. The connected
-  canary currently uses `buffer(30)` and byte offset `4`, neither of which is a public ABI or final
-  immediate-layout rule. General runtime-sized integration requires a planner to derive the
-  pipeline-specific offset before generation. Only Tint's final raised interface and writer result
+  v1 supplies user slots, the required `vgpu-metal-immediate-data-layout-v1` identity, a stage-local
+  shared-immediate candidate, and the model's size offset on every request. The offset is byte `4`
+  for vertex and compute and byte `12` for fragment. Those fields reserve capacity and do not assert
+  that the entry needs it. The current profile reserves `buffer(30)`, but only Tint's final raised interface and writer result
   cause the effective `immediate-data` slot and size region to be serialized. This permits ordinary
   immediate data without a size region, runtime-sized storage without either emitted field, and
   both uses in one physical immediate block.
@@ -300,9 +302,11 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    The runtime-size follow-up proved sparse slot-indexed packing for multiple runtime storage
    buffers, concrete binding ranges rather than backing-buffer lengths, derived extents, stage-local
    indices, range rebinding, immediate/UBO equivalence, and exact Metal readback on the available
-   Apple-silicon machine. The buffer indices `29` and `30`, region offset `4`, and resource ceilings
-   used by these fixtures are test inputs only. They are not public ABI constants or Metal
-   device-limit claims.
+   Apple-silicon machine. The buffer indices `29` and `30` and the resource ceilings used by these
+   fixtures are test inputs only. They are not public ABI constants or Metal device-limit claims.
+   The vertex/compute region offset `4` is instead part of
+   `vgpu-metal-immediate-data-layout-v1`; consumers depend on that versioned model rather than an
+   unversioned numeric constant.
 
    The vertex-buffer follow-up rejected a fixed partition in favor of the pipeline-local hybrid.
    It proved that Metal accepts a colliding vertex stream and shader argument, used readback to
@@ -312,13 +316,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    device-limit claims.
 
    The current accepted direct-source revision builds the worker from Tint's `tint_api` root for the
-   macOS 14 baseline. Its ordinary publication gate authenticates twenty-two branch-specific
-   canaries—ten translation requests, four authenticated entry inventories, and eight program-scoped
+   macOS 14 baseline. Its ordinary publication gate authenticates twenty-three branch-specific
+   canaries—ten translation requests, four authenticated entry inventories, and nine program-scoped
    semantic extractions—produces byte-reproducible arm64, x86_64, and universal executables, and
    matches the arm64-native monolithic oracle byte for byte across eight direct variants without
    linking WebGPU, runtime backends, or frameworks. This proof covers the exact semantic-interface
    handshake, canonical entry names and stages, and the extractor's resource-free, fixed-resource,
-   and exact-static override profiles.
+   runtime-sized-storage, and exact-static override profiles.
    Its x86_64 executions run through Rosetta and do not establish Intel or AMD GPU support; its
    dual-source canary remains internal translator evidence and does not enable the alpha feature.
 
@@ -331,12 +335,19 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    protocol additionally proves paired dual-source lowering; the alpha still rejects that feature.
 
    The isolated interface, binding-slot, runtime-size, and vertex-slot outputs now compile offline
-   for `air64-apple-macos14.0`. The connected fixed-resource render pair also passes authenticated
-   semantic assembly, independently verified nominal slot allocation, exact per-entry translation,
+   for `air64-apple-macos14.0`. The connected gate assembles ten semantic programs and ten nominal
+   allocations into fourteen requests. Thirteen synthetic translations produce nine static
+   projections, while the runtime-sized request is translated twice by real Tint; fourteen
+   independent verifier canaries protect that boundary. The fixed-resource render pair passes
    authenticated response combination into the exact `metal-projection-v1` program fragment, two
-   AIR compilations, and one metallib link. Its effective internal bindings and size regions are
-   empty, as expected for that fixture. The resource-free full-screen path consumes the same nominal
-   projection for offline compilation and live function lookup. The Naga differential runner also
+   AIR compilations, one metallib link, and live binding/readback. Its effective internal bindings
+   and size regions are empty, as expected for that fixture. The runtime-sized compute projection
+   instead preserves external `buffer(0)`, effective immediate-data `buffer(30)`, and its byte-`4`
+   size region. In each of two live M4 Pro processes, two dispatches reuse one allocation and
+   binding offset with ranges `28` and `52`, upload `[0, 28]` and `[0, 52]`, and read back
+   `[2, 202]` and `[4, 404]`. The resource-free
+   full-screen path consumes the same nominal projection boundary for offline compilation and live
+   function lookup. The Naga differential runner also
    compiles and links all 224
    of its successful outputs. Before freezing the dependency or numeric slot profile, run the full shader
    corpus from the exact direct Tint worker through the same offline boundary, complete authored
@@ -354,8 +365,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    distinguishes layout and binding minima, records one shared immediate slot and stage region,
    keeps dynamic size data out of the artifact, fingerprints the complete static projection, and
    rejects malformed region-to-slot relationships and incompatible models before pipeline
-   creation. A no-region program proves that storage-size model support is conditional on the
-   selected program and stage.
+   creation. Its `SparseDraw` fragment has an effective immediate-data slot without a size region:
+   an unknown immediate-layout model rejects that stage, while an unknown storage-size model does
+   not. The runtime-array compute stage proves that storage-size-model support is conditional on a
+   region.
 
    C3b now passes with Apple Metal toolchain build 17C7003j. It compiles handwritten no-op and
    runtime-array Metal functions for `air64-apple-macos14.0`, links and packages one `.metallib`,
@@ -382,3 +395,7 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 6. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
+7. The public Swift representation of a generated storage structure with a fixed prefix and a
+   runtime-sized array tail. The live binder proves the layout and execution path without choosing
+   between an ordinary collection-shaped value and a specialized resource that exposes the prefix
+   separately from its runtime elements.

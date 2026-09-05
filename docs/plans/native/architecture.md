@@ -45,10 +45,10 @@ offsets. The semantic closure and fingerprints traverse the explicit link, so an
 for the same logical type cannot affect a program.
 
 The Metal compiler configures deterministic user slots and candidate internal capacity before
-calling Tint. Compiler protocol v1 carries a shared immediate-data candidate and size-region offset
-for every selected entry; these inputs do not assert that generated code needs them. The current
-bridge values are canary policy, while general runtime-sized integration requires a versioned
-planner to choose the pipeline-specific offset. After Metal lowering and printing, the emitted
+calling Tint. Compiler protocol v1 carries the required
+`vgpu-metal-immediate-data-layout-v1` identity, a shared immediate-data candidate, and the model's
+size-region offset for every selected entry: byte `4` for vertex and compute, and byte `12` for
+fragment. These inputs do not assert that generated code needs them. After Metal lowering and printing, the emitted
 entry interface and Tint's storage-size result determine what is effective: the program records the
 `immediate-data` internal slot only when generated MSL uses it, and records a per-stage
 `storageBufferSizeRegions` offset only when the size transport is needed. There is no second
@@ -77,14 +77,18 @@ present. It does not recover each original WGSL binding identity from Tint's rai
 source-to-slot association remains an explicit trust boundary at Tint's `BindingRemapper`; a
 successful worker response reserializes the independently validated requested external map.
 
-At execution time, selecting a program and stage selects at most one size region. Its presence
-triggers conditional support validation for the projection's storage-buffer-size model. The runtime
+At execution time, selecting a program and stage selects at most one effective `immediate-data`
+slot and one size region. An effective slot triggers support validation for the projection's
+immediate-data layout model even when there is no size region. A region independently triggers
+support validation for the storage-buffer-size model. The runtime
 derives a sparse table from all runtime-sized storage bindings projected into that stage, placing
 each concrete binding range at the word matching its Metal buffer index, and writes that table into
 the shared immediate block at the recorded offset. Word count, range bytes, zero-filled holes,
 upload padding, and the upload mechanism remain transient runtime state. The projection fingerprint
-covers the model, regions, and physical immediate slot, but not those transient values. A program
-stage without a region does not require runtime support for the projection's size-table model.
+covers both model identities, regions, and physical immediate slot, but not those transient values.
+A program stage without an effective immediate slot does not require support for the projection's
+immediate-data layout model; a stage without a region does not require support for its size-table
+model. Both identities remain serialized and fingerprinted at the projection root.
 
 The first implementation supports macOS and Metal only. Shared public contracts must still avoid
 making Metal part of the generated-program ABI or the meaning of rendering primitives. This keeps

@@ -49,6 +49,8 @@ changing its effective range causes the runtime to bind the new external buffer/
 immediate payload before the next use. No artifact regeneration or pipeline specialization is
 required merely because the runtime-array length changed.
 
-The live gate must prove this with two ranges over one oversized backing allocation: `arrayLength()`
-and a last-element read change according to the encoded range while the same generated Metal
-function and projection remain in use.
+The live gate proves this with two ranges over one oversized backing allocation. With the same
+generated Metal function, projection, allocation, and binding offset, ranges `28` and `52` upload
+size words `[0, 28]` and `[0, 52]`; `arrayLength()` plus a last-element read return `[2, 202]` and
+`[4, 404]`. Two M4 Pro processes produce the same report. Eleven malformed manifests and four
+invalid concrete ranges fail before dispatch.

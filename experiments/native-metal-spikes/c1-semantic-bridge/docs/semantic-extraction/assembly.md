@@ -4,11 +4,9 @@ Assembly is a pure TypeScript join. It consumes one authenticated extraction, th
 selection/finalization objects that produced its request, resolver-owned authored declaration and
 resource-symbol evidence, and deterministic presentation policy. It does not parse WGSL or consult
 mutable `ResolvedShader.reflection` after that evidence is minted. The executable profile accepts
-singular resources with fixed-size layouts and scalar exact-static overrides.
-
-The sibling extractor now accepts runtime-sized storage layouts. This assembly profile does not yet
-consume that fixture; runtime-sized assembly, projection, and binding remain the next connected
-slice.
+singular resources with fixed-size or runtime-sized storage layouts and scalar exact-static
+overrides. Runtime-sized assembly, projection, real Tint translation, and offline compilation now
+pass. Its live binding and readback also pass on the available M4 Pro.
 
 ## Ownership of the join
 
@@ -59,8 +57,8 @@ The executable profile applies the association, entry, source-span, resource-sym
 canonical ordering, transitive type/layout closure, capability, exact reprojection, and fingerprint
 checks now. It copies the authenticated program binding union, entry subsets, sampling pairs, types,
 layouts, entry override subsets, and typed override union exactly, then derives only stage visibility
-and Swift presentation. It accepts singular fixed-size resources and scalar exact-static overrides,
-and rejects `dual_source_blending`. The override join is specified in
+and Swift presentation. It accepts singular fixed-size resources, runtime-sized storage resources,
+and scalar exact-static overrides, and rejects `dual_source_blending`. The override join is specified in
 [`exact-static-overrides.md`](./exact-static-overrides.md). Metal slots are derived only after this
 backend-neutral assembly is complete.
 
@@ -122,9 +120,9 @@ The projector rehydrates every interface type from the assembled content IDs, th
 equality with the retained authenticated extraction before it can return a compiler request. It
 also requires a frozen nominal Metal allocation minted for that exact assembly. A clone, a
 hand-written map, or an allocation belonging to a structurally equal but distinct assembly fails
-before translation. Resource-free, fixed-size singular-resource, and exact-static override programs
-now use the same projection path; only their semantic entry subsets and derived external slot sets
-differ.
+before translation. Resource-free, fixed-size and runtime-sized singular-resource, and exact-static
+override programs now use the same projection path; only their semantic entry subsets, derived
+external slot sets, and response-derived effective internal data differ.
 
 For each interface leaf, projection resolves the semantic type ID, proves that it is a scalar or
 vector of one scalar, and emits the original authenticated inline `{ scalar, width }` shape. It
@@ -145,12 +143,14 @@ split are detailed in [`metal-slot-projection.md`](./metal-slot-projection.md).
 
 ## Executable evidence
 
-The static assembly gate resolves effect, multi-module draw, compute, fixed-resource, dependent and
-bypassed compute-override, equivalent-default, render-override, and all-scalar fixtures. It mints
+The static assembly gate resolves effect, multi-module draw, compute, fixed-resource,
+runtime-sized-storage, dependent and bypassed compute-override, equivalent-default,
+render-override, and all-scalar fixtures. It mints
 declaration evidence only through those real resolver calls, authenticates reviewed extraction
-responses, and assembles nine schema-valid programs. The resolved-declarations v3 snapshot retains
-entry spans plus binding, struct, member, and override symbol evidence. Nine nominal slot allocations
-project thirteen compiler requests, including both fixed-resource and override-render stages. The
+responses, and assembles ten schema-valid programs. The resolved-declarations v3 snapshot retains
+entry spans plus binding, struct, member, and override symbol evidence. Ten nominal slot allocations
+project fourteen compiler requests, including fixed-resource, runtime-sized, and override-render
+stages. The
 gate covers five nominal failures, five declaration failures including a cross-module span mutation,
 three resolver-symbol failures, three resolver-resource-join failures, fifteen resolver-override
 checks, two retained resolver-snapshot checks, six override-configuration checks, one rejected
@@ -167,12 +167,19 @@ types become eight semantic types after interface interning, while all six layou
 the three buffer minimum sizes are 8, 24, and 16 bytes. Reprojection removes only adapter-owned
 presentation and visibility and must reproduce the complete authenticated extraction exactly.
 
-With the accepted native worker, the gate performs eighteen semantic-extraction invocations: two
-byte-identical runs for each of nine fixtures. Thirteen static compiler translations assemble nine
-schema-valid program projections, with nineteen authentication/combination failures and independent
-slot, override-subset, runtime-region, workgroup, and requirements canaries. It translates the
-resource vertex and fragment twice each, then performs twelve override translations covering six
-entries and five programs. The six retained override MSL sources contain no `function_constant`,
+With the accepted native worker, the gate performs twenty semantic-extraction invocations: two
+byte-identical runs for each of ten fixtures. Thirteen static compiler translations assemble nine
+schema-valid program projections; the runtime-sized request is deliberately not paired with a
+synthetic compiler response. Fourteen independent verifier canaries cover slot, override-subset,
+runtime-region, workgroup, and requirement behavior alongside nineteen
+authentication/combination failures. The gate translates the resource vertex and fragment twice
+each, the runtime-sized compute entry twice, then performs twelve override translations covering
+six entries and five programs. The two runtime-sized translations are byte-identical, authenticate
+an effective immediate-data slot at `buffer(30)` and a storage-size region at byte `4`, assemble a
+nominal projection, compile to AIR, and link offline. In each of two live M4 Pro processes, two
+dispatches use ranges `28` and `52` over one backing allocation and binding offset, upload `[0, 28]`
+and `[0, 52]`, and read back `[2, 202]` and `[4, 404]`. Eleven manifest negatives and four preparation failures protect the live
+boundary. The six retained override MSL sources contain no `function_constant`,
 compile to AIR for the macOS 14 target, and link into five metallibs. Equivalent omitted and explicit
 defaults produce identical semantic programs, compiler requests, translations, and projections;
 bypassing the initializer with a different value changes them.

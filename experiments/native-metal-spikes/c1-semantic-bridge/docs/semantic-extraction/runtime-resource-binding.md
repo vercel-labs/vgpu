@@ -131,17 +131,20 @@ Instance-owned uniform uploads remain resources at this internal boundary. Their
 lifetime policy is upstream of `prepare`; the binder sees an already selected buffer slice and does
 not decide which in-flight upload allocation wins.
 
-## Runtime-sized storage remains projection-driven
+## Runtime-sized storage is projection-driven
 
 The live fixture uses only fixed-size buffers. Its program projection has no effective
 `internalBindings` and no `storageBufferSizeRegions`; the compiler request's candidate
 `immediate-data` reservation never becomes an encode command. The binder explicitly rejects a
-runtime-sized descriptor rather than silently treating it as fixed-size.
+runtime-sized descriptor rather than silently treating it as fixed-size. That rejection remains
+correct for this fixed-profile binder.
 
-When runtime-sized storage joins this path, `prepare` must derive size words from effective bound
-ranges and the program projection's emitted regions. It must not accept caller-authored words or
-promote unused candidate reservations. The existing C1 buffer-size spike remains the range and
-word-layout oracle for that later integration.
+The sibling runtime-sized binder derives size words from effective bound ranges and the program
+projection's emitted region. It does not accept caller-authored words or promote unused candidate
+reservations. On the available M4 Pro, each of two processes runs two dispatches that reuse one
+backing allocation and offset with ranges `28` and `52`, upload immediate words `[0, 28]` and
+`[0, 52]`, and read back `[2, 202]` and `[4, 404]`. See
+[`../runtime-sized-storage/README.md`](../runtime-sized-storage/README.md) for that separate gate.
 
 ## Executable evidence
 
@@ -191,9 +194,9 @@ artifact format, public API, or new serializable authority. The Swift probe deco
 checks this exact fixture before touching Metal. Pipeline reflection is an independent oracle, not
 slot authority.
 
-This is not general resource-runtime evidence. Compute encoding, runtime-sized buffers, binding
-arrays, argument buffers, storage or external textures, broader texture formats, production
-resource factories, and the supported hardware matrix remain open. The machine exposed one Metal
+This remains fixed-profile resource-runtime evidence. The sibling runtime-sized compute gate has
+passed, but binding arrays, argument buffers, storage or external textures, broader texture formats,
+production resource factories, and the supported hardware matrix remain open. The machine exposed one Metal
 device, so device guards exist but no crossed-device negative ran; `conditionalDeviceChecks` was
 zero. Replacing one dictionary entry after `prepare` also proves only that the prepared plan retains
 the selected resource identities, not that arbitrary mutation of underlying Metal objects is safe.
