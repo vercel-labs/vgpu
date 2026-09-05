@@ -81,6 +81,15 @@
     "expectedPipelineCalls": 0
   },
   {
+    "name": "immediate-data-layout-model",
+    "kind": "descriptorString",
+    "field": "immediateDataLayoutModel",
+    "value": "vgpu-metal-immediate-data-layout-v2",
+    "selection": "sparse-draw-fragment",
+    "expectedApplicationCode": "unsupported-immediate-data-layout-model",
+    "expectedPipelineCalls": 0
+  },
+  {
     "name": "storage-buffer-size-model",
     "kind": "descriptorString",
     "field": "storageBufferSizeModel",

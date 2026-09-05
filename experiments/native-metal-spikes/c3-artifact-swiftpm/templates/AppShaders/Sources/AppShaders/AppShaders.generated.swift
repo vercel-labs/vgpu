@@ -13,6 +13,7 @@ public struct AppShadersRuntimeSupport: Sendable {
   public var bindingModels: Set<String>
   public var shaderInterfaceModels: Set<String>
   public var vertexBufferPolicyModels: Set<String>
+  public var immediateDataLayoutModels: Set<String>
   public var storageBufferSizeModels: Set<String>
 
   public init(
@@ -26,6 +27,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingModels: Set<String>,
     shaderInterfaceModels: Set<String>,
     vertexBufferPolicyModels: Set<String>,
+    immediateDataLayoutModels: Set<String>,
     storageBufferSizeModels: Set<String>
   ) {
     self.semanticSchemaVersions = semanticSchemaVersions
@@ -38,6 +40,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     self.bindingModels = bindingModels
     self.shaderInterfaceModels = shaderInterfaceModels
     self.vertexBufferPolicyModels = vertexBufferPolicyModels
+    self.immediateDataLayoutModels = immediateDataLayoutModels
     self.storageBufferSizeModels = storageBufferSizeModels
   }
 
@@ -52,6 +55,7 @@ public struct AppShadersRuntimeSupport: Sendable {
     bindingModels: ["vgpu-metal-binding-slots-v1"],
     shaderInterfaceModels: ["vgpu-metal-shader-interface-v1"],
     vertexBufferPolicyModels: ["vgpu-metal-pipeline-local-vertex-buffer-slots-v1"],
+    immediateDataLayoutModels: ["vgpu-metal-immediate-data-layout-v1"],
     storageBufferSizeModels: ["vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"]
   )
 }
@@ -68,6 +72,7 @@ public struct AppShadersDescriptor: Sendable {
   public var shaderInterfaceModel: String
   public var vertexBufferPolicyModel: String
   public var externalBufferCeiling: Int
+  public var immediateDataLayoutModel: String
   public var storageBufferSizeModel: String
   public var semanticFingerprint: String
   public var projectionSemanticFingerprint: String
@@ -88,6 +93,7 @@ public struct AppShadersDescriptor: Sendable {
     shaderInterfaceModel: String,
     vertexBufferPolicyModel: String,
     externalBufferCeiling: Int,
+    immediateDataLayoutModel: String,
     storageBufferSizeModel: String,
     semanticFingerprint: String,
     projectionSemanticFingerprint: String,
@@ -107,6 +113,7 @@ public struct AppShadersDescriptor: Sendable {
     self.shaderInterfaceModel = shaderInterfaceModel
     self.vertexBufferPolicyModel = vertexBufferPolicyModel
     self.externalBufferCeiling = externalBufferCeiling
+    self.immediateDataLayoutModel = immediateDataLayoutModel
     self.storageBufferSizeModel = storageBufferSizeModel
     self.semanticFingerprint = semanticFingerprint
     self.projectionSemanticFingerprint = projectionSemanticFingerprint
@@ -376,7 +383,14 @@ public enum AppShadersArtifact {
       ),
     ],
     storageBufferSizeRegions: [],
-    internalBufferSlots: []
+    internalBufferSlots: [
+      AppShadersInternalBufferSlot(
+        role: "__SPARSE_INTERNAL_ROLE__",
+        stage: .__SPARSE_INTERNAL_STAGE__,
+        index: __SPARSE_INTERNAL_INDEX__,
+        count: __SPARSE_INTERNAL_COUNT__
+      )
+    ]
   )
 
   public static let noopComputeSelection = AppShadersPipelineSelection(
@@ -387,6 +401,11 @@ public enum AppShadersArtifact {
   public static let runtimeArrayComputeSelection = AppShadersPipelineSelection(
     program: runtimeArrayProgram,
     stage: .compute
+  )
+
+  public static let sparseDrawFragmentSelection = AppShadersPipelineSelection(
+    program: sparseDrawProgram,
+    stage: .fragment
   )
 
   public static let descriptor = AppShadersDescriptor(
@@ -401,6 +420,7 @@ public enum AppShadersArtifact {
     shaderInterfaceModel: "__SHADER_INTERFACE_MODEL__",
     vertexBufferPolicyModel: "__VERTEX_BUFFER_POLICY_MODEL__",
     externalBufferCeiling: __EXTERNAL_BUFFER_CEILING__,
+    immediateDataLayoutModel: "__IMMEDIATE_DATA_LAYOUT_MODEL__",
     storageBufferSizeModel: "__STORAGE_BUFFER_SIZE_MODEL__",
     semanticFingerprint: "__SEMANTIC_SHA256__",
     projectionSemanticFingerprint: "__SEMANTIC_SHA256__",
@@ -527,6 +547,16 @@ public enum AppShadersArtifact {
       field: "vertex-buffer policy model",
       value: candidate.vertexBufferPolicyModel
     )
+    if selection.program.internalBufferSlots.contains(where: {
+      $0.role == "immediate-data" && $0.stage == selection.stage
+    }) {
+      try require(
+        runtime.immediateDataLayoutModels.contains(candidate.immediateDataLayoutModel),
+        code: "unsupported-immediate-data-layout-model",
+        field: "immediate-data layout model",
+        value: candidate.immediateDataLayoutModel
+      )
+    }
     if selection.program.storageBufferSizeRegion(for: selection.stage) != nil {
       try require(
         runtime.storageBufferSizeModels.contains(candidate.storageBufferSizeModel),

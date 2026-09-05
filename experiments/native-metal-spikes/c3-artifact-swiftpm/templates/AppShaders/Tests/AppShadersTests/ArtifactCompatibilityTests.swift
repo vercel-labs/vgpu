@@ -20,6 +20,14 @@ final class ArtifactCompatibilityTests: XCTestCase {
   }
 
   func testStorageBufferSizeDescriptorsKeepDynamicStateOut() throws {
+    XCTAssertEqual(
+      AppShadersArtifact.descriptor.immediateDataLayoutModel,
+      "vgpu-metal-immediate-data-layout-v1"
+    )
+    XCTAssertEqual(
+      AppShadersRuntimeSupport.fixtureSupported.immediateDataLayoutModels,
+      ["vgpu-metal-immediate-data-layout-v1"]
+    )
     XCTAssertTrue(AppShadersArtifact.noopProgram.storageBufferSizeRegions.isEmpty)
     XCTAssertTrue(AppShadersArtifact.noopProgram.internalBufferSlots.isEmpty)
 
@@ -82,6 +90,64 @@ final class ArtifactCompatibilityTests: XCTestCase {
         ),
       ])
     )
+    XCTAssertTrue(
+      AppShadersArtifact.sparseDrawProgram.storageBufferSizeRegions.isEmpty
+    )
+    XCTAssertEqual(
+      AppShadersArtifact.sparseDrawProgram.internalBufferSlots,
+      [
+        AppShadersInternalBufferSlot(
+          role: "immediate-data",
+          stage: .fragment,
+          index: 30,
+          count: 1
+        )
+      ]
+    )
+    XCTAssertEqual(
+      AppShadersArtifact.sparseDrawFragmentSelection.program,
+      AppShadersArtifact.sparseDrawProgram
+    )
+    XCTAssertEqual(
+      AppShadersArtifact.sparseDrawFragmentSelection.stage,
+      .fragment
+    )
+  }
+
+  func testUnknownImmediateDataLayoutModelTracksEffectiveStageSlot() throws {
+    var descriptor = AppShadersArtifact.descriptor
+    descriptor.immediateDataLayoutModel = "vgpu-metal-immediate-data-layout-v2"
+    var noopPipelineCalls = 0
+
+    try AppShadersArtifact.validateApplicationCompatibility(
+      descriptor: descriptor,
+      selection: AppShadersArtifact.noopComputeSelection,
+      payloadSHA256: descriptor.librarySHA256
+    ) { selection in
+      XCTAssertEqual(selection, AppShadersArtifact.noopComputeSelection)
+      noopPipelineCalls += 1
+    }
+    XCTAssertEqual(noopPipelineCalls, 1)
+
+    var sparsePipelineCalls = 0
+    var compatibilityCode: String?
+    do {
+      try AppShadersArtifact.validateApplicationCompatibility(
+        descriptor: descriptor,
+        selection: AppShadersArtifact.sparseDrawFragmentSelection,
+        payloadSHA256: descriptor.librarySHA256
+      ) { _ in
+        sparsePipelineCalls += 1
+      }
+    } catch let error as AppShadersCompatibilityError {
+      compatibilityCode = error.code
+    }
+
+    XCTAssertEqual(
+      compatibilityCode,
+      "unsupported-immediate-data-layout-model"
+    )
+    XCTAssertEqual(sparsePipelineCalls, 0)
   }
 
   func testUnknownStorageBufferSizeModelDoesNotBlockStageWithoutRegion() throws {
@@ -92,10 +158,10 @@ final class ArtifactCompatibilityTests: XCTestCase {
 
     try AppShadersArtifact.validateApplicationCompatibility(
       descriptor: descriptor,
-      selection: AppShadersArtifact.noopComputeSelection,
+      selection: AppShadersArtifact.sparseDrawFragmentSelection,
       payloadSHA256: descriptor.librarySHA256
     ) { selection in
-      XCTAssertEqual(selection, AppShadersArtifact.noopComputeSelection)
+      XCTAssertEqual(selection, AppShadersArtifact.sparseDrawFragmentSelection)
       pipelineCalls += 1
     }
 

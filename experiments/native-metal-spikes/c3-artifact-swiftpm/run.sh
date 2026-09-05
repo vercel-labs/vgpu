@@ -197,6 +197,17 @@ C3_FUTURE_MODEL="$C3_SCRATCH/assembly-future-storage-size-model"
   --expected-storage-buffer-size-model vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v2
 assert_clean_tree "$C3_FUTURE_MODEL"
 printf 'Future descriptor model did not add itself to fixed runtime support.\n'
+C3_FUTURE_IMMEDIATE_LAYOUT="$C3_SCRATCH/assembly-future-immediate-data-layout"
+"$C3_NODE" "$C3_DIR/scripts/assemble.mjs" \
+  --output "$C3_FUTURE_IMMEDIATE_LAYOUT" \
+  --immediate-data-layout-model vgpu-metal-immediate-data-layout-v2
+"$C3_NODE" "$C3_DIR/scripts/verify-artifact.mjs" \
+  --package "$C3_FUTURE_IMMEDIATE_LAYOUT/AppShaders" \
+  --repository "$C3_REPOSITORY" \
+  --inputs-root "$C3_DIR" \
+  --expected-immediate-data-layout-model vgpu-metal-immediate-data-layout-v2
+assert_clean_tree "$C3_FUTURE_IMMEDIATE_LAYOUT"
+printf 'Future immediate-data layout did not add itself to fixed runtime support.\n'
 printf 'must never be copied by the fixture assembler\n' >"$C3_SECOND/AppShaders/.env"
 C3_ALLOWLIST_NEGATIVE_LOG="$C3_SCRATCH/allowlist-negative.log"
 if "$C3_NODE" "$C3_DIR/scripts/verify-artifact.mjs" \

@@ -438,6 +438,7 @@
       "model": "vgpu-metal-pipeline-local-vertex-buffer-slots-v1",
       "externalBufferCeiling": 30
     },
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
     "storageBufferSizeModel": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
     "toolchain": {
       "translator": {
@@ -601,7 +602,21 @@
           }
         ],
         "bindings": [],
-        "internalBindings": [],
+        "internalBindings": [
+          {
+            "role": "immediate-data",
+            "slots": [
+              {
+                "stage": "fragment",
+                "mode": "direct",
+                "resourceClass": "buffer",
+                "component": "buffer",
+                "index": 30,
+                "count": 1
+              }
+            ]
+          }
+        ],
         "storageBufferSizeRegions": [],
         "deviceRequirements": {
           "features": [],

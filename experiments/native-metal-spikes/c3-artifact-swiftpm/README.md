@@ -48,8 +48,9 @@ The runner:
 
 1. assembles the same tree twice and compares every byte;
 2. compiles all five native JSON Schemas in strict mode, resolves their external references, and
-   validates `artifact.json`, then assembles and verifies a future-model descriptor without adding
-   that model to the runtime's fixed support set; schema negatives reject legacy ambiguous
+   validates `artifact.json`, then assembles and verifies future immediate-data-layout and
+   storage-size-model descriptors without adding either model to the runtime's fixed support set;
+   schema negatives reject legacy ambiguous
    `interfaceLocations`, missing or mismatched stage-discriminated interfaces, invalid interpolation
    roles, workgroup-axis provenance objects and zero dimensions, emitted names outside the `vgpu_`
    domain, legacy arbitrary override IDs, invalid resolved override identifiers, non-finite override
@@ -62,15 +63,16 @@ The runner:
    semantic program and its source module;
 3. recomputes input, file, semantic, program, build, runtime-projection, manifest, and payload
    hashes, checks every cross-reference, requires each resolved semantic workgroup size to equal
-   the translated Metal projection, and proves that the vertex-buffer policy, storage-buffer-size
-   model, shader-interface model and maps, stage-local regions, and immediate-data slots change
-   runtime compatibility;
+   the translated Metal projection, and proves that the vertex-buffer policy,
+   immediate-data-layout model, storage-buffer-size model, shader-interface model and maps,
+   stage-local regions, and immediate-data slots change the runtime-projection fingerprint;
 4. distinguishes a runtime-array structure's four-byte fixed-prefix `layout.minimumSize` from its
    eight-byte, prefix-plus-one-element `minimumBindingSize`, requires canonical per-stage size
-   regions, rejects invalid region-to-slot relationships, and proves that runtime-sized bindings
-   or immediate data alone do not imply a region; it rejects overlaps with external and other
-   internal buffers, plus vertex-stage intervals that violate the independently recorded
-   vertex-buffer ceiling;
+   regions, requires the known v1 stage offsets, rejects invalid region-to-slot relationships, and
+   proves that runtime-sized bindings or immediate data alone do not imply a region; every
+   effective immediate-data slot is validated even without a region. It rejects overlaps with
+   external and other internal buffers, plus vertex-stage intervals that violate the independently
+   recorded vertex-buffer ceiling;
 5. preserves `SparseDraw` locations `3` and `7` as Metal vertex attributes and locations `1` and
    `4` as Metal fragment colors, requires unique and exactly matching semantic and projected
    program names after NFC normalization, orders semantic programs by ascending `name` and projected
@@ -90,8 +92,8 @@ The runner:
    bytes begin with `VGPU-C3-STRUCTURAL-SENTINEL-NOT-A-METALLIB`;
 10. rejects crossed or out-of-range WGSL source provenance, and rejects the mutation matrix before a
     pipeline-factory closure runs, including ABI, model, fingerprint, and payload-hash mismatches;
-    the pipeline selection has no public initializer, determines the conditional region check, and
-    is passed unchanged into that closure; and
+    the pipeline selection has no public initializer, determines the conditional effective-slot
+    and region checks, and is passed unchanged into that closure; and
 11. checks the generated package and clean consumer contain no WGSL, MSL, Metal source, AIR,
     JavaScript, translator executable, build directory, or package-resolution residue, and proves
     the package allowlist rejects an injected `.env` file.
@@ -121,14 +123,16 @@ fingerprint while its generated Swift name does not. Another canary redistribute
 membership between entries without changing the program union and still changes the owning program
 fingerprint.
 
-The projection requires a versioned `storageBufferSizeModel` string and every projected program
-contains a canonical `storageBufferSizeRegions` array. `Noop` uses an empty array. `RuntimeArray`
-records a compute region at immediate-data byte offset `4` and a separate `immediate-data` internal
-binding at `buffer(30)`; the fixture independently chooses `30` as its vertex-buffer ceiling, but
+The projection requires separate, versioned `immediateDataLayoutModel` and
+`storageBufferSizeModel` strings. The former identifies fixed role offsets within each stage's
+shared immediate-data block; the latter identifies the sparse table contents. Every projected
+program contains a canonical `storageBufferSizeRegions` array. `Noop` has neither a region nor an
+effective immediate-data slot. `RuntimeArray` records a compute region at the v1 byte offset `4`
+and a separate `immediate-data` internal binding at `buffer(30)`. `SparseDraw` records a fragment
+immediate-data slot at `buffer(30)` without a region, proving that ordinary immediates do not imply
+storage-size transport. The fixture independently chooses `30` as its vertex-buffer ceiling, but
 the contract does not equate compute or fragment internal slots with that vertex-only policy.
-Neither word counts nor dynamic range bytes are serialized. The runtime checks support for the
-model only when the selected program stage has a region, so a future model can remain structurally
-readable without blocking unrelated programs.
+Neither word counts nor dynamic range bytes are serialized.
 
 The projection ABI also requires `vgpu-metal-shader-interface-v1`. Its entry-point interface is
 stage-discriminated: vertex entries contain only semantic-location to Metal-attribute mappings,
@@ -140,12 +144,16 @@ without compaction. Cross-validation requires the exact semantic set, canonical 
 mapping, and a compatible vertex-to-fragment link before a fingerprint is accepted.
 
 Runtime support is owned by runtime code. Generation never derives a support set from the
-artifact's requested model. Storage-buffer-size support is conditional on the selected stage using
-a region, so `Noop` can cross that boundary with an unknown size model while `RuntimeArray` is
-rejected. Shader-interface-model support is unconditional because every pipeline selection carries
-an interface contract. Generated selections couple the program and stage behind a non-public
-initializer. Every compatibility call must name one of those selections explicitly, and the
-pipeline closure receives that same validated value instead of independently choosing them again.
+artifact's requested model. Immediate-data-layout support is conditional on the selected stage
+having an effective `immediate-data` slot, whether or not it has a storage-size region.
+Storage-buffer-size support remains independently conditional on the selected stage having a
+region. Consequently, an unknown layout model passes `Noop` but rejects the region-free
+`SparseDraw` fragment, while an unknown size model still passes that fragment and rejects
+`RuntimeArray`. Shader-interface-model support is unconditional because every pipeline selection
+carries an interface contract. Generated selections couple the program and stage behind a
+non-public initializer. Every compatibility call must name one of those selections explicitly,
+and the pipeline closure receives that same validated value instead of independently choosing them
+again.
 
 Source spans remain excluded from each `vgpu-native-program/v1` fingerprint as provenance, but they
 are not trusted blindly: the verifier bounds-checks each span against its declared WGSL input and

@@ -13,6 +13,7 @@
     "target",
     "abi",
     "vertexBufferPolicy",
+    "immediateDataLayoutModel",
     "storageBufferSizeModel",
     "toolchain",
     "runtimeFingerprint",
@@ -28,6 +29,12 @@
     "target": { "$ref": "#/$defs/target" },
     "abi": { "$ref": "#/$defs/abi" },
     "vertexBufferPolicy": { "$ref": "#/$defs/vertexBufferPolicy" },
+    "immediateDataLayoutModel": {
+      "description": "Versioned rule for fixed role offsets within each Metal stage's immediate-data payload. A runtime validates support for this model only when loading a program stage that declares an effective immediate-data internal binding.",
+      "type": "string",
+      "pattern": "^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$",
+      "maxLength": 256
+    },
     "storageBufferSizeModel": {
       "description": "Versioned rule for packing effective runtime-sized storage-buffer binding ranges into the stage-local immediate-data region. A runtime validates support for this model only when loading a program stage that declares a storageBufferSizeRegions entry.",
       "type": "string",
@@ -231,7 +238,7 @@
       }
     },
     "runtimeProjectionFingerprint": {
-      "description": "Hash of the semantic fingerprint, Metal ABI, binding and shader-interface models, storage-buffer-size model, deployment target, referenced metallib hash, emitted names, exact vertex-attribute and fragment-color maps, vertex-buffer policy, external and internal slots, per-stage storage-buffer-size regions, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, dynamic buffer ranges and size-table words, and testing metadata are excluded.",
+      "description": "Hash of the semantic fingerprint, Metal ABI, binding and shader-interface models, immediate-data-layout model, storage-buffer-size model, deployment target, referenced metallib hash, emitted names, exact vertex-attribute and fragment-color maps, vertex-buffer policy, external and internal slots, per-stage storage-buffer-size regions, resolved workgroup sizes, and device requirements. Toolchain provenance, source maps, inputs, generated sources, dynamic buffer ranges and size-table words, and testing metadata are excluded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["domain", "sha256"],

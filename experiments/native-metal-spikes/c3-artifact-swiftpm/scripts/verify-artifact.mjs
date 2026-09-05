@@ -9,6 +9,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = resolve(scriptDirectory, "..");
 const defaultRepository = resolve(fixtureDirectory, "..", "..", "..");
+const runtimeSupportedImmediateDataLayoutModel =
+  "vgpu-metal-immediate-data-layout-v1";
 const runtimeSupportedStorageBufferSizeModel =
   "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 
@@ -20,6 +22,7 @@ function parseArguments(argv) {
   const options = {
     repository: defaultRepository,
     inputsRoot: fixtureDirectory,
+    expectedImmediateDataLayoutModel: runtimeSupportedImmediateDataLayoutModel,
     expectedStorageBufferSizeModel: runtimeSupportedStorageBufferSizeModel,
   };
   for (let index = 0; index < argv.length; index += 2) {
@@ -32,12 +35,22 @@ function parseArguments(argv) {
       "--package": "packageRoot",
       "--repository": "repository",
       "--inputs-root": "inputsRoot",
+      "--expected-immediate-data-layout-model":
+        "expectedImmediateDataLayoutModel",
       "--expected-storage-buffer-size-model": "expectedStorageBufferSizeModel",
     }[name];
     if (!key) fail(`unknown option ${name}`);
     options[key] = value;
   }
   if (!options.packageRoot) fail("--package is required");
+  for (const [label, model] of [
+    ["immediate-data layout", options.expectedImmediateDataLayoutModel],
+    ["storage-buffer-size", options.expectedStorageBufferSizeModel],
+  ]) {
+    if (!/^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$/.test(model)) {
+      fail(`invalid expected ${label} model ${model}`);
+    }
+  }
   return {
     ...options,
     packageRoot: resolve(options.packageRoot),
@@ -775,6 +788,7 @@ function runtimeProjectionInput(projection, librarySHA256) {
     target: projection.target,
     abi: projection.abi,
     vertexBufferPolicy: projection.vertexBufferPolicy,
+    immediateDataLayoutModel: projection.immediateDataLayoutModel,
     storageBufferSizeModel: projection.storageBufferSizeModel,
     library: {
       path: projection.library.path,
@@ -1440,6 +1454,116 @@ function requireShaderInterfaceMutationFailure(
   if (!rejected) fail(`${label}: mutation was accepted`);
 }
 
+function validateImmediateDataContract(projection) {
+  const ceiling = projection.vertexBufferPolicy.externalBufferCeiling;
+
+  for (const program of projection.programs) {
+    const entryStages = new Set(
+      program.entryPoints.map((entry) => entry.stage)
+    );
+    const immediateBindings = program.internalBindings.filter(
+      (binding) => binding.role === "immediate-data"
+    );
+    if (immediateBindings.length > 1) {
+      fail(
+        `${program.semanticProgram} repeats immediate-data internal binding`
+      );
+    }
+
+    const slots = immediateBindings.flatMap((binding) => binding.slots);
+    let previousStageRank = -1;
+    const observedStages = new Set();
+    for (const slot of slots) {
+      const stageRank = canonicalStageOrder.indexOf(slot.stage);
+      if (observedStages.has(slot.stage)) {
+        fail(
+          `${program.semanticProgram} repeats immediate-data stage ${slot.stage}`
+        );
+      }
+      if (stageRank < 0 || stageRank <= previousStageRank) {
+        fail(
+          `${program.semanticProgram} immediate-data slots are not canonically stage ordered`
+        );
+      }
+      observedStages.add(slot.stage);
+      previousStageRank = stageRank;
+
+      if (
+        slot.mode !== "direct" ||
+        slot.resourceClass !== "buffer" ||
+        slot.component !== "buffer" ||
+        !Number.isSafeInteger(slot.index) ||
+        slot.index < 0 ||
+        slot.count !== 1
+      ) {
+        fail(
+          `${program.semanticProgram}/${slot.stage} has an incompatible immediate-data slot`
+        );
+      }
+      if (!entryStages.has(slot.stage)) {
+        fail(
+          `${program.semanticProgram}/immediate-data slot stage ${slot.stage} has no projected entry point`
+        );
+      }
+      if (slot.stage === "vertex" && slot.index < ceiling) {
+        fail(
+          `${program.semanticProgram}/${slot.stage} immediate-data starts below the vertex-buffer ceiling`
+        );
+      }
+
+      const overlapsExternalBuffer = program.bindings.some((binding) =>
+        binding.slots.some(
+          (external) =>
+            external.stage === slot.stage &&
+            external.resourceClass === "buffer" &&
+            slot.index < external.index + external.count &&
+            external.index < slot.index + slot.count
+        )
+      );
+      if (overlapsExternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${slot.stage} immediate-data overlaps an external buffer slot`
+        );
+      }
+      const overlapsInternalBuffer = program.internalBindings.some((binding) =>
+        binding.slots.some(
+          (other) =>
+            other !== slot &&
+            other.stage === slot.stage &&
+            other.resourceClass === "buffer" &&
+            slot.index < other.index + other.count &&
+            other.index < slot.index + slot.count
+        )
+      );
+      if (overlapsInternalBuffer) {
+        fail(
+          `${program.semanticProgram}/${slot.stage} immediate-data overlaps another internal buffer slot`
+        );
+      }
+    }
+  }
+}
+
+function requireImmediateDataContractMutationFailure(
+  projection,
+  mutate,
+  expectedMessage,
+  label
+) {
+  const candidate = clone(projection);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    validateImmediateDataContract(candidate);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(expectedMessage)) {
+      fail(`${label}: unexpected error ${String(error)}`);
+    }
+    rejected = true;
+  }
+  if (!rejected) fail(`${label}: mutation was accepted`);
+}
+
 function validateStorageBufferSizeContract(semantic, projection) {
   const semanticPrograms = new Map(
     semantic.programs.map((program) => [program.name, program])
@@ -1484,6 +1608,16 @@ function validateStorageBufferSizeContract(semantic, projection) {
       ) {
         fail(
           `${program.semanticProgram}/${region.stage} has an invalid immediate-data byte offset`
+        );
+      }
+      if (
+        projection.immediateDataLayoutModel ===
+          runtimeSupportedImmediateDataLayoutModel &&
+        region.immediateDataByteOffset !==
+          (region.stage === "fragment" ? 12 : 4)
+      ) {
+        fail(
+          `${program.semanticProgram}/${region.stage} storage-buffer-size offset does not match immediate-data layout v1`
         );
       }
 
@@ -1745,6 +1879,19 @@ if (!validateArtifact(artifact)) {
   );
 }
 validateSemanticOverrides(artifact.semantic);
+const futureImmediateDataLayoutArtifact = clone(artifact);
+futureImmediateDataLayoutArtifact.projection.immediateDataLayoutModel =
+  artifact.projection.immediateDataLayoutModel.endsWith("-v999")
+    ? "vgpu-metal-immediate-data-layout-v998"
+    : "vgpu-metal-immediate-data-layout-v999";
+if (!validateArtifact(futureImmediateDataLayoutArtifact)) {
+  fail(
+    `future immediate-data layout model must remain structurally valid for conditional runtime checks:\n${ajv.errorsText(
+      validateArtifact.errors,
+      { separator: "\n" }
+    )}`
+  );
+}
 const futureStorageSizeModelArtifact = clone(artifact);
 futureStorageSizeModelArtifact.projection.storageBufferSizeModel =
   artifact.projection.storageBufferSizeModel.endsWith("-v999")
@@ -1921,6 +2068,12 @@ for (const [name, label] of [
   );
 }
 for (const [label, mutate] of [
+  [
+    "missing immediate-data layout model",
+    (candidate) => {
+      delete candidate.projection.immediateDataLayoutModel;
+    },
+  ],
   [
     "missing storage-buffer-size model",
     (candidate) => {
@@ -2705,6 +2858,28 @@ requireProjectionSlotEntryMutationFailure(
   "missing-entry internal slot"
 );
 validateVertexBufferPolicy(artifact.projection);
+validateImmediateDataContract(artifact.projection);
+requireImmediateDataContractMutationFailure(
+  artifact.projection,
+  (projection) => {
+    const program = projection.programs.find(
+      (candidate) => candidate.semanticProgram === "SparseDraw"
+    );
+    program.internalBindings.push(clone(program.internalBindings[0]));
+  },
+  "repeats immediate-data internal binding",
+  "duplicate immediate-data role"
+);
+requireImmediateDataContractMutationFailure(
+  artifact.projection,
+  (projection) => {
+    projection.programs.find(
+      (candidate) => candidate.semanticProgram === "SparseDraw"
+    ).internalBindings[0].slots[0].component = "wrong-immediate-data";
+  },
+  "incompatible immediate-data slot",
+  "slot without region still validates immediate-data shape"
+);
 validateStorageBufferSizeContract(artifact.semantic, artifact.projection);
 validateResolvedWorkgroupSizes(artifact.semantic, artifact.projection);
 validateShaderInterfaceContract(artifact.semantic, artifact.projection);
@@ -3048,15 +3223,28 @@ const runtimeArrayFixtureImmediateSlots =
   runtimeArrayFixtureProjection?.internalBindings
     .filter((binding) => binding.role === "immediate-data")
     .flatMap((binding) => binding.slots) ?? [];
+const sparseDrawFixtureProjection = artifact.projection.programs.find(
+  (program) => program.semanticProgram === "SparseDraw"
+);
+const sparseFragmentFixtureImmediateSlots =
+  sparseDrawFixtureProjection?.internalBindings
+    .filter((binding) => binding.role === "immediate-data")
+    .flatMap((binding) => binding.slots)
+    .filter((slot) => slot.stage === "fragment") ?? [];
 if (
+  artifact.projection.immediateDataLayoutModel !==
+    options.expectedImmediateDataLayoutModel ||
   artifact.projection.storageBufferSizeModel !==
     options.expectedStorageBufferSizeModel ||
   artifact.projection.vertexBufferPolicy.externalBufferCeiling !== 30 ||
   runtimeArrayFixtureImmediateSlots.length !== 1 ||
-  runtimeArrayFixtureImmediateSlots[0].index !== 30
+  runtimeArrayFixtureImmediateSlots[0].index !== 30 ||
+  sparseDrawFixtureProjection?.storageBufferSizeRegions.length !== 0 ||
+  sparseFragmentFixtureImmediateSlots.length !== 1 ||
+  sparseFragmentFixtureImmediateSlots[0].index !== 30
 ) {
   fail(
-    "C3 fixture must cover the selected storage-size model, external vertex ceiling 30, and immediate-data buffer(30)"
+    "C3 fixture must cover both selected immediate models, external vertex ceiling 30, region-backed compute immediate data, and fragment immediate data without a region"
   );
 }
 requireVertexPolicyMutationFailure(
@@ -3100,6 +3288,19 @@ requireStorageContractMutationFailure(
   },
   "invalid immediate-data byte offset",
   "misaligned storage-size region"
+);
+requireStorageContractMutationFailure(
+  artifact.semantic,
+  artifact.projection,
+  (_semantic, projection) => {
+    projection.immediateDataLayoutModel =
+      runtimeSupportedImmediateDataLayoutModel;
+    projection.programs.find(
+      (candidate) => candidate.semanticProgram === "RuntimeArray"
+    ).storageBufferSizeRegions[0].immediateDataByteOffset = 8;
+  },
+  "does not match immediate-data layout v1",
+  "known immediate-data layout offset mismatch"
 );
 requireStorageContractMutationFailure(
   artifact.semantic,
@@ -3223,6 +3424,7 @@ validateStorageBufferSizeContract(
   artifact.semantic,
   immediateWithoutRegionProjection
 );
+validateImmediateDataContract(immediateWithoutRegionProjection);
 assertEqual(
   artifact.projection.runtimeFingerprint.sha256,
   runtimeSHA256,
@@ -3271,6 +3473,18 @@ if (
   ) === runtimeSHA256
 ) {
   fail("runtime projection fingerprint excludes storage-buffer-size model");
+}
+const changedImmediateDataLayoutModel = clone(artifact.projection);
+changedImmediateDataLayoutModel.immediateDataLayoutModel =
+  artifact.projection.immediateDataLayoutModel.endsWith("-v2")
+    ? "vgpu-metal-immediate-data-layout-v3"
+    : "vgpu-metal-immediate-data-layout-v2";
+if (
+  sha256Canonical(
+    runtimeProjectionInput(changedImmediateDataLayoutModel, libraries[0].sha256)
+  ) === runtimeSHA256
+) {
+  fail("runtime projection fingerprint excludes immediate-data layout model");
 }
 const changedStorageBufferSizeRegion = clone(artifact.projection);
 changedStorageBufferSizeRegion.programs.find(
@@ -3524,6 +3738,14 @@ for (const [label, expected] of [
     `externalBufferCeiling: ${artifact.projection.vertexBufferPolicy.externalBufferCeiling}`,
   ],
   [
+    "immediate-data layout model",
+    `immediateDataLayoutModel: "${artifact.projection.immediateDataLayoutModel}"`,
+  ],
+  [
+    "supported immediate-data layout model",
+    `immediateDataLayoutModels: ["${runtimeSupportedImmediateDataLayoutModel}"]`,
+  ],
+  [
     "storage-buffer-size model",
     `storageBufferSizeModel: "${artifact.projection.storageBufferSizeModel}"`,
   ],
@@ -3578,6 +3800,14 @@ for (const [label, expected] of [
     "coupled pipeline closure",
     "createPipeline: (AppShadersPipelineSelection) throws -> Void",
   ],
+  [
+    "effective-stage immediate-data compatibility predicate",
+    '$0.role == "immediate-data" && $0.stage == selection.stage',
+  ],
+  [
+    "immediate-data layout support check",
+    "runtime.immediateDataLayoutModels.contains(candidate.immediateDataLayoutModel)",
+  ],
   ["validated closure argument", "try createPipeline(selection)"],
 ]) {
   assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
@@ -3588,6 +3818,8 @@ if (
   ) ||
   generatedSwift.includes("program: AppShadersProgramDescriptor =") ||
   generatedSwift.includes("stage: AppShadersShaderStage =") ||
+  generatedSwift.includes("immediateDataLayoutModel: String =") ||
+  generatedSwift.includes("immediateDataLayoutModels: Set<String> =") ||
   generatedSwift.includes(
     "selection: AppShadersPipelineSelection = noopComputeSelection"
   )
@@ -3711,7 +3943,17 @@ const sparseVertexEntry = sparseDrawProjection?.entryPoints.find(
 const sparseFragmentEntry = sparseDrawProjection?.entryPoints.find(
   (entry) => entry.stage === "fragment"
 );
-if (!sparseDrawProjection || !sparseVertexEntry || !sparseFragmentEntry) {
+const sparseFragmentImmediateSlot = sparseDrawProjection?.internalBindings
+  .filter((binding) => binding.role === "immediate-data")
+  .flatMap((binding) => binding.slots)
+  .find((slot) => slot.stage === "fragment");
+if (
+  !sparseDrawProjection ||
+  !sparseVertexEntry ||
+  !sparseFragmentEntry ||
+  !sparseFragmentImmediateSlot ||
+  sparseDrawProjection.storageBufferSizeRegions.length !== 0
+) {
   fail("SparseDraw generated descriptor inputs are incomplete");
 }
 assertIncludes(
@@ -3732,6 +3974,21 @@ for (const color of sparseFragmentEntry.interface.colorOutputs) {
     `semanticLocation: ${color.semantic.location},\n            blendSource: nil,\n            metalColor: ${color.metal.color},\n            metalIndex: nil`,
     `generated Swift sparse fragment color ${color.semantic.location}`
   );
+}
+for (const [label, expected] of [
+  [
+    "sparse immediate role",
+    `role: "${sparseDrawProjection.internalBindings[0].role}"`,
+  ],
+  ["sparse immediate stage", `stage: .${sparseFragmentImmediateSlot.stage}`],
+  ["sparse immediate index", `index: ${sparseFragmentImmediateSlot.index}`],
+  ["sparse immediate count", `count: ${sparseFragmentImmediateSlot.count}`],
+  [
+    "sparse fragment pipeline selection",
+    "public static let sparseDrawFragmentSelection = AppShadersPipelineSelection(",
+  ],
+]) {
+  assertIncludes(generatedSwift, expected, `generated Swift ${label}`);
 }
 for (const [label, expected] of [
   [
