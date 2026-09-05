@@ -1,3 +1,4 @@
+import Foundation
 import VGPUABI
 
 package struct VGPUBackendTargetHandle: Hashable, Sendable {
@@ -39,10 +40,16 @@ package struct VGPUBackendIndirectDraw: Sendable {
 
 package struct VGPUBackendFrameCommand: Sendable {
   package let target: VGPUBackendTargetHandle
+  package let colorLoad: VGPUBackendColorLoad
   package let draws: [VGPUBackendIndirectDraw]
 
-  package init(target: VGPUBackendTargetHandle, draws: [VGPUBackendIndirectDraw]) {
+  package init(
+    target: VGPUBackendTargetHandle,
+    colorLoad: VGPUBackendColorLoad,
+    draws: [VGPUBackendIndirectDraw]
+  ) {
     self.target = target
+    self.colorLoad = colorLoad
     self.draws = draws
   }
 }
@@ -57,4 +64,6 @@ package protocol VGPURenderBackend: VGPUCoreBackend {
   func submitFrame(
     _ commands: [VGPUBackendFrameCommand]
   ) throws -> any VGPUBackendExecution
+
+  func readOffscreenTarget(_ handle: VGPUBackendTargetHandle) async throws -> Data
 }

@@ -9,21 +9,31 @@ private struct PreparedDraw {
 
 private struct PreparedPass {
   let target: VGPUBackendTargetHandle
+  let colorLoad: VGPUBackendColorLoad
   let draws: [PreparedDraw]
 }
 
-public final class VGPUOffscreenTarget {
+public final class VGPUTarget {
   package let handle: VGPUBackendTargetHandle
   package let contextIdentity: UInt64
+  package let gpu: VGPU
+  package let backend: any VGPURenderBackend
 
-  package init(handle: VGPUBackendTargetHandle, contextIdentity: UInt64) {
+  package init(
+    handle: VGPUBackendTargetHandle,
+    contextIdentity: UInt64,
+    gpu: VGPU,
+    backend: any VGPURenderBackend
+  ) {
     self.handle = handle
     self.contextIdentity = contextIdentity
+    self.gpu = gpu
+    self.backend = backend
   }
 }
 
 @available(*, unavailable)
-extension VGPUOffscreenTarget: Sendable {}
+extension VGPUTarget: Sendable {}
 
 public final class VGPUDrawInstance<Program: VGPUDrawProgram> {
   package let handle: VGPUBackendDrawProgramHandle
@@ -150,7 +160,8 @@ public final class VGPUFrame {
   }
 
   public func pass(
-    target: VGPUOffscreenTarget,
+    target: VGPUTarget,
+    color: VGPUColorLoad = .preserve,
     _ body: (VGPUFramePass) throws -> Void
   ) throws {
     guard open else {
@@ -165,7 +176,13 @@ public final class VGPUFrame {
     let pass = VGPUFramePass(contextIdentity: contextIdentity)
     do {
       try body(pass)
-      passes.append(PreparedPass(target: target.handle, draws: pass.finish()))
+      passes.append(
+        PreparedPass(
+          target: target.handle,
+          colorLoad: try color.backendValue,
+          draws: pass.finish()
+        )
+      )
     } catch {
       pass.cancel()
       throw error
@@ -190,7 +207,7 @@ public final class VGPUFrame {
 extension VGPUFrame: Sendable {}
 
 extension VGPU {
-  public func target(width: Int, height: Int) throws -> VGPUOffscreenTarget {
+  public func target(width: Int, height: Int) throws -> VGPUTarget {
     try withOpenAccess {
       guard width > 0, height > 0 else {
         throw VGPUError(code: .invalidRender, message: "Target dimensions must be positive.")
@@ -202,9 +219,11 @@ extension VGPU {
         )
       }
       do {
-        return VGPUOffscreenTarget(
+        return VGPUTarget(
           handle: try backend.createOffscreenTarget(width: width, height: height),
-          contextIdentity: backend.contextIdentity
+          contextIdentity: backend.contextIdentity,
+          gpu: self,
+          backend: backend
         )
       } catch {
         throw mapBackendError(error, operation: "render.target")
@@ -259,6 +278,7 @@ extension VGPU {
       let commands = preparedPasses.map { pass in
         VGPUBackendFrameCommand(
           target: pass.target,
+          colorLoad: pass.colorLoad,
           draws: pass.draws.map(\.command)
         )
       }

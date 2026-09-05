@@ -2,8 +2,11 @@
 
 import {
   cpSync,
+  existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -25,6 +28,13 @@ if (
 }
 const outputDirectory = resolve(process.argv[outputFlag + 1]);
 const allowedOutputRoot = resolve(spikeDirectory, ".build");
+if (
+  existsSync(allowedOutputRoot) &&
+  lstatSync(allowedOutputRoot).isSymbolicLink()
+) {
+  throw new Error("dc1-compute-draw/.build must not be a symbolic link");
+}
+mkdirSync(allowedOutputRoot, { recursive: true });
 const outputRelativePath = relative(allowedOutputRoot, outputDirectory);
 if (
   outputRelativePath === "" ||
@@ -35,6 +45,33 @@ if (
   isAbsolute(outputRelativePath)
 ) {
   throw new Error("output must be a descendant of dc1-compute-draw/.build");
+}
+const canonicalOutputRoot = realpathSync(allowedOutputRoot);
+let existingAncestor = outputDirectory;
+while (!existsSync(existingAncestor)) {
+  const parent = dirname(existingAncestor);
+  if (parent === existingAncestor) {
+    throw new Error("could not resolve an existing output ancestor");
+  }
+  existingAncestor = parent;
+}
+const canonicalAncestor = realpathSync(existingAncestor);
+const canonicalRelativePath = relative(canonicalOutputRoot, canonicalAncestor);
+if (
+  canonicalRelativePath === ".." ||
+  canonicalRelativePath.startsWith(
+    `..${process.platform === "win32" ? "\\" : "/"}`
+  ) ||
+  isAbsolute(canonicalRelativePath)
+) {
+  throw new Error("output resolves outside dc1-compute-draw/.build");
+}
+let checkedPath = outputDirectory;
+while (checkedPath !== allowedOutputRoot) {
+  if (existsSync(checkedPath) && lstatSync(checkedPath).isSymbolicLink()) {
+    throw new Error("output path must not traverse a symbolic link");
+  }
+  checkedPath = dirname(checkedPath);
 }
 
 const replaceOnce = (path, before, after) => {
@@ -91,6 +128,24 @@ replaceOnce(
 );
 replaceOnce(
   packagePath,
+  '    .library(\n      name: "VGPUMetalCompute",\n      targets: [\n',
+  '    .library(\n      name: "VGPUMetalRender",\n      targets: [\n' +
+    '        "VGPUABI",\n        "VGPUCore",\n        "VGPUResources",\n' +
+    '        "VGPURender",\n        "VGPUMetal",\n        "_VGPUMetalCoreImpl",\n' +
+    '        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalProgramImpl",\n' +
+    '        "_VGPUMetalRenderImpl",\n      ]\n    ),\n' +
+    '    .library(name: "VGPUTesting", targets: ["VGPUTesting"]),\n' +
+    '    .library(\n      name: "VGPUMetalCompute",\n      targets: [\n'
+);
+replaceFirst(
+  packagePath,
+  '        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalComputeImpl",\n',
+  '        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalProgramImpl",\n' +
+    '        "_VGPUMetalComputeImpl",\n',
+  2
+);
+replaceOnce(
+  packagePath,
   '    .executable(name: "RecordingProbe", targets: ["RecordingProbe"]),\n',
   '    .executable(name: "RecordingProbe", targets: ["RecordingProbe"]),\n' +
     '    .executable(name: "DC1RecordingProbe", targets: ["DC1RecordingProbe"]),\n'
@@ -106,6 +161,32 @@ replaceOnce(
   '    .target(name: "GeneratedFixture", dependencies: ["VGPUABI"]),\n',
   '    .target(name: "GeneratedFixture", dependencies: ["VGPUABI"]),\n' +
     '    .target(name: "DC1GeneratedFixture", dependencies: ["VGPUABI"]),\n'
+);
+replaceOnce(
+  packagePath,
+  '    .target(\n      name: "_VGPUMetalComputeImpl",\n      dependencies: [\n',
+  '    .target(\n      name: "_VGPUMetalProgramImpl",\n' +
+    '      dependencies: ["VGPUABI", "_VGPUBackendSPI", "_VGPUMetalCoreImpl"],\n' +
+    '      linkerSettings: [.linkedFramework("Metal")]\n    ),\n' +
+    '    .target(\n      name: "_VGPUMetalRenderImpl",\n' +
+    '      dependencies: [\n        "VGPUABI",\n        "_VGPUBackendSPI",\n' +
+    '        "_VGPUMetalCoreImpl",\n        "_VGPUMetalResourcesImpl",\n' +
+    '        "_VGPUMetalProgramImpl",\n      ],\n' +
+    '      linkerSettings: [.linkedFramework("Metal")]\n    ),\n' +
+    '    .target(\n      name: "_VGPUMetalComputeImpl",\n      dependencies: [\n'
+);
+replaceOnce(
+  packagePath,
+  '        "_VGPUMetalResourcesImpl",\n      ],\n      linkerSettings: [.linkedFramework("Metal")]\n    ),\n    .target(\n      name: "VGPUMetal",',
+  '        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalProgramImpl",\n      ],\n' +
+    '      linkerSettings: [.linkedFramework("Metal")]\n    ),\n    .target(\n      name: "VGPUMetal",'
+);
+replaceOnce(
+  packagePath,
+  '        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalComputeImpl",\n      ],\n      linkerSettings: [.linkedFramework("Metal")]\n    ),\n    .executableTarget(',
+  '        "VGPUMetal",\n        "_VGPUMetalResourcesImpl",\n        "_VGPUMetalProgramImpl",\n' +
+    '        "_VGPUMetalComputeImpl",\n        "_VGPUMetalRenderImpl",\n' +
+    '        "VGPURender",\n      ],\n      linkerSettings: [.linkedFramework("Metal")]\n    ),\n    .executableTarget('
 );
 replaceOnce(
   packagePath,
@@ -228,6 +309,64 @@ replaceOnce(
     "      access: access,\n" +
     "      usage: usage\n" +
     "    )\n"
+);
+replaceOnce(
+  metalResourcesPath,
+  "    let generation: UInt64\n  }\n",
+  "    let generation: UInt64\n    let usage: VGPUBufferUsage\n  }\n"
+);
+replaceOnce(
+  metalResourcesPath,
+  "      generation: 1\n    )\n",
+  "      generation: 1,\n      usage: usage\n    )\n"
+);
+replaceOnce(
+  metalResourcesPath,
+  "  package func contains(allocationIdentity: UInt64) -> Bool {\n",
+  "  package func supportsUsage(\n" +
+    "    _ usage: VGPUBufferUsage,\n    for snapshot: VGPUBackendStorageSnapshot\n  ) throws -> Bool {\n" +
+    "    lock.lock()\n    defer { lock.unlock() }\n" +
+    "    guard snapshot.contextIdentity == contextIdentity,\n" +
+    "      let allocation = allocations[snapshot.handle],\n" +
+    "      allocation.identity == snapshot.allocationIdentity,\n" +
+    "      allocation.generation == snapshot.generation\n" +
+    "    else { throw MetalResourceBackendError.missingAllocation }\n" +
+    "    return allocation.usage.contains(usage)\n  }\n\n" +
+    "  package func contains(allocationIdentity: UInt64) -> Bool {\n"
+);
+replaceOnce(
+  metalResourcesPath,
+  "  ) async throws -> Data {\n    let buffer = try checkedBuffer(handle: handle, range: range)\n",
+  "  ) async throws -> Data {\n" +
+    "    if isIndirectAllocation(handle) { DC1MetalAudit.shared.recordPacketRead() }\n" +
+    "    let buffer = try checkedBuffer(handle: handle, range: range)\n"
+);
+replaceOnce(
+  metalResourcesPath,
+  "  private func checkedBuffer(\n",
+  "  private func isIndirectAllocation(_ handle: VGPUBackendStorageHandle) -> Bool {\n" +
+    "    lock.lock()\n    defer { lock.unlock() }\n" +
+    "    return allocations[handle]?.usage.contains(.indirect) == true\n  }\n\n" +
+    "  private func checkedBuffer(\n"
+);
+
+const metalComputePath = resolve(
+  outputDirectory,
+  "Sources/_VGPUMetalComputeImpl/MetalCompute.swift"
+);
+replaceOnce(
+  metalComputePath,
+  "    try computeBackend.prepareCompute(program)\n",
+  '    if program.artifactID == "dc1-compute-draw" {\n' +
+    "      return try dc1ComputeBackend.prepare(program)\n    }\n" +
+    "    return try computeBackend.prepareCompute(program)\n"
+);
+replaceOnce(
+  metalComputePath,
+  "    try computeBackend.submitCompute(command)\n",
+  '    if command.program.artifactID == "dc1-compute-draw" {\n' +
+    "      return try dc1ComputeBackend.submit(command)\n    }\n" +
+    "    return try computeBackend.submitCompute(command)\n"
 );
 
 const metalHarnessPath = resolve(
