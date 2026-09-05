@@ -3,6 +3,10 @@ import VGPUABI
 import VGPUCore
 import _VGPUBackendSPI
 
+extension VGPUErrorCode {
+  public static let storageAliasing = Self(rawValue: "VGPU-R1-STORAGE-ALIASING")
+}
+
 private struct PreparedBindings {
   let backendBindings: [VGPUBackendComputeBinding]
   let leases: [any _VGPUResourceLease]
