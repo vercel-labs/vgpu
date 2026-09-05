@@ -48,6 +48,11 @@ const materializerSource = join(
   "prototype",
   "main.cc"
 );
+const materializerDirectory = join(compilerFixtureDirectory, "prototype");
+const materializerEngineSource = join(
+  materializerDirectory,
+  "override-materializer.cc"
+);
 const runnerContract = "vgpu-native-override-worker-integration-runner/v1";
 const expectedInternalReservation = {
   role: "immediate-data",
@@ -302,7 +307,10 @@ function runStaticGate() {
     TINT_REVISION === WORKER_TINT_REVISION,
     "materializer and compiler worker pin different Tint revisions"
   );
-  const materializerText = readFileSync(materializerSource, "utf8");
+  const materializerText = `${readFileSync(
+    materializerSource,
+    "utf8"
+  )}\n${readFileSync(materializerEngineSource, "utf8")}`;
   for (const token of [
     "inspector.Overrides()",
     "GetEntryPoint(arguments.entry_point)",
@@ -384,6 +392,8 @@ function compileMaterializer({ releaseRoot, compatInclude, scratch }) {
     "-Wpedantic",
     "-Werror",
     materializerSource,
+    materializerEngineSource,
+    `-I${materializerDirectory}`,
     `-I${compatInclude}`,
     `-I${join(includeRoot, "src", "tint")}`,
     `-I${includeRoot}`,
@@ -429,8 +439,8 @@ function assertNoPhysicalPath(text, physicalPaths, label) {
   );
 }
 
-function nameConfig(key, kind, payload) {
-  return { by: "name", key, kind, payload };
+function identifierConfig(key, kind, payload) {
+  return { key, kind, payload };
 }
 
 function invokeMaterializerOnce({
@@ -451,7 +461,7 @@ function invokeMaterializerOnce({
   ];
   for (const feature of languageFeatures) args.push("--feature", feature);
   for (const item of config) {
-    args.push(`--${item.by}`, String(item.key), item.kind, item.payload);
+    args.push("--identifier", String(item.key), item.kind, item.payload);
   }
   return runCommand(executable, args);
 }
@@ -622,8 +632,8 @@ function nativeCases() {
       entryPoint: "needs_required",
       emittedName: "vgpu_required_and_subsets",
       config: [
-        nameConfig("DEP", "number", "9"),
-        nameConfig("REQUIRED", "number", "4"),
+        identifierConfig("DEP", "number", "9"),
+        identifierConfig("REQUIRED", "number", "4"),
       ],
       effectiveNames: ["DEP"],
       staticNames: ["DEP", "REQUIRED"],
@@ -640,7 +650,7 @@ function nativeCases() {
       sourceInput: "required-and-subsets-wgsl",
       entryPoint: "first",
       emittedName: "vgpu_first",
-      config: [nameConfig("SECOND", "number", "7")],
+      config: [identifierConfig("SECOND", "number", "7")],
       effectiveNames: ["FIRST"],
       staticNames: ["FIRST"],
       exactOverrides: [{ name: "FIRST", value: { type: "u32", value: 2 } }],
@@ -653,7 +663,7 @@ function nativeCases() {
       sourceInput: "invalid-initializer-wgsl",
       entryPoint: "main",
       emittedName: "vgpu_invalid_initializer",
-      config: [nameConfig("A", "number", "7")],
+      config: [identifierConfig("A", "number", "7")],
       effectiveNames: ["A"],
       staticNames: ["A", "X"],
       exactOverrides: [
@@ -670,7 +680,7 @@ function nativeCases() {
       entryPoint: "main",
       emittedName: "vgpu_all_scalars",
       languageFeatures: ["f16"],
-      config: [nameConfig("BASE", "number", "5")],
+      config: [identifierConfig("BASE", "number", "5")],
       effectiveNames: [
         "BASE",
         "DEP",

@@ -130,6 +130,10 @@ code-unit order; a non-BMP/BMP canary verifies that the C++ comparator agrees wi
 ## Compiler prototype
 
 [`prototype/main.cc`](./prototype/main.cc) exercises the direct Tint API used by this contract.
+[`prototype/override-materializer.h`](./prototype/override-materializer.h) owns exact-static
+multi-entry materialization behind a transport-free API that accepts an already parsed
+`tint::Program`. It returns typed entry subsets and their canonical program union without file I/O,
+hashing, JSON, platform APIs, or Tint pointers in outward records.
 [`prototype/json-codec.cc`](./prototype/json-codec.cc) owns stdin framing, strict lexical checks,
 SHA-256 verification, JsonCpp configuration, exact object shapes, and typed decoding. The Node side
 is only the schema/semantic-validating caller. Its raw invocation helper is named accordingly, and

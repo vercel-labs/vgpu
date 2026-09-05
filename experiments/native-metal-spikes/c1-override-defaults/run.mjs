@@ -19,6 +19,17 @@ import { fileURLToPath } from "node:url";
 const fixtureDirectory = dirname(fileURLToPath(import.meta.url));
 const canaryDirectory = join(fixtureDirectory, "canaries");
 const prototypeSource = join(fixtureDirectory, "prototype", "main.cc");
+const materializerDirectory = join(
+  fixtureDirectory,
+  "..",
+  "c1-compiler-protocol",
+  "prototype"
+);
+const materializerSource = join(
+  materializerDirectory,
+  "override-materializer.cc"
+);
+const apiGateSource = join(fixtureDirectory, "prototype", "api-gate.cc");
 const tintRevision = "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
 const prototypeContract = "vgpu-native-override-defaults-spike/v1";
 const runnerContract = "vgpu-native-override-defaults-runner/v1";
@@ -215,6 +226,8 @@ function compilePrototype({ releaseRoot, compatInclude, scratch }) {
     "-Wpedantic",
     "-Werror",
     prototypeSource,
+    materializerSource,
+    `-I${materializerDirectory}`,
     ...(compatInclude ? [`-I${compatInclude}`] : []),
     `-I${dependency.tintInclude}`,
     `-I${dependency.includeRoot}`,
@@ -244,11 +257,57 @@ function compilePrototype({ releaseRoot, compatInclude, scratch }) {
   return { executable, sha256: sha256File(executable) };
 }
 
+function compileApiGate({ releaseRoot, compatInclude, scratch }) {
+  const dependency = verifyPinnedRelease(releaseRoot, compatInclude);
+  const executable = join(scratch, "vgpu-override-materializer-api-gate");
+  const args = [
+    "clang++",
+    "-std=c++20",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Werror",
+    apiGateSource,
+    materializerSource,
+    `-I${materializerDirectory}`,
+    ...(compatInclude ? [`-I${compatInclude}`] : []),
+    `-I${dependency.tintInclude}`,
+    `-I${dependency.includeRoot}`,
+    `-L${join(releaseRoot, "lib")}`,
+    "-lwebgpu_dawn",
+    "-framework",
+    "CoreGraphics",
+    "-framework",
+    "Foundation",
+    "-framework",
+    "Metal",
+    "-framework",
+    "Cocoa",
+    "-framework",
+    "IOKit",
+    "-framework",
+    "IOSurface",
+    "-framework",
+    "QuartzCore",
+    "-o",
+    executable,
+  ];
+  const compilation = runCommand("xcrun", args);
+  if (compilation.error || compilation.signal || compilation.status !== 0) {
+    fail(`API gate compilation failed: ${compilation.stderr.trim()}`);
+  }
+  return executable;
+}
+
 function runStaticGate() {
-  const source = readFileSync(prototypeSource, "utf8");
+  const source = `${readFileSync(prototypeSource, "utf8")}\n${readFileSync(
+    materializerSource,
+    "utf8"
+  )}`;
   for (const token of [
     "inspector.Overrides()",
-    "GetEntryPoint(arguments.entry_point)",
+    "inspector.GetEntryPoint(selected.name)",
     "ProgramToLoweredIR(program)",
     "constant::Eval evaluator",
     "AddOverrideProbes",
@@ -262,6 +321,33 @@ function runStaticGate() {
       `prototype omits required Tint API ${token}`
     );
   }
+  const materializeStart = source.indexOf("Result Materialize(");
+  const entryLoop = source.indexOf(
+    "for (const auto &planned_entry : plan.entries)",
+    materializeStart
+  );
+  assert(
+    materializeStart >= 0 && entryLoop > materializeStart,
+    "materializer omits its program-wide Plan boundary"
+  );
+  for (const token of [
+    "BuildPlan(program",
+    "ResolveConfiguration(plan",
+    "NormalizeConfiguration(program",
+    "MaterializeStaticUnion(program",
+    "EvaluateDefaults(program",
+  ]) {
+    const position = source.indexOf(token, materializeStart);
+    assert(
+      position >= materializeStart && position < entryLoop,
+      `${token} is not completed before the per-entry loop`
+    );
+  }
+  assert(
+    !source.includes("CollectOverrideDependencies") &&
+      !source.includes("TintSubstitutionValue"),
+    "materializer retains recursive traversal or typed-bits-to-double code"
+  );
   const fixtureExpectations = {
     "all-scalars.wgsl": [
       "enable f16",
@@ -304,6 +390,13 @@ function runStaticGate() {
       "override REQUIRED: bool;",
       "override RESULT: bool = CONDITION && REQUIRED",
       "fn main()",
+    ],
+    "multi-entry-union.wgsl": [
+      "override SHARED: u32 = 2u",
+      "override FIRST: u32 = SHARED + 1u",
+      "override SECOND: u32 = SHARED + 2u",
+      "fn first()",
+      "fn second()",
     ],
   };
   for (const [file, tokens] of Object.entries(fixtureExpectations)) {
@@ -351,7 +444,7 @@ function invokeOnce({
   ];
   if (feature) args.push("--feature", feature);
   for (const item of config) {
-    args.push(`--${item.by}`, String(item.key), item.kind, item.payload);
+    args.push("--identifier", String(item.key), item.kind, item.payload);
   }
   return runCommand(executable, args);
 }
@@ -506,12 +599,8 @@ function assertWorkgroup(result, values, dependencies, id) {
   );
 }
 
-function nameConfig(key, kind, payload) {
-  return { by: "name", key, kind, payload };
-}
-
-function idConfig(key, kind, payload) {
-  return { by: "id", key, kind, payload };
+function identifierConfig(key, kind, payload) {
+  return { key, kind, payload };
 }
 
 function runTintGate(options, scratch) {
@@ -540,6 +629,46 @@ function runTintGate(options, scratch) {
     "prototype build is not byte deterministic"
   );
   const executable = builds[0].executable;
+  const apiGateExecutable = compileApiGate({
+    releaseRoot: options.releaseRoot,
+    compatInclude: options.compatInclude,
+    scratch,
+  });
+  const wideDependencyPath = join(scratch, "wide-dependencies.wgsl");
+  const wideDependencyNames = Array.from(
+    { length: 128 },
+    (_, index) => `O${String(index).padStart(3, "0")}`
+  );
+  writeFileSync(
+    wideDependencyPath,
+    `${wideDependencyNames
+      .map((name) => `override ${name}: u32 = 1u;`)
+      .join("\n")}\n` +
+      `@compute @workgroup_size(${wideDependencyNames.join(" + ")})\n` +
+      "fn sum() {}\n"
+  );
+  const apiGateAttempts = [
+    runCommand(apiGateExecutable, [
+      join(canaryDirectory, "multi-entry-union.wgsl"),
+      wideDependencyPath,
+    ]),
+    runCommand(apiGateExecutable, [
+      join(canaryDirectory, "multi-entry-union.wgsl"),
+      wideDependencyPath,
+    ]),
+  ];
+  same(
+    apiGateAttempts[0],
+    apiGateAttempts[1],
+    "multi-entry API gate is not deterministic"
+  );
+  assert(
+    apiGateAttempts[0].status === 0 &&
+      apiGateAttempts[0].signal === null &&
+      apiGateAttempts[0].stderr === "" &&
+      apiGateAttempts[0].stdout === "passed\n",
+    `multi-entry API gate failed: ${apiGateAttempts[0].stderr.trim()}`
+  );
   const physicalPaths = [options.releaseRoot, options.compatInclude];
   let logicalCases = 0;
   let invocations = 0;
@@ -657,7 +786,7 @@ function runTintGate(options, scratch) {
       source: "all-scalars.wgsl",
       entryPoint: "main",
       feature: "f16",
-      config: [nameConfig("BASE", "number", "5")],
+      config: [identifierConfig("BASE", "number", "5")],
     }),
     "dependent/partial-base"
   );
@@ -678,7 +807,7 @@ function runTintGate(options, scratch) {
     source: "all-scalars.wgsl",
     entryPoint: "main",
     feature: "f16",
-    config: [nameConfig("BASE", "number", "4")],
+    config: [identifierConfig("BASE", "number", "4")],
   });
   assertSuccess(explicitDefault, "dependent/explicit-default");
   assert(
@@ -687,9 +816,9 @@ function runTintGate(options, scratch) {
   );
 
   const orderedConfig = [
-    nameConfig("BASE", "number", "5"),
-    nameConfig("FLAG", "bool", "false"),
-    idConfig(17, "number", "2.5"),
+    identifierConfig("BASE", "number", "5"),
+    identifierConfig("FLAG", "bool", "false"),
+    identifierConfig(17, "number", "2.5"),
   ];
   const orderA = execute({
     id: "determinism/config-order-a",
@@ -752,7 +881,7 @@ function runTintGate(options, scratch) {
       id: "required/active",
       source: "required-and-subsets.wgsl",
       entryPoint: "needs_required",
-      config: [nameConfig("REQUIRED", "number", "4")],
+      config: [identifierConfig("REQUIRED", "number", "4")],
     }),
     "required/active"
   );
@@ -782,7 +911,7 @@ function runTintGate(options, scratch) {
     id: "required/configured-dependent-still-requires-upstream",
     source: "required-and-subsets.wgsl",
     entryPoint: "needs_required",
-    config: [nameConfig("DEP", "number", "9")],
+    config: [identifierConfig("DEP", "number", "9")],
   });
   expectError(
     configuredDependentWithoutRequired,
@@ -797,8 +926,8 @@ function runTintGate(options, scratch) {
       source: "required-and-subsets.wgsl",
       entryPoint: "needs_required",
       config: [
-        nameConfig("DEP", "number", "9"),
-        nameConfig("REQUIRED", "number", "4"),
+        identifierConfig("DEP", "number", "9"),
+        identifierConfig("REQUIRED", "number", "4"),
       ],
     }),
     "required/configured-dependent-with-required"
@@ -832,8 +961,8 @@ function runTintGate(options, scratch) {
       source: "required-and-subsets.wgsl",
       entryPoint: "needs_required",
       config: [
-        nameConfig("REQUIRED", "number", "7"),
-        nameConfig("DEP", "number", "9"),
+        identifierConfig("REQUIRED", "number", "7"),
+        identifierConfig("DEP", "number", "9"),
       ],
     }),
     "required/redundant-upstream-config"
@@ -888,7 +1017,7 @@ function runTintGate(options, scratch) {
       id: "config/inactive-accepted",
       source: "required-and-subsets.wgsl",
       entryPoint: "first",
-      config: [nameConfig("SECOND", "number", "7")],
+      config: [identifierConfig("SECOND", "number", "7")],
     }),
     "config/inactive-accepted"
   );
@@ -934,7 +1063,7 @@ function runTintGate(options, scratch) {
       id: "folding/short-circuit-configured-required",
       source: "short-circuit.wgsl",
       entryPoint: "main",
-      config: [nameConfig("REQUIRED", "bool", "true")],
+      config: [identifierConfig("REQUIRED", "bool", "true")],
     }),
     "folding/short-circuit-configured-required"
   );
@@ -964,7 +1093,7 @@ function runTintGate(options, scratch) {
       id: "folding/short-circuit-alternative-required",
       source: "short-circuit.wgsl",
       entryPoint: "main",
-      config: [nameConfig("REQUIRED", "bool", "false")],
+      config: [identifierConfig("REQUIRED", "bool", "false")],
     }),
     "folding/short-circuit-alternative-required"
   );
@@ -983,7 +1112,7 @@ function runTintGate(options, scratch) {
     id: "required/configured-condition-still-requires-value",
     source: "configured-condition.wgsl",
     entryPoint: "main",
-    config: [nameConfig("CONDITION", "bool", "false")],
+    config: [identifierConfig("CONDITION", "bool", "false")],
   });
   expectError(
     configuredConditionMissingRequired,
@@ -997,8 +1126,8 @@ function runTintGate(options, scratch) {
       source: "configured-condition.wgsl",
       entryPoint: "main",
       config: [
-        nameConfig("CONDITION", "bool", "false"),
-        nameConfig("REQUIRED", "bool", "true"),
+        identifierConfig("CONDITION", "bool", "false"),
+        identifierConfig("REQUIRED", "bool", "true"),
       ],
     }),
     "required/configured-condition-with-required"
@@ -1045,7 +1174,7 @@ function runTintGate(options, scratch) {
       id: "evaluation/select-partial",
       source: "select-evaluation.wgsl",
       entryPoint: "main",
-      config: [nameConfig("A", "bool", "true")],
+      config: [identifierConfig("A", "bool", "true")],
     }),
     "evaluation/select-partial"
   );
@@ -1066,7 +1195,7 @@ function runTintGate(options, scratch) {
       id: "evaluation/select-direct",
       source: "select-evaluation.wgsl",
       entryPoint: "main",
-      config: [nameConfig("N", "number", "3")],
+      config: [identifierConfig("N", "number", "3")],
     }),
     "evaluation/select-direct"
   );
@@ -1113,7 +1242,7 @@ function runTintGate(options, scratch) {
       id: "dependency/forward-partial",
       source: "forward-reference.wgsl",
       entryPoint: "main",
-      config: [nameConfig("B", "number", "4")],
+      config: [identifierConfig("B", "number", "4")],
     }),
     "dependency/forward-partial"
   );
@@ -1136,7 +1265,9 @@ function runTintGate(options, scratch) {
         source: "all-scalars.wgsl",
         entryPoint: "main",
         feature: "f16",
-        config: [nameConfig(name, "number", input)],
+        config: [
+          identifierConfig(name === "EXPLICIT" ? "17" : name, "number", input),
+        ],
       }),
       id
     );
@@ -1152,7 +1283,7 @@ function runTintGate(options, scratch) {
       source: "all-scalars.wgsl",
       entryPoint: "main",
       feature: "f16",
-      config: [nameConfig("SIGNED", "number", "-2147483648")],
+      config: [identifierConfig("SIGNED", "number", "-2147483648")],
     }),
     "conversion/i32-minimum"
   );
@@ -1167,7 +1298,7 @@ function runTintGate(options, scratch) {
       id: "initializer/repaired-by-dependency-config",
       source: "invalid-initializer.wgsl",
       entryPoint: "main",
-      config: [nameConfig("X", "number", "2")],
+      config: [identifierConfig("X", "number", "2")],
     }),
     "initializer/repaired-by-dependency-config"
   );
@@ -1198,7 +1329,7 @@ function runTintGate(options, scratch) {
       id: "initializer/direct-selection-cuts-initializer",
       source: "invalid-initializer.wgsl",
       entryPoint: "main",
-      config: [nameConfig("A", "number", "7")],
+      config: [identifierConfig("A", "number", "7")],
     }),
     "initializer/direct-selection-cuts-initializer"
   );
@@ -1232,7 +1363,10 @@ function runTintGate(options, scratch) {
       id: "initializer/redundant-upstream-config",
       source: "invalid-initializer.wgsl",
       entryPoint: "main",
-      config: [nameConfig("X", "number", "2"), nameConfig("A", "number", "7")],
+      config: [
+        identifierConfig("X", "number", "2"),
+        identifierConfig("A", "number", "7"),
+      ],
     }),
     "initializer/redundant-upstream-config"
   );
@@ -1253,7 +1387,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("MISSING", "number", "1")],
+      [identifierConfig("MISSING", "number", "1")],
       "VGPU-C1-OVERRIDE-UNKNOWN",
       "config",
     ],
@@ -1262,7 +1396,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(0, "number", "4")],
+      [identifierConfig(0, "number", "4")],
       "VGPU-C1-OVERRIDE-UNKNOWN",
       "config",
     ],
@@ -1271,26 +1405,32 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("BASE", "number", "5"), nameConfig("BASE", "number", "5")],
+      [
+        identifierConfig("BASE", "number", "5"),
+        identifierConfig("BASE", "number", "5"),
+      ],
       "VGPU-C1-OVERRIDE-DUPLICATE-CONFIG",
       "config",
     ],
     [
-      "error/canonical-id-duplicate",
+      "error/noncanonical-id",
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig("017", "number", "2.5"), idConfig("17", "number", "2.5")],
-      "VGPU-C1-OVERRIDE-DUPLICATE-CONFIG",
+      [
+        identifierConfig("017", "number", "2.5"),
+        identifierConfig("17", "number", "2.5"),
+      ],
+      "VGPU-C1-OVERRIDE-UNKNOWN",
       "config",
     ],
     [
-      "error/id-name-conflict",
+      "error/explicit-id-authored-name",
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("EXPLICIT", "number", "2.5"), idConfig(17, "number", "2.5")],
-      "VGPU-C1-OVERRIDE-ID-NAME-CONFLICT",
+      [identifierConfig("EXPLICIT", "number", "2.5")],
+      "VGPU-C1-OVERRIDE-UNKNOWN",
       "config",
     ],
     [
@@ -1298,7 +1438,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("BASE", "bool", "true")],
+      [identifierConfig("BASE", "bool", "true")],
       "VGPU-C1-OVERRIDE-WRONG-TYPE",
       "config",
     ],
@@ -1307,7 +1447,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("BASE", "number", "1.5")],
+      [identifierConfig("BASE", "number", "1.5")],
       "VGPU-C1-OVERRIDE-WRONG-TYPE",
       "config",
     ],
@@ -1316,7 +1456,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "nan")],
+      [identifierConfig(17, "number", "nan")],
       "VGPU-C1-OVERRIDE-NONFINITE",
       "config",
     ],
@@ -1325,7 +1465,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("BASE", "number", "4294967296")],
+      [identifierConfig("BASE", "number", "4294967296")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1334,7 +1474,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("SIGNED", "number", "-2147483649")],
+      [identifierConfig("SIGNED", "number", "-2147483649")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1343,7 +1483,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "3.5e38")],
+      [identifierConfig(17, "number", "3.5e38")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1352,7 +1492,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "3.402823466385289e38")],
+      [identifierConfig(17, "number", "3.402823466385289e38")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1361,7 +1501,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "-3.402823466385289e38")],
+      [identifierConfig(17, "number", "-3.402823466385289e38")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1370,7 +1510,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "3.4028235e38")],
+      [identifierConfig(17, "number", "3.4028235e38")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1379,7 +1519,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [idConfig(17, "number", "-3.4028235e38")],
+      [identifierConfig(17, "number", "-3.4028235e38")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1388,7 +1528,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("F16_HALF", "number", "70000")],
+      [identifierConfig("F16_HALF", "number", "70000")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1397,7 +1537,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("F16_HALF", "number", "65504.00000000001")],
+      [identifierConfig("F16_HALF", "number", "65504.00000000001")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1406,7 +1546,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("F16_HALF", "number", "-65504.00000000001")],
+      [identifierConfig("F16_HALF", "number", "-65504.00000000001")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1415,7 +1555,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("F16_HALF", "number", "65504.0000001")],
+      [identifierConfig("F16_HALF", "number", "65504.0000001")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1424,7 +1564,7 @@ function runTintGate(options, scratch) {
       "all-scalars.wgsl",
       "main",
       "f16",
-      [nameConfig("F16_HALF", "number", "-65504.0000001")],
+      [identifierConfig("F16_HALF", "number", "-65504.0000001")],
       "VGPU-C1-OVERRIDE-OUT-OF-RANGE",
       "config",
     ],
@@ -1465,8 +1605,8 @@ function runTintGate(options, scratch) {
   }
 
   const conflictConfig = [
-    nameConfig("EXPLICIT", "bool", "true"),
-    idConfig("17", "number", "2.5"),
+    identifierConfig("EXPLICIT", "bool", "true"),
+    identifierConfig("17", "number", "2.5"),
   ];
   const conflictA = execute({
     id: "determinism/invalid-config-order-a",
@@ -1485,13 +1625,13 @@ function runTintGate(options, scratch) {
   expectError(
     conflictA,
     "determinism/invalid-config-order-a",
-    "VGPU-C1-OVERRIDE-ID-NAME-CONFLICT",
+    "VGPU-C1-OVERRIDE-UNKNOWN",
     "config"
   );
   expectError(
     conflictB,
     "determinism/invalid-config-order-b",
-    "VGPU-C1-OVERRIDE-ID-NAME-CONFLICT",
+    "VGPU-C1-OVERRIDE-UNKNOWN",
     "config"
   );
   assert(
@@ -1511,6 +1651,9 @@ function runTintGate(options, scratch) {
     deterministicBuilds: builds.length,
     logicalCases,
     deterministicInvocations: invocations,
+    multiEntryApiInvocations: apiGateAttempts.length,
+    canonicalProgramUnion: ["FIRST", "SECOND", "SHARED"],
+    iterativeDependencyCount: wideDependencyNames.length,
     scalarTypes: ["bool", "i32", "u32", "f16", "f32"],
     dependentDefault: { allDefaults: 8, partialSelection: 10 },
     workgroupExpressionClosure: ["X", "Y"],

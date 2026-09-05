@@ -27,42 +27,48 @@ reused with different source text that happens to have the same virtual name.
 
 ## Materialization procedure
 
-[`prototype/main.cc`](./prototype/main.cc) first reflects with Inspector.
-`Inspector::Overrides()` supplies module identity, scalar type, explicit-versus-automatic ID, and
-initializer presence; `Inspector::GetEntryPoint()` supplies the statically used entry-point set.
-Inspector authorizes module identities and is the required-value validation boundary; lowered IR
-decides only the effective evidence closure after folding and configuration. Every IR path begins
-with `ProgramToLoweredIR()`, the same core-dialect boundary used by Tint's compiler pipeline. The
-materializer has four roles:
+[`prototype/main.cc`](./prototype/main.cc) is now only a standalone adapter: it reads and hashes the
+source, parses WGSL once, calls the worker-adjacent
+[`override-materializer`](../c1-compiler-protocol/prototype/override-materializer.h), and preserves
+the spike's JSON evidence format. The pure C++ engine receives a validated `tint::Program`, one or
+two selected entry names and stages, and typed boolean-or-number configuration. It cross-checks
+each requested stage against Tint and owns no file I/O, hashing, JSON, process, or platform API.
+The engine is placed beside the worker so both semantic extraction and translation can link it in a
+later slice; the current worker executable does not link it yet.
 
-1. The **effective selected pass** accepts and converts every module-level explicit input through Tint's
-   constant evaluator, including valid constants not statically used by the selected entry point.
-   Before any IR pruning, it requires an API value for every statically used declaration without an
-   initializer. It then calls `Override::SetInitializer()` before `SingleEntryPoint`. This
-   implements WGSL evaluation semantics: a configured override's declared initializer is not
-   evaluated, and initializer-only dependencies may leave the effective evidence closure. The pass
-   adds one temporary `var<private>` probe initialized from each retained override result.
-   `SubstituteOverrides` evaluates the whole selected graph in WGSL order, including short-circuit
-   control flow. Each probe initializer becomes a typed IR constant, which is the reported selected
-   value in `overrides`.
-2. The **static selected pass** starts from a fresh lowered module, recreates every explicit input
-   from its normalized typed bits, and takes each override reflected for the selected entry as a
-   root. `ReferencedModuleDecls::AddToBlock()` forms their union after configured initializer cuts;
-   functions, inactive declarations, and orphaned initializer graphs are removed. One probe per
-   retained override plus `SubstituteOverrides` yields `staticOverrides`. The retained IDs must
-   equal Inspector's static set exactly, and the effective view must be its bit-identical subset.
-3. The **default role** repeats on a fresh, unconfigured lowered module for each static override.
-   `ReferencedModuleDecls::AddToBlock()` isolates exactly that override and its transitive
-   initializer graph without entry-point pruning; functions and unrelated root declarations are
-   removed. A single probe plus `SubstituteOverrides` yields the declared default. A failure in
-   that isolated graph is recorded as `requires-configuration`, while an absent initializer stays
-   distinguishable as `absent`.
-4. The **verification pass** repeats the explicit initializer cuts, runs `SingleEntryPoint`, and
-   requires its exact retained override-ID set to match the materialized selected map. It then
-   calls `SubstituteOverrides` with that complete map. The gate verifies that no
-   `core::ir::Override` remains and that compute workgroup dimensions are constants. This pruning
-   canonicalizes local evidence; it never determines whether a statically required value may be
-   omitted.
+The engine performs program-wide work before iterating over selected entries:
+
+1. A **reflection plan** calls `Inspector::Overrides()` once for module identity, scalar type,
+   explicit-versus-automatic ID, and initializer presence. It calls `Inspector::GetEntryPoint()`
+   once per requested entry to validate its stage and collect its statically used override IDs,
+   then forms one canonical static union. Inspector authorizes module identities and is the
+   required-value validation boundary.
+2. **Configuration normalization** resolves every public identifier once and converts each supplied
+   value through Tint's constant evaluator in one lowered module. The resulting typed bits are used
+   directly by later passes; they are never widened to `double` and narrowed again.
+3. The **static union pass** starts from one fresh lowered module, installs the normalized inputs,
+   and takes every override in the canonical union as a root.
+   `ReferencedModuleDecls::AddToBlock()` preserves their combined initializer graph after configured
+   initializer cuts, while removing functions and unrelated declarations. One probe per retained
+   override plus `SubstituteOverrides` yields the bit-exact canonical `staticOverrides` shared by
+   every selected entry.
+4. The **default pass** evaluates each union member once in a fresh, unconfigured lowered module.
+   `ReferencedModuleDecls::AddToBlock()` isolates that override and its transitive initializer graph
+   without entry-point pruning. A single probe plus `SubstituteOverrides` yields the declared
+   default. A failure in that isolated graph is recorded as `requires-configuration`, while an
+   absent initializer stays distinguishable as `absent`.
+5. Only then does the engine iterate over entries. Each **effective and verification pass** installs
+   configured values before `SingleEntryPoint`, implementing WGSL semantics in which configuring an
+   override skips its initializer and can remove initializer-only dependencies. Temporary
+   `var<private>` probes plus `SubstituteOverrides` produce the effective typed evidence. A second
+   lowered module verifies the exact retained override-ID set, installs that complete selected map,
+   checks that no `core::ir::Override` remains, and requires positive constant compute workgroup
+   dimensions. Each effective record must be a bit-identical subset of the already materialized
+   static union.
+
+Every IR path begins with `ProgramToLoweredIR()`, the same core-dialect boundary used by Tint's
+compiler pipeline. Entry-point pruning canonicalizes local evidence; it never determines whether a
+statically required value may be omitted.
 
 Reflection has to happen before substitution: `SubstituteOverrides` removes the override
 instructions and their now-unused initializer graph.
@@ -170,14 +176,17 @@ treated as translated output.
 
 ## IDs and structured errors
 
-The canaries cover both automatic IDs and explicit WGSL `@id(17)`. Names address either kind;
-numeric request keys address explicit WGSL IDs only. Tint's automatic internal IDs are reflected as
-evidence but are not accepted as stable external keys.
+The canaries cover both automatic IDs and explicit WGSL `@id(17)`. Configuration uses WGSL's one
+pipeline-overridable constant identifier: the authored name when there is no `@id`, or the canonical
+base-10 string (`"17"`) when there is one. The authored name of an explicit-ID declaration,
+noncanonical numeric spellings such as `"017"`, and Tint's automatic internal IDs are rejected.
+Automatic IDs remain standalone JSON evidence but never escape the engine API; only an authored
+`@id` is retained as optional provenance.
 
 The runner checks deterministic diagnostics for:
 
 - unknown keys; valid module keys are accepted even when entry-inactive;
-- duplicate keys and name/explicit-ID conflicts;
+- duplicate identifiers, noncanonical IDs, and an authored name used in place of `@id`;
 - wrong scalar kinds and non-integral integer input;
 - non-finite and out-of-range values;
 - a missing active required override;
@@ -206,7 +215,11 @@ Run the complete gate against the exact release and compatibility overlay record
 The pinned gate verifies the complete installed include tree, `libwebgpu_dawn.a`, and the one-file
 `src/utils/compiler.h` overlay before compiling. It builds the prototype twice, requires
 byte-identical executables, invokes every behavioral case twice, permutes configuration order, and
-relocates identical source while keeping the virtual source name stable.
+relocates identical source while keeping the virtual source name stable. A second direct API gate
+materializes two entries in one call, checks their stages and exact/effective subsets, and requires a
+canonical union whose shared record agrees bit for bit. The core independently caps selected entries
+at 2, configuration and program unions at 4,096, aggregate memberships at 8,192, names and
+identifiers at 256 bytes, and diagnostic messages at 16 KiB.
 
 ## Scope boundary
 

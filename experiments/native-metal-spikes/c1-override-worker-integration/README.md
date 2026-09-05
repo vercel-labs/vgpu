@@ -41,8 +41,10 @@ Inspector reflection.
 
 ## Gate
 
-The native gate compiles the existing materializer and compiler worker from their tracked sources
-against the same pinned Tint revision. It validates the generated request with the compiler JSON
+The native gate compiles the standalone adapter with the worker-adjacent materialization engine and
+compiles the compiler worker separately from its tracked sources. The worker does not link the
+engine in this slice. Both compile against the same pinned Tint revision. The gate validates the
+generated request with the compiler JSON
 Schema and semantic checks before launching the worker, then validates the worker response through
 the existing trusted decoder. Every materializer and worker success is invoked twice and must be
 byte deterministic.
