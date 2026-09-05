@@ -65,6 +65,7 @@
   "languageFeatures": ["dual_source_blending"],
   "metal": {
     "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
     "bindings": [],
     "internalReservations": [
       {
@@ -82,7 +83,7 @@
     ],
     "storageBufferSizes": {
       "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-      "immediateDataByteOffset": 4
+      "immediateDataByteOffset": 12
     }
   }
 }

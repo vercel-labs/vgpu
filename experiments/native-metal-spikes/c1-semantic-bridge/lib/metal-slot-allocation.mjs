@@ -4,6 +4,8 @@ import { allocateBindingSlots } from "../../c1-binding-slots/lib/allocate.mjs";
 import { verifyBindingSlotAllocation } from "../../c1-binding-slots/lib/verify.mjs";
 
 export const METAL_BINDING_MODEL = "vgpu-metal-binding-slots-v1";
+export const METAL_IMMEDIATE_DATA_LAYOUT_MODEL =
+  "vgpu-metal-immediate-data-layout-v1";
 
 const stages = ["vertex", "fragment", "compute"];
 
@@ -33,10 +35,8 @@ const canaryProfile = Object.freeze({
   ),
 });
 
-const storageBufferSizes = Object.freeze({
-  model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-  immediateDataByteOffset: 4,
-});
+const storageBufferSizeModel =
+  "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 
 export class MetalSlotAllocationError extends Error {
   constructor(message) {
@@ -175,6 +175,7 @@ export function compilerMetalPolicyForStage(program, allocation, stage) {
   const { role, stage: _stage, ...slot } = reservation;
   return {
     bindingModel: METAL_BINDING_MODEL,
+    immediateDataLayoutModel: METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
     bindings,
     internalReservations: [
       {
@@ -182,7 +183,10 @@ export function compilerMetalPolicyForStage(program, allocation, stage) {
         slots: [{ mode: "direct", ...structuredClone(slot) }],
       },
     ],
-    storageBufferSizes: structuredClone(storageBufferSizes),
+    storageBufferSizes: {
+      model: storageBufferSizeModel,
+      immediateDataByteOffset: stage === "fragment" ? 12 : 4,
+    },
   };
 }
 

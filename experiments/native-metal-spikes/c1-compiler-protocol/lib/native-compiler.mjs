@@ -194,7 +194,7 @@ export function compileTintPrototype({
   }
   for (const required of [
     "kImmediateDataIndex = 30",
-    "kStorageBufferSizesOffset = 4",
+    "array_lengths.buffer_sizes_offset = arguments.storage_buffer_sizes_offset",
     "writer_options.immediate_binding_point",
     "tint::msl::writer::Generate",
     "ExtractSemanticInterface",

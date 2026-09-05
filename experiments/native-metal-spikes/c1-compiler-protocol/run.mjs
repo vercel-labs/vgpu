@@ -26,7 +26,9 @@ import {
   attachDiagnosticOrigins,
   COMPILER_CONTRACT,
   jsonAllocationUnits,
+  METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
   sha256Utf8,
+  storageBufferSizeOffsetForStage,
   TINT_REVISION,
 } from "./lib/protocol.mjs";
 import {
@@ -339,6 +341,21 @@ function runContractGate(validators) {
     assertSchema(validators.response, enriched, `${id} enriched response`);
     assertResponseSemantics(request, enriched);
   }
+  const fragmentRegionResponse = structuredClone(responses["runtime-array"]);
+  fragmentRegionResponse.result.entryPoint.stage = "fragment";
+  fragmentRegionResponse.result.interface = {
+    kind: "fragment",
+    colorOutputs: [],
+  };
+  delete fragmentRegionResponse.result.resolvedWorkgroupSize;
+  fragmentRegionResponse.result.storageBufferSizeRegions = [
+    { stage: "fragment", immediateDataByteOffset: 12 },
+  ];
+  assertSchema(
+    validators.response,
+    fragmentRegionResponse,
+    "fragment layout-v1 response"
+  );
   if (
     JSON.stringify(Object.keys(requests)) !==
     JSON.stringify(Object.keys(responses))
@@ -349,6 +366,20 @@ function runContractGate(validators) {
   const requestSchemaMutations = [
     ["unknown-property", (value) => (value.unknown = true)],
     ["missing-semantic-interface", (value) => delete value.semanticInterface],
+    [
+      "missing-immediate-data-layout-model",
+      (value) => delete value.metal.immediateDataLayoutModel,
+    ],
+    [
+      "unknown-immediate-data-layout-model",
+      (value) =>
+        (value.metal.immediateDataLayoutModel =
+          "vgpu-metal-immediate-data-layout-v2"),
+    ],
+    [
+      "fragment-size-offset-drift",
+      (value) => (value.entryPoint.stage = "fragment"),
+    ],
     [
       "wrong-contract",
       (value) => (value.contractId = "vgpu-native-tint-compiler/v2"),
@@ -641,6 +672,7 @@ function runContractGate(validators) {
       "noop",
       (value) => {
         value.entryPoint.stage = "fragment";
+        value.metal.storageBufferSizes.immediateDataByteOffset = 12;
         value.semanticInterface = {
           kind: "fragment",
           inputs: [
@@ -660,6 +692,7 @@ function runContractGate(validators) {
       "noop",
       (value) => {
         value.entryPoint.stage = "fragment";
+        value.metal.storageBufferSizes.immediateDataByteOffset = 12;
         value.languageFeatures = ["dual_source_blending"];
         value.semanticInterface = {
           kind: "fragment",
@@ -680,8 +713,26 @@ function runContractGate(validators) {
       "noop",
       (value) => {
         value.entryPoint.stage = "fragment";
+        value.metal.storageBufferSizes.immediateDataByteOffset = 12;
         value.semanticInterface = structuredClone(shaderInterfaces.dualSource);
       },
+    ],
+    [
+      "immediate-data-layout-model",
+      "runtime-array",
+      (value) =>
+        (value.metal.immediateDataLayoutModel =
+          "vgpu-metal-immediate-data-layout-v2"),
+      false,
+    ],
+    [
+      "stage-size-offset",
+      "noop",
+      (value) => {
+        value.entryPoint.stage = "fragment";
+        value.semanticInterface = { kind: "fragment", inputs: [], outputs: [] };
+      },
+      false,
     ],
     [
       "semantic-interface-missing-position",
@@ -719,6 +770,8 @@ function runContractGate(validators) {
     "semantic-interface-dual-source": "VGPU-C1-PROTOCOL-INTERFACE",
     "semantic-interface-dual-source-feature": "VGPU-C1-PROTOCOL-INTERFACE",
     "semantic-interface-missing-position": "VGPU-C1-PROTOCOL-INTERFACE",
+    "immediate-data-layout-model": "VGPU-C1-PROTOCOL-METAL-ABI",
+    "stage-size-offset": "VGPU-C1-PROTOCOL-METAL-ABI",
   };
   for (const [
     id,
@@ -852,6 +905,14 @@ function runContractGate(validators) {
           "kernel void vgpu_noop();\nkernel void other() {}\n"),
       (request, response) => assertResponseSemantics(request, response),
     ],
+    [
+      "response-size-offset-drift",
+      "runtime-array",
+      (value) =>
+        (value.result.storageBufferSizeRegions[0].immediateDataByteOffset = 12),
+      (request, response) => assertResponseSemantics(request, response),
+      false,
+    ],
   ];
   const responseSemanticCodes = {
     "response-interface-drift": "VGPU-C1-PROTOCOL-INTERFACE",
@@ -863,6 +924,7 @@ function runContractGate(validators) {
     "comment-only-entry-name": "VGPU-C1-PROTOCOL-MSL-ENTRY",
     "block-comment-entry-declaration": "VGPU-C1-PROTOCOL-MSL-ENTRY",
     "prototype-entry-declaration": "VGPU-C1-PROTOCOL-MSL-ENTRY",
+    "response-size-offset-drift": "VGPU-C1-PROTOCOL-SIZE-REGION",
   };
   for (const [
     id,
@@ -965,11 +1027,12 @@ function singleSourceRequest({
     languageFeatures,
     metal: {
       bindingModel: "vgpu-metal-binding-slots-v1",
+      immediateDataLayoutModel: METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
       bindings,
       internalReservations: [structuredClone(expectedInternalReservation)],
       storageBufferSizes: {
         model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-        immediateDataByteOffset: 4,
+        immediateDataByteOffset: storageBufferSizeOffsetForStage(stage),
       },
     },
   };
@@ -1027,11 +1090,12 @@ fn main() {
       languageFeatures: [],
       metal: {
         bindingModel: "vgpu-metal-binding-slots-v1",
+        immediateDataLayoutModel: METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
         bindings: [binding(0, 0, "buffer", 0), binding(0, 1, "buffer", 1)],
         internalReservations: [structuredClone(expectedInternalReservation)],
         storageBufferSizes: {
           model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-          immediateDataByteOffset: 4,
+          immediateDataByteOffset: storageBufferSizeOffsetForStage("compute"),
         },
       },
     },
@@ -1620,6 +1684,17 @@ async function runWorkerCodecGate({ executable, requests, validators }) {
       requests.fixedPrefix,
     ],
     [
+      "immediate-data-layout-model",
+      (request) =>
+        (request.metal.immediateDataLayoutModel =
+          "vgpu-metal-immediate-data-layout-v2"),
+    ],
+    [
+      "storage-buffer-size-offset",
+      (request) =>
+        (request.metal.storageBufferSizes.immediateDataByteOffset = 12),
+    ],
+    [
       "interface-unknown-field",
       (request) => (request.semanticInterface.inputs[0].name = "global_id"),
       requests.computeBuiltinInterface,
@@ -2100,6 +2175,7 @@ async function runTintGate(options, validators, contractRequests, scratch) {
     requests.noop,
     (request) => {
       request.entryPoint.stage = "fragment";
+      request.metal.storageBufferSizes.immediateDataByteOffset = 12;
       request.semanticInterface = {
         kind: "fragment",
         inputs: [],

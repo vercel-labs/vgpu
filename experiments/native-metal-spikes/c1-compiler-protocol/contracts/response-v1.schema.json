@@ -328,9 +328,35 @@
           "$ref": "#/$defs/stage"
         },
         "immediateDataByteOffset": {
-          "const": 4
+          "enum": [4, 12]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "stage": {
+                "const": "fragment"
+              }
+            },
+            "required": ["stage"]
+          },
+          "then": {
+            "properties": {
+              "immediateDataByteOffset": {
+                "const": 12
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "immediateDataByteOffset": {
+                "const": 4
+              }
+            }
+          }
+        }
+      ]
     },
     "resolvedWorkgroupSize": {
       "type": "object",

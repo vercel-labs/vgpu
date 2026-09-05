@@ -34,6 +34,8 @@ constexpr std::string_view kSemanticExtractionRequestIdentityDomain =
     "vgpu-native-tint-semantic-extraction-request-bytes/v1";
 constexpr std::string_view kOriginMapContract = "vgpu-native-origin-map/v1";
 constexpr std::string_view kBindingModel = "vgpu-metal-binding-slots-v1";
+constexpr std::string_view kImmediateDataLayoutModel =
+    "vgpu-metal-immediate-data-layout-v1";
 constexpr std::string_view kStorageSizeModel =
     "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 constexpr size_t kMaxOriginSources = 4096;
@@ -1509,10 +1511,14 @@ private:
 
   bool DecodeMetal(const Json::Value &value, CompilerRequest &request) {
     if (!HasExactMembers(value,
-                         {"bindingModel", "bindings", "internalReservations",
+                         {"bindingModel", "immediateDataLayoutModel",
+                          "bindings", "internalReservations",
                           "storageBufferSizes"}) ||
         !value["bindingModel"].isString() ||
-        value["bindingModel"].asString() != kBindingModel) {
+        value["bindingModel"].asString() != kBindingModel ||
+        !value["immediateDataLayoutModel"].isString() ||
+        value["immediateDataLayoutModel"].asString() !=
+            kImmediateDataLayoutModel) {
       return Fail("Metal profile has missing fields or an unsupported model");
     }
     if (!DecodeBindings(value["bindings"], request)) {
@@ -1553,11 +1559,13 @@ private:
         storage["model"].asString() != kStorageSizeModel) {
       return Fail("storage-buffer-size model is invalid");
     }
+    const uint32_t expected_offset = request.stage == "fragment" ? 12U : 4U;
     const auto offset =
-        ReadUnsignedInteger(storage["immediateDataByteOffset"], 4);
-    if (!offset || *offset != 4) {
+        ReadUnsignedInteger(storage["immediateDataByteOffset"], 12);
+    if (!offset || *offset != expected_offset) {
       return Fail("storage-buffer-size offset is invalid");
     }
+    request.storage_buffer_sizes_offset = static_cast<uint32_t>(*offset);
     return true;
   }
 

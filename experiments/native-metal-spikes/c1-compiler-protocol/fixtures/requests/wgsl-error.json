@@ -60,6 +60,7 @@
   "languageFeatures": [],
   "metal": {
     "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
     "bindings": [],
     "internalReservations": [
       {

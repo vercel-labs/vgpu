@@ -20,7 +20,9 @@ import {
   assertResponseSemantics,
   attachDiagnosticOrigins,
   COMPILER_CONTRACT,
+  METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
   sha256Utf8,
+  storageBufferSizeOffsetForStage,
   TINT_REVISION as WORKER_TINT_REVISION,
 } from "../c1-compiler-protocol/lib/protocol.mjs";
 import {
@@ -549,11 +551,12 @@ function exactStaticRequest({
     languageFeatures,
     metal: {
       bindingModel: "vgpu-metal-binding-slots-v1",
+      immediateDataLayoutModel: METAL_IMMEDIATE_DATA_LAYOUT_MODEL,
       bindings: [],
       internalReservations: [structuredClone(expectedInternalReservation)],
       storageBufferSizes: {
         model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-        immediateDataByteOffset: 4,
+        immediateDataByteOffset: storageBufferSizeOffsetForStage(stage),
       },
     },
   };

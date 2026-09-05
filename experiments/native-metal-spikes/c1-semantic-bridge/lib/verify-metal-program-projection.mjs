@@ -9,6 +9,9 @@ export const METAL_PROGRAM_PROJECTION_VERIFY_CODE =
   "VGPU-C1-METAL-PROJECTION-VERIFY";
 
 const stageOrder = ["vertex", "fragment", "compute"];
+const immediateDataLayoutModel = "vgpu-metal-immediate-data-layout-v1";
+const storageBufferSizeModel =
+  "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1";
 const stagesForKind = Object.freeze({
   effect: Object.freeze(["vertex", "fragment"]),
   draw: Object.freeze(["vertex", "fragment"]),
@@ -113,6 +116,23 @@ export function verifyMetalProgramProjection({
     const requestMetal = requireRecord(request.metal, `${owner}.request.metal`);
     if (requestMetal.bindingModel !== allocation.bindingModel) {
       fail(`${owner} request uses a different Metal binding model`);
+    }
+    if (requestMetal.immediateDataLayoutModel !== immediateDataLayoutModel) {
+      fail(`${owner} request uses a different immediate-data layout model`);
+    }
+    const storageBufferSizes = requireRecord(
+      requestMetal.storageBufferSizes,
+      `${owner}.request.metal.storageBufferSizes`
+    );
+    const expectedStorageBufferSizeOffset = stage === "fragment" ? 12 : 4;
+    if (
+      storageBufferSizes.model !== storageBufferSizeModel ||
+      storageBufferSizes.immediateDataByteOffset !==
+        expectedStorageBufferSizeOffset
+    ) {
+      fail(
+        `${owner} request uses an invalid ${stage} storage-buffer-size policy`
+      );
     }
     const expectedRequestBindings = requestBindingsForStage({
       allocation,

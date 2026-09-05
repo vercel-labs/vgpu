@@ -149,7 +149,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       vertex: Object.freeze({
         requestSha256:
-          "6a7910a70cb21c137284dea08476a4d6d9658a087c36e50978a2af93ff935baf",
+          "433af9f0fdb675d3cac2456dc4f86111744a4ca011983e87362137143e092976",
         responseSha256:
           "cfec82e2db84a13a8b37509779078e97e39e150a293bb38c8a43cd2bb1836c25",
         mslSha256:
@@ -157,7 +157,7 @@ const expectedSnapshots = Object.freeze({
       }),
       fragment: Object.freeze({
         requestSha256:
-          "9be658b82cd0bab6a8cbe05a14d6ed8a8da95b0e8cfbe8a8b84e4ff23cc10e11",
+          "4a7c265bd657d50fe86530985affad579ea6ddc8f24c0012e2d4e9eec5622231",
         responseSha256:
           "2c9cea9098c73ec00c14f695219e5b5f7342de28fe06bba239f68b1d15eb9ca0",
         mslSha256:
@@ -181,7 +181,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "7d68409a8adaf33bc30caf20a88db157a10e93597c54115529a62f3942995f4b",
+          "c87ae7e5e375d5cf25ca1aeb78cbb7a947f8a53b52e8a89c7d3514b17a96043b",
         responseSha256:
           "98b6796c1cd01b71e02855bc300c3fd69ee85cd2ad8b66918cd7bb7324b4c621",
         mslSha256:
@@ -201,7 +201,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "2c8ac152d2395d423a852ad67b2289765781027e4c0aff9050c9e355771380cc",
+          "cbb4ea4d1905cffff4b2ba426298112574a55827d27110f7eea4138526da9700",
         responseSha256:
           "a1c92c74d2c2723ae407fa0f388bcedc13d33dac047e7eb2a357ea1e9d5677c7",
         mslSha256:
@@ -221,7 +221,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "6aca22eeb66898720f71aefbc1267eefd2f177716a40847df2eeffb266322b1f",
+          "759e8e490e0c5a24725e20db9666a779fb09f3b51960870b64e6779c85952803",
         responseSha256:
           "838fd22a045f5297ec0adf9534f6a0f318a4789e059b9397eb6bf3fc801f7f29",
         mslSha256:
@@ -241,7 +241,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "2c8ac152d2395d423a852ad67b2289765781027e4c0aff9050c9e355771380cc",
+          "cbb4ea4d1905cffff4b2ba426298112574a55827d27110f7eea4138526da9700",
         responseSha256:
           "a1c92c74d2c2723ae407fa0f388bcedc13d33dac047e7eb2a357ea1e9d5677c7",
         mslSha256:
@@ -265,7 +265,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       vertex: Object.freeze({
         requestSha256:
-          "75f0c34694150789e9893fbdf0c3a44edfc874ba89e86b54a1d35ae4160bad29",
+          "337fbbc38208089c934d4da043bbd2e66b187ca1b5c8afb139515dee0634c826",
         responseSha256:
           "6babd78c91a93bfe5f8372e0057a2238c29b1e613232f0d9584fb9484e7b808a",
         mslSha256:
@@ -273,7 +273,7 @@ const expectedSnapshots = Object.freeze({
       }),
       fragment: Object.freeze({
         requestSha256:
-          "60c26bb6f5511c6966ca8a63eb861439d5dd00c50bea1416e50c0451f9f34d61",
+          "39f062bbb13040d71755e09a29987f4b68cd754dbda84205818327a4d6d8f1c8",
         responseSha256:
           "ce11f4af789b8fc1ba50af1d267bb8bb3c619c7cd99f2a8ad449a32fb15c2096",
         mslSha256:
@@ -293,7 +293,7 @@ const expectedSnapshots = Object.freeze({
     translations: Object.freeze({
       compute: Object.freeze({
         requestSha256:
-          "53041016cb1c9b0377fa8b5a67dc2974d3b2b324a199031ac03527e67b2b9a37",
+          "42e79501488e6789dc1efce6254f939ea6874a6d5c7fd07b11f09544ca38a948",
         responseSha256:
           "eec952ce28d39bb4d3ccb4dc83a342470caa83fb2be498f038f789a7e4732475",
         mslSha256:
@@ -1477,6 +1477,10 @@ function assertResourceSlotAllocation(fixture) {
     compilerBinding(0, 10, "buffer", 1),
   ]);
   for (const request of Object.values(requests)) {
+    assert.equal(
+      request.metal.immediateDataLayoutModel,
+      "vgpu-metal-immediate-data-layout-v1"
+    );
     assert.deepEqual(request.metal.internalReservations, [
       {
         role: "immediate-data",
@@ -1493,7 +1497,7 @@ function assertResourceSlotAllocation(fixture) {
     ]);
     assert.deepEqual(request.metal.storageBufferSizes, {
       model: "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
-      immediateDataByteOffset: 4,
+      immediateDataByteOffset: request.entryPoint.stage === "fragment" ? 12 : 4,
     });
   }
 }
@@ -3068,6 +3072,13 @@ function assertIndependentProjectionVerifier(overrideEvidence) {
   reject((candidate) => {
     candidate.semanticLayouts.l_runtime.runtimeSized = false;
   });
+  reject((candidate) => {
+    candidate.translations[0].request.metal.immediateDataLayoutModel =
+      "vgpu-metal-immediate-data-layout-v2";
+  });
+  reject((candidate) => {
+    candidate.translations[0].request.metal.storageBufferSizes.immediateDataByteOffset = 12;
+  });
 
   const overrideBaseline = {
     semanticProgram: structuredClone(
@@ -3154,6 +3165,7 @@ function runtimeSizedProjectionVerifierFixture() {
     overrides: [],
     metal: {
       bindingModel: "vgpu-metal-binding-slots-v1",
+      immediateDataLayoutModel: "vgpu-metal-immediate-data-layout-v1",
       bindings: structuredClone(requestBindings),
       internalReservations: [
         { role: "immediate-data", slots: [structuredClone(immediateSlot)] },

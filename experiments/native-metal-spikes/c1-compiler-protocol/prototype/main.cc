@@ -12,8 +12,9 @@
 // The translation operation owns the Metal ABI instead of accepting
 // translator-selected internals. External buffer intervals are restricted to
 // 0..<30. Tint receives one shared immediate-data binding at buffer(30), with
-// the storage-buffer-size table starting at byte offset 4 and the ordinary
-// non-constant-zero word at byte offset 0. The translation response reports an
+// the storage-buffer-size table starting at byte offset 4 for vertex/compute
+// and 12 for fragment, and the ordinary non-constant-zero word at byte offset
+// 0. The translation response reports an
 // effective internal binding and storage-buffer-size region only when Tint's
 // raised entry interface / writer output uses them.
 
@@ -74,7 +75,6 @@ namespace {
 
 constexpr uint32_t kExternalBufferCeiling = 30;
 constexpr uint32_t kImmediateDataIndex = 30;
-constexpr uint32_t kStorageBufferSizesOffset = 4;
 constexpr uint32_t kNonConstantZeroOffset = 0;
 constexpr size_t kDiagnosticMessageMaxBytes = 16384;
 constexpr size_t kDiagnosticMessagesTotalMaxBytes = 1024 * 1024;
@@ -1190,7 +1190,8 @@ void WriteSuccess(const Arguments &arguments, std::vector<Mapping> mappings,
          << "    \"storageBufferSizeRegions\": [";
   if (generated.needs_storage_buffer_sizes) {
     output << "{\"stage\": " << JsonString(arguments.stage)
-           << ", \"immediateDataByteOffset\": " << kStorageBufferSizesOffset
+           << ", \"immediateDataByteOffset\": "
+           << arguments.storage_buffer_sizes_offset
            << '}';
   }
   output << "]\n"
@@ -1427,7 +1428,7 @@ int Run(const Arguments &arguments) {
       RuntimeStorageBindings(ir, arguments.entry_point);
 
   tint::msl::writer::ArrayLengthOptions array_lengths;
-  array_lengths.buffer_sizes_offset = kStorageBufferSizesOffset;
+  array_lengths.buffer_sizes_offset = arguments.storage_buffer_sizes_offset;
   for (const auto &binding_point : runtime_storage) {
     const auto mapping =
         std::find_if(mappings.begin(), mappings.end(), [&](const auto &item) {

@@ -52,10 +52,66 @@
       }
     },
     "metal": {
-      "description": "The v1 writer profile always supplies one candidate immediate-data reservation at buffer(30) and a storage-size region offset of four bytes. Their presence configures Tint but does not imply that either is effective in the response.",
+      "description": "The v1 writer profile always supplies one candidate immediate-data reservation at buffer(30), the fixed immediate-data layout model, and its stage-specific storage-size region offset. Their presence configures Tint but does not imply that either is effective in the response.",
       "$ref": "#/$defs/metal"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "entryPoint": {
+            "type": "object",
+            "required": ["stage"],
+            "properties": {
+              "stage": {
+                "const": "fragment"
+              }
+            }
+          }
+        },
+        "required": ["entryPoint"]
+      },
+      "then": {
+        "properties": {
+          "metal": {
+            "type": "object",
+            "required": ["storageBufferSizes"],
+            "properties": {
+              "storageBufferSizes": {
+                "type": "object",
+                "required": ["immediateDataByteOffset"],
+                "properties": {
+                  "immediateDataByteOffset": {
+                    "const": 12
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "metal": {
+            "type": "object",
+            "required": ["storageBufferSizes"],
+            "properties": {
+              "storageBufferSizes": {
+                "type": "object",
+                "required": ["immediateDataByteOffset"],
+                "properties": {
+                  "immediateDataByteOffset": {
+                    "const": 4
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "nonEmptyString": {
       "type": "string",
@@ -745,7 +801,7 @@
           "const": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"
         },
         "immediateDataByteOffset": {
-          "const": 4
+          "enum": [4, 12]
         }
       }
     },
@@ -754,6 +810,7 @@
       "additionalProperties": false,
       "required": [
         "bindingModel",
+        "immediateDataLayoutModel",
         "bindings",
         "internalReservations",
         "storageBufferSizes"
@@ -761,6 +818,10 @@
       "properties": {
         "bindingModel": {
           "const": "vgpu-metal-binding-slots-v1"
+        },
+        "immediateDataLayoutModel": {
+          "description": "Versioned positions of internal roles inside the shared stage-local immediate-data block.",
+          "const": "vgpu-metal-immediate-data-layout-v1"
         },
         "bindings": {
           "type": "array",

@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 
 export const COMPILER_CONTRACT = "vgpu-native-tint-compiler/v1";
 export const TINT_REVISION = "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca";
+export const METAL_IMMEDIATE_DATA_LAYOUT_MODEL =
+  "vgpu-metal-immediate-data-layout-v1";
 
 const immediateReservation = {
   role: "immediate-data",
@@ -169,9 +171,12 @@ export function assertRequestSemantics(request) {
   }
   if (
     request.metal.bindingModel !== "vgpu-metal-binding-slots-v1" ||
+    request.metal.immediateDataLayoutModel !==
+      METAL_IMMEDIATE_DATA_LAYOUT_MODEL ||
     request.metal.storageBufferSizes.model !==
       "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1" ||
-    request.metal.storageBufferSizes.immediateDataByteOffset !== 4
+    request.metal.storageBufferSizes.immediateDataByteOffset !==
+      storageBufferSizeOffsetForStage(request.entryPoint.stage)
   ) {
     fail(
       "VGPU-C1-PROTOCOL-METAL-ABI",
@@ -356,7 +361,8 @@ export function assertResponseSemantics(request, response) {
       !isDeepStrictEqual(internals, [immediateReservation]) ||
       regions.length !== 1 ||
       regions[0].stage !== request.entryPoint.stage ||
-      regions[0].immediateDataByteOffset !== 4
+      regions[0].immediateDataByteOffset !==
+        request.metal.storageBufferSizes.immediateDataByteOffset
     ) {
       fail(
         "VGPU-C1-PROTOCOL-SIZE-REGION",
@@ -395,6 +401,12 @@ export function assertResponseSemantics(request, response) {
     );
   }
   return response;
+}
+
+export function storageBufferSizeOffsetForStage(stage) {
+  if (stage === "fragment") return 12;
+  if (stage === "vertex" || stage === "compute") return 4;
+  return undefined;
 }
 
 function byteOffsetForLocation(text, position) {

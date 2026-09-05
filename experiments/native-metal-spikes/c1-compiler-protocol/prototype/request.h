@@ -68,6 +68,7 @@ struct CompilerRequest {
   std::set<std::string> features;
   std::map<std::string, OverrideValue> overrides;
   std::vector<Mapping> mappings;
+  uint32_t storage_buffer_sizes_offset = 0;
 };
 
 struct RequestIdentity {
