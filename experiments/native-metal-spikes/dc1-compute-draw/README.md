@@ -23,20 +23,47 @@ carried through the allocation SPI so a future Vulkan backend can select its imm
 usage at creation time. This layer records command consumption in a fake backend; it does not prove
 Metal visibility or a native resource transition.
 
-Run the WebGPU oracle, portable Swift recording layer, and C2 regression gates with:
+Run the complete WebGPU and connected Swift/Metal suite with:
 
 ```sh
-./experiments/native-metal-spikes/dc1-compute-draw/run.sh
+bash experiments/native-metal-spikes/dc1-compute-draw/run.sh
 ```
 
-The separate compiler bridge resolves both semantic programs once, authenticates and translates
-three stages, and links them into one source-free `metallib`. It deliberately reports whether the
-connected probe was supplied, so a compiler-only pass cannot be mistaken for the complete DC1
-gate.
+Pass a Tint worker explicitly when it is not at the default direct-build artifact path:
 
-## Pending Metal connected gate
+```sh
+bash experiments/native-metal-spikes/dc1-compute-draw/run.sh \
+  /path/to/vgpu-tint-worker
+```
 
-The end-to-end Metal gate is **not implemented and no Metal result is claimed yet**. A later layer
-must package the authenticated programs and projections, expose the same allocation as a bounded
-`buffer.slice(bytes: 16..<32)`, submit compute and render on the same Metal queue without a CPU wait,
-and reproduce the blue/red/green controls through the public Swift API.
+Success is one deterministic `dc1-compute-draw-suite` JSON object on stdout and no stderr. The
+suite always runs both the public WebGPU oracle and the connected compiler-to-Metal gate. The
+compiler bridge resolves both semantic programs once, authenticates and translates three stages,
+and links them into one source-free `metallib`. Its external probe runs twice and requires
+byte-identical reports, so a compiler-only pass cannot be mistaken for the complete DC1 gate.
+
+## Connected Metal gate
+
+The isolated connected gate passes. Real WGSL crosses the semantic bridge, Tint, and Apple's Metal
+compiler before a deterministic assembler emits one relocatable SwiftPM artifact. Generated
+`AppShaders` depends only on `VGPUABI`; clean consumer code selects the separate
+`VGPUMetalCompute` and `VGPUMetalRender` products without importing internal or testing modules.
+
+Two connected processes reproduce exact blue, red, and green controls. The positive trace is
+`computeCommit` followed by `frameCommit` on the shared Metal queue, using one allocation and
+generation, view range `[16, 32]`, consumer offset `0`, physical offset `16`, and a direct vertex
+count of `0`. There is no packet readback or application await between dispatch and frame; target
+readback is the first suspension after both commits. The sequential fixture also requires one
+authenticated Metal-library load. Portable recording proves nested relative slices and rejects
+missing usage, a foreign context, misalignment, a short range, and offset overflow before
+submission, token registration, or `onError`.
+
+The current connected report SHA-256 is
+`c9e5f8211a5db1d059d8919869a56678672d050438eb953b28673a10f1b8283c`; its metallib SHA-256 is
+`f2cdafbd783e0673928e77bf2934b6a0a8844d4b653a4f5f13de3da9ebd927e6`, and its compiler handoff
+SHA-256 is `7554797a66b9734710ce833c7c393818fde62bfbc1ee1a77899a0e7414a1758f`.
+
+This remains an isolated overlay and fixture, not the distributable runtime or production artifact
+format. Native execution covers the available Apple-silicon device. The `x86_64` consumer build is
+compile-only evidence, not Intel or AMD GPU execution. Indexed draw, indirect dispatch,
+runtime-sized or imported buffer views, and a Vulkan transition remain untested here.

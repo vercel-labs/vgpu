@@ -58,8 +58,9 @@ WGSL modules
   a fixed structure prefix followed by a runtime-sized array.
 - [Compute storage](./compute/storage.md) records the two-entry C4 contract, WebGPU oracle, native
   Metal evidence, ping-pong roles, and dispatch-time aliasing rule.
-- [Compute-to-draw indirect](./render/indirect.md) specifies the proposed DC1 buffer-view,
-  validation, queue-ordering, and falsifiable fixture contract.
+- [Compute-to-draw indirect](./render/indirect.md) records the accepted buffer-view contract and
+  passing isolated DC1 validation, queue-ordering, and Metal evidence; production integration
+  remains open.
 
 ## Compiler contracts
 

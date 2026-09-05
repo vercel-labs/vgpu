@@ -105,7 +105,7 @@ vertex selection when more than one exists.
 - `VGPUFramePassResult` distinguishes `.encoded` from normal drawable `.unavailable` without using
   errors for a hidden or resizing window.
 
-## Proposed compute-to-draw indirect contract
+## Compute-to-draw indirect contract
 
 DC1 creates storage with immutable additional indirect usage:
 
@@ -133,7 +133,11 @@ another context preserves the shared `VGPU-NATIVE-CONTEXT-MISMATCH` error. A one
 compute submission followed by a render frame is ordered on the same queue without an await or
 packet readback. The runtime snapshots the exact generation and range for each accepted command.
 No indirect-command or buffer-view fields enter semantic v1 or a backend projection. See
-[Compute-to-draw indirect](./render/indirect.md) for the proposed DC1 fixture and backend rules.
+[Compute-to-draw indirect](./render/indirect.md) for the DC1 fixture and backend rules.
+
+The isolated DC1 gates validate this spelling, ownership, synchronous validation, and queue
+ordering for a 16-byte non-indexed draw. Production integration, indexed draw, and indirect
+dispatch remain open.
 
 ## Artifact contract to freeze first
 

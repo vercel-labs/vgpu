@@ -1,6 +1,7 @@
 # Compute-to-draw indirect contract
 
-Status: proposed for the next DC1 gate. No implementation or passing result is claimed here.
+Status: the isolated DC1 WebGPU, portable Swift, and connected Swift/Metal gates pass. Production
+integration remains open.
 
 ## Public shape
 
@@ -88,11 +89,11 @@ observable. The vertex program contains two full-screen triangles and derives th
 `slice(bytes: 16..<32)` proves the non-zero offset path; accidentally consuming byte zero selects
 the decoy and leaves the target blue. The observable outcomes are therefore distinct:
 
-| Result | Meaning |
-| --- | --- |
-| Blue | The indirect draw did not execute. |
-| Red | The draw consumed the stale packet. |
-| Green | The draw consumed the compute-produced packet. |
+| Result | Meaning                                        |
+| ------ | ---------------------------------------------- |
+| Blue   | The indirect draw did not execute.             |
+| Red    | The draw consumed the stale packet.            |
+| Green  | The draw consumed the compute-produced packet. |
 
 The accepted-work trace is exactly two ordered submissions: one compute dispatch, then one render
 frame containing the indirect draw. There is no packet readback, CPU wait, or intermediate
@@ -104,3 +105,22 @@ required 16 bytes. Missing usage, misalignment, and insufficient range must sync
 the accepted-work trace unchanged and produces neither a submission token nor an `onError` event.
 
 DC1 is one direct gate. There is no separate DC1a milestone.
+
+## Passing isolated evidence
+
+The public WebGPU oracle and connected Metal path reproduce the exact blue, red, and green controls.
+The Metal fixture records `computeCommit` followed by `frameCommit` on one queue, the same allocation
+and generation at both consumers, view range `[16, 32]`, consumer offset `0`, physical offset `16`,
+and one authenticated library load. It performs no packet readback or application await between the
+dispatch and frame; target readback is the first suspension after both commits.
+
+The portable recording backend additionally proves nested relative slices and five synchronous
+rejections: missing `.indirect`, foreign context, misaligned effective offset, short range, and
+integer overflow. Every rejection leaves submission, token, and `onError` counts unchanged. The
+connected artifact is deterministic, relocatable, source-free after generation, and keeps generated
+`AppShaders` dependent only on `VGPUABI` while Compute and Render remain separate products.
+
+This evidence covers one ordinary fixed-size storage allocation and a 16-byte non-indexed draw on
+the available Apple-silicon device. The `x86_64` result is compile-only. Indexed draw, indirect
+dispatch, imported or runtime-sized views, Vulkan transitions, production distribution, and the
+complete target lifecycle remain open.

@@ -460,16 +460,20 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    compile-only. Production C4 remains open until the same gate runs through the distributable
    implementation and declared toolchain/hardware matrix.
 
-4. DC1 is the next proposed gate, not a passing result. Storage declares
+4. The isolated DC1 gate passed against its canonical fixture. Storage declares
    `additionalUsage: [.indirect]` independently from `access`; `VGPUStorage.buffer` and
-   `VGPUBuffer.slice(bytes:)` create bounded, non-allocating views over the same generation without
-   introducing another allocation owner. Draw and future dispatch consumers acquire the normal
-   generation lease and
-   validate their 16-, 20-, or 12-byte packets
-   synchronously. Invalid usage, absolute alignment, or range reports `VGPU-INDIRECT-INVALID`; cross-context
-   use preserves `VGPU-NATIVE-CONTEXT-MISMATCH`. Compute and render remain two submissions ordered on
-   one queue without CPU synchronization. This runtime state adds nothing to semantic or projection
-   artifacts. DC1 is one direct gate, with no DC1a. See
+   `VGPUBuffer.slice(bytes:)` remain bounded, non-allocating views over the same owner and
+   generation. The public WebGPU oracle and connected Swift/Metal path reproduce exact blue, red,
+   and green controls. Compute and frame are two commits on one Metal queue with no packet readback
+   or application await between them; the draw consumes the same allocation and generation through
+   view `[16, 32]` at physical offset `16`. Portable recording proves nested relative slices and
+   rejects missing usage, a foreign context, misalignment, a short range, and offset overflow
+   synchronously with the specified codes and zero registration, submission, or `onError` delta.
+   One source-free authenticated artifact survives deterministic assembly, relocation, poisoned
+   toolchain execution, and separate Compute/Render products. This validates the API and isolated
+   spike seam, not the production runtime or distribution. Native execution covers Apple silicon;
+   `x86_64` is compile-only. Indexed draw, indirect dispatch, imported or runtime-sized views, and
+   Vulkan remain open. DC1 is one direct gate, with no DC1a. See
    [Compute-to-draw indirect](./render/indirect.md).
 5. The exact Swift and Xcode patch-version matrix for macOS 14. Swift tools and language mode 6 are
    the candidate contract; C3 must compile and run generated packages with the minimum and current
