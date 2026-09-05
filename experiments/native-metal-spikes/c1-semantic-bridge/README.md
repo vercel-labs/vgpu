@@ -174,9 +174,13 @@ runtime-sized translations are byte-identical, assemble one authenticated projec
 link offline. In each of two live M4 Pro processes, two dispatches reuse one backing allocation and
 binding offset with effective ranges `28` and `52`, upload immediate words `[0, 28]` and `[0, 52]`,
 and read back `[2, 202]` and `[4, 404]`. The optional runtime-tail hook also hands that exact scratch
-metallib and manifest to one additional typed C2 process. Its immutable two- and four-element views
-reproduce the same ranges and readbacks without treating the backing allocation length as the
-binding length. The override programs preserve a
+metallib and manifest to one additional typed C2 resource process. Its immutable two- and
+four-element views reproduce the same ranges and readbacks without treating the backing allocation
+length as the binding length. The independent `--generated-compute-probe` hook hands the same files
+to two generated-program processes and requires byte-identical reports. Those processes validate
+the semantic binding witness, synchronous `gpu.compute`, atomic `set`, independent dispatch
+snapshots, submission and context settlement, deferred error delivery, and generation retention
+through real Metal. The override programs preserve a
 dependent default, an explicitly bypassed initializer, an equivalent explicit default, different
 render-stage subsets, and all five scalar kinds including `f16`. Their six retained MSL sources
 contain no `function_constant`, compile to AIR, and link into five metallibs. The render program also
@@ -267,8 +271,9 @@ The semantic work is split by responsibility so the growing design remains revie
    exact-static override fixtures are executable; the authenticated repository corpus remains open.
 9. Join semantic resource constraints to projected slots, prepare complete logical resource sets,
    bind the fixed-resource render pair and runtime-sized compute buffer, and observe baked override
-   values at runtime. These live canaries are executable, and the runtime-tail hook now validates the
-   proposed typed resource-to-Metal seam; general resources and the production Swift runtime remain
+   values at runtime. These live canaries are executable. The runtime-tail hook validates the typed
+   resource-to-Metal seam, while the generated-compute hook validates one complete typed compute
+   path through the proposed split Swift runtime. General resources and a production runtime remain
    open.
 10. Run the authenticated repository corpus and record expected failures separately.
 
