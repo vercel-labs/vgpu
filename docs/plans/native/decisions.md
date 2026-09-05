@@ -146,17 +146,17 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   `JCS-RFC8785+VGPU-PATHS-v1` canonicalization; ordered arrays retain their order. Referenced WGSL
   bytes and reachable semantics change the fingerprint; unreachable declarations do not.
 - Generated Swift and TypeScript packers consume the reflected semantic layout rather than Swift
-  `MemoryLayout` or TypeScript's current layout calculator. They reject invalid shapes, fixed-array
+  `MemoryLayout`. They reject invalid shapes, fixed-array
   counts, integer values, ranges, and runtime extents before mutation; write little-endian scalars
   and column-major matrices; and zero padding. WGSL `f16` conversion uses IEEE 754 binary16
   round-to-nearest, ties-to-even. Quiet-NaN class is portable; NaN payload bits are not a value
   contract.
 - C2 demonstrated the intrinsic layout through an independent Swift packer and Metal compute
-  readback. The current TypeScript `naga-standard` calculation diverges for four small uniform
-  canaries, including a valid four-byte root struct that does not require
-  `uniform_buffer_standard_layout`. Replacing that public layout identity and implementation with
-  `wgsl-host-shareable-v1` is an implementation prerequisite, not an alternative native contract;
-  no compatibility alias is planned.
+  readback. TypeScript reflection and packing now match all 13 Swift/Tint cases, including the four
+  decisive compact-uniform canaries; all 15 f16 edge probes match round-to-nearest, ties-to-even;
+  and strict shape, integer-range, and runtime-extent failures carry complete paths before state or
+  GPU bytes change. The public layout identity is `wgsl-host-shareable-v1`; the previous
+  `naga-standard` string has no compatibility alias.
 - WGSL overrides are selected and substituted before WGSL-to-MSL translation. V1 records their
   declarations, evaluated defaults, selected values, and compute workgroup dimensions only as
   resolved positive integer `x`, `y`, and `z`. Literal-versus-expression provenance and override

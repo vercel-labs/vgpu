@@ -224,10 +224,10 @@ when the feature is explicitly present. The feature changes address-space valida
 C2 established `wgsl-host-shareable-v1` as the packing contract. An independent Swift
 implementation agrees with Tint's intrinsic layouts for scalars, vectors, matrices, nested structs,
 fixed arrays, runtime arrays, and explicit member alignment and size. Metal compute readback also
-passes the four decisive small-uniform canaries. The existing TypeScript `naga-standard` calculator
-diverges for those four canaries, including a valid four-byte root struct; replacing it directly
-with the semantic layout model is a prerequisite to closing C2. No compatibility alias is part of
-the native contract.
+passes the four decisive small-uniform canaries. TypeScript now agrees on all 13 layouts and packed
+byte sequences, uses `wgsl-host-shareable-v1` directly without a compatibility alias, passes all 15
+f16 edge probes, and rejects the six strict shape, integer-range, and runtime-extent cases before
+mutating retained host state or GPU-visible bytes.
 
 The runtime-tail resource follow-up passed for generated storage structures whose final field is a
 runtime-sized array. Its proposed public contract separates immutable allocation `capacity` from
@@ -240,7 +240,7 @@ mutation, and compiles the generated conformance from a separate SwiftPM package
 `VGPUABI`. The connected C1 gate additionally ran one typed C2 process with the authenticated
 scratch metallib and manifest. Its two dispatches reproduced ranges `28` and `52` and readbacks
 `[2, 202]` and `[4, 404]`. This is distinct from C1's two deterministic raw-binder processes and
-does not close the broader C2 layout work or the pending TypeScript layout replacement.
+does not close production integration of the generated runtime-tail resource.
 
 Both packers must validate the complete value before writing: fixed shapes and counts are exact,
 integers are integral and in range, and a runtime array's element count and byte extent are checked

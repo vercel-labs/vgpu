@@ -198,6 +198,7 @@ interface Draw {
 - `VGPU-R1-BINDING-NEVER-SET` — a reflected binding was never provided before drawing. `set()` the named binding, or claim its group with `group(n, bindGroup)`.
 - `VGPU-R1-OWNERSHIP-FLIP` — a binding switched between JS-value ownership and resource ownership across `set()` calls. Keep passing the kind its first `set()` used.
 - `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` — a `set()` value does not satisfy the binding; the message names the binding and what it needs.
+- `VGPU-SET-VALUE-INVALID` — a JS-owned buffer binding has a missing or unknown struct member, the wrong vector/matrix/array extent, an out-of-range integer, or an invalid runtime-array extent. Structured detail identifies the complete value path and reason. The rejected value does not change that binding's retained host state or packed GPU bytes.
 - `VGPU-SET-TEXTURE-FILTERABILITY` — a facade texture format cannot satisfy an ordinarily sampled `float` binding (detail identifies the format, texture, and paired sampler). Use a filterable format, request `float32-filterable`, or rewrite to `textureLoad`.
 - `VGPU-R4-GROUP-CLAIMED` — `set()` tried to update a claimed group. Call `set()` before claiming, or keep updating the group yourself from `draw.layout(n)`.
 - `VGPU-R4-GROUP-INCOMPATIBLE` — a claimed bind group does not match the draw's layout. Build it from `draw.layout(n, { dynamicOffsets? })` before calling `group(n, bindGroup)`.

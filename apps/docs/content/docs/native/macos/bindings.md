@@ -136,7 +136,7 @@ This keeps the allocation's immutable `capacity` separate from the binding view'
 
 ## Pack values with the WGSL layout
 
-Every generated packer follows the semantic artifact's `layoutModel`, which is fixed to `"wgsl-host-shareable-v1"` for this contract. Tint reflects the intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride from the resolved module. Generated Swift consumes that reflection directly. The TypeScript packer must match the same semantic offsets; neither it nor Swift `MemoryLayout` defines them.
+Every generated packer follows the semantic artifact's `layoutModel`, which is fixed to `"wgsl-host-shareable-v1"` for this contract. Tint reflects the intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride from the resolved module. Generated Swift consumes that reflection directly. The TypeScript packer uses the same semantic offsets; neither it nor Swift `MemoryLayout` defines them.
 
 Intrinsic layout is independent of address space. A binding records `uniform` or `storage` and its access separately, then the compiler validates that use against the explicitly enabled WGSL language features. Validation may reject a use, but it never changes offsets or strides and never retries with an undeclared feature. For example, `uniform_buffer_standard_layout` must be selected explicitly when a uniform depends on those constraints.
 
