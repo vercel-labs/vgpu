@@ -211,6 +211,7 @@ describe("agent readiness metadata", () => {
     const semantic = nativeContract("semantic-v1.schema.json");
     const semanticSchema = JSON.parse(semantic);
     const projection = nativeContract("metal-projection-v1.schema.json");
+    const projectionSchema = JSON.parse(projection);
     const runnerRequest = nativeContract("metal-runner-request-v1.schema.json");
     const runnerResponse = nativeContract("metal-runner-response-v1.schema.json");
 
@@ -224,6 +225,11 @@ describe("agent readiness metadata", () => {
     expect(semanticSchema.$defs.layout.properties.addressSpace).toBeUndefined();
     expect(semanticSchema.$defs.bufferBinding.properties.addressSpace).toBeDefined();
     expect(projection).toContain('"vgpu-metal-binding-slots-v1"');
+    expect(projection).toContain('"immediateDataLayoutModel"');
+    expect(projectionSchema.required).toContain("immediateDataLayoutModel");
+    expect(projectionSchema.properties.immediateDataLayoutModel.pattern).toBe(
+      "^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$",
+    );
     expect(projection).toContain('"internalBindings"');
     expect(projection).toContain('"metalCompilerTargetTriple"');
     expect(projection).not.toContain('"targetTriple"');
@@ -246,10 +252,15 @@ describe("agent readiness metadata", () => {
     expect(artifacts).toContain("vgpu-native-program/v1");
     expect(artifacts).toContain("transitively reached elemental layout");
     expect(artifacts).toContain("separate runner-build fingerprint");
+    expect(artifacts).toContain("vgpu-metal-immediate-data-layout-v1");
+    expect(artifacts).toContain("Support for `immediateDataLayoutModel`");
+    expect(artifacts).toContain("Support for `storageBufferSizeModel`");
     expect(artifacts).toContain("its emission policy remains open");
     expect(build).toContain("C3a passed the current structural artifact fixture");
     expect(build).toContain("intentionally invalid UTF-8 text");
-    expect(build).toContain("C3b was skipped");
+    expect(build).toContain("C3b now passes");
+    expect(build).toContain("unknown immediate-data layout model");
+    expect(build).toContain("unknown storage-buffer-size model");
     expect(build).toContain("does not implement the compare request and response protocol");
     expect(compare).toContain("`single-json-eof` framing");
     expect(compare).toContain("`AppShadersC3MetalProbe`");

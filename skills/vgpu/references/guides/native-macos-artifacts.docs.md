@@ -83,6 +83,7 @@ Every `artifact.json` starts with this identity and then embeds one semantic con
       "bindingModel": "vgpu-metal-binding-slots-v1",
       "shaderInterfaceModel": "vgpu-metal-shader-interface-v1"
     },
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
     "storageBufferSizeModel": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1"
   }
 }
@@ -119,7 +120,7 @@ The `projection` object records only the selected Metal result:
 - the single `.metallib` reference;
 - emitted Metal function names;
 - the versioned vgpu mapping from semantic bindings to Metal buffer, texture, and sampler slots, plus every emitted backend-only internal slot;
-- the storage-buffer-size model and each compiler-emitted stage-local region within an `immediate-data` payload;
+- the immediate-data layout model, the independent storage-buffer-size model, and each compiler-emitted stage-local region within an `immediate-data` payload;
 - the versioned policy and exclusive external-buffer ceiling used to place pipeline-local vertex streams without colliding with vertex-stage shader buffers;
 - the versioned shader-interface model and exact vertex-location to Metal-attribute and
   fragment-location to Metal-color mappings;
@@ -188,7 +189,9 @@ Slots are scoped by semantic program, selected stage, and Metal resource class. 
 
 ### Encode runtime storage-buffer sizes
 
-The projection root names `vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1`. Every projected program also contains a canonical `storageBufferSizeRegions` array, with at most one entry per stage and an empty array when no selected stage needs this transport. Each entry records only its stage and four-byte-aligned `immediateDataByteOffset`. The physical Metal buffer slot appears once in that stage's `immediate-data` internal binding; storage sizes do not reserve a second buffer.
+The projection root names two independent models. `vgpu-metal-immediate-data-layout-v1` fixes role positions inside each stage's shared payload: storage-buffer sizes begin at byte `4` for vertex and compute, and byte `12` for fragment after the fragment depth-range roles at bytes `4` and `8`. An unused role keeps its space, so a fragment entry without depth clamping does not compact its size table to byte `4`. `vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1` defines the sparse table contents.
+
+Every projected program contains a canonical `storageBufferSizeRegions` array, with at most one entry per stage and an empty array when no selected stage needs this transport. Each entry records only its stage and model-fixed `immediateDataByteOffset`. The physical Metal buffer slot appears once in that stage's `immediate-data` internal binding; storage sizes do not reserve a second buffer.
 
 Tint's writer result is authoritative. A region requires at least one active runtime-sized storage binding and exactly one compatible stage-local `immediate-data` slot. The converses do not hold: a runtime-sized layout may be used only through its fixed prefix, and ordinary immediate values may require the same physical slot without requiring a size region. There is no authored or serialized `needsStorageBufferSizes` flag.
 
@@ -227,9 +230,9 @@ The logical fingerprint covers canonical resolved WGSL and normalized program co
 
 When a compare runner is emitted, its separate runner-build fingerprint covers the artifact manifest SHA-256, Metal-runner ABI, Swift runner target triple, and Swift toolchain. Those inputs invalidate the runner cache without becoming application runtime-compatibility requirements.
 
-The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI, binding and shader-interface models, exact vertex-attribute and fragment-color maps, storage-buffer-size model and regions, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and ceiling, user and internal slots, resolved workgroup sizes, and static device requirements. Its projection-specific input does not directly add compiler and toolchain provenance, root inputs, source maps, generated Swift and test sources, dynamic buffer ranges and size words, or `projection.testing`. Because the semantic fingerprint covers the complete semantic object, semantic presentation and provenance still affect the runtime-projection fingerprint transitively.
+The Metal runtime-projection fingerprint covers the semantic fingerprint, Metal ABI, binding and shader-interface models, exact vertex-attribute and fragment-color maps, immediate-data layout model, storage-buffer-size model and regions, deployment target, `.metallib` hash, emitted names, vertex-buffer policy and ceiling, user and internal slots, resolved workgroup sizes, and static device requirements. Its projection-specific input does not directly add compiler and toolchain provenance, root inputs, source maps, generated Swift and test sources, dynamic buffer ranges and size words, or `projection.testing`. Because the semantic fingerprint covers the complete semantic object, semantic presentation and provenance still affect the runtime-projection fingerprint transitively.
 
-Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, `bindingModel`, `shaderInterfaceModel`, and `vertexBufferPolicy.model` must all be understood before a program loads. Shader-interface-model support is unconditional. The runtime additionally requires support for `storageBufferSizeModel` when the selected program and stage contain a size region; an unknown future model does not block a stage with no region. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
+Generated Swift embeds the semantic contract and that runtime projection, not the complete root manifest. Schema version, `layoutModel`, binding-layout ABI, generated-Swift ABI, required `VGPUABI` integer, Metal-projection ABI, binding-slot ABI, `bindingModel`, `shaderInterfaceModel`, and `vertexBufferPolicy.model` must all be understood before a program loads. Both immediate-data and storage-buffer-size model identities are required fields, but runtime support for them is selection-dependent. Shader-interface-model support is unconditional. Support for `immediateDataLayoutModel` is required only when the selected program stage contains an effective `immediate-data` internal binding, whether or not it contains a size region. Support for `storageBufferSizeModel` is checked independently and only when that stage contains a size region. Both identities are still serialized and fingerprinted for every projection. The runtime advertises an integer ABI range it understands instead of comparing package release versions for exact equality.
 
 An incompatible Metal runner protocol blocks `native compare` only. It does not make the application artifact incompatible. Missing source maps reduce diagnostic precision without changing runtime compatibility.
 
