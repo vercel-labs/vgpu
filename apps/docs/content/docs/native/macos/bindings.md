@@ -72,6 +72,68 @@ Generated value-only types such as `Gradient.Params` conform to `Sendable`. Gene
 
 Types referenced by one program are nested under that program. Types referenced by more than one program are generated once at module scope. A `Particle` used by both `StepParticles` and `ParticleDraw` has one Swift identity, so the same `VGPUStorage<Particle>` can bind to both programs. After computing that actual placement, the build validates the resulting Swift scopes and fails instead of renaming or moving a type to resolve a collision.
 
+## Generate runtime-array layout namespaces
+
+A WGSL structure with a trailing runtime-sized array cannot become an ordinary fixed-size Swift struct:
+
+```wgsl
+struct Particle {
+  @size(8) mass: u32,
+  id: u32,
+}
+
+struct Values {
+  prefix: u32,
+  particles: array<Particle>,
+}
+
+@group(0) @binding(0) var<storage, read> values: Values;
+@group(0) @binding(1) var<storage, read_write> output: array<u32>;
+
+@compute @workgroup_size(1)
+fn inspect_values() {
+  output[0] = arrayLength(&values.particles);
+}
+```
+
+When `Values` is shared by more than one generated program, its simplified module-level interface is:
+
+```text
+public enum Values: VGPURuntimeArrayLayout {
+  public struct Prefix: Sendable {
+    public var prefix: UInt32
+
+    public init(prefix: UInt32)
+  }
+
+  public typealias Element = Particle
+  public typealias Storage = VGPURuntimeStorage<Values>
+  public typealias Binding = VGPURuntimeStorageBinding<Values>
+}
+```
+
+The enum is a layout namespace, not a value to pack. `Prefix` contains every member before the runtime array, while `Element` preserves the array's generated element type. If the layout is used by only one program, the same namespace is nested under that program according to the normal type-placement rule.
+
+The generated program accepts an immutable binding view rather than the capacity-bearing resource itself:
+
+```text
+public enum InspectValues: VGPUComputeProgram {
+  public struct Bindings: VGPUBindingSet {
+    public var values: VGPURuntimeStorageBinding<Values>
+    public var output: VGPUStorage<UInt32>
+
+    public init(
+      values: VGPURuntimeStorageBinding<Values>,
+      output: VGPUStorage<UInt32>
+    )
+  }
+
+  public static let artifact: VGPUProgramArtifact
+}
+```
+
+This keeps the allocation's immutable `capacity` separate from the binding view's immutable `elementCount`. Only the complete `VGPURuntimeStorageBinding<Values>` is bindable; `Values.Prefix` and individual elements are typed access surfaces on the same resource, not independent shader resources.
+
 ## Pack values with the WGSL layout
 
 Every generated packer follows the semantic artifact's `layoutModel`, which is fixed to `"wgsl-host-shareable-v1"` for this contract. Tint reflects the intrinsic WGSL alignment, size, member offsets, array stride, and matrix stride from the resolved module. Generated Swift consumes that reflection directly. The TypeScript packer must match the same semantic offsets; neither it nor Swift `MemoryLayout` defines them.
@@ -217,6 +279,37 @@ When Tint needs storage-buffer sizes for a selected stage, the artifact records 
 Metal vertex streams use the vertex stage's same buffer-index namespace but remain runtime geometry rather than generated bindings. At draw-pipeline creation, the backend applies the projection's versioned `vertexBufferPolicy`: logical stream zero starts after the highest occupied external shader-buffer interval, later streams remain contiguous, and the complete range must end at or before the artifact's exclusive external-buffer ceiling. This derivation cannot move a WGSL binding or infer capacity from a hard-coded internal slot.
 
 The first alpha accepts one resource per WGSL binding. WGSL resource binding arrays (`binding_array`) are rejected by `native check` because semantic contract v1 does not record their cardinality. This is separate from arrays inside a host-shareable buffer type, which remain supported and use their reflected element layout and stride.
+
+For a structure with a trailing runtime-sized array, create its allocation and then choose the exact visible element count before initializing generated bindings:
+
+```swift
+let values = try gpu.storage(
+  Values.self,
+  prefix: .init(prefix: 77),
+  capacity: 4,
+  access: .readWrite,
+  initialElements: particles
+)
+let visibleValues = try values.binding(elementCount: 2)
+let output = try gpu.storage(UInt32.self, count: 1, access: .readWrite)
+
+let inspect = try gpu.compute(
+  InspectValues.self,
+  bindings: .init(
+    values: visibleValues,
+    output: output
+  )
+)
+```
+
+The binding view records the smallest minimum- and alignment-compliant range for which `arrayLength()` still observes exactly `2`, even though the resource has capacity for `4`. To expose another extent later, create another immutable view and set that complete binding:
+
+```swift
+let allValues = try values.binding(elementCount: 4)
+try inspect.set(\.values, to: allValues)
+```
+
+Creating a view starts with `tailOffset + elementCount × stride`, applies the reflected `minimumBindingSize` and four-byte storage granularity, and rejects the result if the padding would change the length reported by `arrayLength()`. A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`; the specialized layout and binding types are only for a structure with a fixed prefix followed by a runtime array.
 
 Bind a `VGPUTarget` directly when the resource must follow resize. The runtime observes its texture generation and rebuilds only the affected argument state. `target.color` returns the current concrete texture; code that binds that snapshot must call `set` again after `target.resize` replaces it.
 

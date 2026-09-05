@@ -45,7 +45,7 @@ let particles = try gpu.storage(
 )
 ```
 
-Plain Swift values passed as uniform bindings use context-managed upload slots. Storage bindings require an explicit `VGPUStorage<T>` or compatible `VGPUBuffer`, so allocation, capacity, access, readback, and lifetime remain visible in application code.
+Plain Swift values passed as uniform bindings use context-managed upload slots. A root `array<Particle>` storage binding uses an explicit `VGPUStorage<Particle>` or compatible `VGPUBuffer`, so allocation, capacity, access, readback, and lifetime remain visible in application code. A structure with a fixed prefix and trailing runtime-sized array uses the generated layout and binding view described below.
 
 Every generated binding exposes the resource type and access mode required by WGSL. A `read_write` binding cannot receive read-only storage, a multisampled texture cannot bind where a regular `texture_2d` is expected, and a context mismatch throws `VGPUError.contextMismatch` synchronously.
 
@@ -60,11 +60,75 @@ let snapshot: [Particle] = try await particles.read(range: 0..<512)
 
 Typed resource writes use the same strict `wgsl-host-shareable-v1` packer as generated bindings. It writes little-endian scalars and column-major matrices at reflected strides, packs each write into a zero-initialized temporary range so every padding byte is deterministic, and converts `Float` to WGSL `f16` with IEEE 754 round-to-nearest, ties-to-even. NaN payload bits are not a cross-runtime value contract. Shape, integer-range, or extent errors report the complete field and array-index path before changing resource contents.
 
+## Store a fixed prefix with a runtime array
+
+A WGSL structure can end in a runtime-sized array:
+
+```wgsl
+struct Particle {
+  @size(8) mass: u32,
+  id: u32,
+}
+
+struct Values {
+  prefix: u32,
+  particles: array<Particle>,
+}
+
+@group(0) @binding(0) var<storage, read> values: Values;
+```
+
+`Values` has no single fixed-size Swift value representation. Code generation instead emits a `VGPURuntimeArrayLayout` namespace with `Values.Prefix`, `Values.Element`, and aliases for its storage resource and binding view. Create one allocation by giving its immutable element capacity separately from its initial contents:
+
+```swift
+let values = try gpu.storage(
+  Values.self,
+  prefix: .init(prefix: 77),
+  capacity: 4,
+  access: .readWrite,
+  initialElements: [
+    .init(mass: 10, id: 101),
+    .init(mass: 20, id: 202),
+    .init(mass: 30, id: 303),
+    .init(mass: 40, id: 404),
+  ]
+)
+```
+
+The resource owns one packed allocation. Its `capacity`, `elementStride`, and `sizeInBytes` describe that allocation and do not change after creation. Prefix and element operations are typed views over the same bytes:
+
+```swift
+try values.writePrefix(.init(prefix: 88))
+try values.writeElements(replacementParticles, at: 2)
+
+let prefix = try await values.readPrefix()
+let particles = try await values.readElements(range: 0..<4)
+```
+
+There is no closure-based `updatePrefix` operation because a storage prefix may have changed on the GPU and a retained host value would not be authoritative. Read it explicitly before a read-modify-write when synchronization makes that operation safe. Neither the prefix nor the element collection is independently bindable; only a complete storage binding view can cross the shader boundary.
+
+Capacity answers how much the resource can hold. The immutable `elementCount` on a binding view answers how much of it the shader can see:
+
+```swift
+let firstTwo = try values.binding(elementCount: 2)
+let allFour = try values.binding(elementCount: 4)
+```
+
+Both views can exist at the same time and retain the same resource allocation. Generated `Bindings` requires `VGPURuntimeStorageBinding<Values>`, so passing `values` directly is rejected instead of silently treating capacity as the logical runtime-array length. See [Bindings and generated types](/native/macos/bindings) for the generated interface.
+
 ## Keep runtime-array extent separate
 
 The reflected runtime-sized layout records its alignment and fixed zero-element prefix as `layout.minimumSize`; its trailing array records an explicit element-layout reference and stride. The explicit edge prevents a consumer from guessing among physical layouts that share one logical element type. The binding's `minimumBindingSize` additionally includes one complete trailing element and any enclosing-structure padding. Neither value contains an allocation-specific element count or final byte size. Those values belong to each storage resource and bound buffer range.
 
-For a typed allocation, `count` produces a checked byte length from the fixed prefix plus `count × stride`. Writes preserve that declared extent. At binding time, the runtime validates the effective offset and range without changing the canonical layout to make the array appear statically sized. The range must be at least `minimumBindingSize`, fit inside the logical buffer from that offset, fit in `UInt32`, and be a multiple of four bytes for a storage binding. It does not need to be an exact multiple of the runtime array's stride. Raw buffers provide the equivalent extent through their explicit byte range.
+For `VGPURuntimeStorage`, `binding(elementCount:)` starts with `tailOffset + elementCount × stride`, then derives the smallest range that also satisfies the reflected `minimumBindingSize` and four-byte storage granularity. It accepts that range only when WGSL's truncating length calculation still produces exactly `elementCount`; otherwise that count is not representable and the call fails.
+
+The shader therefore observes the binding view's `elementCount`, not the resource's capacity. With the layout above, `tailOffset` is `4` and the authored `Particle` stride is `12`, so counts `2` and `4` bind exact ranges of `28` and `52` bytes. `arrayLength(&values.particles)` returns `2` and `4`, respectively, even though both views refer to the same allocation.
+
+Enclosing structure alignment can make the smallest representable count greater than one. For example, a reflected tail offset of `4`, stride of `4`, and `minimumBindingSize` of `16` makes `3` the first valid count: raw ranges for counts `1` and `2` would be only `8` and `12` bytes, while the required range of `16` makes `arrayLength()` report `3`. Padding is valid when it stays inside the requested count's byte interval; a tail offset of `4`, stride of `12`, and minimum of `32` can still represent count `2` because `(32 - 4) / 12` truncates to `2`.
+
+Representable counts need not form one uninterrupted range. With a fixed `u32` prefix followed by `array<f16>`, the two-byte element stride conflicts with four-byte storage granularity: rounding an odd count would expose the following even element, so this profile accepts only even counts. Resource creation validates `capacity` through the same rule, and each binding view validates its requested count independently.
+
+At binding time, the runtime also validates that the effective offset and exact range fit inside the logical buffer, fit in `UInt32`, and are a multiple of four bytes for storage. Raw buffers provide their effective extent through an explicit byte range; that raw range need not be an exact multiple of the runtime array's stride, but it must satisfy the same reflected minimum and buffer bounds.
 
 Tint may lower `arrayLength()` or robust runtime-array access through storage-buffer-size words. When the selected stage needs them, its Metal projection records a region inside the shared `immediate-data` payload. `vgpu-metal-immediate-data-layout-v1` fixes that region at byte `4` for vertex and compute or byte `12` for fragment; unused fixed roles keep their offsets instead of compacting the payload. The physical slot and `immediate-data` role are explicit in the projection, never appear as a generated Swift binding, and cannot collide with user resources. A runtime-sized layout alone does not require a region; Tint may generate code that reads only its fixed prefix.
 

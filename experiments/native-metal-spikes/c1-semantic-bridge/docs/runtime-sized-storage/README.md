@@ -52,8 +52,9 @@ preparation failures reject invalid model identities, slots, regions, and concre
 dispatch. This is evidence for the available Apple M4 Pro only; it does not establish Intel or AMD
 support.
 
-The live fixture uses an internal/raw buffer binder. The public Swift representation of a generated
-structure with a fixed prefix and runtime array tail remains an API decision; it is not frozen by
-this feasibility fixture.
+The live fixture uses an internal/raw buffer binder. The public API now selects a specialized typed
+resource with immutable allocation capacity and explicit immutable element-count binding views.
+The follow-up C2 resource spike must connect that representation to this authenticated Metal path;
+this feasibility fixture alone does not prove the public implementation.
 
 WGSL `binding_array` remains outside semantic v1 and the first alpha.

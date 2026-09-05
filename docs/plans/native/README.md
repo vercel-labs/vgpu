@@ -54,6 +54,8 @@ WGSL modules
   spike or product decision.
 - [Shader interfaces](./compiler/shader-interfaces.md) defines the complete semantic view, the
   compiler validation boundary, and the minimal Metal runtime projection.
+- [Runtime-sized storage](./runtime/runtime-sized-storage.md) defines the typed Swift resource for
+  a fixed structure prefix followed by a runtime-sized array.
 
 ## Compiler contracts
 

@@ -39,6 +39,16 @@ fixed-prefix `minimumSize` distinct from the binding's prefix-plus-one-element
 `minimumBindingSize`. It does not predict which backend lowering needs a length query. That choice
 belongs to the selected backend projection and compiler result.
 
+A generated storage structure with a runtime-sized final array is represented by a layout namespace,
+one typed resource with immutable allocation capacity, and immutable binding views with explicit
+element counts. The resource allocation and binding length are separate so two commands can capture
+different extents over the same generation without mutable global length state. The shared contract
+derives the smallest minimum- and alignment-compliant byte range for the requested count, then
+rejects it unless WGSL's truncating length formula still produces that exact count. Padding is valid
+only while it does not change `arrayLength()`.
+[Runtime-sized storage resources](./runtime/runtime-sized-storage.md) owns the public shape and
+validation rules.
+
 Every array layout links directly to its element layout. Logical type identity is not enough to
 recover that edge because it excludes authored alignment and size attributes and concrete member
 offsets. The semantic closure and fingerprints traverse the explicit link, so an unrelated layout
@@ -150,9 +160,13 @@ VGPUSwiftUI                -> VGPUMetalKit
 `_VGPUBackendSPI` and the three `*Impl` targets are package-only. `VGPUTesting` is never an
 application dependency.
 
-`VGPUABI` contains only generated-program descriptors, binding wrappers, semantic layouts, and
-artifact references. It does not import Metal, MetalKit, SwiftUI, Render, or Compute. A generated
-module can therefore describe effects, draws, and compute programs without linking an executor.
+`VGPUABI` contains only generated-program descriptors, binding wrappers, semantic layouts, runtime
+array layout witnesses, and artifact references. It does not import Metal, MetalKit, SwiftUI,
+Render, or Compute. A generated module can therefore describe effects, draws, and compute programs
+without linking an executor. Backend-neutral resource handle declarations also live in `VGPUABI`
+when generated signatures need to name them; `VGPUResources` adds their factories and operations.
+Those handles contain only ABI-owned erased state and do not pull resource execution or a backend
+into the generated package.
 
 `VGPUCore` owns context identity, ordered submission, the clock, errors, capabilities, and
 lifecycle. `VGPUResources`, `VGPURender`, and `VGPUCompute` add their `gpu.*` factories through

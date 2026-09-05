@@ -155,6 +155,17 @@ little-endian; and initialize padding to zero. Conversion to WGSL `f16` uses IEE
 round-to-nearest, ties-to-even. A NaN must remain a quiet NaN, but its payload is not a cross-runtime
 value contract.
 
+A root runtime array remains `VGPUStorage<Element>`. A generated storage structure with a fixed
+prefix and runtime-sized final array instead becomes a `VGPURuntimeArrayLayout` namespace with a
+typed `Prefix`, `Element`, `VGPURuntimeStorage`, and `VGPURuntimeStorageBinding`. Allocation
+`capacity` is immutable on the resource; each immutable binding view supplies an explicit
+`elementCount`. Generated binding sets accept only the complete view, not the prefix or elements as
+separate resources. This preserves simultaneous ranges over one allocation and keeps
+`arrayLength()` tied to the command's count-preserving effective range. Minimum-size and four-byte
+alignment padding is accepted only when the resulting WGSL length still equals the requested count;
+otherwise that count is rejected. See
+[Runtime-sized storage resources](./runtime/runtime-sized-storage.md).
+
 Configured override values are substituted before omitted initializers are evaluated and before
 WGSL-to-MSL translation. The semantic contract preserves every override declaration statically
 used by a selected entry point, its available evaluated default, and its selected value. A compute

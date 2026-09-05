@@ -159,6 +159,30 @@ describe("agent readiness metadata", () => {
     expect(index).toContain("[Review the native API proposal](/docs/native)");
   });
 
+  it("documents fixed-prefix runtime arrays as explicit immutable binding views", () => {
+    const resources = docsContent("native/macos/resources.md");
+    expect(resources).toContain("Values.self");
+    expect(resources).toContain("capacity: 4");
+    expect(resources).toContain("try values.writePrefix(.init(prefix: 88))");
+    expect(resources).toContain("try values.writeElements(replacementParticles, at: 2)");
+    expect(resources).toContain("let firstTwo = try values.binding(elementCount: 2)");
+    expect(resources).toContain("let allFour = try values.binding(elementCount: 4)");
+    expect(resources).toContain("starts with `tailOffset + elementCount × stride`");
+    expect(resources).toContain("Padding is valid when it stays inside the requested count's byte interval");
+    expect(resources).toContain("makes `3` the first valid count");
+    expect(resources).toContain("this profile accepts only even counts");
+    expect(resources).not.toContain("values.updatePrefix");
+
+    const bindings = docsContent("native/macos/bindings.md");
+    expect(bindings).toContain("public enum Values: VGPURuntimeArrayLayout");
+    expect(bindings).toContain("public typealias Binding = VGPURuntimeStorageBinding<Values>");
+    expect(bindings).toContain("public var values: VGPURuntimeStorageBinding<Values>");
+    expect(bindings).toContain("let visibleValues = try values.binding(elementCount: 2)");
+    expect(bindings).toContain(
+      "A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`",
+    );
+  });
+
   it("derives nested Native metadata from navigation groups", () => {
     const files = buildMetaFiles({
       sections: [

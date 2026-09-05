@@ -229,6 +229,14 @@ diverges for those four canaries, including a valid four-byte root struct; repla
 with the semantic layout model is a prerequisite to closing C2. No compatibility alias is part of
 the native contract.
 
+The runtime-tail resource follow-up covers generated storage structures whose final field is a
+runtime-sized array. Its public contract separates immutable allocation `capacity` from immutable
+binding `elementCount`, retains one allocation across different views, and derives the smallest
+minimum- and four-byte-aligned range that still produces the requested WGSL `arrayLength()`.
+Alignment padding and two-byte `f16` strides make some counts unrepresentable; the gate must accept
+safe padding, reject padding that changes the observed count, and drive the authenticated C1 Metal
+function through the typed resource rather than its earlier raw binder.
+
 Both packers must validate the complete value before writing: fixed shapes and counts are exact,
 integers are integral and in range, and a runtime array's element count and byte extent are checked
 without mutating its immutable layout. Writes are little-endian with column-major matrices and

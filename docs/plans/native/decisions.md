@@ -123,6 +123,16 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   structure padding. The runtime validates the effective binding range against the latter, the
   backing allocation and `UInt32`, and Metal's four-byte storage-buffer alignment. The range need
   not be a multiple of the runtime element stride.
+- A root runtime array remains `VGPUStorage<Element>`. A generated storage structure with a fixed
+  prefix and runtime-sized final array uses a specialized `VGPURuntimeStorage<Layout>`. Its immutable
+  `capacity` owns one contiguous allocation; `binding(elementCount:)` creates immutable complete-
+  resource views so different commands can expose different lengths over the same allocation.
+  Generated bindings require `VGPURuntimeStorageBinding<Layout>` and never bind prefix or element
+  facets separately. The typed range is the smallest four-byte-aligned value that covers
+  `tailOffset + elementCount * elementStride` and `minimumBindingSize`. It is accepted only when
+  WGSL's truncating formula still observes exactly that element count; otherwise the count is not
+  representable. The detailed contract lives in
+  [Runtime-sized storage resources](./runtime/runtime-sized-storage.md).
 - WGSL environment language features are explicit semantic capabilities and are validated before
   reflection. `uniform_buffer_standard_layout` participates in logical, program, and semantic
   fingerprints, but never in Metal device requirements. The compiler does not infer it by retrying
@@ -395,7 +405,3 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 6. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
-7. The public Swift representation of a generated storage structure with a fixed prefix and a
-   runtime-sized array tail. The live binder proves the layout and execution path without choosing
-   between an ordinary collection-shaped value and a specialized resource that exposes the prefix
-   separately from its runtime elements.
