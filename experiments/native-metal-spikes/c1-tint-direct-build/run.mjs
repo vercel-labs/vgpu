@@ -152,13 +152,27 @@ const fixedInterfaceOracleInputIds = [
   "semanticExtractionRequestSchema",
   "semanticExtractionResponseSchema",
 ];
-const currentOracleInputIds = [
+const resourceGraphOracleInputIds = [
   ...inventoryOracleInputIds,
   "semanticExtractionProtocol",
   "semanticResourceGraph",
   "semanticExtractionRequestSchema",
   "semanticExtractionResponseSchema",
   "semanticActiveResourceResponse",
+];
+const currentOracleInputIds = [
+  ...inventoryOracleInputIds,
+  "semanticExtractionProtocol",
+  "semanticOverrideGraph",
+  "semanticResourceGraph",
+  "semanticExtractionRequestSchema",
+  "semanticExtractionResponseSchema",
+  "semanticActiveOverrideResponse",
+  "semanticActiveResourceResponse",
+  "semanticOverrideAllScalarsResponse",
+  "semanticOverrideConfiguredBypassResponse",
+  "semanticOverrideConfiguredDependentResponse",
+  "semanticOverrideRenderUnionResponse",
 ];
 const oracleInputs = [
   {
@@ -222,6 +236,11 @@ const oracleInputs = [
     mutable: true,
   },
   {
+    id: "semanticOverrideGraph",
+    path: "../c1-semantic-bridge/lib/semantic-override-graph.mjs",
+    mutable: true,
+  },
+  {
     id: "semanticResourceGraph",
     path: "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
     mutable: true,
@@ -237,8 +256,33 @@ const oracleInputs = [
     mutable: true,
   },
   {
+    id: "semanticActiveOverrideResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-override.json",
+    mutable: true,
+  },
+  {
     id: "semanticActiveResourceResponse",
     path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json",
+    mutable: true,
+  },
+  {
+    id: "semanticOverrideAllScalarsResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-all-scalars.json",
+    mutable: true,
+  },
+  {
+    id: "semanticOverrideConfiguredBypassResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-bypass.json",
+    mutable: true,
+  },
+  {
+    id: "semanticOverrideConfiguredDependentResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-dependent.json",
+    mutable: true,
+  },
+  {
+    id: "semanticOverrideRenderUnionResponse",
+    path: "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-render-union.json",
     mutable: true,
   },
 ];
@@ -293,7 +337,7 @@ const oracleFixtures = [
   },
   {
     id: "semantic-active-override",
-    ok: false,
+    ok: true,
     path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-override.json",
   },
   {
@@ -305,6 +349,26 @@ const oracleFixtures = [
     id: "semantic-compute-interface",
     ok: true,
     path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/compute-interface.json",
+  },
+  {
+    id: "semantic-override-all-scalars",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-all-scalars.json",
+  },
+  {
+    id: "semantic-override-configured-bypass",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-bypass.json",
+  },
+  {
+    id: "semantic-override-configured-dependent",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-dependent.json",
+  },
+  {
+    id: "semantic-override-render-union",
+    ok: true,
+    path: "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-render-union.json",
   },
   {
     id: "semantic-render-interface",
@@ -372,7 +436,7 @@ const inventoryOracleFixtureIds = [
   "scalar-fragment",
   "vertex-sparse",
 ];
-const currentOracleFixtureIds = [
+const resourceGraphOracleFixtureIds = [
   "generate-failure",
   "noop",
   "runtime-array",
@@ -392,16 +456,57 @@ const currentOracleFixtureIds = [
   "scalar-fragment",
   "vertex-sparse",
 ];
+const currentOracleFixtureIds = [
+  "generate-failure",
+  "noop",
+  "runtime-array",
+  "wgsl-error",
+  "inventory-empty-module",
+  "inventory-invalid-wgsl",
+  "inventory-library-only",
+  "inventory-multi-stage",
+  "semantic-active-override",
+  "semantic-active-resource",
+  "semantic-compute-interface",
+  "semantic-override-all-scalars",
+  "semantic-override-configured-bypass",
+  "semantic-override-configured-dependent",
+  "semantic-override-render-union",
+  "semantic-render-interface",
+  "compute-builtins",
+  "dual-source",
+  "fragment-sparse",
+  "interface-mismatch",
+  "scalar-fragment",
+  "vertex-sparse",
+];
 const compilerOracleRequestPaths = oracleRequestPathsForFixtureIds(
   compilerOracleFixtureIds
 );
 const inventoryOracleRequestPaths = oracleRequestPathsForFixtureIds(
   inventoryOracleFixtureIds
 );
+const resourceGraphOracleRequestPaths = oracleRequestPathsForFixtureIds(
+  resourceGraphOracleFixtureIds
+);
 const currentOracleRequestPaths = oracleRequestPathsForFixtureIds(
   currentOracleFixtureIds
 );
 const mutableCompiledRepositories = ["dawn", "abseil", "jsoncpp", "worker"];
+const baselineWorkerClosurePaths = [
+  "json-codec.cc",
+  "json-codec.h",
+  "main.cc",
+  "request.h",
+];
+const currentWorkerClosurePaths = [
+  "json-codec.cc",
+  "json-codec.h",
+  "main.cc",
+  "override-materializer.cc",
+  "override-materializer.h",
+  "request.h",
+];
 const valuedArguments = new Map([
   ["--dawn-root", "dawnRoot"],
   ["--jsoncpp-root", "jsoncppRoot"],
@@ -829,6 +934,22 @@ function assertOrMeasure(actual, expected, label, jsonPointer) {
   candidateMeasurements.set(jsonPointer, actual);
 }
 
+function assertJsonOrMeasure(actual, expected, label, jsonPointer) {
+  if (!candidateMode || !jsonPointer) {
+    assertEqual(JSON.stringify(actual), JSON.stringify(expected), label);
+    return;
+  }
+  if (candidateMeasurements.has(jsonPointer)) {
+    assertEqual(
+      JSON.stringify(actual),
+      JSON.stringify(candidateMeasurements.get(jsonPointer)),
+      `${label} across candidate measurements`
+    );
+    return;
+  }
+  candidateMeasurements.set(jsonPointer, structuredClone(actual));
+}
+
 function assertOracleFixtureDefinitions() {
   assertEqual(
     JSON.stringify(oracleInputs.map(({ id }) => id)),
@@ -869,17 +990,12 @@ function oracleInputIdsForLockShape(shape) {
       return compilerOracleInputIds;
     case "inventory":
       return inventoryOracleInputIds;
-    case "current": {
-      const lockedIds = Object.keys(lock?.oracle?.inputs ?? {});
-      if (
-        candidateMode &&
-        JSON.stringify(lockedIds) ===
-          JSON.stringify(fixedInterfaceOracleInputIds)
-      ) {
-        return fixedInterfaceOracleInputIds;
-      }
+    case "fixed-interface":
+      return fixedInterfaceOracleInputIds;
+    case "resource":
+      return resourceGraphOracleInputIds;
+    case "current":
       return currentOracleInputIds;
-    }
     default:
       fail(`unknown oracle input lock shape ${String(shape)}`);
   }
@@ -893,6 +1009,9 @@ function oracleFixtureIdsForLockShape(shape) {
       return compilerOracleFixtureIds;
     case "inventory":
       return inventoryOracleFixtureIds;
+    case "fixed-interface":
+    case "resource":
+      return resourceGraphOracleFixtureIds;
     case "current":
       return currentOracleFixtureIds;
     default:
@@ -926,19 +1045,35 @@ function selectOracleRequestRoot() {
         paths: inventoryOracleRequestPaths,
       },
       {
+        id: "fixed-interface",
+        root: oracleRequestRoot,
+        paths: resourceGraphOracleRequestPaths,
+        inputIds: fixedInterfaceOracleInputIds,
+      },
+      {
+        id: "resource",
+        root: oracleRequestRoot,
+        paths: resourceGraphOracleRequestPaths,
+        inputIds: resourceGraphOracleInputIds,
+      },
+      {
         id: "current",
         root: oracleRequestRoot,
         paths: currentOracleRequestPaths,
+        inputIds: currentOracleInputIds,
       },
     ];
+    const lockedInputIds = Object.keys(lock.oracle.inputs);
     const recognized = shapes.find(
       (shape) =>
         expected.root === shape.root &&
-        JSON.stringify(expected.paths) === JSON.stringify(shape.paths)
+        JSON.stringify(expected.paths) === JSON.stringify(shape.paths) &&
+        (!shape.inputIds ||
+          JSON.stringify(lockedInputIds) === JSON.stringify(shape.inputIds))
     );
     if (!recognized) {
       fail(
-        "source lock has no recognized legacy, compiler-only, inventory, or current oracle request shape"
+        "source lock has no recognized legacy, compiler-only, inventory, fixed-interface, resource, or current oracle shape"
       );
     }
     baselineLockShape = recognized.id;
@@ -1004,15 +1139,23 @@ function verifyLicense(sourceRoot, dependency, label) {
 
 function verifySourceInputs(options) {
   const fixtureCmake = join(fixtureDirectory, lock.fixture.cmake.path);
-  assertEqual(
+  assertOrMeasure(
     statSync(fixtureCmake).size,
     lock.fixture.cmake.bytes,
-    "spike CMakeLists.txt size"
+    "spike CMakeLists.txt size",
+    "/fixture/cmake/bytes"
   );
-  assertEqual(
+  assertOrMeasure(
     sha256File(fixtureCmake),
     lock.fixture.cmake.sha256,
-    "spike CMakeLists.txt SHA-256"
+    "spike CMakeLists.txt SHA-256",
+    "/fixture/cmake/sha256"
+  );
+  verifyFilesMatchGitHead(
+    repositoryRoot,
+    [realpathSync(fixtureCmake)],
+    "candidate fixture CMakeLists.txt",
+    localHeadCommit
   );
   const oracle = verifyOracleInputs();
   const dawnRoot = resolveExisting(options.dawnRoot, "Dawn root", "directory");
@@ -1142,18 +1285,35 @@ function verifySourceInputs(options) {
 
   const workerClosure = sha256SelectedFiles(
     workerRoot,
-    lock.worker.closure.paths,
+    currentWorkerClosurePaths,
     "worker closure"
   );
   assertEqual(
+    JSON.stringify(currentWorkerClosurePaths),
+    JSON.stringify([...currentWorkerClosurePaths].sort(compareUtf8)),
+    "current worker closure path order"
+  );
+  if (candidateMode) {
+    const lockedPaths = lock.worker.closure.paths;
+    if (
+      JSON.stringify(lockedPaths) !==
+        JSON.stringify(baselineWorkerClosurePaths) &&
+      JSON.stringify(lockedPaths) !== JSON.stringify(currentWorkerClosurePaths)
+    ) {
+      fail("source lock has no recognized worker closure shape");
+    }
+  }
+  assertOrMeasure(
     workerClosure.files,
     lock.worker.closure.files,
-    "worker closure files"
+    "worker closure files",
+    "/worker/closure/files"
   );
-  assertEqual(
-    JSON.stringify(lock.worker.closure.paths),
-    JSON.stringify([...lock.worker.closure.paths].sort(compareUtf8)),
-    "worker closure path order"
+  assertJsonOrMeasure(
+    currentWorkerClosurePaths,
+    lock.worker.closure.paths,
+    "worker closure paths",
+    "/worker/closure/paths"
   );
   assertOrMeasure(
     workerClosure.sha256,
@@ -1163,7 +1323,7 @@ function verifySourceInputs(options) {
   );
   verifyFilesMatchGitHead(
     repositoryRoot,
-    lock.worker.closure.paths.map((path) =>
+    currentWorkerClosurePaths.map((path) =>
       realpathSync(join(workerRoot, ...path.split("/")))
     ),
     "candidate worker closure",
@@ -1360,6 +1520,10 @@ function diffJsonPointers(before, after, pointer = "") {
 
 function isAllowedCandidateChange(pointer) {
   const exact = new Set([
+    "/fixture/cmake/bytes",
+    "/fixture/cmake/sha256",
+    "/worker/closure/files",
+    "/worker/closure/paths",
     "/worker/closure/sha256",
     "/oracle/requests/root",
     "/oracle/requests/files",
@@ -1369,6 +1533,9 @@ function isAllowedCandidateChange(pointer) {
     "/closures/compiled/files",
     "/closures/compiled/bytes",
     "/closures/compiled/sha256",
+    "/closures/compiled/objects",
+    "/build/compileCommands",
+    "/build/directWorkerObjects",
     "/build/outputs/arm64/bytes",
     "/build/outputs/arm64/sha256",
     "/build/outputs/x86_64/bytes",
@@ -1403,7 +1570,7 @@ function isAllowedCandidateChange(pointer) {
   for (const id of oracleFixtureIds) {
     const canary = `/oracle/canaries/${escapeJsonPointer(id)}`;
     if (
-      id === "semantic-active-resource" &&
+      ["semantic-active-override", "semantic-active-resource"].includes(id) &&
       pointer === `${canary}/ok` &&
       lock.oracle.canaries[id]?.ok === false &&
       oracleFixtures.find((fixture) => fixture.id === id)?.ok === true
@@ -1426,6 +1593,10 @@ function isAllowedCandidateChange(pointer) {
 
 function createLockCandidate() {
   const requiredMeasurements = [
+    "/fixture/cmake/bytes",
+    "/fixture/cmake/sha256",
+    "/worker/closure/files",
+    "/worker/closure/paths",
     "/worker/closure/sha256",
     "/oracle/requests/files",
     "/oracle/requests/bytes",
@@ -1433,6 +1604,9 @@ function createLockCandidate() {
     "/closures/compiled/files",
     "/closures/compiled/bytes",
     "/closures/compiled/sha256",
+    "/closures/compiled/objects",
+    "/build/compileCommands",
+    "/build/directWorkerObjects",
     "/build/outputs/arm64/bytes",
     "/build/outputs/arm64/sha256",
     "/build/outputs/x86_64/bytes",
@@ -1513,8 +1687,9 @@ function writeLockCandidate(path) {
     [
       fileURLToPath(import.meta.url),
       join(fixtureDirectory, "provenance", "source-lock.json"),
+      realpathSync(join(fixtureDirectory, lock.fixture.cmake.path)),
     ],
-    "candidate runner and source lock final check",
+    "candidate runner, source lock, and fixture CMake final check",
     localHeadCommit
   );
   verifySourceLockIdentity();
@@ -1964,15 +2139,17 @@ function configurationInputs(buildNinja, buildDirectory, inputs) {
     1,
     "RERUN_CMAKE spike CMakeLists.txt occurrences"
   );
-  assertEqual(
+  assertOrMeasure(
     statSync(fixtureCmake).size,
     lock.fixture.cmake.bytes,
-    "spike CMakeLists.txt size"
+    "spike CMakeLists.txt size",
+    "/fixture/cmake/bytes"
   );
-  assertEqual(
+  assertOrMeasure(
     sha256File(fixtureCmake),
     lock.fixture.cmake.sha256,
-    "spike CMakeLists.txt SHA-256"
+    "spike CMakeLists.txt SHA-256",
+    "/fixture/cmake/sha256"
   );
   const observedSorted = [...observedSources].sort(compareUtf8);
   const expectedSorted = [...expectedSources].sort(compareUtf8);
@@ -1995,10 +2172,11 @@ function compiledInputs(buildDirectory, inputs) {
     .split("\0")
     .filter(Boolean);
   const objects = new Set(graphInputs.filter((path) => path.endsWith(".o")));
-  assertEqual(
+  assertOrMeasure(
     objects.size,
     lock.closures.compiled.objects,
-    "compiled object closure"
+    "compiled object closure",
+    "/closures/compiled/objects"
   );
 
   const dependencyResult = checkedCommand(
@@ -2275,10 +2453,11 @@ function verifyBuildGraph(buildDirectory, architecture, inputs) {
     lock.build.linkArchives.sha256,
     `${architecture} ordered archive closure SHA-256`
   );
-  assertEqual(
+  assertOrMeasure(
     link.directObjects.length,
     lock.build.directWorkerObjects,
-    `${architecture} direct worker object count`
+    `${architecture} direct worker object count`,
+    "/build/directWorkerObjects"
   );
   assertEqual(
     link.properties.get("FLAGS"),
@@ -2315,22 +2494,24 @@ function verifyBuildGraph(buildDirectory, architecture, inputs) {
     [
       join(inputs.workerRoot, "main.cc"),
       join(inputs.workerRoot, "json-codec.cc"),
+      join(inputs.workerRoot, "override-materializer.cc"),
       join(inputs.jsoncppRoot, "src", "lib_json", "json_reader.cpp"),
       join(inputs.jsoncppRoot, "src", "lib_json", "json_value.cpp"),
       join(inputs.jsoncppRoot, "src", "lib_json", "json_writer.cpp"),
     ].map((path) => realpathSync(path))
   );
-  assertEqual(
+  assertOrMeasure(
     compileCommands.length,
     lock.build.compileCommands,
-    `${architecture} configured compile command count`
+    `${architecture} configured compile command count`,
+    "/build/compileCommands"
   );
   const workerCommands = compileCommands.filter((entry) =>
     entry.output?.startsWith("CMakeFiles/vgpu-tint-worker.dir/")
   );
   assertEqual(
     workerCommands.length,
-    5,
+    workerFiles.size,
     `${architecture} worker translation units`
   );
   const compiledWorkerFiles = new Set(
@@ -2876,20 +3057,14 @@ function verifyOracleBranchEvidence(id, response) {
       break;
     case "semantic-active-override":
       assertExactJSON(
-        { ok: response.ok, diagnostics: response.diagnostics },
-        {
-          ok: false,
-          diagnostics: [
-            {
-              code: "VGPU-NATIVE-TINT-SEMANTIC-OVERRIDE-UNSUPPORTED",
-              severity: "error",
-              phase: "inspect",
-              message:
-                "selected program uses overrides outside the fixed-resource profile",
-            },
-          ],
-        },
-        `${id} exact active override rejection evidence`
+        response,
+        readJSON(
+          resolve(
+            fixtureDirectory,
+            "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-override.json"
+          )
+        ),
+        `${id} exact active override evidence`
       );
       break;
     case "semantic-active-resource":
@@ -2904,6 +3079,23 @@ function verifyOracleBranchEvidence(id, response) {
         `${id} exact active resource graph evidence`
       );
       break;
+    case "semantic-override-all-scalars":
+    case "semantic-override-configured-bypass":
+    case "semantic-override-configured-dependent":
+    case "semantic-override-render-union": {
+      const responseName = id.slice("semantic-".length);
+      assertExactJSON(
+        response,
+        readJSON(
+          resolve(
+            fixtureDirectory,
+            `../c1-semantic-bridge/fixtures/semantic-extraction/responses/${responseName}.json`
+          )
+        ),
+        `${id} exact override evidence`
+      );
+      break;
+    }
     case "semantic-compute-interface":
       assertExactJSON(
         {
@@ -3745,6 +3937,9 @@ async function main() {
   const semanticExtractionProtocolModule = await import(
     pathToFileURL(inputs.oracle.files.semanticExtractionProtocol).href
   );
+  const semanticOverrideGraphModule = await import(
+    pathToFileURL(inputs.oracle.files.semanticOverrideGraph).href
+  );
   if (
     typeof semanticExtractionProtocolModule.encodeSemanticExtractionRequest !==
       "function" ||
@@ -3756,6 +3951,12 @@ async function main() {
       semanticExtractionContractId
   ) {
     fail("locked semantic extraction protocol helper omitted validators");
+  }
+  if (
+    typeof semanticOverrideGraphModule.assertSemanticOverrideGraph !==
+    "function"
+  ) {
+    fail("locked semantic override graph helper omitted its validator");
   }
   const toolchain = verifyToolchain(inputs);
   const buildRoot = createScratch(options);
