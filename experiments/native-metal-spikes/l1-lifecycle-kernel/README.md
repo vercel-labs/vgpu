@@ -36,9 +36,10 @@ unobserved error, and can unsubscribe itself from inside its actor-isolated call
 
 Subscription state distinguishes a delivery merely scheduled on a task from a handler that has
 actually claimed its invocation. A deterministic before-start barrier proves unsubscribe cancels
-the former before returning; the separate blocking-handler gate proves an invocation that already
-started may finish. Membership changes and publication snapshots linearize under the registry
-lock, while cancellation completion and application callbacks always run after locks are released.
+the former after delivery has reached the handler's actor but before the claim; the separate
+blocking-handler gate proves an invocation that already started may finish. Membership changes and
+publication snapshots linearize under the registry lock, while cancellation completion and
+application callbacks always run after locks are released.
 
 A direct async read failure is different: it maps to `VGPUError`, completes its ledger record, and
 throws once to the awaiting caller without also entering `onError`.

@@ -91,7 +91,6 @@ private final class ErrorSubscription: @unchecked Sendable {
 
   private func start(_ delivery: QueuedDelivery) {
     Task { @Sendable in
-      beforeStart(delivery.envelope.publication, id)
       await deliver(
         delivery,
         isolation: handler.isolation
@@ -103,6 +102,7 @@ private final class ErrorSubscription: @unchecked Sendable {
     _ delivery: QueuedDelivery,
     isolation: isolated (any Actor)?
   ) async {
+    beforeStart(delivery.envelope.publication, id)
     guard claimHandlerStart(delivery) else {
       record(
         .startRejected(
