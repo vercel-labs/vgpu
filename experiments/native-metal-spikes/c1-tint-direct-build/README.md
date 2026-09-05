@@ -16,50 +16,54 @@ builds were byte-identical within each architecture. Combining each pair with `l
 byte-identical universal executables.
 
 The accepted baseline includes the exact shader-interface handshake, authenticated entry inventory,
-and the fixed-size singular-resource semantic-extraction contract. It passed the ordinary
-publication gate after an independently reviewed candidate rebaseline. Candidate generation remains
-a separate non-publishing mode described below; measurements do not become accepted provenance by
-themselves.
+and semantic extraction for fixed-size singular resources and exact static overrides. It passed the
+ordinary publication gate after an independently reviewed candidate rebaseline. Candidate
+generation remains a separate non-publishing mode described below; measurements do not become
+accepted provenance by themselves.
 
 | Output    |      Bytes | SHA-256                                                            |
 | --------- | ---------: | ------------------------------------------------------------------ |
-| arm64     |  5,952,688 | `5b31505951a410f1d8316115797c74754ea1bb73c94c0f7c35325b4874a2e962` |
-| x86_64    |  7,024,848 | `2786c9eb3f2765eb2c4a61b535065db5a39a262e67f67272346f6f15a704f5c9` |
-| universal | 12,997,808 | `7b4658e3bc890e987f10fc32e2e024089054c376a22a3214e69f9cf7bdccc3e6` |
+| arm64     |  6,105,392 | `3b4929f2a7e8a343a75c25b767c4573f9b618129b3490dbeb170ddb31814c342` |
+| x86_64    |  7,199,464 | `2bfdd8947a568245f5c27887a90c423e113cc1e025ebc92e49d272e56991c77e` |
+| universal | 13,314,352 | `f3f29ed71b4fc6aa0570ddee755abea1f631232dd25b37175fc87d3322a60aea` |
 
 The gate does not treat one of the new builds as its own oracle. It first compiles the same worker
 against the previously verified monolithic release archive. The locked request closure contains
-eighteen canaries. Ten translation canaries cover the original `noop`, `runtime-array`, `wgsl-error`,
+twenty-two canaries. Ten translation canaries cover the original `noop`, `runtime-array`, `wgsl-error`,
 and `generate-failure` cases plus checked-in vertex, fragment, scalar-fragment, compute-builtin,
 dual-source, and semantic-interface-mismatch requests. Four authenticated inventory canaries add an
 empty module, a library-only module, invalid WGSL, and a multi-stage module. They establish empty
 inventories, structured parse failure, canonical entry-point names and stages, and the request identity
 `SHA-256(UTF-8("vgpu-native-tint-entry-inventory-request-bytes/v1") || 0x00 || exact encoded request bytes)`.
-Four semantic-extraction canaries add exact render and compute interfaces, one exact fixed-resource
-graph, and a fail-closed rejection for active overrides. The resource canary covers numeric binding
-order through binding ten, per-entry active subsets, one sampling pair, and content-addressed fixed
-buffer types and layouts.
+Eight semantic-extraction canaries add exact render and compute interfaces, one exact fixed-resource
+graph, and five successful exact-static override profiles. The override profiles cover the default
+active case, every supported scalar kind, configured initializer bypass and dependency evaluation,
+authored numeric IDs, selected and default values, resolved workgroup dimensions, and a render
+program whose entry-local subsets form one canonical program union. The resource canary covers
+numeric binding order through binding ten, per-entry active subsets, one sampling pair, and
+content-addressed fixed buffer types and layouts.
 Each response must match the same reference byte for byte across eight direct variants: both thin
 A/B builds, both universal A/B builds, and each applicable arm64-native or x86_64-Rosetta execution
 mode. The last original translation request retains a historical fixture name; the real worker
 successfully translates it, and all variants agree on that success. The monolithic executable is
 reference-only: it is neither copied into `.artifacts` nor a candidate for distribution.
 
-In normal mode, before loading the oracle helper, the gate authenticates all sixteen local oracle
+In normal mode, before loading the oracle helper, the gate authenticates all twenty-two local oracle
 inputs: both provenance manifests, the helper, the translation and origin-map protocol modules, all
-three contract families' request and response schemas, the shared origin-map schema, and the
-inventory and semantic-extraction protocol modules, the semantic resource-graph validator, and the
-fixed-resource response oracle. It also authenticates the exact eighteen-request closure. It
+three contract families' request and response schemas, the shared origin-map schema, the inventory
+and semantic-extraction protocol modules, both semantic graph validators, and the six semantic
+response oracles. It also authenticates the exact twenty-two-request closure. It
 validates each request and response against its authenticated JSON Schema, then runs the corresponding
 JavaScript semantic validator in addition to the independent native decoder.
 Translation assertions require the exact sparse vertex attributes, sparse fragment colors, fragment
 and compute builtins, scalar locations, dual-source color/index pairs, and mismatch diagnostic.
 Inventory assertions require the empty-module and library-only results, invalid-WGSL diagnostic,
 canonical multi-stage names and stages, and request identity derived from the exact encoded bytes.
-Semantic-extraction assertions require literal program-scoped interfaces, the exact fixed resource
-graph, and the exact unsupported-override diagnostic. Common byte parity therefore cannot bless a
-canary that stopped exercising its intended branch. Each oracle response must also match its locked
-byte count, SHA-256, and success state before any direct worker can use it as a reference.
+Semantic-extraction assertions require exact program-scoped interfaces, the fixed resource graph,
+and each override union, per-entry subset, scalar representation, selected/default value, authored
+ID, and resolved workgroup dimension. Common byte parity therefore cannot bless a canary that
+stopped exercising its intended branch. Each oracle response must also match its locked byte count,
+SHA-256, and success state before any direct worker can use it as a reference.
 
 Candidate mode does not treat changed helper, protocol, schema, or request bytes as authenticated
 by the stale lock. It measures their exact bytes before use, requires them to remain identical
@@ -180,9 +184,9 @@ The gate verifies source commits and Git tree objects without running a broad `g
 fetch missing blobs from a partial clone. Before executing CMake, it authenticates the checked-in
 manifest and its exact 156-file configuration closure. The generated Ninja graph must then name
 that same source set, the fixture `CMakeLists.txt`, and no external inputs outside the selected
-CMake installation or build root. It also authenticates 920 compiled source/header files feeding
-407 valid dependency objects. The compiled closure is 804 Dawn/Tint files, 97 Abseil files, 15
-JsonCpp files, and four worker files. SPIRV-Headers contributes one `CMakeLists.txt` during
+CMake installation or build root. It also authenticates 922 compiled source/header files feeding
+408 valid dependency objects. The compiled closure is 804 Dawn/Tint files, 97 Abseil files, 15
+JsonCpp files, and six worker files. SPIRV-Headers contributes one `CMakeLists.txt` during
 configuration and zero compiled headers or linked objects. The runner checks those closures again
 after execution and before publication.
 
@@ -190,7 +194,7 @@ All source and build prefixes are normalized at compile time. The gate rejects a
 contains any of the physical Dawn, JsonCpp, worker, or build paths, so changing where the pinned
 inputs are materialized neither changes the output nor discloses the local checkout location.
 
-It also verifies the CMake cache, all compile commands, the five direct worker objects, the exact
+It also verifies the CMake cache, all 549 compile commands, the six direct worker objects, the exact
 order and hash of 54 static archives, Mach-O load commands, dynamic libraries, native/Rosetta
 execution, rebuild hashes, and request/response bytes. An ordinary publication run invalidates
 `.artifacts/` before beginning, so an interrupted or failed run cannot leave an older PASS visible.

@@ -184,10 +184,12 @@ omitted. Each translation request receives the corresponding exact static per-en
 may later prune initializer-only dependencies, but that optimization does not redefine either the
 required interface or semantic v1. Evaluated-default extraction, partial-configuration ordering,
 and the exact-static materializer-to-worker boundary have passed their C1 gates. The program-scoped
-extraction wire now also passes against the source-built worker. Its four locked requests are a
-successful render interface, a successful compute interface with literal workgroup dimensions, a
-successful fixed-resource program union, and a fail-closed active-override case. The connected
-bridge carries the fixed-size singular resources through semantic v1, nominal program-level slot
+extraction wire now also passes against the source-built worker. Its eight locked requests cover
+successful render, compute, and fixed-resource interfaces plus five exact-static override profiles.
+The override profiles prove every supported scalar kind, selected and default values, authored
+numeric IDs, canonical program unions and per-entry subsets, configured initializer semantics, and
+resolved workgroup dimensions. The connected bridge carries the fixed-size singular resources
+through semantic v1, nominal program-level slot
 allocation, exact per-entry compiler requests, native translation, authenticated program
 projection, and offline Metal linking. It preserves entry subsets, sampling pairs, visibility,
 authored presentation names, and reachable types/layouts; its allocation and final program fragment

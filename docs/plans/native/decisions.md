@@ -308,13 +308,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
    device-limit claims.
 
    The current accepted direct-source revision builds the worker from Tint's `tint_api` root for the
-   macOS 14 baseline. Its ordinary publication gate authenticates eighteen branch-specific
-   canaries—ten translation requests, four authenticated entry inventories, and four program-scoped
+   macOS 14 baseline. Its ordinary publication gate authenticates twenty-two branch-specific
+   canaries—ten translation requests, four authenticated entry inventories, and eight program-scoped
    semantic extractions—produces byte-reproducible arm64, x86_64, and universal executables, and
    matches the arm64-native monolithic oracle byte for byte across eight direct variants without
    linking WebGPU, runtime backends, or frameworks. This proof covers the exact semantic-interface
-   handshake, canonical entry names and stages, and the extractor's resource-free and fixed-resource
-   profiles.
+   handshake, canonical entry names and stages, and the extractor's resource-free, fixed-resource,
+   and exact-static override profiles.
    Its x86_64 executions run through Rosetta and do not establish Intel or AMD GPU support; its
    dual-source canary remains internal translator evidence and does not enable the alpha feature.
 

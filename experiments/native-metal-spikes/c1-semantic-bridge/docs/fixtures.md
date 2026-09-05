@@ -34,28 +34,36 @@ the standalone worker does not independently prove NFC.
 
 ## Executable semantic-extraction slice
 
-The extractor freezes four request/response pairs. `render-interface` and `compute-interface`
-succeed with canonical interfaces; the compute case also returns a literal `1 x 1 x 1` workgroup
-size. `active-resource` now succeeds with the numeric binding union `b0`, `b1`, `b2`, `b3`, `b10`.
-Its vertex subset is `b0`, `b1`; its fragment subset is `b0`, `b2`, `b3`, `b10`, with `b0`
-shared across stages and the texture/sampler pair at `b2`/`b3`. The graph contains seven types, six
-layouts, and fixed buffer minimum sizes 8, 24, and 16. `active-override` remains a structured
-unsupported failure.
+The extractor freezes eight request/response pairs. `render-interface` and `compute-interface`
+succeed with canonical interfaces; the compute case returns a resolved `1 x 1 x 1` workgroup size.
+`active-resource` succeeds with the numeric binding union `b0`, `b1`, `b2`, `b3`, `b10`. Its vertex
+subset is `b0`, `b1`; its fragment subset is `b0`, `b2`, `b3`, `b10`, with `b0` shared across stages
+and the texture/sampler pair at `b2`/`b3`. The graph contains seven types, six layouts, and fixed
+buffer minimum sizes 8, 24, and 16.
 
-Nine prelaunch mutations stop before a worker can run. Thirty-one response mutations cover request
-and compiler association, entry identity, canonical numbers and ordering, builtin types, diagnostic
-provenance, dual-source rules, binding subsets and union, sampling-pair roles and resolved classes,
-content IDs, graph closure, fixed-layout invariants, child-layout association, and resource limits.
-Three successful responses are nominally branded against the exact finalized capsule; cloning or
-crossing the capsule loses that authority.
+Five override fixtures succeed. Together they cover the default active case, all supported scalar
+kinds, configured initializer bypass and dependency evaluation, authored numeric IDs, selected and
+default values, exact entry-local subsets and their canonical program union, and resolved workgroup
+dimensions.
 
-The native gate makes twenty-three one-shot invocations. Beyond the four frozen responses and
-repeated successes, it proves that extraction is independent from later render-link validation,
+Ten prelaunch mutations stop before a worker can run. Twenty-four override-response mutations and
+thirty-one existing response mutations cover request and compiler association, entry identity,
+canonical numbers and ordering, builtin and override types, diagnostic provenance, dual-source
+rules, exact override subsets and union, typed values and authored IDs, binding subsets and union,
+sampling-pair roles and resolved classes, content IDs, graph closure, fixed-layout invariants,
+child-layout association, and resource limits. The three baseline successful responses are nominally
+branded against the exact finalized capsule; cloning or crossing the capsule loses that authority.
+
+The native gate makes forty-seven one-shot invocations, including nine deterministic repeats, eight
+crossed-request checks, five fixture successes, two inactive-configuration successes, one
+constant-expression workgroup success, seven semantic failures, and ten protocol failures. Beyond
+the frozen responses, it proves that extraction is independent from later render-link validation,
 accepts the generated full-screen vertex and authenticates it through the adapter, ignores inactive
-resource and override declarations, preserves an authored fixed `@size`, extracts a simple storage
-texture, and resolves unknown sampler/texture classes over both render stages using Dawn's policy.
-Runtime arrays and sized binding arrays fail explicitly. The gate also covers the interface-size
-boundary, missing and wrong-stage selections, and malformed raw protocol requests.
+resource and override declarations and valid inactive configuration, preserves an authored fixed
+`@size`, extracts a simple storage texture, and resolves unknown sampler/texture classes over both
+render stages using Dawn's policy. Runtime arrays and sized binding arrays fail explicitly. The gate
+also covers the interface-size boundary, missing and wrong-stage selections, and malformed raw
+protocol requests.
 
 ## Executable program-selection slice
 

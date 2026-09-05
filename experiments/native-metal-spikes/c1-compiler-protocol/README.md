@@ -22,8 +22,8 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
 
 - a resolver-to-compiler request made entirely from relocatable virtual paths;
 - module-attributed WGSL diagnostics without invented authored line or column positions;
-- exact active override sets whose `bool`, `i32`, `u32`, `f16`, and `f32` values are observable in
-  emitted MSL and resolved workgroup dimensions;
+- exact static per-entry override sets whose `bool`, `i32`, `u32`, `f16`, and `f32` values are
+  observable in emitted MSL and resolved workgroup dimensions;
 - exact-static override materialization before entry pruning, including a bypassed invalid
   initializer and a required declaration used only by another entry point;
 - independent Metal buffer, texture, and sampler namespaces;
@@ -39,11 +39,12 @@ vector, and rejection at 128 MiB plus one byte. The covered compiler cases inclu
 
 This fixture's native gate still uses the verified arm64 Dawn release archive and its monolithic
 `libwebgpu_dawn.a`. The companion direct-source gate now covers this exact worker revision,
-authenticated entry inventory, the semantic-interface handshake, and fixed singular-resource
-extraction. Its ordinary publication gate passes with an authenticated eighteen-canary request
-closure, byte-reproducible arm64, x86_64, and universal executables, and response parity with the
-arm64-native monolithic oracle across eight direct variants. The x86_64 executions run through
-Rosetta and establish compiler-process behavior, not Intel or AMD GPU support.
+authenticated entry inventory, the semantic-interface handshake, and semantic extraction for fixed
+singular resources and exact-static overrides. Its ordinary publication gate authenticates a
+twenty-two-canary request closure, produces byte-reproducible arm64, x86_64, and universal
+executables, and passes response parity with the arm64-native monolithic oracle across eight direct
+variants. The x86_64 executions run through Rosetta and establish compiler-process behavior, not
+Intel or AMD GPU support.
 
 ## Boundary
 
@@ -55,7 +56,7 @@ resolved source and one selected entry point. Its variable inputs are:
 - WGSL and emitted Metal entry names plus the selected stage;
 - the exact flattened semantic interface, with resolved scalar/vector types and normalized
   interpolation but without artifact type IDs or source names;
-- the exact, typed set of active overrides after upstream default materialization;
+- the exact, typed static per-entry override set after upstream default materialization;
 - an explicit allowlist of WGSL language features; and
 - one direct Metal component interval for every reflected WGSL resource binding.
 
@@ -241,7 +242,7 @@ authenticated graph and verified independently before the projector can use it.
 
 The remaining gates are:
 
-- connect exact-static override extraction and assembly;
+- carry extracted exact-static overrides through semantic assembly and projection;
 - extend the connected bridge to runtime-sized and broader resource shapes, then run the full
   corpus through Apple's offline compiler; and
 - connect this compiler response to the deterministic Swift package artifact spike.

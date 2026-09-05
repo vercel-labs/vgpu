@@ -181,12 +181,14 @@ Metal lowering. Fifteen positive and twenty-two negative native cases pass deter
 including sparse interfaces and the internal dual-source canary.
 
 The current direct-source distribution proof covers this interface handshake. Its accepted lock
-authenticates an exact eighteen-canary request closure: ten translation requests covering sparse
+authenticates an exact twenty-two-canary request closure: ten translation requests covering sparse
 vertex and fragment interfaces, scalar fragment I/O, compute built-ins, internal dual-source
 lowering, a fail-closed interface mismatch, and the four legacy branches; four authenticated
-entry-inventory requests; and four semantic extraction requests covering successful render,
-successful compute, successful fixed-resource extraction, and fail-closed active-override
-extraction. The ordinary publication gate passes with byte-identical responses from eight direct
+entry-inventory requests; and eight semantic extraction requests covering successful render,
+successful compute, successful fixed-resource extraction, and five exact-static override profiles.
+Those override profiles preserve scalar types, selected/default values, authored numeric IDs,
+entry-local subsets, one canonical program union, initializer semantics, and resolved workgroup
+dimensions. The ordinary publication gate passes with byte-identical responses from eight direct
 variants spanning the arm64, x86_64, and universal executables against the arm64-native oracle.
 
 `experiments/native-metal-spikes/c3-artifact-swiftpm` now carries a synthetic `SparseDraw` program.
@@ -199,10 +201,9 @@ isolated interface outputs compile offline for `air64-apple-macos14.0` and link 
 The connected fixed-size singular-resource render pair now passes semantic assembly, nominal slot
 allocation, exact per-entry projection and translation, authenticated program assembly, two AIR
 compilations, and one metallib link. The resource-free full-screen companion consumes the same
-nominal program boundary for offline compilation and live function lookup. Override extraction and
-assembly, broader resource shapes, the exact direct worker's full corpus through that offline
-boundary, a real C1-connected artifact, resource runtime binding, and pixel/buffer parity remain
-open.
+nominal program boundary for offline compilation and live function lookup. Override assembly,
+broader resource shapes, the exact direct worker's full corpus through that offline boundary, a real
+C1-connected artifact, resource runtime binding, and pixel/buffer parity remain open.
 
 Two public render-target decisions remain intentionally outside this contract:
 
