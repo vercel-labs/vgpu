@@ -3,6 +3,8 @@ set -euo pipefail
 
 ORACLE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$ORACLE_DIR/../../../.." && pwd)
+FIXTURE_PATH="$ORACLE_DIR/../fixtures/compute-storage.wgsl"
+mkdir -p "$ROOT_DIR/.context"
 SCRATCH_DIR=$(mktemp -d "$ROOT_DIR/.context/c4-webgpu-oracle.XXXXXX")
 
 cleanup() {
@@ -19,8 +21,22 @@ pnpm --dir "$ROOT_DIR" exec esbuild "$ORACLE_DIR/oracle.ts" \
   --outfile="$SCRATCH_DIR/oracle.mjs" \
   --log-level=warning
 
-node "$SCRATCH_DIR/oracle.mjs" >"$SCRATCH_DIR/first.json"
-node "$SCRATCH_DIR/oracle.mjs" >"$SCRATCH_DIR/second.json"
+run_oracle() {
+  local output_path=$1
+  local stderr_path=$2
+
+  if ! node "$SCRATCH_DIR/oracle.mjs" "$FIXTURE_PATH" >"$output_path" 2>"$stderr_path"; then
+    cat "$stderr_path" >&2
+    return 1
+  fi
+  if [[ -s "$stderr_path" ]]; then
+    cat "$stderr_path" >&2
+    return 1
+  fi
+}
+
+run_oracle "$SCRATCH_DIR/first.json" "$SCRATCH_DIR/first.stderr"
+run_oracle "$SCRATCH_DIR/second.json" "$SCRATCH_DIR/second.stderr"
 
 cmp "$SCRATCH_DIR/first.json" "$SCRATCH_DIR/second.json"
 cmp "$ORACLE_DIR/expected.json" "$SCRATCH_DIR/first.json"

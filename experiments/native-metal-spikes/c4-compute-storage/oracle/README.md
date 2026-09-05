@@ -10,11 +10,12 @@ Run it from the repository root:
 bash experiments/native-metal-spikes/c4-compute-storage/oracle/run.sh
 ```
 
-The gate builds the public package entry point, type-checks the oracle, executes it twice, compares
-both byte-for-byte, and compares stdout with `expected.json`. On macOS, the stock `webgpu` package
-provides a Dawn Metal binary, so the gate runs locally. The existing Linux Lane C environment can
-run the same script after starting Xvfb and setting `VGPU_DOCKER_TEST=1`; for example, inside its
-prepared container:
+The gate builds the public package entry point, type-checks the oracle, reads the same canonical
+`../fixtures/compute-storage.wgsl` file as the C1 native gate, executes it twice, rejects stderr,
+compares both outputs byte-for-byte, and compares stdout with `expected.json`. On macOS, the stock
+`webgpu` package provides a Dawn Metal binary, so the gate runs locally. The existing Linux Lane C
+environment can run the same script after starting Xvfb and setting `VGPU_DOCKER_TEST=1`; for
+example, inside its prepared container:
 
 ```sh
 Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 &

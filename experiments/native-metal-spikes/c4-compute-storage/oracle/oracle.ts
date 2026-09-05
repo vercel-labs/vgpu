@@ -1,4 +1,5 @@
 import { VGPUError, compute, init, pingPongStorage } from "vgpu/node";
+import { readFile } from "node:fs/promises";
 
 const ELEMENT_COUNT = 8;
 const STATE_BYTES = ELEMENT_COUNT * Uint32Array.BYTES_PER_ELEMENT;
@@ -11,52 +12,6 @@ const EXPECTED_FINAL = Uint32Array.of(6, 14, 22, 30, 38, 46, 54, 62);
 const EXPECTED_ADVANCE_AUDIT = Uint32Array.of(101, 2, 1, 2);
 const EXPECTED_MIX_AUDIT = Uint32Array.of(202, 2, 2, 1);
 const NEGATIVE_AUDIT_SENTINEL = Uint32Array.of(901, 902, 903, 904);
-
-const shader = /* wgsl */ `
-@group(0) @binding(0) var<storage, read> src: array<u32>;
-@group(0) @binding(1) var<storage, read> mask: array<u32>;
-@group(0) @binding(2) var<storage, read_write> dst: array<u32>;
-@group(0) @binding(3) var<storage, read_write> advanceAudit: array<u32>;
-@group(0) @binding(4) var<storage, read_write> mixAudit: array<u32>;
-
-@compute @workgroup_size(2, 1, 1)
-fn advance(
-  @builtin(global_invocation_id) id: vec3<u32>,
-  @builtin(num_workgroups) groups: vec3<u32>,
-) {
-  let index = id.x + id.z * (groups.x * 2u);
-  if (index >= arrayLength(&dst)) {
-    return;
-  }
-
-  dst[index] = src[index] * 2u + (mask[index] - src[index]) + 1u;
-  if (index == 0u) {
-    advanceAudit[0] = 101u;
-    advanceAudit[1] = groups.x;
-    advanceAudit[2] = groups.y;
-    advanceAudit[3] = groups.z;
-  }
-}
-
-@compute @workgroup_size(1, 2, 1)
-fn mix(
-  @builtin(global_invocation_id) id: vec3<u32>,
-  @builtin(num_workgroups) groups: vec3<u32>,
-) {
-  let index = id.y * groups.x + id.x;
-  if (index >= arrayLength(&dst)) {
-    return;
-  }
-
-  dst[index] = src[index] * 2u + mask[index] * 2u + 2u;
-  if (index == 0u) {
-    mixAudit[0] = 202u;
-    mixAudit[1] = groups.x;
-    mixAudit[2] = groups.y;
-    mixAudit[3] = groups.z;
-  }
-}
-`;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -87,6 +42,9 @@ async function readU32(buffer: {
 }
 
 async function main(): Promise<void> {
+  const shaderPath = process.argv[2];
+  assert(shaderPath, "usage: oracle.mjs <compute-storage.wgsl>");
+  const shader = await readFile(shaderPath, "utf8");
   const gpu = await init();
   const deliveredErrors: string[] = [];
   const stopListening = gpu.onError((error) =>
