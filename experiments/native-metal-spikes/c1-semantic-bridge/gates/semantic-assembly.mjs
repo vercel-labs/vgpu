@@ -174,6 +174,20 @@ const expectedSnapshots = Object.freeze({
       "dabc80a7fdf36e3ed0f8cb182f8b6d81567eeaac75989b9967ab9a4a1bd4e526",
     nativeResponseSha256:
       "b750ce574d2418d0f2ab6c1d1672c721633ab3f97c4fbcf38f88888e58d1325f",
+    metalProjectionSha256:
+      "0cbc8ea70617babb93b866ffcf95cb57d655194b657ad0250988352a60d86f47",
+    runtimeLayoutSha256:
+      "7cdac4742ab4bc881f6b3061edeb64a87a897eb159f6aece0033e1189d2e30da",
+    translations: Object.freeze({
+      compute: Object.freeze({
+        requestSha256:
+          "7d68409a8adaf33bc30caf20a88db157a10e93597c54115529a62f3942995f4b",
+        responseSha256:
+          "98b6796c1cd01b71e02855bc300c3fd69ee85cd2ad8b66918cd7bb7324b4c621",
+        mslSha256:
+          "49fc6ee1a7e29b66e968291e516ba5c228766340ed24aadf01ed77963df4d960",
+      }),
+    }),
   }),
   overrideDependent: Object.freeze({
     programFingerprint:
@@ -538,6 +552,7 @@ const resource = await makeFixture({
 
 const runtimeSizedStorage = await makeFixture({
   label: "runtimeSizedStorage",
+  metalLabel: "runtime_sized_storage",
   file: "runtime-sized-storage.wgsl",
   input: "semantic-assembly-runtime-sized-storage-wgsl",
   configSource: "Shaders/runtime-sized-storage.wgsl",
@@ -776,6 +791,12 @@ const native = options.worker
         options,
         staticMetalPrograms.projections.resource
       ),
+      runtimeSizedStorageTranslation:
+        await assertNativeRuntimeSizedStorageTranslation(
+          options.worker,
+          runtimeSizedStorage,
+          options
+        ),
       overrideTranslation: await assertNativeOverrideTranslations(
         options.worker,
         overrideFixtures,
@@ -3786,6 +3807,220 @@ async function assertNativeResourceTranslations(
     offlineMetal: metal.offlineMetal,
     metalRuntime: metal.metalRuntime,
   };
+}
+
+async function assertNativeRuntimeSizedStorageTranslation(
+  workerPath,
+  fixture,
+  settings
+) {
+  const initialLaunches = translationWorkerLaunches;
+  assert.equal(fixture.compilerRequests.length, 1);
+  const [request] = fixture.compilerRequests;
+  assert.equal(request.entryPoint.stage, "compute");
+  const attempts = await Promise.all([
+    invokeTranslation(workerPath, request),
+    invokeTranslation(workerPath, request),
+  ]);
+  assert.equal(attempts[0].stdout, attempts[1].stdout);
+  const translations = attempts.map((attempt) => {
+    let translation;
+    decodeTintWorkerResponse(attempt, (response) => {
+      translation = authenticateSuccessfulCompilerTranslation({
+        request,
+        response,
+      });
+      return true;
+    });
+    assert(translation);
+    return translation;
+  });
+  const responses = translations.map(compilerResponseForTranslation);
+  assert.deepEqual(responses[0], responses[1]);
+  const result = responses[0].result;
+  const observed = {
+    stage: request.entryPoint.stage,
+    deterministicRuns: attempts.length,
+    requestSha256: sha256(JSON.stringify(request)),
+    responseSha256: sha256(attempts[0].stdout),
+    mslSha256: sha256(result.msl),
+  };
+  assert.deepEqual(
+    {
+      requestSha256: observed.requestSha256,
+      responseSha256: observed.responseSha256,
+      mslSha256: observed.mslSha256,
+    },
+    expectedSnapshots.runtimeSizedStorage.translations.compute
+  );
+  assert.deepEqual(result.internalBindings, [
+    {
+      role: "immediate-data",
+      slots: [
+        {
+          mode: "direct",
+          resourceClass: "buffer",
+          component: "buffer",
+          index: 30,
+          count: 1,
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.storageBufferSizeRegions, [
+    { stage: "compute", immediateDataByteOffset: 4 },
+  ]);
+  assert.match(result.msl, /values \[\[buffer\(0\)\]\]/u);
+  assert.match(result.msl, /tint_immediate_data \[\[buffer\(30\)\]\]/u);
+  assert.match(result.msl, /tint_storage_buffer_sizes\[0u\] - 4u\) \/ 12u/u);
+
+  const projection = assembleMetalProgramProjection({
+    assembly: fixture.assembly,
+    allocation: fixture.allocation,
+    translations: [translations[0]],
+  });
+  assert.deepEqual(projection, {
+    semanticProgram: "AssemblyRuntimeSizedStorage",
+    kind: "compute",
+    entryPoints: [
+      {
+        stage: "compute",
+        wgsl: "compute_main",
+        metal: "vgpu_assembly_runtime_sized_storage_compute",
+        interface: { kind: "compute" },
+      },
+    ],
+    bindings: [
+      {
+        semanticBinding: "g0b0",
+        slots: [directSlot("compute", "buffer", 0)],
+      },
+    ],
+    internalBindings: [
+      {
+        role: "immediate-data",
+        slots: [directSlot("compute", "buffer", 30)],
+      },
+    ],
+    storageBufferSizeRegions: [
+      { stage: "compute", immediateDataByteOffset: 4 },
+    ],
+    resolvedWorkgroupSize: { x: 1, y: 1, z: 1 },
+    deviceRequirements: { features: [], limits: [], formats: [] },
+  });
+  assert.equal(
+    sha256(JSON.stringify(projection)),
+    expectedSnapshots.runtimeSizedStorage.metalProjectionSha256
+  );
+  const runtimeLayout =
+    runtimeResourceLayoutForMetalProgramProjection(projection);
+  assert.deepEqual(runtimeLayout, {
+    semanticProgram: "AssemblyRuntimeSizedStorage",
+    kind: "compute",
+    bindings: [
+      {
+        semanticBinding: "g0b0",
+        descriptor: {
+          kind: "buffer",
+          addressSpace: "storage",
+          access: "read",
+          minimumBindingSize: 16,
+          runtimeSized: true,
+        },
+        slots: [directSlot("compute", "buffer", 0)],
+      },
+    ],
+    samplingPairs: [],
+  });
+  assert.equal(
+    sha256(JSON.stringify(runtimeLayout)),
+    expectedSnapshots.runtimeSizedStorage.runtimeLayoutSha256
+  );
+  const offlineMetal = compileRuntimeSizedStorageMetal({
+    projection,
+    settings,
+  });
+  return {
+    invocations: translationWorkerLaunches - initialLaunches,
+    deterministicEntries: 1,
+    projectedPrograms: 1,
+    observed: [observed],
+    projectionSha256:
+      expectedSnapshots.runtimeSizedStorage.metalProjectionSha256,
+    runtimeLayoutSha256:
+      expectedSnapshots.runtimeSizedStorage.runtimeLayoutSha256,
+    offlineMetal,
+    metalRuntime: {
+      status: "deferred",
+      reason: "internal-raw-runtime-binder-not-yet-connected",
+    },
+  };
+}
+
+function compileRuntimeSizedStorageMetal({ projection, settings }) {
+  const [source] = metalSourcesForProgramProjection(projection);
+  assert.equal(source.stage, "compute");
+  if (process.platform !== "darwin") {
+    if (settings.requireOfflineMetal) {
+      fail(
+        "runtime-sized storage offline Metal is required: host-is-not-macos"
+      );
+    }
+    return { status: "skipped", reason: "host-is-not-macos" };
+  }
+  const missing = ["metal", "metallib"].filter((tool) => !xcrunToolWorks(tool));
+  if (missing.length > 0) {
+    if (settings.requireOfflineMetal) {
+      fail(
+        `runtime-sized storage offline Metal is required: missing-xcrun-tools:${missing.join(
+          ","
+        )}`
+      );
+    }
+    return {
+      status: "skipped",
+      reason: `missing-xcrun-tools:${missing.join(",")}`,
+    };
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), "vgpu-runtime-storage-metal-"));
+  try {
+    const sourcePath = join(scratch, "runtime-storage.metal");
+    const airPath = join(scratch, "runtime-storage.air");
+    const libraryPath = join(scratch, "runtime-storage.metallib");
+    writeFileSync(sourcePath, source.msl, "utf8");
+    checkedCommand("offline Metal runtime-sized storage compilation", "xcrun", [
+      "-sdk",
+      "macosx",
+      "metal",
+      "-c",
+      sourcePath,
+      "-o",
+      airPath,
+      "-std=macos-metal2.4",
+      "-Wno-unused-variable",
+      "-target",
+      metalTarget,
+    ]);
+    assertNonEmptyFile(airPath, "runtime-sized storage AIR");
+    checkedCommand("offline Metal runtime-sized storage link", "xcrun", [
+      "-sdk",
+      "macosx",
+      "metallib",
+      airPath,
+      "-o",
+      libraryPath,
+    ]);
+    assertNonEmptyFile(libraryPath, "runtime-sized storage metallib");
+    return {
+      status: "passed",
+      shaders: 1,
+      target: metalTarget,
+      libraryBytes: lstatSync(libraryPath).size,
+    };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function invokeTranslation(workerPath, request) {
