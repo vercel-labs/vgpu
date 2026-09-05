@@ -98,6 +98,11 @@ const runtimeSizedStorageSwiftProbePath = join(
   "gates",
   "runtime-sized-storage-metal.swift"
 );
+const computeStorageGatePath = join(
+  spikeDirectory,
+  "gates",
+  "compute-storage.mjs"
+);
 const generatedPath = "Intermediate/semantic-assembly.resolved.wgsl";
 const metalTarget = "air64-apple-macos14.0";
 const overrideExpectedReadback = Object.freeze([
@@ -820,6 +825,9 @@ const native = options.worker
       ),
     }
   : { status: "skipped", reason: "no Tint worker supplied" };
+if (options.computeStorageProbe) {
+  native.computeStorage = runComputeStorageGate(options);
+}
 if (options.requireMetalRuntime) {
   for (const [label, status] of [
     ["resource", native.resourceTranslation.metalRuntime.status],
@@ -5144,12 +5152,53 @@ function semanticSuccess(requestBytes, result) {
   };
 }
 
+function runComputeStorageGate(settings) {
+  const attempt = runCommand(
+    process.execPath,
+    [
+      computeStorageGatePath,
+      "--worker",
+      settings.worker,
+      "--probe",
+      settings.computeStorageProbe,
+    ],
+    { timeout: 900_000 }
+  );
+  if (attempt.error || attempt.signal || attempt.status !== 0) {
+    commandFailure("C4 compute-storage C1 gate", attempt);
+  }
+  if (attempt.stderr !== "") {
+    fail(`C4 compute-storage C1 gate wrote stderr: ${attempt.stderr.trim()}`);
+  }
+  let report;
+  try {
+    report = JSON.parse(attempt.stdout);
+  } catch (error) {
+    fail(`C4 compute-storage C1 gate returned invalid JSON: ${error.message}`);
+  }
+  if (
+    report?.schemaVersion !== 1 ||
+    report?.gate !== "c1-compute-storage" ||
+    report?.status !== "passed" ||
+    report?.resolverCalls !== 1 ||
+    report?.semanticPrograms !== 2 ||
+    report?.projections !== 2 ||
+    report?.runtimeManifests !== 2 ||
+    report?.probe?.status !== "passed" ||
+    report?.probe?.deterministicProcesses !== 2
+  ) {
+    fail("C4 compute-storage C1 gate returned an invalid report");
+  }
+  return report;
+}
+
 function parseArguments(argv) {
   const parsed = {
     worker: undefined,
     runtimeTailResourceProbe: undefined,
     generatedComputeProbe: undefined,
     connectedArtifactProbe: undefined,
+    computeStorageProbe: undefined,
     requireWorker: false,
     requireOfflineMetal: false,
     requireMetalRuntime: false,
@@ -5164,6 +5213,7 @@ function parseArguments(argv) {
           "[--runtime-tail-resource-probe <executable>] " +
           "[--generated-compute-probe <executable>] " +
           "[--connected-artifact-probe <executable>] " +
+          "[--compute-storage-probe <executable>] " +
           "[--require-worker] [--require-offline-metal] " +
           "[--require-metal-runtime] [--skip-metal-runtime]\n"
       );
@@ -5227,6 +5277,16 @@ function parseArguments(argv) {
       parsed.connectedArtifactProbe = resolve(executable);
       continue;
     }
+    if (argument === "--compute-storage-probe") {
+      if (seen.has(argument)) fail(`${argument} may appear only once`);
+      seen.add(argument);
+      const executable = argv[++index];
+      if (!executable || executable.startsWith("--")) {
+        fail("--compute-storage-probe requires a value");
+      }
+      parsed.computeStorageProbe = resolve(executable);
+      continue;
+    }
     fail(`unknown argument ${argument}`);
   }
   if (
@@ -5280,6 +5340,21 @@ function parseArguments(argv) {
       );
     }
   }
+  if (parsed.computeStorageProbe) {
+    if (
+      !existsSync(parsed.computeStorageProbe) ||
+      !lstatSync(parsed.computeStorageProbe).isFile()
+    ) {
+      fail(
+        `compute-storage probe is not a regular file: ${parsed.computeStorageProbe}`
+      );
+    }
+    if ((lstatSync(parsed.computeStorageProbe).mode & 0o111) === 0) {
+      fail(
+        `compute-storage probe is not executable: ${parsed.computeStorageProbe}`
+      );
+    }
+  }
   if (parsed.runtimeTailResourceProbe && parsed.skipMetalRuntime) {
     fail("--runtime-tail-resource-probe conflicts with --skip-metal-runtime");
   }
@@ -5289,10 +5364,14 @@ function parseArguments(argv) {
   if (parsed.connectedArtifactProbe && parsed.skipMetalRuntime) {
     fail("--connected-artifact-probe conflicts with --skip-metal-runtime");
   }
+  if (parsed.computeStorageProbe && parsed.skipMetalRuntime) {
+    fail("--compute-storage-probe conflicts with --skip-metal-runtime");
+  }
   if (
     parsed.runtimeTailResourceProbe ||
     parsed.generatedComputeProbe ||
-    parsed.connectedArtifactProbe
+    parsed.connectedArtifactProbe ||
+    parsed.computeStorageProbe
   ) {
     parsed.requireMetalRuntime = true;
   }
