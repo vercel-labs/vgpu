@@ -139,3 +139,45 @@ package final class MetalResourceBackend: VGPUResourceBackend, @unchecked Sendab
     return allocation.buffer
   }
 }
+
+extension MetalBackend {
+  package var resourceBackend: MetalResourceBackend {
+    capabilityState(MetalResourceBackend.self) {
+      MetalResourceBackend(core: core)
+    }
+  }
+}
+
+extension MetalBackend: VGPUResourceBackend {
+  package func allocateStorage(
+    initialBytes: Data,
+    access: VGPUStorageAccess
+  ) throws -> VGPUBackendStorageHandle {
+    try resourceBackend.allocateStorage(initialBytes: initialBytes, access: access)
+  }
+
+  package func replaceStorageBytes(
+    handle: VGPUBackendStorageHandle,
+    range: Range<Int>,
+    bytes: Data
+  ) throws {
+    try resourceBackend.replaceStorageBytes(handle: handle, range: range, bytes: bytes)
+  }
+
+  package func readStorageBytes(
+    handle: VGPUBackendStorageHandle,
+    range: Range<Int>
+  ) async throws -> Data {
+    try await resourceBackend.readStorageBytes(handle: handle, range: range)
+  }
+
+  package func storageSnapshot(
+    handle: VGPUBackendStorageHandle
+  ) throws -> VGPUBackendStorageSnapshot {
+    try resourceBackend.storageSnapshot(handle: handle)
+  }
+
+  package func releaseStorage(handle: VGPUBackendStorageHandle) {
+    resourceBackend.releaseStorage(handle: handle)
+  }
+}

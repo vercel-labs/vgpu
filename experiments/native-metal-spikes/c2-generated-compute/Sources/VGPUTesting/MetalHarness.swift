@@ -9,6 +9,7 @@ import _VGPUMetalResourcesImpl
 
 package enum MetalHarnessError: Error, Sendable {
   case noDevice
+  case noCommandQueue
 }
 
 package actor MetalCompletionGate: MetalCompletionObserver {
@@ -139,7 +140,10 @@ package func makeMetalHarness(
   manifestURL: URL
 ) throws -> MetalHarness {
   guard let device = MTLCreateSystemDefaultDevice() else { throw MetalHarnessError.noDevice }
-  let core = MetalCore(device: device, contextIdentity: 1)
+  guard let commandQueue = device.makeCommandQueue() else {
+    throw MetalHarnessError.noCommandQueue
+  }
+  let core = MetalCore(device: device, commandQueue: commandQueue, contextIdentity: 1)
   let resources = MetalResourceBackend(core: core)
   let completionGate = MetalCompletionGate()
   let compute = try MetalComputeBackend(

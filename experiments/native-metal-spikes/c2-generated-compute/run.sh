@@ -76,10 +76,33 @@ if (!same(dependencyNames("VGPUCompute"), ["VGPUABI", "VGPUCore", "_VGPUBackendS
 if (!same(dependencyNames("VGPUResources"), ["VGPUABI", "VGPUCore", "_VGPUBackendSPI"])) {
   throw new Error("VGPUResources target boundary drifted");
 }
+if (!same(dependencyNames("VGPUMetal"), [
+  "VGPUCore",
+  "_VGPUBackendSPI",
+  "_VGPUMetalCoreImpl",
+])) {
+  throw new Error("VGPUMetal target boundary drifted");
+}
+const metalComputeProduct = description.products.find(
+  ({ name }) => name === "VGPUMetalCompute",
+);
+if (!metalComputeProduct || !same(metalComputeProduct.targets, [
+  "VGPUABI",
+  "VGPUCore",
+  "VGPUResources",
+  "VGPUCompute",
+  "VGPUMetal",
+  "_VGPUMetalCoreImpl",
+  "_VGPUMetalResourcesImpl",
+  "_VGPUMetalComputeImpl",
+])) {
+  throw new Error("VGPUMetalCompute multi-target product drifted");
+}
 for (const target of [
   "_VGPUMetalCoreImpl",
   "_VGPUMetalResourcesImpl",
   "_VGPUMetalComputeImpl",
+  "VGPUMetal",
   "VGPUTesting",
 ]) {
   if (!description.targets.some(({ name }) => name === target)) {

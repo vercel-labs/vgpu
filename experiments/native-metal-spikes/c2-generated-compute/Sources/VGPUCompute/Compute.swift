@@ -31,7 +31,11 @@ public final class VGPUComputeInstance<Program: VGPUComputeProgram> {
     self.programHandle = try gpu.withOpenAccess {
       let validated = try validateBindings(bindings, for: Program.self, gpu: gpu)
       _ = validated
-      return try backend.prepareCompute(Program._vgpuProgramDescriptor)
+      do {
+        return try backend.prepareCompute(Program._vgpuProgramDescriptor)
+      } catch {
+        throw mapBackendError(error, operation: "compute.create")
+      }
     }
     self.bindings = bindings
   }

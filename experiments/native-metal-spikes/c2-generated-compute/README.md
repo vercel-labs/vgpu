@@ -19,8 +19,16 @@ await second.settled()
 `GeneratedFixture` depends exactly on `VGPUABI`. Its binding witness supplies typed values at
 semantic ordinals; it has no knowledge of Metal indices, transport models, or artifact URLs.
 Core, Resources, and Compute use separate backend capabilities and targets. The corresponding
-Metal implementations are also split, while `VGPUTesting` alone resolves test artifact URLs and
-composes the physical capabilities.
+Metal implementations are also split. The original connected probe keeps its caller-provided
+artifact URLs inside `VGPUTesting`.
+
+The C3c follow-up reuses this runtime through backend-complete, multi-target `VGPUMetal`,
+`VGPUMetalResources`, and `VGPUMetalCompute` products. `VGPUMetal` owns the context constructor and
+one command queue; capability implementation targets attach their state independently. A generated
+module can instead supply private resource bytes through `_VGPUProgramArtifactWitness`, with both
+descriptor and library hashes participating in program identity. The Metal backend rejects unknown
+descriptor shapes, ABI or transport models, payload mismatches, and reflection mismatches before it
+registers a pipeline. These remain executable prototype boundaries rather than production modules.
 
 The portable recording gate proves that `set` is atomic, dispatch snapshots are independent,
 submission is synchronous through encode/commit, `gpu.settled()` cannot miss accepted work,

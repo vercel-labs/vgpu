@@ -10,6 +10,34 @@ let package = Package(
     .library(name: "VGPUCore", targets: ["VGPUCore"]),
     .library(name: "VGPUResources", targets: ["VGPUResources"]),
     .library(name: "VGPUCompute", targets: ["VGPUCompute"]),
+    .library(
+      name: "VGPUMetal",
+      targets: ["VGPUABI", "VGPUCore", "VGPUMetal", "_VGPUMetalCoreImpl"]
+    ),
+    .library(
+      name: "VGPUMetalResources",
+      targets: [
+        "VGPUABI",
+        "VGPUCore",
+        "VGPUResources",
+        "VGPUMetal",
+        "_VGPUMetalCoreImpl",
+        "_VGPUMetalResourcesImpl",
+      ]
+    ),
+    .library(
+      name: "VGPUMetalCompute",
+      targets: [
+        "VGPUABI",
+        "VGPUCore",
+        "VGPUResources",
+        "VGPUCompute",
+        "VGPUMetal",
+        "_VGPUMetalCoreImpl",
+        "_VGPUMetalResourcesImpl",
+        "_VGPUMetalComputeImpl",
+      ]
+    ),
     .library(name: "GeneratedFixture", targets: ["GeneratedFixture"]),
     .executable(name: "RecordingProbe", targets: ["RecordingProbe"]),
     .executable(name: "MetalProbe", targets: ["MetalProbe"]),
@@ -47,6 +75,15 @@ let package = Package(
         "_VGPUBackendSPI",
         "_VGPUMetalCoreImpl",
         "_VGPUMetalResourcesImpl",
+      ],
+      linkerSettings: [.linkedFramework("Metal")]
+    ),
+    .target(
+      name: "VGPUMetal",
+      dependencies: [
+        "VGPUCore",
+        "_VGPUBackendSPI",
+        "_VGPUMetalCoreImpl",
       ],
       linkerSettings: [.linkedFramework("Metal")]
     ),

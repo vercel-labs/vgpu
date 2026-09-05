@@ -99,27 +99,65 @@ public struct _VGPULogicalBindingDescriptor: Equatable, Sendable {
   }
 }
 
+public protocol _VGPUProgramArtifactWitness: Sendable {
+  static var _vgpuDescriptorSHA256: String { get }
+  static var _vgpuLibrarySHA256: String { get }
+  static func _vgpuLoadDescriptor() throws -> Data
+  static func _vgpuLoadLibrary() throws -> Data
+}
+
+public struct _VGPUProgramArtifact: Equatable, Sendable {
+  package let descriptorSHA256: String
+  package let librarySHA256: String
+  private let descriptorLoader: @Sendable () throws -> Data
+  private let libraryLoader: @Sendable () throws -> Data
+
+  public init<Witness: _VGPUProgramArtifactWitness>(_ witness: Witness.Type) {
+    self.descriptorSHA256 = witness._vgpuDescriptorSHA256
+    self.librarySHA256 = witness._vgpuLibrarySHA256
+    self.descriptorLoader = witness._vgpuLoadDescriptor
+    self.libraryLoader = witness._vgpuLoadLibrary
+  }
+
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.descriptorSHA256 == rhs.descriptorSHA256
+      && lhs.librarySHA256 == rhs.librarySHA256
+  }
+
+  package func descriptorData() throws -> Data {
+    try descriptorLoader()
+  }
+
+  package func libraryData() throws -> Data {
+    try libraryLoader()
+  }
+}
+
 public struct _VGPUProgramDescriptor: Equatable, Sendable {
   package let artifactID: String
   package let entryPointID: String
   package let bindings: [_VGPULogicalBindingDescriptor]
   package let workgroupSize: (x: Int, y: Int, z: Int)
+  package let artifact: _VGPUProgramArtifact?
 
   public init(
     artifactID: String,
     entryPointID: String,
     bindings: [_VGPULogicalBindingDescriptor],
-    workgroupSize: (x: Int, y: Int, z: Int)
+    workgroupSize: (x: Int, y: Int, z: Int),
+    artifact: _VGPUProgramArtifact? = nil
   ) {
     self.artifactID = artifactID
     self.entryPointID = entryPointID
     self.bindings = bindings
     self.workgroupSize = workgroupSize
+    self.artifact = artifact
   }
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.artifactID == rhs.artifactID && lhs.entryPointID == rhs.entryPointID
-      && lhs.bindings == rhs.bindings && lhs.workgroupSize.x == rhs.workgroupSize.x
+      && lhs.artifact == rhs.artifact && lhs.bindings == rhs.bindings
+      && lhs.workgroupSize.x == rhs.workgroupSize.x
       && lhs.workgroupSize.y == rhs.workgroupSize.y
       && lhs.workgroupSize.z == rhs.workgroupSize.z
   }
