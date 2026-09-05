@@ -14,18 +14,29 @@ The public WebGPU oracle uses three fresh scenarios:
 In the positive scenario the application makes no packet readback, settlement, or other `await`
 between the compute dispatch and render frame. The first await after those calls is the target
 readback. The oracle runs twice and requires byte-identical output. Its report records public call
-order, not internal queue instrumentation; the pending native recording backend owns the exact
-submission and wait trace.
+order, not internal queue instrumentation.
 
-Run the currently executable layer with:
+The portable Swift recording layer exercises the proposed API directly. It verifies two ordered
+commits, one allocation and generation across compute and draw, relative nested buffer slices, no
+storage read or wait between submissions, and synchronous fail-closed validation. Buffer usage is
+carried through the allocation SPI so a future Vulkan backend can select its immutable indirect
+usage at creation time. This layer records command consumption in a fake backend; it does not prove
+Metal visibility or a native resource transition.
+
+Run the WebGPU oracle, portable Swift recording layer, and C2 regression gates with:
 
 ```sh
 ./experiments/native-metal-spikes/dc1-compute-draw/run.sh
 ```
 
-## Pending native connected gate
+The separate compiler bridge resolves both semantic programs once, authenticates and translates
+three stages, and links them into one source-free `metallib`. It deliberately reports whether the
+connected probe was supplied, so a compiler-only pass cannot be mistaken for the complete DC1
+gate.
 
-The connected SwiftPM/Metal gate is **not implemented and no native result is claimed yet**. A later
-layer must compile authenticated semantic programs and Metal projections into one metallib, expose
-the same allocation as a bounded `buffer.slice(bytes: 16..<32)`, submit compute and render on the
-same queue without a CPU wait, and reproduce the blue/red/green controls through public Swift API.
+## Pending Metal connected gate
+
+The end-to-end Metal gate is **not implemented and no Metal result is claimed yet**. A later layer
+must package the authenticated programs and projections, expose the same allocation as a bounded
+`buffer.slice(bytes: 16..<32)`, submit compute and render on the same Metal queue without a CPU wait,
+and reproduce the blue/red/green controls through the public Swift API.
