@@ -5,8 +5,8 @@
   "fixture": {
     "cmake": {
       "path": "CMakeLists.txt",
-      "bytes": 7145,
-      "sha256": "2d9efbd6c665fdea1673cb2120b4a0ba9b884f5b67bf3bbb446bdeb092fe85d7"
+      "bytes": 7295,
+      "sha256": "1db1d90ed6834414b8f2deadc1703b10d569cc9956b405d146a5ab2e940dacf4"
     },
     "configurationInputs": {
       "path": "provenance/configuration-inputs.json",
@@ -83,9 +83,16 @@
     "defaultRoot": "../c1-compiler-protocol/prototype",
     "closure": {
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
-      "files": 4,
-      "sha256": "36a7d2bfae11c5fa589327043962c69da9a70ab858a2850170ab336f402be275",
-      "paths": ["json-codec.cc", "json-codec.h", "main.cc", "request.h"]
+      "files": 6,
+      "sha256": "859e0e1383c5e28ed5e62a3ef47091ebf73b009440996bc8f72d74cd3260b653",
+      "paths": [
+        "json-codec.cc",
+        "json-codec.h",
+        "main.cc",
+        "override-materializer.cc",
+        "override-materializer.h",
+        "request.h"
+      ]
     }
   },
   "oracle": {
@@ -102,8 +109,8 @@
       },
       "nativeCompiler": {
         "path": "../c1-compiler-protocol/lib/native-compiler.mjs",
-        "bytes": 15242,
-        "sha256": "1f8f0c5941c3699864c0737b668fdd3fa486c223ae0f9da1d08432a949ec458e"
+        "bytes": 15445,
+        "sha256": "74d3ff3377a4b59c05d6326d5f4ed324d851aa5861990cb8ca9cc3d863ecc342"
       },
       "protocol": {
         "path": "../c1-compiler-protocol/lib/protocol.mjs",
@@ -147,8 +154,13 @@
       },
       "semanticExtractionProtocol": {
         "path": "../c1-semantic-bridge/lib/semantic-extraction-protocol.mjs",
-        "bytes": 14461,
-        "sha256": "893e897265d5c60e0d01050f4e457b0b2027916d5d35cbbbc4fbc919fd3e1184"
+        "bytes": 14212,
+        "sha256": "4d3e5b236fc6c5f6a6a9b8964cae3144bc16035faacd9f7eceda13b100591d7d"
+      },
+      "semanticOverrideGraph": {
+        "path": "../c1-semantic-bridge/lib/semantic-override-graph.mjs",
+        "bytes": 6291,
+        "sha256": "7fcf67616da5c47fdfab0d14e6e81de9267f41c9c9af6582daa2c0c7fafb5dfc"
       },
       "semanticResourceGraph": {
         "path": "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
@@ -157,26 +169,51 @@
       },
       "semanticExtractionRequestSchema": {
         "path": "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
-        "bytes": 3268,
-        "sha256": "da321fd903639706411cda8080ed322af8bc448376c5f9dd79aafc0279d18602"
+        "bytes": 3743,
+        "sha256": "72c961fe8240a932c37ace977ffdc219f66841b7b87449241c50e7f386606d73"
       },
       "semanticExtractionResponseSchema": {
         "path": "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
         "bytes": 21835,
         "sha256": "960270e71103338ad8090d45c62b603a5d9c151aa6426acc7c52cfa2136ba729"
       },
+      "semanticActiveOverrideResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-override.json",
+        "bytes": 1220,
+        "sha256": "dad3bd5a9cb04d1b4be0641e7b6d00535ac1aa4de0dba27fd1b7c1c6fb2a8bc1"
+      },
       "semanticActiveResourceResponse": {
         "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json",
         "bytes": 8298,
         "sha256": "e9d27229f6dfe4a3a3c4191b1bef483ba0ec0f44c4236dc218c8078d14b2c935"
+      },
+      "semanticOverrideAllScalarsResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-all-scalars.json",
+        "bytes": 2184,
+        "sha256": "4cfe60cf6279648153e345b2f3d11358eb1e5b5d4929c0289e60e619c2854957"
+      },
+      "semanticOverrideConfiguredBypassResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-bypass.json",
+        "bytes": 1327,
+        "sha256": "0469712e384df146237c651d72c15a4c632f0198925429a4873c9df9be40f949"
+      },
+      "semanticOverrideConfiguredDependentResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-dependent.json",
+        "bytes": 1327,
+        "sha256": "f939551b86fa50dbc1211bad32fe4159769b2655b1e91b1df0aaacc72a8d44a6"
+      },
+      "semanticOverrideRenderUnionResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-render-union.json",
+        "bytes": 2357,
+        "sha256": "40f31944db3247e37c4d1874bde7ab3d54482a36083ec36267b4194a1da79d44"
       }
     },
     "requests": {
       "root": "..",
       "algorithm": "relative-path-nul-file-sha256-lines-v1",
-      "files": 18,
-      "bytes": 39979,
-      "sha256": "87d7c9c660f3e7c4a5ab54eb9bf5153657809f470583879df6d1472316ab95aa",
+      "files": 22,
+      "bytes": 46530,
+      "sha256": "6fd25ee693823dc1ecc2252bf6c8eaec4b863a9367b0e0e38530ec7d000e6126",
       "paths": [
         "c1-compiler-protocol/fixtures/requests/generate-failure.json",
         "c1-compiler-protocol/fixtures/requests/noop.json",
@@ -189,6 +226,10 @@
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-override.json",
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-resource.json",
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/compute-interface.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-all-scalars.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-bypass.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-dependent.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-render-union.json",
         "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
         "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
         "c1-tint-direct-build/fixtures/requests/dual-source.json",
@@ -249,9 +290,9 @@
       },
       "semantic-active-override": {
         "requestSha256": "b85ff9868f9ba540725326f41bff7b7b801657c8be7da12ae302bd7bd217c93b",
-        "responseBytes": 648,
-        "responseSha256": "0ac4fe3fb297f20536bc24eac96d2a253e02da908b710d0963acab4873e38537",
-        "ok": false
+        "responseBytes": 915,
+        "responseSha256": "e8d936190911d93e460d98bb33e48b41211e87a30fd89c3f8d405864f9b8553c",
+        "ok": true
       },
       "semantic-active-resource": {
         "requestSha256": "c8ec843bf783512dcfe6ff789d2ac5ffb8c4801a0623243b557327267e992e25",
@@ -263,6 +304,30 @@
         "requestSha256": "ee6da4eb9153eeefbda37ab9ad5a5d883f392065d358048d7733170fbe18082e",
         "responseBytes": 1272,
         "responseSha256": "072fe886fa65aaf935b0228ccf0c7aa61584f74a405532d152cc924e4507a3c8",
+        "ok": true
+      },
+      "semantic-override-all-scalars": {
+        "requestSha256": "63eda3647953fee9e8ce6d1950989e716b5c4ac02e9dc7049d169f5c12b448b3",
+        "responseBytes": 1427,
+        "responseSha256": "3b47e3eb90f9b8cca54b781ff1a742d2a96f70e8164a4080bff1cc0c887b5d03",
+        "ok": true
+      },
+      "semantic-override-configured-bypass": {
+        "requestSha256": "d999c186e82a17f99f6dd672e037bba25c61a091aa70f1235a187ff297f0a9a4",
+        "responseBytes": 985,
+        "responseSha256": "542dfa1acadd3e19206fb9cedded34c8c32e2e5c0bb3bc698559dc36745191f4",
+        "ok": true
+      },
+      "semantic-override-configured-dependent": {
+        "requestSha256": "e8d2584a00b41914df7753de7f890cfe349b2cbc28488458c70ab43d8713c868",
+        "responseBytes": 985,
+        "responseSha256": "6d6d4088f992f19d956f8749094f1eb2a076fa0df585f622fd6fa445877edc00",
+        "ok": true
+      },
+      "semantic-override-render-union": {
+        "requestSha256": "9db8d7a9299729a9012ee1bcc9c7350073afe8b38a113cc66a8af26d6ec83204",
+        "responseBytes": 1522,
+        "responseSha256": "af2a1e7dca199bca64ebe8d907025576e4d6a4bf3b84abe51c32005200af7132",
         "ok": true
       },
       "semantic-render-interface": {
@@ -335,10 +400,10 @@
     },
     "compiled": {
       "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
-      "objects": 407,
-      "files": 920,
-      "bytes": 8785753,
-      "sha256": "f3f33447f032cb462110cbecb67281581f7a1a1ffb566fbca1a077586663e418",
+      "objects": 408,
+      "files": 922,
+      "bytes": 8855291,
+      "sha256": "0566646c4b36deaaf642fccd72783a6b708fb5da50cc35c5791ab3bd7803832b",
       "repositories": {
         "dawn": {
           "files": 804,
@@ -361,9 +426,9 @@
           "sha256": "06d06c5919c219af43813049af0585b743f60518ab806e315babe0150bd245c0"
         },
         "worker": {
-          "files": 4,
-          "bytes": 174790,
-          "sha256": "36a7d2bfae11c5fa589327043962c69da9a70ab858a2850170ab336f402be275"
+          "files": 6,
+          "bytes": 244328,
+          "sha256": "859e0e1383c5e28ed5e62a3ef47091ebf73b009440996bc8f72d74cd3260b653"
         }
       }
     }
@@ -378,8 +443,8 @@
     "sdk": "macosx14.5",
     "minimumMacOS": "14.0",
     "minimumHostMacOS": 26,
-    "compileCommands": 548,
-    "directWorkerObjects": 5,
+    "compileCommands": 549,
+    "directWorkerObjects": 6,
     "linkArchives": {
       "algorithm": "ordered-ninja-path-lines-v1",
       "files": 54,
@@ -387,18 +452,21 @@
     },
     "outputs": {
       "arm64": {
-        "bytes": 5952688,
-        "sha256": "5b31505951a410f1d8316115797c74754ea1bb73c94c0f7c35325b4874a2e962"
+        "bytes": 6105392,
+        "sha256": "3b4929f2a7e8a343a75c25b767c4573f9b618129b3490dbeb170ddb31814c342"
       },
       "x86_64": {
-        "bytes": 7024848,
-        "sha256": "2786c9eb3f2765eb2c4a61b535065db5a39a262e67f67272346f6f15a704f5c9"
+        "bytes": 7199464,
+        "sha256": "2bfdd8947a568245f5c27887a90c423e113cc1e025ebc92e49d272e56991c77e"
       },
       "universal": {
-        "bytes": 12997808,
-        "sha256": "7b4658e3bc890e987f10fc32e2e024089054c376a22a3214e69f9cf7bdccc3e6"
+        "bytes": 13314352,
+        "sha256": "f3f29ed71b4fc6aa0570ddee755abea1f631232dd25b37175fc87d3322a60aea"
       }
     },
-    "architectures": ["arm64", "x86_64"]
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ]
   }
 }
