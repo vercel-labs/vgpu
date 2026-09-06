@@ -6,7 +6,7 @@ on:
   pull_request:
 
 # CI only reads the checkout. Keeping its token read-only ensures that tests and third-party
-# actions cannot forge the separate stable-npm commit status that gates Vercel production aliases.
+# actions cannot forge the separate production-authorization status that gates Vercel aliases.
 permissions:
   contents: read
 

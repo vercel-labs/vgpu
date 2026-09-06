@@ -4,7 +4,7 @@ on:
   release:
     types: [published]
 
-# npm publishes are irreversible and a recursive workspace publish is not atomic. Never allow
+# npm publishes are irreversible and a seven-package publish is not atomic. Never allow
 # two release events to mutate the dist-tags concurrently, and never cancel one mid-publish.
 concurrency:
   group: npm-release
@@ -14,43 +14,51 @@ concurrency:
   queue: max
 
 jobs:
-  publish:
+  verify-and-pack:
     # Binary-asset releases like dawn-* must not publish npm.
     if: ${{ startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ubuntu-latest
     outputs:
       release-branch: ${{ steps.release-channel.outputs.release-branch }}
+      dist-tag: ${{ steps.release-channel.outputs.dist-tag }}
+      artifact-name: ${{ steps.release-channel.outputs.artifact-name }}
+      artifact-id: ${{ steps.upload-packages.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload-packages.outputs.artifact-digest }}
     permissions:
+      actions: read
       contents: read
-      id-token: write
 
     steps:
       # The release tag is the code that will be built and published. Fetching full history plus
       # both long-lived branches lets us prove it is the current tip of the channel selected by
       # its semver.
       - name: Checkout release commit and branch history
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # A release event is attached to an immutable commit SHA. Checking out that SHA avoids
           # building different code if somebody moves the tag while this workflow is queued.
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       # Resolve the channel before the expensive install/build/test gates. Only the two supported
       # release shapes are accepted:
       #   vX.Y.Z-rc.N + GitHub prerelease -> canary -> npm `next`
-      #   vX.Y.Z      + normal release    -> main   -> npm `latest`
+      #   vX.Y.Z      + normal release    -> canary -> npm `latest`
       # This rejects either checkbox mismatch, as well as arbitrary prerelease identifiers.
       - name: Resolve and validate release channel
         id: release-channel
         shell: bash
         env:
+          ARTIFACT_NAME: npm-release-${{ github.sha }}-${{ github.run_attempt }}
           TAG_NAME: ${{ github.event.release.tag_name }}
           IS_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           set -euo pipefail
 
-          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+          echo "artifact-name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+          if [[ "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.(0|[1-9][0-9]*)$ ]]; then
             if [ "$IS_PRERELEASE" != "true" ]; then
               echo "::error::Release candidate $TAG_NAME must be marked as a GitHub pre-release."
               exit 1
@@ -58,14 +66,14 @@ jobs:
             echo "dist-tag=next" >> "$GITHUB_OUTPUT"
             echo "release-branch=canary" >> "$GITHUB_OUTPUT"
             echo "Release candidate $TAG_NAME -> canary -> npm dist-tag 'next'."
-          elif [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          elif [[ "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             if [ "$IS_PRERELEASE" != "false" ]; then
               echo "::error::Stable release $TAG_NAME must not be marked as a GitHub pre-release."
               exit 1
             fi
             echo "dist-tag=latest" >> "$GITHUB_OUTPUT"
-            echo "release-branch=main" >> "$GITHUB_OUTPUT"
-            echo "Stable release $TAG_NAME -> main -> npm dist-tag 'latest'."
+            echo "release-branch=canary" >> "$GITHUB_OUTPUT"
+            echo "Stable release $TAG_NAME -> canary -> npm dist-tag 'latest'."
           else
             echo "::error::Unsupported npm release tag $TAG_NAME. Expected vX.Y.Z or vX.Y.Z-rc.N."
             exit 1
@@ -93,54 +101,7 @@ jobs:
           fi
 
           tag_version="${TAG_NAME#v}"
-          EXPECTED_VERSION="$tag_version" node <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-
-          const config = JSON.parse(fs.readFileSync(".changeset/config.json", "utf8"));
-          const fixedPackages = new Set(config.fixed.flat());
-          const workspaceRoots = ["packages", "examples", "apps"];
-          const manifests = workspaceRoots
-            .flatMap((root) =>
-              fs
-                .readdirSync(root, { withFileTypes: true })
-                .filter((entry) => entry.isDirectory())
-                .map((entry) => path.join(root, entry.name, "package.json"))
-            )
-            .filter((manifestPath) => fs.existsSync(manifestPath))
-            .map((manifestPath) => ({
-              manifestPath,
-              manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")),
-            }));
-          const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
-          const errors = [];
-
-          for (const packageName of fixedPackages) {
-            const entry = byName.get(packageName);
-            if (!entry) {
-              errors.push(`${packageName}: package.json not found`);
-            } else if (entry.manifest.version !== process.env.EXPECTED_VERSION) {
-              errors.push(
-                `${packageName}: ${entry.manifest.version} (expected ${process.env.EXPECTED_VERSION})`
-              );
-            }
-          }
-
-          for (const { manifestPath, manifest } of manifests) {
-            if (manifest.private !== true && !fixedPackages.has(manifest.name)) {
-              errors.push(
-                `${manifest.name ?? manifestPath}: public workspace package missing from the fixed group`
-              );
-            }
-          }
-
-          if (errors.length > 0) {
-            console.error(
-              `::error::Release package validation failed: ${errors.join(", ")}`
-            );
-            process.exit(1);
-          }
-          NODE
+          EXPECTED_VERSION="$tag_version" node scripts/check-release-packages.mjs
 
           branch_ref="refs/remotes/origin/$RELEASE_BRANCH"
           if ! git show-ref --verify --quiet "$branch_ref"; then
@@ -156,14 +117,20 @@ jobs:
           echo "$TAG_NAME matches every fixed package and the current $RELEASE_BRANCH tip."
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org/
+
+      - name: Require successful full push CI on the release commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ steps.release-channel.outputs.release-branch }}
+        run: node scripts/check-release-ci.mjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -184,8 +151,7 @@ jobs:
       # The full suite, exactly as ci.yml runs it. Tests that need a real GPU (Dawn + Xvfb) are
       # guarded by `VGPU_DOCKER_TEST` and skip themselves here, so this stays runner-safe while
       # covering every publishable package. Real-device validation stays in ci.yml's `docker-gpu`
-      # job on both long-lived branches; a release tag is only cut from an already-green `canary`
-      # (release candidates) or `main` (stable releases).
+      # job on both long-lived branches; every release tag is cut from an already-green `canary`.
       - name: Run tests
         run: pnpm exec vitest run
 
@@ -193,22 +159,351 @@ jobs:
       - name: Check bundle budgets
         run: pnpm bundle-check
 
-      - name: Upgrade npm for OIDC publishing
-        run: npm install -g npm@^11.5.1
-
-      - name: Publish to npm
+      # `pnpm pack` resolves workspace:* dependencies and intentionally runs vgpu's prepack docs
+      # generation here, in the job that has no OIDC permission. The privileged job receives only
+      # these inert tarballs and never checks out or executes repository code.
+      - name: Pack and validate the exact release artifacts
+        shell: bash
         env:
-          DIST_TAG: ${{ steps.release-channel.outputs.dist-tag }}
-        run: pnpm -r publish --access public --no-git-checks --tag "$DIST_TAG"
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          version="${TAG_NAME#v}"
+          artifact_dir="${RUNNER_TEMP}/npm-release"
+          mkdir "$artifact_dir"
+          package_specs=(
+            "@vgpu/wgsl-std|packages/wgsl-std|vgpu-wgsl-std-${version}.tgz"
+            "@vgpu/wgsl|packages/wgsl|vgpu-wgsl-${version}.tgz"
+            "@vgpu/core|packages/core|vgpu-core-${version}.tgz"
+            "@vgpu/adapter-node|packages/adapter-node|vgpu-adapter-node-${version}.tgz"
+            "@vgpu/adapter-mock|packages/adapter-mock|vgpu-adapter-mock-${version}.tgz"
+            "@vgpu/render|packages/render|vgpu-render-${version}.tgz"
+            "vgpu|packages/vgpu-api|vgpu-${version}.tgz"
+          )
+
+          for spec in "${package_specs[@]}"; do
+            IFS='|' read -r package_name package_dir tarball_name <<<"$spec"
+            pnpm --dir "$package_dir" pack --pack-destination "$artifact_dir" >/dev/null
+            if [ ! -f "$artifact_dir/$tarball_name" ] || [ -L "$artifact_dir/$tarball_name" ]; then
+              echo "::error::$package_name did not produce the expected regular tarball $tarball_name."
+              exit 1
+            fi
+            echo "Packed $package_name as $tarball_name."
+          done
+
+          entry_count="$(find "$artifact_dir" -mindepth 1 -maxdepth 1 -exec printf x \; | wc -c | tr -d '[:space:]')"
+          if [ "$entry_count" != "${#package_specs[@]}" ]; then
+            echo "::error::Expected exactly ${#package_specs[@]} packed artifacts; found $entry_count."
+            exit 1
+          fi
+
+          for spec in "${package_specs[@]}"; do
+            IFS='|' read -r package_name package_dir tarball_name <<<"$spec"
+            tarball="$artifact_dir/$tarball_name"
+            manifest_count="$(tar -tzf "$tarball" | awk '$0 == "package/package.json" { count += 1 } END { print count + 0 }')"
+            if [ "$manifest_count" != "1" ]; then
+              echo "::error::$tarball_name must contain exactly one package/package.json; found $manifest_count."
+              exit 1
+            fi
+            manifest="$(tar -xOzf "$tarball" package/package.json)"
+            if ! jq -e \
+              --arg name "$package_name" \
+              --arg directory "$package_dir" \
+              --arg version "$version" \
+              '
+                .name == $name and
+                .version == $version and
+                .private == false and
+                .repository == {
+                  type: "git",
+                  url: "git+https://github.com/vercel-labs/vgpu.git",
+                  directory: $directory
+                } and
+                .publishConfig == { access: "public" } and
+                ([.dependencies?, .optionalDependencies?, .peerDependencies?]
+                  | all(. == null or type == "object")) and
+                ([.dependencies?, .optionalDependencies?, .peerDependencies?]
+                  | map(select(. != null) | to_entries[] | .value)
+                  | all(type != "string" or (startswith("workspace:") | not)))
+              ' <<<"$manifest" >/dev/null; then
+              echo "::error::$tarball_name has invalid release metadata or an unresolved workspace dependency."
+              exit 1
+            fi
+          done
+
+          (
+            cd "$artifact_dir"
+            sha256sum -- "${package_specs[@]##*|}" > SHA256SUMS
+          )
+
+      - name: Upload immutable release artifacts
+        id: upload-packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.release-channel.outputs.artifact-name }}
+          path: ${{ runner.temp }}/npm-release
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: false
+
+  publish:
+    needs: verify-and-pack
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+
+    steps:
+      # Deliberately no checkout, pnpm, or repository code in this job. It uses pinned actions,
+      # inline control-plane code from this workflow, and an exact npm CLI installed without scripts.
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install the exact Trusted Publishing npm CLI
+        run: |
+          set -euo pipefail
+          npm install -g \
+            --ignore-scripts \
+            --no-audit \
+            --no-fund \
+            --registry=https://registry.npmjs.org/ \
+            npm@11.19.1
+          test "$(npm --version)" = "11.19.1"
+
+      - name: Verify immutable artifact provenance
+        env:
+          ARTIFACT_DIGEST: ${{ needs.verify-and-pack.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ needs.verify-and-pack.outputs.artifact-id }}
+          ARTIFACT_NAME: ${{ needs.verify-and-pack.outputs.artifact-name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || \
+             [[ ! "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]] || \
+             [[ ! "$ARTIFACT_NAME" =~ ^npm-release-${GITHUB_SHA}-[1-9][0-9]*$ ]]; then
+            echo "::error::The package artifact ID, digest, or name is invalid."
+            exit 1
+          fi
+          artifact="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}")"
+          artifact_id="$(jq -r '.id' <<<"$artifact")"
+          artifact_digest="$(jq -r '.digest' <<<"$artifact")"
+          artifact_name="$(jq -r '.name' <<<"$artifact")"
+          artifact_run_id="$(jq -r '.workflow_run.id' <<<"$artifact")"
+          artifact_sha="$(jq -r '.workflow_run.head_sha' <<<"$artifact")"
+          artifact_expired="$(jq -r '.expired' <<<"$artifact")"
+          if [ "$artifact_id" != "$ARTIFACT_ID" ] || \
+             [ "$artifact_name" != "$ARTIFACT_NAME" ] || \
+             [ "$artifact_digest" != "sha256:$ARTIFACT_DIGEST" ] || \
+             [ "$artifact_run_id" != "$GITHUB_RUN_ID" ] || \
+             [ "$artifact_sha" != "$GITHUB_SHA" ] || \
+             [ "$artifact_expired" != "false" ]; then
+            echo "::error::The package artifact is not the immutable output of this release run and SHA."
+            exit 1
+          fi
+
+      - name: Download exact release artifact
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          artifact-ids: ${{ needs.verify-and-pack.outputs.artifact-id }}
+          path: ${{ runner.temp }}/npm-release
+          digest-mismatch: error
+
+      # This validation is intentionally inline: the OIDC job must not execute a verifier from the
+      # tagged checkout. It accepts only the seven named regular files and their checksum manifest.
+      - name: Validate downloaded tarballs without executing package code
+        shell: bash
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          version="${TAG_NAME#v}"
+          artifact_dir="${RUNNER_TEMP}/npm-release"
+          package_specs=(
+            "@vgpu/wgsl-std|packages/wgsl-std|vgpu-wgsl-std-${version}.tgz"
+            "@vgpu/wgsl|packages/wgsl|vgpu-wgsl-${version}.tgz"
+            "@vgpu/core|packages/core|vgpu-core-${version}.tgz"
+            "@vgpu/adapter-node|packages/adapter-node|vgpu-adapter-node-${version}.tgz"
+            "@vgpu/adapter-mock|packages/adapter-mock|vgpu-adapter-mock-${version}.tgz"
+            "@vgpu/render|packages/render|vgpu-render-${version}.tgz"
+            "vgpu|packages/vgpu-api|vgpu-${version}.tgz"
+          )
+
+          entry_count="$(find "$artifact_dir" -mindepth 1 -maxdepth 1 -exec printf x \; | wc -c | tr -d '[:space:]')"
+          if [ "$entry_count" != "8" ] || [ ! -f "$artifact_dir/SHA256SUMS" ] || [ -L "$artifact_dir/SHA256SUMS" ]; then
+            echo "::error::Release artifact must contain exactly seven tarballs and one regular SHA256SUMS file."
+            exit 1
+          fi
+          checksum_count="$(wc -l < "$artifact_dir/SHA256SUMS" | tr -d '[:space:]')"
+          if [ "$checksum_count" != "${#package_specs[@]}" ]; then
+            echo "::error::SHA256SUMS must contain exactly ${#package_specs[@]} records."
+            exit 1
+          fi
+
+          for spec in "${package_specs[@]}"; do
+            IFS='|' read -r package_name package_dir tarball_name <<<"$spec"
+            tarball="$artifact_dir/$tarball_name"
+            if [ ! -f "$tarball" ] || [ -L "$tarball" ]; then
+              echo "::error::Missing expected regular tarball $tarball_name."
+              exit 1
+            fi
+
+            checksum_matches="$(awk -v filename="$tarball_name" 'NF == 2 && $2 == filename { count += 1 } END { print count + 0 }' "$artifact_dir/SHA256SUMS")"
+            expected_checksum="$(awk -v filename="$tarball_name" 'NF == 2 && $2 == filename { print $1 }' "$artifact_dir/SHA256SUMS")"
+            actual_checksum="$(sha256sum -- "$tarball" | awk '{ print $1 }')"
+            if [ "$checksum_matches" != "1" ] || [[ ! "$expected_checksum" =~ ^[0-9a-f]{64}$ ]] || [ "$actual_checksum" != "$expected_checksum" ]; then
+              echo "::error::Checksum validation failed for $tarball_name."
+              exit 1
+            fi
+
+            manifest_count="$(tar -tzf "$tarball" | awk '$0 == "package/package.json" { count += 1 } END { print count + 0 }')"
+            if [ "$manifest_count" != "1" ]; then
+              echo "::error::$tarball_name must contain exactly one package/package.json; found $manifest_count."
+              exit 1
+            fi
+            manifest="$(tar -xOzf "$tarball" package/package.json)"
+            if ! jq -e \
+              --arg name "$package_name" \
+              --arg directory "$package_dir" \
+              --arg version "$version" \
+              '
+                .name == $name and
+                .version == $version and
+                .private == false and
+                .repository == {
+                  type: "git",
+                  url: "git+https://github.com/vercel-labs/vgpu.git",
+                  directory: $directory
+                } and
+                .publishConfig == { access: "public" } and
+                ([.dependencies?, .optionalDependencies?, .peerDependencies?]
+                  | all(. == null or type == "object")) and
+                ([.dependencies?, .optionalDependencies?, .peerDependencies?]
+                  | map(select(. != null) | to_entries[] | .value)
+                  | all(type != "string" or (startswith("workspace:") | not)))
+              ' <<<"$manifest" >/dev/null; then
+              echo "::error::$tarball_name has invalid release metadata or an unresolved workspace dependency."
+              exit 1
+            fi
+          done
+
+      # Branch and tag protection are the primary immutability controls. Re-read the remote refs in
+      # the OIDC job, after artifact validation and immediately before the first irreversible call.
+      - name: Revalidate remote tag and channel tip
+        env:
+          DIST_TAG: ${{ needs.verify-and-pack.outputs.dist-tag }}
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.(0|[1-9][0-9]*)$ ]]; then
+            if [ "$IS_PRERELEASE" != "true" ] || [ "$DIST_TAG" != "next" ]; then
+              echo "::error::Release candidate $TAG_NAME must still map to prerelease=true and npm dist-tag next."
+              exit 1
+            fi
+          elif [[ "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            if [ "$IS_PRERELEASE" != "false" ] || [ "$DIST_TAG" != "latest" ]; then
+              echo "::error::Stable release $TAG_NAME must still map to prerelease=false and npm dist-tag latest."
+              exit 1
+            fi
+          else
+            echo "::error::Unsupported npm release tag $TAG_NAME immediately before publish."
+            exit 1
+          fi
+
+          if [ "$DIST_TAG" = "latest" ]; then
+            main_sha="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              --jq '.object.sha')"
+            comparison="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/compare/${main_sha}...${GITHUB_SHA}")"
+            merge_base_sha="$(jq -r '.merge_base_commit.sha' <<<"$comparison")"
+            comparison_status="$(jq -r '.status' <<<"$comparison")"
+            if [ "$merge_base_sha" != "$main_sha" ] || { [ "$comparison_status" != "ahead" ] && [ "$comparison_status" != "identical" ]; }; then
+              echo "::error::Stable release $TAG_NAME is not descended from the current main tip $main_sha (merge-base=$merge_base_sha, comparison=$comparison_status). Backmerge main into canary without squashing or rebasing before publishing latest."
+              exit 1
+            fi
+          fi
+
+          tag_sha="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/commits/refs%2Ftags%2F${TAG_NAME}" \
+            --jq '.sha')"
+          canary_sha="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/canary" \
+            --jq '.object.sha')"
+          if [ "$tag_sha" != "$GITHUB_SHA" ] || [ "$canary_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::$TAG_NAME and canary must still resolve to release commit $GITHUB_SHA immediately before npm publish (tag=$tag_sha, canary=$canary_sha)."
+            exit 1
+          fi
+
+          if [ "$DIST_TAG" = "latest" ]; then
+            current_main_sha="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              --jq '.object.sha')"
+            if [ "$current_main_sha" != "$main_sha" ]; then
+              echo "::error::main moved while stable ancestry was being validated (before=$main_sha, after=$current_main_sha). Retry against the new main tip."
+              exit 1
+            fi
+          fi
+
+      - name: Publish the verified tarballs to npm
+        env:
+          DIST_TAG: ${{ needs.verify-and-pack.outputs.dist-tag }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          version="${TAG_NAME#v}"
+          cd "${RUNNER_TEMP}/npm-release"
+          tarballs=(
+            "vgpu-wgsl-std-${version}.tgz"
+            "vgpu-wgsl-${version}.tgz"
+            "vgpu-core-${version}.tgz"
+            "vgpu-adapter-node-${version}.tgz"
+            "vgpu-adapter-mock-${version}.tgz"
+            "vgpu-render-${version}.tgz"
+            "vgpu-${version}.tgz"
+          )
+          for tarball in "${tarballs[@]}"; do
+            npm publish "./$tarball" \
+              --ignore-scripts \
+              --registry=https://registry.npmjs.org/ \
+              --access=public \
+              --tag="$DIST_TAG" \
+              --provenance \
+              --dry-run=false
+          done
 
   # Keep status reporting separate from the irreversible npm publish. If this API call has a
   # transient failure, the failed job can be retried without attempting to republish packages.
-  # Vercel requires this exact status before assigning production domains to a `main` deployment.
+  # This is an audit record on the tagged canary commit, not Vercel deployment authorization.
   # RC and binary-asset releases never emit it.
   report-stable-npm-status:
     name: Record stable npm publication status
-    needs: publish
-    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.release-branch == 'main' }}
+    needs: [verify-and-pack, publish]
+    if: ${{ needs.publish.result == 'success' && needs.verify-and-pack.outputs.dist-tag == 'latest' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -217,17 +512,23 @@ jobs:
       - name: Mark stable npm publication successful
         env:
           GH_TOKEN: ${{ github.token }}
-          VERCEL_CHECK_CONTEXT: "Vercel - vgpu: npm stable published"
+          AUDIT_STATUS_CONTEXT: "vgpu: stable npm published"
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
 
-          main_sha="$(gh api \
+          tag_sha="$(gh api \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
-            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            "repos/${GITHUB_REPOSITORY}/commits/refs%2Ftags%2F${TAG_NAME}" \
+            --jq '.sha')"
+          canary_sha="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/canary" \
             --jq '.object.sha')"
-          if [ "$main_sha" != "$GITHUB_SHA" ]; then
-            echo "::error::Stable release commit $GITHUB_SHA is no longer the current main tip ($main_sha)."
+          if [ "$tag_sha" != "$GITHUB_SHA" ] || [ "$canary_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::$TAG_NAME and canary must still resolve to stable release commit $GITHUB_SHA before recording the npm audit status (tag=$tag_sha, canary=$canary_sha)."
             exit 1
           fi
 
@@ -236,6 +537,6 @@ jobs:
             -H "X-GitHub-Api-Version: 2026-03-10" \
             "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             --field state=success \
-            --field context="$VERCEL_CHECK_CONTEXT" \
+            --field context="$AUDIT_STATUS_CONTEXT" \
             --field description="All stable npm packages published successfully." \
             --field target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

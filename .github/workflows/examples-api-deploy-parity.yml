@@ -60,25 +60,65 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04-arm
+    # Store the bypass secret in this Environment (not as a repository secret) and restrict its
+    # deployment branches to canary. That prevents workflow_dispatch from another ref reading it.
+    environment: examples-api-parity
     permissions:
       contents: read
-    env:
-      # Set this secret to reach a preview that has Vercel Deployment Protection enabled
-      # (Project Settings -> Deployment Protection -> Protection Bypass for Automation). Without it
-      # a protected preview answers 401 and the script exits 75 = BLOCKED, which is explicitly NOT
-      # a parity failure.
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Never execute an operator-supplied ref in a job that can read the deployment bypass
+          # secret. Network-only A/B checks can still compare any two supplied deployment URLs.
+          ref: main
+          persist-credentials: false
       - name: Install pnpm for local artifact generation
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 9.15.4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
+      - name: Validate deployment URLs before exposing the bypass secret
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          COMPARE_URL: ${{ inputs.compare_url }}
+        run: |
+          node <<'NODE'
+          const allowedHost = (hostname) =>
+            hostname === "vgpu.sh" ||
+            hostname === "vgpu.labs.vercel.dev" ||
+            /^vgpu-[a-z0-9]+\.labs\.vercel\.dev$/.test(hostname);
+
+          for (const [name, value] of [
+            ["base_url", process.env.BASE_URL],
+            ["compare_url", process.env.COMPARE_URL],
+          ]) {
+            if (!value && name === "compare_url") continue;
+            let url;
+            try {
+              url = new URL(value);
+            } catch {
+              throw new Error(`${name} must be an absolute URL.`);
+            }
+            if (
+              url.protocol !== "https:" ||
+              url.username ||
+              url.password ||
+              url.port ||
+              (url.pathname !== "" && url.pathname !== "/") ||
+              url.search ||
+              url.hash ||
+              !allowedHost(url.hostname)
+            ) {
+              throw new Error(
+                `${name} must be an HTTPS origin owned by the vgpu Vercel project; received ${url.origin}.`
+              );
+            }
+          }
+          NODE
       - name: Install generator dependencies
         if: inputs.local_tree != 'none'
         run: pnpm install --frozen-lockfile
@@ -92,6 +132,10 @@ jobs:
           LOCAL_TREE: ${{ inputs.local_tree }}
           REQUIRE_LOCAL: ${{ inputs.require_local }}
           VERBOSE: ${{ inputs.verbose }}
+          # Set this secret to reach a preview that has Vercel Deployment Protection enabled
+          # (Project Settings -> Deployment Protection -> Protection Bypass for Automation). Without
+          # it, a protected preview returns 401 and the verifier exits 75 = BLOCKED.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -o pipefail
           arguments=("$BASE_URL")
@@ -121,7 +165,7 @@ jobs:
           exit "$status"
       - name: Upload the machine-readable parity report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: examples-api-deployment-parity
           path: examples-api-deployment-parity.json
