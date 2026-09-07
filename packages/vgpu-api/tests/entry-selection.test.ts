@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { init, compute, draw, geometry, target } from "../src/mock.ts";
+import { compute, draw, effect, geometry, init, target } from "../src/mock.ts";
 
 const TWO_FRAGMENT_WGSL = `
 @group(0) @binding(0) var<uniform> tintA: vec4f;
@@ -42,6 +42,25 @@ const TWO_COMPUTE_WGSL = `
 const MIXED_STAGE_COMPUTE_WGSL = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return vec4f(0.0); }
 @compute @workgroup_size(1) fn cs_main() {}
+`;
+
+// Issue #399 repro shape: another @fragment declared before fs_main. Default selection must prefer fs_main,
+// not the first fragment in source order. other returns tintA (binding 0), fs_main returns tintB (binding 1).
+const EARLIER_FRAGMENT_WGSL = `
+@group(0) @binding(0) var<uniform> tintA: vec4f;
+@group(0) @binding(1) var<uniform> tintB: vec4f;
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var pos = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(pos[vi], 0.0, 1.0);
+}
+@fragment fn other() -> @location(0) vec4f { return tintA; }
+@fragment fn fs_main() -> @location(0) vec4f { return tintB; }
+`;
+
+// Exact issue #399 shape: fragment-only source, so effect() injects its fullscreen vertex stage.
+const EFFECT_ISSUE_399_WGSL = `
+@fragment fn other(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(0.0, 1.0, 0.0, 1.0); }
 `;
 
 function layoutEntries(gpu: Awaited<ReturnType<typeof init>>, label: string): readonly GPUBindGroupLayoutEntry[] {
@@ -146,5 +165,48 @@ test("compute entry validates at construction with where compute", async () => {
   expect(() => compute(gpu, TWO_COMPUTE_WGSL, { label: "unknown-list", entry: "cs_c" })).toThrowError(/"cs_a" \(@compute\), "cs_b" \(@compute\)/);
   expect(() => compute(gpu, MIXED_STAGE_COMPUTE_WGSL, { label: "wrong-stage", entry: "vs_main" })).toThrowError(/VGPU-ENTRY-INVALID|is a @vertex entry point, not @compute/);
   expect(() => compute(gpu, TWO_COMPUTE_WGSL, { label: "not-string", entry: 1 as never })).toThrowError(/VGPU-ENTRY-INVALID|expected an entry point name string/);
+  gpu.dispose();
+});
+
+test("default fragment selection prefers a declared fs_main over an earlier @fragment (issue #399)", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+
+  draw(gpu, { shader: EARLIER_FRAGMENT_WGSL, label: "issue399-draw", set: { tintB: [0, 1, 0, 1] } }).draw(colorTarget);
+
+  const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
+  expect(desc?.fragment?.entryPoint).toBe("fs_main");
+  // Binding visibility follows the selected fs_main: only tintB (binding 1) is statically used by it.
+  expect(layoutEntries(gpu, "issue399-draw").map(({ binding, visibility }) => [binding, visibility])).toEqual([[1, 2]]);
+  gpu.dispose();
+});
+
+test("effect() prefers fs_main in the fragment-only issue #399 repro", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+
+  effect(gpu, EFFECT_ISSUE_399_WGSL, { label: "issue399-effect" }).draw(colorTarget);
+
+  const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
+  expect(desc?.fragment?.entryPoint).toBe("fs_main");
+  expect(desc?.vertex.entryPoint).toBe("vgpu_fullscreen_vs");
+  gpu.dispose();
+});
+
+test("absent entry and explicit entry naming the convention share one pipeline", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+
+  const plain = draw(gpu, { shader: EARLIER_FRAGMENT_WGSL, label: "share-plain", set: { tintB: [0, 1, 0, 1] } });
+  const explicitDefaults = draw(gpu, { shader: EARLIER_FRAGMENT_WGSL, label: "share-explicit", entry: { fragment: "fs_main" }, set: { tintB: [0, 1, 0, 1] } });
+  plain.draw(colorTarget);
+  explicitDefaults.draw(colorTarget);
+
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  expect(mock.calls.createShaderModule).toBe(1);
+  // Both resolve to fs_main and keep byte-identical cache keys, so one pipeline is created and shared.
+  expect(mock.calls.createRenderPipeline).toBe(1);
+  const desc = mock.createRenderPipelineDescriptors.at(-1);
+  expect(desc?.fragment?.entryPoint).toBe("fs_main");
   gpu.dispose();
 });
