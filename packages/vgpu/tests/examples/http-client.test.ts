@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -145,6 +145,8 @@ test.each(['darwin','win32'])("runs online commands with a per-invocation cache 
   const f=await fixture(),env=await testEnv();
   const cat=await runExamples(["cat","raymarched-fractal","example.ts","--base-url",f.origin],{version:"0.1.6",env,platform});
   expect(cat).toMatchObject({code:0,stdout:source});
+  const out=join(env.VGPU_CACHE_DIR,"pulled"),pulled=await runExamples(["pull","raymarched-fractal","--out",out,"--base-url",f.origin],{version:"0.1.6",env,platform});
+  expect(pulled.code).toBe(0);expect(JSON.parse(pulled.stdout as string).files).toBe(1);expect(await readFile(join(out,"example.ts"))).toEqual(source);
   expect(await runExamples(["cache","path"],{env,platform})).toEqual({code:0,stdout:"memory\n"});
   expect(await runExamples(["cache","clear"],{env,platform})).toEqual({code:0,stdout:'{"cleared":true,"path":"memory"}\n'});
   const offline=await runExamples(["show","raymarched-fractal","--offline"],{version:"0.1.6",env,platform,fetchImpl:()=>{throw new Error("socket opened")}});
