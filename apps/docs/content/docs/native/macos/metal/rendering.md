@@ -10,7 +10,8 @@ it does not introduce an effect, frame, or renderer object.
 > Warning: Native build tooling is under development and no native command is published yet.
 > This guide defines the first compiler-to-render example. The build input below is the proposed
 > command configuration; it is exercised through the internal compiler adapter until the command
-> is available. The initial compiler profile accepts resource-free vertex/fragment pairs only.
+> is available. The compiler also supports the fixed uniform profile described in
+> [Pack uniforms for Metal](/native/macos/metal/uniforms).
 
 ## Share shader code
 
@@ -152,9 +153,10 @@ it mixes generated shaders with other Metal commands.
 
 ## Keep the compiler profile explicit
 
-The first compiler adapter requires one selected vertex and one selected fragment stage per
-program, no active resource bindings, and no active overrides. It also rejects any effective
-compiler-required internal buffer or storage-size payload. Source features outside this profile
+The render compiler adapter requires one selected vertex and one selected fragment stage per
+program. Resources can be fixed uniform structs containing `f32`, `vec2f`, `vec3f`, and `vec4f`
+members. Active overrides, other resource kinds, and effective compiler-required internal buffers
+or storage-size payloads are rejected. Source features outside this profile
 fail explicitly; the compiler does not produce a package whose required data cannot be supplied.
 
 If translation reports an effective internal payload, assuming that the missing bytes would be
@@ -164,7 +166,7 @@ it does not infer payload requirements merely from the presence of a built-in su
 
 This compiler boundary is narrower than the [function loader](/native/macos/metal/functions),
 which can already expose a selected compute function or a single render stage from a compiled
-library. Uniforms, storage buffers, textures, specialization, and compiler-supported language
+library. Storage buffers, textures, specialization, and compiler-supported language
 features are added through their own documented integration, without adding a Swift renderer.
 
 Compiler failures identify their stage: source resolution, native validation/translation, or

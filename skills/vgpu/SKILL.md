@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: 1a4769e395796f6ea3c97a40c7c98587cb455057
-generatedAt: 2026-09-08T17:51:27.838Z
+gitSha: cbbc00a9460ed0baa13e7dc1c84f7fa552e5184b
+generatedAt: 2026-09-08T18:34:43.190Z
 ---
 
 # vgpu
@@ -56,13 +56,16 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
 - **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
 - **Native** — Start with Load Metal functions.  `references/guides/native.docs.md`
-- **macOS** — The new Metal function-loading guide defines the first generated API for application-owned Metal code.  `references/guides/native-macos.docs.md`
+- **macOS** — Start with Render WGSL with Metal to compile imported WGSL and draw with an application-owned pipeline.  `references/guides/native-macos.docs.md`
 - **Generated artifacts** — One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection.  `references/guides/native-macos-artifacts.docs.md`
 - **Bindings and generated types** — vgpu native build turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles.  `references/guides/native-macos-bindings.docs.md`
 - **Build and verify** — Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison.  `references/guides/native-macos-build.docs.md`
 - **Compare WebGPU and Metal** — native compare renders an explicit fixture through vgpu/node and the generated Metal package.  `references/guides/native-macos-compare.docs.md`
 - **GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
 - **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
+- **Bind Metal buffers** — The generated binding helper connects application-owned buffers to a program's Metal slots.  `references/guides/native-macos-metal-bindings.docs.md`
+- **Dispatch WGSL compute** — A generated compute program exposes a Metal function, its WGSL workgroup size, and helpers for binding its resources.  `references/guides/native-macos-metal-compute-dispatch.docs.md`
+- **Use prepared compute bindings** — Some translated shaders need compiler-generated data alongside application buffers.  `references/guides/native-macos-metal-compute-prepared-bindings.docs.md`
 - **Load Metal functions** — A generated shader package gives your Metal code access to selected shader functions without requiring a vgpu renderer.  `references/guides/native-macos-metal-functions.docs.md`
 - **Render WGSL with Metal** — Write shader behavior in WGSL.  `references/guides/native-macos-metal-rendering.docs.md`
 - **Pack uniforms for Metal** — A WGSL uniform describes bytes, not a Swift memory layout.  `references/guides/native-macos-metal-uniforms.docs.md`

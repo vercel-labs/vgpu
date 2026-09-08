@@ -4,6 +4,8 @@
     "functions",
     "rendering",
     "uniforms",
+    "bindings",
+    "compute",
     "..."
   ]
 }

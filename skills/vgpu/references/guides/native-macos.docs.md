@@ -20,11 +20,19 @@ relatedSymbols:
 > Warning: This guide documents the earlier full Swift-runtime proposal. The current direction is
 > WGSL compilation and generated Metal integration, with pipelines, resources, command buffers,
 > and presentation owned by the application. The `gpu.*` and view APIs below are not commitments
-> for that release. See [Native](/native) for the scope notice; the replacement quickstart will
-> follow validation of the generated API.
+> for that release. See [Native](/native) for the scope notice and the direct integration guides below.
 
-The new [Metal function-loading guide](/native/macos/metal/functions) defines the first generated
-API for application-owned Metal code. The remainder of this page is the earlier runtime draft.
+## Direct Metal integration
+
+Start with [Render WGSL with Metal](/native/macos/metal/rendering) to compile imported WGSL and
+draw with an application-owned pipeline. The [function-loading guide](/native/macos/metal/functions)
+explains the generated package and its loading errors. Follow the data path in
+[Pack uniforms for Metal](/native/macos/metal/uniforms) and
+[Bind Metal buffers](/native/macos/metal/bindings), which mark integration work still in progress.
+
+## Earlier runtime proposal
+
+The remainder of this page is the earlier runtime draft, not the generated Metal package's API.
 
 `vgpu native build` turns WGSL programs into a `.metallib` and generated Swift types. Your application creates effects, draws, targets, and frames with small Swift products implemented directly on Metal.
 

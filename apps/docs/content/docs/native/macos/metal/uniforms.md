@@ -7,10 +7,10 @@ A WGSL uniform describes bytes, not a Swift memory layout. The generated package
 ordinary Swift value and a binding-specific packer. You decide where the bytes live and when the
 GPU can read them.
 
-> Warning: This guide defines the next native integration under development. The initial
-> compiler-to-render example is resource-free; uniform compilation and binding are not available
-> through a published command. Packing is validated separately before connecting this example
-> to the compiler and a native render pass.
+> Warning: Native build tooling is under development and no native command is published yet.
+> This example is tested through the internal compiler adapter: WGSL reflection, generated Swift
+> packing and bindings, and a native render pass with GPU pixel readback. The current profile
+> covers fixed uniform structs with flat `f32`, `vec2f`, `vec3f`, and `vec4f` members.
 
 ## Declare shader data
 
@@ -141,9 +141,9 @@ The range's `length` is host-side validation metadata, not a Metal memory-access
 Metal's direct buffer setters receive a buffer and offset, not a bounded range. Keep the full
 buffer alive and synchronize its use as you would for handwritten Metal commands.
 
-Stage-qualified slot metadata will let native code set the same buffers without using the
-convenience helper. A vertex-stage slot and a fragment-stage slot with the same index do not
-collide. A native vertex stream must avoid the generated vertex-stage buffer slots.
+See [Bind Metal buffers](/native/macos/metal/bindings) for validation guarantees and direct
+stage-qualified slot access. A vertex-stage slot and a fragment-stage slot with the same index
+do not collide. A native vertex stream must avoid the generated vertex-stage buffer slots.
 
 Direct packing and direct Metal resources are the integration boundary. They do not require
 vgpu to own a frame loop, resource pool, renderer, or SwiftUI view.

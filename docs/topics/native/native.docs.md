@@ -27,6 +27,11 @@ Start with [Load Metal functions](/native/macos/metal/functions). The generated 
 the selected shader functions on your existing Metal device. Your application owns resources,
 pipelines, command encoding, synchronization, and presentation. No Swift vgpu renderer is required.
 
+Continue with [Render WGSL with Metal](/native/macos/metal/rendering) for an imported shader and
+an application-owned pipeline. [Pack uniforms for Metal](/native/macos/metal/uniforms) and
+[Bind Metal buffers](/native/macos/metal/bindings) develop the data and resource integration;
+each guide distinguishes validated behavior from the next proposed step.
+
 ## Earlier runtime proposal
 
 Native targets bring vgpu's rendering model to platform GPU APIs. You still create one backend-explicit GPU context, create resources once, update bindings, and encode explicit frames and passes. The public primitives stay backend-neutral; an opt-in backend module performs the platform work instead of vgpu's JavaScript runtime.
