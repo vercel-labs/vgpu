@@ -3,8 +3,8 @@ import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { captureToolEnvironment } from "./environment.js";
 
 export interface TintWorkerInput {
   executable: string;
@@ -13,6 +13,8 @@ export interface TintWorkerInput {
   signal?: AbortSignal;
   /** Optional shorter process deadline; never permits more than 60 seconds. */
   timeoutMs?: number;
+  /** Internal host context; captured before asynchronous executable reads. */
+  environment?: NodeJS.ProcessEnv;
 }
 
 export class TintWorkerError extends Error {
@@ -41,6 +43,7 @@ export async function invokeTintWorker(
   input: TintWorkerInput
 ): Promise<unknown> {
   throwIfCancelled(input.signal);
+  const environment = captureToolEnvironment(input.environment);
   const timeoutMs = input.timeoutMs ?? 60_000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
     throw new TintWorkerError(
@@ -82,14 +85,20 @@ export async function invokeTintWorker(
       "Tint worker executable does not match a trusted pinned build"
     );
   }
-  const scratch = await mkdtemp(join(tmpdir(), "vgpu-tint-worker-"));
+  const scratch = await mkdtemp(join(environment.TMPDIR!, "vgpu-tint-worker-"));
   try {
     // Execute these authenticated bytes, not a path that could be replaced
     // between verification and spawn. The directory is private to this call.
     const executable = join(scratch, "worker");
     await writeFile(executable, binary, { flag: "wx", mode: 0o500 });
     throwIfCancelled(input.signal);
-    return await runWorker(executable, input.request, input.signal, timeoutMs);
+    return await runWorker(
+      executable,
+      input.request,
+      input.signal,
+      timeoutMs,
+      environment
+    );
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
@@ -99,13 +108,14 @@ function runWorker(
   executable: string,
   request: string,
   signal: AbortSignal | undefined,
-  timeoutMs: number
+  timeoutMs: number,
+  environment: Readonly<NodeJS.ProcessEnv>
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     // Hashing the executable is insufficient if inherited loader options can
     // inject a library or redirect its dependencies before main() runs.
     const env = Object.fromEntries(
-      Object.entries(process.env).filter(
+      Object.entries(environment).filter(
         ([name]) => !name.startsWith("DYLD_") && !name.startsWith("LD_")
       )
     );

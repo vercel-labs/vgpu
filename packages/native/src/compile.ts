@@ -7,6 +7,7 @@ import {
 } from "./index.js";
 import { MetalCompileError } from "./compiler/errors.js";
 import { compileMetalLibrary } from "./compiler/metal.js";
+import { captureToolEnvironment } from "./compiler/environment.js";
 import {
   checkedSemanticResult,
   checkedTranslation,
@@ -45,6 +46,7 @@ export type CompileMetalPackageInput = MetalSourceInput & {
   }[];
   readonly workerPath: string;
   readonly signal?: AbortSignal;
+  readonly environment?: NodeJS.ProcessEnv;
 };
 
 export interface CheckedMetalPackage {
@@ -60,7 +62,9 @@ export async function compileMetalPackage(
   input: CompileMetalPackageInput
 ): Promise<GeneratedMetalPackage> {
   const prepared = await prepareMetalPackage(input);
-  const library = await compileMetalLibrary(prepared.sources, prepared.signal);
+  const library = await compileMetalLibrary(prepared.sources, prepared.signal, {
+    environment: prepared.environment,
+  });
   try {
     return generateMetalPackage({
       moduleName: prepared.moduleName,
@@ -98,6 +102,7 @@ interface PreparedMetalPackage {
   readonly programs: readonly MetalProgram[];
   readonly sources: readonly string[];
   readonly signal?: AbortSignal;
+  readonly environment: Readonly<NodeJS.ProcessEnv>;
 }
 
 async function prepareMetalPackage(
@@ -163,6 +168,7 @@ async function prepareMetalPackage(
     moduleName: input.moduleName,
     workerPath: input.workerPath,
     signal: input.signal,
+    environment: captureToolEnvironment(input.environment),
     programs: input.programs
       .map((program) => ({
         name: program.name,
@@ -316,6 +322,7 @@ async function prepareMetalPackage(
     programs,
     sources,
     signal: input.signal,
+    environment: input.environment!,
   };
 }
 
@@ -335,6 +342,7 @@ async function callWorker(
       executable: input.workerPath,
       request,
       signal: input.signal,
+      environment: input.environment,
     });
   } catch (cause) {
     throw new MetalCompileError(
