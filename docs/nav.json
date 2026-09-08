@@ -235,6 +235,7 @@
             { "title": "Use prepared compute bindings", "href": "/native/macos/metal/compute/prepared-bindings" },
             { "title": "Configure a Metal package", "href": "/native/macos/metal/tooling/configuration" },
             { "title": "Resolve shader inputs", "href": "/native/macos/metal/tooling/sources" },
+            { "title": "Check the native toolchain", "href": "/native/macos/metal/tooling/doctor" },
             { "title": "Build and verify a Metal package", "href": "/native/macos/metal/tooling/build" },
             { "title": "Programs", "href": "/native/macos/programs" },
             { "title": "Bindings and generated types", "href": "/native/macos/bindings" },

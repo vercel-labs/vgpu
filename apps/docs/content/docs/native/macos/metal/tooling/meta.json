@@ -3,6 +3,7 @@
   "pages": [
     "configuration",
     "sources",
+    "doctor",
     "build",
     "..."
   ]

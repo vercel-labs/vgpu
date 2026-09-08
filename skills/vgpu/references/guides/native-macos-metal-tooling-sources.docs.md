@@ -13,9 +13,9 @@ A native build uses the configured entry shaders and every module they import. C
 graph keeps the source bytes and import choices together: checking one set of files and compiling
 a later reread would not validate the same input.
 
-> Warning: This is the docs-first source-capture contract. The filesystem snapshot helpers and
-> their native command integration are not implemented or published yet. The existing internal
-> compiler accepts an explicit in-memory module map.
+> Warning: The snapshot helpers are implemented and tested, including serialized replay, package
+> imports, relocation, and bounded direct file reads. They are not published yet. Native command
+> integration remains pending; the internal Metal compiler currently accepts an in-memory module map.
 
 ## Keep imports in WGSL
 
@@ -48,7 +48,7 @@ change can therefore make verification stale without changing the emitted shader
 
 ## Capture the source graph
 
-The command performs this step for you. Build-tool integrations can use the proposed WGSL helpers
+The intended command performs this step for you. Build-tool integrations can use the WGSL helpers
 directly, without importing the Metal compiler:
 
 ```ts
@@ -96,13 +96,22 @@ and `minify` options have the same meaning as `resolveShader`; native tooling di
 validation and minification before running the pinned Metal compiler boundary. Capture itself
 does not validate WGSL semantics or prove that a shader belongs to the supported Metal profile.
 
+The initial snapshot records source and import choices, not a package-resolution warning log.
+Replay reports the WGSL diagnostics it can reproduce from that data; it does not recreate warnings
+about a package's conditional exports. The existing filesystem `resolveShader` API retains those
+package-resolution diagnostics.
+
 ## Bound input reads
 
 Source files must be regular, valid UTF-8 files without NUL bytes. The initial capture limits are
 four MiB per source module, thirty-two MiB of captured module bytes, 1,024 graph modules, and 128
-modules along an import chain. Package manifests used for resolution must be regular UTF-8 JSON
+modules along an import chain. Package manifests read directly by vgpu must be regular UTF-8 JSON
 files no larger than one MiB. Exceeding a limit fails the capture; it does not truncate source or
 return a partial graph. These limits are not command-line tuning flags.
+
+Fallbacks delegated to Node or package-manager resolver hooks retain those resolvers' own I/O
+behavior. The direct-read limits do not establish bounded execution or compatibility for every
+package manager, virtual filesystem, or custom hook.
 
 Capturing is not an atomic snapshot of the entire filesystem. Finish edits and dependency
 installation before running a native command. Capture reads each resolved module once per call

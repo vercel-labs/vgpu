@@ -166,6 +166,7 @@
       "    Use prepared compute bindings @ /native/macos/metal/compute/prepared-bindings",
       "    Configure a Metal package @ /native/macos/metal/tooling/configuration",
       "    Resolve shader inputs @ /native/macos/metal/tooling/sources",
+      "    Check the native toolchain @ /native/macos/metal/tooling/doctor",
       "    Build and verify a Metal package @ /native/macos/metal/tooling/build",
       "    Programs @ /native/macos/programs",
       "    Bindings and generated types @ /native/macos/bindings",

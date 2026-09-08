@@ -37,6 +37,9 @@ a failing exit status with an actionable diagnostic.
 A successful toolchain probe is not GPU execution coverage. Real shader tests and the release's
 physical-device matrix remain separate checks.
 
+See [Check the native toolchain](/native/macos/metal/tooling/doctor) for the findings, selected-Xcode
+behavior, and diagnostic boundaries.
+
 ## Validate before generating
 
 After [configuring a package](/native/macos/metal/tooling/configuration), run:
@@ -97,6 +100,14 @@ npx vgpu native verify
 `verify` checks the ownership record, supported artifact format, generated file set and hashes,
 and whether the current configuration and resolved source inputs match the recorded logical build
 inputs. It does not regenerate output or invoke Tint, `metal`, or `metallib`.
+
+The hidden `.vgpu-native-output.json` record belongs to the tool. It identifies the artifact format,
+owning configuration relative to the package, logical input fingerprint, and exact generated file
+hashes. Ownership does not change when you edit a shader: an unchanged old package can be replaced
+by its owning configuration even when its input fingerprint is stale. Do not edit the record to
+bypass a conflict. It is integrity metadata, not a signature or an application runtime dependency.
+The record is versioned UTF-8 JSON no larger than 64 KiB; unsupported or malformed records fail
+validation before their file list is used.
 
 Changing an imported helper makes the output stale even if its entry file did not change. Editing
 generated Swift, replacing the library, removing a generated file, or adding an unexpected file
