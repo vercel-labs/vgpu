@@ -77,6 +77,11 @@ Only one build can publish to an output at a time. Another build must report the
 interleave file writes. Interrupted staging or ownership state is reported with a recovery action;
 read-only commands never silently clean it up.
 
+Publication is the commit point. Cancellation or interruption after it may leave the complete new
+package in place. A cleanup problem must report that publication happened, rather than roll back
+the package or claim the old one is unchanged. If the process exits before reporting its outcome,
+inspect the recorded generation and recovery state before retrying.
+
 Add the generated package to your Swift project and use its functions, packers, and bindings.
 The application still creates its pipelines, buffers, textures, encoders, and submissions. A build
 does not launch the application or prove that its native pipeline state is compatible.

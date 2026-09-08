@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: dd4300f5f2cc42034f3a0ceec3aa64850da29338
-generatedAt: 2026-09-08T19:16:59.850Z
+gitSha: ccea90dedd806cff82db8aecc3321218a818fa6c
+generatedAt: 2026-09-08T19:29:04.581Z
 ---
 
 # vgpu
@@ -71,6 +71,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Render WGSL with Metal** — Write shader behavior in WGSL.  `references/guides/native-macos-metal-rendering.docs.md`
 - **Build and verify a Metal package** — Native tooling runs on the machine that generates the shaders.  `references/guides/native-macos-metal-tooling-build.docs.md`
 - **Configure a Metal package** — A native configuration selects the shader programs that ship together in one Swift package.  `references/guides/native-macos-metal-tooling-configuration.docs.md`
+- **Resolve shader inputs** — A native build uses the configured entry shaders and every module they import.  `references/guides/native-macos-metal-tooling-sources.docs.md`
 - **Pack uniforms for Metal** — A WGSL uniform describes bytes, not a Swift memory layout.  `references/guides/native-macos-metal-uniforms.docs.md`
 - **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
 - **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`

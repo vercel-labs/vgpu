@@ -61,6 +61,9 @@ working directory. Use forward slashes in configuration paths. Relative WGSL imp
 relative to the module that imports them. Imported modules follow vgpu's purity rules; resource
 and entry declarations stay in the entry shader.
 
+See [Resolve shader inputs](/native/macos/metal/tooling/sources) for how captured source bytes,
+package imports, and dependency changes become build inputs.
+
 Project commands use `./vgpu.native.json` by default. They do not search parent directories.
 Select a file explicitly in a monorepo:
 
@@ -84,8 +87,11 @@ matching ownership record and an unchanged set of tool-owned files. Modified gen
 unexpected files are reported instead of being discarded. There is no force flag that bypasses
 ownership checks.
 
-Filesystem roots, the home directory, the configuration directory, an ancestor of a source input,
-and symlinked output paths are not valid destinations. Changing the configured output does not
+Filesystem roots, the home directory, the configuration directory or its ancestors, an ancestor of
+any resolved source input, and symlinked output paths are not valid destinations. These checks
+include the physical targets of input aliases and every existing component of the output path.
+A valid destination boundary does not establish ownership of an existing package; replacement
+still requires the unchanged ownership and file checks above. Changing the configured output does not
 delete the previous directory. Move or remove an old package yourself after updating its consumers.
 
 ## Keep toolchain targets explicit

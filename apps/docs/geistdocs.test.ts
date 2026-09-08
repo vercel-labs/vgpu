@@ -111,7 +111,7 @@ describe("agent readiness metadata", () => {
     const computePages = JSON.parse(docsContent("native/macos/metal/compute/meta.json")).pages as string[];
     expect(computePages).toEqual(["dispatch", "prepared-bindings", "..."]);
     const toolingPages = JSON.parse(docsContent("native/macos/metal/tooling/meta.json")).pages as string[];
-    expect(toolingPages).toEqual(["configuration", "build", "..."]);
+    expect(toolingPages).toEqual(["configuration", "sources", "build", "..."]);
 
     const macos = docsContent("native/macos/index.md");
     expect(macos).toContain("let gpu = try VGPU.metal(device: device)");
