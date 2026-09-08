@@ -6,6 +6,7 @@
     { "path": "./packages/adapter-mock" },
     { "path": "./packages/adapter-node" },
     { "path": "./packages/render" },
+    { "path": "./packages/native" },
     { "path": "./packages/vgpu-api" }
   ]
 }

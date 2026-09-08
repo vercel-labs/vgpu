@@ -1,0 +1,145 @@
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { validateMetalPackageInput } from "./validation.js";
+
+export type MetalStage = "vertex" | "fragment" | "compute";
+
+export interface MetalProgram {
+  readonly name: string;
+  readonly functions: Partial<Record<MetalStage, string>>;
+}
+
+export interface MetalPackageInput {
+  readonly moduleName: string;
+  readonly library: Uint8Array;
+  readonly programs: readonly MetalProgram[];
+}
+
+export interface GeneratedMetalPackage {
+  readonly files: Readonly<Record<string, Uint8Array>>;
+}
+
+/** Generates source and resource files without writing to the filesystem. */
+export function generateMetalPackage(
+  input: MetalPackageInput
+): GeneratedMetalPackage {
+  validateMetalPackageInput(input);
+  const { moduleName } = input;
+  const librarySHA256 = createHash("sha256")
+    .update(input.library)
+    .digest("hex");
+  const programs = [...input.programs].sort((left, right) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  );
+  const stages: readonly MetalStage[] = ["vertex", "fragment", "compute"];
+  const programSource = programs
+    .map((program) => {
+      const functions = stages
+        .filter((stage) => Object.hasOwn(program.functions, stage))
+        .map((stage) => [stage, program.functions[stage]!] as const);
+      return `public enum ${program.name} {
+  public struct Functions {
+${functions
+  .map(([stage]) => `    public let ${stage}: any MTLFunction`)
+  .join("\n")}
+  }
+
+  public static func load(device: any MTLDevice) throws -> Functions {
+    let library = try _ShaderLibrary.load(device: device)
+    return Functions(
+${functions
+  .map(
+    ([stage, name]) =>
+      `      ${stage}: try _ShaderLibrary.function(library, name: "${name}", program: "${program.name}", stage: .${stage})`
+  )
+  .join(",\n")}
+    )
+  }
+}`;
+    })
+    .join("\n\n");
+
+  return {
+    files: {
+      "Package.swift": Buffer.from(`// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+  name: "${moduleName}",
+  platforms: [.macOS(.v14)],
+  products: [.library(name: "${moduleName}", targets: ["${moduleName}"])],
+  targets: [.target(name: "${moduleName}", resources: [.copy("Resources/Shaders.metallib")])]
+)
+`),
+      [`Sources/${moduleName}/Shaders.generated.swift`]:
+        Buffer.from(`import CryptoKit
+import Dispatch
+import Foundation
+import Metal
+
+public enum ShaderStage: String, Sendable {
+  case vertex, fragment, compute
+}
+
+public enum ShaderLoadError: Error {
+  case resourceUnavailable
+  case resourceUnreadable(underlying: any Error)
+  case libraryIntegrityMismatch
+  case libraryCreationFailed(underlying: any Error)
+  case missingFunction(program: String, stage: ShaderStage)
+  case unexpectedFunctionStage(program: String, stage: ShaderStage, actual: MTLFunctionType)
+  case functionConstantsUnsupported(program: String, stage: ShaderStage)
+}
+
+${programSource}
+
+private enum _ShaderLibrary {
+  static func load(device: any MTLDevice) throws -> any MTLLibrary {
+    guard let url = Bundle.module.url(forResource: "Shaders", withExtension: "metallib") else {
+      throw ShaderLoadError.resourceUnavailable
+    }
+    let data: Data
+    do {
+      data = try Data(contentsOf: url)
+    } catch {
+      throw ShaderLoadError.resourceUnreadable(underlying: error)
+    }
+    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    guard digest == "${librarySHA256}" else {
+      throw ShaderLoadError.libraryIntegrityMismatch
+    }
+    do {
+      return try data.withUnsafeBytes { bytes in
+        try device.makeLibrary(data: DispatchData(bytes: bytes))
+      }
+    } catch {
+      throw ShaderLoadError.libraryCreationFailed(underlying: error)
+    }
+  }
+
+  static func function(_ library: any MTLLibrary, name: String, program: String, stage: ShaderStage) throws -> any MTLFunction {
+    guard let function = library.makeFunction(name: name) else {
+      throw ShaderLoadError.missingFunction(program: program, stage: stage)
+    }
+    let expected: MTLFunctionType
+    switch stage {
+    case .vertex: expected = .vertex
+    case .fragment: expected = .fragment
+    case .compute: expected = .kernel
+    }
+    guard function.functionType == expected else {
+      throw ShaderLoadError.unexpectedFunctionStage(program: program, stage: stage, actual: function.functionType)
+    }
+    guard function.functionConstantsDictionary.isEmpty else {
+      throw ShaderLoadError.functionConstantsUnsupported(program: program, stage: stage)
+    }
+    return function
+  }
+}
+`),
+      [`Sources/${moduleName}/Resources/Shaders.metallib`]: Uint8Array.from(
+        input.library
+      ),
+    },
+  };
+}
