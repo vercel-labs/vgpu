@@ -13,9 +13,9 @@ Before investigating a project shader, check that the machine can run the native
 npx vgpu native doctor
 ```
 
-> Warning: This is the docs-first diagnostic contract. The native doctor command and installable
-> tooling are not available yet. Existing tests exercise the pinned worker and offline compiler
-> directly; the diagnostic workflow needs its own tests.
+> Warning: The internal diagnostic is implemented and tested with the pinned worker and Apple's
+> offline compiler. The native doctor command and installable tooling are not available yet.
+> These checks do not establish a release compatibility matrix.
 
 The command needs no `vgpu.native.json`, does not read project shaders, and writes no generated
 package. It reports evidence and a suggested next action for each failed prerequisite.

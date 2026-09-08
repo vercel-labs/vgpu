@@ -14,8 +14,9 @@ graph keeps the source bytes and import choices together: checking one set of fi
 a later reread would not validate the same input.
 
 > Warning: The snapshot helpers are implemented and tested, including serialized replay, package
-> imports, relocation, and bounded direct file reads. They are not published yet. Native command
-> integration remains pending; the internal Metal compiler currently accepts an in-memory module map.
+> imports, relocation, and bounded direct file reads. The internal Metal compiler accepts captured
+> graphs as well as explicit module maps, with real compute and render tests. These helpers are not
+> published yet; native command integration remains pending.
 
 ## Keep imports in WGSL
 
@@ -89,6 +90,12 @@ Snapshots are versioned data, not handles tied to the process that captured them
 trip or `structuredClone` can be replayed. Replay validates the snapshot's shape, source hashes,
 and complete import edges before using it; malformed or unsupported snapshots fail without falling
 back to the filesystem. Hash validation checks consistency, not who authored the source.
+
+Tooling that accepts a mutable snapshot can first call `copyShaderGraphSnapshot(snapshot)` from
+`@vgpu/wgsl/runtime`. It synchronously validates the data shape, source limits and hashes, then
+returns an owned, deeply frozen copy before asynchronous work begins. Accessor properties and
+custom object prototypes are not snapshot data. Copying does not replace replay's import-graph,
+purity, and shader checks.
 
 `resolveShaderSnapshot` uses only captured source and edges. It performs ordinary import, purity,
 emission, and reflection checks without reading files or resolving packages again. Its `validate`

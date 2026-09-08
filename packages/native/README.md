@@ -9,7 +9,8 @@ flat-float uniform layouts generate binding-specific CPU packers. Complete stage
 also generate explicit range validation and render binding helpers. Caller-supplied metadata does
 not prove that it matches arbitrary library bytes.
 
-The internal `compileMetalPackage` adapter resolves an explicit WGSL module map, validates and
+The internal `compileMetalPackage` adapter resolves an explicit WGSL module map or an owned
+`ShaderGraphSnapshot` captured with `@vgpu/wgsl/runtime`, validates and
 translates render pairs and compute entries with a pinned Tint worker, and compiles Metal offline
 before generating the package. Render programs support fixed uniform structs with flat float and
 float-vector fields. Compute programs support storage buffers, fixed workgroup dimensions, and
@@ -23,6 +24,11 @@ installation, and atomic output publication remain separate integration work.
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
 Apple's offline compiler or generate package files. This is an internal seam, not an installed CLI.
+
+Read-only tooling seams parse the project configuration, diagnose the selected native toolchain,
+validate output boundaries, and verify an existing package's exact file tree and integrity record.
+Output verification does not establish input freshness or authorize publication. These modules do
+not yet connect the project configuration to installed commands or write generated directories.
 
 The generated consumer API is documented in
 [Load Metal functions](../../docs/topics/native/macos/metal/native-macos-metal-functions.docs.md),

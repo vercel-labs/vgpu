@@ -116,6 +116,13 @@ package: build it as a dependency of your consuming Swift project, whose build p
 outside this directory. A `.build` directory created by building the generated package directly
 is still an unexpected addition; the tool reports it instead of deleting it.
 
+The package must contain ordinary directories and regular, unlinked files. Symbolic links,
+hard-linked files, special files, and unexpected empty directories fail verification too. The
+verifier reads the limited ownership record before using its file list, then hashes payloads in
+small chunks. Cancelling stops the inspection without changing the package. Verification is a
+read-only observation, not a lock or permission to replace the directory: builds must repeat the
+ownership checks inside their publication boundary.
+
 Hash checks detect mismatches. They are not a signature proving who authored a package, and a
 library hash does not promise byte-identical Apple compiler output across toolchain versions.
 Verification also does not execute shaders or validate the application's resource contents.
