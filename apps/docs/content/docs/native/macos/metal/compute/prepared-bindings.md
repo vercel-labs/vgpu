@@ -9,7 +9,8 @@ together so native code does not accidentally combine a new range with an old si
 
 > Warning: Native tests on Apple silicon execute both the prepared helper and manual upload path
 > with the exact WGSL from the dispatch guide. The package and build commands are not published
-> yet. This guide does not establish support for indirect command buffer execution.
+> yet. A separate [indirect dispatch example](/native/macos/metal/compute/indirect-dispatch) tests
+> a bounded native command-buffer integration.
 
 ## Prepare one binding snapshot
 
@@ -117,5 +118,6 @@ for caller-owned uploads. See Apple's
 
 This does not make an arbitrary pipeline or resource set safe for indirect commands. The
 application still configures indirect pipeline support, buffer inheritance, resource residency,
-barriers, storage-mode synchronization, and lifetime. An actual indirect-command execution test
-is a separate support gate, not a consequence of being able to inspect the bytes.
+barriers, storage-mode synchronization, and lifetime. Continue with
+[Encode native indirect dispatch](/native/macos/metal/compute/indirect-dispatch) for the tested
+CPU-encoded, shared-buffer example and its limits.

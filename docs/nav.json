@@ -233,6 +233,7 @@
             { "title": "Render to multiple textures", "href": "/native/macos/metal/render/targets" },
             { "title": "Dispatch WGSL compute", "href": "/native/macos/metal/compute/dispatch" },
             { "title": "Use prepared compute bindings", "href": "/native/macos/metal/compute/prepared-bindings" },
+            { "title": "Encode native indirect dispatch", "href": "/native/macos/metal/compute/indirect-dispatch" },
             { "title": "Configure a Metal package", "href": "/native/macos/metal/tooling/configuration" },
             { "title": "Resolve shader inputs", "href": "/native/macos/metal/tooling/sources" },
             { "title": "Check the native toolchain", "href": "/native/macos/metal/tooling/doctor" },

@@ -123,3 +123,21 @@ captures again instead of trusting modification times or a previous dependency l
 the logical configuration, source hashes, and resolved edges with the recorded generation; it
 does not invoke Tint or Apple's compiler. Continue with
 [Build and verify a Metal package](/native/macos/metal/tooling/build).
+
+## Identify a generation
+
+The input fingerprint describes the module name, selected programs and entry points, captured
+source hashes and import edges, and the native generation profile. The profile includes the pinned
+WGSL compiler and protocol, artifact format, generation revision, and Metal, Swift, and deployment
+settings that affect the generated package.
+
+Absolute checkout paths, the output destination, configuration formatting, and program listing
+order do not make otherwise identical inputs stale. The owning configuration is checked separately
+from this fingerprint. Changing a shader, a captured logical import edge, an entry point, or the generation
+profile does make the output stale, including changes to imported declarations that are unused.
+
+Generation revisions track changes to source resolution, shader interpretation, bindings, or Swift
+emission. A documentation-only or command-line-only tooling update does not require regeneration
+just because its npm version changed. Verification does not run the installed Apple tools to
+compare their versions; the fingerprint does not promise identical compiled library bytes across
+different Xcode or Metal compiler versions.

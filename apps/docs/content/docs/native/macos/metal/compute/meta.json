@@ -3,6 +3,7 @@
   "pages": [
     "dispatch",
     "prepared-bindings",
+    "indirect-dispatch",
     "..."
   ]
 }

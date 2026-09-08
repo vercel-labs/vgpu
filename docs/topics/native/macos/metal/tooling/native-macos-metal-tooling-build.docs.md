@@ -80,6 +80,17 @@ Only one build can publish to an output at a time. Another build must report the
 interleave file writes. Interrupted staging or ownership state is reported with a recovery action;
 read-only commands never silently clean it up.
 
+On macOS, publication uses a small filesystem helper compiled locally from the installed tool's
+source with the selected Xcode C compiler. This helper is a build-time component, not part of the
+generated Swift package or application. It needs no separate binary download or persistent cache.
+Its compilation and execution can fail without replacing the package.
+
+The initial publisher holds a lock on the physical parent directory while it checks ownership,
+publishes, and cleans up its staging. Builds targeting sibling packages in that same directory
+also conflict. Alternate spellings of the same physical parent do not provide independent locks.
+Changing the parent directory while a build is running is unsupported and can produce a recovery
+diagnostic; the tool does not follow a replacement parent to publish somewhere else.
+
 Publication is the commit point. Cancellation or interruption after it may leave the complete new
 package in place. A cleanup problem must report that publication happened, rather than roll back
 the package or claim the old one is unchanged. If the process exits before reporting its outcome,

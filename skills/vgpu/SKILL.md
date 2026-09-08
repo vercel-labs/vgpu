@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: 7b28b6e3326199fed51d1e6ed852c35da649f8b2
-generatedAt: 2026-09-08T20:28:51.397Z
+gitSha: 7dc48de6d65a355b5203e29314018344a5547015
+generatedAt: 2026-09-08T20:42:27.417Z
 ---
 
 # vgpu
@@ -65,6 +65,7 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
 - **Bind Metal buffers** — The generated binding helper connects application-owned buffers to a program's Metal slots.  `references/guides/native-macos-metal-bindings.docs.md`
 - **Dispatch WGSL compute** — A generated compute program exposes a Metal function, its WGSL workgroup size, and helpers for binding its resources.  `references/guides/native-macos-metal-compute-dispatch.docs.md`
+- **Encode native indirect dispatch** — An application can keep Metal command encoding outside vgpu.  `references/guides/native-macos-metal-compute-indirect-dispatch.docs.md`
 - **Use prepared compute bindings** — Some translated shaders need compiler-generated data alongside application buffers.  `references/guides/native-macos-metal-compute-prepared-bindings.docs.md`
 - **Load Metal functions** — A generated shader package gives your Metal code access to selected shader functions without requiring a vgpu renderer.  `references/guides/native-macos-metal-functions.docs.md`
 - **Render to multiple textures** — A fragment shader can write more than one result in a draw.  `references/guides/native-macos-metal-render-targets.docs.md`

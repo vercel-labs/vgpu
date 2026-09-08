@@ -18,7 +18,7 @@ effective runtime-array size data derived from explicit ranges. Prepared binding
 internal bytes for caller-managed uploads. Storage packing remains application-owned.
 
 Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
-authored struct names, not physical offsets. Other resource kinds, indirect execution, command
+authored struct names, not physical offsets. Other resource kinds, command
 installation, and atomic output publication remain separate integration work.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
@@ -59,6 +59,8 @@ Loader fixtures use handwritten Metal to isolate packaging and loading. Compiler
 resolve real imported WGSL, run the pinned worker and offline compiler, and execute the guide's
 Swift draw code with GPU pixel readback, including uniforms, explicit ranges, and shared-stage
 bindings, dense and sparse render targets, and compute output readback through ordinary, prepared,
-and manual binding paths. Separate packing fixtures execute generated Swift against byte oracles; binder fixtures
+and manual binding paths. A bounded CPU-encoded indirect compute fixture also tests command replay
+and reset/re-encoding with changed prepared ranges; it is not a TypeScript render-bundle runtime.
+Separate packing fixtures execute generated Swift against byte oracles; binder fixtures
 isolate validation and encoder atomicity. None establishes a release support matrix.
 Temporary consumers and resources are created outside the repository and cleaned up by the harness.
