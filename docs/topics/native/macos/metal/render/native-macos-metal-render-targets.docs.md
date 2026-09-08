@@ -1,0 +1,120 @@
+---
+title: Render to multiple textures
+summary: Connect WGSL fragment outputs to application-owned Metal color attachments, including sparse locations.
+websitePath: /native/macos/metal/render/targets
+keywords: native, macos, metal, swift, multiple render targets, mrt, color attachments
+---
+
+# Render to multiple textures
+
+A fragment shader can write more than one result in a draw. Declare the outputs in WGSL, then
+connect each output location to the same color-attachment index in your Metal pipeline and render
+pass. The generated package exposes the functions; your application owns the textures and pass.
+
+> Warning: Native build tooling is under development and no native command is published yet.
+> The example below and its sparse-location variant are tested through the internal compiler
+> adapter and a generated Swift package, with both textures read back from Metal on Apple silicon.
+
+## Declare two outputs
+
+```wgsl
+// shaders/layers.wgsl
+struct LayersOutput {
+  @location(0) color: vec4f,
+  @location(1) mask: vec4f,
+}
+
+@vertex
+fn vertex_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
+  return vec4f(position, 0.0, 1.0);
+}
+
+@fragment
+fn fragment_main() -> LayersOutput {
+  return LayersOutput(vec4f(1.0, 0.0, 0.0, 1.0), vec4f(0.0, 1.0, 0.0, 1.0));
+}
+```
+
+Select `vertex_main` and `fragment_main` in a program named `Layers`, as in
+[Render WGSL with Metal](/native/macos/metal/rendering). That guide also supplies the `device`,
+two-component `vertices` descriptor, and fullscreen `vertexBuffer` used below.
+
+## Match the pipeline attachments
+
+```swift
+import Metal
+import AppShaders
+
+let layers = try Layers.load(device: device)
+let descriptor = MTLRenderPipelineDescriptor()
+descriptor.vertexFunction = layers.vertex
+descriptor.fragmentFunction = layers.fragment
+descriptor.vertexDescriptor = vertices
+descriptor.colorAttachments[0].pixelFormat = .rgba8Unorm
+descriptor.colorAttachments[1].pixelFormat = .rgba8Unorm
+let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+```
+
+Each format describes a target, not a generated resource. The format must be compatible with the
+shader output and the texture attached when you draw. Configure blending and write masks through
+the same native descriptors when needed. See Apple's
+[pipeline color attachments](https://developer.apple.com/documentation/metal/mtlrenderpipelinedescriptor/colorattachments).
+
+Create the two textures on your device:
+
+```swift
+let target = MTLTextureDescriptor.texture2DDescriptor(
+  pixelFormat: .rgba8Unorm,
+  width: 64,
+  height: 64,
+  mipmapped: false
+)
+target.storageMode = .private
+target.usage = [.renderTarget]
+let color = device.makeTexture(descriptor: target)!
+let mask = device.makeTexture(descriptor: target)!
+```
+
+The short example assumes allocation succeeds. Both textures use the same dimensions and sample
+count. Add the native usage flags required by later work, such as `.shaderRead` for sampling.
+
+## Draw into both textures
+
+With an application-owned `commandBuffer`, attach the textures and encode one draw:
+
+```swift
+let pass = MTLRenderPassDescriptor()
+pass.colorAttachments[0].texture = color
+pass.colorAttachments[0].loadAction = .clear
+pass.colorAttachments[0].storeAction = .store
+pass.colorAttachments[1].texture = mask
+pass.colorAttachments[1].loadAction = .clear
+pass.colorAttachments[1].storeAction = .store
+
+let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass)!
+encoder.setRenderPipelineState(pipeline)
+encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+encoder.endEncoding()
+```
+
+After successful submission and completion, covered pixels are opaque red in `color` and opaque
+green in `mask`. The application decides whether to sample, copy, present, or keep these textures.
+Neither output has to be a drawable or pass through a vgpu-owned target object.
+
+The pipeline describes formats; the [render pass attachments](https://developer.apple.com/documentation/metal/mtlrenderpassdescriptor/colorattachments)
+select actual textures, load actions, and store actions. Loading the functions does not validate
+your future attachments, and successful pipeline creation alone does not prove every shader
+output will be stored. Keep all intended output locations configured in both descriptors.
+
+## Preserve sparse locations
+
+Locations are indices, not the order of present outputs. If the shader changes its two locations
+to `1` and `4`, change the pipeline and pass attachment indices to `1` and `4` as well. Leave the
+unused pipeline formats at `.invalid` and the unused pass textures unset. Do not compact the two
+outputs back to `0` and `1`.
+
+This example does not add dual-source blending, multisampling, or depth/stencil support to the
+declared compiler profile. Those features have separate language, pipeline, and device contracts.
+Multiple color outputs need no new Swift renderer primitive: the composition remains ordinary
+Metal code around the generated functions.

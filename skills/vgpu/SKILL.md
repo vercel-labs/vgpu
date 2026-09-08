@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: cbbc00a9460ed0baa13e7dc1c84f7fa552e5184b
-generatedAt: 2026-09-08T18:34:43.190Z
+gitSha: 7ed18e0be13200f532c46826235a47d68422eaea
+generatedAt: 2026-09-08T18:50:43.964Z
 ---
 
 # vgpu
@@ -67,7 +67,10 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Dispatch WGSL compute** — A generated compute program exposes a Metal function, its WGSL workgroup size, and helpers for binding its resources.  `references/guides/native-macos-metal-compute-dispatch.docs.md`
 - **Use prepared compute bindings** — Some translated shaders need compiler-generated data alongside application buffers.  `references/guides/native-macos-metal-compute-prepared-bindings.docs.md`
 - **Load Metal functions** — A generated shader package gives your Metal code access to selected shader functions without requiring a vgpu renderer.  `references/guides/native-macos-metal-functions.docs.md`
+- **Render to multiple textures** — A fragment shader can write more than one result in a draw.  `references/guides/native-macos-metal-render-targets.docs.md`
 - **Render WGSL with Metal** — Write shader behavior in WGSL.  `references/guides/native-macos-metal-rendering.docs.md`
+- **Build and verify a Metal package** — Native tooling runs on the machine that generates the shaders.  `references/guides/native-macos-metal-tooling-build.docs.md`
+- **Configure a Metal package** — A native configuration selects the shader programs that ship together in one Swift package.  `references/guides/native-macos-metal-tooling-configuration.docs.md`
 - **Pack uniforms for Metal** — A WGSL uniform describes bytes, not a Swift memory layout.  `references/guides/native-macos-metal-uniforms.docs.md`
 - **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
 - **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`

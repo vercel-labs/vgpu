@@ -5,7 +5,9 @@
     "rendering",
     "uniforms",
     "bindings",
+    "render",
     "compute",
+    "tooling",
     "..."
   ]
 }
