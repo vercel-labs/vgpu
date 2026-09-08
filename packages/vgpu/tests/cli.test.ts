@@ -308,8 +308,11 @@ test("caps the low-signal 'a' query with a notice", () => {
 });
 
 test("does not add a notice when the route-hit count is under the cap", () => {
-  const out = success(["docs", "find", "Buffer"]);
-  expect(out).toContain("Buffer\tvgpu/core");
+  // "Buffer" now legitimately matches more than 20 native and JavaScript guides.
+  // Use the specific symbol to exercise the under-cap branch as the corpus grows.
+  const out = success(["docs", "find", "BufferOptions"]);
+  expect(out).toContain("BufferOptions\tvgpu/core");
+  expect(out.trimEnd().split("\n").length).toBeLessThanOrEqual(20);
   expect(out).not.toMatch(/showing the 20 best/);
 });
 
