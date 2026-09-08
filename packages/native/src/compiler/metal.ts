@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MetalCompileError } from "./errors.js";
+import { metalGenerationProfile } from "../compatibility.js";
 
 export async function compileMetalLibrary(
   sources: readonly string[],
@@ -29,11 +30,11 @@ export async function compileMetalLibrary(
         "/usr/bin/xcrun",
         [
           "-sdk",
-          "macosx",
+          metalGenerationProfile.metal.sdk,
           "metal",
-          "-std=macos-metal2.4",
+          `-std=${metalGenerationProfile.metal.languageStandard}`,
           "-target",
-          "air64-apple-macos14.0",
+          metalGenerationProfile.metal.target,
           "-c",
           msl,
           "-o",
@@ -54,7 +55,10 @@ export async function compileMetalLibrary(
     const library = join(directory, "Shaders.metallib");
     await execute(
       "/usr/bin/xcrun",
-      ["-sdk", "macosx", "metallib", ...airFiles, "-o", library],
+      [
+        "-sdk", metalGenerationProfile.metal.sdk, "metallib",
+        ...airFiles, "-o", library,
+      ],
       {
         env: environment,
         signal,

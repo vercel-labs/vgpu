@@ -3,6 +3,7 @@ import { isUtf8 } from "node:buffer";
 import { posix } from "node:path";
 import type { GeneratedMetalPackage } from "../index.js";
 import { validateSwiftIdentifier } from "../validation.js";
+import { metalGenerationProfile } from "../compatibility.js";
 
 export const metalOutputRecordPath = ".vgpu-native-output.json";
 
@@ -16,7 +17,7 @@ export class MetalOutputRecordError extends Error {
 
 export interface MetalOutputRecord {
   readonly schemaVersion: 1;
-  readonly format: "vgpu-metal-package/v1";
+  readonly format: typeof metalGenerationProfile.artifactFormat;
   readonly moduleName: string;
   readonly ownerConfiguration: string;
   readonly inputFingerprint: string;
@@ -54,7 +55,7 @@ export function createMetalOutputRecord(
     );
   const record: MetalOutputRecord = {
     schemaVersion: 1,
-    format: "vgpu-metal-package/v1",
+    format: metalGenerationProfile.artifactFormat,
     moduleName: input.moduleName,
     ownerConfiguration: input.ownerConfiguration,
     inputFingerprint: input.inputFingerprint,
@@ -130,7 +131,10 @@ function checkedRecord(bytes: Uint8Array): MetalOutputRecord {
     "inputFingerprint",
     "files",
   ]);
-  if (record.schemaVersion !== 1 || record.format !== "vgpu-metal-package/v1")
+  if (
+    record.schemaVersion !== 1 ||
+    record.format !== metalGenerationProfile.artifactFormat
+  )
     throw new TypeError("Unsupported output record format");
   validateSwiftIdentifier(record.moduleName, "moduleName");
   validateIdentity(record.ownerConfiguration, record.inputFingerprint);

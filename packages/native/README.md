@@ -30,6 +30,11 @@ validate output boundaries, and verify an existing package's exact file tree and
 Output verification does not establish input freshness or authorize publication. These modules do
 not yet connect the project configuration to installed commands or write generated directories.
 
+`loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
+Its logical fingerprint includes the generation profile, selected programs, source hashes, and
+import edges, not physical checkout paths or output ownership. Generation compatibility settings
+are shared with the compiler, Swift package emitter, and integrity-record format.
+
 The generated consumer API is documented in
 [Load Metal functions](../../docs/topics/native/macos/metal/native-macos-metal-functions.docs.md),
 [Render WGSL with Metal](../../docs/topics/native/macos/metal/native-macos-metal-rendering.docs.md),

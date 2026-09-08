@@ -11,6 +11,12 @@ import { sha256 } from "./source.js";
 import { hasMslEntryDeclaration } from "./msl.js";
 import type { MetalBindingMapping } from "./uniforms.js";
 import type { MetalStorageBufferSizes } from "../index.js";
+import { compilerIdentity } from "./identity.js";
+export {
+  compilerIdentity,
+  semanticContract,
+  translationContract,
+} from "./identity.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 for (const schema of [
@@ -22,18 +28,6 @@ for (const schema of [
   semanticResponseSchema,
 ])
   ajv.addSchema(schema);
-
-export const compilerIdentity = {
-  name: "vgpu-tint-compiler",
-  version: "0.1.0",
-  protocol: 1,
-  upstream: {
-    name: "dawn/tint",
-    revision: "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca",
-  },
-};
-export const semanticContract = "vgpu-native-tint-semantic-extraction/v1";
-export const translationContract = "vgpu-native-tint-compiler/v1";
 
 export interface InterfaceValue {
   type: { scalar: string; width: number };

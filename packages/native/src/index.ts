@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
+import { metalGenerationProfile } from "./compatibility.js";
 import { validateMetalPackageInput } from "./validation.js";
 import { generateUniformDeclarations, uniformPackingSupport, type MetalUniform } from "./uniforms.js";
 import { bindingSupport, generateBindingMethods, generateBindingsDeclaration, hasUniformBindings } from "./bindings.js";
@@ -72,12 +73,12 @@ ${functions
 
   return {
     files: {
-      "Package.swift": Buffer.from(`// swift-tools-version: 6.0
+      "Package.swift": Buffer.from(`// swift-tools-version: ${metalGenerationProfile.swift.toolsVersion}
 import PackageDescription
 
 let package = Package(
   name: "${moduleName}",
-  platforms: [.macOS(.v14)],
+  platforms: [.macOS(.${metalGenerationProfile.swift.macOSPlatform})],
   products: [.library(name: "${moduleName}", targets: ["${moduleName}"])],
   targets: [.target(name: "${moduleName}", resources: [.copy("Resources/Shaders.metallib")])]
 )
