@@ -109,5 +109,9 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "tsl-exports": {
     "card": "/examples/tsl-exports.card.png",
     "hero": "/examples/tsl-exports.hero.png"
+  },
+  "typegpu-liquid-glass": {
+    "card": "/examples/typegpu-liquid-glass.card.png",
+    "hero": "/examples/typegpu-liquid-glass.hero.png"
   }
 };
