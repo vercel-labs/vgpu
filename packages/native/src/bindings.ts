@@ -142,6 +142,8 @@ export const bindingSupport = `public enum ShaderBindingError: Error {
   case misalignedOffset(binding: String, required: Int, actual: Int)
   case resourceDeviceMismatch(binding: String)
   case encoderDeviceMismatch
+  case unrepresentableLength(binding: String, maximum: Int, actual: Int)
+  case preparedDeviceMismatch
 }
 
 public struct ShaderBufferRange {
@@ -162,7 +164,7 @@ public struct ShaderBufferSlot: Sendable {
 }
 
 private enum _ShaderBinding {
-  static func validate(_ range: ShaderBufferRange, name: String, byteCount: Int, alignment: Int, device: any MTLDevice) throws {
+  static func validate(_ range: ShaderBufferRange, name: String, byteCount: Int, alignment: Int, device: any MTLDevice, constantBuffer: Bool = true) throws {
     guard range.offset >= 0, range.length >= 0,
           range.offset <= range.buffer.length,
           range.length <= range.buffer.length - range.offset else {
@@ -174,7 +176,7 @@ private enum _ShaderBinding {
     // Apple GPU constant buffers require 4-byte offsets. The 256-byte fallback
     // is a conservative compatibility policy for devices outside this release's
     // tested Apple-family matrix, not a universal Metal requirement.
-    let requiredAlignment = Swift.max(alignment, device.supportsFamily(.apple1) ? 4 : 256)
+    let requiredAlignment = constantBuffer ? Swift.max(alignment, device.supportsFamily(.apple1) ? 4 : 256) : alignment
     guard range.offset % requiredAlignment == 0 else {
       throw ShaderBindingError.misalignedOffset(binding: name, required: requiredAlignment, actual: range.offset)
     }

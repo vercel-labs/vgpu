@@ -108,6 +108,8 @@ export function projectUniforms(
     bindingNames.add(binding.name.toLowerCase());
   }
   for (const entry of semantics.entryPoints) {
+    if (entry.stage === "compute")
+      fail("render uniform projection requires render stages");
     if (entry.samplingPairs.length) fail("sampling pairs are unsupported");
     const active = entry.bindings
       .map((id) => {

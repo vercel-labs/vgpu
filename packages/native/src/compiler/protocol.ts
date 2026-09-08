@@ -10,6 +10,7 @@ import { MetalCompileError, type CompileStage } from "./errors.js";
 import { sha256 } from "./source.js";
 import { hasMslEntryDeclaration } from "./msl.js";
 import type { MetalBindingMapping } from "./uniforms.js";
+import type { MetalStorageBufferSizes } from "../index.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 for (const schema of [
@@ -43,18 +44,25 @@ export interface InterfaceValue {
   blendSource?: number;
 }
 export interface ShaderInterface {
-  kind: "vertex" | "fragment";
+  kind: "vertex" | "fragment" | "compute";
   inputs: InterfaceValue[];
   outputs: InterfaceValue[];
 }
-export interface ExtractedEntry {
-  stage: "vertex" | "fragment";
+export interface WorkgroupSize {
+  x: number;
+  y: number;
+  z: number;
+}
+export type ExtractedEntry = {
   wgsl: string;
   semanticInterface: ShaderInterface;
   bindings: string[];
   samplingPairs: unknown[];
   overrides: string[];
-}
+} & (
+  | { stage: "vertex" | "fragment" }
+  | { stage: "compute"; workgroupSize: WorkgroupSize }
+);
 export interface SemanticResult {
   entryPoints: ExtractedEntry[];
   bindings: unknown[];
@@ -119,12 +127,14 @@ export function checkedTranslation(
   response: unknown,
   entryPoint: { stage: string; wgsl: string; metal: string },
   semanticInterface: ShaderInterface,
-  expectedBindings: readonly MetalBindingMapping[] = []
+  expectedBindings: readonly MetalBindingMapping[] = [],
+  compute?: { workgroupSize: WorkgroupSize; hasRuntimeStorage: boolean }
 ): {
   msl: string;
   entryPoint: typeof entryPoint;
   internalBindings: unknown[];
   storageBufferSizeRegions: unknown[];
+  internalData: MetalStorageBufferSizes[];
 } {
   const checked = checkedResponse(
     response,
@@ -145,10 +155,54 @@ export function checkedTranslation(
       "Tint translation changed the selected entry, slots, or interface"
     );
   }
-  if (
+  const internalData: MetalStorageBufferSizes[] = [];
+  const hasInternals =
     !isDeepStrictEqual(result.internalBindings, []) ||
-    !isDeepStrictEqual(result.storageBufferSizeRegions, [])
-  ) {
+    !isDeepStrictEqual(result.storageBufferSizeRegions, []);
+  if (entryPoint.stage === "compute") {
+    if (
+      !compute ||
+      !isDeepStrictEqual(result.resolvedWorkgroupSize, compute.workgroupSize)
+    )
+      throw new MetalCompileError(
+        "translation",
+        "Tint translation changed the fixed compute workgroup size"
+      );
+    if (hasInternals) {
+      if (
+        !compute.hasRuntimeStorage ||
+        !isDeepStrictEqual(result.internalBindings, [
+          {
+            role: "immediate-data",
+            slots: [
+              {
+                mode: "direct",
+                resourceClass: "buffer",
+                component: "buffer",
+                index: 30,
+                count: 1,
+              },
+            ],
+          },
+        ]) ||
+        !isDeepStrictEqual(result.storageBufferSizeRegions, [
+          { stage: "compute", immediateDataByteOffset: 4 },
+        ])
+      )
+        throw new MetalCompileError(
+          "translation",
+          "Effective Metal internal data is unsupported by the current compute profile"
+        );
+      internalData.push({
+        kind: "storage-buffer-sizes",
+        slot: { stage: "compute", index: 30 },
+        immediateDataLayoutModel: "vgpu-metal-immediate-data-layout-v1",
+        storageBufferSizeModel:
+          "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+        byteOffset: 4,
+      });
+    }
+  } else if (hasInternals) {
     throw new MetalCompileError(
       "translation",
       "Effective Metal internal data is unsupported by the current render profile"
@@ -166,11 +220,12 @@ export function checkedTranslation(
       "Tint MSL is missing its selected entry declaration"
     );
   }
-  return result as unknown as {
+  return { ...result, internalData } as unknown as {
     msl: string;
     entryPoint: typeof entryPoint;
     internalBindings: unknown[];
     storageBufferSizeRegions: unknown[];
+    internalData: MetalStorageBufferSizes[];
   };
 }
 
@@ -217,6 +272,7 @@ function assertSchema(id: string, value: unknown, stage: CompileStage): void {
 }
 
 function expectedMetalInterface(shader: ShaderInterface): unknown {
+  if (shader.kind === "compute") return { kind: "compute" };
   if (shader.kind === "vertex")
     return {
       kind: "vertex",

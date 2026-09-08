@@ -10,17 +10,24 @@ also generate explicit range validation and render binding helpers. Caller-suppl
 not prove that it matches arbitrary library bytes.
 
 The internal `compileMetalPackage` adapter resolves an explicit WGSL module map, validates and
-translates vertex/fragment pairs with a pinned Tint worker, and compiles Metal offline before
-generating the package. Its current resource profile covers fixed uniform structs with flat float
-and float-vector fields. Physical layouts and stage mappings come from checked compiler metadata;
-the resolver supplies authored struct names, not physical offsets. Compute, other resource kinds,
-command installation, and atomic output publication remain separate integration work.
+translates render pairs and compute entries with a pinned Tint worker, and compiles Metal offline
+before generating the package. Render programs support fixed uniform structs with flat float and
+float-vector fields. Compute programs support storage buffers, fixed workgroup dimensions, and
+effective runtime-array size data derived from explicit ranges. Prepared bindings expose owned
+internal bytes for caller-managed uploads. Storage packing remains application-owned.
+
+Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
+authored struct names, not physical offsets. Other resource kinds, indirect execution, command
+installation, and atomic output publication remain separate integration work.
 
 The generated consumer API is documented in
 [Load Metal functions](../../docs/topics/native/macos/metal/native-macos-metal-functions.docs.md),
 [Render WGSL with Metal](../../docs/topics/native/macos/metal/native-macos-metal-rendering.docs.md),
 [Pack uniforms for Metal](../../docs/topics/native/macos/metal/native-macos-metal-uniforms.docs.md),
-and [Bind Metal buffers](../../docs/topics/native/macos/metal/native-macos-metal-bindings.docs.md).
+[Bind Metal buffers](../../docs/topics/native/macos/metal/native-macos-metal-bindings.docs.md),
+[Use multiple render targets](../../docs/topics/native/macos/metal/render/native-macos-metal-render-targets.docs.md),
+[Dispatch WGSL compute](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-dispatch.docs.md),
+and [Use prepared compute bindings](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-prepared-bindings.docs.md).
 Keep the guides, generated Swift, and external consumer fixtures aligned when changing the API.
 
 ## Checks
@@ -41,6 +48,7 @@ imply native coverage. The suite does not enforce an architecture gate or establ
 Loader fixtures use handwritten Metal to isolate packaging and loading. Compiler fixtures instead
 resolve real imported WGSL, run the pinned worker and offline compiler, and execute the guide's
 Swift draw code with GPU pixel readback, including uniforms, explicit ranges, and shared-stage
-bindings. Separate packing fixtures execute generated Swift against byte oracles; binder fixtures
+bindings, dense and sparse render targets, and compute output readback through ordinary, prepared,
+and manual binding paths. Separate packing fixtures execute generated Swift against byte oracles; binder fixtures
 isolate validation and encoder atomicity. None establishes a release support matrix.
 Temporary consumers and resources are created outside the repository and cleaned up by the harness.

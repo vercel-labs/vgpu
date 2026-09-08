@@ -39,7 +39,7 @@ test("generated packages accept compiler-qualified Metal function identities", (
 test("unsupported stage maps fail before source or compiler work", async () => {
   for (const entryPoints of [
     { vertex: "vertex_main" },
-    { compute: "compute_main" },
+    { compute: "compute_main", fragment: "fragment_main" },
     {
       vertex: "vertex_main",
       fragment: "fragment_main",
