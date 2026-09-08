@@ -127,7 +127,7 @@ print("shared helpers loaded")
   expect(output).toBe("shared helpers loaded");
 });
 
-test("active resources fail explicitly at native validation", async () => {
+test("active storage resources fail explicitly at native validation", async () => {
   await expect(
     compileMetalPackage({
       ...configuration,
@@ -137,7 +137,7 @@ test("active resources fail explicitly at native validation", async () => {
         "shaders/triangle.wgsl": `${wgsl[1].replace(
           "return color();",
           "return params.color;"
-        )}\nstruct Params { color: vec4f }\n@group(0) @binding(0) var<uniform> params: Params;`,
+        )}\nstruct Params { color: vec4f }\n@group(0) @binding(0) var<storage, read> params: Params;`,
       },
     }).then(() => "unexpected package")
   ).rejects.toMatchObject({

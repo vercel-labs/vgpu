@@ -9,6 +9,7 @@ import compilerResponseSchema = require("./schemas/compiler-response.json");
 import { MetalCompileError, type CompileStage } from "./errors.js";
 import { sha256 } from "./source.js";
 import { hasMslEntryDeclaration } from "./msl.js";
+import type { MetalBindingMapping } from "./uniforms.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 for (const schema of [
@@ -117,7 +118,8 @@ export function checkedSemanticResult(
 export function checkedTranslation(
   response: unknown,
   entryPoint: { stage: string; wgsl: string; metal: string },
-  semanticInterface: ShaderInterface
+  semanticInterface: ShaderInterface,
+  expectedBindings: readonly MetalBindingMapping[] = []
 ): {
   msl: string;
   entryPoint: typeof entryPoint;
@@ -132,7 +134,7 @@ export function checkedTranslation(
   const result = checked.result as Record<string, unknown>;
   if (
     !isDeepStrictEqual(result.entryPoint, entryPoint) ||
-    !isDeepStrictEqual(result.bindings, []) ||
+    !isDeepStrictEqual(result.bindings, expectedBindings) ||
     !isDeepStrictEqual(
       result.interface,
       expectedMetalInterface(semanticInterface)
@@ -149,7 +151,7 @@ export function checkedTranslation(
   ) {
     throw new MetalCompileError(
       "translation",
-      "Effective Metal internal data is unsupported by the resource-free render profile"
+      "Effective Metal internal data is unsupported by the current render profile"
     );
   }
   if (

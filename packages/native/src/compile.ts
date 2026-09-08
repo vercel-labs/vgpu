@@ -12,6 +12,7 @@ import { resolveMetalSource, sha256 } from "./compiler/source.js";
 import { invokeTintWorker } from "./compiler/worker.js";
 import { validateSwiftIdentifier } from "./validation.js";
 import { namespaceMsl } from "./compiler/msl.js";
+import { projectUniforms } from "./compiler/uniforms.js";
 
 export { MetalCompileError } from "./compiler/errors.js";
 
@@ -97,7 +98,10 @@ export async function compileMetalPackage(
   const programs = [];
   const sources: string[] = [];
   for (const program of input.programs) {
-    const capsule = await resolveMetalSource(program.source, input.modules);
+    const { authoredStructs, ...capsule } = await resolveMetalSource(
+      program.source,
+      input.modules
+    );
     const selected = ["vertex", "fragment"].map((stage) => ({
       stage,
       wgsl: program.entryPoints[stage as "vertex" | "fragment"],
@@ -112,24 +116,14 @@ export async function compileMetalPackage(
     const requestBytes = encodeRequest(request, "semantic");
     const response = await callWorker(input, requestBytes, "validation");
     const semantics = checkedSemanticResult(response, requestBytes, selected);
-    if (
-      semantics.bindings.length > 0 ||
-      semantics.entryPoints.some(
-        (entry) => entry.bindings.length > 0 || entry.samplingPairs.length > 0
-      )
-    ) {
-      throw new MetalCompileError(
-        "validation",
-        "Active resource bindings are unsupported by the resource-free render profile"
-      );
-    }
+    const projected = projectUniforms(semantics, authoredStructs);
     if (
       semantics.overrides.length > 0 ||
       semantics.entryPoints.some((entry) => entry.overrides.length > 0)
     ) {
       throw new MetalCompileError(
         "validation",
-        "Active overrides are unsupported by the resource-free render profile"
+        "Active overrides are unsupported by the current render profile"
       );
     }
     const functions: { vertex?: string; fragment?: string } = {};
@@ -154,7 +148,7 @@ export async function compileMetalPackage(
         metal: {
           bindingModel: "vgpu-metal-binding-slots-v1",
           immediateDataLayoutModel: "vgpu-metal-immediate-data-layout-v1",
-          bindings: [],
+          bindings: projected.stages[entry.stage],
           internalReservations: [
             {
               role: "immediate-data",
@@ -182,20 +176,35 @@ export async function compileMetalPackage(
           "translation"
         ),
         entryPoint,
-        entry.semanticInterface
+        entry.semanticInterface,
+        projected.stages[entry.stage]
       );
       const namespace = `${emittedName}_scope`;
       sources.push(namespaceMsl(translated.msl, namespace));
       functions[entry.stage] = `${namespace}::${translated.entryPoint.metal}`;
     }
-    programs.push({ name: program.name, functions });
+    programs.push({
+      name: program.name,
+      functions,
+      uniforms: projected.uniforms,
+    });
   }
   const library = await compileMetalLibrary(sources, input.signal);
-  return generateMetalPackage({
-    moduleName: input.moduleName,
-    programs,
-    library,
-  });
+  try {
+    return generateMetalPackage({
+      moduleName: input.moduleName,
+      programs,
+      library,
+    });
+  } catch (cause) {
+    throw new MetalCompileError(
+      "validation",
+      `Generated Swift interface is invalid: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+      { cause }
+    );
+  }
 }
 
 async function callWorker(

@@ -1,3 +1,5 @@
+import { generateUniformSlots, type MetalUniformSlot } from "./bindings.js";
+
 export type UniformFieldType = "f32" | "vec2f" | "vec3f" | "vec4f";
 
 /** Physical layout projected from one reflected WGSL uniform binding. */
@@ -6,6 +8,8 @@ export interface MetalUniform {
   readonly typeName: string;
   readonly byteCount: number;
   readonly alignment: number;
+  /** Omit for packing-only output; render binding generation requires complete mappings. */
+  readonly slots?: readonly MetalUniformSlot[];
   readonly members: readonly {
     readonly name: string;
     readonly type: UniformFieldType;
@@ -68,6 +72,7 @@ ${uniforms.map((uniform) => `    public static let ${uniform.name} = _Layout_${u
       fileprivate init() {}
       public let byteCount = ${uniform.byteCount}
       public let alignment = ${uniform.alignment}
+${generateUniformSlots(uniform)}\
 
       public func pack(_ value: ${uniform.typeName}, into destination: UnsafeMutableRawBufferPointer) throws {
         guard destination.count >= byteCount else {

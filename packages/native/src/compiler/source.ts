@@ -58,6 +58,9 @@ export async function resolveMetalSource(
       segments: [],
     };
     return {
+      authoredStructs: resolved.reflection.structs.map(
+        ({ name, mangledName }) => ({ name, mangledName })
+      ),
       source,
       originMap,
       originMapSha256: sha256(canonicalJSON(originMap)),
@@ -96,7 +99,7 @@ function isWellFormed(value: string): boolean {
   return !/[\uD800-\uDFFF]/u.test(value);
 }
 
-function canonicalJSON(value: unknown): string {
+export function canonicalJSON(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJSON).join(",")}]`;
   if (value !== null && typeof value === "object") {
     return `{${Object.keys(value)

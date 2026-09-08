@@ -2,8 +2,10 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { validateMetalPackageInput } from "./validation.js";
 import { generateUniformDeclarations, uniformPackingSupport, type MetalUniform } from "./uniforms.js";
+import { bindingSupport, generateBindingMethods, generateBindingsDeclaration, hasUniformBindings } from "./bindings.js";
 
 export type { MetalUniform, UniformFieldType } from "./uniforms.js";
+export type { MetalUniformSlot } from "./bindings.js";
 
 export type MetalStage = "vertex" | "fragment" | "compute";
 
@@ -42,15 +44,17 @@ export function generateMetalPackage(
         .filter((stage) => Object.hasOwn(program.functions, stage))
         .map((stage) => [stage, program.functions[stage]!] as const);
       return `public enum ${program.name} {
-${generateUniformDeclarations(program.uniforms ?? [])}  public struct Functions {
+${generateUniformDeclarations(program.uniforms ?? [])}${generateBindingsDeclaration(program.uniforms ?? [])}  public struct Functions {
+${hasUniformBindings(program.uniforms ?? []) ? "    fileprivate let _device: any MTLDevice\n" : ""}\
 ${functions
   .map(([stage]) => `    public let ${stage}: any MTLFunction`)
-  .join("\n")}
+  .join("\n")}${generateBindingMethods(program.uniforms ?? [])}
   }
 
   public static func load(device: any MTLDevice) throws -> Functions {
     let library = try _ShaderLibrary.load(device: device)
     return Functions(
+${hasUniformBindings(program.uniforms ?? []) ? "      _device: device,\n" : ""}\
 ${functions
   .map(
     ([stage, name]) =>
@@ -98,6 +102,7 @@ public enum ShaderLoadError: Error {
 ${programSource}
 
 ${programs.some((program) => program.uniforms?.length) ? uniformPackingSupport : ""}
+${programs.some((program) => hasUniformBindings(program.uniforms ?? [])) ? bindingSupport : ""}
 private enum _ShaderLibrary {
   static func load(device: any MTLDevice) throws -> any MTLLibrary {
     guard let url = Bundle.module.url(forResource: "Shaders", withExtension: "metallib") else {

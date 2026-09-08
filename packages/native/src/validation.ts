@@ -1,5 +1,6 @@
 import type { MetalPackageInput, MetalUniform } from "./index.js";
 import { validateUniformLayout } from "./uniforms.js";
+import { validateUniformSlots } from "./bindings.js";
 
 const asciiIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const metalFunctionName = /^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$/;
@@ -53,6 +54,13 @@ const generatedNames = new Set(
     "SIMD4",
     "UnsafeMutableRawBufferPointer",
     "withUnsafeBytes",
+    "Bindings",
+    "ShaderBufferRange",
+    "ShaderBufferSlot",
+    "ShaderBindingError",
+    "_ShaderBinding",
+    "MTLBuffer",
+    "MTLRenderCommandEncoder",
   ].map((name) => name.toLowerCase())
 );
 
@@ -127,6 +135,7 @@ export function validateMetalPackageInput(input: MetalPackageInput): void {
       }
       uniformTypes.set(typeName, shape);
     }
+    validateUniformSlots(program.uniforms ?? [], Object.keys(program.functions), `programs[${index}].uniforms`);
   }
 }
 
