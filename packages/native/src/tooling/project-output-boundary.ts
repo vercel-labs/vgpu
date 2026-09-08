@@ -9,7 +9,7 @@ export interface MetalProjectOutputBoundaryInput {
   readonly configurationPath: string;
   /** The original, unnormalized configuration.output value. */
   readonly output: string;
-  /** Every captured source input, including imported modules. */
+  /** Publication supplies every captured input. Read-only artifact inspection may omit them. */
   readonly sourcePaths: readonly string[];
 }
 

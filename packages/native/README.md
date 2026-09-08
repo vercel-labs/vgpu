@@ -27,8 +27,11 @@ Apple's offline compiler or generate package files. This is an internal seam, no
 
 Read-only tooling seams parse the project configuration, diagnose the selected native toolchain,
 validate output boundaries, and verify an existing package's exact file tree and integrity record.
-Output verification does not establish input freshness or authorize publication. These modules do
-not yet connect the project configuration to installed commands or write generated directories.
+Low-level output verification does not establish input freshness or authorize publication.
+`checkMetalProject` validates one captured configured project without inspecting output;
+`verifyMetalProject` adds original-path checks and compares the intact package with that capture's
+fingerprint. These modules do not yet connect the project configuration to installed commands or
+write generated directories.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and
