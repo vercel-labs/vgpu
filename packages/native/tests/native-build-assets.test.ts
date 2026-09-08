@@ -34,6 +34,7 @@ test("workspace and package builds include the native source asset from a clean 
       await copy("package.json");
       await copy("packages/native/package.json");
       await copy("packages/native/src/tooling/publication-session.c");
+      await copy("packages/native/src/tooling/publication-staging.c");
       await copy("packages/vgpu-api/scripts/copy-cli.mjs");
       await copy("packages/native/scripts/copy-assets.mjs");
       await put(
@@ -86,6 +87,11 @@ test("workspace and package builds include the native source asset from a clean 
         await readFile(join(native, "dist/tooling/publication-session.c"))
       ).toEqual(
         await readFile(join(native, "src/tooling/publication-session.c"))
+      );
+      expect(
+        await readFile(join(native, "dist/tooling/publication-staging.c"))
+      ).toEqual(
+        await readFile(join(native, "src/tooling/publication-staging.c"))
       );
       expect(
         await readFile(join(native, "dist/tooling/marker.js"), "utf8")
