@@ -23,6 +23,9 @@ relatedSymbols:
 > for that release. See [Native](/native) for the scope notice; the replacement quickstart will
 > follow validation of the generated API.
 
+The new [Metal function-loading guide](/native/macos/metal/functions) defines the first generated
+API for application-owned Metal code. The remainder of this page is the earlier runtime draft.
+
 `vgpu native build` turns WGSL programs into a `.metallib` and generated Swift types. Your application creates effects, draws, targets, and frames with small Swift products implemented directly on Metal.
 
 Node.js, the WGSL translator, generated MSL, and vgpu's TypeScript runtime stay on the build machine. The application ships the compiled library, typed program descriptors, and only the Swift runtime products it selects. One generated configuration is also one shader-payload boundary: every program in its `.metallib` ships together even when the application omits an executor module.

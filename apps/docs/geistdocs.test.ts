@@ -90,6 +90,7 @@ describe("agent readiness metadata", () => {
 
     const macosPages = JSON.parse(docsContent("native/macos/meta.json")).pages as string[];
     expect(macosPages).toEqual([
+      "metal",
       "programs",
       "bindings",
       "resources",
@@ -102,6 +103,9 @@ describe("agent readiness metadata", () => {
       "compare",
       "...",
     ]);
+
+    const metalPages = JSON.parse(docsContent("native/macos/metal/meta.json")).pages as string[];
+    expect(metalPages).toEqual(["functions", "..."]);
 
     const macos = docsContent("native/macos/index.md");
     expect(macos).toContain("let gpu = try VGPU.metal(device: device)");
@@ -254,6 +258,48 @@ describe("agent readiness metadata", () => {
         },
       ],
     }, [])).toThrow('Native navigation has multiple groups for platform directory "linux"');
+  });
+
+  it("keeps Native topic folders navigable in curated order", () => {
+    const files = buildMetaFiles({
+      sections: [{
+        title: "Native",
+        href: "/native",
+        groups: [{
+          title: "macOS",
+          items: [
+            { title: "Get started", href: "/native/macos" },
+            { title: "Functions", href: "/native/macos/metal/functions" },
+            { title: "Programs", href: "/native/macos/programs" },
+            { title: "Bindings", href: "/native/macos/metal/bindings" },
+            { title: "Metal overview", href: "/native/macos/metal" },
+            { title: "Setup", href: "/native/macos/metal/build/setup" },
+          ],
+        }],
+      }],
+    }, [
+      { path: "native/index.md" },
+      { path: "native/macos/index.md" },
+      { path: "native/macos/programs.md" },
+      { path: "native/macos/metal/index.md" },
+      { path: "native/macos/metal/functions.md" },
+      { path: "native/macos/metal/bindings.md" },
+      { path: "native/macos/metal/build/setup.md" },
+    ]);
+
+    expect(JSON.parse(files.get("native/macos/meta.json")!)).toEqual({
+      title: "macOS",
+      pages: ["metal", "programs", "..."],
+    });
+    expect(JSON.parse(files.get("native/macos/metal/meta.json")!)).toEqual({
+      title: "Metal",
+      pages: ["functions", "bindings", "build", "..."],
+    });
+    expect(JSON.parse(files.get("native/macos/metal/build/meta.json")!)).toEqual({
+      title: "Build",
+      pages: ["setup", "..."],
+    });
+    expect(files.has("native/macos/metal/functions/meta.json")).toBe(false);
   });
 
   it("distinguishes semantic, Metal, Swift runner, and GPU architecture identities", () => {

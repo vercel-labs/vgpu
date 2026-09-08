@@ -349,6 +349,22 @@ function sectionDirectChildSlugs(section, prefix) {
   return direct;
 }
 
+function appendNestedMetaFiles(files, directory, title, slugs) {
+  const children = new Map();
+  for (const slug of slugs) {
+    const [child, ...remaining] = slug.split("/");
+    assertSafeSegment(child, `navigation below ${directory}`);
+    if (!children.has(child)) children.set(child, []);
+    if (remaining.length > 0) children.get(child).push(remaining.join("/"));
+  }
+  files.set(`${directory}/meta.json`, serializeJson({ title, pages: [...children.keys(), "..."] }));
+  for (const [child, descendants] of children) {
+    if (descendants.length > 0) {
+      appendNestedMetaFiles(files, `${directory}/${child}`, titleFromSlug(child), descendants);
+    }
+  }
+}
+
 /**
  * Translates docs/nav.json into one meta.json per directory.
  *
@@ -433,7 +449,7 @@ export function buildMetaFiles(nav, pages) {
     files.set("ml/meta.json", serializeJson({ title: mlSection.title, pages: [...sectionItemSlugs(mlSection, "/ml"), "..."] }));
   }
 
-  // -- native: literal order plus one meta file per nested platform group ----
+  // -- native: literal order with platform groups and nested topic folders ---
   const nativeSection = findSection(nav, "Native");
   if (nativeSection) {
     files.set(
@@ -457,9 +473,11 @@ export function buildMetaFiles(nav, pages) {
       }
       nestedPlatformGroups.add(child);
       const prefix = `/native/${child}`;
-      files.set(
-        `native/${child}/meta.json`,
-        serializeJson({ title: group.title || titleFromSlug(child), pages: [...groupItemSlugs(group, prefix), "..."] }),
+      appendNestedMetaFiles(
+        files,
+        `native/${child}`,
+        group.title || titleFromSlug(child),
+        groupItemSlugs(group, prefix),
       );
     }
   }

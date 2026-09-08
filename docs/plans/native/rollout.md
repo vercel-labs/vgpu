@@ -1,7 +1,7 @@
 # Native rollout and verification
 
 Status: historical full-runtime roadmap. Use the
-[Metal integration release plan](./metal-integration/release-plan.md) for current work. Passing
+[Metal integration documentation](../../topics/native/macos/metal/native-macos-metal-functions.docs.md) for current scope; operational sequencing lives in the ignored workspace context. Passing
 spikes below remain evidence; unimplemented renderer milestones are not prerequisites for that release.
 
 Every gate has a fixture and a falsifiable exit condition. A spike may be discarded; its fixture

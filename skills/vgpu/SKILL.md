@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: 97c4e534358813f33d9de8c62d21d494b42b7163
-generatedAt: 2026-09-08T16:01:04.457Z
+gitSha: c343168af90a0dcb71a8a1901596b557c595c024
+generatedAt: 2026-09-08T16:54:55.011Z
 ---
 
 # vgpu
@@ -55,14 +55,15 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Quickstart: Browser** — In this quickstart you run an ONNX model with ONNX Runtime Web's WebGPU execution provider and consume its output with vgpu shaders — on one shared…  `references/guides/ml-browser.docs.md`
 - **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
 - **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
-- **Native** — Native targets bring vgpu's rendering model to platform GPU APIs.  `references/guides/native.docs.md`
-- **macOS** — vgpu native build turns WGSL programs into a .metallib and generated Swift types.  `references/guides/native-macos.docs.md`
+- **Native** — Start with Load Metal functions.  `references/guides/native.docs.md`
+- **macOS** — The new Metal function-loading guide defines the first generated API for application-owned Metal code.  `references/guides/native-macos.docs.md`
 - **Generated artifacts** — One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection.  `references/guides/native-macos-artifacts.docs.md`
 - **Bindings and generated types** — vgpu native build turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles.  `references/guides/native-macos-bindings.docs.md`
 - **Build and verify** — Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison.  `references/guides/native-macos-build.docs.md`
 - **Compare WebGPU and Metal** — native compare renders an explicit fixture through vgpu/node and the generated Metal package.  `references/guides/native-macos-compare.docs.md`
 - **GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
 - **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
+- **Load Metal functions** — A generated shader package gives your Metal code access to selected shader functions without requiring a vgpu renderer.  `references/guides/native-macos-metal-functions.docs.md`
 - **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
 - **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`
 - **Resources and Metal interop** — Resources created by one VGPU context have that context's identity.  `references/guides/native-macos-resources.docs.md`

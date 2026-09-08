@@ -1,6 +1,7 @@
 {
   "title": "macOS",
   "pages": [
+    "metal",
     "programs",
     "bindings",
     "resources",

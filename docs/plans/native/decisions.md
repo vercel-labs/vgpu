@@ -1,10 +1,10 @@
 # Native decisions
 
-The current product decision is [WGSL and generated Metal integration](./metal-integration/README.md).
+The current product decision is [WGSL and generated Metal integration](../../topics/native/macos/metal/native-macos-metal-functions.docs.md).
 The accepted and open decisions below belong to the earlier full Swift-runtime proposal. Preserve
 them as history; do not treat renderer APIs or that package graph as current release commitments.
-The new [release plan](./metal-integration/release-plan.md) identifies reusable compiler evidence
-and the direct-Metal contract still to validate.
+New operational plans and audit reports stay in the ignored workspace context. Compiler evidence
+remains reusable, while direct-Metal APIs are validated through their documentation and tests.
 
 This log separates contracts already fixed by documentation from work that still needs evidence.
 Architectural rationale lives in [architecture](./architecture.md), API mappings in

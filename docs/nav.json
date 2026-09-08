@@ -226,6 +226,7 @@
           "title": "macOS",
           "items": [
             { "title": "Get started", "href": "/native/macos" },
+            { "title": "Load Metal functions", "href": "/native/macos/metal/functions" },
             { "title": "Programs", "href": "/native/macos/programs" },
             { "title": "Bindings and generated types", "href": "/native/macos/bindings" },
             { "title": "Resources and Metal interop", "href": "/native/macos/resources" },

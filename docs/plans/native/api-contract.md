@@ -1,7 +1,7 @@
 # Native API contract
 
 Status: historical full-runtime proposal. The active
-[Metal integration plan](./metal-integration/README.md) supersedes the Swift runtime parity target
+[Metal integration documentation](../../topics/native/macos/metal/native-macos-metal-functions.docs.md) supersedes the Swift runtime parity target
 below. Shader semantics and fixtures remain evidence; generated direct-Metal APIs are not frozen.
 
 This document maps the existing vgpu model into Swift and records the generated-program contract.

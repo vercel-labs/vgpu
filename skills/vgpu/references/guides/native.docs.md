@@ -23,6 +23,14 @@ relatedSymbols:
 > from the earlier proposal, not the API of the upcoming package. The direct Metal API is still
 > being designed, and no native package or command is published yet.
 
+## Direct Metal integration
+
+Start with [Load Metal functions](/native/macos/metal/functions). The generated package exposes
+the selected shader functions on your existing Metal device. Your application owns resources,
+pipelines, command encoding, synchronization, and presentation. No Swift vgpu renderer is required.
+
+## Earlier runtime proposal
+
 Native targets bring vgpu's rendering model to platform GPU APIs. You still create one backend-explicit GPU context, create resources once, update bindings, and encode explicit frames and passes. The public primitives stay backend-neutral; an opt-in backend module performs the platform work instead of vgpu's JavaScript runtime.
 
 WGSL stays the source of truth. A build step resolves its module graph, reflects its interfaces, translates it for the platform, and generates typed program descriptors for the host language.

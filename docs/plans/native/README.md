@@ -4,10 +4,12 @@ Status: the branch now targets WGSL compilation and generated integration with o
 Metal code, not a full Swift port of the vgpu runtime. No production native package or command is
 available yet.
 
-## Active plan
+## Current API documentation
 
-- [Scope and responsibilities](./metal-integration/README.md)
-- [Steps and gates for production release](./metal-integration/release-plan.md)
+- [Load generated Metal functions](../../topics/native/macos/metal/native-macos-metal-functions.docs.md)
+
+Operational plans and new audit reports live in the workspace's ignored `.context` directory.
+Only durable documentation, implementation, and test fixtures are versioned.
 
 The application owns Metal devices, resources, pipelines, encoders, queues, synchronization, and
 presentation. vgpu supplies shader compilation, generated functions/types, packing, and correct
@@ -15,7 +17,7 @@ binding integration. Exact generated API spellings and package dependencies rema
 
 The earlier runtime documents and experiments below are retained as design history and evidence.
 Their accepted `gpu.*` APIs, module graph, and renderer milestones are not requirements for the
-current release. Compiler semantics and test fixtures are reusable where the active plan says so.
+current release. Compiler semantics and test fixtures remain reusable evidence for direct Metal integration.
 
 ## Earlier runtime proposal
 
