@@ -1,8 +1,23 @@
-# Plan: native Swift API over Metal
+# Plan: WGSL and generated Metal integration
 
-Status: docs-first API validation. No public package or command described here exists yet.
+Status: the branch now targets WGSL compilation and generated integration with ordinary Swift and
+Metal code, not a full Swift port of the vgpu runtime. No production native package or command is
+available yet.
 
-## Outcome
+## Active plan
+
+- [Scope and responsibilities](./metal-integration/README.md)
+- [Steps and gates for production release](./metal-integration/release-plan.md)
+
+The application owns Metal devices, resources, pipelines, encoders, queues, synchronization, and
+presentation. vgpu supplies shader compilation, generated functions/types, packing, and correct
+binding integration. Exact generated API spellings and package dependencies remain to be validated.
+
+The earlier runtime documents and experiments below are retained as design history and evidence.
+Their accepted `gpu.*` APIs, module graph, and renderer milestones are not requirements for the
+current release. Compiler semantics and test fixtures are reusable where the active plan says so.
+
+## Earlier runtime proposal
 
 Bring the vgpu programming model to Swift while using Metal directly at runtime. A developer who
 already knows `Gpu`, `Surface`, `Target`, `Effect`, `Draw`, `Compute`, `Frame`, and `FramePass`

@@ -1,5 +1,9 @@
 # Native rollout and verification
 
+Status: historical full-runtime roadmap. Use the
+[Metal integration release plan](./metal-integration/release-plan.md) for current work. Passing
+spikes below remain evidence; unimplemented renderer milestones are not prerequisites for that release.
+
 Every gate has a fixture and a falsifiable exit condition. A spike may be discarded; its fixture
 and result remain as evidence for the next API revision. See [architecture](./architecture.md) for
 the boundaries these gates protect and [decisions](./decisions.md) for unresolved choices.

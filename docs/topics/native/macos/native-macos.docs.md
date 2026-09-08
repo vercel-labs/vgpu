@@ -1,6 +1,6 @@
 ---
 title: macOS
-summary: Explore a proposed API for compiling WGSL into a Metal library and using the vgpu rendering model from Swift, MetalKit, and SwiftUI.
+summary: Track the move from a Swift runtime proposal to WGSL compilation and generated integration with application-owned Metal code.
 websitePath: /native/macos
 keywords: macos, metal, metal shader, metallib, swift, swiftui, mtkview, native, wgsl to msl, aot
 relatedSymbols:
@@ -14,6 +14,12 @@ relatedSymbols:
 ---
 
 # macOS
+
+> Warning: This guide documents the earlier full Swift-runtime proposal. The current direction is
+> WGSL compilation and generated Metal integration, with pipelines, resources, command buffers,
+> and presentation owned by the application. The `gpu.*` and view APIs below are not commitments
+> for that release. See [Native](/native) for the scope notice; the replacement quickstart will
+> follow validation of the generated API.
 
 `vgpu native build` turns WGSL programs into a `.metallib` and generated Swift types. Your application creates effects, draws, targets, and frames with small Swift products implemented directly on Metal.
 

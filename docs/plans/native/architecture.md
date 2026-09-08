@@ -1,5 +1,9 @@
 # Native runtime architecture
 
+Status: historical full-runtime proposal. The active release targets
+[generated Metal integration](./metal-integration/README.md), without a vgpu renderer. In
+particular, the old rule that generated Swift must hide Metal types does not apply to that product.
+
 This document defines the runtime and package boundaries for the first Metal implementation. See
 [API contract](./api-contract.md) for public behavior, [rollout](./rollout.md) for verification, and
 [decisions](./decisions.md) for accepted and open choices.
