@@ -3,22 +3,23 @@ import { sourceMap, toAstModule } from "./ast-projection.ts";
 import { assertModulesHaveNoBindings } from "./assert-module-purity.ts";
 import { cacheKeys } from "./cache-key.ts";
 import type { DiagnosticList } from "./diagnostic-types.ts";
-import { remember } from "./lru.ts";
 import { assertNoMangleCollisions, emitModule, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
 import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./minify.ts";
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
-import { parseModule, type ImportDecl } from "./parser.ts";
+import { type ImportDecl } from "./parser.ts";
 import { reflect, type EntryPointInfo, type Reflection } from "./reflect.ts";
 import { reservedIdentifierDiagnostics } from "./reserved-identifiers.ts";
 import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
 import { wgslError } from "./errors.ts";
 import { parseDeclarations } from "./reflect-declarations.ts";
-import { scan } from "./scanner.ts";
+import { loadModuleGraph, reachableModules, resolvedEdge, type ModuleGraph } from "./module-graph.ts";
+import { capturedShaderGraph, type ShaderGraphSnapshot } from "./shader-graph-snapshot.ts";
 import { releaseValidationDevice, retainValidationDevice } from "./validation-device.ts";
 import { resolveDefaultValidateMode, validateWGSL, type ValidateMode, type ValidationOutcome } from "./validation.ts";
 
 export { reflectSource } from "./reflect-source.ts";
+export { captureShaderGraph, type CaptureShaderGraphOptions, type ShaderGraphSnapshot } from "./shader-graph-snapshot.ts";
 export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";
@@ -78,8 +79,6 @@ export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLM
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
 export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection; readonly validation: { readonly mode: ValidateMode; readonly attempted: boolean; readonly ok: boolean; readonly skipped?: { readonly code: string; readonly message: string; readonly fix?: string } } }
 
-const scanCache = new Map<string, MangleModule>();
-
 /** `true` -> `"require"`, `false` -> `"off"`, unset -> `VGPU_VALIDATE` (default `"auto"`). */
 function normalizeValidateMode(value: ResolveOptions["validate"]): ValidateMode {
   if (value === undefined) return resolveDefaultValidateMode();
@@ -89,10 +88,24 @@ function normalizeValidateMode(value: ResolveOptions["validate"]): ValidateMode 
 }
 
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
-  const loaded = new Map<string, MangleModule>();
   const diagnostics: DiagnosticList[number][] = [];
   const entry = canonicalEntry(opts.entry, opts);
-  await loadGraph(entry, opts, loaded, [], diagnostics);
+  const graph = await loadModuleGraph([entry], {
+    read: (path) => readModule(path, opts),
+    resolve: (specifier, from) => resolvePath(specifier, from, opts, diagnostics),
+    onDependency: opts.onDependency,
+  });
+  return resolveGraph(entry, graph, opts, diagnostics);
+}
+
+export async function resolveShaderSnapshot(snapshot: ShaderGraphSnapshot, opts: Pick<ResolveOptions, "entry" | "validate" | "minify">): Promise<ResolvedShader> {
+  const options = { entry: opts.entry, validate: opts.validate, minify: typeof opts.minify === "object" ? { ...opts.minify } : opts.minify };
+  const captured = await capturedShaderGraph(snapshot);
+  return resolveGraph(options.entry, captured.graph, { ...options, rootDir: "." }, [...captured.diagnostics]);
+}
+
+async function resolveGraph(entry: string, graph: ModuleGraph, opts: ResolveOptions, diagnostics: DiagnosticList[number][]): Promise<ResolvedShader> {
+  const loaded = reachableModules(graph, entry);
   const modules = [...loaded.values()];
   const deps = [...loaded.keys()].sort();
   assertModulesHaveNoBindings(modules, entry);
@@ -100,7 +113,7 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   assertNoJsVisibleDuplicates(modules);
   for (const module of modules) diagnostics.push(...reservedIdentifierDiagnostics(module));
   const exportsByPath = buildExports(modules);
-  const pathOf = (from: string, imp: ImportDecl) => resolvePath(imp.from, from, opts, diagnostics);
+  const pathOf = (from: string, imp: ImportDecl) => resolvedEdge(graph, from, imp.from);
   const emittedWgsl = eliminateDeadDeclarations(modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n"));
   const reflection = reflect(modules, pathOf);
   const emittedReflection = reflectSource(emittedWgsl, entry);
@@ -144,23 +157,6 @@ export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShade
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
   return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection, validation: { mode: validateMode, ...validationOutcome } };
-}
-
-async function loadGraph(path: string, opts: ResolveOptions, loaded: Map<string, MangleModule>, stack: string[], diagnostics: DiagnosticList[number][]): Promise<void> {
-  if (stack.includes(path)) throw wgslError("VGPU-WGSL-IMP-SELF", `Import cycle: ${[...stack, path].join(" -> ")}`);
-  if (loaded.has(path)) return;
-  const source = await readModule(path, opts);
-  const cacheKey = `${path}:${source}`;
-  let module = scanCache.get(cacheKey);
-  if (!module) { const tokens = scan(source, path); module = { path, source, tokens, parsed: parseModule(tokens) }; remember(scanCache, cacheKey, module); }
-  loaded.set(path, module);
-  stack.push(path);
-  for (const imp of module.parsed.imports) {
-    const dependency = resolvePath(imp.from, path, opts, diagnostics);
-    if (!loaded.has(dependency)) opts.onDependency?.(dependency);
-    await loadGraph(dependency, opts, loaded, stack, diagnostics);
-  }
-  stack.pop();
 }
 
 function buildExports(modules: readonly MangleModule[]): ReadonlyMap<string, ExportMap> {
