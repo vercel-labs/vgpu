@@ -170,6 +170,7 @@
       "    Resolve shader inputs @ /native/macos/metal/tooling/sources",
       "    Check the native toolchain @ /native/macos/metal/tooling/doctor",
       "    Build and verify a Metal package @ /native/macos/metal/tooling/build",
+      "    Publish generated packages @ /native/macos/metal/tooling/publication",
       "    Programs @ /native/macos/programs",
       "    Bindings and generated types @ /native/macos/bindings",
       "    Resources and Metal interop @ /native/macos/resources",

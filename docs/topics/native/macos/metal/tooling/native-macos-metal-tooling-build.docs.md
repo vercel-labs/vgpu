@@ -70,36 +70,28 @@ The build validates the inputs, translates every selected stage, compiles and li
 library, and generates the Swift package. It completes a sibling staging directory before
 publishing it to the configured output.
 
+The library, generated Swift, and ownership record come from the same captured project. Editing
+a shader during compilation does not splice newer source into part of that package. A later
+verification can report the captured generation as stale against those edits.
+
+The build captures its selected tool environment before awaiting project work. Relative
+`DEVELOPER_DIR` and `TMPDIR` selections keep their meaning from that invocation's working directory;
+changing the process environment later does not switch the Apple compiler halfway through the build.
+These host settings are not copied into the generated package or its logical input fingerprint.
+
 A failed program, cancelled build before publication, or rejected output boundary leaves the last
 valid package unchanged. Publishing replaces the directory as one operation: the output path names
 a complete old or new package, never a partially written package. If the destination filesystem
 cannot provide the required operation, the build fails without replacing the package.
 
-Finish generation before starting a Swift build or another consumer that reads multiple files from
-the package. Atomic directory publication is not a snapshot across separate file opens: a reader
-that spans the replacement could otherwise open a file from each version. Do not edit generated
-output concurrently with the build; ownership checks do not protect against another process
-deliberately changing files between validation and publication.
+Finish generation before starting a Swift build, and do not edit generated output concurrently.
+Cancellation after the commit point may leave the complete new package in place. The diagnostic
+must retain that publication outcome, including when cleanup fails or an interrupted helper leaves
+the outcome unknown.
 
-Only one build can publish to an output at a time. Another build must report the conflict, not
-interleave file writes. Interrupted staging or ownership state is reported with a recovery action;
-read-only commands never silently clean it up.
-
-On macOS, publication uses a small filesystem helper compiled locally from the installed tool's
-source with the selected Xcode C compiler. This helper is a build-time component, not part of the
-generated Swift package or application. It needs no separate binary download or persistent cache.
-Its compilation and execution can fail without replacing the package.
-
-The initial publisher holds a lock on the physical parent directory while it checks ownership,
-publishes, and cleans up its staging. Builds targeting sibling packages in that same directory
-also conflict. Alternate spellings of the same physical parent do not provide independent locks.
-Changing the parent directory while a build is running is unsupported and can produce a recovery
-diagnostic; the tool does not follow a replacement parent to publish somewhere else.
-
-Publication is the commit point. Cancellation or interruption after it may leave the complete new
-package in place. A cleanup problem must report that publication happened, rather than roll back
-the package or claim the old one is unchanged. If the process exits before reporting its outcome,
-inspect the recorded generation and recovery state before retrying.
+See [Publish generated packages](/native/macos/metal/tooling/publication) for safe parent creation,
+physical-directory locking, atomic replacement, and recovery. These operations do not silently
+discard unrelated files or interrupted transactions.
 
 Add the generated package to your Swift project and use its functions, packers, and bindings.
 The application still creates its pipelines, buffers, textures, encoders, and submissions. A build
@@ -119,6 +111,11 @@ Verification first captures the current project inputs, then checks the existing
 and integrity, and finally compares its recorded fingerprint with the captured inputs. A package
 can be intact and owned by the project but still stale. That result is a failure with a request to
 build again, not permission to modify the record or a claim that verification generated anything.
+
+Before inspecting the package, verification checks the original output path components as described
+in [Configure a Metal package](/native/macos/metal/tooling/configuration). A symlink hidden by `..`
+is an invalid destination, even when a package at the simplified path would be intact. This path
+check does not reopen captured shader inputs; freshness still uses the one captured graph.
 
 The hidden `.vgpu-native-output.json` record belongs to the tool. It identifies the artifact format,
 owning configuration relative to the package, logical input fingerprint, and exact generated file
@@ -152,9 +149,28 @@ the generated diff together with the source change.
 
 ## Use the commands in automation
 
-Each command accepts `--help`. Project commands accept `--config`; use the same file for `check`,
-`build`, and `verify`. A successful command exits `0`; invalid options, missing prerequisites,
-unsupported shaders, stale output, and verification failures exit nonzero.
+Run `vgpu native` or `vgpu native --help` to list the four commands. Each command accepts `--help`
+or `-h`. Help does not load the native companion package, inspect a project, or require a working
+Metal toolchain.
+
+The `vgpu` command loads the optional `@vgpu/native` companion only for a valid native operation.
+An absent or incompatible companion fails with an installation or compatibility diagnostic.
+Other vgpu commands do not load it. Native execution uses the supported Node 22 build-host profile;
+displaying help does not enforce that toolchain profile.
+
+Project commands accept one `--config <file>`; use the same file for `check`, `build`, and `verify`.
+Relative config arguments are resolved from the invocation's working directory. Omitting the
+option selects `vgpu.native.json` in that directory, without searching ancestors. `doctor` does
+not accept `--config`.
+
+Unknown commands or options, repeated `--config`, missing values, and positional arguments are
+usage errors, including when combined with `--help`. The initial commands have no `--target`,
+`--json`, `--force`, or custom-worker option.
+
+A successful command exits `0`. Usage errors exit `2`; missing prerequisites, unsupported shaders,
+stale output, and verification failures exit `1`. An interrupted invocation waits for its cleanup
+and exits `130` for SIGINT or `143` for SIGTERM. A post-publication interruption still reports that
+the new package was published; it does not imply that the old package remains in place.
 
 The initial command surface is deliberately four operations. Watching files, scaffold generation,
 pixel-comparison commands, editor plugins, and automated publication are separate integrations.

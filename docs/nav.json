@@ -239,6 +239,7 @@
             { "title": "Resolve shader inputs", "href": "/native/macos/metal/tooling/sources" },
             { "title": "Check the native toolchain", "href": "/native/macos/metal/tooling/doctor" },
             { "title": "Build and verify a Metal package", "href": "/native/macos/metal/tooling/build" },
+            { "title": "Publish generated packages", "href": "/native/macos/metal/tooling/publication" },
             { "title": "Programs", "href": "/native/macos/programs" },
             { "title": "Bindings and generated types", "href": "/native/macos/bindings" },
             { "title": "Resources and Metal interop", "href": "/native/macos/resources" },
