@@ -13,9 +13,9 @@ Some translated shaders need compiler-generated data alongside application buffe
 array's visible length is one example. Preparing a binding set keeps its ranges and these bytes
 together so native code does not accidentally combine a new range with an old size table.
 
-> Warning: This is a proposed compute API, written before implementation. The ordinary compute
-> path and the manual upload path both need connected native tests. This guide does not establish
-> support for indirect command buffer execution.
+> Warning: Native tests on Apple silicon execute both the prepared helper and manual upload path
+> with the exact WGSL from the dispatch guide. The package and build commands are not published
+> yet. This guide does not establish support for indirect command buffer execution.
 
 ## Prepare one binding snapshot
 
@@ -34,7 +34,12 @@ stage-qualified slots needed by this compiled program.
 Preparation validates the full set, including device identity, range containment, required size,
 alignment, and whether visible lengths fit the compiler's size representation. It returns no
 partially prepared value on failure. It does not write application memory, create GPU resources,
-or encode commands.
+or encode commands. Only lengths included in an effective compiler size table must fit `UInt32`;
+a fixed buffer that does not contribute a size word has no additional `UInt32` length limit.
+
+Invalid ranges use the shared `ShaderBindingError` cases described in
+[Bind Metal buffers](/native/macos/metal/bindings). A size-table length that cannot be represented
+throws `unrepresentableLength(binding:maximum:actual:)` before conversion or encoding.
 
 The snapshot retains resource references; it does not freeze buffer contents or prove their GPU
 lifetime. Changing a buffer's bytes can be intentional, but changing a visible range requires a
@@ -55,6 +60,10 @@ encoder.dispatchThreadgroups(
 prepared form when you need to inspect or reuse the CPU description. Encoder-device validation
 still happens before any setter; preparation does not validate a future encoder or pipeline.
 
+The prepared value belongs to the actual Metal device used to load its program. Binding it through
+functions loaded on a different device throws `preparedDeviceMismatch` before any setter.
+Reloading the same program on the same device does not invalidate the snapshot.
+
 Preparing fixed-uniform-only render bindings is not required by this compute API. The additional
 snapshot exists to keep resource-dependent compiler bytes and their source ranges consistent.
 
@@ -64,6 +73,9 @@ Each `ShaderInternalBufferData` value exposes `slot`, `bytes`, and `offsetAlignm
 `slot` is a `ShaderBufferSlot`; `bytes` is an immutable `[UInt8]`; `offsetAlignment` is the required
 alignment if you place those bytes in a region of a native buffer. An empty effective internal
 payload produces no entry. The metadata does not invent an allocation for every reserved slot.
+For example, a shader that reads only a runtime-array struct's fixed prefix may need no size table.
+When a table is needed, its entries preserve physical buffer-slot indices, including zero-filled
+holes. Application code should upload the provided bytes without constructing that table itself.
 
 Allocate the upload buffers using your own Metal device:
 

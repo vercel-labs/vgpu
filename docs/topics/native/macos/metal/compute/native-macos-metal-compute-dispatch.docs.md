@@ -11,9 +11,9 @@ A generated compute program exposes a Metal function, its WGSL workgroup size, a
 binding its resources. Your application creates the pipeline and decides when and how much work
 to dispatch.
 
-> Warning: This guide defines the next compute integration. The compiler and generated bindings
-> currently focus on render programs. Compute compilation, runtime-array ranges, and prepared
-> internal data need connected native tests before this example is available.
+> Warning: The internal compiler and generated bindings execute this guide in native tests on
+> Apple silicon, including GPU readback for both visible ranges. The package and build commands
+> are not published yet. These tests do not establish the release support matrix.
 
 ## Read a bounded storage view
 
@@ -50,10 +50,12 @@ padding from `@size(8)`, and four for `id`. A visible range of `28` bytes contai
 two particles. A range of `52` bytes contains the prefix and four particles. The fixed output
 array requires eight bytes for its two results.
 
-Select the compute entry point in the proposed build configuration:
+Select the compute entry point in the proposed
+[build configuration](/native/macos/metal/tooling/configuration):
 
 ```json
 {
+  "schemaVersion": 1,
   "moduleName": "AppShaders",
   "programs": [
     {
@@ -61,7 +63,8 @@ Select the compute entry point in the proposed build configuration:
       "source": "shaders/count.wgsl",
       "entryPoints": { "compute": "count_main" }
     }
-  ]
+  ],
+  "output": "Generated/AppShaders"
 }
 ```
 
@@ -145,6 +148,10 @@ End encoding and submit your command buffer. After successful GPU completion, th
 words are `[2, 202]`. Construct bindings with `length: 52` and dispatch again to produce
 `[4, 404]`. Neither the backing allocation nor the shader needs to change.
 
+A range may end partway through another element. For example, `length: 31` still produces
+`[2, 202]`: the remaining three bytes do not form a complete particle. The offset must satisfy the
+buffer layout's alignment; the length does not need to be a multiple of four.
+
 Do not read the output before completion or overwrite input bytes still in use by submitted work.
 The application owns command failures, synchronization, pipeline state, and resource lifetime.
 
@@ -162,3 +169,14 @@ convenience helper or upload them yourself. Continue with
 The explicit range is not a hardware-enforced Metal memory boundary. It supplies validation and
 compiler metadata for the supported shader profile; it does not provide isolation between buffers
 or validate arbitrary native commands.
+
+## Stay within the initial resource profile
+
+Compute programs currently support read-only and read/write storage buffers with `f32`, `i32`,
+and `u32` scalars, vectors, float matrices, fixed arrays, and fixed nested structs. A runtime array
+can be the binding's root type or the final member of its root struct. The application writes
+storage bytes using the WGSL layout; this profile does not generate storage packers.
+
+Active uniform buffers, textures, atomics, `f16`, and shader overrides fail compilation in this
+profile. Fixed workgroup sizes can use constants from imported modules. A generated package may
+contain both render and compute programs, with each program's resource profile checked separately.

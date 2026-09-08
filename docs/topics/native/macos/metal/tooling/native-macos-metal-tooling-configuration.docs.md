@@ -16,7 +16,8 @@ It does not describe your application's pipelines, resource allocations, render 
 
 ## Select the programs
 
-Create `vgpu.native.json` beside your shader directory:
+Create `vgpu.native.json` beside your shader directory. The configuration must be a regular UTF-8
+JSON file no larger than one MiB:
 
 ```json
 {
@@ -60,8 +61,9 @@ Those options need explicit compiler contracts, not passthrough flags.
 ## Resolve paths from the configuration
 
 `source` and `output` are relative to the configuration's directory, regardless of the shell's
-working directory. Relative WGSL imports remain relative to the module that imports them. Imported
-modules follow vgpu's purity rules; resource and entry declarations stay in the entry shader.
+working directory. Use forward slashes in configuration paths. Relative WGSL imports remain
+relative to the module that imports them. Imported modules follow vgpu's purity rules; resource
+and entry declarations stay in the entry shader.
 
 Project commands use `./vgpu.native.json` by default. They do not search parent directories.
 Select a file explicitly in a monorepo:

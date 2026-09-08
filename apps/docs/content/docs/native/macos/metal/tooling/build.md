@@ -58,10 +58,16 @@ The build validates the inputs, translates every selected stage, compiles and li
 library, and generates the Swift package. It completes a sibling staging directory before
 publishing it to the configured output.
 
-A failed program, cancelled build, or rejected output boundary leaves the last valid package
-unchanged. Updating an existing package must preserve a complete old-or-new view, not expose new
-Swift source beside an old library. If the destination filesystem cannot provide the required
-publication operation, the build fails without replacing the package.
+A failed program, cancelled build before publication, or rejected output boundary leaves the last
+valid package unchanged. Publishing replaces the directory as one operation: the output path names
+a complete old or new package, never a partially written package. If the destination filesystem
+cannot provide the required operation, the build fails without replacing the package.
+
+Finish generation before starting a Swift build or another consumer that reads multiple files from
+the package. Atomic directory publication is not a snapshot across separate file opens: a reader
+that spans the replacement could otherwise open a file from each version. Do not edit generated
+output concurrently with the build; ownership checks do not protect against another process
+deliberately changing files between validation and publication.
 
 Only one build can publish to an output at a time. Another build must report the conflict, not
 interleave file writes. Interrupted staging or ownership state is reported with a recovery action;
