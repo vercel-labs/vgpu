@@ -59,6 +59,29 @@ The recovery record is separate from `.vgpu-native-output.json`, which remains i
 generated package. Neither is an application runtime dependency or an author signature. An
 unrecognized file occupying a reserved recovery name is a conflict, not a file to overwrite.
 
+### Bound one transaction
+
+Publication accepts exactly the four generated files described in
+[Build and verify a Metal package](/native/macos/metal/tooling/build). Their combined raw byte size
+must not exceed 128 MiB. This is a tooling safety boundary, not a promise that every package below
+that size will compile or load on every device.
+
+The helper receives file contents in chunks no larger than 64 KiB and writes each chunk relative
+to the retained staging directory. It does not place the complete library in a JSON or base64
+message. The generated ownership record and the separate transaction recovery record are each
+bounded to 64 KiB of UTF-8 data.
+
+Output, module, staging, and recovery names must be single valid filesystem components: no slash,
+NUL, control characters, `.` or `..`. Their UTF-8 bytes must fit the opened parent filesystem's
+reported name limit. The build does not truncate, normalize, case-fold, or silently choose another
+name when a value is invalid or reserved.
+
+Before a generation is called prepared, the helper reopens every staged file through retained
+directory descriptors. It requires ordinary single-link files, the exact four-file tree, declared
+lengths, and matching SHA-256 hashes after reading the bytes back. The intent record exists before
+the staging directory, and the staging directory's actual identity is recorded before payload
+transfer begins.
+
 ## Replace the directory
 
 The operation depends on the observed destination:

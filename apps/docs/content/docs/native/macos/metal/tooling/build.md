@@ -122,6 +122,12 @@ bypass a conflict. It is integrity metadata, not a signature or an application r
 The record is versioned UTF-8 JSON no larger than 64 KiB; unsupported or malformed records fail
 validation before their file list is used.
 
+One publication accepts exactly `Package.swift`, generated Swift, `Shaders.metallib`, and that
+ownership record, with a combined 128 MiB limit. Payload transport uses chunks no larger than
+64 KiB; it does not encode the complete library into a control message. See
+[Publish generated packages](/native/macos/metal/tooling/publication) for staging verification and
+transaction-record limits.
+
 Changing an imported helper makes the output stale even if its entry file did not change. Editing
 generated Swift, replacing the library, removing a generated file, or adding an unexpected file
 also fails verification. The initial policy treats this directory as an immutable generated
