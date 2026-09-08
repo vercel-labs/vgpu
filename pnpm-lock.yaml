@@ -496,7 +496,14 @@ importers:
         specifier: workspace:*
         version: link:../wgsl
 
-  packages/native: {}
+  packages/native:
+    dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../wgsl
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
 
   packages/render:
     dependencies:
