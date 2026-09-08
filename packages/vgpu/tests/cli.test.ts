@@ -42,6 +42,9 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Node rendering environment
   npx vgpu doctor
+
+## Native Metal tooling
+  npx vgpu native --help
 `;
 
 test("routes the bare command and --help/-h to the docs-first guide, exit 0", () => {
