@@ -1,6 +1,8 @@
-import type { MetalPackageInput } from "./index.js";
+import type { MetalPackageInput, MetalUniform } from "./index.js";
+import { validateUniformLayout } from "./uniforms.js";
 
 const asciiIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const metalFunctionName = /^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$/;
 // The generated surface deliberately excludes contextual keywords as well as
 // reserved words; it never escapes or silently renames an authored identity.
 const swiftKeywords = new Set(
@@ -39,6 +41,18 @@ const generatedNames = new Set(
     "DispatchData",
     "SHA256",
     "Sendable",
+    "ShaderPackingError",
+    "_ShaderPacking",
+    "Uniforms",
+    "Float",
+    "Int",
+    "UInt8",
+    "UInt32",
+    "SIMD2",
+    "SIMD3",
+    "SIMD4",
+    "UnsafeMutableRawBufferPointer",
+    "withUnsafeBytes",
   ].map((name) => name.toLowerCase())
 );
 
@@ -74,6 +88,45 @@ export function validateMetalPackageInput(input: MetalPackageInput): void {
     }
     names.add(name);
     validateFunctions(program.functions, `programs[${index}].functions`);
+    if (program.uniforms !== undefined && !Array.isArray(program.uniforms)) {
+      throw new TypeError(`programs[${index}].uniforms must be an array`);
+    }
+    const uniformNames = new Set<string>();
+    const uniformTypes = new Map<string, string>();
+    for (const [uniformIndex, uniform] of (program.uniforms ?? []).entries()) {
+      const label = `programs[${index}].uniforms[${uniformIndex}]`;
+      if (uniform === null || typeof uniform !== "object" || Array.isArray(uniform)) {
+        throw new TypeError(`${label} must be a uniform record`);
+      }
+      validateSwiftIdentifier(uniform.name, `${label}.name`);
+      validateSwiftIdentifier(uniform.typeName, `${label}.typeName`);
+      if ([program.name, input.moduleName, "load"].some((name) => name.toLowerCase() === uniform.typeName.toLowerCase())) {
+        throw new TypeError(`${label}.typeName collides with a containing declaration`);
+      }
+      if (!Array.isArray(uniform.members) || uniform.members.length === 0) {
+        throw new TypeError(`${label}.members must be a nonempty array`);
+      }
+      const memberNames = new Set<string>();
+      for (const member of uniform.members) {
+        if (member === null || typeof member !== "object" || Array.isArray(member)) {
+          throw new TypeError(`${label}.members must contain member records`);
+        }
+        validateSwiftIdentifier(member.name, `${label}.members.name`);
+        const name = member.name.toLowerCase();
+        if (memberNames.has(name)) throw new TypeError(`${label} has duplicate member names`);
+        memberNames.add(name);
+      }
+      validateUniformLayout(uniform, label);
+      const uniformName = uniform.name.toLowerCase();
+      if (uniformNames.has(uniformName)) throw new TypeError(`${label} duplicates a uniform binding name`);
+      uniformNames.add(uniformName);
+      const typeName = uniform.typeName.toLowerCase();
+      const shape = JSON.stringify({ name: uniform.typeName, members: uniform.members.map(({ name, type }: MetalUniform["members"][number]) => ({ name, type })) });
+      if (uniformTypes.has(typeName) && uniformTypes.get(typeName) !== shape) {
+        throw new TypeError(`${label} has an ambiguous shared Swift type identity`);
+      }
+      uniformTypes.set(typeName, shape);
+    }
   }
 }
 
@@ -102,20 +155,21 @@ function validateFunctions(functions: unknown, label: string): void {
   }
   for (const stage of stages) {
     const name: unknown = Reflect.get(functions, stage);
-    if (typeof name !== "string" || !asciiIdentifier.test(name)) {
+    if (typeof name !== "string" || !metalFunctionName.test(name)) {
       throw new TypeError(
-        `${label}.${String(stage)} must be a nonempty emitted Metal identifier`
+        `${label}.${String(stage)} must be a nonempty emitted Metal identifier or qualified name`
       );
     }
   }
 }
 
-function validateSwiftIdentifier(value: unknown, label: string): void {
+export function validateSwiftIdentifier(value: unknown, label: string): void {
   if (
     typeof value !== "string" ||
     !asciiIdentifier.test(value) ||
     value === "_" ||
-    value.startsWith("__")
+    value.startsWith("__") ||
+    value.toLowerCase().startsWith("_layout_")
   ) {
     throw new TypeError(`${label} must be a supported Swift ASCII identifier`);
   }

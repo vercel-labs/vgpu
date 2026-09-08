@@ -1,12 +1,16 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { validateMetalPackageInput } from "./validation.js";
+import { generateUniformDeclarations, uniformPackingSupport, type MetalUniform } from "./uniforms.js";
+
+export type { MetalUniform, UniformFieldType } from "./uniforms.js";
 
 export type MetalStage = "vertex" | "fragment" | "compute";
 
 export interface MetalProgram {
   readonly name: string;
   readonly functions: Partial<Record<MetalStage, string>>;
+  readonly uniforms?: readonly MetalUniform[];
 }
 
 export interface MetalPackageInput {
@@ -38,7 +42,7 @@ export function generateMetalPackage(
         .filter((stage) => Object.hasOwn(program.functions, stage))
         .map((stage) => [stage, program.functions[stage]!] as const);
       return `public enum ${program.name} {
-  public struct Functions {
+${generateUniformDeclarations(program.uniforms ?? [])}  public struct Functions {
 ${functions
   .map(([stage]) => `    public let ${stage}: any MTLFunction`)
   .join("\n")}
@@ -93,6 +97,7 @@ public enum ShaderLoadError: Error {
 
 ${programSource}
 
+${programs.some((program) => program.uniforms?.length) ? uniformPackingSupport : ""}
 private enum _ShaderLibrary {
   static func load(device: any MTLDevice) throws -> any MTLLibrary {
     guard let url = Bundle.module.url(forResource: "Shaders", withExtension: "metallib") else {

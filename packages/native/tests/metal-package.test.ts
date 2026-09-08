@@ -9,6 +9,16 @@ function input(): MetalPackageInput {
   };
 }
 
+test("qualified compiler function names are accepted without permitting arbitrary Swift strings", () => {
+  const generateName = (name: string) => generateMetalPackage({
+    ...input(), programs: [{ name: "Triangle", functions: { vertex: name } }],
+  });
+  expect(() => generateName("vgpu_stage::selected_vertex")).not.toThrow();
+  for (const name of ["::vertex", "stage::", "stage::::vertex", "stage::1vertex", "stage::vertex\"", "stage\nvertex"]) {
+    expect(() => generateName(name)).toThrow(/functions/);
+  }
+});
+
 test("invalid module identities fail rather than becoming Swift declarations or paths", () => {
   for (const moduleName of [
     "",
