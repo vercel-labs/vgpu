@@ -1,11 +1,13 @@
 ---
-title: "Bindings and generated types"
-description: "Initialize and update typed Swift bindings while preserving WGSL names, layouts, and resource ownership."
+title: "Earlier proposal — Bindings and generated types"
+description: "Earlier proposal for typed Swift runtime bindings, resource handles, and mutable program state."
 ---
 
-`vgpu native build` turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles. Generated descriptors describe programs; effect, draw, and compute instances own their binding state.
+> Warning: This page preserves the earlier Swift-runtime proposal, which the direct Metal workflow
+> replaced. Its resource handles and stateful program instances are not current commitments. Start
+> with [Bind Metal buffers](/native/macos/metal/bindings) for the supported generated bindings.
 
-> Warning: Native macOS support is a docs-first API proposal. The Swift API on this page is not implemented yet.
+`vgpu native build` turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles. Generated descriptors describe programs; effect, draw, and compute instances own their binding state.
 
 ## Understand generated program types
 

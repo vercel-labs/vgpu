@@ -13,7 +13,8 @@ The generated binding helper connects application-owned buffers to a program's M
 It does not own a pipeline, resource pool, or command buffer. You can use the helper for ordinary
 render encoding or read the same slot metadata from your own native code.
 
-> Warning: Native build tooling is under development and no native command is published yet.
+> Warning: Native build tooling is under development. The `vgpu native` shim exists, but its
+> operational companion and complete installed workflow are not published yet.
 > The fixed-uniform render path is tested through the internal compiler adapter and native
 > consumers. Device execution coverage is Apple silicon; this is not a release support matrix.
 

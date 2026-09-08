@@ -1,6 +1,6 @@
 ---
-title: Build and verify
-summary: Validate the Metal toolchain, inspect deterministic build plans, and verify generated Swift packages.
+title: Earlier proposal — Build and verify
+summary: Earlier proposal for build plans, runtime-package validation, comparison, and recovery commands.
 websitePath: /native/macos/build
 keywords: macos, metal, build, verify, doctor, ci, native artifact, json diagnostics
 relatedSymbols:
@@ -10,15 +10,15 @@ relatedSymbols:
   - compute
 ---
 
-# Build and verify
+# Earlier proposal — Build and verify
 
-Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison. This page covers build and verification; [Compare WebGPU and Metal](/native/macos/compare) covers parity fixtures.
-
-> Warning: This page preserves the superseded Swift runtime proposal, not the current command
-> contract. For WGSL and direct Metal integration, use
+> Warning: This page preserves the earlier Swift-runtime proposal, which the direct Metal workflow
+> replaced. For the current command contract, use
 > [Build and verify a Metal package](/native/macos/metal/tooling/build). The additional commands,
 > flags, runtime packages, and automatic recovery described below are not release commitments.
-> No native command is published yet.
+> The `vgpu native` shim exists, but the companion and complete installed workflow are not published.
+
+Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison. This page covers build and verification; [Compare WebGPU and Metal](/native/macos/compare) covers parity fixtures.
 
 ## Check the build machine
 

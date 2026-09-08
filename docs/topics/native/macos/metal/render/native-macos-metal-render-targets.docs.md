@@ -11,7 +11,8 @@ A fragment shader can write more than one result in a draw. Declare the outputs 
 connect each output location to the same color-attachment index in your Metal pipeline and render
 pass. The generated package exposes the functions; your application owns the textures and pass.
 
-> Warning: Native build tooling is under development and no native command is published yet.
+> Warning: Native build tooling is under development. The `vgpu native` shim exists, but its
+> operational companion and complete installed workflow are not published yet.
 > The example below and its sparse-location variant are tested through the internal compiler
 > adapter and a generated Swift package, with both textures read back from Metal on Apple silicon.
 

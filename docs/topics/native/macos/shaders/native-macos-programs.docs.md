@@ -1,6 +1,6 @@
 ---
-title: Programs
-summary: Configure effect, draw, and compute entry points without baking renderer state into generated shader programs.
+title: Earlier proposal — Programs
+summary: Earlier proposal for configuring effect, draw, and compute descriptors in the superseded Swift runtime.
 websitePath: /native/macos/programs
 keywords: macos, metal, swift, native program, wgsl, override, entry point, target signature
 relatedSymbols:
@@ -10,13 +10,15 @@ relatedSymbols:
   - resolveShader
 ---
 
-# Programs
+# Earlier proposal — Programs
+
+> Warning: This page preserves the earlier Swift-runtime proposal, which the direct Metal workflow
+> replaced. Its program descriptors and `VGPU` instances are not current commitments. Start with
+> [Configure a Metal package](/native/macos/metal/tooling/configuration) for the supported workflow.
 
 A native shader module contains programs, not renderers. `vgpu native build` selects WGSL entry points and generates Swift descriptors that the opt-in render and compute products can instantiate.
 
 The generated descriptor owns no GPU resources. An instance such as `VGPUEffect<Gradient>` owns binding state and asks its `VGPU` context for pipelines as it encounters target signatures.
-
-> Warning: Native macOS support is a docs-first API proposal. The configuration and Swift API on this page are not implemented yet.
 
 ## Configure programs
 

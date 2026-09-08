@@ -1,13 +1,15 @@
 ---
-title: "Rendering primitives"
-description: "Create a VGPU context and compose effects and draws through ordered frames and render passes."
+title: "Earlier proposal — Rendering primitives"
+description: "Earlier proposal for a Swift VGPU context, frames, render passes, effects, and draws."
 ---
+
+> Warning: This page preserves the earlier Swift renderer proposal, which application-owned Metal
+> encoding replaced. Its contexts, frames, effects, and draws are not current commitments. Start
+> with [Render WGSL with Metal](/native/macos/metal/rendering) for the supported integration.
 
 Everything starts from one `VGPU` context. Surfaces, targets, program instances, resources, and frames created from it share one Metal device, command queue, clock, and pipeline cache.
 
 Create long-lived resources outside rendering code. A frame should update data and encode commands, not rebuild pipelines, textures, or geometry.
-
-> Warning: Native macOS support is a docs-first API proposal. The Swift APIs on this page are not implemented yet.
 
 ## Create a context
 

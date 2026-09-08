@@ -1,11 +1,13 @@
 ---
-title: "Generated artifacts"
-description: "Understand the generated Swift package, backend-neutral semantics, Metal projection, and compatibility fingerprints."
+title: "Earlier proposal — Generated artifacts"
+description: "Earlier proposal for a generated package with backend-neutral runtime products and artifact envelopes."
 ---
 
-One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection. The manifest is a build-time envelope; generated Swift embeds only the compatibility data needed to load and execute the packaged `.metallib`.
+> Warning: This page preserves the earlier Swift-runtime artifact proposal, which the self-contained
+> direct Metal package replaced. Its runtime dependencies and artifact envelopes are not current
+> commitments. Start with [Load Metal functions](/native/macos/metal/functions) for the generated package.
 
-> Warning: Native macOS support is a docs-first API proposal. The package and artifact formats on this page are not implemented yet.
+One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection. The manifest is a build-time envelope; generated Swift embeds only the compatibility data needed to load and execute the packaged `.metallib`.
 
 ## Inspect the generated package
 

@@ -6,9 +6,9 @@ description: "Select WGSL entry points and an owned output directory for a gener
 A native configuration selects the shader programs that ship together in one Swift package.
 It does not describe your application's pipelines, resource allocations, render passes, or frame loop.
 
-> Warning: This is the proposed production command contract, written before command implementation.
-> The internal compiler and generator are tested separately. No native command or installable native
-> tooling release is available yet; the examples below define the intended workflow.
+> Warning: This is the proposed production workflow. The `vgpu native` parser, help, and lazy
+> companion dispatch are implemented, and the internal compiler and generator are tested separately.
+> The operational companion and complete installed tooling release are not available yet.
 
 ## Select the programs
 

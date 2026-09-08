@@ -32,6 +32,30 @@ The `examples` commands never execute fetched code.
 | `install-dawn` | Download and verify the portable Node Dawn prebuild |
 | `install-software-renderer` | Download and verify the portable CPU renderer |
 | `doctor` | Verify this machine can render headless (JSON verdict + fixes) |
+| `native` | Show native Metal tooling help and dispatch to the optional companion |
+
+## native
+
+Native tooling compiles WGSL for application-owned Metal code. Its command dispatcher loads the
+optional `@vgpu/native` companion only for native operations; other vgpu commands and native help
+do not load the compiler.
+
+> Warning: Native tooling is under development. The dispatcher and help are tested, but the native
+> companion is not published and the complete installed build workflow is not available yet.
+
+```terminal
+npx vgpu native --help
+npx vgpu native check --help
+```
+
+The command surface is `doctor`, `check`, `build`, and `verify`. Project commands accept
+`--config <file>` and default to `./vgpu.native.json` without searching parent directories. Native
+execution uses Node.js 22. An absent or incompatible companion fails with a diagnostic, not a
+successful no-op.
+
+See [Build and verify a Metal package](/native/macos/metal/tooling/build) for the command contract,
+exit codes, and current implementation boundaries. `vgpu native doctor` checks the Metal build
+toolchain; it is separate from the headless Node.js rendering checks performed by `vgpu doctor`.
 
 ## check
 

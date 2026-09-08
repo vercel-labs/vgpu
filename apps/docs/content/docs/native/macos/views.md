@@ -1,13 +1,15 @@
 ---
-title: "SwiftUI and MetalKit"
-description: "Put one renderer behind either a generic SwiftUI VGPUView or an application-owned MTKView without generating a view per shader."
+title: "Earlier proposal — SwiftUI and MetalKit"
+description: "Earlier proposal for generic SwiftUI and MetalKit adapters around the superseded Swift renderer."
 ---
+
+> Warning: This page preserves the earlier Swift view-adapter proposal, which the direct Metal
+> workflow replaced. Its `VGPUView` and renderer protocols are not current commitments. Start with
+> [Render WGSL with Metal](/native/macos/metal/rendering) and drive presentation in application code.
 
 View integration belongs above the rendering primitives. A renderer creates effects, draws, and targets from one `VGPU` context; a generic host decides whether an `MTKViewDelegate` or SwiftUI drives it.
 
 Generated programs never conform to a view protocol. The same renderer can combine any number of programs and run behind either host.
-
-> Warning: Native macOS support is a docs-first API proposal. The `VGPUView`, `VGPUViewDriver`, and renderer protocol on this page are not implemented yet.
 
 ## Write one renderer
 

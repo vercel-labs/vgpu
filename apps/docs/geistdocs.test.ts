@@ -4,11 +4,13 @@ import { agent, nav, navbarVariant } from "./geistdocs";
 import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./lib/agent-guidance";
 import { buildMetaFiles } from "../../packages/vgpu/lib/docs/generate/generate-geistdocs.js";
 
-const docsContent = (path: string) => readFileSync(new URL(`content/docs/${path}`, import.meta.url), "utf8");
-const nativeContract = (path: string) => readFileSync(
-  new URL(`../../docs/plans/native/contracts/${path}`, import.meta.url),
-  "utf8",
-);
+const docsContent = (path: string) =>
+  readFileSync(new URL(`content/docs/${path}`, import.meta.url), "utf8");
+const nativeContract = (path: string) =>
+  readFileSync(
+    new URL(`../../docs/plans/native/contracts/${path}`, import.meta.url),
+    "utf8"
+  );
 
 describe("agent readiness metadata", () => {
   it("keeps project trust links out of the primary navigation", () => {
@@ -20,20 +22,23 @@ describe("agent readiness metadata", () => {
     expect(agent.product.category).toBe("Developer tools");
     expect(agent.api?.openApiUrl).toBe("https://vgpu.sh/openapi.json");
     expect(agent.api?.errorsUrl).toContain("/docs/examples-api#errors");
-    expect(agent.links?.map((link) => link.href)).toEqual(expect.arrayContaining([
-      "https://github.com/vercel-labs/vgpu",
-      "https://www.npmjs.com/package/vgpu",
-      "https://vgpu.sh/docs/cli",
-      "https://vgpu.sh/.well-known/vgpu-examples.json",
-      "https://vgpu.sh/api/mcp",
-    ]));
+    expect(agent.links?.map((link) => link.href)).toEqual(
+      expect.arrayContaining([
+        "https://github.com/vercel-labs/vgpu",
+        "https://www.npmjs.com/package/vgpu",
+        "https://vgpu.sh/docs/cli",
+        "https://vgpu.sh/.well-known/vgpu-examples.json",
+        "https://vgpu.sh/api/mcp",
+      ])
+    );
     expect(agent.mcp).toEqual({
       manifestUrl: "/.well-known/mcp.json",
       servers: [
         {
           name: "vgpu MCP",
           url: "https://vgpu.sh/api/mcp",
-          description: "Stateless modern MCP tools for searching VGPU documentation and verified examples.",
+          description:
+            "Stateless modern MCP tools for searching VGPU documentation and verified examples.",
         },
       ],
     });
@@ -54,24 +59,30 @@ describe("agent readiness metadata", () => {
     expect(pages.slice(cli, cli + 3)).toEqual(["cli", "mcp", "ml"]);
 
     const index = docsContent("index.mdx");
-    expect(index.indexOf("[CLI](/docs/cli)")).toBeLessThan(index.indexOf("[MCP](/docs/mcp)"));
-    expect(index.indexOf("[MCP](/docs/mcp)")).toBeLessThan(index.indexOf("[ML](/docs/ml)"));
+    expect(index.indexOf("[CLI](/docs/cli)")).toBeLessThan(
+      index.indexOf("[MCP](/docs/mcp)")
+    );
+    expect(index.indexOf("[MCP](/docs/mcp)")).toBeLessThan(
+      index.indexOf("[ML](/docs/ml)")
+    );
 
     const agents = docsContent("get-started/agents.mdx");
     expect(agents).toContain("https://vgpu.sh/api/mcp");
     expect(agents).toContain("[MCP reference](/docs/mcp)");
     expect(agents.indexOf("## Point your agent at the docs")).toBeLessThan(
-      agents.indexOf("## Install the skill"),
+      agents.indexOf("## Install the skill")
     );
     expect(agents.indexOf("## Install the skill")).toBeLessThan(
-      agents.indexOf("## Connect the hosted MCP server"),
+      agents.indexOf("## Connect the hosted MCP server")
     );
 
     const mcp = docsContent("mcp.md");
     expect(mcp).toContain("## Quick setup");
     expect(mcp).toContain("npx -y add-mcp https://vgpu.sh/api/mcp -g");
     expect(mcp).toContain("## What is VGPU MCP?");
-    expect(mcp).toContain("claude mcp add --transport http vgpu https://vgpu.sh/api/mcp");
+    expect(mcp).toContain(
+      "claude mcp add --transport http vgpu https://vgpu.sh/api/mcp"
+    );
     expect(mcp).toContain("codex mcp add vgpu --url https://vgpu.sh/api/mcp");
     expect(mcp).toContain("## Try it");
     expect(mcp).toContain("## Hosted HTTP");
@@ -85,10 +96,12 @@ describe("agent readiness metadata", () => {
     const pages = JSON.parse(docsContent("meta.json")).pages as string[];
     expect(pages[pages.indexOf("ml") + 1]).toBe("native");
 
-    const nativePages = JSON.parse(docsContent("native/meta.json")).pages as string[];
+    const nativePages = JSON.parse(docsContent("native/meta.json"))
+      .pages as string[];
     expect(nativePages).toEqual(["macos", "..."]);
 
-    const macosPages = JSON.parse(docsContent("native/macos/meta.json")).pages as string[];
+    const macosPages = JSON.parse(docsContent("native/macos/meta.json"))
+      .pages as string[];
     expect(macosPages).toEqual([
       "metal",
       "programs",
@@ -104,87 +117,108 @@ describe("agent readiness metadata", () => {
       "...",
     ]);
 
-    const metalPages = JSON.parse(docsContent("native/macos/metal/meta.json")).pages as string[];
-    expect(metalPages).toEqual(["functions", "rendering", "uniforms", "bindings", "render", "compute", "tooling", "..."]);
-    const renderPages = JSON.parse(docsContent("native/macos/metal/render/meta.json")).pages as string[];
+    const metalPages = JSON.parse(docsContent("native/macos/metal/meta.json"))
+      .pages as string[];
+    expect(metalPages).toEqual([
+      "functions",
+      "rendering",
+      "uniforms",
+      "bindings",
+      "render",
+      "compute",
+      "tooling",
+      "...",
+    ]);
+    const renderPages = JSON.parse(
+      docsContent("native/macos/metal/render/meta.json")
+    ).pages as string[];
     expect(renderPages).toEqual(["targets", "..."]);
-    const computePages = JSON.parse(docsContent("native/macos/metal/compute/meta.json")).pages as string[];
-    expect(computePages).toEqual(["dispatch", "prepared-bindings", "indirect-dispatch", "rendering", "..."]);
-    const toolingPages = JSON.parse(docsContent("native/macos/metal/tooling/meta.json")).pages as string[];
-    expect(toolingPages).toEqual(["configuration", "sources", "doctor", "build", "publication", "..."]);
+    const computePages = JSON.parse(
+      docsContent("native/macos/metal/compute/meta.json")
+    ).pages as string[];
+    expect(computePages).toEqual([
+      "dispatch",
+      "prepared-bindings",
+      "indirect-dispatch",
+      "rendering",
+      "...",
+    ]);
+    const toolingPages = JSON.parse(
+      docsContent("native/macos/metal/tooling/meta.json")
+    ).pages as string[];
+    expect(toolingPages).toEqual([
+      "configuration",
+      "sources",
+      "doctor",
+      "build",
+      "publication",
+      "...",
+    ]);
 
     const macos = docsContent("native/macos/index.md");
-    expect(macos).toContain("let gpu = try VGPU.metal(device: device)");
-    expect(macos).toContain("import VGPUMetal");
-    expect(macos).toContain("Apple silicon and macOS 14 or later as the supported application target");
-    expect(macos).toContain("does not include Intel-based Macs or Intel and AMD GPUs");
-    expect(macos).toContain("If the closure throws before submission, the frame cancels");
-    expect(macos).not.toContain("VGPUKit");
-    expect(macos).toContain("let scene = try gpu.target");
-    expect(macos).toContain("try gpu.frame { frame in");
-    expect(macos).not.toContain("Gradient.View(");
-
-    const rendering = docsContent("native/macos/rendering.md");
-    expect(rendering).toContain("VGPU.metal(commandQueue: commandQueue)");
-    expect(rendering).toContain("the backend-neutral `VGPUSurface` handle has no global actor annotation");
-    expect(rendering).toContain("public enum VGPUFramePassResult: Sendable");
-    expect(rendering).toContain("throws -> VGPUSubmission");
-    expect(rendering).toContain("let submission = try update.dispatch");
-    expect(rendering).toContain("blocks inside `submitCompute`");
-    expect(rendering).toContain("do not expose an Apple-silicon mode");
-    expect(rendering).toContain("Await each actor-owned instance in order");
-    expect(rendering).not.toContain("The first native API is isolated to `@MainActor`");
-
-    const gpuDrivenDrawing = docsContent("native/macos/gpu-driven-drawing.md");
-    expect(gpuDrivenDrawing).toContain("additionalUsage: [.indirect]");
-    expect(gpuDrivenDrawing).toContain("slice(bytes: 16..<32)");
-    expect(gpuDrivenDrawing).toContain("Do not await the compute submission");
-    expect(gpuDrivenDrawing).toContain("`VGPU-INDIRECT-INVALID`");
-    expect(gpuDrivenDrawing).toContain("`VGPUError.contextMismatch`");
-    expect(gpuDrivenDrawing).not.toContain("VGPUIndirectArguments");
-
-    const views = docsContent("native/macos/views.md");
-    expect(views).toContain("`@MainActor` is a contract of the view adapter");
-    expect(views).toContain("The handle itself has no global actor annotation");
-    expect(views).toContain("Call them explicitly: a normal deinitializer cannot safely clear the delegate");
-
-    const resources = docsContent("native/macos/resources.md");
-    expect(resources).toContain("import VGPUMetalInterop");
-    expect(resources).toContain("Only one vgpu wrapper may claim the same exact `MTLResource`");
-    expect(resources).toContain("not zero-copy access or a particular Metal storage mode");
-    expect(resources.indexOf("try importedBuffer.dispose()")).toBeLessThan(
-      resources.indexOf("await firstGPU.settled()"),
+    expect(macos).toContain(
+      "Your application owns the device, pipelines, resources, encoders"
     );
+    expect(macos).toContain(
+      "[Render WGSL with Metal](/native/macos/metal/rendering)"
+    );
+    expect(macos).toContain(
+      "The generated package has no external Swift dependencies"
+    );
+    expect(macos).toContain(
+      "The application does not require Node.js, Tint, or Xcode at launch"
+    );
+    expect(macos).not.toContain("try gpu.frame { frame in");
 
-    const lifecycle = docsContent("native/macos/lifecycle.md");
-    expect(lifecycle).toContain("@escaping @isolated(any) @Sendable (VGPUError) -> Void");
-    expect(lifecycle).not.toContain("sending @escaping");
-    expect(lifecycle).toContain("public struct VGPUErrorCode: RawRepresentable, Hashable, Sendable");
-    expect(lifecycle).toContain("public struct VGPUSubmission: Sendable");
-    expect(lifecycle).toContain("Do not await every submission in an animation loop");
-    expect(lifecycle).toContain("gpu.settled()` snapshots all work already known to the context");
-    expect(lifecycle).toContain("VGPU-NATIVE-CONCURRENT-ACCESS");
-    expect(lifecycle).toContain("isolation: isolated (any Actor)? = #isolation");
-    expect(lifecycle).toContain("The first release does not rely on Swift 6.2 `isolated deinit`");
+    const historicalPages = [
+      ["programs", "shaders/native-macos-programs.docs.md"],
+      ["bindings", "shaders/native-macos-bindings.docs.md"],
+      ["resources", "runtime/native-macos-resources.docs.md"],
+      ["rendering", "runtime/native-macos-rendering.docs.md"],
+      ["gpu-driven-drawing", "runtime/native-macos-gpu-driven-drawing.docs.md"],
+      ["views", "integrations/native-macos-views.docs.md"],
+      ["lifecycle", "runtime/native-macos-lifecycle.docs.md"],
+      ["artifacts", "shaders/native-macos-artifacts.docs.md"],
+      ["build", "tooling/native-macos-build.docs.md"],
+      ["compare", "tooling/native-macos-compare.docs.md"],
+    ];
+    const docsNav = JSON.parse(
+      readFileSync(new URL("../../docs/nav.json", import.meta.url), "utf8")
+    );
+    const nativeNavigation = docsNav.sections
+      .find((section: { title?: string }) => section.title === "Native")
+      .groups.find((group: { title?: string }) => group.title === "macOS")
+      .items as Array<{ title: string; href: string }>;
+    for (const [page, sourcePath] of historicalPages) {
+      const content = docsContent(`native/macos/${page}.md`);
+      expect(content).toMatch(/^---\ntitle: "Earlier proposal — /);
+      expect(content).toMatch(/\ndescription: "Earlier proposal /);
+      expect(content).toContain("> Warning: This page preserves the earlier");
 
-    const artifacts = docsContent("native/macos/artifacts.md");
-    expect(artifacts).toContain("vgpu-native-semantic/v1");
-    expect(artifacts).toContain("vgpu-native-metal-projection/v1");
-    expect(artifacts).toContain("Metal compiler target triple");
-    expect(artifacts).toContain("Intel-based Macs and Intel or AMD GPUs remain outside that matrix");
-    expect(artifacts).toContain("it does not remove compute functions already packaged");
-    expect(artifacts).not.toContain("VGPUKit");
+      const source = readFileSync(
+        new URL(
+          `../../docs/topics/native/macos/${sourcePath}`,
+          import.meta.url
+        ),
+        "utf8"
+      );
+      expect(source).toMatch(/\nsummary: Earlier proposal /);
+      expect(source).toContain("# Earlier proposal — ");
+
+      const navItem = nativeNavigation.find(
+        (item) => item.href === `/native/macos/${page}`
+      );
+      expect(navItem?.title).toMatch(/^Earlier proposal — /);
+    }
 
     const build = docsContent("native/macos/build.md");
-    expect(build).toContain("compiles the generated layout conformance from a separate SwiftPM package");
-    expect(build).toContain("one additional typed Metal process");
-    expect(build).toContain("one external generated `VGPUComputeProgram`");
-    expect(build).toContain("depends only on `VGPUABI`");
-    expect(build).toContain("a racing `gpu.settled()` sees the registered work");
-    expect(build).toContain("requires byte-identical reports");
+    expect(build).toContain("The `vgpu native` shim exists");
+    expect(build).toContain(
+      "the companion and complete installed workflow are not published"
+    );
 
     const index = docsContent("index.mdx");
-    expect(index).toContain("[Review the native API proposal](/docs/native)");
+    expect(index).toContain("[Integrate WGSL with native Metal](/docs/native)");
   });
 
   it("documents fixed-prefix runtime arrays as explicit immutable binding views", () => {
@@ -192,11 +226,21 @@ describe("agent readiness metadata", () => {
     expect(resources).toContain("Values.self");
     expect(resources).toContain("capacity: 4");
     expect(resources).toContain("try values.writePrefix(.init(prefix: 88))");
-    expect(resources).toContain("try values.writeElements(replacementParticles, at: 2)");
-    expect(resources).toContain("let firstTwo = try values.binding(elementCount: 2)");
-    expect(resources).toContain("let allFour = try values.binding(elementCount: 4)");
-    expect(resources).toContain("starts with `tailOffset + elementCount × stride`");
-    expect(resources).toContain("Padding is valid when it stays inside the requested count's byte interval");
+    expect(resources).toContain(
+      "try values.writeElements(replacementParticles, at: 2)"
+    );
+    expect(resources).toContain(
+      "let firstTwo = try values.binding(elementCount: 2)"
+    );
+    expect(resources).toContain(
+      "let allFour = try values.binding(elementCount: 4)"
+    );
+    expect(resources).toContain(
+      "starts with `tailOffset + elementCount × stride`"
+    );
+    expect(resources).toContain(
+      "Padding is valid when it stays inside the requested count's byte interval"
+    );
     expect(resources).toContain("makes `3` the first valid count");
     expect(resources).toContain("this profile accepts only even counts");
     expect(resources).not.toContain("values.updatePrefix");
@@ -205,41 +249,50 @@ describe("agent readiness metadata", () => {
     expect(bindings).toContain("public enum Values: VGPURuntimeArrayLayout");
     expect(bindings).toContain("omitted from the WGSL excerpt");
     expect(bindings).toContain("underscored descriptor and packer witnesses");
-    expect(bindings).toContain("public typealias Binding = VGPURuntimeStorageBinding<Values>");
-    expect(bindings).toContain("public var values: VGPURuntimeStorageBinding<Values>");
-    expect(bindings).toContain("let visibleValues = try values.binding(elementCount: 2)");
     expect(bindings).toContain(
-      "A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`",
+      "public typealias Binding = VGPURuntimeStorageBinding<Values>"
     );
     expect(bindings).toContain(
-      "`Values` has a 4-byte prefix and a 12-byte trailing-element stride",
+      "public var values: VGPURuntimeStorageBinding<Values>"
+    );
+    expect(bindings).toContain(
+      "let visibleValues = try values.binding(elementCount: 2)"
+    );
+    expect(bindings).toContain(
+      "A root runtime array such as `array<Particle>` remains `VGPUStorage<Particle>`"
+    );
+    expect(bindings).toContain(
+      "`Values` has a 4-byte prefix and a 12-byte trailing-element stride"
     );
     expect(bindings).toContain("views expose 28 and 52 bytes");
     expect(bindings).toContain("writes `[2, 202]` and `[4, 404]`");
   });
 
   it("derives nested Native metadata from navigation groups", () => {
-    const files = buildMetaFiles({
-      sections: [
-        {
-          title: "Native",
-          href: "/native",
-          groups: [
-            {
-              title: "Linux",
-              items: [
-                { title: "Get started", href: "/native/linux" },
-                { title: "Programs", href: "/native/linux/programs" },
-              ],
-            },
-          ],
-        },
-      ],
-    }, [
-      { path: "native/index.md" },
-      { path: "native/linux/index.md" },
-      { path: "native/linux/programs.md" },
-    ]);
+    const files = buildMetaFiles(
+      {
+        sections: [
+          {
+            title: "Native",
+            href: "/native",
+            groups: [
+              {
+                title: "Linux",
+                items: [
+                  { title: "Get started", href: "/native/linux" },
+                  { title: "Programs", href: "/native/linux/programs" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      [
+        { path: "native/index.md" },
+        { path: "native/linux/index.md" },
+        { path: "native/linux/programs.md" },
+      ]
+    );
 
     expect(JSON.parse(files.get("native/meta.json")!)).toEqual({
       title: "Native",
@@ -252,46 +305,68 @@ describe("agent readiness metadata", () => {
   });
 
   it("rejects duplicate navigation groups for one Native platform", () => {
-    expect(() => buildMetaFiles({
-      sections: [
+    expect(() =>
+      buildMetaFiles(
         {
-          title: "Native",
-          href: "/native",
-          groups: [
-            { title: "Linux basics", items: [{ title: "Programs", href: "/native/linux/programs" }] },
-            { title: "Linux advanced", items: [{ title: "Build", href: "/native/linux/build" }] },
+          sections: [
+            {
+              title: "Native",
+              href: "/native",
+              groups: [
+                {
+                  title: "Linux basics",
+                  items: [
+                    { title: "Programs", href: "/native/linux/programs" },
+                  ],
+                },
+                {
+                  title: "Linux advanced",
+                  items: [{ title: "Build", href: "/native/linux/build" }],
+                },
+              ],
+            },
           ],
         },
-      ],
-    }, [])).toThrow('Native navigation has multiple groups for platform directory "linux"');
+        []
+      )
+    ).toThrow(
+      'Native navigation has multiple groups for platform directory "linux"'
+    );
   });
 
   it("keeps Native topic folders navigable in curated order", () => {
-    const files = buildMetaFiles({
-      sections: [{
-        title: "Native",
-        href: "/native",
-        groups: [{
-          title: "macOS",
-          items: [
-            { title: "Get started", href: "/native/macos" },
-            { title: "Functions", href: "/native/macos/metal/functions" },
-            { title: "Programs", href: "/native/macos/programs" },
-            { title: "Bindings", href: "/native/macos/metal/bindings" },
-            { title: "Metal overview", href: "/native/macos/metal" },
-            { title: "Setup", href: "/native/macos/metal/build/setup" },
-          ],
-        }],
-      }],
-    }, [
-      { path: "native/index.md" },
-      { path: "native/macos/index.md" },
-      { path: "native/macos/programs.md" },
-      { path: "native/macos/metal/index.md" },
-      { path: "native/macos/metal/functions.md" },
-      { path: "native/macos/metal/bindings.md" },
-      { path: "native/macos/metal/build/setup.md" },
-    ]);
+    const files = buildMetaFiles(
+      {
+        sections: [
+          {
+            title: "Native",
+            href: "/native",
+            groups: [
+              {
+                title: "macOS",
+                items: [
+                  { title: "Get started", href: "/native/macos" },
+                  { title: "Functions", href: "/native/macos/metal/functions" },
+                  { title: "Programs", href: "/native/macos/programs" },
+                  { title: "Bindings", href: "/native/macos/metal/bindings" },
+                  { title: "Metal overview", href: "/native/macos/metal" },
+                  { title: "Setup", href: "/native/macos/metal/build/setup" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      [
+        { path: "native/index.md" },
+        { path: "native/macos/index.md" },
+        { path: "native/macos/programs.md" },
+        { path: "native/macos/metal/index.md" },
+        { path: "native/macos/metal/functions.md" },
+        { path: "native/macos/metal/bindings.md" },
+        { path: "native/macos/metal/build/setup.md" },
+      ]
+    );
 
     expect(JSON.parse(files.get("native/macos/meta.json")!)).toEqual({
       title: "macOS",
@@ -301,7 +376,9 @@ describe("agent readiness metadata", () => {
       title: "Metal",
       pages: ["functions", "bindings", "build", "..."],
     });
-    expect(JSON.parse(files.get("native/macos/metal/build/meta.json")!)).toEqual({
+    expect(
+      JSON.parse(files.get("native/macos/metal/build/meta.json")!)
+    ).toEqual({
       title: "Build",
       pages: ["setup", "..."],
     });
@@ -314,7 +391,9 @@ describe("agent readiness metadata", () => {
     const projection = nativeContract("metal-projection-v1.schema.json");
     const projectionSchema = JSON.parse(projection);
     const runnerRequest = nativeContract("metal-runner-request-v1.schema.json");
-    const runnerResponse = nativeContract("metal-runner-response-v1.schema.json");
+    const runnerResponse = nativeContract(
+      "metal-runner-response-v1.schema.json"
+    );
 
     expect(() => JSON.parse(semantic)).not.toThrow();
     expect(() => JSON.parse(projection)).not.toThrow();
@@ -324,12 +403,14 @@ describe("agent readiness metadata", () => {
     expect(semantic).toContain('"wgsl-host-shareable-v1"');
     expect(semantic).toContain('"languageFeatures"');
     expect(semanticSchema.$defs.layout.properties.addressSpace).toBeUndefined();
-    expect(semanticSchema.$defs.bufferBinding.properties.addressSpace).toBeDefined();
+    expect(
+      semanticSchema.$defs.bufferBinding.properties.addressSpace
+    ).toBeDefined();
     expect(projection).toContain('"vgpu-metal-binding-slots-v1"');
     expect(projection).toContain('"immediateDataLayoutModel"');
     expect(projectionSchema.required).toContain("immediateDataLayoutModel");
     expect(projectionSchema.properties.immediateDataLayoutModel.pattern).toBe(
-      "^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$",
+      "^vgpu-metal-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$"
     );
     expect(projection).toContain('"internalBindings"');
     expect(projection).toContain('"metalCompilerTargetTriple"');
@@ -347,7 +428,9 @@ describe("agent readiness metadata", () => {
     const compare = docsContent("native/macos/compare.md");
     const semantic = nativeContract("semantic-v1.schema.json");
 
-    expect(macos).toContain('.upToNextMinor(from: "<version>")');
+    expect(macos).toContain(
+      "The generated package has no external Swift dependencies"
+    );
     expect(programs).toContain("transitive type and layout closure");
     expect(programs).toContain("unrelated types or layouts do not");
     expect(artifacts).toContain("vgpu-native-program/v1");
@@ -357,19 +440,25 @@ describe("agent readiness metadata", () => {
     expect(artifacts).toContain("Support for `immediateDataLayoutModel`");
     expect(artifacts).toContain("Support for `storageBufferSizeModel`");
     expect(artifacts).toContain("its emission policy remains open");
-    expect(build).toContain("C3a passed the current structural artifact fixture");
+    expect(build).toContain(
+      "C3a passed the current structural artifact fixture"
+    );
     expect(build).toContain("intentionally invalid UTF-8 text");
     expect(build).toContain("C3b now passes");
     expect(build).toContain("unknown immediate-data layout model");
     expect(build).toContain("unknown storage-buffer-size model");
-    expect(build).toContain("does not implement the compare request and response protocol");
+    expect(build).toContain(
+      "does not implement the compare request and response protocol"
+    );
     expect(compare).toContain("`single-json-eof` framing");
     expect(compare).toContain("`AppShadersC3MetalProbe`");
     expect(compare).toContain("whether generation always emits the runner");
     expect(compare).not.toContain(
-      "The generated package includes an `AppShadersMetalRunner` executable target used only by tests",
+      "The generated package includes an `AppShadersMetalRunner` executable target used only by tests"
     );
     expect(semantic).toContain("referenced WGSL input IDs and content hashes");
-    expect(semantic).toContain("transitively reachable types and intrinsic layouts");
+    expect(semantic).toContain(
+      "transitively reachable types and intrinsic layouts"
+    );
   });
 });

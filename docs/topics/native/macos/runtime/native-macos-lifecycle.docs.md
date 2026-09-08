@@ -1,6 +1,6 @@
 ---
-title: Ownership and lifecycle
-summary: Keep a VGPU object graph in one actor, handle synchronous and deferred failures, and dispose resources without racing in-flight Metal work.
+title: Earlier proposal — Ownership and lifecycle
+summary: Earlier proposal for actor isolation, errors, submissions, and disposal in the superseded Swift runtime.
 websitePath: /native/macos/lifecycle
 keywords: macos, metal, swift, vgpu, ownership, actor, concurrency, error, submission, settled, dispose, lifetime
 relatedSymbols:
@@ -11,11 +11,13 @@ relatedSymbols:
   - VGPUError
 ---
 
-# Ownership and lifecycle
+# Earlier proposal — Ownership and lifecycle
+
+> Warning: This page preserves the earlier Swift-runtime proposal, which the direct Metal workflow
+> replaced. Its object graph, submission, and disposal APIs are not current commitments. Start with
+> [macOS](/native/macos) for the application-owned Metal responsibility boundary.
 
 One owner controls a `VGPU` context and every live object created from it. View integration normally uses `@MainActor`; offscreen work can use an application-defined actor. Encoding stays synchronous inside that owner while Metal execution and readback continue asynchronously.
-
-> Warning: Native macOS support is a docs-first API proposal. The Swift APIs on this page are not implemented yet.
 
 ## Choose one isolation domain
 

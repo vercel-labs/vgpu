@@ -13,10 +13,11 @@ Write shader behavior in WGSL. Your Swift code chooses the vertex data, target f
 and commands. The generated package connects the compiled shader functions to that native code;
 it does not introduce an effect, frame, or renderer object.
 
-> Warning: Native build tooling is under development and no native command is published yet.
+> Warning: Native build tooling is under development. The `vgpu native` shim exists, but its
+> operational companion and complete installed workflow are not published yet.
 > This guide defines the first compiler-to-render example. The build input below is the proposed
-> command configuration; it is exercised through the internal compiler adapter until the command
-> is available. The compiler also supports the fixed uniform profile described in
+> command configuration; it is exercised through the internal compiler adapter until the companion
+> workflow is available. The compiler also supports the fixed uniform profile described in
 > [Pack uniforms for Metal](/native/macos/metal/uniforms).
 
 ## Share shader code

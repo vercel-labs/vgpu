@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: bda83ded843ce67388485b5dc73b165e1595d4d3
-generatedAt: 2026-09-08T21:25:34.509Z
+gitSha: 90da4fd800edc024b37a95862a0479c626c88ce3
+generatedAt: 2026-09-08T22:26:37.072Z
 ---
 
 # vgpu
@@ -55,14 +55,14 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Quickstart: Browser** — In this quickstart you run an ONNX model with ONNX Runtime Web's WebGPU execution provider and consume its output with vgpu shaders — on one shared…  `references/guides/ml-browser.docs.md`
 - **Buffers & ownership** — ts export interface InitOptions { readonly adapter?: VGPUAdapter; / Never set: adoption lives in initFromDevice(device).  `references/guides/ml-buffers.docs.md`
 - **Quickstart: Node** — In this quickstart you run the same integration in Node, with Dawn providing WebGPU.  `references/guides/ml-node.docs.md`
-- **Native** — Start with Load Metal functions.  `references/guides/native.docs.md`
-- **macOS** — Start with Render WGSL with Metal to compile imported WGSL and draw with an application-owned pipeline.  `references/guides/native-macos.docs.md`
-- **Generated artifacts** — One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection.  `references/guides/native-macos-artifacts.docs.md`
-- **Bindings and generated types** — vgpu native build turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles.  `references/guides/native-macos-bindings.docs.md`
-- **Build and verify** — Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison.  `references/guides/native-macos-build.docs.md`
-- **Compare WebGPU and Metal** — native compare renders an explicit fixture through vgpu/node and the generated Metal package.  `references/guides/native-macos-compare.docs.md`
-- **GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
-- **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
+- **Native** — Use vgpu's WGSL module system with native GPU code.  `references/guides/native.docs.md`
+- **macOS** — Generate a Swift package from WGSL modules, then use its functions and bindings with Metal.  `references/guides/native-macos.docs.md`
+- **Earlier proposal — Generated artifacts** — One native configuration produces one Swift module, one semantic program contract, and one selected Metal projection.  `references/guides/native-macos-artifacts.docs.md`
+- **Earlier proposal — Bindings and generated types** — vgpu native build turns reflected WGSL types and bindings into ordinary Swift values and typed vgpu resource handles.  `references/guides/native-macos-bindings.docs.md`
+- **Earlier proposal — Build and verify** — Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison.  `references/guides/native-macos-build.docs.md`
+- **Earlier proposal — Compare WebGPU and Metal** — native compare renders an explicit fixture through vgpu/node and the generated Metal package.  `references/guides/native-macos-compare.docs.md`
+- **Earlier proposal — GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
+- **Earlier proposal — Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
 - **Bind Metal buffers** — The generated binding helper connects application-owned buffers to a program's Metal slots.  `references/guides/native-macos-metal-bindings.docs.md`
 - **Dispatch WGSL compute** — A generated compute program exposes a Metal function, its WGSL workgroup size, and helpers for binding its resources.  `references/guides/native-macos-metal-compute-dispatch.docs.md`
 - **Encode native indirect dispatch** — An application can keep Metal command encoding outside vgpu.  `references/guides/native-macos-metal-compute-indirect-dispatch.docs.md`
@@ -77,10 +77,10 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **Publish generated packages** — A generated package contains Swift code and a compiled library that must agree.  `references/guides/native-macos-metal-tooling-publication.docs.md`
 - **Resolve shader inputs** — A native build uses the configured entry shaders and every module they import.  `references/guides/native-macos-metal-tooling-sources.docs.md`
 - **Pack uniforms for Metal** — A WGSL uniform describes bytes, not a Swift memory layout.  `references/guides/native-macos-metal-uniforms.docs.md`
-- **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
-- **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`
-- **Resources and Metal interop** — Resources created by one VGPU context have that context's identity.  `references/guides/native-macos-resources.docs.md`
-- **SwiftUI and MetalKit** — View integration belongs above the rendering primitives.  `references/guides/native-macos-views.docs.md`
+- **Earlier proposal — Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
+- **Earlier proposal — Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`
+- **Earlier proposal — Resources and Metal interop** — Resources created by one VGPU context have that context's identity.  `references/guides/native-macos-resources.docs.md`
+- **Earlier proposal — SwiftUI and MetalKit** — View integration belongs above the rendering primitives.  `references/guides/native-macos-views.docs.md`
 - **Using vgpu with Next.js and other bundlers** — effect(gpu, source) takes WGSL as a string, so nothing forces you to use a bundler loader.  `references/guides/nextjs.docs.md`
 - **Using vgpu without a bundler** — effect(gpu, source) and draw(gpu, { shader }) take WGSL as a plain string, so nothing forces you to use a bundler.  `references/guides/no-bundler.docs.md`
 - **Optimize a pass** — Optimize one pass by first deciding what changes every frame.  `references/guides/optimize-pass.docs.md`

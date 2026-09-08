@@ -12,8 +12,9 @@ array's visible length is one example. Preparing a binding set keeps its ranges 
 together so native code does not accidentally combine a new range with an old size table.
 
 > Warning: Native tests on Apple silicon execute both the prepared helper and manual upload path
-> with the exact WGSL from the dispatch guide. The package and build commands are not published
-> yet. A separate [indirect dispatch example](/native/macos/metal/compute/indirect-dispatch) tests
+> with the exact WGSL from the dispatch guide. The command shim exists; the generated package,
+> operational companion, and complete installed workflow are not published yet. A separate
+> [indirect dispatch example](/native/macos/metal/compute/indirect-dispatch) tests
 > a bounded native command-buffer integration.
 
 ## Prepare one binding snapshot

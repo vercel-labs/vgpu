@@ -13,8 +13,9 @@ A generated package contains Swift code and a compiled library that must agree. 
 them together, then replaces the output directory as one operation.
 
 > Warning: This is the docs-first publication contract. The native lock helper is tested, but the
-> complete publishing transaction and installed build command are not implemented yet. Passing a
-> lock test does not establish safe staging, replacement, or crash recovery.
+> complete publishing transaction and operational build companion are not implemented yet. The
+> command shim exists; passing a lock test does not establish safe staging, replacement, or crash
+> recovery.
 
 ## Reserve the destination
 

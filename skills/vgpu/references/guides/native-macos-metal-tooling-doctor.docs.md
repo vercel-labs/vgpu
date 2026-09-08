@@ -16,8 +16,9 @@ npx vgpu native doctor
 ```
 
 > Warning: The internal diagnostic is implemented and tested with the pinned worker and Apple's
-> offline compiler. The native doctor command and installable tooling are not available yet.
-> These checks do not establish a release compatibility matrix.
+> offline compiler. The `vgpu native doctor` grammar and lazy dispatch exist, but the operational
+> companion and installable workflow are not available yet. These checks do not establish a
+> release compatibility matrix.
 
 The command needs no `vgpu.native.json`, does not read project shaders, and writes no generated
 package. It reports evidence and a suggested next action for each failed prerequisite.

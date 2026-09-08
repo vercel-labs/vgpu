@@ -13,7 +13,8 @@ A WGSL uniform describes bytes, not a Swift memory layout. The generated package
 ordinary Swift value and a binding-specific packer. You decide where the bytes live and when the
 GPU can read them.
 
-> Warning: Native build tooling is under development and no native command is published yet.
+> Warning: Native build tooling is under development. The `vgpu native` shim exists, but its
+> operational companion and complete installed workflow are not published yet.
 > This example is tested through the internal compiler adapter: WGSL reflection, generated Swift
 > packing and bindings, and a native render pass with GPU pixel readback. The current profile
 > covers fixed uniform structs with flat `f32`, `vec2f`, `vec3f`, and `vec4f` members.

@@ -1,13 +1,15 @@
 ---
-title: "GPU-driven drawing"
-description: "Let compute produce draw arguments that a later render submission consumes without a CPU readback."
+title: "Earlier proposal — GPU-driven drawing"
+description: "Earlier proposal for GPU-driven drawing through the superseded Swift runtime and submission API."
 ---
+
+> Warning: This page preserves the earlier Swift-runtime proposal, which the direct Metal workflow
+> replaced. Its storage, draw, and submission wrappers are not current commitments. Start with
+> [Encode native indirect dispatch](/native/macos/metal/compute/indirect-dispatch) for the tested native pattern.
 
 An indirect draw reads its vertex and instance counts from a buffer. A compute program can write
 that buffer, then a render submission can consume it without copying the counts back to Swift.
 This keeps culling, compaction, and variable workloads on the GPU.
-
-> Warning: Native macOS support is a docs-first API proposal. The Swift APIs on this page are not implemented yet.
 
 ## Create storage for indirect arguments
 
