@@ -16,6 +16,8 @@ export interface MetalPublicationSession {
 
 export interface MetalPublicationSessionInput {
   readonly parentPath: string;
+  /** Internal opt-in after compilation/preflight; created container directories are retained. */
+  readonly createParentDirectories?: boolean;
   readonly environment?: NodeJS.ProcessEnv;
   readonly signal?: AbortSignal;
 }
@@ -59,7 +61,8 @@ export class MetalPublicationSessionCleanupError extends MetalPublicationSession
 }
 
 /**
- * Lock-only internal session; this does not authorize or perform publication.
+ * Internal parent/lock session; no staging, ownership authorization, or publication.
+ * Missing container creation requires an explicit opt-in after build preflight.
  * The callback must honor session.signal and finish its cleanup before settling.
  * Cancellation does not release its lock while callback work is still running.
  */
@@ -68,6 +71,7 @@ export async function withMetalPublicationSession<T>(
   callback: (session: MetalPublicationSession) => Promise<T>
 ): Promise<T> {
   const parentPath = input.parentPath;
+  const createParentDirectories = input.createParentDirectories === true;
   const environment = { ...(input.environment ?? process.env) };
   environment.TMPDIR = resolve(environment.TMPDIR ?? tmpdir());
   if (environment.DEVELOPER_DIR !== undefined)
@@ -94,7 +98,7 @@ export async function withMetalPublicationSession<T>(
     typeof parentPath !== "string" ||
     !isAbsolute(parentPath) ||
     resolve(parentPath) !== parentPath ||
-    parentPath.includes("\0")
+    /[\u0000\uD800-\uDFFF]/u.test(parentPath)
   )
     throw new MetalPublicationSessionError(
       "unsafe-parent",
@@ -116,7 +120,11 @@ export async function withMetalPublicationSession<T>(
     controller.signal.throwIfAborted();
     const child = spawn(
       executable,
-      ["vgpu-publication-session/v1", parentPath],
+      [
+        "vgpu-publication-session/v1",
+        parentPath,
+        createParentDirectories ? "create-parents" : "existing-parent",
+      ],
       { env: environment, stdio: ["pipe", "pipe", "pipe"] }
     );
     let spawnError: Error | undefined;
