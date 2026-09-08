@@ -26,7 +26,7 @@ export function checkedSnapshot(value: unknown): ShaderGraphSnapshot {
     if (totalBytes > graphLimits.totalBytes) throw new RangeError("Shader graph exceeds 32 MiB");
     if (module.source.includes("\0") || Buffer.from(module.source, "utf8").toString("utf8") !== module.source) throw new TypeError(`Snapshot source ${id} must be valid UTF-8 without NUL bytes`);
     const imports = Object.fromEntries(Object.entries(record(module.imports, `snapshot imports ${id}`)).map(([specifier, target]) => [specifier, moduleId(target)]));
-    modules[id] = { source: module.source, imports };
+    modules[id] = Object.freeze({ source: module.source, imports: Object.freeze(imports) });
   }
   for (const id of Object.values(entries)) if (!Object.hasOwn(modules, id)) throw new TypeError(`Unknown snapshot entry ${id}`);
   const inputValues = dataArray(snapshot.inputs);
@@ -40,9 +40,9 @@ export function checkedSnapshot(value: unknown): ShaderGraphSnapshot {
     seen.add(id);
     if (typeof input.physicalPath !== "string") throw new TypeError("Snapshot physicalPath must be a string");
     if (typeof input.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(input.sha256) || createHash("sha256").update(module.source).digest("hex") !== input.sha256) throw new TypeError(`Snapshot sha256 mismatch for ${id}`);
-    return { module: id, physicalPath: input.physicalPath, sha256: input.sha256 };
+    return Object.freeze({ module: id, physicalPath: input.physicalPath, sha256: input.sha256 });
   });
-  return { schemaVersion: 1, entries, modules, inputs };
+  return Object.freeze({ schemaVersion: 1, entries: Object.freeze(entries), modules: Object.freeze(modules), inputs: Object.freeze(inputs) });
 }
 
 function dataArray(value: unknown): unknown[] {

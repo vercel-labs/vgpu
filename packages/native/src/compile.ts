@@ -14,7 +14,12 @@ import {
   semanticContract,
   translationContract,
 } from "./compiler/protocol.js";
-import { resolveMetalSource, sha256 } from "./compiler/source.js";
+import {
+  copyMetalSourceInput,
+  resolveMetalSource,
+  sha256,
+  type MetalSourceInput,
+} from "./compiler/source.js";
 import { invokeTintWorker } from "./compiler/worker.js";
 import {
   validateMetalPackageInterface,
@@ -26,7 +31,7 @@ import { projectComputeStorage } from "./compiler/storage.js";
 
 export { MetalCompileError } from "./compiler/errors.js";
 
-export interface CompileMetalPackageInput {
+export type CompileMetalPackageInput = MetalSourceInput & {
   readonly moduleName: string;
   readonly programs: readonly {
     readonly name: string;
@@ -38,10 +43,9 @@ export interface CompileMetalPackageInput {
         }
       | { readonly compute: string };
   }[];
-  readonly modules: Readonly<Record<string, string>>;
   readonly workerPath: string;
   readonly signal?: AbortSignal;
-}
+};
 
 export interface CheckedMetalPackage {
   readonly moduleName: string;
@@ -102,6 +106,10 @@ async function prepareMetalPackage(
   try {
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw new TypeError("input must be a compiler input record");
+    if (Object.hasOwn(input, "modules") === Object.hasOwn(input, "snapshot"))
+      throw new TypeError(
+        "input must provide exactly one of modules or snapshot"
+      );
     validateSwiftIdentifier(input.moduleName, "moduleName");
     if (!Array.isArray(input.programs) || input.programs.length === 0)
       throw new TypeError("programs must be a nonempty array");
@@ -167,14 +175,14 @@ async function prepareMetalPackage(
             },
       }))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
-    modules: Object.assign(Object.create(null), input.modules),
+    ...copyMetalSourceInput(input),
   };
   const programs: MetalProgram[] = [];
   const sources: string[] = [];
   for (const program of input.programs) {
     const { authoredStructs, ...capsule } = await resolveMetalSource(
       program.source,
-      input.modules
+      input
     );
     const selected = hasComputeEntry(program.entryPoints)
       ? [{ stage: "compute", wgsl: program.entryPoints.compute }]

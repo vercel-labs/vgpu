@@ -20,6 +20,7 @@ import { resolveDefaultValidateMode, validateWGSL, type ValidateMode, type Valid
 
 export { reflectSource } from "./reflect-source.ts";
 export { captureShaderGraph, type CaptureShaderGraphOptions, type ShaderGraphSnapshot } from "./shader-graph-snapshot.ts";
+export { checkedSnapshot as copyShaderGraphSnapshot } from "./shader-graph-validation.ts";
 export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
 export type { ShaderSource } from "../types.ts";

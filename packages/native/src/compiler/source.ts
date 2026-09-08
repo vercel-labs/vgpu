@@ -1,17 +1,52 @@
 import { createHash } from "node:crypto";
-import { resolveShader } from "@vgpu/wgsl/runtime";
+import {
+  copyShaderGraphSnapshot,
+  resolveShader,
+  resolveShaderSnapshot,
+  type ShaderGraphSnapshot,
+} from "@vgpu/wgsl/runtime";
 import { MetalCompileError } from "./errors.js";
 
 export function sha256(text: string | Uint8Array): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+export type MetalSourceInput =
+  | {
+      readonly modules: Readonly<Record<string, string>>;
+      readonly snapshot?: never;
+    }
+  | { readonly snapshot: ShaderGraphSnapshot; readonly modules?: never };
+
+export function copyMetalSourceInput(
+  input: MetalSourceInput
+): MetalSourceInput {
+  try {
+    return Object.hasOwn(input, "snapshot")
+      ? { snapshot: copyShaderGraphSnapshot(input.snapshot) }
+      : { modules: Object.assign(Object.create(null), input.modules) };
+  } catch (cause) {
+    throw sourceError(cause);
+  }
+}
+
 export async function resolveMetalSource(
   entry: string,
-  inputModules: Readonly<Record<string, string>>
+  input: MetalSourceInput
 ) {
   try {
     assertVirtualPath(entry);
+    const snapshot = Object.hasOwn(input, "snapshot")
+      ? input.snapshot
+      : undefined;
+    const inputModules = snapshot
+      ? Object.fromEntries(
+          Object.entries(snapshot.modules).map(([name, module]) => [
+            name,
+            module.source,
+          ])
+        )
+      : input.modules!;
     const modules: Record<string, string> = Object.create(null);
     for (const name of Object.keys(inputModules).sort()) {
       assertVirtualPath(name);
@@ -25,13 +60,19 @@ export async function resolveMetalSource(
       }
       modules[name] = source;
     }
-    const resolved = await resolveShader({
-      entry,
-      modules,
-      rootDir: ".",
-      validate: false,
-      minify: false,
-    });
+    const resolved = snapshot
+      ? await resolveShaderSnapshot(snapshot, {
+          entry,
+          validate: false,
+          minify: false,
+        })
+      : await resolveShader({
+          entry,
+          modules,
+          rootDir: ".",
+          validate: false,
+          minify: false,
+        });
     if (
       resolved.deps.some((dependency) => !Object.hasOwn(modules, dependency))
     ) {
@@ -67,14 +108,18 @@ export async function resolveMetalSource(
       languageFeatures: [],
     };
   } catch (cause) {
-    throw new MetalCompileError(
-      "source",
-      `WGSL source resolution failed: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-      { cause }
-    );
+    throw sourceError(cause);
   }
+}
+
+function sourceError(cause: unknown): MetalCompileError {
+  return new MetalCompileError(
+    "source",
+    `WGSL source resolution failed: ${
+      cause instanceof Error ? cause.message : String(cause)
+    }`,
+    { cause }
+  );
 }
 
 function assertVirtualPath(value: string): void {
