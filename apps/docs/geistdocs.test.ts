@@ -105,7 +105,7 @@ describe("agent readiness metadata", () => {
     ]);
 
     const metalPages = JSON.parse(docsContent("native/macos/metal/meta.json")).pages as string[];
-    expect(metalPages).toEqual(["functions", "..."]);
+    expect(metalPages).toEqual(["functions", "rendering", "uniforms", "..."]);
 
     const macos = docsContent("native/macos/index.md");
     expect(macos).toContain("let gpu = try VGPU.metal(device: device)");

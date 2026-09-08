@@ -158,6 +158,8 @@
       "  macOS",
       "    Get started @ /native/macos",
       "    Load Metal functions @ /native/macos/metal/functions",
+      "    Render WGSL with Metal @ /native/macos/metal/rendering",
+      "    Pack uniforms for Metal @ /native/macos/metal/uniforms",
       "    Programs @ /native/macos/programs",
       "    Bindings and generated types @ /native/macos/bindings",
       "    Resources and Metal interop @ /native/macos/resources",

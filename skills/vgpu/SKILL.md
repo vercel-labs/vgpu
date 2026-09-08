@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: c343168af90a0dcb71a8a1901596b557c595c024
-generatedAt: 2026-09-08T16:54:55.011Z
+gitSha: 1a4769e395796f6ea3c97a40c7c98587cb455057
+generatedAt: 2026-09-08T17:51:27.838Z
 ---
 
 # vgpu
@@ -64,6 +64,8 @@ Writing or optimizing a shader? Read **performance-model** first, then the rest 
 - **GPU-driven drawing** — An indirect draw reads its vertex and instance counts from a buffer.  `references/guides/native-macos-gpu-driven-drawing.docs.md`
 - **Ownership and lifecycle** — One owner controls a VGPU context and every live object created from it.  `references/guides/native-macos-lifecycle.docs.md`
 - **Load Metal functions** — A generated shader package gives your Metal code access to selected shader functions without requiring a vgpu renderer.  `references/guides/native-macos-metal-functions.docs.md`
+- **Render WGSL with Metal** — Write shader behavior in WGSL.  `references/guides/native-macos-metal-rendering.docs.md`
+- **Pack uniforms for Metal** — A WGSL uniform describes bytes, not a Swift memory layout.  `references/guides/native-macos-metal-uniforms.docs.md`
 - **Programs** — A native shader module contains programs, not renderers.  `references/guides/native-macos-programs.docs.md`
 - **Rendering primitives** — Everything starts from one VGPU context.  `references/guides/native-macos-rendering.docs.md`
 - **Resources and Metal interop** — Resources created by one VGPU context have that context's identity.  `references/guides/native-macos-resources.docs.md`

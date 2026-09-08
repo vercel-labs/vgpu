@@ -123,6 +123,9 @@ executing your Metal pipeline remain Metal errors, not loading errors from this 
 
 ## Continue with Metal
 
+See [Render WGSL with Metal](/native/macos/metal/rendering) for an imported WGSL program consumed
+by an application-owned vertex descriptor, buffer, and render pipeline.
+
 Loaded functions can be used in compatible native pipelines, including multiple color outputs.
 The loader does not impose a single-color target, a frame loop, or an encoder abstraction.
 Native indirect command buffers have their own pipeline, resource, and device requirements; this
