@@ -71,16 +71,22 @@ const generatedNames = new Set(
 );
 
 export function validateMetalPackageInput(input: MetalPackageInput): void {
-  if (input === null || typeof input !== "object" || Array.isArray(input)) {
-    throw new TypeError("input must be a Metal package input record");
-  }
-  validateSwiftIdentifier(input.moduleName, "moduleName");
+  validateMetalPackageInterface(input);
   if (
     !(input.library instanceof Uint8Array) ||
     input.library.byteLength === 0
   ) {
     throw new TypeError("library must be a nonempty Uint8Array");
   }
+}
+
+export function validateMetalPackageInterface(
+  input: Pick<MetalPackageInput, "moduleName" | "programs">
+): void {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError("input must be a Metal package input record");
+  }
+  validateSwiftIdentifier(input.moduleName, "moduleName");
   if (!Array.isArray(input.programs) || input.programs.length === 0) {
     throw new TypeError("programs must be a nonempty array");
   }

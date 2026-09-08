@@ -3,6 +3,7 @@ import {
   type GeneratedMetalPackage,
   type MetalProgram,
   type MetalCompute,
+  type MetalStage,
 } from "./index.js";
 import { MetalCompileError } from "./compiler/errors.js";
 import { compileMetalLibrary } from "./compiler/metal.js";
@@ -15,7 +16,10 @@ import {
 } from "./compiler/protocol.js";
 import { resolveMetalSource, sha256 } from "./compiler/source.js";
 import { invokeTintWorker } from "./compiler/worker.js";
-import { validateSwiftIdentifier } from "./validation.js";
+import {
+  validateMetalPackageInterface,
+  validateSwiftIdentifier,
+} from "./validation.js";
 import { namespaceMsl } from "./compiler/msl.js";
 import { projectUniforms } from "./compiler/uniforms.js";
 import { projectComputeStorage } from "./compiler/storage.js";
@@ -39,10 +43,62 @@ export interface CompileMetalPackageInput {
   readonly signal?: AbortSignal;
 }
 
+export interface CheckedMetalPackage {
+  readonly moduleName: string;
+  readonly programs: readonly {
+    readonly name: string;
+    readonly stages: readonly MetalStage[];
+  }[];
+}
+
 /** Internal compiler adapter. No commands or output directories are published by this API. */
 export async function compileMetalPackage(
   input: CompileMetalPackageInput
 ): Promise<GeneratedMetalPackage> {
+  const prepared = await prepareMetalPackage(input);
+  const library = await compileMetalLibrary(prepared.sources, prepared.signal);
+  try {
+    return generateMetalPackage({
+      moduleName: prepared.moduleName,
+      programs: prepared.programs,
+      library,
+    });
+  } catch (cause) {
+    throw new MetalCompileError(
+      "validation",
+      `Generated Swift interface is invalid: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+      { cause }
+    );
+  }
+}
+
+/** Internal shader check. Does not run Apple's compiler or generate package files. */
+export async function checkMetalPackage(
+  input: CompileMetalPackageInput
+): Promise<CheckedMetalPackage> {
+  const prepared = await prepareMetalPackage(input);
+  const stages: readonly MetalStage[] = ["vertex", "fragment", "compute"];
+  return {
+    moduleName: prepared.moduleName,
+    programs: prepared.programs.map((program) => ({
+      name: program.name,
+      stages: stages.filter((stage) => Object.hasOwn(program.functions, stage)),
+    })),
+  };
+}
+
+interface PreparedMetalPackage {
+  readonly moduleName: string;
+  readonly programs: readonly MetalProgram[];
+  readonly sources: readonly string[];
+  readonly signal?: AbortSignal;
+}
+
+async function prepareMetalPackage(
+  input: CompileMetalPackageInput
+): Promise<PreparedMetalPackage> {
   try {
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw new TypeError("input must be a compiler input record");
@@ -236,13 +292,8 @@ export async function compileMetalPackage(
       compute,
     });
   }
-  const library = await compileMetalLibrary(sources, input.signal);
   try {
-    return generateMetalPackage({
-      moduleName: input.moduleName,
-      programs,
-      library,
-    });
+    validateMetalPackageInterface({ moduleName: input.moduleName, programs });
   } catch (cause) {
     throw new MetalCompileError(
       "validation",
@@ -252,6 +303,12 @@ export async function compileMetalPackage(
       { cause }
     );
   }
+  return {
+    moduleName: input.moduleName,
+    programs,
+    sources,
+    signal: input.signal,
+  };
 }
 
 function hasComputeEntry(

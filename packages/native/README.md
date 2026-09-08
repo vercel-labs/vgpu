@@ -20,6 +20,10 @@ Physical layouts and stage mappings come from checked compiler metadata; the res
 authored struct names, not physical offsets. Other resource kinds, indirect execution, command
 installation, and atomic output publication remain separate integration work.
 
+The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
+interface validation as compilation, but returns only a program/stage summary. It does not invoke
+Apple's offline compiler or generate package files. This is an internal seam, not an installed CLI.
+
 The generated consumer API is documented in
 [Load Metal functions](../../docs/topics/native/macos/metal/native-macos-metal-functions.docs.md),
 [Render WGSL with Metal](../../docs/topics/native/macos/metal/native-macos-metal-rendering.docs.md),
