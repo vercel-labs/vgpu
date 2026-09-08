@@ -52,6 +52,11 @@ npx vgpu native check
 resource layouts, and runs the pinned semantic and Metal-translation boundary. It stops before
 Apple's offline compiler and does not write the configured output.
 
+Each invocation captures the configuration and complete imported source graph once. Validation
+uses that captured input even if an editor changes a file while the compiler is running. A check
+does not inspect, create, or repair the output directory; checking a project with no generated
+package is valid.
+
 The check uses the same supported compiler profile as `build`. It does not retry a rejected shader
 with extra language features or infer missing application state. Reported locations distinguish
 resolved WGSL from authored source; the tool does not invent an original line number when no mapping
@@ -111,6 +116,11 @@ npx vgpu native verify
 `verify` checks the ownership record, supported artifact format, generated file set and hashes,
 and whether the current configuration and resolved source inputs match the recorded logical build
 inputs. It does not regenerate output or invoke Tint, `metal`, or `metallib`.
+
+Verification first captures the current project inputs, then checks the existing package's owner
+and integrity, and finally compares its recorded fingerprint with the captured inputs. A package
+can be intact and owned by the project but still stale. That result is a failure with a request to
+build again, not permission to modify the record or a claim that verification generated anything.
 
 The hidden `.vgpu-native-output.json` record belongs to the tool. It identifies the artifact format,
 owning configuration relative to the package, logical input fingerprint, and exact generated file

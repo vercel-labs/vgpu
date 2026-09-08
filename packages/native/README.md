@@ -42,7 +42,8 @@ The generated consumer API is documented in
 [Bind Metal buffers](../../docs/topics/native/macos/metal/native-macos-metal-bindings.docs.md),
 [Use multiple render targets](../../docs/topics/native/macos/metal/render/native-macos-metal-render-targets.docs.md),
 [Dispatch WGSL compute](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-dispatch.docs.md),
-and [Use prepared compute bindings](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-prepared-bindings.docs.md).
+[Use prepared compute bindings](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-prepared-bindings.docs.md),
+and [Render computed data](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-rendering.docs.md).
 Keep the guides, generated Swift, and external consumer fixtures aligned when changing the API.
 
 ## Checks
@@ -55,6 +56,10 @@ pnpm --dir packages/native test
 pnpm --dir packages/native test:native
 ```
 
+Both the workspace build and the native package build must include the publication helper's C
+source beside its compiled JavaScript. The build-time session compiles that installed source with
+the selected Xcode C compiler; the generated Swift package does not include the helper.
+
 The portable suite checks generation and input validation. The separate native suite targets
 Apple silicon and requires a Metal device, Swift tooling, and Xcode's Metal compiler component.
 Missing tool or device prerequisites fail the native suite; passing the portable suite does not
@@ -66,6 +71,8 @@ Swift draw code with GPU pixel readback, including uniforms, explicit ranges, an
 bindings, dense and sparse render targets, and compute output readback through ordinary, prepared,
 and manual binding paths. A bounded CPU-encoded indirect compute fixture also tests command replay
 and reset/re-encoding with changed prepared ranges; it is not a TypeScript render-bundle runtime.
+A private tracked buffer also passes from compute storage to a render uniform in one command
+buffer, including application-owned blits before and after the generated passes.
 Separate packing fixtures execute generated Swift against byte oracles; binder fixtures
 isolate validation and encoder atomicity. None establishes a release support matrix.
 Temporary consumers and resources are created outside the repository and cleaned up by the harness.

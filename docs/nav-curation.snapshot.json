@@ -165,6 +165,7 @@
       "    Dispatch WGSL compute @ /native/macos/metal/compute/dispatch",
       "    Use prepared compute bindings @ /native/macos/metal/compute/prepared-bindings",
       "    Encode native indirect dispatch @ /native/macos/metal/compute/indirect-dispatch",
+      "    Render computed data @ /native/macos/metal/compute/rendering",
       "    Configure a Metal package @ /native/macos/metal/tooling/configuration",
       "    Resolve shader inputs @ /native/macos/metal/tooling/sources",
       "    Check the native toolchain @ /native/macos/metal/tooling/doctor",

@@ -16,7 +16,11 @@ relatedSymbols:
 
 Native tooling separates source validation, artifact generation, integrity checks, and pixel comparison. This page covers build and verification; [Compare WebGPU and Metal](/native/macos/compare) covers parity fixtures.
 
-> Warning: Native macOS support is a docs-first API proposal. The commands and output formats on this page are not implemented yet.
+> Warning: This page preserves the superseded Swift runtime proposal, not the current command
+> contract. For WGSL and direct Metal integration, use
+> [Build and verify a Metal package](/native/macos/metal/tooling/build). The additional commands,
+> flags, runtime packages, and automatic recovery described below are not release commitments.
+> No native command is published yet.
 
 ## Check the build machine
 

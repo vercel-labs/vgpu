@@ -96,6 +96,10 @@ ownership checks.
 Filesystem roots, the home directory, the configuration directory or its ancestors, an ancestor of
 any resolved source input, and symlinked output paths are not valid destinations. These checks
 include the physical targets of input aliases and every existing component of the output path.
+Components are checked before simplifying `.` or `..`: `Link/../Generated` is rejected when `Link`
+is a symbolic link, even if the simplified destination would be safe. A regular file in that
+position is rejected too. Missing components do not end the inspection; a later `..` can return
+to an existing directory whose next component still needs checking. This preflight creates nothing.
 A valid destination boundary does not establish ownership of an existing package; replacement
 still requires the unchanged ownership and file checks above. Changing the configured output does not
 delete the previous directory. Move or remove an old package yourself after updating its consumers.
