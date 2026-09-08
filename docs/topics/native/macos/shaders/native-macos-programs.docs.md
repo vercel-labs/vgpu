@@ -237,10 +237,15 @@ The `.metallib` contains functions, not complete render pipelines. The runtime c
 pipeline state for the target where an effect or draw is used. Its target signature records exact
 color slots, depth and stencil formats, and sample count.
 
-> Warning: The public target-signature shape is not frozen yet. Sparse color attachments can use
-> indexed records or a nullable positional array; both preserve holes. The behavior for a shader
-> output whose slot has no attachment is also open: fail by default and require explicit discard
-> intent, or follow Metal's silent discard. These are Swift API decisions, not compiler mappings.
+Color formats use a positional array, matching target creation with `colors:`. Position `i`
+describes the attachment for fragment output `@location(i)`; `nil` keeps that location empty.
+For example, `[.rgba8Unorm, nil, nil, .rgba16Float]` describes attachments at locations `0` and
+`3`. Signature validation and pipeline cache keys preserve those positions instead of compacting
+the non-empty entries. See [Choose color outputs](/native/macos/rendering#choose-color-outputs).
+
+> Warning: The behavior for a shader output whose slot has no attachment remains open: fail by
+> default and require explicit discard intent, or follow Metal's silent discard. A `nil` attachment
+> describes an absent destination; it does not settle this separate output-validation policy.
 
 `VGPUTarget.signature` and `VGPUSurface.signature` return snapshots of this value. A target convenience overload reads the offscreen signature directly; a surface must be reduced to its signature before pre-warming outside a frame:
 

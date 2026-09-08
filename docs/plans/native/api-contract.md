@@ -139,6 +139,35 @@ The isolated DC1 gates validate this spelling, ownership, synchronous validation
 ordering for a 16-byte non-indexed draw. Production integration, indexed draw, and indirect
 dispatch remain open.
 
+## Color attachments and target signatures
+
+The accepted Swift shape uses `format:` for one color output and a positional `colors:` array for
+multiple outputs:
+
+```swift
+let single = try gpu.target(size: size, format: .rgba8Unorm)
+let multiple = try gpu.target(size: size, colors: [.rgba8Unorm, .rgba16Float])
+let sparse = try gpu.target(size: size, colors: [.rgba8Unorm, nil, nil, .rgba16Float])
+```
+
+Array position `i` identifies fragment output `@location(i)`. A `nil` entry means no attachment
+exists at that location and allocates no texture. Later positions keep their original indices;
+validation and cache-key construction must never compact the non-empty entries.
+`format: .rgba8Unorm` is the convenience form of `colors: [.rgba8Unorm]`.
+
+`VGPURenderTargetSignature.colors` uses the same positional array of optional formats. A signature
+describes formats and locations without owning textures; target dimensions are not part of the
+pipeline signature. `VGPUTarget.signature` and `VGPUSurface.signature` return immutable snapshots.
+
+This keeps TypeScript's positional model. The current TypeScript target constructor uses an array
+of `{ format }` records, and its signature uses an array of formats; both require consecutive
+attachments. The native proposal additionally represents empty slots with `nil`. This decision
+does not change the TypeScript API, compiler semantic contract, or Metal projection.
+
+An absent attachment is distinct from disabling writes to an existing attachment. The policy for
+a shader that writes to an absent attachment remains open. Choosing this representation records
+the API contract; it does not establish a passing multiple-output runtime gate.
+
 ## Artifact contract to freeze first
 
 `NativeArtifact` is a build manifest, not an extension of `ShaderSource`. One configuration

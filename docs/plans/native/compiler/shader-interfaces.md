@@ -1,8 +1,8 @@
 # Native shader-interface contract
 
 Status: the semantic and Metal artifact shapes are accepted. The exact compiler-worker handshake is
-integrated and has passed its C1 protocol gate. Render-target API choices for sparse attachments
-remain open.
+integrated and has passed its C1 protocol gate. Render targets use positional optional color
+formats; the policy for a shader output with no attachment remains open.
 
 ## Keep three different views
 
@@ -219,11 +219,12 @@ shapes, the exact direct worker's full corpus through that offline boundary, gen
 runtime binding, the production package/runtime contract, and broader pixel/buffer parity remain
 open.
 
-Two public render-target decisions remain intentionally outside this contract:
+The public render-target API uses a positional array of optional color formats. Position `i`
+corresponds to fragment `@location(i)`; `nil` preserves an empty slot without compacting later
+indices. Single-output target creation retains the `format:` convenience. This accepted choice
+uses the existing exact shader locations and requires no compiler-contract change. See
+[Color attachments and target signatures](../api-contract.md#color-attachments-and-target-signatures).
 
-- indexed attachment records versus a nullable positional array for sparse targets; and
-- silent discard for a shader output with no attachment versus failure by default with explicit
-  discard intent.
-
-The internal shader contract supports either public API. No public target shape should be frozen
-until those choices are resolved.
+One public policy remains outside this contract: silent discard for a shader output with no
+attachment versus failure by default with explicit discard intent. A `nil` attachment identifies
+an absent destination without deciding whether an active shader output may target it.

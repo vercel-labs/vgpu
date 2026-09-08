@@ -123,6 +123,42 @@ The `VGPUTarget` keeps stable identity and publishes a new texture generation wh
 
 Readback and texture-generation ownership are covered in [Resources and Metal interop](/native/macos/resources).
 
+### Choose color outputs
+
+Use `format:` for a single color output at `@location(0)`:
+
+```swift
+let output = try gpu.target(
+  size: surface.size,
+  format: .rgba8Unorm
+)
+```
+
+Use `colors:` when a draw writes multiple outputs. Each array position matches the fragment
+shader's `@location` with the same index:
+
+```swift
+let output = try gpu.target(
+  size: surface.size,
+  colors: [.rgba8Unorm, .rgba16Float]
+)
+```
+
+This creates color attachments at locations `0` and `1`. To leave a location unused, keep its
+position with `nil`:
+
+```swift
+let output = try gpu.target(
+  size: surface.size,
+  colors: [.rgba8Unorm, nil, nil, .rgba16Float]
+)
+```
+
+Use this target with a shader that declares color outputs at locations `0` and `3`. A `nil` entry creates no texture; it does not
+renumber later attachments or mean a transparent clear color. The target's signature preserves
+the same positional mapping. `format: .rgba8Unorm` is the single-output convenience for
+`colors: [.rgba8Unorm]`.
+
 ## Create effects
 
 An effect is a full-screen fragment program. Create as many instances as you need from one generated descriptor:

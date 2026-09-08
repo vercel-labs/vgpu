@@ -210,6 +210,13 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
   separately limits Swift source and binary drift.
 - Artifact format requirements contain only formats fixed by shader semantics. Sampled texture and
   render-target formats, sample counts, and render state are runtime inputs.
+- Offscreen target creation keeps `format:` for a single color output and uses a positional
+  `colors:` array of optional formats for multiple outputs. Position `i` maps to fragment
+  `@location(i)`; `nil` leaves that attachment absent without allocating a texture or renumbering
+  later slots. Target signatures use the same mapping. This preserves TypeScript's positional
+  model while adding explicit holes to the native API; the current TypeScript target API accepts
+  only consecutive formats. The separate policy for a shader output with no attachment remains
+  open. See [Color attachments and target signatures](./api-contract.md#color-attachments-and-target-signatures).
 
 ## Accepted architecture
 
@@ -481,13 +488,10 @@ Architectural rationale lives in [architecture](./architecture.md), API mappings
 6. The first-alpha Metal format and limit matrix. A device probe must combine Metal-family tables,
    direct device limits, actual resource creation, and representative pipeline compilation. This is
    an empirical compatibility result; there is no user-facing API tie.
-7. The Swift representation for sparse color attachments. Indexed records make the semantic slot
-   explicit and remain extensible; a nullable positional array resembles WebGPU more closely. Both
-   preserve holes correctly, so this is a public API choice rather than a compiler question.
-8. The behavior when a shader writes a color location with no attachment. Metal silently discards
+7. The behavior when a shader writes a color location with no attachment. Metal silently discards
    the result. The safer proposal fails by default and requires explicit discard intent, while the
    permissive proposal follows Metal's omission behavior.
-9. The public representation of structured error details and authored-source paths: typed details
+8. The public representation of structured error details and authored-source paths: typed details
    per error case versus an extensible payload, and structured path components versus one rendered
    diagnostic path. The isolated lifecycle kernel proves deterministic mapping for representative
    codes and messages while keeping backend metadata package-only; it does not make message text or
