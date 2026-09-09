@@ -1123,6 +1123,88 @@ static int cleanup_owned_package(int parent, const struct owned_package *old) {
   return 0;
 }
 
+struct retained_recovery_tree {
+  const char *root_name;
+  const char *module_name;
+  const struct stat *root_identity;
+  int root;
+  int sources;
+  int module;
+  int resources;
+  struct stat sources_identity;
+  struct stat module_identity;
+  struct stat resources_identity;
+};
+
+/* Retain only the fixed generated tree; the caller controls proof selection and final checks. */
+static const char *read_recovery_tree(int parent, const struct stat *parent_identity,
+                                      int require_same_device, struct artifact files[4],
+                                      struct retained_recovery_tree *tree) {
+  tree->root = open_child_directory(parent, tree->root_name);
+  if (tree->root < 0) return "conflict";
+  if (require_same_device &&
+      directory_edge(parent, tree->root_name, tree->root, tree->root_identity) != 0)
+    return "conflict";
+  tree->sources = open_child_directory(tree->root, "Sources");
+  if (tree->sources < 0 || fstat(tree->sources, &tree->sources_identity) != 0)
+    return "invalid-stage";
+  if (require_same_device && tree->sources_identity.st_dev != parent_identity->st_dev) {
+    errno = EXDEV;
+    return "invalid-stage";
+  }
+  tree->module = open_child_directory(tree->sources, tree->module_name);
+  if (tree->module < 0 || fstat(tree->module, &tree->module_identity) != 0)
+    return "invalid-stage";
+  if (require_same_device && tree->module_identity.st_dev != parent_identity->st_dev) {
+    errno = EXDEV;
+    return "invalid-stage";
+  }
+  tree->resources = open_child_directory(tree->module, "Resources");
+  if (tree->resources < 0 || fstat(tree->resources, &tree->resources_identity) != 0)
+    return "invalid-stage";
+  if (require_same_device && tree->resources_identity.st_dev != parent_identity->st_dev) {
+    errno = EXDEV;
+    return "invalid-stage";
+  }
+  const int directories[] = { tree->root, tree->module, tree->resources, tree->root };
+  const char *names[] = {
+    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  };
+  for (int index = 0; index < 4; index++) {
+    struct stat identity;
+    if (fstatat(directories[index], names[index], &identity, AT_SYMLINK_NOFOLLOW) != 0)
+      return "invalid-stage";
+    if (!S_ISREG(identity.st_mode) || identity.st_nlink != 1 ||
+        (unsigned long long)identity.st_size != files[index].length) {
+      errno = ESTALE;
+      return "invalid-stage";
+    }
+    if (require_same_device && identity.st_dev != parent_identity->st_dev) {
+      errno = EXDEV;
+      return "invalid-stage";
+    }
+    files[index].device = identity.st_dev;
+    files[index].inode = identity.st_ino;
+  }
+  if (verify_tree(parent, tree->root_name, tree->root, tree->root_identity,
+                  tree->sources, &tree->sources_identity, tree->module, tree->module_name,
+                  &tree->module_identity, tree->resources, &tree->resources_identity, files) != 0)
+    return "invalid-stage";
+  return NULL;
+}
+
+static int recovery_tree_edges(int parent, const struct retained_recovery_tree *tree) {
+  return directory_edge(parent, tree->root_name, tree->root, tree->root_identity) != 0 ||
+         directory_edge(tree->root, "Sources", tree->sources, &tree->sources_identity) != 0 ||
+         directory_edge(tree->sources, tree->module_name, tree->module, &tree->module_identity) != 0 ||
+         directory_edge(tree->module, "Resources", tree->resources, &tree->resources_identity) != 0 ? -1 : 0;
+}
+
+static int close_recovery_tree(const struct retained_recovery_tree *tree) {
+  return close(tree->resources) != 0 || close(tree->module) != 0 ||
+         close(tree->sources) != 0 || close(tree->root) != 0 ? -1 : 0;
+}
+
 /* The caller has joined this locked journal to its original prepared receipt. */
 static int verify_recovery(int parent, const char *parent_path,
                                      const struct stat *parent_identity,
@@ -1272,77 +1354,25 @@ static int verify_recovery(int parent, const char *parent_path,
     errno = ESTALE;
     return fail("conflict");
   }
-  int root = open_child_directory(parent, root_name);
-  if (root < 0) return fail("conflict");
-  if (request->mode == RECONCILE_OWNED_PUBLISHED &&
-      directory_edge(parent, root_name, root, &candidate->identity) != 0)
-    return fail("conflict");
-  struct stat sources_identity;
-  struct stat module_identity;
-  struct stat resources_identity;
-  int sources = open_child_directory(root, "Sources");
-  if (sources < 0 || fstat(sources, &sources_identity) != 0)
-    return fail("invalid-stage");
-  if (request->mode == RECONCILE_OWNED_PUBLISHED &&
-      sources_identity.st_dev != parent_identity->st_dev) {
-    errno = EXDEV;
-    return fail("invalid-stage");
-  }
-  int module = open_child_directory(sources, request->module);
-  if (module < 0 || fstat(module, &module_identity) != 0)
-    return fail("invalid-stage");
-  if (request->mode == RECONCILE_OWNED_PUBLISHED &&
-      module_identity.st_dev != parent_identity->st_dev) {
-    errno = EXDEV;
-    return fail("invalid-stage");
-  }
-  int resources = open_child_directory(module, "Resources");
-  if (resources < 0 || fstat(resources, &resources_identity) != 0)
-    return fail("invalid-stage");
-  if (request->mode == RECONCILE_OWNED_PUBLISHED &&
-      resources_identity.st_dev != parent_identity->st_dev) {
-    errno = EXDEV;
-    return fail("invalid-stage");
-  }
-  const int directories[] = { root, module, resources, root };
-  const char *names[] = {
-    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  struct retained_recovery_tree tree = {
+    .root_name = root_name, .module_name = request->module, .root_identity = &candidate->identity,
+    .root = -1, .sources = -1, .module = -1, .resources = -1
   };
-  for (int index = 0; index < 4; index++) {
-    struct stat identity;
-    if (fstatat(directories[index], names[index], &identity, AT_SYMLINK_NOFOLLOW) != 0)
-      return fail("invalid-stage");
-    if (!S_ISREG(identity.st_mode) || identity.st_nlink != 1 ||
-        (unsigned long long)identity.st_size != files[index].length) {
-      errno = ESTALE;
-      return fail("invalid-stage");
-    }
-    if (request->mode == RECONCILE_OWNED_PUBLISHED && identity.st_dev != parent_identity->st_dev) {
-      errno = EXDEV;
-      return fail("invalid-stage");
-    }
-    files[index].device = identity.st_dev;
-    files[index].inode = identity.st_ino;
-  }
-  if (verify_tree(parent, root_name, root, &candidate->identity,
-                  sources, &sources_identity, module, request->module, &module_identity,
-                  resources, &resources_identity, files) != 0)
-    return fail("invalid-stage");
+  const char *tree_error = read_recovery_tree(parent, parent_identity,
+                                              request->mode == RECONCILE_OWNED_PUBLISHED, files, &tree);
+  if (tree_error != NULL) return fail(tree_error);
   if (!parent_matches(parent_path, parent_identity) ||
       verify_bytes(parent, JOURNAL_NAME, journal_identity, journal, journal_length) != 0 ||
       recovery_name_matches(parent, STAGE_NAME, stage) != 0 ||
       recovery_name_matches(parent, UPDATE_NAME, update) != 0 ||
       recovery_name_matches(parent, request->destination, destination) != 0 ||
-      directory_edge(parent, root_name, root, &candidate->identity) != 0 ||
-      directory_edge(root, "Sources", sources, &sources_identity) != 0 ||
-      directory_edge(sources, request->module, module, &module_identity) != 0 ||
-      directory_edge(module, "Resources", resources, &resources_identity) != 0 ||
+      recovery_tree_edges(parent, &tree) != 0 ||
       (old_destination >= 0 &&
        (directory_edge(parent, request->destination, old_destination,
                        &destination->identity) != 0 ||
         exact_directory(old_destination, NULL, 0) != 0)))
     return fail("conflict");
-  if (close(resources) != 0 || close(module) != 0 || close(sources) != 0 || close(root) != 0 ||
+  if (close_recovery_tree(&tree) != 0 ||
       (old_destination >= 0 && close(old_destination) != 0))
     return fail("helper-failed");
   char receipt[JOURNAL_LIMIT];
