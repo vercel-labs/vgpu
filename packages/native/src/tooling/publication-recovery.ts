@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { validateSwiftIdentifier } from "../validation.js";
 
 const journalName = ".vgpu-native-publication.json";
@@ -11,12 +11,31 @@ type Identity = Readonly<{ device: string; inode: string }>;
 type ObservedEntry = Identity &
   Readonly<{ kind: "directory" | "file" | "symlink" | "other" }>;
 
+type PlannedFile = Readonly<{
+  role: string;
+  path: string;
+  length: number;
+  sha256: string;
+}>;
+
 export type MetalPublicationPlan =
   | Readonly<{ renameMode: "excl"; expectedDestination: "missing" }>
   | Readonly<{
       renameMode: "replace-empty";
       expectedDestination: "empty";
       oldDestination: Identity;
+    }>
+  | Readonly<{
+      renameMode: "swap";
+      expectedDestination: "owned";
+      oldDestination: Identity;
+      oldModuleName: string;
+      oldRecordSHA256: string;
+      oldFiles: readonly PlannedFile[];
+      ownership: Readonly<{
+        ownerConfiguration: string;
+        configuration: Identity;
+      }>;
     }>;
 
 /** Recognize owned plan metadata; filesystem checks still determine publication authority. */
@@ -28,7 +47,11 @@ export function parseMetalPublicationPlan(
   if (
     !decimal(parent?.device) ||
     !decimal(parent?.inode) ||
-    (stage !== undefined && (!decimal(stage?.device) || !decimal(stage?.inode)))
+    (stage !== undefined &&
+      (!decimal(stage?.device) ||
+        !decimal(stage?.inode) ||
+        stage.device !== parent.device ||
+        stage.inode === parent.inode))
   )
     return undefined;
   if (
@@ -41,9 +64,7 @@ export function parseMetalPublicationPlan(
       expectedDestination: "missing",
     });
   if (
-    !keys(value, ["renameMode", "expectedDestination", "oldDestination"]) ||
-    value.renameMode !== "replace-empty" ||
-    value.expectedDestination !== "empty" ||
+    !record(value) ||
     !identity(value.oldDestination) ||
     value.oldDestination.device !== parent.device ||
     value.oldDestination.inode === parent.inode ||
@@ -52,12 +73,69 @@ export function parseMetalPublicationPlan(
       value.oldDestination.inode === stage.inode)
   )
     return undefined;
+  const oldDestination = Object.freeze({ ...value.oldDestination });
+  if (
+    keys(value, ["renameMode", "expectedDestination", "oldDestination"]) &&
+    value.renameMode === "replace-empty" &&
+    value.expectedDestination === "empty"
+  )
+    return Object.freeze({
+      renameMode: "replace-empty",
+      expectedDestination: "empty",
+      oldDestination,
+    });
+  if (
+    !keys(value, [
+      "renameMode",
+      "expectedDestination",
+      "oldDestination",
+      "oldModuleName",
+      "oldRecordSHA256",
+      "oldFiles",
+      "ownership",
+    ]) ||
+    value.renameMode !== "swap" ||
+    value.expectedDestination !== "owned" ||
+    !component(value.oldModuleName, 255) ||
+    !preparedFiles(
+      value.oldFiles,
+      value.oldModuleName,
+      value.oldRecordSHA256
+    ) ||
+    !keys(value.ownership, ["ownerConfiguration", "configuration"]) ||
+    !identity(value.ownership.configuration) ||
+    typeof value.ownership.ownerConfiguration !== "string"
+  )
+    return undefined;
+  const owner = value.ownership.ownerConfiguration;
+  if (
+    !owner.startsWith("../") ||
+    owner.endsWith("/") ||
+    posix.basename(owner) === ".." ||
+    posix.normalize(owner) !== owner ||
+    Buffer.byteLength(owner) > 1023 ||
+    /[\\\u0000-\u001f\u007f\uD800-\uDFFF]/u.test(owner)
+  )
+    return undefined;
+  try {
+    validateSwiftIdentifier(value.oldModuleName, "oldModuleName");
+  } catch {
+    return undefined;
+  }
   return Object.freeze({
-    renameMode: "replace-empty",
-    expectedDestination: "empty",
-    oldDestination: Object.freeze({
-      device: value.oldDestination.device,
-      inode: value.oldDestination.inode,
+    renameMode: "swap",
+    expectedDestination: "owned",
+    oldDestination,
+    oldModuleName: value.oldModuleName,
+    oldRecordSHA256: value.oldRecordSHA256 as string,
+    oldFiles: Object.freeze(
+      (value.oldFiles as PlannedFile[]).map((file) =>
+        Object.freeze({ ...file })
+      )
+    ),
+    ownership: Object.freeze({
+      ownerConfiguration: owner,
+      configuration: Object.freeze({ ...value.ownership.configuration }),
     }),
   });
 }
@@ -299,6 +377,10 @@ function preparedFiles(
       return false;
   }
   return true;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function keys(

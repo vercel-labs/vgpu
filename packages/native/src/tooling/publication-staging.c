@@ -37,6 +37,28 @@ struct artifact {
   char written_hash[65];
 };
 
+struct owned_package {
+  int root;
+  int sources;
+  int module;
+  int resources;
+  int record_descriptor;
+  struct stat root_identity;
+  struct stat sources_identity;
+  struct stat module_identity;
+  struct stat resources_identity;
+  struct stat record_identity;
+  char module_name[PATH_MAX];
+  char owner[PATH_MAX];
+  const char *configuration_path;
+  unsigned long long configuration_device;
+  unsigned long long configuration_inode;
+  char record[RECORD_LIMIT + 1];
+  size_t record_length;
+  char record_hash[65];
+  struct artifact files[4];
+};
+
 static int fail(const char *code) {
   int error = errno;
   printf("{\"schemaVersion\":1,\"kind\":\"error\",\"code\":\"%s\",\"errno\":%d}\n",
@@ -246,10 +268,46 @@ static int append_json_string(char *buffer, size_t capacity, size_t *used,
   return append_json(buffer, capacity, used, "\"");
 }
 
+static int append_owned_plan(char *buffer, size_t capacity, size_t *used,
+                              const struct owned_package *old) {
+  char swift[PATH_MAX];
+  char library[PATH_MAX];
+  if (snprintf(swift, sizeof(swift), "Sources/%s/Shaders.generated.swift", old->module_name) >=
+        (int)sizeof(swift) ||
+      snprintf(library, sizeof(library), "Sources/%s/Resources/Shaders.metallib", old->module_name) >=
+        (int)sizeof(library)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  const char *paths[] = { "Package.swift", swift, library, ".vgpu-native-output.json" };
+  if (append_json(buffer, capacity, used,
+      "{\"renameMode\":\"swap\",\"expectedDestination\":\"owned\","
+      "\"oldDestination\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"oldModuleName\":",
+      (unsigned long long)old->root_identity.st_dev,
+      (unsigned long long)old->root_identity.st_ino) != 0 ||
+      append_json_string(buffer, capacity, used, old->module_name) != 0 ||
+      append_json(buffer, capacity, used, ",\"oldRecordSHA256\":\"%s\",\"oldFiles\":[",
+                  old->record_hash) != 0) return -1;
+  for (int index = 0; index < 4; index++) {
+    if (append_json(buffer, capacity, used, "%s{\"role\":\"%s\",\"path\":",
+                    index == 0 ? "" : ",", roles[index]) != 0 ||
+        append_json_string(buffer, capacity, used, paths[index]) != 0 ||
+        append_json(buffer, capacity, used, ",\"length\":%llu,\"sha256\":\"%s\"}",
+                    old->files[index].length, old->files[index].hash) != 0) return -1;
+  }
+  if (append_json(buffer, capacity, used, "],\"ownership\":{\"ownerConfiguration\":") != 0 ||
+      append_json_string(buffer, capacity, used, old->owner) != 0 ||
+      append_json(buffer, capacity, used,
+                  ",\"configuration\":{\"device\":\"%llu\",\"inode\":\"%llu\"}}}",
+                  old->configuration_device, old->configuration_inode) != 0) return -1;
+  return 0;
+}
+
 static int build_journal(char *buffer, size_t capacity, const char *phase,
                          const char *transaction, const char *destination,
                          const char *module, int publishing,
                          const struct stat *old_destination_identity,
+                         const struct owned_package *owned,
                          const struct stat *parent_identity,
                          const struct stat *stage_identity,
                          const struct artifact files[4], size_t *length) {
@@ -264,7 +322,10 @@ static int build_journal(char *buffer, size_t capacity, const char *phase,
       append_json(buffer, capacity, &used, ",\"moduleName\":") != 0 ||
       append_json_string(buffer, capacity, &used, module) != 0) return -1;
   if (publishing) {
-    if (old_destination_identity != NULL) {
+    if (owned != NULL) {
+      if (append_json(buffer, capacity, &used, ",\"publication\":") != 0 ||
+          append_owned_plan(buffer, capacity, &used, owned) != 0) return -1;
+    } else if (old_destination_identity != NULL) {
       if (append_json(buffer, capacity, &used,
           ",\"publication\":{\"renameMode\":\"replace-empty\",\"expectedDestination\":\"empty\","
           "\"oldDestination\":{\"device\":\"%llu\",\"inode\":\"%llu\"}}",
@@ -746,6 +807,295 @@ static int read_reconciliation_line(char *line, size_t capacity) {
   return -1;
 }
 
+static int valid_utf8(const char *value) {
+  const unsigned char *bytes = (const unsigned char *)value;
+  size_t length = strlen(value);
+  for (size_t index = 0; index < length;) {
+    unsigned char first = bytes[index++];
+    if (first < 0x80) continue;
+    unsigned int count;
+    uint32_t point;
+    uint32_t minimum;
+    if (first >= 0xc2 && first <= 0xdf) { count = 1; point = first & 0x1f; minimum = 0x80; }
+    else if (first >= 0xe0 && first <= 0xef) { count = 2; point = first & 0x0f; minimum = 0x800; }
+    else if (first >= 0xf0 && first <= 0xf4) { count = 3; point = first & 7; minimum = 0x10000; }
+    else return 0;
+    if (length - index < count) return 0;
+    for (unsigned int next = 0; next < count; next++) {
+      unsigned char byte = bytes[index++];
+      if ((byte & 0xc0) != 0x80) return 0;
+      point = (point << 6) | (byte & 0x3f);
+    }
+    if (point < minimum || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) return 0;
+  }
+  return 1;
+}
+
+static int decode_owner(const char *hex, char owner[PATH_MAX]) {
+  size_t length = strlen(hex);
+  if (length == 0 || length % 2 != 0 || length / 2 >= PATH_MAX) return -1;
+  for (size_t index = 0; index < length / 2; index++) {
+    unsigned int value = 0;
+    for (int digit = 0; digit < 2; digit++) {
+      unsigned char byte = (unsigned char)hex[index * 2 + (size_t)digit];
+      if (byte >= '0' && byte <= '9') value = value * 16 + byte - '0';
+      else if (byte >= 'a' && byte <= 'f') value = value * 16 + byte - 'a' + 10;
+      else return -1;
+    }
+    if (value < 0x20 || value == 0x7f || value == '\\') return -1;
+    owner[index] = (char)value;
+  }
+  owner[length / 2] = '\0';
+  if (!valid_utf8(owner) || strncmp(owner, "../", 3) != 0) return -1;
+  const char *component = owner;
+  int descended = 0;
+  while (*component != '\0') {
+    const char *slash = strchr(component, '/');
+    size_t size = slash == NULL ? strlen(component) : (size_t)(slash - component);
+    if (size == 0 || (size == 1 && component[0] == '.')) return -1;
+    if (size == 2 && component[0] == '.' && component[1] == '.') {
+      if (descended || slash == NULL) return -1;
+    } else descended = 1;
+    if (slash == NULL) return 0;
+    component = slash + 1;
+  }
+  return -1;
+}
+
+static int valid_old_module(const char *module, long name_max) {
+  if (!valid_component(module, name_max) || strlen(module) >= PATH_MAX) return 0;
+  for (size_t index = 0; module[index] != '\0'; index++) {
+    unsigned char byte = (unsigned char)module[index];
+    if ((byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') || byte == '_') continue;
+    if (index != 0 && byte >= '0' && byte <= '9') continue;
+    return 0;
+  }
+  return 1;
+}
+
+static int verify_owned_owner(const struct owned_package *old) {
+  struct stat owner;
+  struct stat caller;
+  if (fstatat(old->root, old->owner, &owner, 0) != 0 ||
+      stat(old->configuration_path, &caller) != 0) return -1;
+  if (!S_ISREG(owner.st_mode) || !S_ISREG(caller.st_mode) ||
+      (unsigned long long)owner.st_dev != old->configuration_device ||
+      (unsigned long long)owner.st_ino != old->configuration_inode ||
+      !same_identity(&owner, &caller)) {
+    errno = ESTALE;
+    return -1;
+  }
+  return 0;
+}
+
+static int verify_owned_tree(int parent, const char *root_name,
+                              const struct owned_package *old) {
+  if (verify_tree(parent, root_name, old->root, &old->root_identity,
+                  old->sources, &old->sources_identity, old->module, old->module_name,
+                  &old->module_identity, old->resources, &old->resources_identity,
+                  old->files) != 0 ||
+      verify_bytes(old->root, ".vgpu-native-output.json", &old->record_identity,
+                   old->record, old->record_length) != 0 ||
+      directory_edge(parent, root_name, old->root, &old->root_identity) != 0 ||
+      directory_edge(old->root, "Sources", old->sources, &old->sources_identity) != 0 ||
+      directory_edge(old->sources, old->module_name, old->module, &old->module_identity) != 0 ||
+      directory_edge(old->module, "Resources", old->resources, &old->resources_identity) != 0)
+    return -1;
+  return 0;
+}
+
+static int owned_inspection_matches(int parent, const char *parent_path,
+                                     const struct stat *parent_identity,
+                                     const char *destination, const struct owned_package *old) {
+  if (!parent_matches(parent_path, parent_identity) ||
+      directory_edge(parent, destination, old->root, &old->root_identity) != 0 ||
+      verify_bytes(old->root, ".vgpu-native-output.json", &old->record_identity,
+                   old->record, old->record_length) != 0 ||
+      ensure_absent(parent, JOURNAL_NAME) != 0 || ensure_absent(parent, UPDATE_NAME) != 0 ||
+      ensure_absent(parent, STAGE_NAME) != 0) return -1;
+  return 0;
+}
+
+/* The only pre-intent approval: semantics belong to TS; all old bytes stay rooted here. */
+static int inspect_owned_package(int parent, const char *parent_path,
+                                   const struct stat *parent_identity,
+                                   const char *destination, const char *transaction,
+                                   long name_max, struct owned_package *old) {
+  struct stat named_record;
+  if (fstatat(old->root, ".vgpu-native-output.json", &named_record, AT_SYMLINK_NOFOLLOW) != 0)
+    return fail("conflict");
+  if (!S_ISREG(named_record.st_mode) || named_record.st_nlink != 1 ||
+      named_record.st_size <= 0 || named_record.st_size > RECORD_LIMIT) {
+    errno = EINVAL;
+    return fail("conflict");
+  }
+  old->record_descriptor = openat(old->root, ".vgpu-native-output.json",
+                                  O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+  if (old->record_descriptor < 0 || fstat(old->record_descriptor, &old->record_identity) != 0)
+    return fail("conflict");
+  if (!same_identity(&old->record_identity, &named_record) ||
+      !S_ISREG(old->record_identity.st_mode) || old->record_identity.st_nlink != 1 ||
+      old->record_identity.st_size != named_record.st_size) {
+    errno = ESTALE;
+    return fail("conflict");
+  }
+  while (old->record_length < sizeof(old->record)) {
+    ssize_t count = read(old->record_descriptor, old->record + old->record_length,
+                         sizeof(old->record) - old->record_length);
+    if (count < 0 && errno == EINTR) continue;
+    if (count < 0) return fail("conflict");
+    if (count == 0) break;
+    old->record_length += (size_t)count;
+  }
+  if (old->record_length != (size_t)old->record_identity.st_size ||
+      old->record_length > RECORD_LIMIT) {
+    errno = ESTALE;
+    return fail("conflict");
+  }
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  if (CC_SHA256(old->record, (CC_LONG)old->record_length, digest) == NULL) {
+    errno = EIO;
+    return fail("helper-failed");
+  }
+  for (size_t index = 0; index < sizeof(digest); index++)
+    snprintf(old->record_hash + index * 2, 3, "%02x", digest[index]);
+  if (owned_inspection_matches(parent, parent_path, parent_identity, destination, old) != 0)
+    return fail("conflict");
+  const size_t chunk_count = (old->record_length + RECOVERY_CHUNK_LIMIT - 1) / RECOVERY_CHUNK_LIMIT;
+  char header[JOURNAL_LIMIT];
+  size_t used = 0;
+  if (append_json(header, sizeof(header), &used,
+      "{\"schemaVersion\":1,\"kind\":\"owned-inspection\",\"transactionId\":\"%s\","
+      "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"destinationName\":",
+      transaction, (unsigned long long)parent_identity->st_dev,
+      (unsigned long long)parent_identity->st_ino) != 0 ||
+      append_json_string(header, sizeof(header), &used, destination) != 0 ||
+      append_json(header, sizeof(header), &used,
+      ",\"oldDestination\":{\"device\":\"%llu\",\"inode\":\"%llu\"},"
+      "\"record\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"nameMax\":%ld,\"pathMax\":%d,"
+      "\"length\":%zu,\"sha256\":\"%s\",\"chunkCount\":%zu}\n",
+      (unsigned long long)old->root_identity.st_dev, (unsigned long long)old->root_identity.st_ino,
+      (unsigned long long)old->record_identity.st_dev, (unsigned long long)old->record_identity.st_ino,
+      name_max, PATH_MAX - 1, old->record_length, old->record_hash, chunk_count) != 0)
+    return fail("helper-failed");
+  if (fwrite(header, 1, used, stdout) != used) return 1;
+  static const char digits[] = "0123456789abcdef";
+  for (size_t index = 0; index < chunk_count; index++) {
+    size_t offset = index * RECOVERY_CHUNK_LIMIT;
+    size_t count = old->record_length - offset < RECOVERY_CHUNK_LIMIT ?
+      old->record_length - offset : RECOVERY_CHUNK_LIMIT;
+    char hex[RECOVERY_CHUNK_LIMIT * 2 + 1];
+    for (size_t byte = 0; byte < count; byte++) {
+      unsigned char value = (unsigned char)old->record[offset + byte];
+      hex[byte * 2] = digits[value >> 4];
+      hex[byte * 2 + 1] = digits[value & 15];
+    }
+    hex[count * 2] = '\0';
+    if (printf("{\"schemaVersion\":1,\"kind\":\"owned-record-chunk\",\"index\":%zu,\"hex\":\"%s\"}\n",
+               index, hex) < 0 || fflush(stdout) != 0) return 1;
+  }
+  if (owned_inspection_matches(parent, parent_path, parent_identity, destination, old) != 0)
+    return fail("conflict");
+  if (printf("{\"schemaVersion\":1,\"kind\":\"owned-inspection-complete\",\"transactionId\":\"%s\"}\n",
+             transaction) < 0 || fflush(stdout) != 0) return 1;
+
+  char line[PATH_MAX * 3 + 512];
+  if (read_reconciliation_line(line, sizeof(line)) != 0) return fail("invalid-transfer");
+  char *parts[11];
+  char *next = line;
+  for (int index = 0; index < 11; index++) {
+    parts[index] = next;
+    char *end = strchr(next, index == 10 ? '\n' : ' ');
+    if (end == NULL || end == next || (index == 10 && end[1] != '\0')) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    *end = '\0';
+    next = end + 1;
+  }
+  unsigned long long old_device;
+  unsigned long long old_inode;
+  unsigned long long record_length;
+  if (strcmp(parts[0], "approve-owned") != 0 || strcmp(parts[1], transaction) != 0 ||
+      strcmp(parts[2], "inspection") != 0 || parse_decimal(parts[3], &old_device) != 0 ||
+      parse_decimal(parts[4], &old_inode) != 0 ||
+      parse_decimal(parts[5], &old->configuration_device) != 0 ||
+      parse_decimal(parts[6], &old->configuration_inode) != 0 ||
+      parse_decimal(parts[7], &record_length) != 0 || record_length != old->record_length ||
+      strcmp(parts[8], old->record_hash) != 0 || !valid_old_module(parts[9], name_max) ||
+      decode_owner(parts[10], old->owner) != 0 ||
+      old_device != (unsigned long long)old->root_identity.st_dev ||
+      old_inode != (unsigned long long)old->root_identity.st_ino) {
+    errno = EPROTO;
+    return fail("invalid-transfer");
+  }
+  memcpy(old->module_name, parts[9], strlen(parts[9]) + 1);
+  for (int index = 0; index < 4; index++) {
+    char role[2] = {0};
+    char trailer = '\0';
+    char canonical[128];
+    if (read_reconciliation_line(line, sizeof(line)) != 0 ||
+        sscanf(line, "old-artifact %1[0-3] %64[a-f0-9]%c", role, old->files[index].hash, &trailer) != 3 ||
+        role[0] != '0' + index || trailer != '\n' || strlen(old->files[index].hash) != 64) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    snprintf(canonical, sizeof(canonical), "old-artifact %d %s\n", index, old->files[index].hash);
+    if (strcmp(line, canonical) != 0) { errno = EPROTO; return fail("invalid-transfer"); }
+  }
+  if (strcmp(old->files[3].hash, old->record_hash) != 0) {
+    errno = EPROTO;
+    return fail("invalid-transfer");
+  }
+  if (verify_owned_owner(old) != 0) return fail("conflict");
+  old->sources = open_child_directory(old->root, "Sources");
+  if (old->sources < 0) return fail("conflict");
+  old->module = open_child_directory(old->sources, old->module_name);
+  if (old->module < 0) return fail("conflict");
+  old->resources = open_child_directory(old->module, "Resources");
+  if (old->resources < 0 || fstat(old->sources, &old->sources_identity) != 0 ||
+      fstat(old->module, &old->module_identity) != 0 ||
+      fstat(old->resources, &old->resources_identity) != 0) return fail("conflict");
+  const int directories[] = { old->root, old->module, old->resources, old->root };
+  const char *names[] = {
+    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  };
+  unsigned long long aggregate = 0;
+  for (int index = 0; index < 4; index++) {
+    struct stat identity;
+    if (fstatat(directories[index], names[index], &identity, AT_SYMLINK_NOFOLLOW) != 0)
+      return fail("conflict");
+    if (!S_ISREG(identity.st_mode) || identity.st_nlink != 1 || identity.st_size <= 0 ||
+        (unsigned long long)identity.st_size > AGGREGATE_LIMIT ||
+        aggregate > AGGREGATE_LIMIT - (unsigned long long)identity.st_size ||
+        (index == 3 && (!same_identity(&identity, &old->record_identity) ||
+                       (size_t)identity.st_size != old->record_length))) {
+      errno = ESTALE;
+      return fail("conflict");
+    }
+    old->files[index].device = identity.st_dev;
+    old->files[index].inode = identity.st_ino;
+    old->files[index].length = (unsigned long long)identity.st_size;
+    aggregate += old->files[index].length;
+  }
+  if (verify_owned_tree(parent, destination, old) != 0 || verify_owned_owner(old) != 0 ||
+      owned_inspection_matches(parent, parent_path, parent_identity, destination, old) != 0)
+    return fail("conflict");
+  return 0;
+}
+
+static int cleanup_owned_package(int parent, const struct owned_package *old) {
+  if (remove_artifact(old->root, "Package.swift", &old->files[0]) != 0 ||
+      remove_artifact(old->module, "Shaders.generated.swift", &old->files[1]) != 0 ||
+      remove_artifact(old->resources, "Shaders.metallib", &old->files[2]) != 0 ||
+      remove_artifact(old->root, ".vgpu-native-output.json", &old->files[3]) != 0 ||
+      remove_empty_directory(old->module, "Resources", old->resources, &old->resources_identity) != 0 ||
+      remove_empty_directory(old->sources, old->module_name, old->module, &old->module_identity) != 0 ||
+      remove_empty_directory(old->root, "Sources", old->sources, &old->sources_identity) != 0 ||
+      remove_empty_directory(parent, STAGE_NAME, old->root, &old->root_identity) != 0) return -1;
+  return 0;
+}
+
 /* The caller has joined this locked journal to its original prepared receipt. */
 static int verify_recovery(int parent, const char *parent_path,
                                      const struct stat *parent_identity,
@@ -979,9 +1329,10 @@ static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_
 }
 
 int main(int argc, char **argv) {
-  if ((argc != 6 && argc != 7 && argc != 9) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
+  if ((argc != 6 && argc != 7 && argc != 8 && argc != 9) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
       (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0 &&
        strcmp(argv[6], "publish-missing-or-empty") != 0) ||
+      (argc == 8 && strcmp(argv[6], "publish-project") != 0) ||
       (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0 &&
        strcmp(argv[6], "reconcile-empty") != 0) ||
       !valid_transaction(argv[5])) {
@@ -992,7 +1343,14 @@ int main(int argc, char **argv) {
   const char *destination = argv[3];
   const char *module = argv[4];
   const char *transaction = argv[5];
-  int allow_empty = argc == 7 && strcmp(argv[6], "publish-missing-or-empty") == 0;
+  int allow_owned = argc == 8;
+  const char *configuration_path = allow_owned ? argv[7] : NULL;
+  if (allow_owned && (configuration_path[0] != '/' || strlen(configuration_path) >= PATH_MAX ||
+                      !valid_utf8(configuration_path))) {
+    errno = EINVAL;
+    return fail("helper-failed");
+  }
+  int allow_empty = allow_owned || (argc == 7 && strcmp(argv[6], "publish-missing-or-empty") == 0);
   int publishing = allow_empty || (argc == 7 && strcmp(argv[6], "publish-missing") == 0);
   int reconciling = argc == 9;
   int reconcile_empty = reconciling && strcmp(argv[6], "reconcile-empty") == 0;
@@ -1052,6 +1410,11 @@ int main(int argc, char **argv) {
   int old_destination = -1;
   struct stat old_destination_identity = {0};
   int replace_empty = 0;
+  struct owned_package owned_context = {
+    .root = -1, .sources = -1, .module = -1, .resources = -1, .record_descriptor = -1,
+    .configuration_path = configuration_path
+  };
+  const struct owned_package *owned = NULL;
   if (allow_empty) {
     struct stat observed_destination;
     if (fstatat(parent, destination, &observed_destination, AT_SYMLINK_NOFOLLOW) == 0) {
@@ -1063,23 +1426,32 @@ int main(int argc, char **argv) {
       }
       old_destination = open_child_directory(parent, destination);
       if (old_destination < 0 || fstat(old_destination, &old_destination_identity) != 0 ||
-          directory_edge(parent, destination, old_destination, &observed_destination) != 0 ||
-          exact_directory(old_destination, NULL, 0) != 0)
+          directory_edge(parent, destination, old_destination, &observed_destination) != 0)
         return fail("conflict");
-      replace_empty = 1;
+      if (exact_directory(old_destination, NULL, 0) == 0) {
+        replace_empty = 1;
+      } else if (allow_owned && errno == ENOTEMPTY) {
+        owned_context.root = old_destination;
+        owned_context.root_identity = old_destination_identity;
+        if (inspect_owned_package(parent, parent_path, &parent_identity, destination,
+                                   transaction, name_max, &owned_context) != 0) return 1;
+        owned = &owned_context;
+      } else {
+        return fail("conflict");
+      }
     } else if (errno != ENOENT) {
       return fail("conflict");
     }
   } else if (ensure_absent(parent, destination) != 0) {
     return fail("conflict");
   }
-  const struct stat *old_identity = replace_empty ? &old_destination_identity : NULL;
+  const struct stat *old_identity = replace_empty || owned != NULL ? &old_destination_identity : NULL;
 
   char journal[JOURNAL_LIMIT];
   size_t journal_length = 0;
   struct stat journal_identity;
   if (build_journal(journal, sizeof(journal), "intent", transaction, destination,
-                    module, publishing, old_identity, &parent_identity, NULL, NULL,
+                    module, publishing, old_identity, owned, &parent_identity, NULL, NULL,
                     &journal_length) != 0 ||
       install_initial_journal(parent, journal, journal_length, &journal_identity) != 0)
     return fail("helper-failed");
@@ -1087,7 +1459,7 @@ int main(int argc, char **argv) {
   struct stat stage_identity;
   int stage = make_child_directory(parent, STAGE_NAME, &stage_identity);
   if (stage < 0) return fail("helper-failed");
-  if (replace_empty && same_identity(&stage_identity, &old_destination_identity)) {
+  if (old_identity != NULL && same_identity(&stage_identity, old_identity)) {
     errno = ESTALE;
     return fail("conflict");
   }
@@ -1095,7 +1467,7 @@ int main(int argc, char **argv) {
   char next_journal[JOURNAL_LIMIT];
   size_t next_journal_length = 0;
   if (build_journal(next_journal, sizeof(next_journal), "staging", transaction, destination,
-                    module, publishing, old_identity, &parent_identity, &stage_identity, NULL,
+                    module, publishing, old_identity, owned, &parent_identity, &stage_identity, NULL,
                     &next_journal_length) != 0 ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
                             journal, journal_length, &retained_update) != 0)
@@ -1112,8 +1484,21 @@ int main(int argc, char **argv) {
   int resources = module_directory < 0 ? -1 :
     make_child_directory(module_directory, "Resources", &resources_identity);
   if (resources < 0) return fail("helper-failed");
-  printf("{\"schemaVersion\":1,\"kind\":\"ready\"}\n");
-  fflush(stdout);
+  if (owned != NULL) {
+    size_t ready_length = 0;
+    if (append_json(next_journal, sizeof(next_journal), &ready_length,
+        "{\"schemaVersion\":1,\"kind\":\"ready\",\"transactionId\":\"%s\","
+        "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"destinationName\":",
+        transaction, (unsigned long long)parent_identity.st_dev,
+        (unsigned long long)parent_identity.st_ino) != 0 ||
+        append_json_string(next_journal, sizeof(next_journal), &ready_length, destination) != 0 ||
+        append_json(next_journal, sizeof(next_journal), &ready_length, ",\"publication\":") != 0 ||
+        append_owned_plan(next_journal, sizeof(next_journal), &ready_length, owned) != 0 ||
+        append_json(next_journal, sizeof(next_journal), &ready_length, "}\n") != 0)
+      return fail("helper-failed");
+    if (fwrite(next_journal, 1, ready_length, stdout) != ready_length) return 1;
+  } else if (printf("{\"schemaVersion\":1,\"kind\":\"ready\"}\n") < 0) return 1;
+  if (fflush(stdout) != 0) return 1;
 
   struct artifact files[4] = {0};
   unsigned long long aggregate = 0;
@@ -1156,7 +1541,7 @@ int main(int argc, char **argv) {
                   &resources_identity, files) != 0)
     return fail("invalid-stage");
   if (build_journal(next_journal, sizeof(next_journal), "prepared", transaction, destination,
-                    module, publishing, old_identity, &parent_identity, &stage_identity, files,
+                    module, publishing, old_identity, owned, &parent_identity, &stage_identity, files,
                     &next_journal_length) != 0 ||
       next_journal_length > JOURNAL_LIMIT ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
@@ -1168,7 +1553,7 @@ int main(int argc, char **argv) {
   char receipt[JOURNAL_LIMIT];
   size_t receipt_length = 0;
   if (build_journal(receipt, sizeof(receipt), "prepared", transaction, destination,
-                    module, publishing, old_identity, &parent_identity, &stage_identity, files,
+                    module, publishing, old_identity, owned, &parent_identity, &stage_identity, files,
                     &receipt_length) != 0)
     return fail("helper-failed");
   char *kind = strstr(receipt, "\"kind\":\"vgpu-native-publication\",\"phase\":\"prepared\"");
@@ -1187,7 +1572,7 @@ int main(int argc, char **argv) {
   if (publishing) {
     char expected[64];
     snprintf(expected, sizeof(expected), "commit-%s %s prepared\n",
-             replace_empty ? "empty" : "missing", transaction);
+             owned != NULL ? "owned" : replace_empty ? "empty" : "missing", transaction);
     if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, expected) != 0)
       return fail("helper-failed");
 
@@ -1205,16 +1590,28 @@ int main(int argc, char **argv) {
     else if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
              ensure_absent(parent, UPDATE_NAME) != 0)
       rejection = "conflict";
+    else if (owned != NULL &&
+             (verify_owned_tree(parent, destination, owned) != 0 || verify_owned_owner(owned) != 0))
+      rejection = "conflict";
+    else if (owned != NULL &&
+             (directory_edge(parent, STAGE_NAME, stage, &stage_identity) != 0 ||
+              directory_edge(stage, "Sources", sources, &sources_identity) != 0 ||
+              directory_edge(sources, module, module_directory, &module_identity) != 0 ||
+              directory_edge(module_directory, "Resources", resources, &resources_identity) != 0 ||
+              verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
+              ensure_absent(parent, UPDATE_NAME) != 0))
+      rejection = "conflict";
     else if (replace_empty &&
              (directory_edge(parent, destination, old_destination, &old_destination_identity) != 0 ||
               exact_directory(old_destination, NULL, 0) != 0))
       rejection = "conflict";
-    else if (!replace_empty && ensure_absent(parent, destination) != 0)
+    else if (old_identity == NULL && ensure_absent(parent, destination) != 0)
       rejection = "conflict";
     else if (!parent_matches(parent_path, &parent_identity))
       rejection = "parent-changed";
     else if (renameatx_np(parent, STAGE_NAME, parent, destination,
-                          (replace_empty ? 0 : RENAME_EXCL) | RENAME_NOFOLLOW_ANY) != 0)
+                          (owned != NULL ? RENAME_SWAP : replace_empty ? 0 : RENAME_EXCL) |
+                          RENAME_NOFOLLOW_ANY) != 0)
       rejection = errno == EEXIST || (replace_empty && errno == ENOTEMPTY) ? "conflict" : "helper-failed";
     else
       published = 1; /* Historical syscall evidence, before acknowledgment or cleanup. */
@@ -1242,11 +1639,20 @@ int main(int argc, char **argv) {
                   &resources_identity, files) != 0)
     return fail("cleanup-failed");
   if ((publishing && ensure_absent(parent, UPDATE_NAME) != 0) ||
-      (published && ensure_absent(parent, STAGE_NAME) != 0))
+      (published && owned == NULL && ensure_absent(parent, STAGE_NAME) != 0) ||
+      (published && owned != NULL && verify_owned_tree(parent, STAGE_NAME, owned) != 0))
+    return fail("cleanup-failed");
+  if (published && owned != NULL &&
+      (directory_edge(parent, destination, stage, &stage_identity) != 0 ||
+       directory_edge(stage, "Sources", sources, &sources_identity) != 0 ||
+       directory_edge(sources, module, module_directory, &module_identity) != 0 ||
+       directory_edge(module_directory, "Resources", resources, &resources_identity) != 0))
     return fail("cleanup-failed");
   if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0)
     return fail("cleanup-failed");
-  if (!published) {
+  if (published && owned != NULL) {
+    if (cleanup_owned_package(parent, owned) != 0) return fail("cleanup-failed");
+  } else if (!published) {
     if (remove_artifact(stage, "Package.swift", &files[0]) != 0)
       return fail("cleanup-failed");
     if (remove_artifact(module_directory, "Shaders.generated.swift", &files[1]) != 0)
@@ -1279,6 +1685,12 @@ int main(int argc, char **argv) {
   close(module_directory);
   close(sources);
   close(stage);
+  if (owned != NULL) {
+    close(owned->record_descriptor);
+    close(owned->resources);
+    close(owned->module);
+    close(owned->sources);
+  }
   if (old_destination >= 0) close(old_destination);
   close(parent);
   return 0;

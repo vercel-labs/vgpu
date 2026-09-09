@@ -7,8 +7,9 @@ A generated package contains Swift code and a compiled library that must agree. 
 them together, then replaces the output directory as one operation.
 
 > Warning: This is the docs-first publication contract. Staging, missing and empty-destination
-> publication, and bounded read-only reconciliation have native test coverage. The complete replacement
-> workflow and operational build companion are not implemented yet. The command shim exists; this is not a
+> publication, their bounded read-only reconciliation, and a byte-identical same-owner package exchange
+> have native test coverage. Owned-replacement fault handling and reconciliation still need further
+> coverage and implementation, and the operational build companion is unfinished. The command shim exists; this is not a
 > released end-to-end build workflow.
 
 ## Reserve the destination

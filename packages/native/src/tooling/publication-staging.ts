@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { copyFile, mkdtemp, open, rm, type FileHandle } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -23,6 +24,11 @@ import {
   metalOutputRecordPath,
   parseMetalOutputRecord,
 } from "./output-record.js";
+import {
+  readOwnedPublicationInspection,
+  ownedPublicationApproval,
+  validateOwnedPublicationReady,
+} from "./publication-owned-inspection.js";
 
 const aggregateLimit = 128 * 1024 * 1024;
 const chunkLimit = 64 * 1024;
@@ -158,7 +164,8 @@ export class MetalPublicationError extends MetalPublicationStagingError {
     const retained =
       state.prepared && !state.finalized
         ? [
-            ...(state.outcome === "published"
+            ...(state.outcome === "published" &&
+            state.publication?.renameMode !== "swap"
               ? []
               : [state.prepared.stagePath]),
             state.prepared.journalPath,
@@ -199,7 +206,8 @@ type StagingOperation<T> = {
   readonly callback: (receipt: PreparedMetalPublicationStage) => Promise<T>;
 };
 type PublishingOperation = {
-  readonly kind: "publish-missing-or-empty";
+  readonly kind: "publish-project";
+  readonly configurationPath: string;
   readonly state: PublicationState;
 };
 
@@ -230,7 +238,7 @@ export function withPreparedMetalPublicationStage<T>(
   return runStaging(snapshot, { kind: "stage-only", callback });
 }
 
-/** Private missing-or-empty publisher; replacing owned packages is not enabled yet. */
+/** Private publisher for missing, ordinary empty, or verified same-owner outputs. */
 export async function publishPreparedMetalOutput(
   input: PreparedMetalPublicationStageInput
 ): Promise<PublishedMetalPublication> {
@@ -250,6 +258,9 @@ export async function publishPreparedMetalOutput(
     const record = parseMetalOutputRecord(snapshot.files[3]!.bytes);
     if (
       typeof boundary.configurationPath !== "string" ||
+      !isAbsolute(boundary.configurationPath) ||
+      boundary.configurationPath.includes("\0") ||
+      Buffer.byteLength(boundary.configurationPath) > 1023 ||
       typeof boundary.output !== "string" ||
       resolve(dirname(boundary.configurationPath), boundary.output) !==
         outputPath ||
@@ -264,7 +275,8 @@ export async function publishPreparedMetalOutput(
     throwIfCancelled(snapshot.signal);
     await validateMetalProjectOutputBoundary(boundary);
     return await runStaging(snapshot, {
-      kind: "publish-missing-or-empty",
+      kind: "publish-project",
+      configurationPath: boundary.configurationPath,
       state,
     });
   } catch (cause) {
@@ -435,6 +447,11 @@ async function runStaging<T>(
   let lastMessage: Record<string, any> | undefined;
   let recoveryFailure: MetalPublicationStagingError | undefined;
   let ioTimedOut = false;
+  let configurationHandle: FileHandle | undefined;
+  let ownedParent: PreparedMetalPublicationStage["parent"] | undefined;
+  let ownedPlan:
+    | Extract<MetalPublicationPlan, { renameMode: "swap" }>
+    | undefined;
   const executable = join(scratch, "publication-staging");
   try {
     const source = join(scratch, "publication-staging.c");
@@ -455,8 +472,8 @@ async function runStaging<T>(
         snapshot.destinationName,
         snapshot.moduleName,
         snapshot.transactionId,
-        ...(operation.kind === "publish-missing-or-empty"
-          ? ["publish-missing-or-empty"]
+        ...(operation.kind === "publish-project"
+          ? ["publish-project", operation.configurationPath]
           : []),
       ],
       { env: snapshot.environment, stdio: ["pipe", "pipe", "pipe"] }
@@ -498,7 +515,7 @@ async function runStaging<T>(
     };
     snapshot.signal?.addEventListener("abort", cancelTransfer, { once: true });
     if (snapshot.signal?.aborted) cancelTransfer();
-    const ready = (lastMessage = await watchProgress(receiveMessage(lines)));
+    let ready = (lastMessage = await watchProgress(receiveMessage(lines)));
     if (ready.kind === "recovery") {
       const recovery = await readMetalPublicationRecovery(
         ready,
@@ -526,6 +543,64 @@ async function runStaging<T>(
           { cause: recoveryFailure, recoveryPaths: recovery.recoveryPaths }
         );
       throw recoveryFailure;
+    }
+    if (
+      ready.kind === "owned-inspection" &&
+      operation.kind === "publish-project"
+    ) {
+      const inspection = await readOwnedPublicationInspection(
+        ready,
+        () => watchProgress(receiveMessage(lines)),
+        snapshot
+      );
+      ownedParent = inspection.parent;
+      throwIfCancelled(snapshot.signal);
+      configurationHandle = await open(
+        operation.configurationPath,
+        constants.O_RDONLY | constants.O_NONBLOCK
+      );
+      const configurationStat = await configurationHandle.stat({
+        bigint: true,
+      });
+      if (!configurationStat.isFile())
+        throw new MetalPublicationStagingError(
+          "conflict",
+          "Current owner configuration is not a regular file"
+        );
+      const configuration = Object.freeze({
+        device: String(configurationStat.dev),
+        inode: String(configurationStat.ino),
+      });
+      throwIfCancelled(snapshot.signal);
+      await watchProgress(
+        writeBytes(
+          childInput,
+          ownedPublicationApproval(inspection, configuration)
+        )
+      );
+      ready = lastMessage = await watchProgress(receiveMessage(lines));
+      if (ready.kind !== "ready")
+        throw helperResponseError(ready, snapshot.parentPath);
+      try {
+        ownedPlan = validateOwnedPublicationReady(
+          ready,
+          inspection,
+          configuration
+        );
+      } catch (cause) {
+        throw new MetalPublicationStagingError(
+          "helper-failed",
+          "Invalid owned publication approval response",
+          {
+            cause,
+            recoveryPaths: [
+              join(snapshot.parentPath, stageName),
+              join(snapshot.parentPath, actualJournalName),
+            ],
+          }
+        );
+      }
+      operation.state.publication = ownedPlan;
     }
     if (ready.kind !== "ready")
       throw helperResponseError(ready, snapshot.parentPath);
@@ -561,17 +636,23 @@ async function runStaging<T>(
     if (prepared.kind !== "prepared")
       throw helperResponseError(prepared, snapshot.parentPath);
     const receipt = validateReceipt(prepared, snapshot);
-    if (operation.kind === "publish-missing-or-empty") {
+    if (operation.kind === "publish-project") {
       operation.state.prepared = receipt;
       const publication = parseMetalPublicationPlan(
         prepared.publication,
         receipt.parent,
         receipt.stage
       );
-      if (!publication)
+      if (
+        !publication ||
+        (ownedPlan
+          ? !responseIdentity(receipt.parent, ownedParent!) ||
+            !samePublicationPlan(publication, ownedPlan)
+          : publication.renameMode === "swap")
+      )
         throw new MetalPublicationStagingError(
           "helper-failed",
-          "Prepared helper did not confirm a valid missing-or-empty publication plan"
+          "Prepared helper did not confirm the approved publication plan"
         );
       const publishingReceipt: PreparedPublishingStage = Object.freeze({
         ...receipt,
@@ -736,10 +817,11 @@ async function runStaging<T>(
         { cause }
       );
     if (
-      operation.kind === "publish-missing-or-empty" &&
+      operation.kind === "publish-project" &&
       operation.state.outcome === "unknown" &&
       operation.state.prepared &&
-      operation.state.publication
+      operation.state.publication &&
+      operation.state.publication.renameMode !== "swap"
     ) {
       try {
         await reconcilePublication(
@@ -768,15 +850,34 @@ async function runStaging<T>(
     clearTimeout(cancellationGrace);
     if (cancelTransfer)
       snapshot.signal?.removeEventListener("abort", cancelTransfer);
-    await replies?.return?.();
+    const cleanupFailures: unknown[] = [];
+    let retainedScratch = false;
+    try {
+      await replies?.return?.();
+    } catch (cause) {
+      cleanupFailures.push(cause);
+    }
+    try {
+      await configurationHandle?.close();
+    } catch (cause) {
+      cleanupFailures.push(cause);
+    }
     try {
       await rm(scratch, { recursive: true, force: true });
     } catch (cause) {
-      throw new MetalPublicationStagingCleanupError(
-        operationFailure ? [operationFailure, cause] : [cause],
-        [...(operationFailure?.recoveryPaths ?? []), scratch]
-      );
+      retainedScratch = true;
+      cleanupFailures.push(cause);
     }
+    if (cleanupFailures.length)
+      throw new MetalPublicationStagingCleanupError(
+        operationFailure
+          ? [operationFailure, ...cleanupFailures]
+          : cleanupFailures,
+        [
+          ...(operationFailure?.recoveryPaths ?? []),
+          ...(retainedScratch ? [scratch] : []),
+        ]
+      );
   }
 }
 
@@ -826,7 +927,9 @@ async function commitPublication(
     const commit =
       prepared.publication.renameMode === "excl"
         ? "commit-missing"
-        : "commit-empty";
+        : prepared.publication.renameMode === "replace-empty"
+        ? "commit-empty"
+        : "commit-owned";
     const command = Buffer.from(
       `${commit} ${snapshot.transactionId} prepared\n`
     );
@@ -939,6 +1042,8 @@ async function reconcilePublication(
   publication: MetalPublicationPlan,
   state: PublicationState
 ): Promise<void> {
+  if (publication.renameMode === "swap")
+    throw new Error("Owned publication reconciliation is not enabled");
   const emptyDestination = publication.renameMode === "replace-empty";
   const child = spawn(
     executable,
@@ -1097,10 +1202,34 @@ function samePublicationPlan(
     observed.expectedDestination !== expected.expectedDestination
   )
     return false;
+  if (expected.renameMode === "excl") return true;
+  if (
+    observed.renameMode === "excl" ||
+    !responseIdentity(observed.oldDestination, expected.oldDestination)
+  )
+    return false;
+  if (expected.renameMode === "replace-empty")
+    return observed.renameMode === "replace-empty";
   return (
-    expected.renameMode === "excl" ||
-    (observed.renameMode === "replace-empty" &&
-      responseIdentity(observed.oldDestination, expected.oldDestination))
+    observed.renameMode === "swap" &&
+    observed.oldModuleName === expected.oldModuleName &&
+    observed.oldRecordSHA256 === expected.oldRecordSHA256 &&
+    observed.ownership.ownerConfiguration ===
+      expected.ownership.ownerConfiguration &&
+    responseIdentity(
+      observed.ownership.configuration,
+      expected.ownership.configuration
+    ) &&
+    observed.oldFiles.length === expected.oldFiles.length &&
+    observed.oldFiles.every((file, index) => {
+      const wanted = expected.oldFiles[index]!;
+      return (
+        file.role === wanted.role &&
+        file.path === wanted.path &&
+        file.length === wanted.length &&
+        file.sha256 === wanted.sha256
+      );
+    })
   );
 }
 

@@ -53,7 +53,8 @@ vi.mock("node:child_process", async (original) => {
       let messages: Record<string, unknown>[];
       if (
         boundary.environment &&
-        args[1].includes("publish-missing-or-empty")
+        (args[1].includes("publish-missing-or-empty") ||
+          args[1].includes("publish-project"))
       ) {
         child = actual.spawn(args[0], args[1], {
           ...args[2],

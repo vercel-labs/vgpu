@@ -33,7 +33,9 @@ vi.mock("node:child_process", async (original) => {
         Array.isArray(args[1]) &&
         args[1].some(
           (arg) =>
-            arg === "publish-missing" || arg === "publish-missing-or-empty"
+            arg === "publish-missing" ||
+            arg === "publish-missing-or-empty" ||
+            arg === "publish-project"
         )
       ) {
         const child = actual.spawn(args[0], args[1], {
