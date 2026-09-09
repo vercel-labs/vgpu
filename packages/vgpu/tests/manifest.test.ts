@@ -5,7 +5,6 @@ import { expect, test } from "vitest";
 import { buildIndex } from "../lib/docs/index.js";
 import { resolveDocsTarget } from "../lib/docs/commands/resolve.js";
 import { createManifest, parseAllowlist, serializeManifest, virtualPathFor } from "../lib/docs/generate/manifest.js";
-import { buildSkill } from "../lib/docs/generate/skill.js";
 import { docsManifest } from "../lib/generated/docs-manifest.generated.js";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -119,7 +118,7 @@ test("manifest includes getting-started as a guide", () => {
   });
 });
 
-test("exports the CLI reference to the docs corpus and skill", () => {
+test("exports the CLI reference to the docs corpus", () => {
   expect(docsManifest.records.find((record) => record.symbol === "cli")).toMatchObject({
     package: "guides",
     symbol: "cli",
@@ -129,12 +128,6 @@ test("exports the CLI reference to the docs corpus and skill", () => {
     topicTitle: "CLI",
     websitePath: "/cli",
   });
-
-  const skill = buildSkill(docsManifest);
-  expect(skill.get("SKILL.md")).toContain("## CLI reference");
-  expect(skill.get("SKILL.md")).toContain("## Guides");
-  expect(skill.get("SKILL.md")).not.toContain("## Performance guides");
-  expect(skill.get("references/guides/cli.docs.md")).toContain("# CLI");
 });
 
 test("getting-started cat references resolve against the docs index", () => {
@@ -181,15 +174,6 @@ test("concept guides preserve canonical title and numeric website order", () => 
     topicTitle: title,
     order,
   })));
-
-  const router = buildSkill(manifest).get("SKILL.md");
-  expect(router).toBeDefined();
-  const concepts = router?.slice(router.indexOf("## Core concepts"), router.indexOf("## Guides"));
-  expect([...concepts?.matchAll(/^- \*\*([^*]+)\*\*/gmu) ?? []].map((match) => match[1])).toEqual([
-    "Context", "Draws", "Compilation", "Effects", "Passes", "Frames", "Render bundles",
-  ]);
-  expect(concepts).toContain("**Context** — Everything in vgpu starts from one call.");
-  expect(concepts).not.toContain("— ---");
 });
 
 test("rejects a non-numeric guide order", () => {

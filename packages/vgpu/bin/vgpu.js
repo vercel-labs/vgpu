@@ -17,8 +17,7 @@ const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "u
 // versioned independently of the public `vgpu` package and known to drift from it (see
 // CONTRIBUTING.md). Reporting that version made every in-repo `vgpu examples ...` call fail the
 // server handshake with VGPU-EXAMPLES-CLI-TOO-OLD, so resolve the public version from the sibling
-// `vgpu-api` package instead -- same try/catch-degrade pattern as computeStamp() in
-// lib/docs/generate/generate.js.
+// `vgpu-api` package instead and degrade to the CLI package version for an incomplete checkout.
 //
 // In the published tarball, `../package.json` is the synthetic `{type,version}` stamp written by
 // packages/vgpu-api/scripts/copy-cli.mjs, which has no `name` field, so this branch is dead code

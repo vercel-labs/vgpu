@@ -18,7 +18,7 @@ export const Logo = () => (
 );
 
 export const github = {
-  branch: "main",
+  branch: "canary",
   // The real path from the repo root, not from this app: vgpu is a monorepo,
   // content/docs lives under apps/docs, and the vanilla template's path
   // (content/docs/{path}) pointed "edit this page" at a 404.
