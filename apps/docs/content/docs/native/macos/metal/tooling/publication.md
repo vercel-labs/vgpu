@@ -9,8 +9,9 @@ them together, then replaces the output directory as one operation.
 > Warning: This is the docs-first publication contract. Staging, missing and empty-destination
 > publication, their bounded read-only reconciliation, and same-owner package exchanges with identical
 > bytes or a changed module name have native test coverage, as does rejection of an old generated
-> subtree on another filesystem device. Owned-replacement fault handling and reconciliation still
-> need further coverage and implementation, and the operational build companion is unfinished.
+> subtree on another filesystem device. A real owned exchange whose helper dies before confirming
+> success also has published-only reconciliation coverage. Broader owned-replacement fault handling
+> still needs coverage and implementation. The operational build companion is unfinished.
 > The command shim exists; this is not a released end-to-end build workflow.
 
 ## Reserve the destination
@@ -143,9 +144,9 @@ Cancellation stops work before the commit request when possible. After that requ
 must preserve publication evidence while it finishes or reports recovery. It never automatically
 rolls a published package back because a later cleanup step failed.
 
-If the live invocation loses confirmation while publishing to a missing destination or replacing
-an empty directory, it makes one bounded, read-only reconciliation attempt after the original
-helper exits. It reacquires the physical parent lock and compares the recorded transaction,
+If the live invocation loses publication confirmation, it makes one bounded, read-only
+reconciliation attempt after the original helper exits. It reacquires the physical parent lock
+and compares the recorded transaction,
 original destination classification, expected directory identities, and complete package contents
 with the generation it prepared. It does not send another commit request, recreate a missing
 parent, or remove recovery state.
@@ -156,6 +157,19 @@ intact directory still at staging with the destination absent can instead establ
 did not happen. For an empty-directory replacement, proving non-publication requires both the
 intact prepared directory still at staging and the original destination directory still present
 and exactly empty. A missing destination or a different empty directory does not provide that proof.
+
+For an owned exchange, the initial reconciliation can establish only that publication happened:
+the complete new package must be at the destination with its original prepared directory identity,
+exact file set, lengths, and hashes. Its generated directories and files must remain on the physical
+parent's filesystem device. The recorded plan must match the original live transaction, including
+the old module, file manifest, integrity record, and configuration identity accepted before exchange.
+This is historical publication evidence, not a fresh ownership or input-freshness check.
+
+An old package left at staging is recovery evidence, not permission to delete it. Reconciliation
+does not clean either generation or the journal. Proving that an owned exchange did not happen
+requires a separate check of both original generations; that negative proof is not enabled in this
+initial slice. An unconfirmed exchange without the checked new package at its destination remains
+unknown, even when an apparently intact package is still at staging.
 
 A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
 into a successful build. The diagnostic preserves the original error and distinguishes reconciled

@@ -820,8 +820,7 @@ async function runStaging<T>(
       operation.kind === "publish-project" &&
       operation.state.outcome === "unknown" &&
       operation.state.prepared &&
-      operation.state.publication &&
-      operation.state.publication.renameMode !== "swap"
+      operation.state.publication
     ) {
       try {
         await reconcilePublication(
@@ -1042,9 +1041,12 @@ async function reconcilePublication(
   publication: MetalPublicationPlan,
   state: PublicationState
 ): Promise<void> {
-  if (publication.renameMode === "swap")
-    throw new Error("Owned publication reconciliation is not enabled");
-  const emptyDestination = publication.renameMode === "replace-empty";
+  const reconciliationMode =
+    publication.renameMode === "swap"
+      ? "reconcile-owned-published"
+      : publication.renameMode === "replace-empty"
+      ? "reconcile-empty"
+      : "reconcile-missing";
   const child = spawn(
     executable,
     [
@@ -1053,7 +1055,7 @@ async function reconcilePublication(
       snapshot.destinationName,
       snapshot.moduleName,
       snapshot.transactionId,
-      emptyDestination ? "reconcile-empty" : "reconcile-missing",
+      reconciliationMode,
       prepared.parent.device,
       prepared.parent.inode,
     ],
@@ -1120,7 +1122,9 @@ async function reconcilePublication(
         "Recovery record does not match the original prepared publication"
       );
     const command =
-      publication.renameMode === "replace-empty"
+      publication.renameMode === "swap"
+        ? `verify-owned-published ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
+        : publication.renameMode === "replace-empty"
         ? `verify-empty ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode} ${publication.oldDestination.device} ${publication.oldDestination.inode}\n`
         : `verify-missing ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`;
     await writeBytes(input, Buffer.from(command));
@@ -1135,7 +1139,9 @@ async function reconcilePublication(
       reply.kind !== "reconciliation-result" ||
       reply.transactionId !== prepared.transactionId ||
       reply.phase !== "prepared" ||
-      (!published && reply.outcome !== "not-published") ||
+      (!published &&
+        (publication.renameMode === "swap" ||
+          reply.outcome !== "not-published")) ||
       Object.keys(reply).length !== 9 ||
       !responseIdentity(reply.parent, prepared.parent) ||
       reply.destinationName !== prepared.destinationName ||

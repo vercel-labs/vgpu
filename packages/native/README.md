@@ -44,9 +44,12 @@ checks this boundary and preservation of the existing package. Broader owned-rep
 coverage remains pending.
 Interrupted invocations retain explicit outcomes and recovery evidence. Bounded
 read-only reconciliation can confirm that the original intact generation reached the destination
-in the missing and empty modes. Owned exchange without an acknowledgment remains `unknown`;
-owned reconciliation is not enabled yet. Reconciliation never retries commit or deletes retained
-recovery state. Complete replacement fault handling and the installed command workflow remain unfinished.
+in the missing and empty modes. Owned exchange can also be confirmed as published when its original
+intact new generation is at the destination; a real SWAP followed by helper death before acknowledgment
+exercises this read-only proof. Owned non-publication proof is not enabled: without a checked new
+generation at the destination, its unconfirmed outcome remains `unknown`. Reconciliation never
+retries commit or deletes retained recovery state. Complete replacement fault handling and the
+installed command workflow remain unfinished.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and
