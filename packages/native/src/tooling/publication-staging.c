@@ -20,6 +20,7 @@
 #define RECORD_LIMIT (64U * 1024U)
 #define CHUNK_LIMIT (64U * 1024U)
 #define AGGREGATE_LIMIT (128ULL * 1024ULL * 1024ULL)
+#define RECOVERY_CHUNK_LIMIT (16U * 1024U)
 #define TRANSFER_SHORT (-2)
 
 static const char *roles[4] = {
@@ -379,6 +380,139 @@ static int receive_file(FILE *input, int directory, const char *name,
   return result;
 }
 
+struct recovery_observation {
+  int present;
+  struct stat identity;
+};
+
+static int observe_recovery_name(int parent, const char *name,
+                                 struct recovery_observation *observation) {
+  if (fstatat(parent, name, &observation->identity, AT_SYMLINK_NOFOLLOW) == 0) {
+    observation->present = 1;
+    return 0;
+  }
+  if (errno != ENOENT) return -1;
+  observation->present = 0;
+  return 0;
+}
+
+static int recovery_name_matches(int parent, const char *name,
+                                  const struct recovery_observation *expected) {
+  struct recovery_observation observed = {0};
+  if (observe_recovery_name(parent, name, &observed) != 0) return -1;
+  if (observed.present != expected->present ||
+      (observed.present &&
+       (!same_identity(&observed.identity, &expected->identity) ||
+        (observed.identity.st_mode & S_IFMT) != (expected->identity.st_mode & S_IFMT)))) {
+    errno = ESTALE;
+    return -1;
+  }
+  return 0;
+}
+
+static void print_recovery_observation(const struct recovery_observation *observation) {
+  if (!observation->present) {
+    fputs("null", stdout);
+    return;
+  }
+  const struct stat *identity = &observation->identity;
+  const char *kind = S_ISDIR(identity->st_mode) ? "directory" :
+    S_ISREG(identity->st_mode) ? "file" : S_ISLNK(identity->st_mode) ? "symlink" : "other";
+  printf("{\"device\":\"%llu\",\"inode\":\"%llu\",\"kind\":\"%s\"}",
+         (unsigned long long)identity->st_dev, (unsigned long long)identity->st_ino, kind);
+}
+
+/* Read-only startup report: names are fixed here; journal semantics belong to the caller. */
+static int report_recovery(int parent, const char *parent_path,
+                           const struct stat *parent_identity,
+                           const struct stat *named_journal, long name_max) {
+  /* Even a nonblocking FIFO open can release another process waiting for a reader. */
+  if (!S_ISREG(named_journal->st_mode) || named_journal->st_nlink != 1 ||
+      named_journal->st_size <= 0 || named_journal->st_size > JOURNAL_LIMIT) {
+    errno = EINVAL;
+    return fail("conflict");
+  }
+  int descriptor = openat(parent, JOURNAL_NAME,
+                          O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+  if (descriptor < 0) return fail("conflict");
+  struct stat identity;
+  int result = fstat(descriptor, &identity);
+  if (result == 0 && (!same_identity(&identity, named_journal) ||
+                      !S_ISREG(identity.st_mode) || identity.st_nlink != 1 ||
+                      identity.st_size <= 0 || identity.st_size > JOURNAL_LIMIT)) {
+    errno = EINVAL;
+    result = -1;
+  }
+  unsigned char bytes[JOURNAL_LIMIT + 1];
+  size_t length = 0;
+  while (result == 0 && length < sizeof(bytes)) {
+    ssize_t count = read(descriptor, bytes + length, sizeof(bytes) - length);
+    if (count < 0 && errno == EINTR) continue;
+    if (count < 0) { result = -1; break; }
+    if (count == 0) break;
+    length += (size_t)count;
+  }
+  if (result == 0 && (length > JOURNAL_LIMIT || length != (size_t)identity.st_size)) {
+    errno = ESTALE;
+    result = -1;
+  }
+  int error = result != 0 ? errno : 0;
+  if (close(descriptor) != 0 && result == 0) { result = -1; error = errno; }
+  if (result != 0) { errno = error; return fail("conflict"); }
+  struct recovery_observation stage = {0};
+  struct recovery_observation update = {0};
+  if (observe_recovery_name(parent, STAGE_NAME, &stage) != 0 ||
+      observe_recovery_name(parent, UPDATE_NAME, &update) != 0)
+    return fail("conflict");
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  if (CC_SHA256(bytes, (CC_LONG)length, digest) == NULL) {
+    errno = EIO;
+    return fail("helper-failed");
+  }
+  char hash[65];
+  for (size_t index = 0; index < sizeof(digest); index++)
+    snprintf(hash + index * 2, 3, "%02x", digest[index]);
+  const size_t chunk_count = (length + RECOVERY_CHUNK_LIMIT - 1) / RECOVERY_CHUNK_LIMIT;
+  printf("{\"schemaVersion\":1,\"kind\":\"recovery\","
+         "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},"
+         "\"journal\":{\"device\":\"%llu\",\"inode\":\"%llu\"},"
+         "\"nameMax\":%ld,\"length\":%zu,\"sha256\":\"%s\",\"chunkCount\":%zu,\"stage\":",
+         (unsigned long long)parent_identity->st_dev, (unsigned long long)parent_identity->st_ino,
+         (unsigned long long)identity.st_dev, (unsigned long long)identity.st_ino,
+         name_max, length, hash, chunk_count);
+  print_recovery_observation(&stage);
+  fputs(",\"update\":", stdout);
+  print_recovery_observation(&update);
+  fputs("}\n", stdout);
+  for (size_t index = 0; index < chunk_count; index++) {
+    const size_t offset = index * RECOVERY_CHUNK_LIMIT;
+    const size_t count = length - offset < RECOVERY_CHUNK_LIMIT ?
+      length - offset : RECOVERY_CHUNK_LIMIT;
+    char hex[RECOVERY_CHUNK_LIMIT * 2 + 1];
+    static const char digits[] = "0123456789abcdef";
+    for (size_t byte = 0; byte < count; byte++) {
+      hex[byte * 2] = digits[bytes[offset + byte] >> 4];
+      hex[byte * 2 + 1] = digits[bytes[offset + byte] & 15];
+    }
+    hex[count * 2] = '\0';
+    printf("{\"schemaVersion\":1,\"kind\":\"recovery-chunk\",\"index\":%zu,\"hex\":\"%s\"}\n",
+           index, hex);
+    if (fflush(stdout) != 0) return 1;
+  }
+  if (!parent_matches(parent_path, parent_identity) ||
+      verify_bytes(parent, JOURNAL_NAME, &identity, (const char *)bytes, length) != 0 ||
+      recovery_name_matches(parent, STAGE_NAME, &stage) != 0 ||
+      recovery_name_matches(parent, UPDATE_NAME, &update) != 0)
+    return fail("conflict");
+  fputs("{\"schemaVersion\":1,\"kind\":\"recovery-complete\"}\n", stdout);
+  if (fflush(stdout) != 0) return 1;
+  /* Keep the parent lock until the report consumer closes input; never interpret commands. */
+  while (fread(bytes, 1, sizeof(bytes), stdin) > 0) {}
+  if (ferror(stdin)) return 1;
+  close(parent);
+  return 0;
+}
+
 static int hash_file(int directory, const char *name, const struct artifact *artifact) {
   int descriptor = openat(directory, name,
                           O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
@@ -604,6 +738,10 @@ int main(int argc, char **argv) {
     return fail("unsupported-filesystem");
   }
   if (!parent_matches(parent_path, &parent_identity)) return fail("parent-changed");
+  struct stat existing_journal;
+  if (fstatat(parent, JOURNAL_NAME, &existing_journal, AT_SYMLINK_NOFOLLOW) == 0)
+    return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max);
+  if (errno != ENOENT) return fail("conflict");
   if (ensure_absent(parent, destination) != 0 || ensure_absent(parent, JOURNAL_NAME) != 0 ||
       ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, STAGE_NAME) != 0)
     return fail("conflict");
