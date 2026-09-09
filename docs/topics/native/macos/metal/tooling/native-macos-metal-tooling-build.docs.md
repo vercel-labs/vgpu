@@ -215,6 +215,12 @@ package: build it as a dependency of your consuming Swift project, whose build p
 outside this directory. A `.build` directory created by building the generated package directly
 is still an unexpected addition; the tool reports it instead of deleting it.
 
+For example, modifying the generated Swift in `AppShaders` reports
+`Generated file has changed: Sources/AppShaders/Shaders.generated.swift` on standard error with
+exit status `1` and no successful report. This is an integrity failure even when the configured
+WGSL inputs have not changed. Verification preserves the modified file and its original ownership
+record; it does not rewrite either one to accept the edit.
+
 The package must contain ordinary directories and regular, unlinked files. Symbolic links,
 hard-linked files, special files, and unexpected empty directories fail verification too. The
 verifier reads the limited ownership record before using its file list, then hashes payloads in

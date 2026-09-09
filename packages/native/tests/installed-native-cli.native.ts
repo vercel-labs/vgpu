@@ -790,6 +790,75 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     expect(await readFile(helperSource)).toEqual(helperChanged);
     await writeFile(helperSource, helperBefore);
     expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    const generatedSwift = join(
+      output,
+      "Sources/AppShaders/Shaders.generated.swift"
+    );
+    const swiftBefore = await readFile(generatedSwift);
+    const swiftComment = Buffer.from(
+      "\n// Test-owned generated output alteration.\n"
+    );
+    const swiftChanged = Buffer.concat([swiftBefore, swiftComment]);
+    await writeFile(generatedSwift, swiftChanged);
+    const alteredProjectBefore = await treeEvidence(project);
+    const alteredIdentities = retainedIdentities.map(({ path, metadata }) => ({
+      path,
+      metadata:
+        path === generatedSwift
+          ? { ...metadata, size: metadata.size + BigInt(swiftComment.length) }
+          : metadata,
+    }));
+    for (const { path, metadata } of alteredIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    const invalidOutput = await command(
+      process.execPath,
+      [bin, "native", "verify", "--config", "../project/vgpu.native.json"],
+      runtime,
+      {
+        ...doctorEnvironment,
+        DEVELOPER_DIR: missingDeveloper,
+        TMPDIR: missingVerifyTemp,
+      }
+    );
+    console.info(
+      "Installed integrity verify actual result",
+      JSON.stringify(invalidOutput)
+    );
+    expect(invalidOutput.code, JSON.stringify(invalidOutput)).toBe(1);
+    expect(invalidOutput.signal).toBeNull();
+    expect(invalidOutput.stdout).toBe("");
+    expect(invalidOutput.stderr).toBe(
+      "Generated file has changed: Sources/AppShaders/Shaders.generated.swift\n"
+    );
+    expect(await treeEvidence(project)).toEqual(alteredProjectBefore);
+    for (const { path, metadata } of alteredIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    const unchangedRecord = await readFile(
+      join(output, ".vgpu-native-output.json")
+    );
+    expect(unchangedRecord).toEqual(recordBytes);
+    expect(createHash("sha256").update(unchangedRecord).digest("hex")).toBe(
+      recordHash
+    );
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    expect(await readFile(generatedSwift)).toEqual(swiftChanged);
+    await writeFile(generatedSwift, swiftBefore);
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {
