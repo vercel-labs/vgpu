@@ -134,8 +134,9 @@ parent, or remove recovery state.
 The complete new package at the destination must retain the prepared directory's identity to
 prove publication. For a transaction that originally targeted a missing destination, that same
 intact directory still at staging with the destination absent can instead establish that publication
-did not happen. A missing destination does not provide that proof for an empty-directory replacement:
-its original directory identity is also part of the recorded transaction.
+did not happen. For an empty-directory replacement, proving non-publication requires both the
+intact prepared directory still at staging and the original destination directory still present
+and exactly empty. A missing destination or a different empty directory does not provide that proof.
 
 A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
 into a successful build. The diagnostic preserves the original error and distinguishes reconciled
