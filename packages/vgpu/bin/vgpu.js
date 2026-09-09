@@ -44,7 +44,7 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Run this first
   npx vgpu docs cat getting-started.md
-  The guide is the current API. Do not write vgpu code from memory.
+  Always read this when working with vgpu, do not skip.
   It is short and covers the API, project setup, and what to do before a PR.
 
 ## Find anything else in the docs
