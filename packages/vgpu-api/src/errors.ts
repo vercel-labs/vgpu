@@ -3,6 +3,16 @@ import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 
+export function destroyedBindingError(label: string, binding: BindingInfo, resourceName = "resource"): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-BINDING-DESTROYED",
+    message: `Binding '${binding.name}' (@group(${binding.group}) @binding(${binding.binding})) in '${label}' refers to destroyed resource '${resourceName}'.`,
+    where: `${label}.${binding.name}`,
+    fix: `Create a live resource and call set({ ${binding.name}: replacement }). Direct attachment references do not follow target.resize(); bind the Target itself to follow replacements. Re-record bundles that captured the old resource.`,
+    detail: { binding: binding.binding, bindingName: binding.name, resourceName },
+  });
+}
+
 export function storageStageLimitError(label: string, stage: "vertex" | "fragment", entryPoint: string, count: number, limit: number, bindings: readonly BindingInfo[]): VGPUError {
   const title = stage === "vertex" ? "Vertex" : "Fragment";
   const suffix = stage === "vertex" ? "VERTEX" : "FRAGMENT";

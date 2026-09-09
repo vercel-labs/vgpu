@@ -148,7 +148,7 @@ jobs:
       - name: Typecheck
         run: pnpm -w typecheck
 
-      # The full suite, exactly as ci.yml runs it. Tests that need a real GPU (Dawn + Xvfb) are
+      # The full suite, exactly as ci.yml runs it. Tests that need a GPU backend (Dawn + Vulkan) are
       # guarded by `VGPU_DOCKER_TEST` and skip themselves here, so this stays runner-safe while
       # covering every publishable package. Real-device validation stays in ci.yml's `docker-gpu`
       # job on both long-lived branches; every release tag is cut from an already-green `canary`.

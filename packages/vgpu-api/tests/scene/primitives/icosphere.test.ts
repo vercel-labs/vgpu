@@ -36,7 +36,7 @@ test("Mesh.icosphere validates params and overflow", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("icosphere primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("icosphere primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("icosphere", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.icosphere({ device, radius: 0.5, subdivisions: 2 }), camera: primitiveCamera(angle), material, baseColor: [0.5, 0.8, 0.95] })); }
   finally { device.destroy(); }

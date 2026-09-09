@@ -16,7 +16,7 @@ test("by-example §3 documents one shared user-owned uniform plus per-draw lib-o
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §3 shared camera feeds two draws with mixed ownership params", async () => {
   const { gpu, target, camera } = await runSharingExample();
   try {
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     const left = pixel(pixels, 3, 8, 16);
     const right = pixel(pixels, 12, 8, 16);
     expect(left[0]).toBeGreaterThan(180);

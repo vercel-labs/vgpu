@@ -19,8 +19,8 @@ import { resolveIndirect } from "./indirect.ts";
  * Compute pipeline for this gpu, ready to `set()` bindings and `dispatch()`.
  *
  * Each compute owns its own pipeline (no shared pipeline store), but it resolves the gpu's single
- * lazy bind group cache through the kernel, so a bind group built for a draw and one built here are
- * the same object when the resources match — and the cache is torn down once, in the service phase.
+ * lazy bind group cache through the kernel. Entries remain scoped to their pipeline owner: matching
+ * resources alone do not imply compatible layouts. The service tears down the shared cache once.
  */
 export function compute(gpu: Gpu, source: string | ShaderSource, opts: ComputeOptions = {}): Compute {
   const kernel = liveKernel(gpu, "compute");
@@ -70,7 +70,7 @@ export class ComputePipeline implements Compute {
       layout: this.pipelineLayout,
       compute: { module: this.shaderModule, entryPoint: this.entryPoint, ...(constants ? { constants } : {}) },
     });
-    this.setCore = createSetCore({ device, label: this.label, drawId: this.id, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
+    this.setCore = createSetCore({ device, label: this.label, drawId: `compute:${this.id}`, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
     const active = new Set(entryMetadata(entry, "bindings", this.label).map((binding) => `${binding.group}:${binding.binding}`));
     this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage" && active.has(`${binding.group}:${binding.binding}`));
     if (opts.set) this.set(opts.set);
@@ -88,10 +88,11 @@ export class ComputePipeline implements Compute {
     assertDeviceUsable(this.device, `${this.label}.dispatch`);
     const indirect = typeof x === "object" && x !== null ? this.#resolveIndirectDispatch(x, y, z) : undefined;
     this.#preflightAliasing();
+    const bindings = this.setCore.bindGroups();
     const encoder = this.device.gpu.createCommandEncoder({ label: `${this.label}.encoder` });
     const pass = encoder.beginComputePass({ label: `${this.label}.pass` });
     pass.setPipeline(this.pipeline);
-    for (const binding of this.setCore.bindGroups()) pass.setBindGroup(binding.group, binding.bindGroup, binding.offsets);
+    for (const binding of bindings) pass.setBindGroup(binding.group, binding.bindGroup, binding.offsets);
     if (indirect) pass.dispatchWorkgroupsIndirect(indirect.buffer, indirect.offset);
     else pass.dispatchWorkgroups(x as number, y ?? 1, z ?? 1);
     pass.end();

@@ -39,6 +39,15 @@ describe("doctor prescriptions", () => {
     expect(findings.find((finding) => finding.probe === "linux-mesa")).toMatchObject({ status: "ok", evidence: expect.stringContaining("Mesa 25.0") });
   });
 
+  test("a configured display does not imply an automatic OpenGL backend", async () => {
+    const findings = await runProbeRegistry(probeRegistry, {
+      ...linux, env: { DISPLAY: ":99", WAYLAND_DISPLAY: "wayland-0" },
+    });
+    expect(findings.find((finding) => finding.probe === "linux-display")).toMatchObject({
+      status: "ok", evidence: expect.stringContaining("defaults to Vulkan"),
+    });
+  });
+
   test("selects executable apt, dnf, and generic lavapipe fixes", () => {
     expect(prescriptionsFor({ ID: "ubuntu" }).install).toBe("apt-get update && apt-get install -y libvulkan1 libdrm2 zlib1g libzstd1 libudev1 mesa-vulkan-drivers");
     expect(prescriptionsFor({ ID: "amzn", VERSION_ID: "2023", ID_LIKE: "fedora" }).install).toBe("dnf install -y vulkan-loader libdrm zlib libzstd systemd-libs mesa-vulkan-drivers");

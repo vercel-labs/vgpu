@@ -8,6 +8,7 @@ import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
 import { meta as blackHoleMeta } from '../examples/black-hole/meta';
 import { meta as optimizedBlackHoleMeta } from '../examples/optimized-black-hole/meta';
 import { meta as earthMeta } from '../examples/earth/meta';
+import { meta as atmosphereMeta } from '../examples/atmosphere/meta';
 import { meta as fluidMeta } from '../examples/fluid/meta';
 import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
 import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
@@ -37,6 +38,7 @@ const rawMetadata = {
   'black-hole': blackHoleMeta,
   'optimized-black-hole': optimizedBlackHoleMeta,
   earth: earthMeta,
+  atmosphere: atmosphereMeta,
   fluid: fluidMeta,
   'instanced-rendering': instancedRenderingMeta,
   'batch-rendering': batchRenderingMeta,
@@ -75,6 +77,7 @@ export const exampleMetadataBySlug = {
   'black-hole': withThumbnails(rawMetadata['black-hole']),
   'optimized-black-hole': withThumbnails(rawMetadata['optimized-black-hole']),
   earth: withThumbnails(rawMetadata.earth),
+  atmosphere: withThumbnails(rawMetadata.atmosphere),
   fluid: withThumbnails(rawMetadata.fluid),
   'instanced-rendering': withThumbnails(rawMetadata['instanced-rendering']),
   'batch-rendering': withThumbnails(rawMetadata['batch-rendering']),

@@ -5,6 +5,7 @@
     "gpu",
     "surface",
     "target",
+    "texture",
     "frame",
     "effect",
     "draw",

@@ -196,6 +196,7 @@ test("builds the HDR scene in the original environment, blur, metal, and present
     [16, 8],
   ]);
   expect(state.gpu.device.createTexture).toHaveBeenCalledWith({
+    kind: "2d",
     format: "rgba16float",
     mipLevelCount: 8,
     size: [2048, 1024],

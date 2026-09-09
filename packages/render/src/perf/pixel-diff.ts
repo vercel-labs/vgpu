@@ -29,8 +29,8 @@ export async function pixelDiff(
   a: Texture | Uint8Array,
   b: Texture | Uint8Array,
 ): Promise<PixelDiffResult> {
-  const da = a instanceof Uint8Array ? a : await a.read();
-  const db = b instanceof Uint8Array ? b : await b.read();
+  const da = a instanceof Uint8Array ? a : await a.read({ mipLevel: 0, region: "all" });
+  const db = b instanceof Uint8Array ? b : await b.read({ mipLevel: 0, region: "all" });
 
   const total = Math.min(da.length, db.length);
   let maxByte = 0;
