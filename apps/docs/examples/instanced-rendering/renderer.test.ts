@@ -80,19 +80,39 @@ vi.mock("vgpu", () => ({
   clock: (gpu: TestGpu) => gpu.clock,
   frameLoop: (gpu: TestGpu, callback: (frame: unknown) => void) =>
     gpu.fns.frameLoop(callback),
-  surface: (gpu: TestGpu, ...args: unknown[]) => gpu.fns.surface(...args),
-  target: (gpu: TestGpu, ...args: unknown[]) => gpu.fns.target(...args),
+  surface: (gpu: TestGpu, canvas: HTMLCanvasElement, options: unknown) =>
+    gpu.fns.surface(canvas, options),
+  target: (gpu: TestGpu, options: { size: readonly [number, number] }) =>
+    gpu.fns.target(options),
 }));
 
 import { createRenderer } from "./renderer";
+
+interface TestSurface {
+  size: readonly [number, number];
+  format: string;
+  onResize(
+    callback: (size: { width: number; height: number }) => unknown
+  ): () => void;
+}
+
+interface TestTarget {
+  size: readonly [number, number];
+  format: string;
+  destroy: ReturnType<typeof vi.fn<() => void>>;
+}
+
+type MakeSurface = (canvas: HTMLCanvasElement, options: unknown) => TestSurface;
+type MakeTarget = (options: { size: readonly [number, number] }) => TestTarget;
+type StartLoop = (callback: (frame: unknown) => void) => { stop(): void };
 
 interface TestGpu {
   clock: { time: number };
   dispose: ReturnType<typeof vi.fn>;
   fns: {
-    frameLoop: ReturnType<typeof vi.fn>;
-    surface: ReturnType<typeof vi.fn>;
-    target: ReturnType<typeof vi.fn>;
+    frameLoop: ReturnType<typeof vi.fn<StartLoop>>;
+    surface: ReturnType<typeof vi.fn<MakeSurface>>;
+    target: ReturnType<typeof vi.fn<MakeTarget>>;
   };
 }
 
@@ -156,17 +176,17 @@ function setup() {
     clock: { time: 2.4 },
     dispose: vi.fn(),
     fns: {
-      surface: vi.fn(() => output),
-      target: vi.fn((options: { size: readonly [number, number] }) => {
+      surface: vi.fn<MakeSurface>(() => output),
+      target: vi.fn<MakeTarget>((options) => {
         const next = {
           size: options.size,
           format: "rgba8unorm",
-          destroy: vi.fn(),
+          destroy: vi.fn<() => void>(),
         };
         targets.push(next);
         return next;
       }),
-      frameLoop: vi.fn((callback: (frame: unknown) => void) => {
+      frameLoop: vi.fn<StartLoop>((callback) => {
         frameCallback = callback;
         return { stop };
       }),

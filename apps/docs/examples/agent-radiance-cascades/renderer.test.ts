@@ -17,7 +17,7 @@ const guiMocks = vi.hoisted(() => ({
     {
       change?: () => void;
       object: Record<string, unknown>;
-      options: ReturnType<typeof vi.fn>;
+      options: ReturnType<typeof vi.fn<(options: unknown) => void>>;
     }
   >(),
   destroy: vi.fn(),
@@ -47,10 +47,13 @@ vi.mock("lil-gui", () => ({
     }
 
     add(object: Record<string, unknown>, property: string) {
-      const state = { object, options: vi.fn() } as {
+      const state = {
+        object,
+        options: vi.fn<(options: unknown) => void>(),
+      } as {
         change?: () => void;
         object: Record<string, unknown>;
-        options: ReturnType<typeof vi.fn>;
+        options: ReturnType<typeof vi.fn<(options: unknown) => void>>;
       };
       const controller = {
         name: vi.fn(() => controller),

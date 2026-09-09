@@ -30,6 +30,34 @@ jobs:
       - run: pnpm exec vitest run
       - run: pnpm bundle-check
 
+  factory-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck factory
+        run: pnpm --filter @vgpu/factory typecheck
+      - name: Run deterministic factory tests
+        run: pnpm --filter @vgpu/factory test
+      - name: Inspect Eve discovery
+        run: pnpm --filter @vgpu/factory exec eve info --json
+      - name: Assert factory agent surface
+        run: pnpm --filter @vgpu/factory check:agent-surface
+      - name: Build factory
+        run: pnpm --filter @vgpu/factory build
+
   wgsl-loader-bundler-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 5

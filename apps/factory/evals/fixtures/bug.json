@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9901,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9901",
+    "sourceId": "issue:9901",
+    "title": "render produces a transparent PNG when alpha is omitted",
+    "body": "Using vgpu 0.2.0 on Node 22.18.0 and Ubuntu 24.04, a 16x16 solid red shader renders RGB values correctly but every output alpha value is 0. The same script produced opaque pixels in 0.1.9. Expected alpha 255; actual alpha 0. I can reproduce on two clean machines and included the minimal shader and JavaScript inline below.\n\nJavaScript: import { render } from 'vgpu'; await render({ width: 16, height: 16, shader: source, output: 'out.png' });\nShader fragment result: vec4f(1.0, 0.0, 0.0, 1.0).",
+    "author": "fixture-reporter",
+    "createdAt": "2026-08-20T14:30:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "enhancement", "description": "New feature or request" },
+    { "name": "question", "description": "Further information is requested" },
+    {
+      "name": "needs-information",
+      "description": "More reporter context is required"
+    },
+    { "name": "duplicate", "description": "This issue already exists" }
+  ],
+  "availableSourceIds": ["issue:9901"],
+  "contextWarnings": [],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": true }
+}
