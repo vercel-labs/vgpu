@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/vgpu-rewrite]
+    branches: [canary, main]
   pull_request:
+
+# CI only reads the checkout. Keeping its token read-only ensures that tests and third-party
+# actions cannot forge the separate production-authorization status that gates Vercel aliases.
+permissions:
+  contents: read
 
 jobs:
   test-fast:
@@ -377,12 +382,11 @@ jobs:
           if-no-files-found: warn
 
   docs-generated:
-    # Guards that the committed docs manifest + generated skill (skills/vgpu, the payload
-    # `npx skills add vercel-labs/vgpu` ships) are in sync with their sources (co-located
-    # *.docs.md, docs/topics, docs/allowlist.txt, and the generator itself). The generator is
-    # dependency-free (pure Node), so no install/build is needed. check-drift.js regenerates into a
-    # scratch temp dir (it never mutates the working tree) and normalizes the SKILL.md stamp
-    # (vgpuVersion/gitSha/generatedAt) before diffing, since that stamp is volatile by design.
+    # Guards the committed docs manifest and version-neutral skill router (`skills/vgpu`, the
+    # payload `npx skills add vercel-labs/vgpu` ships). The manifest stays in sync with co-located
+    # *.docs.md, docs/topics, and docs/allowlist.txt; the thin router stays in sync with skill.js and
+    # deliberately contains no version stamp or reference corpus. The generator is dependency-free
+    # (pure Node), and check-drift.js regenerates into a scratch directory without mutating the tree.
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -391,7 +395,7 @@ jobs:
         with:
           node-version: 22
       # TGEIST-12 extended this script to the geistdocs target as well, so this one step now covers
-      # both committed generator outputs: skills/vgpu + the docs manifest, AND
+      # the committed thin router + docs manifest, AND
       # apps/docs/content/docs (Decision 4's closing line). It regenerates both into a temp dir
       # and diffs — it never writes to the working tree, which is what replaced TGEIST-04's
       # "regenerate then `git diff --exit-code`" pair here (that pair mutated the checkout, so it

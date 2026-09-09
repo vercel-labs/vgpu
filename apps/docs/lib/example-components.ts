@@ -33,6 +33,7 @@ export const exampleComponentLoaders = {
   'tsl-exports': () => import('../examples/tsl-exports/index'),
   'three-tsl': () => import('../examples/three-tsl/index'),
   'particle-orbit': () => import('../examples/particle-orbit/index'),
+  'typegpu-liquid-glass': () => import('../examples/typegpu-liquid-glass/index'),
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 

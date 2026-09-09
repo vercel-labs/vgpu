@@ -8,7 +8,8 @@ export const AGENT_USE_CASES = [
 export const AGENT_INSTRUCTIONS = [
   "Prefer `npx vgpu examples` for discovering and copying examples.",
   "Use the examples API without authentication; verify the published SHA-256 values before using artifacts.",
-  "Prefer the public MCP server with automatic or modern protocol negotiation for agent-driven documentation and example discovery.",
+  "Use the public MCP server with automatic or modern protocol negotiation for current stable documentation and example discovery.",
+  "Use the project-local vgpu CLI or MCP server when documentation must match an installed package or prerelease.",
   "Use `npx vgpu mcp --project-from-cwd` for an active project workspace or `npx vgpu mcp --output-dir /absolute/path` for a fixed project when a local agent needs downloads.",
   "When download is enabled, pass a relative `destination` beneath the configured output directory.",
 ] as const;

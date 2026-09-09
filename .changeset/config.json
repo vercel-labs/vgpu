@@ -5,7 +5,7 @@
   "fixed": [["vgpu", "@vgpu/core", "@vgpu/wgsl", "@vgpu/wgsl-std", "@vgpu/adapter-node", "@vgpu/adapter-mock", "@vgpu/render"]],
   "linked": [],
   "access": "public",
-  "baseBranch": "main",
+  "baseBranch": "canary",
   "updateInternalDependencies": "patch",
   "ignore": [],
   "privatePackages": { "version": true, "tag": false },

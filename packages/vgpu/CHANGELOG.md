@@ -1,5 +1,11 @@
 # @vgpu/cli
 
+## 0.2.2
+
+### Patch Changes
+
+- 01470c5: Make the repository skill a version-neutral router that reads documentation from the project's selected `vgpu` package, keeping agent guidance aligned with the installed stable or prerelease version.
+
 ## 0.2.1
 
 ### Patch Changes
