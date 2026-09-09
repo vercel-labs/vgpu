@@ -16,6 +16,7 @@ export function assertSnapshotEnvironment(env = process.env, platform = process.
   if (!["check", "update"].includes(env.VGPU_SNAPSHOT_MODE)) throw new Error("Use pnpm snapshots:check or pnpm snapshots:update.");
   if (platform !== "linux" || arch !== "x64" || env.VGPU_SNAPSHOT_ENV !== SNAPSHOT_ENV
     || env.VGPU_DAWN_FLAGS !== "backend=vulkan"
+    || env.GALLIUM_OVERRIDE_CPU_CAPS !== "sse2" || env.LP_NATIVE_VECTOR_WIDTH !== "128"
     || env.VK_DRIVER_FILES !== "/usr/share/vulkan/icd.d/lvp_icd.json"
     || env.VK_ICD_FILENAMES !== env.VK_DRIVER_FILES) {
     throw new Error(`Visual references require ${SNAPSHOT_ENV}. Use pnpm snapshots:check; ordinary local GPU tests do not compare these images.`);

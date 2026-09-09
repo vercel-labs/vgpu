@@ -21,7 +21,7 @@ They never commit, push, approve changes, or upload your uncommitted files. Fork
 workflow-dispatch permission can use the normal PR check and ask a maintainer to generate candidates.
 
 Open the downloaded `index.html` to compare **before / actual / diff**. `environment.json` records the
-source revision, Node, Mesa/LLVM packages and the Vulkan adapter. `results.json` records hashes and
+source revision, Node, Mesa/LLVM packages, CPU capabilities and the Vulkan adapter. `results.json` records hashes and
 the result for each rendered image. Missing baselines fail check mode; they are not created silently.
 The production CI gate requires the verification job, not the separately named candidate-generation job.
 
@@ -49,6 +49,12 @@ The canonical Dockerfile pins the amd64 Node image by digest and the Debian pack
 including Mesa and LLVM. The workspace lockfile pins Dawn and other JS dependencies. CI runs on native
 `ubuntu-24.04` x64 and does not pass through a hardware GPU. Docs proofs, thumbnail checks and the CLI
 probe also use this pinned image; their existing comparison policies are unchanged.
+
+The visual workflow additionally fixes `GALLIUM_OVERRIDE_CPU_CAPS=sse2` and
+`LP_NATIVE_VECTOR_WIDTH=128`. Pinning the OS and packages alone did not produce identical images
+across native x64 runners: Mesa also selects shader instructions from host CPU capabilities.
+These overrides are restricted to the snapshot job, not library defaults or functional GPU tests.
+See Mesa's [CPU capability override](https://docs.mesa3d.org/envvars.html#envvar-GALLIUM_OVERRIDE_CPU_CAPS).
 
 Docker alone is not a promise of cross-architecture pixel equality. Emulated x64 on a Mac is useful
 for testing the harness, but its captures are not automatically promoted to canonical references.

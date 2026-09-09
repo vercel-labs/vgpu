@@ -13,6 +13,8 @@ const metadata = {
   environment: SNAPSHOT_ENV, mode: process.env.VGPU_SNAPSHOT_MODE,
   execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local (not native CI evidence)",
   revision: process.env.GITHUB_SHA ?? null, node: process.version,
+  cpu: (await readFile("/proc/cpuinfo", "utf8")).split("\n\n")[0],
+  cpuCaps: process.env.GALLIUM_OVERRIDE_CPU_CAPS, vectorWidth: process.env.LP_NATIVE_VECTOR_WIDTH,
   dockerfileSha256: createHash("sha256").update(await readFile("infra/snapshots/Dockerfile")).digest("hex"),
   lockfileSha256: createHash("sha256").update(await readFile("pnpm-lock.yaml")).digest("hex"),
   packages: spawnSync("dpkg-query", ["-W", "mesa-vulkan-drivers", "libllvm19", "libvulkan1"], { encoding: "utf8" }).stdout,

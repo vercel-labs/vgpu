@@ -383,4 +383,12 @@ Native artifacts/logs: `.context/native-snapshots-34384558238/`,
 
 Final gate: all required checks must pass on the latest PR revision after the native references and
 integration fixes. The live PR checks are authoritative for merge readiness; candidate generation or
-old green runs are not substitutes. Vulkan adoption, Linux defaults and native reference review are done.
+old green runs are not substitutes. Vulkan adoption and Linux defaults are done.
+
+The second native run (`34385008080`) exposed CPU-dependent visual output despite identical pinned
+packages: 36 images differed by at most one channel level, and all 237 captures matched the earlier
+emulated run. The first reference adoption therefore did not establish a stable oracle. The visual
+job now fixes Mesa CPU capabilities to SSE2 and its vector width to 128; this does not affect library
+defaults or functional GPU jobs. Native repeated-capture verification and reference review remain
+required before calling the snapshot migration complete. CPU identity is now included in artifacts.
+The same run found one lost documentation anchor, restored with an explicit replacement explanation.

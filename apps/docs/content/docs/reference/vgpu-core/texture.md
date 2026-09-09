@@ -64,7 +64,9 @@ Valid `TextureUsageName` values: `"copy_src"`, `"copy_dst"`, `"texture_binding"`
 | options | `TextureOptions` | ✔ | — | Copied and frozen, including nested arrays; exposed as `texture.options`. The constructor wraps an existing native resource; prefer `Device.createTexture()` for validated allocation. |
 | ownership | `"owned" \| "external"` | ✖ | `"owned"` | Destroying an owned wrapper releases its native texture. Destroying an external wrapper only invalidates the wrapper and notifies subscribers; native ownership stays external. |
 
-### Views and readback
+### Views, resize, readback
+
+Texture allocation is immutable. To resize, create a replacement and rebind it before destroying the previous texture; see the replacement example below. Views and readback operate on the current allocation.
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
