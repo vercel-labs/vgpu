@@ -929,6 +929,10 @@ static int inspect_owned_package(int parent, const char *parent_path,
     errno = EINVAL;
     return fail("conflict");
   }
+  if (named_record.st_dev != old->root_identity.st_dev) {
+    errno = EXDEV;
+    return fail("conflict");
+  }
   old->record_descriptor = openat(old->root, ".vgpu-native-output.json",
                                   O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
   if (old->record_descriptor < 0 || fstat(old->record_descriptor, &old->record_identity) != 0)
@@ -1049,13 +1053,26 @@ static int inspect_owned_package(int parent, const char *parent_path,
   }
   if (verify_owned_owner(old) != 0) return fail("conflict");
   old->sources = open_child_directory(old->root, "Sources");
-  if (old->sources < 0) return fail("conflict");
+  if (old->sources < 0 || fstat(old->sources, &old->sources_identity) != 0)
+    return fail("conflict");
+  if (old->sources_identity.st_dev != old->root_identity.st_dev) {
+    errno = EXDEV;
+    return fail("conflict");
+  }
   old->module = open_child_directory(old->sources, old->module_name);
-  if (old->module < 0) return fail("conflict");
+  if (old->module < 0 || fstat(old->module, &old->module_identity) != 0)
+    return fail("conflict");
+  if (old->module_identity.st_dev != old->root_identity.st_dev) {
+    errno = EXDEV;
+    return fail("conflict");
+  }
   old->resources = open_child_directory(old->module, "Resources");
-  if (old->resources < 0 || fstat(old->sources, &old->sources_identity) != 0 ||
-      fstat(old->module, &old->module_identity) != 0 ||
-      fstat(old->resources, &old->resources_identity) != 0) return fail("conflict");
+  if (old->resources < 0 || fstat(old->resources, &old->resources_identity) != 0)
+    return fail("conflict");
+  if (old->resources_identity.st_dev != old->root_identity.st_dev) {
+    errno = EXDEV;
+    return fail("conflict");
+  }
   const int directories[] = { old->root, old->module, old->resources, old->root };
   const char *names[] = {
     "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
@@ -1071,6 +1088,10 @@ static int inspect_owned_package(int parent, const char *parent_path,
         (index == 3 && (!same_identity(&identity, &old->record_identity) ||
                        (size_t)identity.st_size != old->record_length))) {
       errno = ESTALE;
+      return fail("conflict");
+    }
+    if (identity.st_dev != old->root_identity.st_dev) {
+      errno = EXDEV;
       return fail("conflict");
     }
     old->files[index].device = identity.st_dev;

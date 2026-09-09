@@ -38,8 +38,10 @@ publishing them. The private publisher currently stages and verifies those files
 parent lock, then publishes exclusively to a missing destination, atomically replaces an ordinary
 empty directory, or exchanges an intact package belonging to the same current configuration.
 Native byte-identical and changed-module rebuild tests observe the actual exchange of distinct
-complete directories and cleanup using the old package's own paths and metadata. Broader
-owned-replacement fault coverage remains pending.
+complete directories and cleanup using the old package's own paths and metadata. Old generated
+subtrees on another filesystem device are rejected before staging; a real mounted-image regression
+checks this boundary and preservation of the existing package. Broader owned-replacement fault
+coverage remains pending.
 Interrupted invocations retain explicit outcomes and recovery evidence. Bounded
 read-only reconciliation can confirm that the original intact generation reached the destination
 in the missing and empty modes. Owned exchange without an acknowledgment remains `unknown`;
@@ -99,6 +101,9 @@ The portable suite checks generation and input validation. The separate native s
 Apple silicon and requires a Metal device, Swift tooling, and Xcode's Metal compiler component.
 Missing tool or device prerequisites fail the native suite; passing the portable suite does not
 imply native coverage. The suite does not enforce an architecture gate or establish Intel support.
+The owned-package filesystem-boundary regression also uses macOS `hdiutil` to create and mount a
+disposable read-only image inside its temporary fixture. It detaches that image before removing
+the fixture; if detach cannot be confirmed, it preserves the fixture and reports the failure.
 
 Loader fixtures use handwritten Metal to isolate packaging and loading. Compiler fixtures instead
 resolve real imported WGSL, run the pinned worker and offline compiler, and execute the guide's

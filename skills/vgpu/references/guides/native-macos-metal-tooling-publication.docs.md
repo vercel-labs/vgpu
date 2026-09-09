@@ -14,9 +14,10 @@ them together, then replaces the output directory as one operation.
 
 > Warning: This is the docs-first publication contract. Staging, missing and empty-destination
 > publication, their bounded read-only reconciliation, and same-owner package exchanges with identical
-> bytes or a changed module name have native test coverage. Owned-replacement fault handling and reconciliation still need further
-> coverage and implementation, and the operational build companion is unfinished. The command shim exists; this is not a
-> released end-to-end build workflow.
+> bytes or a changed module name have native test coverage, as does rejection of an old generated
+> subtree on another filesystem device. Owned-replacement fault handling and reconciliation still
+> need further coverage and implementation, and the operational build companion is unfinished.
+> The command shim exists; this is not a released end-to-end build workflow.
 
 ## Reserve the destination
 
@@ -72,6 +73,14 @@ record and its configuration ownership, then the helper checks the old package's
 and actual bytes through the retained directories. The new generation does not supply the old
 module's paths, lengths, or hashes. Ownership and integrity are rechecked before exchange; old
 package cleanup uses its own verified file set, with the recovery record removed last.
+
+Before creating transaction state for an owned replacement, every generated directory and all four
+old package files must be on the same filesystem device as the retained package root and physical
+output parent. A generated subtree mounted from another device is a conflict, even when its file
+names, bytes, and ownership record otherwise match. It is not adopted for replacement or cleanup.
+This device boundary applies to generated contents, not the owning configuration: an accepted
+configuration alias may resolve to another device. Matching device identities do not by themselves
+prove the absence of every possible mount or alias topology.
 
 ### Bound one transaction
 
