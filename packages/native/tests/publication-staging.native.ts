@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   lstat,
+  mkdir,
   readFile,
   readdir,
   rename,
@@ -170,6 +171,70 @@ test("cleanup preserves a staged transaction when a file is replaced with the sa
     await rm(input.directory, { recursive: true, force: true });
   }
 });
+
+test("pre-existing destination, journal, and journal update entries are rejected without modification", async () => {
+  const cases = [
+    { name: "AppShaders", directory: true },
+    { name: ".vgpu-native-publication.json", directory: false },
+    { name: ".vgpu-native-publication.update.json", directory: false },
+  ] as const;
+
+  for (const conflict of cases) {
+    const input = await projectFixture();
+    try {
+      const prepared = await prepareMetalProject({
+        configurationPath: input.configurationPath,
+        workerPath,
+      });
+      const parent = dirname(input.outputPath);
+      const target = join(parent, conflict.name);
+      const sentinel = conflict.directory ? join(target, "sentinel") : target;
+      await mkdir(parent, { recursive: true });
+      if (conflict.directory) await mkdir(target);
+      await writeFile(sentinel, `preserve ${conflict.name}`);
+      const before = await lstat(target, { bigint: true });
+      const sentinelBefore = await lstat(sentinel, { bigint: true });
+      let callbackCalled = false;
+
+      await expect(
+        withPreparedMetalPublicationStage({ prepared }, async () => {
+          callbackCalled = true;
+        })
+      ).rejects.toMatchObject({
+        name: "MetalPublicationStagingError",
+        code: "conflict",
+      });
+
+      expect(callbackCalled).toBe(false);
+      const after = await lstat(target, { bigint: true });
+      expect({ device: after.dev, inode: after.ino, mode: after.mode }).toEqual(
+        {
+          device: before.dev,
+          inode: before.ino,
+          mode: before.mode,
+        }
+      );
+      expect(await readFile(sentinel, "utf8")).toBe(
+        `preserve ${conflict.name}`
+      );
+      const sentinelAfter = await lstat(sentinel, { bigint: true });
+      expect({
+        device: sentinelAfter.dev,
+        inode: sentinelAfter.ino,
+        mode: sentinelAfter.mode,
+      }).toEqual({
+        device: sentinelBefore.dev,
+        inode: sentinelBefore.ino,
+        mode: sentinelBefore.mode,
+      });
+      if (conflict.directory)
+        expect(await readdir(target)).toEqual(["sentinel"]);
+      expect(await readdir(parent)).toEqual([conflict.name]);
+    } finally {
+      await rm(input.directory, { recursive: true, force: true });
+    }
+  }
+}, 30_000);
 
 async function listTree(root: string, relative = ""): Promise<string[]> {
   const entries = await readdir(join(root, relative), {
