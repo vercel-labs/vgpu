@@ -32,6 +32,16 @@ export class FactoryRuntimeError extends FactoryError {
   }
 }
 
+export class FactoryInterruptedError extends FactoryRuntimeError {
+  readonly signal: "SIGINT" | "SIGTERM";
+
+  constructor(signal: "SIGINT" | "SIGTERM") {
+    super(`Interrupted by ${signal}.`);
+    this.name = "FactoryInterruptedError";
+    this.signal = signal;
+  }
+}
+
 export function exitCodeForError(error: unknown): 1 | 2 {
   return error instanceof FactoryError ? error.exitCode : 1;
 }

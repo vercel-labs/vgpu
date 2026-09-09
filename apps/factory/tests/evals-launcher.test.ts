@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { spawn as spawnProcess } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import {
   main,
@@ -22,9 +23,11 @@ class FakeServer extends EventEmitter implements EveChildProcess {
 
 function serverDependencies() {
   return {
+    createInvocation: async (appRoot: string) => ({ appRoot }),
     findOpenPort: async () => 43210,
     createClient: () => ({
       health: async () => undefined,
+      info: async () => undefined,
       session: () => {
         throw new Error("unused");
       },
@@ -51,6 +54,69 @@ class FakeChild extends EventEmitter implements EvalChildProcess {
 }
 
 describe("runFactoryEvals", () => {
+  it.skipIf(process.platform === "win32").each(["SIGTERM", "SIGINT"] as const)(
+    "does not swallow %s while preparing an invocation before any server exists",
+    async (signal) => {
+      const launcherUrl = new URL("../scripts/evals.ts", import.meta.url).href;
+      const parent = spawnProcess(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `
+      import { runFactoryEvals } from ${JSON.stringify(launcherUrl)};
+      setTimeout(() => process.exit(78), 2_000);
+      await runFactoryEvals([], {
+        environment: {},
+        buildEnvironment: async () => ({ environment: {}, credentialKind: "AI_GATEWAY_API_KEY", model: "mock" }),
+        serverDependencies: {
+          createInvocation: async () => { process.stdout.write("preparing"); await new Promise(() => {}); },
+          spawn: () => { throw new Error("Must never start a server after stop"); },
+        },
+      });
+    `,
+        ],
+        { env: {}, stdio: ["ignore", "pipe", "pipe"] }
+      );
+      const closed = new Promise<{
+        code: number | null;
+        signal: string | null;
+      }>((resolve, reject) => {
+        parent.once("error", reject);
+        parent.once("close", (code, signal) => resolve({ code, signal }));
+      });
+      parent.stdout.once("data", () => parent.kill(signal));
+      try {
+        await expect(closed).resolves.toEqual({ code: null, signal });
+      } finally {
+        if (parent.exitCode === null && parent.signalCode === null)
+          parent.kill("SIGKILL");
+      }
+    }
+  );
+
+  it("preserves a signal exit code when the eval and managed server share the process signal target", async () => {
+    const signalTarget = new EventEmitter();
+    const child = new FakeChild();
+    await expect(
+      runFactoryEvals([], {
+        nodeVersion: "24.0.0",
+        signalTarget,
+        serverDependencies: { ...serverDependencies(), signalTarget },
+        buildEnvironment: async () => ({
+          environment: {},
+          credentialKind: "AI_GATEWAY_API_KEY",
+          model: "mock",
+        }),
+        spawn: () => {
+          queueMicrotask(() => signalTarget.emit("SIGTERM"));
+          return child;
+        },
+      })
+    ).resolves.toBe(143);
+    expect(signalTarget.listenerCount("SIGTERM")).toBe(0);
+  });
+
   it.each([
     ["--url", "https://example.com"],
     ["--url=https://example.com"],
@@ -104,14 +170,17 @@ describe("runFactoryEvals", () => {
         }),
         signalTarget,
         spawn,
-        serverDependencies: serverDependencies(),
+        serverDependencies: {
+          ...serverDependencies(),
+          createInvocation: async () => ({ appRoot: "/isolated/evals" }),
+        },
       })
     ).resolves.toBe(0);
 
     expect(spawn).toHaveBeenCalledWith(
       process.execPath,
       [
-        "/repo/apps/factory/node_modules/eve/bin/eve.js",
+        "/isolated/evals/node_modules/eve/bin/eve.js",
         "eval",
         "--tag",
         "triage",
@@ -120,7 +189,7 @@ describe("runFactoryEvals", () => {
         "http://127.0.0.1:43210",
       ],
       {
-        cwd: "/repo/apps/factory",
+        cwd: "/isolated/evals",
         env: {
           ...sanitizedEnvironment,
           EVE_EVAL_AUTH_TOKEN: expect.stringMatching(/^[a-f0-9]{64}$/),

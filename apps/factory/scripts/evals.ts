@@ -13,6 +13,7 @@ import {
   exitCodeForError,
   FactoryRuntimeError,
   FactoryUsageError,
+  FactoryInterruptedError,
 } from "../src/errors.ts";
 import {
   withEveDevServer,
@@ -86,23 +87,28 @@ export async function runFactoryEvals(
     dependencies.buildEnvironment ?? buildSanitizedEveEnvironment
   )({ appRoot, hostEnvironment });
 
-  const eveBin = resolve(appRoot, "node_modules/eve/bin/eve.js");
-  return withEveDevServer(
-    {
-      appRoot,
-      environment: sanitized.environment,
-      dependencies: dependencies.serverDependencies,
-    },
-    async (_client, serverSignal, { host, token }) =>
-      launchEval(
-        [...argv, "--url", host],
+  try {
+    return await withEveDevServer(
+      {
         appRoot,
-        eveBin,
-        { ...sanitized.environment, EVE_EVAL_AUTH_TOKEN: token },
-        serverSignal,
-        dependencies
-      )
-  );
+        environment: sanitized.environment,
+        dependencies: dependencies.serverDependencies,
+      },
+      async (_client, serverSignal, { host, token, appRoot: invocationRoot }) =>
+        launchEval(
+          [...argv, "--url", host],
+          invocationRoot,
+          resolve(invocationRoot, "node_modules/eve/bin/eve.js"),
+          { ...sanitized.environment, EVE_EVAL_AUTH_TOKEN: token },
+          serverSignal,
+          dependencies
+        )
+    );
+  } catch (error) {
+    if (error instanceof FactoryInterruptedError)
+      return error.signal === "SIGINT" ? 130 : 143;
+    throw error;
+  }
 }
 
 async function launchEval(

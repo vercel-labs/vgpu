@@ -6,8 +6,8 @@ advisory report for a maintainer to review; it cannot label, comment on, close,
 or otherwise mutate an issue.
 
 This first milestone is deliberately text-only. It tests the classification and
-security boundaries before a GitHub App, webhooks, durable workflows, or code
-execution are introduced.
+security boundaries before a GitHub App, webhooks, multi-stage orchestration,
+or code execution are introduced.
 
 ## Requirements
 
@@ -45,6 +45,21 @@ runner for each invocation, separate from the Gateway credential. It is passed
 only through the child environment and authenticated client, not command-line
 arguments or session metadata. There is no unauthenticated localhost fallback;
 starting `eve dev` directly without the runner leaves these routes locked.
+The runner waits for both public health and authenticated agent information
+before submitting a turn; it never retries a session-creation POST.
+
+Each triage or eval invocation runs in its own private `vgpu-factory-*` directory
+under the OS temporary directory. Only authored agent/eval/source files and
+package configuration are copied; installed dependencies are linked. Dotenv
+files and previous workflow state are never copied. Existing `.eve/` artifacts
+remain untouched, and a later invocation never reopens an earlier runtime root.
+
+On interruption the triage runner requests cooperative cancellation while Eve
+is alive and allows up to five seconds to observe the session boundary, then
+terminates the process with bounded SIGTERM/SIGKILL escalation. If cancellation
+cannot be confirmed (including a lost create-session response), the isolated
+root prevents a later invocation from recovering that work. Do not manually
+restart Eve in a retained invocation directory: doing so can resume its runs.
 
 ## Run a dry triage
 
@@ -145,9 +160,11 @@ does not send its local credential to remote targets.
 
 Trace payload capture is disabled, but Eve's ignored local workflow state can
 retain the public input and result needed for durable execution. Eval reporters
-also intentionally save complete fixture prompts and model outputs under
-`apps/factory/.eve/evals/`. Use only public or synthetic reports in this
-milestone, keep `.eve/` local, and redact those artifacts before sharing them.
+also intentionally save complete fixture prompts and model outputs under the
+invocation's `.eve/evals/` directory. Temporary invocation directories are kept
+for inspection, not automatically deleted; old artifacts under
+`apps/factory/.eve/` are also left intact. Use only public or synthetic reports
+in this milestone, keep these artifacts local, and redact them before sharing.
 
 CI runs only the deterministic checks, surface inspection, and build. It is not
 given AI credentials, and its checkout does not persist the read-only GitHub

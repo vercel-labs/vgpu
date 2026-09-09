@@ -2,14 +2,19 @@ import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { Client, type MessageResult } from "eve/client";
+import {
+  Client,
+  type MessageResult,
+  type MessageStreamEvent,
+} from "eve/client";
 import {
   TriageProposalSchema,
   type NormalizedTriageInput,
   type TriageProposal,
 } from "../agent/lib/triage-schema.ts";
 import { FACTORY_LIMITS } from "./constants.ts";
-import { FactoryRuntimeError } from "./errors.ts";
+import { FactoryInterruptedError, FactoryRuntimeError } from "./errors.ts";
+import { createEveInvocation } from "./eve-invocation.ts";
 import { serializeTriagePrompt } from "./prompt.ts";
 import {
   assembleTriageReport,
@@ -33,23 +38,33 @@ export interface EveChildProcess {
   ): unknown;
 }
 
+export interface EveSessionLike {
+  readonly state: { readonly sessionId?: string };
+  cancel(): Promise<{ status: "accepted" | "no_active_turn" }>;
+  stream(options: {
+    signal: AbortSignal;
+    startIndex?: number;
+  }): AsyncIterable<MessageStreamEvent>;
+  send(input: {
+    message: string;
+    outputSchema: typeof TriageProposalSchema;
+    signal?: AbortSignal;
+  }): Promise<{ result(): Promise<MessageResult<TriageProposal>> }>;
+}
+
 export interface EveClientLike {
   health(): Promise<unknown>;
-  session(): {
-    send(input: {
-      message: string;
-      outputSchema: typeof TriageProposalSchema;
-      signal?: AbortSignal;
-    }): Promise<{ result(): Promise<MessageResult<TriageProposal>> }>;
-  };
+  info(): Promise<unknown>;
+  session(): EveSessionLike;
 }
 
 interface SignalTarget {
-  once(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+  on(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
   off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
 }
 
 export interface EveRunnerDependencies {
+  readonly createInvocation?: typeof createEveInvocation;
   readonly createClient?: (host: string, token: string) => EveClientLike;
   readonly findOpenPort?: () => Promise<number>;
   readonly signalTarget?: SignalTarget;
@@ -71,6 +86,7 @@ export interface EveServerOptions {
   readonly agentTurnTimeoutMs?: number;
   readonly startupTimeoutMs?: number;
   readonly stopGraceMs?: number;
+  readonly cancellationGraceMs?: number;
   readonly dependencies?: EveRunnerDependencies;
 }
 
@@ -154,12 +170,58 @@ function redactLog(log: string, environment: NodeJS.ProcessEnv): string {
   return redacted.trim();
 }
 
+async function cancelSessions(
+  sessions: ReadonlySet<EveSessionLike>,
+  graceMs: number
+): Promise<void> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      Promise.all(
+        [...sessions].map(async (session) => {
+          if (session.state.sessionId === undefined) return;
+          try {
+            const result = await session.cancel();
+            if (result.status !== "accepted" || controller.signal.aborted)
+              return;
+            // This runner sends one turn per session. Reattach independently of
+            // the aborted transport and observe a durable terminal boundary.
+            for await (const event of session.stream({
+              signal: controller.signal,
+              startIndex: 0,
+            })) {
+              if (
+                [
+                  "session.waiting",
+                  "session.completed",
+                  "session.failed",
+                ].includes(event.type)
+              )
+                return;
+            }
+          } catch {
+            // Cancellation is cooperative and may race startup or a dead host.
+            // Process termination + a never-reused app root are the backstop.
+          }
+        })
+      ),
+      new Promise<void>((resolveTimeout) => {
+        timer = setTimeout(resolveTimeout, graceMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    controller.abort();
+  }
+}
+
 export async function withEveDevServer<T>(
   options: EveServerOptions,
   useServer: (
     client: EveClientLike,
     signal: AbortSignal,
-    connection: { host: string; token: string }
+    connection: { host: string; token: string; appRoot: string }
   ) => Promise<T>
 ): Promise<T> {
   const dependencies = options.dependencies ?? {};
@@ -176,13 +238,15 @@ export async function withEveDevServer<T>(
       });
       return {
         health: () => client.health(),
-        session: () => ({
-          send: (input) => client.session().send(input),
-        }),
+        info: () => client.info(),
+        session: () => client.session(),
       };
     });
   const spawnProcess = dependencies.spawn ?? spawnEve;
   const signalTarget = dependencies.signalTarget ?? process;
+  const { appRoot } = await (
+    dependencies.createInvocation ?? createEveInvocation
+  )(options.appRoot);
   const port = await findPort();
   const host = `http://127.0.0.1:${port}`;
   const token = randomBytes(32).toString("hex");
@@ -190,11 +254,11 @@ export async function withEveDevServer<T>(
     ...options.environment,
     VGPU_FACTORY_LOCAL_TOKEN: token,
   };
-  const eveBin = resolve(options.appRoot, "node_modules/eve/bin/eve.js");
+  const eveBin = resolve(appRoot, "node_modules/eve/bin/eve.js");
   const child = spawnProcess(
     process.execPath,
     [eveBin, "dev", "--no-ui", "--host", "127.0.0.1", "--port", String(port)],
-    { cwd: options.appRoot, env: environment }
+    { cwd: appRoot, env: environment }
   );
 
   let output = "";
@@ -284,14 +348,16 @@ export async function withEveDevServer<T>(
       return;
     }
     interruptedBy = signal;
-    abortController.abort(new Error(`Interrupted by ${signal}.`));
-    void stop();
-    rejectInterrupted(new FactoryRuntimeError(`Interrupted by ${signal}.`));
+    const error = new FactoryInterruptedError(signal);
+    abortController.abort(error);
+    rejectInterrupted(error);
   };
   const onSigint = onSignal("SIGINT");
   const onSigterm = onSignal("SIGTERM");
-  signalTarget.once("SIGINT", onSigint);
-  signalTarget.once("SIGTERM", onSigterm);
+  // Keep handlers installed throughout cancellation and process termination.
+  // A second parent-directed signal must not orphan the still-running child.
+  signalTarget.on("SIGINT", onSigint);
+  signalTarget.on("SIGTERM", onSigterm);
 
   const startupDeadlineController = new AbortController();
   const startupDeadline = timeout(
@@ -305,6 +371,7 @@ export async function withEveDevServer<T>(
     );
   });
   void startupDeadline.catch(() => undefined);
+  const sessions = new Set<EveSessionLike>();
 
   try {
     const client = createClient(host, token);
@@ -324,7 +391,13 @@ export async function withEveDevServer<T>(
           startupDeadline,
           unexpectedExit,
           interrupted,
-          client.health(),
+          (async () => {
+            await client.health();
+            abortController.signal.throwIfAborted();
+            // Health is public and can become ready before Eve activates its
+            // runtime generation. Verify authenticated routes before any send.
+            await client.info();
+          })(),
         ]);
         startupDeadlineController.abort();
         break;
@@ -342,7 +415,19 @@ export async function withEveDevServer<T>(
     }
 
     return await Promise.race([
-      useServer(client, abortController.signal, { host, token }),
+      useServer(
+        {
+          health: () => client.health(),
+          info: () => client.info(),
+          session: () => {
+            const session = client.session();
+            sessions.add(session);
+            return session;
+          },
+        },
+        abortController.signal,
+        { host, token, appRoot }
+      ),
       unexpectedExit,
       interrupted,
     ]);
@@ -351,9 +436,16 @@ export async function withEveDevServer<T>(
     abortController.abort(
       new FactoryRuntimeError("The eve development server is shutting down.")
     );
-    signalTarget.off("SIGINT", onSigint);
-    signalTarget.off("SIGTERM", onSigterm);
-    await stop();
+    try {
+      await cancelSessions(sessions, options.cancellationGraceMs ?? 5_000);
+    } finally {
+      try {
+        await stop();
+      } finally {
+        signalTarget.off("SIGINT", onSigint);
+        signalTarget.off("SIGTERM", onSigterm);
+      }
+    }
   }
 }
 

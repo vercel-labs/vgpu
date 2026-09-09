@@ -34,12 +34,20 @@ class FakeChild extends EventEmitter implements EveChildProcess {
   }
 }
 
+const idleSession = {
+  state: {},
+  cancel: async () => ({ status: "no_active_turn" as const }),
+  stream: async function* () {},
+};
+
 function clientWithHealth(
   health = vi.fn(async () => ({ ok: true }))
 ): EveClientLike {
   return {
     health,
+    info: async () => undefined,
     session: () => ({
+      ...idleSession,
       send: vi.fn(async () => {
         throw new Error("send was not configured");
       }),
@@ -47,7 +55,172 @@ function clientWithHealth(
   };
 }
 
+const filesystem = {
+  createInvocation: async (appRoot: string) => ({ appRoot }),
+};
+
 describe("withEveDevServer", () => {
+  it("keeps a hung authenticated readiness probe inside the startup deadline", async () => {
+    const child = new FakeChild();
+    const info = vi.fn(() => new Promise<never>(() => undefined));
+    const useServer = vi.fn(async () => undefined);
+    await expect(
+      withEveDevServer(
+        {
+          appRoot: "/app",
+          environment: {},
+          startupTimeoutMs: 5,
+          dependencies: {
+            ...filesystem,
+            findOpenPort: async () => 12345,
+            signalTarget: new EventEmitter(),
+            spawn: () => child,
+            createClient: () => ({ ...clientWithHealth(), info }),
+          },
+        },
+        useServer
+      )
+    ).rejects.toThrow("startup deadline");
+    expect(info).toHaveBeenCalledOnce();
+    expect(useServer).not.toHaveBeenCalled();
+    expect(child.kills).toEqual(["SIGTERM"]);
+  });
+
+  it("waits for authenticated agent readiness even when the public health route is already healthy", async () => {
+    const child = new FakeChild();
+    let ready = false;
+    const info = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("runtime generation is not active yet"))
+      .mockImplementation(async () => {
+        ready = true;
+      });
+    const useServer = vi.fn(async () => {
+      expect(ready).toBe(true);
+      return "ready";
+    });
+    await expect(
+      withEveDevServer(
+        {
+          appRoot: "/app",
+          environment: {},
+          dependencies: {
+            ...filesystem,
+            findOpenPort: async () => 12345,
+            signalTarget: new EventEmitter(),
+            spawn: () => child,
+            sleep: async () => undefined,
+            createClient: () => ({ ...clientWithHealth(), info }),
+          },
+        },
+        useServer
+      )
+    ).resolves.toBe("ready");
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(useServer).toHaveBeenCalledOnce();
+  });
+
+  it.each(["request", "stream"])(
+    "bounds cleanup when the cancellation %s never settles",
+    async (hang) => {
+      const child = new FakeChild();
+      const cancel = vi.fn(async () =>
+        hang === "request"
+          ? new Promise<never>(() => undefined)
+          : { status: "accepted" as const }
+      );
+      await expect(
+        withEveDevServer(
+          {
+            appRoot: "/app",
+            environment: {},
+            cancellationGraceMs: 1,
+            dependencies: {
+              ...filesystem,
+              findOpenPort: async () => 12345,
+              signalTarget: new EventEmitter(),
+              spawn: () => child,
+              createClient: () => ({
+                health: async () => undefined,
+                info: async () => undefined,
+                session: () => ({
+                  state: { sessionId: "session-1" },
+                  cancel,
+                  send: async () => {
+                    throw new Error("not used");
+                  },
+                  stream: async function* () {
+                    await new Promise<never>(() => undefined);
+                  },
+                }),
+              }),
+            },
+          },
+          async (client) => {
+            client.session();
+            throw new Error("interrupted");
+          }
+        )
+      ).rejects.toThrow("interrupted");
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(child.kills).toEqual(["SIGTERM"]);
+    }
+  );
+
+  it.each(["timeout", "SIGTERM"])(
+    "cancels a turn on %s and observes its boundary before stopping Eve",
+    async (interruption) => {
+      const child = new FakeChild();
+      const signalTarget = new EventEmitter();
+      const order: string[] = [];
+      child.once("exit", () => order.push("stopped"));
+      let turnSignal: AbortSignal | undefined;
+      const client: EveClientLike = {
+        health: async () => undefined,
+        info: async () => undefined,
+        session: () => ({
+          state: { sessionId: "session-1" },
+          send: async ({ signal }) => {
+            turnSignal = signal;
+            if (interruption === "SIGTERM")
+              queueMicrotask(() => signalTarget.emit("SIGTERM"));
+            return { result: () => new Promise<never>(() => undefined) };
+          },
+          cancel: async () => {
+            expect(turnSignal?.aborted).toBe(true);
+            expect(child.signalCode).toBeNull();
+            order.push("cancel");
+            return { status: "accepted" as const };
+          },
+          stream: async function* ({ signal }) {
+            expect(signal.aborted).toBe(false);
+            order.push("cancelled");
+            yield { type: "turn.cancelled" } as MessageStreamEvent;
+            order.push("waiting");
+            yield { type: "session.waiting" } as MessageStreamEvent;
+          },
+        }),
+      };
+      await expect(
+        runTriageAgent(makeContext(), {
+          appRoot: "/app",
+          environment: {},
+          agentTurnTimeoutMs: 1,
+          dependencies: {
+            ...filesystem,
+            createClient: () => client,
+            findOpenPort: async () => 12345,
+            signalTarget,
+            spawn: () => child,
+          },
+        })
+      ).rejects.toThrow(
+        interruption === "timeout" ? "deadline" : "Interrupted by SIGTERM"
+      );
+      expect(order).toEqual(["cancel", "cancelled", "waiting", "stopped"]);
+    }
+  );
+
   it("starts Eve on an ephemeral loopback port, waits for health, and always terminates it", async () => {
     const child = new FakeChild();
     const spawn = vi.fn(
@@ -68,6 +241,7 @@ describe("withEveDevServer", () => {
         appRoot: "/repo/apps/factory",
         environment: { PATH: "/bin", AI_GATEWAY_API_KEY: "secret" },
         dependencies: {
+          createInvocation: async () => ({ appRoot: "/isolated/run" }),
           createClient: (host, token) => {
             expect(host).toBe("http://127.0.0.1:43210");
             expect(token).toMatch(/^[a-f0-9]{64}$/);
@@ -90,7 +264,7 @@ describe("withEveDevServer", () => {
     expect(spawn).toHaveBeenCalledOnce();
     const [, args, spawnOptions] = spawn.mock.calls[0]!;
     expect(args).toEqual([
-      "/repo/apps/factory/node_modules/eve/bin/eve.js",
+      "/isolated/run/node_modules/eve/bin/eve.js",
       "dev",
       "--no-ui",
       "--host",
@@ -99,7 +273,7 @@ describe("withEveDevServer", () => {
       "43210",
     ]);
     expect(spawnOptions).toEqual({
-      cwd: "/repo/apps/factory",
+      cwd: "/isolated/run",
       env: {
         PATH: "/bin",
         AI_GATEWAY_API_KEY: "secret",
@@ -119,6 +293,7 @@ describe("withEveDevServer", () => {
           appRoot: "/app",
           environment: { AI_GATEWAY_API_KEY: "secret" },
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(),
             findOpenPort: async () => 12345,
             signalTarget: new EventEmitter(),
@@ -145,6 +320,7 @@ describe("withEveDevServer", () => {
           environment: { AI_GATEWAY_API_KEY: "gateway-secret" },
           startupTimeoutMs: 100,
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(health),
             findOpenPort: async () => 12345,
             signalTarget: new EventEmitter(),
@@ -174,6 +350,7 @@ describe("withEveDevServer", () => {
           appRoot: "/app",
           environment: { AI_GATEWAY_API_KEY: "secret" },
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(health),
             findOpenPort: async () => 12345,
             signalTarget: new EventEmitter(),
@@ -195,6 +372,7 @@ describe("withEveDevServer", () => {
           appRoot: "/app",
           environment: { AI_GATEWAY_API_KEY: "secret" },
           dependencies: {
+            ...filesystem,
             createClient: () =>
               clientWithHealth(
                 vi.fn(() => new Promise<never>(() => undefined))
@@ -226,6 +404,7 @@ describe("withEveDevServer", () => {
           environment: { AI_GATEWAY_API_KEY: "secret" },
           stopGraceMs: 1,
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(),
             findOpenPort: async () => 12345,
             signalTarget: new EventEmitter(),
@@ -248,6 +427,7 @@ describe("withEveDevServer", () => {
           appRoot: "/app",
           environment: { AI_GATEWAY_API_KEY: "secret" },
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(),
             findOpenPort: async () => 12345,
             signalTarget,
@@ -272,6 +452,7 @@ describe("withEveDevServer", () => {
           appRoot: "/app",
           environment: { AI_GATEWAY_API_KEY: "secret" },
           dependencies: {
+            ...filesystem,
             createClient: () => clientWithHealth(),
             findOpenPort: async () => 12345,
             signalTarget: new EventEmitter(),
@@ -292,7 +473,9 @@ describe("withEveDevServer", () => {
     const child = new FakeChild();
     const client: EveClientLike = {
       health: async () => ({ ok: true }),
+      info: async () => undefined,
       session: () => ({
+        ...idleSession,
         send: vi.fn(() => new Promise<never>(() => undefined)),
       }),
     };
@@ -303,6 +486,7 @@ describe("withEveDevServer", () => {
         environment: { AI_GATEWAY_API_KEY: "secret" },
         agentTurnTimeoutMs: 1,
         dependencies: {
+          ...filesystem,
           createClient: () => client,
           findOpenPort: async () => 12345,
           signalTarget: new EventEmitter(),
@@ -352,7 +536,8 @@ describe("invokeTriageTurn", () => {
     );
     const client: EveClientLike = {
       health: async () => ({ ok: true }),
-      session: () => ({ send }),
+      info: async () => undefined,
+      session: () => ({ ...idleSession, send }),
     };
     const signal = new AbortController().signal;
 
@@ -372,7 +557,9 @@ describe("invokeTriageTurn", () => {
     const context = makeContext();
     const sendFailure: EveClientLike = {
       health: async () => undefined,
+      info: async () => undefined,
       session: () => ({
+        ...idleSession,
         send: vi.fn(async () => Promise.reject(new Error("transport"))),
       }),
     };
@@ -382,7 +569,9 @@ describe("invokeTriageTurn", () => {
 
     const resultFailure: EveClientLike = {
       health: async () => undefined,
+      info: async () => undefined,
       session: () => ({
+        ...idleSession,
         send: vi.fn(async () => ({
           result: async () => Promise.reject(new Error("stream")),
         })),
