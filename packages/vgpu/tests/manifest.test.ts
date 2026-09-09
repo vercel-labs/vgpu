@@ -21,6 +21,13 @@ test("the public texture reference ships on the website and in curated navigatio
   expect(topics.indexOf("texture")).toBe(topics.indexOf("target") + 1);
 });
 
+test.each(["TextureReadOptions", "TextureShape", "TextureUsageName"])("new texture type %s has a real heading for its website deep link", (symbol) => {
+  const record = docsManifest.records.find((entry) => entry.package === "vgpu/core" && entry.symbol === symbol);
+  expect(record?.anchor).toBe(symbol.toLowerCase());
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu-core/texture.md"), "utf8");
+  expect(page).toContain(`### ${symbol}\n`);
+});
+
 test("parses allowlist entries and maps virtual paths", () => {
   const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/buffer.docs.md\n");
 

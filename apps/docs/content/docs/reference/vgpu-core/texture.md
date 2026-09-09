@@ -41,6 +41,34 @@ declare class Texture {
 }
 ```
 
+## Shared types
+
+### TextureShape
+
+The discriminated shape uses `kind: "1d"` with `[width]`, `"2d"` with `[width, height]`,
+`"3d"` with `[width, height, depth]`, or `"2d-array"` with `[width, height]` and separate `layers`.
+Only arrays accept `layers`. Narrow `texture.options.kind` to access shape-specific fields.
+
+### TextureUsageName
+
+The capability names are `"copy_src"`, `"copy_dst"`, `"texture_binding"`, `"storage_binding"` and
+`"render_attachment"`. `TextureOptions.usage` requires at least one; no capability is inferred.
+
+### TextureReadOptions
+
+Both fields are required. Origins and extents are mip-relative texels; `"all"` includes every array
+layer or 3D slice of the selected mip. Buffer reads are unchanged.
+
+```ts
+interface TextureReadOptions {
+  readonly mipLevel: number;
+  readonly region: "all" | {
+    readonly origin: readonly [number, number, number];
+    readonly size: readonly [number, number, number];
+  };
+}
+```
+
 ## Parameters
 
 ### `Device.createTexture(opts)` / `TextureOptions`
