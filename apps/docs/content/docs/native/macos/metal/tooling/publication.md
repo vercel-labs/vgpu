@@ -122,6 +122,10 @@ physical parent lock and compares the recorded transaction, expected directory i
 complete package contents with the generation it prepared. It does not send another commit
 request, recreate a missing parent, or remove recovery state.
 
+The complete new package at the destination must retain the prepared directory's identity to
+prove publication. If that same intact directory is still at staging and the destination is
+absent, reconciliation can instead establish that publication did not happen.
+
 A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
 into a successful build. The diagnostic preserves the original error and distinguishes reconciled
 publication from an acknowledged commit. If the lock, identities, record, or contents cannot be
