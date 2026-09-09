@@ -940,7 +940,11 @@ test("an explicit preference cancels a stale Auto import", async () => {
   const env = browser();
   const live = gpu();
   const pendingAuto = deferred<{
-    createPrismAutoQualityController: ReturnType<typeof vi.fn>;
+    createPrismAutoQualityController: ReturnType<
+      typeof vi.fn<
+        typeof import("./performance/auto-quality").createPrismAutoQualityController
+      >
+    >;
   }>();
   const createAuto = vi.fn();
   const loadAutoQuality = vi.fn(() => pendingAuto.promise);
