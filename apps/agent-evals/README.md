@@ -48,6 +48,8 @@ own build copies the CLI out of it and its `prepack` generates the docs that
 | `s2-gradient` | a 128x128 red-to-blue gradient from `node render.mjs` | the PNG the agent left behind |
 | `n1-hero-shader` | a hover-trail background shader in a Next.js hero | a build/serve/hover pass the **harness** runs itself |
 | `view-image-smoke` | name the two colors in `known.png` | that the `view-image` tool really delivers pixels |
+| `n2-ship-hero` | a working, approved vgpu hero: "get it ready to merge", write `PR.md` | build + `vgpu check` by the **harness**; whether the agent found and followed the shipping-to-production guide |
+| `n3-explore-hero` | the same hero, "still exploring the look", one palette change | build + `vgpu check`; that the agent did **not** run the pre-PR checklist |
 
 ### s2-gradient
 
@@ -250,6 +252,72 @@ able to *end* that run, and by default it can:
   archived material that contains no negative examples to validate the new
   boundary against. Converting them needs a comparability run of its own.
 
+### n2-ship-hero and n3-explore-hero (a pair)
+
+Two tasks, **one seed** (`agent/sandbox/tasks/n2-ship-hero/` and an identical
+copy under `n3-explore-hero/`), one grading vocabulary
+(`evals/lib/hero-signals.ts`). They exist to answer a docs question the other
+tasks cannot: does an agent find the guide written for the *finishing moment*
+([shipping-to-production](../../docs/topics/shipping-to-production.docs.md))
+when that moment arrives, and does it leave the guide alone when it has not?
+
+The seed is a Next.js hero that already renders an aurora with vgpu and builds
+clean. It is deliberately unoptimized in exactly the ways the guide's sections 3
+and 4 name: no `compile()` pre-warm, three `rgba32float` targets where
+`rgba16float` would do, a two-pass blur at full resolution, a continuous frame
+loop. Each is a fork: a free default the agent may apply, or a visible trade it
+must offer rather than impose.
+
+**`n2-ship-hero`** asks:
+
+> The hero background in /workspace looks good and is approved. Get it ready to
+> merge: do whatever you would do before opening the PR, then write the PR
+> description to PR.md. Use `npx vgpu`.
+
+`PR.md` is named because "prepare the PR" without a place for the description
+would grade a file the agent had no reason to write. Nothing else is said: no
+"checklist", "optimize", "measure" or "propose".
+
+**`n3-explore-hero`** asks, from the same seed:
+
+> I'm still exploring the look of the hero background in /workspace. Try a
+> warmer palette: oranges and magentas instead of the blues. Use `npx vgpu`.
+
+The word "exploring" is the whole signal. The guide says not to start the
+checklist unprompted while the user is prototyping; an agent that pre-warms,
+downgrades formats or writes `PR.md` here applied the right guide at the wrong
+time. Without this control, an agent that *always* optimizes passes n2 for the
+wrong reason.
+
+**What the harness does after the turn** (`agent/lib/verify/next-build.mjs`,
+from the same `turn.completed` hook as n1): discovers every shipped `.wgsl`
+with `find` and runs `npx vgpu check` on each, then `next build`, and writes
+`.agent-evals/build-verify.json`. No browser, no server: these tasks are about
+what the agent does at the finishing moment, not about pixels, so a run stays in
+the minutes.
+
+**Gates.** n2: build ok, every WGSL module validates, `PR.md` exists and is
+non-empty. n3: build ok, every module validates, a shader actually changed.
+
+**Everything else is observed, never gated.** Deterministic signals from
+`hero-signals.ts` (each a literal fact about files or commands, all false on the
+untouched seed): `opened_shipping_guide` (asked for the doc by name, not merely
+saw it in an index), `ran_vgpu_check`, `ran_next_build`, `wrote_measurement`,
+`prewarm_added`, `bundles_added`, `format_changed`, `pr_md_written`,
+`pr_has_measurement`, and `checklist_footprint` (the union n3 expects to be
+false). Plus soft code-semantics judges through `lib/judge-code.mjs` so a
+failed judge call costs a signal and never the run: for n2, "PR.md separates
+applied from proposed with a number each", "no pixel-affecting change in the
+seed→shipped diff is missing from PR.md", "a measurement was actually taken";
+for n3, "the palette moved warm" and "scope discipline: nothing beyond the
+request". The seed→shipped diff is judge *material* only, never control flow.
+
+Read the pair together. The finding is the contrast: n2 `opened_shipping_guide`
+and `prewarm_added` high with `silent_format_change` false, and n3
+`checklist_footprint` false, is the docs doing their job. n2 low and n3 false
+means the skill's hook line is not being followed at the finishing moment; n2
+high and n3 true means the guide is being applied indiscriminately.
+
 ### view-image-smoke
 
 A fast, ~1-turn infra self-test: it asks the agent to look at a randomly
@@ -283,8 +351,8 @@ node --env-file .env.local ./node_modules/.bin/pnpm agent-evals --task n1-hero-s
 node --env-file .env.local ./node_modules/.bin/pnpm agent-evals --task view-image-smoke
 ```
 
-Shortcuts for the same three: `pnpm agent-evals:s2`, `pnpm agent-evals:n1`,
-`pnpm agent-evals:view-image`.
+Shortcuts: `pnpm agent-evals:s2`, `pnpm agent-evals:n1`, `pnpm agent-evals:view-image`,
+`pnpm agent-evals:n2`, `pnpm agent-evals:n3`.
 
 `pnpm agent-evals` preflights the Node version (exit code **2** with an
 actionable message if it is too old), resolves `--task` (exit **2** listing the
