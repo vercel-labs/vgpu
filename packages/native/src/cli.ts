@@ -138,6 +138,7 @@ function compilerFailureResult(
 function renderPublicationError(error: MetalPublicationError): string {
   const lines = [
     `Native publication: ${error.outcome}`,
+    ...(error.receipt ? [`Confirmation: ${error.receipt.confirmation}`] : []),
     `[error] ${error.code}: ${error.message.replace(/\r\n|\r|\n/gu, "\n  ")}`,
   ];
   if (error.recoveryPaths.length > 0)

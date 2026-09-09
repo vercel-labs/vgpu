@@ -127,8 +127,12 @@ not a publication outcome or permission to remove recovery evidence.
 
 An installed build encountering an unrecognized recovery record reports its current non-publication
 outcome, original error and retained paths without changing the existing package or recovery files.
-Those paths are for inspection, not cleanup authority. This narrow conflict case does not qualify
-installed interrupted-transaction or published/unknown receipt diagnostics.
+Those paths are for inspection, not cleanup authority. A separate fault-instrumented invocation of
+the installed candidate observes a real successful rename followed by helper death before its
+acknowledgment. The command reports `Confirmation: reconciled` from its checked receipt, retains the
+original failure and preserves the published package and journal. Its test-only preload modifies
+only the selected helper's spawn environment; it does not qualify ordinary loader behavior, signing
+or quarantine. Installed interrupted-transaction and unknown-outcome diagnostics remain unqualified.
 
 ## Checks
 

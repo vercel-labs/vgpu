@@ -19,9 +19,12 @@ them together, then replaces the output directory as one operation.
 > The local installed build companion publishes to an initially absent destination and checks the
 > resulting package in an offline local-tarball test with dependency install scripts disabled.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
-> the supplied paths while preserving the existing package and recovery files. Installed interrupted-
-> transaction and published/unknown receipt diagnostics remain unqualified; this is not a released
-> end-to-end build workflow.
+> the supplied paths while preserving the existing package and recovery files. A separate,
+> explicitly fault-instrumented invocation of the same candidate observes a successful real rename
+> followed by helper death before acknowledgment. Its report includes `Confirmation: reconciled`,
+> retains the original failure, and preserves the published package and journal. This instrumentation
+> does not qualify ordinary loader behavior, signing, or quarantine. Installed interrupted-transaction
+> and unknown-outcome diagnostics remain unqualified; this is not a released end-to-end build workflow.
 
 ## Reserve the destination
 
@@ -199,6 +202,29 @@ into a successful build. The diagnostic preserves the original error and disting
 publication from an acknowledged commit. If the lock, identities, record, or contents cannot be
 verified, the outcome remains unknown. An already requested cancellation does not skip this
 bounded evidence check.
+
+When a failed invocation carries a checked publication receipt, its command report prints
+`Confirmation: acknowledged` or `Confirmation: reconciled` immediately after the publication
+outcome. The value comes from that receipt: `acknowledged` means the live helper's response was
+checked; `reconciled` means the later read-only evidence check established publication. No
+confirmation line is added without a receipt, and the command does not infer one from a directory
+name or matching hashes.
+
+For example, losing the helper response after a real publication can produce this failure report:
+
+```text
+Native publication: published
+Confirmation: reconciled
+[error] helper-failed: Metal publication published: Invalid publication staging helper response
+Inspect retained paths (not cleanup authority):
+  /absolute/output/parent/.vgpu-native-publication.json
+  /absolute/output/parent/AppShaders
+```
+
+This remains a failed invocation with empty standard output, not a successful build report or
+permission to remove the retained files. The original error and paths remain in the report;
+the additional confirmation describes the evidence behind the publication outcome. Ordinary
+failure exits `1`, while cancellation retains the documented signal exit status.
 
 ## Recover without guessing
 

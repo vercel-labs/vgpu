@@ -18,6 +18,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { expect, test } from "vitest";
 import { runConsumer } from "./native-support.ts";
 import { projectFixture } from "./project-operation-fixture.ts";
@@ -1056,6 +1057,401 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
     expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
     for (const [filename, before] of archiveEvidence)
       expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    // Explicit fault instrumentation of this one installed command, not ordinary loader qualification.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(105_000);
+    const originalProjectNames = (await readdir(project)).sort();
+    const lostConfiguration = join(project, "lost-ack.native.json");
+    const lostParent = join(project, "LostAck");
+    const lostOutput = join(lostParent, "AppShaders");
+    const lostStage = join(lostParent, ".vgpu-native-stage");
+    const lostJournal = join(lostParent, ".vgpu-native-publication.json");
+    const faultEvidence = join(fixture, "publication-fault");
+    await mkdir(faultEvidence);
+    await mkdir(lostParent);
+    const lostConfigurationBytes = Buffer.from(
+      JSON.stringify({
+        ...JSON.parse(
+          await readFile(join(project, "vgpu.native.json"), "utf8")
+        ),
+        output: "LostAck/AppShaders",
+      })
+    );
+    await writeFile(lostConfiguration, lostConfigurationBytes, { flag: "wx" });
+    const lostConfigurationIdentity = await lstat(lostConfiguration, {
+      bigint: true,
+    });
+    const lostParentIdentity = await lstat(lostParent, { bigint: true });
+    expect(await readdir(lostParent)).toEqual([]);
+    const preload = new URL(
+      "./fixtures/publication-cli-fault-injection.mjs",
+      import.meta.url
+    );
+    const observerSource = new URL(
+      "./fixtures/publication-rename-conflict.c",
+      import.meta.url
+    );
+    const faultSources = [
+      fileURLToPath(preload),
+      fileURLToPath(observerSource),
+    ];
+    const faultSourceEvidence = await Promise.all(
+      faultSources.map(fileEvidence)
+    );
+    const observer = join(faultEvidence, "rename-observer.dylib");
+    await boundedCommands(
+      Math.min(workflowDeadline, Date.now() + 30_000)
+    ).checked(
+      "/usr/bin/xcrun",
+      [
+        "--sdk",
+        "macosx",
+        "clang",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mmacosx-version-min=14.0",
+        "-dynamiclib",
+        fileURLToPath(observerSource),
+        "-o",
+        observer,
+      ],
+      fixture,
+      doctorEnvironment
+    );
+    const observerBefore = await fileEvidence(observer);
+    const paused = join(faultEvidence, "paused");
+    const resume = join(faultEvidence, "resume");
+    const completed = join(faultEvidence, "completed");
+    const faultDeadline = Math.min(workflowDeadline, Date.now() + 60_000);
+    let faultResult: Result | undefined;
+    let faultError: unknown;
+    let faultSettled = false;
+    const faultOperation = boundedCommands(faultDeadline)
+      .command(
+        process.execPath,
+        [
+          "--import",
+          preload.href,
+          bin,
+          "native",
+          "build",
+          "--config",
+          "../project/lost-ack.native.json",
+        ],
+        runtime,
+        {
+          ...doctorEnvironment,
+          VGPU_CLI_FAULT_PARENT_PID: String(process.pid),
+          VGPU_CLI_FAULT_SETTINGS: JSON.stringify({
+            bin,
+            configurationPath: lostConfiguration,
+            configurationArgument: "../project/lost-ack.native.json",
+            parentPath: lostParent,
+            scratch,
+            evidence: faultEvidence,
+            observer,
+          }),
+        }
+      )
+      .then(
+        (result) => {
+          faultResult = result;
+          faultSettled = true;
+        },
+        (cause: unknown) => {
+          faultError = cause;
+          faultSettled = true;
+        }
+      );
+    try {
+      let reachedPause = false;
+      while (Date.now() < faultDeadline) {
+        if (faultSettled)
+          throw new Error(
+            `Setup: fault-injected command closed before rename pause: ${String(
+              faultError ?? JSON.stringify(faultResult)
+            )}`
+          );
+        const marker = await readFile(paused, "utf8").catch(
+          (cause: NodeJS.ErrnoException) => {
+            if (cause.code !== "ENOENT") throw cause;
+            return undefined;
+          }
+        );
+        if (marker !== undefined) {
+          expect(marker).toBe("before-rename\n");
+          reachedPause = true;
+          break;
+        }
+        await delay(5);
+      }
+      if (!reachedPause)
+        throw new Error("Setup: real helper never reached the rename pause");
+      const entry = JSON.parse(
+        await readFile(join(faultEvidence, "entry.json"), "utf8")
+      );
+      const publisher = JSON.parse(
+        await readFile(join(faultEvidence, "publisher.json"), "utf8")
+      );
+      expect(entry).toEqual({
+        pid: expect.any(Number),
+        parentPid: process.pid,
+        argv: [
+          process.execPath,
+          bin,
+          "native",
+          "build",
+          "--config",
+          "../project/lost-ack.native.json",
+        ],
+      });
+      expect(publisher).toMatchObject({
+        pid: expect.any(Number),
+        sanitized: true,
+      });
+      expect(publisher.args).toEqual([
+        "vgpu-publication-staging/v1",
+        lostParent,
+        "AppShaders",
+        "AppShaders",
+        expect.stringMatching(/^[a-f0-9]{32}$/u),
+        "publish-project",
+        lostConfiguration,
+      ]);
+      for (const path of [
+        lostOutput,
+        resume,
+        completed,
+        join(faultEvidence, "publisher-close.json"),
+        join(faultEvidence, "reconciliation.json"),
+      ])
+        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      const journal = await boundedFaultFile(lostJournal);
+      expect(isUtf8(journal.bytes)).toBe(true);
+      expect((await readdir(lostParent)).sort()).toEqual([
+        ".vgpu-native-publication.json",
+        ".vgpu-native-stage",
+      ]);
+      const stagedDirectories = [];
+      for (const [path, children] of [
+        ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
+        ["Sources", ["AppShaders"]],
+        ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
+        ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
+      ] as const) {
+        const metadata = await lstat(join(lostStage, path), { bigint: true });
+        expect(metadata.isDirectory()).toBe(true);
+        expect((await readdir(join(lostStage, path))).sort()).toEqual(children);
+        stagedDirectories.push({ path, children, metadata });
+      }
+      const stagedFiles = [];
+      for (const [role, path] of [
+        ["package-manifest", "Package.swift"],
+        ["swift-source", "Sources/AppShaders/Shaders.generated.swift"],
+        ["metal-library", "Sources/AppShaders/Resources/Shaders.metallib"],
+        ["output-record", ".vgpu-native-output.json"],
+      ] as const)
+        stagedFiles.push({
+          role,
+          path,
+          ...(await boundedFaultFile(join(lostStage, path))),
+        });
+      const originalStage = stagedDirectories[0]!.metadata;
+      const preparedJournal = JSON.parse(journal.bytes.toString("utf8"));
+      expect(preparedJournal).toEqual({
+        schemaVersion: 1,
+        kind: "vgpu-native-publication",
+        phase: "prepared",
+        transactionId: publisher.args[4],
+        parent: {
+          device: lostParentIdentity.dev.toString(),
+          inode: lostParentIdentity.ino.toString(),
+        },
+        destinationName: "AppShaders",
+        moduleName: "AppShaders",
+        publication: { renameMode: "excl", expectedDestination: "missing" },
+        stage: {
+          name: ".vgpu-native-stage",
+          device: originalStage.dev.toString(),
+          inode: originalStage.ino.toString(),
+        },
+        recordSHA256: createHash("sha256")
+          .update(stagedFiles[3]!.bytes)
+          .digest("hex"),
+        files: stagedFiles.map(({ role, path, bytes }) => ({
+          role,
+          path,
+          length: bytes.length,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        })),
+      });
+      expect(isUtf8(stagedFiles[3]!.bytes)).toBe(true);
+      expect(JSON.parse(stagedFiles[3]!.bytes.toString("utf8"))).toMatchObject({
+        schemaVersion: 1,
+        format: "vgpu-metal-package/v1",
+        moduleName: "AppShaders",
+        ownerConfiguration: "../../lost-ack.native.json",
+        files: stagedFiles
+          .slice(0, 3)
+          .map(({ path, bytes }) => ({
+            path,
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+          }))
+          .sort((left, right) => left.path.localeCompare(right.path)),
+      });
+      await writeFile(resume, "resume\n", { flag: "wx" });
+      await faultOperation;
+      if (faultError) throw faultError;
+      if (!faultResult)
+        throw new Error("Setup: fault command has no settled result");
+      console.info(
+        "Fault-injected installed publication actual result",
+        JSON.stringify(faultResult)
+      );
+      expect(await readFile(completed, "utf8")).toMatch(/^0 \d+\n$/u);
+      const publisherClose = JSON.parse(
+        await readFile(join(faultEvidence, "publisher-close.json"), "utf8")
+      );
+      expect(publisherClose).toEqual({
+        pid: publisher.pid,
+        code: 97,
+        signal: null,
+      });
+      const reconciliation = JSON.parse(
+        await readFile(join(faultEvidence, "reconciliation.json"), "utf8")
+      );
+      expect(reconciliation).toEqual({
+        executable: publisher.executable,
+        pid: expect.any(Number),
+        args: [
+          "vgpu-publication-staging/v1",
+          lostParent,
+          "AppShaders",
+          "AppShaders",
+          publisher.args[4],
+          "reconcile-missing",
+          lostParentIdentity.dev.toString(),
+          lostParentIdentity.ino.toString(),
+        ],
+        afterPublisherClose: publisherClose,
+        injected: false,
+      });
+      expect(reconciliation.pid).not.toBe(publisher.pid);
+      expect(
+        JSON.parse(
+          await readFile(
+            join(faultEvidence, "reconciliation-close.json"),
+            "utf8"
+          )
+        )
+      ).toEqual({ pid: reconciliation.pid, code: 0, signal: null });
+      expect((await readdir(faultEvidence)).sort()).toEqual([
+        "completed",
+        "entry.json",
+        "paused",
+        "publisher-close.json",
+        "publisher.json",
+        "reconciliation-close.json",
+        "reconciliation.json",
+        "rename-observer.dylib",
+        "resume",
+      ]);
+      for (const { path, children, metadata } of stagedDirectories) {
+        expect((await readdir(join(lostOutput, path))).sort()).toEqual(
+          children
+        );
+        expect(
+          await lstat(join(lostOutput, path), { bigint: true })
+        ).toMatchObject({
+          dev: metadata.dev,
+          ino: metadata.ino,
+          mode: metadata.mode,
+          nlink: metadata.nlink,
+        });
+      }
+      for (const { path, bytes, metadata } of stagedFiles) {
+        const retained = await boundedFaultFile(join(lostOutput, path));
+        expect(retained.bytes).toEqual(bytes);
+        expect(retained.metadata).toMatchObject({
+          dev: metadata.dev,
+          ino: metadata.ino,
+          mode: metadata.mode,
+          nlink: metadata.nlink,
+          size: metadata.size,
+        });
+      }
+      const journalAfter = await boundedFaultFile(lostJournal);
+      expect(journalAfter.bytes).toEqual(journal.bytes);
+      expect(journalAfter.metadata).toMatchObject({
+        dev: journal.metadata.dev,
+        ino: journal.metadata.ino,
+        mode: journal.metadata.mode,
+        nlink: journal.metadata.nlink,
+        size: journal.metadata.size,
+      });
+      expect((await readdir(lostParent)).sort()).toEqual([
+        ".vgpu-native-publication.json",
+        "AppShaders",
+      ]);
+      await expect(lstat(lostStage)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await lstat(lostParent, { bigint: true })).toMatchObject({
+        dev: lostParentIdentity.dev,
+        ino: lostParentIdentity.ino,
+        mode: lostParentIdentity.mode,
+      });
+      expect(await readFile(lostConfiguration)).toEqual(lostConfigurationBytes);
+      expect(await lstat(lostConfiguration, { bigint: true })).toMatchObject({
+        dev: lostConfigurationIdentity.dev,
+        ino: lostConfigurationIdentity.ino,
+        mode: lostConfigurationIdentity.mode,
+        nlink: lostConfigurationIdentity.nlink,
+        size: lostConfigurationIdentity.size,
+      });
+      expect((await readdir(project)).sort()).toEqual(
+        [...originalProjectNames, "LostAck", "lost-ack.native.json"].sort()
+      );
+      expect(
+        await Promise.all(
+          originalProjectNames.map(async (name) => [
+            name,
+            await treeEvidence(join(project, name)),
+          ])
+        )
+      ).toEqual(retainedTreeBefore);
+      for (const { path, metadata } of retainedIdentities)
+        expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+      for (const path of [missingDeveloper, missingVerifyTemp])
+        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(scratch)).toEqual([]);
+      expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+      expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+      expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+      expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+      for (const [filename, before] of archiveEvidence)
+        expect(await fileEvidence(join(archives, filename))).toEqual(before);
+      expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
+        faultSourceEvidence
+      );
+      expect(await fileEvidence(observer)).toEqual(observerBefore);
+      // Only the receipt-backed formatting assertion below is the intended RED.
+      expect(faultResult.code, JSON.stringify(faultResult)).toBe(1);
+      expect(faultResult.signal).toBeNull();
+      expect(faultResult.stdout).toBe("");
+      expect(faultResult.stderr).toContain("Native publication: published\n");
+      expect(faultResult.stderr).toContain(
+        "[error] helper-failed: Metal publication published: Invalid publication staging helper response\n"
+      );
+      expect(faultResult.stderr).toContain(
+        `Inspect retained paths (not cleanup authority):\n  ${lostJournal}\n  ${lostOutput}\n`
+      );
+      expect(faultResult.stderr, JSON.stringify(faultResult)).toBe(
+        `Native publication: published\nConfirmation: reconciled\n[error] helper-failed: Metal publication published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${lostJournal}\n  ${lostOutput}\n`
+      );
+    } finally {
+      // The public process-group deadline owns shutdown, even if barrier/evidence setup fails.
+      await faultOperation;
+    }
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {
@@ -1227,6 +1623,33 @@ async function fileEvidence(path: string) {
     bytes: bytes.length,
     sha256: createHash("sha256").update(bytes).digest("hex"),
   };
+}
+
+async function boundedFaultFile(path: string) {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const metadata = await file.stat({ bigint: true });
+    expect(metadata.isFile()).toBe(true);
+    expect(metadata.nlink).toBe(1n);
+    expect(metadata.size).toBeGreaterThan(0n);
+    expect(metadata.size).toBeLessThanOrEqual(65536n);
+    const buffer = Buffer.alloc(65537);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(
+        buffer,
+        length,
+        buffer.length - length,
+        length
+      );
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    expect(BigInt(length)).toBe(metadata.size);
+    return { bytes: buffer.subarray(0, length), metadata };
+  } finally {
+    await file.close();
+  }
 }
 
 async function treeEvidence(path: string): Promise<unknown> {
