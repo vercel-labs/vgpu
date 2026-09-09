@@ -15,7 +15,7 @@ import {
   inspectExistingProductionAuthorization,
   latestCommitStatus,
   latestMainPolicyCheck,
-  mainPolicyRunIdFromDetailsUrl,
+  mainPolicyWorkflowRunId,
   normalizeGraphqlPullRequest,
   parseMainPolicyCheckExternalId,
   promotionVersionFromBranch,
@@ -596,7 +596,7 @@ async function main() {
   );
   const mainPolicyPolicySha = mainPolicyBinding?.policySha ?? null;
   const mainPolicyRunId = latestMainPolicy
-    ? mainPolicyRunIdFromDetailsUrl(latestMainPolicy.details_url, repository)
+    ? mainPolicyWorkflowRunId(latestMainPolicy, repository)
     : null;
   const mainPolicyWorkflowRun = mainPolicyRunId
     ? await github.get(
