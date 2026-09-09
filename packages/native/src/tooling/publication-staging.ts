@@ -1,9 +1,17 @@
 import { execFile, spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { captureToolEnvironment } from "../compiler/environment.js";
 import type { PreparedMetalProject } from "./prepare-project.js";
+import { validateMetalProjectOutputBoundary } from "./project-output-boundary.js";
 import { readPublicationResponseLines } from "./publication-response-lines.js";
 import {
   readMetalPublicationRecovery,
@@ -111,6 +119,77 @@ export class MetalPublicationStagingCleanupError extends MetalPublicationStaging
   }
 }
 
+export type MetalPublicationOutcome = "not-published" | "unknown" | "published";
+
+export interface PublishedMetalPublication {
+  readonly schemaVersion: 1;
+  readonly kind: "published";
+  readonly outcome: "published";
+  readonly transactionId: string;
+  readonly parent: PreparedMetalPublicationStage["parent"];
+  readonly destinationName: string;
+  readonly output: PreparedMetalPublicationStage["parent"];
+  readonly recordSHA256: string;
+  readonly outputPath: string;
+}
+
+interface PublicationState {
+  outcome: MetalPublicationOutcome;
+  prepared?: PreparedMetalPublicationStage;
+  receipt?: PublishedMetalPublication;
+  finalized: boolean;
+}
+
+export class MetalPublicationError extends MetalPublicationStagingError {
+  readonly outcome: MetalPublicationOutcome;
+  readonly receipt?: PublishedMetalPublication;
+  constructor(state: PublicationState, cause: unknown) {
+    const known =
+      cause instanceof MetalPublicationStagingError ? cause : undefined;
+    const retained =
+      state.prepared && !state.finalized
+        ? [
+            ...(state.outcome === "published"
+              ? []
+              : [state.prepared.stagePath]),
+            state.prepared.journalPath,
+            ...(state.outcome === "not-published"
+              ? []
+              : [
+                  join(
+                    dirname(state.prepared.journalPath),
+                    state.prepared.destinationName
+                  ),
+                ]),
+          ]
+        : [];
+    super(
+      known?.code ?? "helper-failed",
+      `Metal publication ${state.outcome}: ${
+        known?.message ?? "operation failed"
+      }`,
+      {
+        cause,
+        recoveryPaths: [
+          ...new Set([...(known?.recoveryPaths ?? []), ...retained]),
+        ],
+      }
+    );
+    this.name = "MetalPublicationError";
+    this.outcome = state.outcome;
+    this.receipt = state.receipt;
+  }
+}
+
+type StagingOperation<T> = {
+  readonly kind: "stage-only";
+  readonly callback: (receipt: PreparedMetalPublicationStage) => Promise<T>;
+};
+type PublishingOperation = {
+  readonly kind: "publish-missing";
+  readonly state: PublicationState;
+};
+
 interface StagingSnapshot {
   readonly parentPath: string;
   readonly destinationName: string;
@@ -135,7 +214,46 @@ export function withPreparedMetalPublicationStage<T>(
   if (typeof callback !== "function")
     throw new TypeError("A staging callback is required");
   const snapshot = snapshotPreparation(input);
-  return runStaging(snapshot, callback);
+  return runStaging(snapshot, { kind: "stage-only", callback });
+}
+
+/** Private missing-destination tracer; replacement modes are not enabled by this entry point. */
+export async function publishPreparedMetalOutput(
+  input: PreparedMetalPublicationStageInput
+): Promise<PublishedMetalPublication> {
+  const state: PublicationState = {
+    outcome: "not-published",
+    finalized: false,
+  };
+  try {
+    const snapshot = snapshotPreparation(input);
+    const project = input.prepared.project;
+    const boundary = Object.freeze({
+      configurationPath: project.filePath,
+      output: project.configuration.output,
+      sourcePaths: Object.freeze([...project.sourcePaths]),
+    });
+    const outputPath = join(snapshot.parentPath, snapshot.destinationName);
+    const record = parseMetalOutputRecord(snapshot.files[3]!.bytes);
+    if (
+      typeof boundary.configurationPath !== "string" ||
+      typeof boundary.output !== "string" ||
+      resolve(dirname(boundary.configurationPath), boundary.output) !==
+        outputPath ||
+      record.ownerConfiguration !==
+        relative(outputPath, boundary.configurationPath) ||
+      record.inputFingerprint !== project.inputFingerprint
+    )
+      throw new MetalPublicationStagingError(
+        "invalid-preparation",
+        "Prepared publication boundary metadata is inconsistent"
+      );
+    throwIfCancelled(snapshot.signal);
+    await validateMetalProjectOutputBoundary(boundary);
+    return await runStaging(snapshot, { kind: "publish-missing", state });
+  } catch (cause) {
+    throw new MetalPublicationError(state, cause);
+  }
 }
 
 function snapshotPreparation(
@@ -268,10 +386,18 @@ function validateComponent(value: string, label: string): void {
     );
 }
 
+function runStaging<T>(
+  snapshot: StagingSnapshot,
+  operation: StagingOperation<T>
+): Promise<T>;
+function runStaging(
+  snapshot: StagingSnapshot,
+  operation: PublishingOperation
+): Promise<PublishedMetalPublication>;
 async function runStaging<T>(
   snapshot: StagingSnapshot,
-  callback: (receipt: PreparedMetalPublicationStage) => Promise<T>
-): Promise<T> {
+  operation: StagingOperation<T> | PublishingOperation
+): Promise<T | PublishedMetalPublication> {
   throwIfCancelled(snapshot.signal);
   if (process.platform !== "darwin")
     throw new MetalPublicationStagingError(
@@ -313,6 +439,7 @@ async function runStaging<T>(
         snapshot.destinationName,
         snapshot.moduleName,
         snapshot.transactionId,
+        ...(operation.kind === "publish-missing" ? ["publish-missing"] : []),
       ],
       { env: snapshot.environment, stdio: ["pipe", "pipe", "pipe"] }
     );
@@ -416,11 +543,34 @@ async function runStaging<T>(
     if (prepared.kind !== "prepared")
       throw helperResponseError(prepared, snapshot.parentPath);
     const receipt = validateReceipt(prepared, snapshot);
+    if (operation.kind === "publish-missing") {
+      operation.state.prepared = receipt;
+      if (
+        prepared.publication?.renameMode !== "excl" ||
+        prepared.publication?.expectedDestination !== "missing" ||
+        Object.keys(prepared.publication).length !== 2
+      )
+        throw new MetalPublicationStagingError(
+          "helper-failed",
+          "Prepared helper did not confirm the missing-destination publication mode"
+        );
+    }
     throwIfCancelled(snapshot.signal);
     transferActive = false;
+    if (operation.kind === "publish-missing")
+      return await commitMissingPublication(
+        childInput,
+        lines,
+        child,
+        closed,
+        snapshot,
+        receipt,
+        operation.state,
+        watchProgress
+      );
     let value: T;
     try {
-      value = await callback(receipt);
+      value = await operation.callback(receipt);
       throwIfCancelled(snapshot.signal);
     } catch (cause) {
       if (snapshot.signal?.aborted && cause === snapshot.signal.reason)
@@ -574,6 +724,165 @@ async function runStaging<T>(
       );
     }
   }
+}
+
+async function commitMissingPublication(
+  input: NodeJS.WritableStream,
+  lines: AsyncIterator<string>,
+  child: ReturnType<typeof spawn>,
+  closed: Promise<number | null>,
+  snapshot: StagingSnapshot,
+  prepared: PreparedMetalPublicationStage,
+  state: PublicationState,
+  watchProgress: <U>(operation: Promise<U>) => Promise<U>
+): Promise<PublishedMetalPublication> {
+  let cancellationGrace: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => {
+    cancellationGrace ??= setTimeout(() => child.kill("SIGKILL"), 5_000);
+  };
+  snapshot.signal?.addEventListener("abort", cancel, { once: true });
+  if (snapshot.signal?.aborted) cancel();
+  const finish = async (phase: "prepared" | "published") => {
+    await watchProgress(
+      writeBytes(
+        input,
+        Buffer.from(`finalize ${snapshot.transactionId} ${phase}\n`)
+      )
+    );
+    const reply = await watchProgress(receiveMessage(lines));
+    if (
+      reply.kind !== "finalized" ||
+      reply.transactionId !== snapshot.transactionId ||
+      reply.phase !== phase
+    )
+      throw helperResponseError(reply, snapshot.parentPath);
+    input.end();
+    if (
+      !(await watchProgress(lines.next())).done ||
+      (await watchProgress(closed)) !== 0
+    )
+      throw new MetalPublicationStagingError(
+        "helper-failed",
+        "Publication helper did not close cleanly after finalization"
+      );
+    state.finalized = true;
+  };
+  try {
+    throwIfCancelled(snapshot.signal);
+    const command = Buffer.from(
+      `commit-missing ${snapshot.transactionId} prepared\n`
+    );
+    // This write can reach the helper even when its callback later fails.
+    state.outcome = "unknown";
+    await watchProgress(writeBytes(input, command));
+    const reply = await watchProgress(receiveMessage(lines));
+    if (
+      reply.kind !== "commit-result" ||
+      reply.transactionId !== snapshot.transactionId ||
+      reply.phase !== "prepared"
+    )
+      throw new MetalPublicationStagingError(
+        "helper-failed",
+        "Unconfirmed publication commit response"
+      );
+    if (reply.outcome === "not-published") {
+      if (
+        Object.keys(reply).length !== 7 ||
+        ![
+          "conflict",
+          "parent-changed",
+          "invalid-stage",
+          "helper-failed",
+        ].includes(reply.code) ||
+        !Number.isSafeInteger(reply.errno) ||
+        reply.errno < 0
+      )
+        throw new MetalPublicationStagingError(
+          "helper-failed",
+          "Invalid publication rejection response"
+        );
+      state.outcome = "not-published";
+      const failure = helperResponseError(reply, snapshot.parentPath);
+      try {
+        await finish("prepared");
+      } catch (cleanupCause) {
+        throw new MetalPublicationStagingCleanupError(
+          [failure, cleanupCause],
+          [prepared.stagePath, prepared.journalPath]
+        );
+      }
+      throw failure;
+    }
+    if (
+      reply.outcome !== "published" ||
+      Object.keys(reply).length !== 9 ||
+      !responseIdentity(reply.parent, prepared.parent) ||
+      reply.destinationName !== prepared.destinationName ||
+      !responseIdentity(reply.output, prepared.stage) ||
+      reply.recordSHA256 !== prepared.recordSHA256
+    )
+      throw new MetalPublicationStagingError(
+        "helper-failed",
+        "Invalid successful publication response"
+      );
+    state.outcome = "published";
+    state.receipt = Object.freeze({
+      schemaVersion: 1,
+      kind: "published",
+      outcome: "published",
+      transactionId: snapshot.transactionId,
+      parent: prepared.parent,
+      destinationName: prepared.destinationName,
+      output: Object.freeze({
+        device: prepared.stage.device,
+        inode: prepared.stage.inode,
+      }),
+      recordSHA256: prepared.recordSHA256,
+      outputPath: join(snapshot.parentPath, snapshot.destinationName),
+    });
+    await finish("published");
+    throwIfCancelled(snapshot.signal);
+    return state.receipt;
+  } catch (cause) {
+    if (
+      snapshot.signal?.aborted &&
+      !(
+        cause instanceof MetalPublicationStagingError &&
+        cause.code === "cancelled"
+      )
+    )
+      throw new MetalPublicationStagingError(
+        "cancelled",
+        "Publication was cancelled while retaining commit evidence",
+        {
+          cause: new AggregateError(
+            [snapshot.signal.reason, cause],
+            "Publication cancellation and failure"
+          ),
+          recoveryPaths:
+            cause instanceof MetalPublicationStagingError
+              ? cause.recoveryPaths
+              : [],
+        }
+      );
+    throw cause;
+  } finally {
+    clearTimeout(cancellationGrace);
+    snapshot.signal?.removeEventListener("abort", cancel);
+  }
+}
+
+function responseIdentity(
+  value: any,
+  expected: PreparedMetalPublicationStage["parent"]
+): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Object.keys(value).length === 2 &&
+    value.device === expected.device &&
+    value.inode === expected.inode
+  );
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {

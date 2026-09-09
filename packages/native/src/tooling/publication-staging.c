@@ -234,7 +234,8 @@ static int append_json_string(char *buffer, size_t capacity, size_t *used,
 
 static int build_journal(char *buffer, size_t capacity, const char *phase,
                          const char *transaction, const char *destination,
-                         const char *module, const struct stat *parent_identity,
+                         const char *module, int publish_missing,
+                         const struct stat *parent_identity,
                          const struct stat *stage_identity,
                          const struct artifact files[4], size_t *length) {
   size_t used = 0;
@@ -247,6 +248,9 @@ static int build_journal(char *buffer, size_t capacity, const char *phase,
       append_json_string(buffer, capacity, &used, destination) != 0 ||
       append_json(buffer, capacity, &used, ",\"moduleName\":") != 0 ||
       append_json_string(buffer, capacity, &used, module) != 0) return -1;
+  if (publish_missing && append_json(buffer, capacity, &used,
+      ",\"publication\":{\"renameMode\":\"excl\",\"expectedDestination\":\"missing\"}") != 0)
+    return -1;
   if (stage_identity != NULL && append_json(buffer, capacity, &used,
       ",\"stage\":{\"name\":\"%s\",\"device\":\"%llu\",\"inode\":\"%llu\"}",
       STAGE_NAME, (unsigned long long)stage_identity->st_dev,
@@ -275,6 +279,27 @@ static int build_journal(char *buffer, size_t capacity, const char *phase,
     if (append_json(buffer, capacity, &used, "]") != 0) return -1;
   }
   if (append_json(buffer, capacity, &used, "}\n") != 0) return -1;
+  *length = used;
+  return 0;
+}
+
+static int build_commit_receipt(char *buffer, size_t capacity, const char *transaction,
+                                const char *destination, const struct stat *parent_identity,
+                                const struct stat *output_identity, const char *record_hash,
+                                size_t *length) {
+  size_t used = 0;
+  if (append_json(buffer, capacity, &used,
+      "{\"schemaVersion\":1,\"kind\":\"commit-result\",\"transactionId\":\"%s\","
+      "\"phase\":\"prepared\",\"outcome\":\"published\","
+      "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"destinationName\":",
+      transaction, (unsigned long long)parent_identity->st_dev,
+      (unsigned long long)parent_identity->st_ino) != 0 ||
+      append_json_string(buffer, capacity, &used, destination) != 0 ||
+      append_json(buffer, capacity, &used,
+      ",\"output\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"recordSHA256\":\"%s\"}\n",
+      (unsigned long long)output_identity->st_dev,
+      (unsigned long long)output_identity->st_ino, record_hash) != 0)
+    return -1;
   *length = used;
   return 0;
 }
@@ -588,7 +613,8 @@ static int directory_edge(int parent, const char *name, int retained,
   return 0;
 }
 
-static int verify_tree(int parent, int stage, const struct stat *stage_identity,
+static int verify_tree(int parent, const char *root_name, int stage,
+                       const struct stat *stage_identity,
                        int sources, const struct stat *sources_identity,
                        int module, const char *module_name,
                        const struct stat *module_identity, int resources,
@@ -598,7 +624,7 @@ static int verify_tree(int parent, int stage, const struct stat *stage_identity,
   const char *sources_entries[] = { module_name };
   const char *module_entries[] = { "Resources", "Shaders.generated.swift" };
   const char *resource_entries[] = { "Shaders.metallib" };
-  if (directory_edge(parent, STAGE_NAME, stage, stage_identity) != 0 ||
+  if (directory_edge(parent, root_name, stage, stage_identity) != 0 ||
       directory_edge(stage, "Sources", sources, sources_identity) != 0 ||
       directory_edge(sources, module_name, module, module_identity) != 0 ||
       directory_edge(module, "Resources", resources, resources_identity) != 0 ||
@@ -704,7 +730,8 @@ static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_
 }
 
 int main(int argc, char **argv) {
-  if (argc != 6 || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
+  if ((argc != 6 && argc != 7) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
+      (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0) ||
       !valid_transaction(argv[5])) {
     errno = EINVAL;
     return fail("helper-failed");
@@ -713,6 +740,7 @@ int main(int argc, char **argv) {
   const char *destination = argv[3];
   const char *module = argv[4];
   const char *transaction = argv[5];
+  int publish_missing = argc == 7 && strcmp(argv[6], "publish-missing") == 0;
   int parent = open_parent(parent_path);
   if (parent < 0) return fail("unsafe-parent");
   struct stat parent_identity;
@@ -750,7 +778,7 @@ int main(int argc, char **argv) {
   size_t journal_length = 0;
   struct stat journal_identity;
   if (build_journal(journal, sizeof(journal), "intent", transaction, destination,
-                    module, &parent_identity, NULL, NULL, &journal_length) != 0 ||
+                    module, publish_missing, &parent_identity, NULL, NULL, &journal_length) != 0 ||
       install_initial_journal(parent, journal, journal_length, &journal_identity) != 0)
     return fail("helper-failed");
 
@@ -761,7 +789,8 @@ int main(int argc, char **argv) {
   char next_journal[JOURNAL_LIMIT];
   size_t next_journal_length = 0;
   if (build_journal(next_journal, sizeof(next_journal), "staging", transaction, destination,
-                    module, &parent_identity, &stage_identity, NULL, &next_journal_length) != 0 ||
+                    module, publish_missing, &parent_identity, &stage_identity, NULL,
+                    &next_journal_length) != 0 ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
                             journal, journal_length, &retained_update) != 0)
     return fail_journal_update(retained_update);
@@ -816,12 +845,13 @@ int main(int argc, char **argv) {
   if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, "prepare\n") != 0)
     return fail("invalid-transfer");
   if (!parent_matches(parent_path, &parent_identity)) return fail("parent-changed");
-  if (verify_tree(parent, stage, &stage_identity, sources, &sources_identity,
+  if (verify_tree(parent, STAGE_NAME, stage, &stage_identity, sources, &sources_identity,
                   module_directory, module, &module_identity, resources,
                   &resources_identity, files) != 0)
     return fail("invalid-stage");
   if (build_journal(next_journal, sizeof(next_journal), "prepared", transaction, destination,
-                    module, &parent_identity, &stage_identity, files, &next_journal_length) != 0 ||
+                    module, publish_missing, &parent_identity, &stage_identity, files,
+                    &next_journal_length) != 0 ||
       next_journal_length > JOURNAL_LIMIT ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
                             journal, journal_length, &retained_update) != 0)
@@ -832,7 +862,8 @@ int main(int argc, char **argv) {
   char receipt[JOURNAL_LIMIT];
   size_t receipt_length = 0;
   if (build_journal(receipt, sizeof(receipt), "prepared", transaction, destination,
-                    module, &parent_identity, &stage_identity, files, &receipt_length) != 0)
+                    module, publish_missing, &parent_identity, &stage_identity, files,
+                    &receipt_length) != 0)
     return fail("helper-failed");
   char *kind = strstr(receipt, "\"kind\":\"vgpu-native-publication\",\"phase\":\"prepared\"");
   if (kind == NULL) return fail("helper-failed");
@@ -846,37 +877,90 @@ int main(int argc, char **argv) {
   fwrite(receipt, 1, receipt_length, stdout);
   fflush(stdout);
 
-  if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, "finalize\n") != 0)
+  int published = 0;
+  if (publish_missing) {
+    char expected[64];
+    snprintf(expected, sizeof(expected), "commit-missing %s prepared\n", transaction);
+    if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, expected) != 0)
+      return fail("helper-failed");
+
+    const char *rejection = NULL;
+    if (build_commit_receipt(receipt, sizeof(receipt), transaction, destination,
+                             &parent_identity, &stage_identity, files[3].hash,
+                             &receipt_length) != 0)
+      rejection = "helper-failed";
+    else if (!parent_matches(parent_path, &parent_identity))
+      rejection = "parent-changed";
+    else if (verify_tree(parent, STAGE_NAME, stage, &stage_identity, sources, &sources_identity,
+                         module_directory, module, &module_identity, resources,
+                         &resources_identity, files) != 0)
+      rejection = "invalid-stage";
+    else if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
+             ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, destination) != 0)
+      rejection = "conflict";
+    else if (!parent_matches(parent_path, &parent_identity))
+      rejection = "parent-changed";
+    else if (renameatx_np(parent, STAGE_NAME, parent, destination,
+                          RENAME_EXCL | RENAME_NOFOLLOW_ANY) != 0)
+      rejection = errno == EEXIST ? "conflict" : "helper-failed";
+    else
+      published = 1; /* Historical syscall evidence, before acknowledgment or cleanup. */
+
+    if (published) {
+      if (fwrite(receipt, 1, receipt_length, stdout) != receipt_length || fflush(stdout) != 0)
+        return 1;
+    } else {
+      int commit_error = errno;
+      if (printf("{\"schemaVersion\":1,\"kind\":\"commit-result\",\"transactionId\":\"%s\","
+                 "\"phase\":\"prepared\",\"outcome\":\"not-published\",\"code\":\"%s\","
+                 "\"errno\":%d}\n", transaction, rejection, commit_error) < 0 || fflush(stdout) != 0)
+        return 1;
+    }
+    snprintf(expected, sizeof(expected), "finalize %s %s\n", transaction,
+             published ? "published" : "prepared");
+    if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, expected) != 0)
+      return fail("helper-failed");
+  } else if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, "finalize\n") != 0)
     return fail("helper-failed");
   if (!parent_matches(parent_path, &parent_identity)) return fail("cleanup-failed");
-  if (verify_tree(parent, stage, &stage_identity, sources, &sources_identity,
+  if (verify_tree(parent, published ? destination : STAGE_NAME, stage,
+                  &stage_identity, sources, &sources_identity,
                   module_directory, module, &module_identity, resources,
                   &resources_identity, files) != 0)
     return fail("cleanup-failed");
+  if ((publish_missing && ensure_absent(parent, UPDATE_NAME) != 0) ||
+      (published && ensure_absent(parent, STAGE_NAME) != 0))
+    return fail("cleanup-failed");
   if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0)
     return fail("cleanup-failed");
-  if (remove_artifact(stage, "Package.swift", &files[0]) != 0)
-    return fail("cleanup-failed");
-  if (remove_artifact(module_directory, "Shaders.generated.swift", &files[1]) != 0)
-    return fail("cleanup-failed");
-  if (remove_artifact(resources, "Shaders.metallib", &files[2]) != 0)
-    return fail("cleanup-failed");
-  if (remove_artifact(stage, ".vgpu-native-output.json", &files[3]) != 0)
-    return fail("cleanup-failed");
-  if (remove_empty_directory(module_directory, "Resources", resources,
-                             &resources_identity) != 0)
-    return fail("cleanup-failed");
-  if (remove_empty_directory(sources, module, module_directory,
-                             &module_identity) != 0)
-    return fail("cleanup-failed");
-  if (remove_empty_directory(stage, "Sources", sources, &sources_identity) != 0)
-    return fail("cleanup-failed");
-  if (remove_empty_directory(parent, STAGE_NAME, stage, &stage_identity) != 0)
-    return fail("cleanup-failed");
+  if (!published) {
+    if (remove_artifact(stage, "Package.swift", &files[0]) != 0)
+      return fail("cleanup-failed");
+    if (remove_artifact(module_directory, "Shaders.generated.swift", &files[1]) != 0)
+      return fail("cleanup-failed");
+    if (remove_artifact(resources, "Shaders.metallib", &files[2]) != 0)
+      return fail("cleanup-failed");
+    if (remove_artifact(stage, ".vgpu-native-output.json", &files[3]) != 0)
+      return fail("cleanup-failed");
+    if (remove_empty_directory(module_directory, "Resources", resources,
+                               &resources_identity) != 0)
+      return fail("cleanup-failed");
+    if (remove_empty_directory(sources, module, module_directory,
+                               &module_identity) != 0)
+      return fail("cleanup-failed");
+    if (remove_empty_directory(stage, "Sources", sources, &sources_identity) != 0)
+      return fail("cleanup-failed");
+    if (remove_empty_directory(parent, STAGE_NAME, stage, &stage_identity) != 0)
+      return fail("cleanup-failed");
+  }
   if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
       unlinkat(parent, JOURNAL_NAME, 0) != 0)
     return fail("cleanup-failed");
-  puts("{\"schemaVersion\":1,\"kind\":\"finalized\"}");
+  if (publish_missing)
+    printf("{\"schemaVersion\":1,\"kind\":\"finalized\",\"transactionId\":\"%s\",\"phase\":\"%s\"}\n",
+           transaction, published ? "published" : "prepared");
+  else
+    puts("{\"schemaVersion\":1,\"kind\":\"finalized\"}");
   fflush(stdout);
   close(resources);
   close(module_directory);
