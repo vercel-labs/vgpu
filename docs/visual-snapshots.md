@@ -1,6 +1,6 @@
 # Visual snapshots for contributors
 
-We keep one collection of approved PNGs. Exact geometry-image comparisons run on native Linux x64
+We keep one collection of approved PNGs. Geometry-image comparisons run on native Linux x64
 in CI using the pinned Vulkan/lavapipe environment in `infra/snapshots/Dockerfile`. ARM64, Metal and
 other local renderers remain useful for development, but their images are not the reference oracle.
 `pnpm test` runs local tests without opting into architecture-sensitive visual comparisons;
@@ -24,6 +24,13 @@ Open the downloaded `index.html` to compare **before / actual / diff**. `environ
 source revision, Node, Mesa/LLVM packages, CPU capabilities and the Vulkan adapter. `results.json` records hashes and
 the result for each rendered image. Missing baselines fail check mode; they are not created silently.
 The production CI gate requires the verification job, not the separately named candidate-generation job.
+
+Every pixel is checked, including antialiased pixels: each RGB channel may differ by at most **1/255**,
+while alpha must match exactly. One RGB channel differing by 2, or alpha differing by 1, fails the image.
+There is no percentage-of-pixels allowance. This intentionally cannot detect an RGB change of only one
+level, even across the entire image. Reports retain raw changed-pixel counts, hashes, maximum deltas
+and the count outside tolerance; a tolerated match is not claimed to be byte-identical. Tolerated
+rounding differences do not create replacement candidates or modify references.
 
 ## Intentional visual changes
 
@@ -52,8 +59,9 @@ probe also use this pinned image; their existing comparison policies are unchang
 
 Pinning the OS and packages alone has not yet established byte-identical images across native x64
 runners. CPU-capability overrides were tested and rejected: they did not remove cross-host variation.
-CPU identity is recorded in artifacts to help diagnose this. The exact comparison remains enabled;
-the visual gate must not be bypassed or described as stable until this remaining issue is resolved.
+CPU identity is recorded in artifacts to help diagnose this. The narrowly bounded RGB rounding policy
+above was explicitly accepted after native captures differed by one RGB level with identical alpha.
+Larger changes still require review; a new environment is not permission to increase these limits.
 
 Docker alone is not a promise of cross-architecture pixel equality. Emulated x64 on a Mac is useful
 for testing the harness, but its captures are not automatically promoted to canonical references.

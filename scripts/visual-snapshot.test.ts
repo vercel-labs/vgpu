@@ -49,32 +49,54 @@ test("matching pixels produce a report without modifying the baseline", async ()
   expect(await readFile(join(f.root, f.directory, f.name))).toEqual(f.baseline);
 });
 
-test("even one channel level fails check and produces before, actual and diff", async () => {
+test.each([0, 1, 2, 3])("one pixel beyond the channel %i limit fails and produces review artifacts", async (channel) => {
   const f = await fixture();
-  const changed = PNG.sync.read(f.baseline); changed.data[0] += 1;
+  const changed = PNG.sync.read(f.baseline);
+  changed.data[channel] += channel === 3 ? -1 : 2;
   await expect(compareVisualSnapshot(f.directory, f.name, PNG.sync.write(changed), f.options)).rejects.toThrow("changed visual snapshot");
   const artifact = join(f.root, "artifacts/visual-snapshots/images", f.directory, "test");
   for (const file of ["before.png", "actual.png", "diff.png", "result.json"]) expect((await readFile(join(artifact, file))).length).toBeGreaterThan(0);
-  expect(JSON.parse(await readFile(join(artifact, "result.json"), "utf8"))).toMatchObject({ mismatchedPixels: 1, maxChannelDelta: 1 });
+  expect(JSON.parse(await readFile(join(artifact, "result.json"), "utf8"))).toMatchObject({ mismatchedPixels: 1, outsideTolerancePixels: 1, maxChannelDelta: channel === 3 ? 1 : 2 });
   expect(await readFile(join(f.root, f.directory, f.name))).toEqual(f.baseline);
+});
+
+test.each(["check", "update"])("%s accepts ±1 RGB rounding but preserves raw differences and references", async (mode) => {
+  const f = await fixture();
+  const changed = PNG.sync.read(f.baseline);
+  for (let i = 0; i < changed.data.length; i += 4) {
+    changed.data[i] -= 1;
+    changed.data[i + 1] += 1;
+    changed.data[i + 2] += 1;
+  }
+  const result = await compareVisualSnapshot(f.directory, f.name, PNG.sync.write(changed), { ...f.options, env: { ...env, VGPU_SNAPSHOT_MODE: mode } });
+  expect(result).toMatchObject({ status: "matched", mismatchedPixels: 256 * 256, outsideTolerancePixels: 0, maxChannelDelta: 1, tolerance: { maxRgbDelta: 1, maxAlphaDelta: 0 } });
+  expect(result.actualSha256).not.toBe(result.baselineSha256);
+  expect(await readFile(join(f.root, f.directory, f.name))).toEqual(f.baseline);
+  await expect(readFile(join(f.root, "artifacts/visual-snapshots/candidates", f.directory, f.name))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 test("update stages a candidate and baseline hashes, never overwrites approved PNGs", async () => {
   const f = await fixture();
-  const actual = png(41);
+  const actual = png(42);
   const result = await compareVisualSnapshot(f.directory, f.name, actual, { ...f.options, env: { ...env, VGPU_SNAPSHOT_MODE: "update" } });
   expect(result.baselineSha256).not.toBe(result.actualSha256);
   expect(await readFile(join(f.root, f.directory, f.name))).toEqual(f.baseline);
   expect(await readFile(join(f.root, "artifacts/visual-snapshots/candidates", f.directory, f.name))).toEqual(actual);
 });
 
+test("negative RGB differences are bounded by the same absolute limit", async () => {
+  const f = await fixture();
+  const changed = PNG.sync.read(f.baseline); changed.data[0] -= 2;
+  await expect(compareVisualSnapshot(f.directory, f.name, PNG.sync.write(changed), f.options)).rejects.toThrow("changed visual snapshot");
+});
+
 test("soft comparison failures allow the battery to collect all images without losing failure status", async () => {
   const f = await fixture();
   const failures: string[] = [];
-  const result = await compareVisualSnapshot(f.directory, f.name, png(41), { ...f.options, onMismatch: (message: string) => failures.push(message) });
+  const result = await compareVisualSnapshot(f.directory, f.name, png(42), { ...f.options, onMismatch: (message: string) => failures.push(message) });
   expect(failures).toHaveLength(1);
   expect(result.status).toBe("changed");
-  expect(await readFile(join(f.root, "artifacts/visual-snapshots/candidates", f.directory, f.name))).toEqual(png(41));
+  expect(await readFile(join(f.root, "artifacts/visual-snapshots/candidates", f.directory, f.name))).toEqual(png(42));
 });
 
 test("a missing reference fails check but can be generated as a review candidate", async () => {

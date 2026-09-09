@@ -41,5 +41,5 @@ Snapshots clear to `(63, 63, 80, 255)`. The dark blue-gray background keeps silh
 ## Determinism
 
 These snapshots run in the pinned Linux x64 Vulkan CI environment, separately from functional GPU
-tests. Docker on ARM64 is not byte-equivalent to x64. `pnpm test` does not opt into exact visual
+tests. Docker on ARM64 is not byte-equivalent to x64. `pnpm test` does not opt into canonical visual
 comparisons. See `docs/visual-snapshots.md` for the contributor workflow and environment pins.

@@ -5,6 +5,8 @@ import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 
 export const SNAPSHOT_ENV = "linux-x64-vulkan-v1";
+// Repo policy, not a caller override: tolerate RGB rounding only, including antialiased pixels.
+export const SNAPSHOT_TOLERANCE = Object.freeze({ maxRgbDelta: 1, maxAlphaDelta: 0 });
 export const SNAPSHOT_ROOTS = [
   "packages/vgpu-api/tests/scene/primitives/__snapshots__",
   "packages/render/tests/inspect/__snapshots__",
@@ -44,16 +46,22 @@ export async function compareVisualSnapshot(directory, name, pngBytes, options =
   catch (error) { if (error.code !== "ENOENT") throw error; }
   const expected = expectedBytes && PNG.sync.read(expectedBytes);
   const sameSize = expected && expected.width === actual.width && expected.height === actual.height;
-  const matched = Boolean(sameSize && actual.data.equals(expected.data));
-  const status = matched ? "matched" : expected ? "changed" : "missing";
   let mismatchedPixels = sameSize ? 0 : null, maxChannelDelta = sameSize ? 0 : null;
+  let outsideTolerancePixels = sameSize ? 0 : null;
   if (sameSize) for (let pixel = 0; pixel < actual.data.length; pixel += 4) {
-    let delta = 0;
-    for (let channel = 0; channel < 4; channel++) delta = Math.max(delta, Math.abs(actual.data[pixel + channel] - expected.data[pixel + channel]));
+    let delta = 0, outsideTolerance = false;
+    for (let channel = 0; channel < 4; channel++) {
+      const channelDelta = Math.abs(actual.data[pixel + channel] - expected.data[pixel + channel]);
+      delta = Math.max(delta, channelDelta);
+      if (channelDelta > (channel === 3 ? SNAPSHOT_TOLERANCE.maxAlphaDelta : SNAPSHOT_TOLERANCE.maxRgbDelta)) outsideTolerance = true;
+    }
     if (delta) mismatchedPixels++;
+    if (outsideTolerance) outsideTolerancePixels++;
     maxChannelDelta = Math.max(maxChannelDelta, delta);
   }
-  const report = { path, status, mismatchedPixels, maxChannelDelta, baselineSha256: expectedBytes ? sha(expectedBytes) : null, actualSha256: sha(actualBytes) };
+  const matched = Boolean(sameSize && outsideTolerancePixels === 0);
+  const status = matched ? "matched" : expected ? "changed" : "missing";
+  const report = { path, status, mismatchedPixels, outsideTolerancePixels, maxChannelDelta, tolerance: SNAPSHOT_TOLERANCE, baselineSha256: expectedBytes ? sha(expectedBytes) : null, actualSha256: sha(actualBytes) };
   const destination = join(artifactRoot, "images", path.slice(0, -4));
   await mkdir(destination, { recursive: true });
   await writeFile(join(destination, "actual.png"), actualBytes);

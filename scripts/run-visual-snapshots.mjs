@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { assertSnapshotEnvironment, SNAPSHOT_ENV } from "./lib/visual-snapshot.mjs";
+import { assertSnapshotEnvironment, SNAPSHOT_ENV, SNAPSHOT_TOLERANCE } from "./lib/visual-snapshot.mjs";
 
 assertSnapshotEnvironment();
 const artifactRoot = "artifacts/visual-snapshots";
@@ -11,6 +11,7 @@ await mkdir(artifactRoot, { recursive: true });
 if ((await readdir(artifactRoot)).length) throw new Error(`${artifactRoot} must be empty. Preserve previous artifacts in a different directory first.`);
 const metadata = {
   environment: SNAPSHOT_ENV, mode: process.env.VGPU_SNAPSHOT_MODE,
+  tolerance: SNAPSHOT_TOLERANCE,
   execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local (not native CI evidence)",
   revision: process.env.GITHUB_SHA ?? null, node: process.version,
   cpu: (await readFile("/proc/cpuinfo", "utf8")).split("\n\n")[0],
@@ -42,10 +43,11 @@ await writeFile(join(artifactRoot, "results.json"), JSON.stringify({ ...metadata
 const html = ['<!doctype html><meta charset="utf-8"><title>Visual snapshots</title>',
   '<style>body{font:14px system-ui;background:#181818;color:white}img{width:256px}article{margin:24px 0}code{display:block}</style>',
   `<h1>Visual snapshots</h1><p>${reports.filter((r) => r.status !== "matched").length} changed or missing / ${reports.length} images.</p><p>Before / Actual / Diff. Candidates are not approved references.</p>`,
-  ...reports.map(({ path, status, baselineSha256, mismatchedPixels, maxChannelDelta }) => {
+  `<p>Per-channel tolerance: RGB ≤ ${SNAPSHOT_TOLERANCE.maxRgbDelta}/255; alpha exact. Raw differences remain visible below.</p>`,
+  ...reports.map(({ path, status, baselineSha256, mismatchedPixels, outsideTolerancePixels, maxChannelDelta }) => {
     const base = `images/${path.slice(0, -4)}`;
     const frames = [baselineSha256 && "before", "actual", mismatchedPixels !== null && "diff"].filter(Boolean);
-    return `<details ${status !== "matched" ? "open" : ""}><summary>${path} — ${status}</summary><article><p>Changed pixels: ${mismatchedPixels ?? "n/a"}; max channel delta: ${maxChannelDelta ?? "n/a"}/255.</p>${frames.map((kind) => `<img alt="${kind}" src="${base}/${kind}.png">`).join("")}</article></details>`;
+    return `<details ${status !== "matched" ? "open" : ""}><summary>${path} — ${status}</summary><article><p>Raw changed pixels: ${mismatchedPixels ?? "n/a"}; outside tolerance: ${outsideTolerancePixels ?? "n/a"}; max channel delta: ${maxChannelDelta ?? "n/a"}/255.</p>${frames.map((kind) => `<img alt="${kind}" src="${base}/${kind}.png">`).join("")}</article></details>`;
   }),
 ].join("\n");
 await writeFile(join(artifactRoot, "index.html"), html);

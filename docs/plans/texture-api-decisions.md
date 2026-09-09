@@ -276,7 +276,8 @@ No Dawn 0.6 update or native patch is required. Preserve macOS, Windows and brow
 existing compatibility feature level, explicit backend/Dawn-flag overrides, and installed-software-renderer
 fallback. Do not silently fall back to OpenGL or download a driver when Vulkan is unavailable; return the
 existing actionable error instead. Explicit OpenGL remains an opt-in with the upstream limitation.
-Regenerate and inspect affected Vulkan references without broadening comparison tolerances.
+Regenerate and inspect affected Vulkan references. The subsequently accepted rounding policy below
+supersedes the initial requirement not to change comparison tolerances.
 
 ### Visual reference environment — accepted
 
@@ -286,6 +287,22 @@ must not report false regressions from ARM64/Metal image differences. Keep funct
 independent. Provide `pnpm snapshots:check` and `pnpm snapshots:update`, with before/actual/diff
 artifacts. Updates stage candidates for explicit review, never overwrite or approve baselines in CI.
 Emulated x64 captures cannot replace native verification. See `docs/visual-snapshots.md`.
+
+### Visual rounding policy — accepted 2026-09-09
+
+Native x64 runners still produced differences of one RGB byte level with identical alpha despite
+pinned Node, Mesa and LLVM packages. CPU capability overrides did not establish reproducibility and
+were removed. User explicitly approved the repo-only policy:
+
+```js
+{ maxRgbDelta: 1, maxAlphaDelta: 0 }
+```
+
+Compare every channel of every pixel, including antialiased pixels. No averaging or percentage-based
+allowance: one RGB delta of 2 or alpha delta of 1 fails. The accepted tradeoff is that intentional RGB
+changes of only one level are not detected. Retain raw differences and hashes in reports, distinguish
+them from pixels outside tolerance, and do not regenerate references for tolerated rounding. Keep one
+shared collection, pinned native CI rendering, functional GPU tests, and explicit candidate review.
 
 ## Reference patterns consulted
 

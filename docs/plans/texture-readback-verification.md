@@ -388,7 +388,7 @@ old green runs are not substitutes. Vulkan adoption and Linux defaults are done.
 The second native run (`34385008080`) exposed CPU-dependent visual output despite identical pinned
 packages: 36 images differed by at most one channel level, and all 237 captures matched the earlier
 emulated run. The first reference adoption therefore did not establish a stable oracle. The visual
-job still requires exact comparisons. Native repeated-capture verification and reference review remain
+job still required exact comparisons at that point. Native repeated-capture verification and reference review remained
 required before calling the snapshot migration complete. CPU identity is now included in artifacts.
 The same run found one lost documentation anchor, restored with an explicit replacement explanation.
 An intermediate SSE2-only cap still produced host-dependent output (native run `34385630231`);
@@ -401,3 +401,13 @@ until that decision is made and validated. Fast tests, docs build/parity, genera
 bundlers and cache-key jobs passed on both experimental revisions; GPU thumbnail checks were still
 running when this note was written. The preceding unmodified-renderer run `34385008080` passed the
 complete GPU job (124 tests, docs proofs and thumbnail comparisons).
+
+### Accepted rounding policy (2026-09-09)
+
+User approved `{ maxRgbDelta: 1, maxAlphaDelta: 0 }` after reviewing the tradeoff. This supersedes the
+earlier exact-byte gate and unresolved policy decision above. Every channel/pixel is checked, without
+antialias exclusions or a mismatched-pixel allowance. Reports preserve raw deltas/hashes and separately
+count pixels outside tolerance. Tolerated rounding neither creates candidates nor alters baselines.
+The focused harness/CLI suite passes 19 tests, including ±1 acceptance, a single RGB delta of 2 or alpha
+delta of 1 failing, negative differences, all-pixel rounding, and baseline preservation in both modes.
+Native CI on the final integrated revision remains the merge gate.
