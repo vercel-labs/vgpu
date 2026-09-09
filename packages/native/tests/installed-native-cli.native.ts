@@ -1448,6 +1448,98 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       expect(faultResult.stderr, JSON.stringify(faultResult)).toBe(
         `Native publication: published\nConfirmation: reconciled\n[error] helper-failed: Metal publication published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${lostJournal}\n  ${lostOutput}\n`
       );
+      // A later ordinary invocation recognizes evidence; it does not inherit the earlier receipt.
+      const interruptedProjectBefore = await treeEvidence(project);
+      const interruptedFaultBefore = await treeEvidence(faultEvidence);
+      const interruptedIdentities = await Promise.all(
+        [
+          ...retainedIdentities.map(({ path }) => path),
+          lostConfiguration,
+          lostParent,
+          lostJournal,
+          ...stagedDirectories.map(({ path }) => join(lostOutput, path)),
+          ...stagedFiles.map(({ path }) => join(lostOutput, path)),
+          faultEvidence,
+          ...(
+            await readdir(faultEvidence)
+          ).map((name) => join(faultEvidence, name)),
+        ].map(async (path) => {
+          const metadata = await lstat(path, { bigint: true });
+          return {
+            path,
+            metadata: {
+              dev: metadata.dev,
+              ino: metadata.ino,
+              mode: metadata.mode,
+              nlink: metadata.nlink,
+              size: metadata.size,
+            },
+          };
+        })
+      );
+      expect(
+        Object.keys(doctorEnvironment).filter((name) =>
+          /^(?:VGPU_CLI_FAULT_|DYLD_|LD_)/u.test(name)
+        )
+      ).toEqual([]);
+      expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(75_000);
+      const interrupted = await boundedCommands(
+        Math.min(workflowDeadline, Date.now() + 60_000)
+      ).command(
+        process.execPath,
+        [bin, "native", "build", "--config", "../project/lost-ack.native.json"],
+        runtime,
+        doctorEnvironment
+      );
+      console.info(
+        "Installed recognized interruption actual result",
+        JSON.stringify(interrupted)
+      );
+      expect(await treeEvidence(project)).toEqual(interruptedProjectBefore);
+      expect(await treeEvidence(faultEvidence)).toEqual(interruptedFaultBefore);
+      for (const { path, metadata } of interruptedIdentities)
+        expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+      expect((await boundedFaultFile(lostJournal)).bytes).toEqual(
+        journal.bytes
+      );
+      for (const { path, bytes } of stagedFiles)
+        expect((await boundedFaultFile(join(lostOutput, path))).bytes).toEqual(
+          bytes
+        );
+      expect((await readdir(lostParent)).sort()).toEqual([
+        ".vgpu-native-publication.json",
+        "AppShaders",
+      ]);
+      await expect(lstat(lostStage)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(
+        await Promise.all(
+          originalProjectNames.map(async (name) => [
+            name,
+            await treeEvidence(join(project, name)),
+          ])
+        )
+      ).toEqual(retainedTreeBefore);
+      for (const path of [missingDeveloper, missingVerifyTemp])
+        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(scratch)).toEqual([]);
+      expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+      expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+      expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+      expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+      for (const [filename, before] of archiveEvidence)
+        expect(await fileEvidence(join(archives, filename))).toEqual(before);
+      expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
+        faultSourceEvidence
+      );
+      for (const [path, evidence] of sourceEvidence)
+        expect(await fileEvidence(path)).toEqual(evidence);
+      // Honest already-GREEN coverage: this result concerns only the new invocation.
+      expect(interrupted.code, JSON.stringify(interrupted)).toBe(1);
+      expect(interrupted.signal).toBeNull();
+      expect(interrupted.stdout).toBe("");
+      expect(interrupted.stderr).toBe(
+        `Native publication: not-published\n[error] interrupted-transaction: Metal publication not-published: Interrupted publication ${preparedJournal.transactionId} for ${lostOutput}\nInspect retained paths (not cleanup authority):\n  ${lostJournal}\n`
+      );
     } finally {
       // The public process-group deadline owns shutdown, even if barrier/evidence setup fails.
       await faultOperation;

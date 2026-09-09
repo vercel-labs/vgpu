@@ -23,8 +23,10 @@ them together, then replaces the output directory as one operation.
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
 > followed by helper death before acknowledgment. Its report includes `Confirmation: reconciled`,
 > retains the original failure, and preserves the published package and journal. This instrumentation
-> does not qualify ordinary loader behavior, signing, or quarantine. Installed interrupted-transaction
-> and unknown-outcome diagnostics remain unqualified; this is not a released end-to-end build workflow.
+> does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
+> recognizes that same retained transaction, reports its original output and journal, and leaves the
+> evidence intact. Broader installed interruption and unknown-outcome diagnostics remain unqualified;
+> this is not a released end-to-end build workflow.
 
 ## Reserve the destination
 
@@ -237,6 +239,23 @@ A recognized record must be well-formed and match the locked physical parent. It
 identifies the earlier transaction and recorded output, even when the current configuration names
 a different sibling output. Recognizing the record does not establish package integrity or the
 outcome of publication. Unrecognized or inconsistent records remain conflicts and are left intact.
+
+For example, an ordinary later build can encounter the prepared journal retained after a previous
+invocation published but lost its helper acknowledgment. If staging and the journal-update file
+are absent, the recognized-transaction report lists only the remaining journal:
+
+```text
+Native publication: not-published
+[error] interrupted-transaction: Metal publication not-published: Interrupted publication <transaction-id> for /absolute/output/parent/AppShaders
+Inspect retained paths (not cleanup authority):
+  /absolute/output/parent/.vgpu-native-publication.json
+```
+
+The transaction and output in this message come from the recognized earlier record. `not-published`
+describes this new invocation: it does not contradict an earlier `published` / `reconciled` report.
+This invocation has no publication receipt and adds no confirmation line. It exits `1` with empty
+standard output and leaves the earlier package and recovery evidence intact; recognizing the
+transaction does not authorize another publication, cleanup, or reconstruction of its outcome.
 
 When an unrecognized recovery record prevents this invocation from publishing, the command reports
 `not-published`, its error code and original message, and the retained paths on standard error.

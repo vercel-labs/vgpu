@@ -132,7 +132,10 @@ the installed candidate observes a real successful rename followed by helper dea
 acknowledgment. The command reports `Confirmation: reconciled` from its checked receipt, retains the
 original failure and preserves the published package and journal. Its test-only preload modifies
 only the selected helper's spawn environment; it does not qualify ordinary loader behavior, signing
-or quarantine. Installed interrupted-transaction and unknown-outcome diagnostics remain unqualified.
+or quarantine. A subsequent ordinary build recognizes that same retained transaction and reports
+its original transaction ID, output and remaining journal without changing the package or evidence.
+Its `not-published` outcome concerns only that new invocation; it has no publication receipt.
+Broader installed interruption and unknown-outcome diagnostics remain unqualified.
 
 ## Checks
 
