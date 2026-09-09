@@ -47,6 +47,9 @@ the same code running in the browser, headless Node, and your test suite.
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
   npx vgpu docs cat <path>
 
+## Before you ship
+  npx vgpu docs cat shipping-to-production   Pre-PR checklist: correctness gates, measure, free defaults, propose the rest
+
 ## Validate shader code
   npx vgpu check <file.wgsl>              Validate and reflect a WGSL file as JSON
   npx vgpu check <file.wgsl> --require-validation
