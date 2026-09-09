@@ -289,14 +289,22 @@ const TASK_EXTRAS: Record<string, { label: string; command: string }[]> = {
       command: asRoot("apt-get update && apt-get install -y curl procps util-linux"),
     },
     {
-      label: "playwright's chromium + its system libraries (Chrome for Testing publishes no arm64 build)",
-      // `--with-deps` is load-bearing, not belt-and-braces: the bare
-      // `playwright install chromium` downloads a browser that cannot start on
-      // this image at all — `libglib-2.0.so.0: cannot open shared object file`,
-      // exit 127 before Chrome ever writes a DevTools port. The apt line above
-      // covers the Vulkan/X side, not Chromium's own GTK/ATK/NSS closure, and
-      // `--with-deps` is playwright's own maintained list of exactly those.
-      command: "npm install -g playwright && npx playwright install --with-deps chromium",
+      // Split in three because the sandbox user is no longer root (see asRoot).
+      // The system-library half needs apt, so it runs as root; the browser
+      // download must NOT — a root install lands under /root/.cache (mode 700),
+      // where neither the agent nor the verify pass, both running as the
+      // sandbox user, can read it. `install-deps` is load-bearing, not
+      // belt-and-braces: a bare `playwright install chromium` downloads a browser
+      // that cannot start on this image (`libglib-2.0.so.0: cannot open shared
+      // object file`, exit 127 before Chrome writes a DevTools port); the apt line
+      // above covers the Vulkan/X side, not Chromium's own GTK/ATK/NSS closure.
+      // `npm install -g` needs no sudo: npm's global prefix is ~/.local here.
+      label: "playwright's chromium + its system libraries (agent-browser's own download is not usable on arm64)",
+      command: [
+        "npm install -g playwright",
+        asRoot("npx -y playwright install-deps chromium"),
+        "npx playwright install chromium",
+      ].join(" && "),
     },
   ],
   // A fresh random image per run, so the smoke test cannot be passed by guessing
