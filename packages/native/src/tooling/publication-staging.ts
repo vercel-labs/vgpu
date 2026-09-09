@@ -6,6 +6,10 @@ import { captureToolEnvironment } from "../compiler/environment.js";
 import type { PreparedMetalProject } from "./prepare-project.js";
 import { readPublicationResponseLines } from "./publication-response-lines.js";
 import {
+  readMetalPublicationRecovery,
+  type InterruptedMetalPublication,
+} from "./publication-recovery.js";
+import {
   metalOutputRecordPath,
   parseMetalOutputRecord,
 } from "./output-record.js";
@@ -64,6 +68,7 @@ export class MetalPublicationStagingError extends Error {
       | "invalid-preparation"
       | "busy"
       | "conflict"
+      | "interrupted-transaction"
       | "unsafe-parent"
       | "unsafe-name"
       | "unsupported-filesystem"
@@ -77,6 +82,20 @@ export class MetalPublicationStagingError extends Error {
     super(message, options);
     this.name = "MetalPublicationStagingError";
     this.recoveryPaths = Object.freeze([...(options?.recoveryPaths ?? [])]);
+  }
+}
+
+export class MetalPublicationInterruptedError extends MetalPublicationStagingError {
+  constructor(
+    readonly transaction: InterruptedMetalPublication,
+    recoveryPaths: readonly string[]
+  ) {
+    super(
+      "interrupted-transaction",
+      `Interrupted publication ${transaction.transactionId} for ${transaction.outputPath}`,
+      { recoveryPaths }
+    );
+    this.name = "MetalPublicationInterruptedError";
   }
 }
 
@@ -272,6 +291,7 @@ async function runStaging<T>(
   let transferCancelled = false;
   let replies: AsyncIterator<string> | undefined;
   let lastMessage: Record<string, any> | undefined;
+  let recoveryFailure: MetalPublicationStagingError | undefined;
   let ioTimedOut = false;
   try {
     const source = join(scratch, "publication-staging.c");
@@ -334,6 +354,34 @@ async function runStaging<T>(
     snapshot.signal?.addEventListener("abort", cancelTransfer, { once: true });
     if (snapshot.signal?.aborted) cancelTransfer();
     const ready = (lastMessage = await watchProgress(receiveMessage(lines)));
+    if (ready.kind === "recovery") {
+      const recovery = await readMetalPublicationRecovery(
+        ready,
+        () => watchProgress(receiveMessage(lines)),
+        snapshot.parentPath
+      );
+      recoveryFailure = recovery.transaction
+        ? new MetalPublicationInterruptedError(
+            recovery.transaction,
+            recovery.recoveryPaths
+          )
+        : new MetalPublicationStagingError(
+            "conflict",
+            "Unrecognized publication recovery record",
+            { recoveryPaths: recovery.recoveryPaths }
+          );
+      childInput.end();
+      if (
+        !(await watchProgress(lines.next())).done ||
+        (await watchProgress(closed)) !== 0
+      )
+        throw new MetalPublicationStagingError(
+          "helper-failed",
+          "Publication recovery helper did not close cleanly",
+          { cause: recoveryFailure, recoveryPaths: recovery.recoveryPaths }
+        );
+      throw recoveryFailure;
+    }
     if (ready.kind !== "ready")
       throw helperResponseError(ready, snapshot.parentPath);
     for (let index = 0; index < snapshot.files.length; index++) {
@@ -445,7 +493,7 @@ async function runStaging<T>(
       );
     if (transferCancelled) {
       // No response read is abandoned on abort: consume EOF cleanup evidence once.
-      if (lastMessage?.kind !== "error" && replies) {
+      if (!recoveryFailure && lastMessage?.kind !== "error" && replies) {
         try {
           lastMessage = await receiveMessage(replies);
         } catch {
@@ -454,12 +502,13 @@ async function runStaging<T>(
       }
       child?.stdout?.resume();
       if (closed) await closed;
-      const retainedUpdateFailure =
-        lastMessage?.retainedUpdate === true
+      const retainedFailure =
+        recoveryFailure ??
+        (lastMessage?.retainedUpdate === true
           ? helperResponseError(lastMessage, snapshot.parentPath)
-          : undefined;
-      const recoveryPaths = retainedUpdateFailure
-        ? retainedUpdateFailure.recoveryPaths
+          : undefined);
+      const recoveryPaths = retainedFailure
+        ? retainedFailure.recoveryPaths
         : lastMessage?.cleanup === "cleaned"
         ? []
         : [
@@ -470,10 +519,10 @@ async function runStaging<T>(
         "cancelled",
         "Publication staging was cancelled",
         {
-          cause: retainedUpdateFailure
+          cause: retainedFailure
             ? new AggregateError(
-                [snapshot.signal?.reason, retainedUpdateFailure],
-                "Publication staging cancellation and journal update failure"
+                [snapshot.signal?.reason, retainedFailure],
+                "Publication staging cancellation and retained evidence"
               )
             : snapshot.signal?.reason,
           recoveryPaths,
