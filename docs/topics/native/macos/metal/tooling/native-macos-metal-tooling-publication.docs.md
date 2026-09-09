@@ -178,6 +178,8 @@ module, exact file set, lengths, and hashes; both retained directory trees and a
 must stay on the physical parent's filesystem device. A missing destination, a substituted root,
 or an incomplete or modified generation leaves the outcome unknown, even when the other package
 appears intact. Equal content hashes alone do not establish either directory's identity.
+An in-place edit to an old payload prevents this negative proof even when its directory and file
+identities and its byte length have not changed.
 
 An old package left at staging is recovery evidence, not permission to delete it. Its contents are
 not required to prove publication of the complete new generation at the destination. Reconciliation

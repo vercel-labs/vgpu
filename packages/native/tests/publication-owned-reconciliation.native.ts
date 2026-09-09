@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { constants, renameSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeSync,
+} from "node:fs";
 import {
   lstat,
   open,
@@ -9,6 +18,7 @@ import {
   writeFile,
   type FileHandle,
 } from "node:fs/promises";
+import { constants as osConstants } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -69,6 +79,7 @@ vi.mock("node:child_process", async (original) => {
 });
 
 import { prepareMetalProject } from "../src/tooling/prepare-project.ts";
+import { MetalOutputVerificationError } from "../src/tooling/output-verification.ts";
 import {
   MetalPublicationError,
   publishPreparedMetalOutput,
@@ -83,7 +94,12 @@ const workerPath = fileURLToPath(
   )
 );
 
-test.each(["published", "missing-destination", "not-published"] as const)(
+test.each([
+  "published",
+  "missing-destination",
+  "not-published",
+  "changed-old-payload",
+] as const)(
   "owned reconciliation preserves both generations after interruption (%s)",
   async (outcome) => {
     const input = await projectFixture();
@@ -102,6 +118,12 @@ test.each(["published", "missing-destination", "not-published"] as const)(
     let observationFailure: unknown;
     let publishers = 0;
     let movedOldDestination = false;
+    let changedOldBefore: unknown;
+    let changedOldFiles: Readonly<Record<string, Uint8Array>> | undefined;
+    const expectedOutcome =
+      outcome === "missing-destination" || outcome === "changed-old-payload"
+        ? "unknown"
+        : outcome;
     const frames: Record<string, any>[] = [];
     const reconciliationFrames: Record<string, any>[] = [];
     const reconciliationWrites: Buffer[] = [];
@@ -251,6 +273,51 @@ test.each(["published", "missing-destination", "not-published"] as const)(
           renameSync(input.outputPath, oldBackup);
           movedOldDestination = true;
         }
+        if (outcome === "changed-old-payload") {
+          if (!originalClosed || changedOldBefore !== undefined)
+            throw new Error(
+              "Old payload must change once, after original helper close"
+            );
+          const changedPackage = Buffer.from(original.files["Package.swift"]!);
+          expect(changedPackage.byteLength).toBeGreaterThan(0);
+          const offset = Math.floor(changedPackage.byteLength / 2);
+          changedPackage[offset] = changedPackage[offset]! ^ 1;
+          const descriptor = openSync(
+            join(input.outputPath, "Package.swift"),
+            constants.O_WRONLY | constants.O_NOFOLLOW
+          );
+          try {
+            expect(
+              writeSync(descriptor, changedPackage, offset, 1, offset)
+            ).toBe(1);
+          } finally {
+            closeSync(descriptor);
+          }
+          changedOldFiles = {
+            ...original.files,
+            "Package.swift": changedPackage,
+          };
+          // Capture before actual spawn; every identity, mode, size and other byte must remain original.
+          changedOldBefore = treeEvidence(input.outputPath);
+          const originalTree = oldBefore as {
+            children: [string, Record<string, unknown>][];
+          };
+          expect(changedOldBefore).toEqual({
+            ...originalTree,
+            children: originalTree.children.map(([name, evidence]) => [
+              name,
+              name === "Package.swift"
+                ? { ...evidence, bytes: changedPackage }
+                : evidence,
+            ]),
+          });
+          expect(treeEvidence(stage)).toEqual(newBefore);
+          expect(treeEvidence(journal)).toEqual(journalBefore);
+          expect(readFileSync(journal)).toEqual(journalBytes);
+          expect(
+            readFileSync(join(input.outputPath, ".vgpu-native-output.json"))
+          ).toEqual(oldRecordBytes);
+        }
       };
       boundary.onReconciliation = (child) => {
         const timeout = setTimeout(() => {
@@ -339,7 +406,7 @@ test.each(["published", "missing-destination", "not-published"] as const)(
           destination: stageIdentity,
         });
       }
-      // Published dies at RETURN after the actual SWAP; both other cases die before RESUME.
+      // Published dies at RETURN after the actual SWAP; all other cases die before RESUME.
       expect(helper?.kill("SIGKILL")).toBe(true);
       expect(await closed).toEqual({ code: null, signal: "SIGKILL" });
       const failure = await operation;
@@ -370,7 +437,11 @@ test.each(["published", "missing-destination", "not-published"] as const)(
           ...(outcome === "missing-destination" ? [input.outputPath] : []),
         ])
           await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await treeEvidence(oldLocation)).toEqual(oldBefore);
+      const expectedOldTree = changedOldBefore ?? oldBefore;
+      expect(changedOldBefore !== undefined).toBe(
+        outcome === "changed-old-payload"
+      );
+      expect(await treeEvidence(oldLocation)).toEqual(expectedOldTree);
       expect(await treeEvidence(newLocation)).toEqual(newBefore);
       expect(await treeEvidence(journal)).toEqual(journalBefore);
       expect(await readFile(journal)).toEqual(journalBytes);
@@ -384,16 +455,27 @@ test.each(["published", "missing-destination", "not-published"] as const)(
         inode: oldRoot.ino,
         mode: oldRoot.mode,
       });
-      await expectPackageFiles(oldLocation, original.files);
+      await expectPackageFiles(oldLocation, changedOldFiles ?? original.files);
       await expectPackageFiles(newLocation, prepared.files);
-      if (outcome !== "missing-destination")
+      if (outcome === "changed-old-payload") {
+        const verificationFailure = await verifyMetalProject({
+          configurationPath: input.configurationPath,
+        }).catch((cause: unknown) => cause);
+        expect(verificationFailure).toBeInstanceOf(
+          MetalOutputVerificationError
+        );
+        expect(verificationFailure).toMatchObject({
+          code: "invalid-output",
+          message: "Generated file has changed: Package.swift",
+        });
+      } else if (outcome !== "missing-destination")
         await expect(
           verifyMetalProject({ configurationPath: input.configurationPath })
         ).resolves.toMatchObject({
           outputPath: input.outputPath,
           inputFingerprint: prepared.project.inputFingerprint,
         });
-      expect(await treeEvidence(oldLocation)).toEqual(oldBefore);
+      expect(await treeEvidence(oldLocation)).toEqual(expectedOldTree);
       expect(await treeEvidence(newLocation)).toEqual(newBefore);
       expect(await treeEvidence(journal)).toEqual(journalBefore);
       await expect(lstat(update)).rejects.toMatchObject({ code: "ENOENT" });
@@ -413,7 +495,7 @@ test.each(["published", "missing-destination", "not-published"] as const)(
 
       // Physical interruption, complete packages/journal, and original EOF precede outcome assertions.
       expect(failure).toMatchObject({
-        outcome: outcome === "missing-destination" ? "unknown" : outcome,
+        outcome: expectedOutcome,
       });
       if (outcome === "published")
         expect(failure).toMatchObject({
@@ -451,7 +533,7 @@ test.each(["published", "missing-destination", "not-published"] as const)(
       expect(reconcilers).toHaveLength(1);
       expect(reconcilers[0]!.child.pid).not.toBe(helper?.pid);
       expect(reconciliationCloses).toEqual([
-        { code: outcome === "missing-destination" ? 1 : 0, signal: null },
+        { code: expectedOutcome === "unknown" ? 1 : 0, signal: null },
       ]);
       const originalPlan = actualPrepared!.publication;
       const expectedRequest =
@@ -478,14 +560,14 @@ test.each(["published", "missing-destination", "not-published"] as const)(
           (frame) => frame.kind === "reconciliation-result"
         )
       ).toEqual(
-        outcome !== "missing-destination"
+        expectedOutcome !== "unknown"
           ? [
               {
                 schemaVersion: 1,
                 kind: "reconciliation-result",
                 transactionId: journalRecord.transactionId,
                 phase: "prepared",
-                outcome,
+                outcome: expectedOutcome,
                 parent: actualPrepared!.parent,
                 destinationName: actualPrepared!.destinationName,
                 ...(outcome === "published"
@@ -496,19 +578,26 @@ test.each(["published", "missing-destination", "not-published"] as const)(
             ]
           : []
       );
-      if (outcome === "missing-destination") {
+      if (expectedOutcome === "unknown") {
         expect(
           reconciliationFrames.find((frame) => frame.kind === "reconciliation")
         ).toMatchObject({
-          destination: null,
+          destination:
+            outcome === "missing-destination"
+              ? null
+              : { ...oldIdentity, kind: "directory" },
           stage: { ...stageIdentity, kind: "directory" },
         });
         const rejected = reconciliationFrames.find(
           (frame) => frame.kind === "error"
         );
         expect(rejected).toMatchObject({
-          code: "conflict",
-          errno: expect.any(Number),
+          code:
+            outcome === "missing-destination" ? "conflict" : "invalid-stage",
+          errno:
+            outcome === "missing-destination"
+              ? expect.any(Number)
+              : osConstants.errno.EBADMSG,
         });
         expect(
           hasFailure(
@@ -574,8 +663,8 @@ async function expectPackageFiles(
   }
 }
 
-async function treeEvidence(root: string): Promise<unknown> {
-  const stat = await lstat(root, { bigint: true });
+function treeEvidence(root: string): unknown {
+  const stat = lstatSync(root, { bigint: true });
   const identity = {
     device: stat.dev,
     inode: stat.ino,
@@ -585,14 +674,12 @@ async function treeEvidence(root: string): Promise<unknown> {
   if (stat.isDirectory())
     return {
       ...identity,
-      children: await Promise.all(
-        (await readdir(root))
-          .sort()
-          .map(async (name) => [name, await treeEvidence(join(root, name))])
-      ),
+      children: readdirSync(root)
+        .sort()
+        .map((name) => [name, treeEvidence(join(root, name))]),
     };
   if (!stat.isFile()) throw new Error("Unexpected nonordinary package entry");
-  return { ...identity, size: stat.size, bytes: await readFile(root) };
+  return { ...identity, size: stat.size, bytes: readFileSync(root) };
 }
 
 function hasFailure(
