@@ -14,6 +14,7 @@ import {
   MetalPublicationError,
   publishPreparedMetalOutput,
 } from "./tooling/publication-staging.js";
+import { verifyMetalProject } from "./tooling/verify-project.js";
 
 export const nativeCliProtocol = 1;
 
@@ -86,6 +87,22 @@ export async function runNativeCommand(
       if (!(error instanceof MetalPublicationError)) throw error;
       return { code: 1, stderr: renderPublicationError(error) };
     }
+  }
+  if (input.command === "verify") {
+    const report = await verifyMetalProject({
+      configurationPath: input.configurationPath,
+      signal: input.signal,
+    });
+    return {
+      code: 0,
+      stdout: [
+        "Native package: current",
+        `Module: ${report.moduleName}`,
+        `Output: ${report.outputPath}`,
+        `Input fingerprint: ${report.inputFingerprint}`,
+        "",
+      ].join("\n"),
+    };
   }
   if (input.command !== "doctor")
     return {

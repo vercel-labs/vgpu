@@ -13,9 +13,9 @@ A native configuration selects the shader programs that ship together in one Swi
 It does not describe your application's pipelines, resource allocations, render passes, or frame loop.
 
 > Warning: This is a docs-first production workflow. The parser, help, lazy dispatch, `doctor`,
-> `check`, and `build` are implemented. Local-tarball tests install offline with dependency install
+> `check`, `build`, and `verify` are implemented. Local-tarball tests install offline with dependency install
 > scripts disabled and exercise build publication to an initially absent destination. The companion
-> remains private and unpublished; installed `verify`, replacement/recovery diagnostics, external
+> remains private and unpublished; broader installed replacement/recovery diagnostics, external
 > Swift/GPU consumption of that candidate, and the complete release workflow remain unfinished.
 
 ## Select the programs

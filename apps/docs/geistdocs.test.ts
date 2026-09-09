@@ -181,7 +181,7 @@ describe("agent readiness metadata", () => {
     );
     expect(build).toContain("private and unpublished");
     expect(build).toContain(
-      "`verify` is not connected to its installed command yet"
+      "without compiler or temporary-directory prerequisites and leaves parent recovery files untouched"
     );
     expect(build).toContain("support remain unqualified");
 

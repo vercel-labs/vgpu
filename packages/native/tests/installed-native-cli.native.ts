@@ -49,7 +49,7 @@ const external = {
   zod: "4.4.3",
 };
 
-test("an offline installed public vgpu diagnoses, checks without Apple tools, and builds documented shaders", async () => {
+test("an offline installed public vgpu diagnoses, checks without Apple tools, and builds and verifies documented shaders", async () => {
   expect(process.versions.node).toBe("22.19.0");
   expect(process.platform).toBe("darwin");
   const { command, checked } = boundedCommands(Date.now() + 240_000);
@@ -708,6 +708,43 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     ).toBe(
       `Native publication: not-published\n[error] conflict: Metal publication not-published: Unrecognized publication recovery record\nInspect retained paths (not cleanup authority):\n  ${retainedStage}\n  ${retainedJournal}\n`
     );
+    const missingVerifyTemp = join(fixture, "missing-verify-temp");
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    const verify = await command(
+      process.execPath,
+      [bin, "native", "verify", "--config", "../project/vgpu.native.json"],
+      runtime,
+      {
+        ...doctorEnvironment,
+        DEVELOPER_DIR: missingDeveloper,
+        TMPDIR: missingVerifyTemp,
+      }
+    );
+    console.info("Installed verify actual result", JSON.stringify(verify));
+    expect(verify.code, JSON.stringify(verify)).toBe(0);
+    expect(verify.signal).toBeNull();
+    expect(verify.stderr).toBe("");
+    expect(verify.stdout).toBe(
+      `Native package: current\nModule: AppShaders\nOutput: ${output}\nInput fingerprint: ${fingerprint}\n`
+    );
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {

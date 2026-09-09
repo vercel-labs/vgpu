@@ -11,11 +11,12 @@ Native tooling runs on the machine that generates the shaders. The Swift applica
 resulting package without running Node.js or translating WGSL at launch.
 
 > Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, `doctor`,
-> `check`, and `build` are implemented. These commands have real local-tarball coverage with an offline
+> `check`, `build`, and `verify` are implemented. These commands have real local-tarball coverage with an offline
 > installation and dependency install scripts disabled; build coverage publishes to an initially
-> absent destination and independently checks the resulting files and hashes. The companion remains
-> private and unpublished; `verify` is not connected to its installed command yet. Installed
-> replacement/recovery diagnostics, external Swift/GPU consumption of that candidate, and release
+> absent destination and independently checks the resulting files and hashes. Verification succeeds
+> without compiler or temporary-directory prerequisites and leaves parent recovery files untouched.
+> The companion remains private and unpublished. Broader installed replacement/recovery diagnostics,
+> external Swift/GPU consumption of that candidate, and release
 > support remain unqualified. Internal tests exercise those underlying modules separately.
 
 ## Prepare the build machine
@@ -165,6 +166,23 @@ Verification first captures the current project inputs, then checks the existing
 and integrity, and finally compares its recorded fingerprint with the captured inputs. A package
 can be intact and owned by the project but still stale. That result is a failure with a request to
 build again, not permission to modify the record or a claim that verification generated anything.
+
+A successful verification writes a human-readable report to standard output and exits `0`:
+
+```text
+Native package: current
+Module: AppShaders
+Output: /absolute/path/to/Generated/AppShaders
+Input fingerprint: ...
+```
+
+The absolute output path, module and 64-character lowercase hexadecimal fingerprint come from the
+verified package and captured project. `current` means the observed package passed ownership,
+integrity and input-freshness checks; it does not mean this invocation published or executed it.
+A failed verification exits `1` with a diagnostic on standard error and no successful report.
+The command needs no compiler or temporary compiler directory and does not repair files. Recovery
+records beside the output are not package contents: successful verification leaves them untouched
+and does not establish an earlier publication outcome or authorize their removal.
 
 Before inspecting the package, verification checks the original output path components as described
 in [Configure a Metal package](/native/macos/metal/tooling/configuration). A symlink hidden by `..`

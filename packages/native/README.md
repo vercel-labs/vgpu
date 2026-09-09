@@ -2,7 +2,7 @@
 
 Private build-time tooling for generated Metal integration. This package is not published and does
 not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor`,
-`vgpu native check`, and `vgpu native build`; installed `verify` remains unfinished.
+`vgpu native check`, `vgpu native build`, and `vgpu native verify`.
 
 `generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
 returns the files of a self-contained Swift package without writing to disk. Optional reflected
@@ -31,8 +31,8 @@ validate output boundaries, and verify an existing package's exact file tree and
 Low-level output verification does not establish input freshness or authorize publication.
 `checkMetalProject` validates one captured configured project without inspecting output;
 `verifyMetalProject` adds original-path checks and compares the intact package with that capture's
-fingerprint. The installed check connects configuration to validation; installed verify remains
-unfinished. These read-only modules do not write generated directories.
+fingerprint. Installed check and verify connect configuration to validation and current output
+inspection respectively. These read-only modules do not write generated directories.
 
 `prepareMetalProject` compiles one captured project into the four coherent generated files without
 publishing them. The installed build connects this preparation to the private publisher and reports
@@ -55,7 +55,7 @@ generations at their original destination and staging names can instead prove no
 Both trees are checked against their own modules and manifests; a missing destination remains
 `unknown`, even with an intact new stage. These checks preserve the original failure and recovery
 state, never retry commit or delete either generation. Complete replacement fault handling and
-the installed command workflow remain unfinished.
+installed interruption diagnostics remain unfinished.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and
@@ -112,9 +112,13 @@ not an install, postinstall, or prepare hook. Generated distribution assets and 
 remain untracked. A local offline install with dependency install scripts disabled tests this
 candidate boundary; it does not qualify empty-cache installation, normal dependency install
 scripts, signing/quarantine, or a release compatibility matrix. Local installed doctor, check and
-initially-absent build publication are exercised through this packaging boundary. Installed verify,
-replacement/recovery diagnostics, and external Swift/GPU consumption of that candidate remain
+initially-absent build publication and current-package verification are exercised through this
+packaging boundary. Broader installed replacement/recovery diagnostics and external Swift/GPU consumption of that candidate remain
 unfinished. The package remains private and unpublished.
+
+Installed verification succeeds without compiler or temporary-directory prerequisites and leaves
+parent recovery files untouched. It reports current ownership, integrity and input freshness,
+not a publication outcome or permission to remove recovery evidence.
 
 An installed build encountering an unrecognized recovery record reports its current non-publication
 outcome, original error and retained paths without changing the existing package or recovery files.

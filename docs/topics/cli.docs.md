@@ -41,9 +41,9 @@ optional `@vgpu/native` companion only for native operations; other vgpu command
 do not load the compiler.
 
 > Warning: Native tooling is under development. The dispatcher, help, `native doctor`,
-> `native check`, and `native build` are tested using real local tarballs installed offline with
+> `native check`, `native build`, and `native verify` are tested using real local tarballs installed offline with
 > dependency install scripts disabled; build coverage publishes to an initially absent destination.
-> The companion is not published; installed `native verify`, replacement/recovery diagnostics,
+> The companion is not published; broader installed replacement/recovery diagnostics,
 > external Swift/GPU consumption of that candidate, and release qualification remain unfinished.
 
 ```terminal

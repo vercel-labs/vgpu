@@ -10,9 +10,9 @@ a later reread would not validate the same input.
 > Warning: The snapshot helpers are implemented and tested, including serialized replay, package
 > imports, relocation, and bounded direct file reads. The internal Metal compiler accepts captured
 > graphs as well as explicit module maps, with real compute and render tests. Native doctor, check,
-> and build also run from real local tarballs installed offline with dependency install scripts
+> build, and verify also run from real local tarballs installed offline with dependency install scripts
 > disabled; build coverage publishes to an initially absent destination. The companion remains
-> private and unpublished; installed verify, replacement/recovery diagnostics, external Swift/GPU
+> private and unpublished; broader installed replacement/recovery diagnostics, external Swift/GPU
 > consumption of that candidate, and the complete release workflow remain unfinished.
 
 ## Keep imports in WGSL
