@@ -9,9 +9,10 @@ a later reread would not validate the same input.
 
 > Warning: The snapshot helpers are implemented and tested, including serialized replay, package
 > imports, relocation, and bounded direct file reads. The internal Metal compiler accepts captured
-> graphs as well as explicit module maps, with real compute and render tests. The `vgpu native`
-> grammar, help, and lazy dispatch exist; the operational companion and complete installed workflow
-> remain pending.
+> graphs as well as explicit module maps, with real compute and render tests. Native doctor and check
+> also run from real local tarballs installed offline with dependency install scripts disabled.
+> The companion remains private and unpublished; installed build, verify, and the complete release
+> workflow remain unfinished.
 
 ## Keep imports in WGSL
 

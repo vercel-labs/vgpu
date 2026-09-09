@@ -1,5 +1,9 @@
 import { installedTintWorkerPath } from "./compiler/installed-worker.js";
 import {
+  checkMetalProject,
+  type CheckedMetalProject,
+} from "./tooling/check-project.js";
+import {
   doctorMetalToolchain,
   type NativeDoctorReport,
 } from "./tooling/doctor.js";
@@ -26,6 +30,14 @@ export interface NativeCommandResult {
 export async function runNativeCommand(
   input: NativeCommandInput
 ): Promise<NativeCommandResult> {
+  if (input.command === "check") {
+    const report = await checkMetalProject({
+      configurationPath: input.configurationPath,
+      workerPath: installedTintWorkerPath(),
+      signal: input.signal,
+    });
+    return { code: 0, stdout: renderCheckReport(report) };
+  }
   if (input.command !== "doctor")
     return {
       code: 1,
@@ -40,6 +52,18 @@ export async function runNativeCommand(
     code: report.verdict === "healthy" ? 0 : 1,
     stdout: renderDoctorReport(report),
   };
+}
+
+function renderCheckReport(report: CheckedMetalProject): string {
+  return [
+    "Native shaders: valid",
+    `Module: ${report.moduleName}`,
+    ...report.programs.map(
+      (program) => `[ok] ${program.name}: ${program.stages.join(", ")}`
+    ),
+    `Input fingerprint: ${report.inputFingerprint}`,
+    "",
+  ].join("\n");
 }
 
 function renderDoctorReport(report: NativeDoctorReport): string {

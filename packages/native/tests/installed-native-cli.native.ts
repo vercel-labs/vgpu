@@ -7,6 +7,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -14,6 +15,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { projectFixture } from "./project-operation-fixture.ts";
 
 const workspace = fileURLToPath(new URL("../../..", import.meta.url));
 const packages = [
@@ -43,7 +45,7 @@ const external = {
   zod: "4.4.3",
 };
 
-test("an offline installed public vgpu diagnoses its real packaged native toolchain", async () => {
+test("an offline installed public vgpu diagnoses its native toolchain and checks documented shaders without output or Apple tools", async () => {
   expect(process.versions.node).toBe("22.19.0");
   expect(process.platform).toBe("darwin");
   const { command, checked } = boundedCommands(Date.now() + 240_000);
@@ -58,6 +60,7 @@ test("an offline installed public vgpu diagnoses its real packaged native toolch
   );
   const assets = join(workspace, "packages/native/dist/compiler/assets");
   let ownsAssets = false;
+  let unplacedProject: string | undefined;
   const sourceRoot = join(
     workspace,
     "tooling/native-tint-worker/c1-tint-direct-build"
@@ -419,6 +422,49 @@ test("an offline installed public vgpu diagnoses its real packaged native toolch
       );
       expect(packed.bytes.byteLength).toBe(item.bytes);
     }
+    expect(await readdir(scratch)).toEqual([]);
+    const input = await projectFixture();
+    unplacedProject = input.directory;
+    const project = join(fixture, "project");
+    const output = join(project, relative(input.directory, input.outputPath));
+    await rename(input.directory, project);
+    unplacedProject = undefined;
+    await mkdir(dirname(output), { recursive: true });
+    await writeFile(output, "Handwritten output sentinel; do not replace\n", {
+      flag: "wx",
+    });
+    const outputBefore = await lstat(output, { bigint: true });
+    expect(outputBefore.isFile()).toBe(true);
+    const projectBefore = await treeEvidence(project);
+    const missingDeveloper = join(fixture, "missing-apple-toolchain");
+    await expect(lstat(missingDeveloper)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    const check = await command(
+      process.execPath,
+      [bin, "native", "check", "--config", "../project/vgpu.native.json"],
+      runtime,
+      { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+    );
+    console.info("Installed check actual result", JSON.stringify(check));
+    // Actual installed behavior is the first check oracle, not a future export or renderer prerequisite.
+    expect(check.code, JSON.stringify(check)).toBe(0);
+    expect(check.signal).toBeNull();
+    expect(check.stderr).toBe("");
+    expect(check.stdout).toMatch(
+      /^Native shaders: valid\nModule: AppShaders\n\[ok\] Count: compute\n\[ok\] Gradient: vertex, fragment\nInput fingerprint: [a-f0-9]{64}\n$/u
+    );
+    expect(await treeEvidence(project)).toEqual(projectBefore);
+    expect(await lstat(output, { bigint: true })).toMatchObject({
+      dev: outputBefore.dev,
+      ino: outputBefore.ino,
+      mode: outputBefore.mode,
+      nlink: outputBefore.nlink,
+      size: outputBefore.size,
+    });
+    await expect(lstat(missingDeveloper)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
     expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
     expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
@@ -435,7 +481,11 @@ test("an offline installed public vgpu diagnoses its real packaged native toolch
         cleanupFailures.push(cause);
       }
     }
-    for (const path of [...(ownsAssets ? [assets] : []), fixture]) {
+    for (const path of [
+      ...(ownsAssets ? [assets] : []),
+      ...(unplacedProject ? [unplacedProject] : []),
+      fixture,
+    ]) {
       try {
         await rm(path, { recursive: true, force: true });
       } catch (cause) {

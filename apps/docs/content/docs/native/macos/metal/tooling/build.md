@@ -6,12 +6,12 @@ description: "Check the native toolchain, validate shaders, regenerate an owned 
 Native tooling runs on the machine that generates the shaders. The Swift application consumes the
 resulting package without running Node.js or translating WGSL at launch.
 
-> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, and `doctor`
-> companion are implemented. Doctor has real local-tarball coverage with an offline installation
+> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, `doctor`, and
+> `check` are implemented. Both commands have real local-tarball coverage with an offline installation
 > and dependency install scripts disabled. The companion remains private and unpublished;
-> `check`, `build`, and `verify` are not connected to installed commands yet. Internal tests exercise
-> their compiler, publication, and verification modules separately. The complete installed build
-> workflow and release support remain unqualified.
+> `build` and `verify` are not connected to installed commands yet. Internal tests exercise their
+> compiler, publication, and verification modules separately. The complete installed build workflow
+> and release support remain unqualified.
 
 ## Prepare the build machine
 
@@ -58,6 +58,23 @@ The check uses the same supported compiler profile as `build`. It does not retry
 with extra language features or infer missing application state. Reported locations distinguish
 resolved WGSL from authored source; the tool does not invent an original line number when no mapping
 is available.
+
+A successful check writes a human-readable report to standard output. It identifies the module,
+lists programs in name order with their selected stages, and reports the captured input fingerprint.
+For the documented `AppShaders` configuration, the report has this shape; the actual fingerprint
+is 64 lowercase hexadecimal characters:
+
+```text
+Native shaders: valid
+Module: AppShaders
+[ok] Count: compute
+[ok] Gradient: vertex, fragment
+Input fingerprint: ...
+```
+
+Success exits `0`. A failed check exits `1` with a diagnostic on standard error instead of a
+successful report. Cancellation retains the CLI's signal exit statuses. Neither a successful
+check nor its fingerprint claims that an output package exists, is intact, or is current.
 
 ## Generate the package
 

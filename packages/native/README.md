@@ -1,8 +1,8 @@
 # @vgpu/native
 
 Private build-time tooling for generated Metal integration. This package is not published and does
-not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor`;
-the installed `check`, `build`, and `verify` operations remain unfinished.
+not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor` and
+`vgpu native check`; the installed `build` and `verify` operations remain unfinished.
 
 `generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
 returns the files of a self-contained Swift package without writing to disk. Optional reflected
@@ -24,15 +24,15 @@ command workflow remain separate integration work.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
-Apple's offline compiler or generate package files. This is an internal seam, not an installed CLI.
+Apple's offline compiler or generate package files. The installed check uses this internal seam.
 
 Read-only tooling seams parse the project configuration, diagnose the selected native toolchain,
 validate output boundaries, and verify an existing package's exact file tree and integrity record.
 Low-level output verification does not establish input freshness or authorize publication.
 `checkMetalProject` validates one captured configured project without inspecting output;
 `verifyMetalProject` adds original-path checks and compares the intact package with that capture's
-fingerprint. These modules do not yet connect the project configuration to installed commands or
-write generated directories.
+fingerprint. The installed check connects configuration to validation; installed build and verify
+remain unfinished. These read-only modules do not write generated directories.
 
 `prepareMetalProject` compiles one captured project into the four coherent generated files without
 publishing them. The private publisher currently stages and verifies those files under a physical
@@ -108,8 +108,8 @@ The regular TypeScript/C-source build remains independent of the local worker ca
 not an install, postinstall, or prepare hook. Generated distribution assets and candidate tarballs
 remain untracked. A local offline install with dependency install scripts disabled tests this
 candidate boundary; it does not qualify empty-cache installation, normal dependency install
-scripts, signing/quarantine, or a release compatibility matrix. The local installed doctor is
-exercised through this packaging boundary; project commands remain unfinished and the package
+scripts, signing/quarantine, or a release compatibility matrix. The local installed doctor and check
+are exercised through this packaging boundary; build and verify remain unfinished and the package
 remains private and unpublished.
 
 ## Checks
