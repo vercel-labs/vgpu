@@ -498,7 +498,7 @@ struct recovery_observation {
 enum reconciliation_mode {
   RECONCILE_MISSING,
   RECONCILE_EMPTY,
-  RECONCILE_OWNED_PUBLISHED
+  RECONCILE_OWNED
 };
 
 struct reconciliation_request {
@@ -506,6 +506,7 @@ struct reconciliation_request {
   const char *module;
   const char *transaction;
   enum reconciliation_mode mode;
+  long name_max;
 };
 
 static int verify_recovery(int parent, const char *parent_path,
@@ -1214,8 +1215,8 @@ static int verify_recovery(int parent, const char *parent_path,
                                      const struct recovery_observation *update,
                                      const struct recovery_observation *destination,
                                      const struct reconciliation_request *request) {
-  char line[256];
-  char canonical[256];
+  char line[512];
+  char canonical[512];
   char transaction[33] = {0};
   char device[21] = {0};
   char inode[21] = {0};
@@ -1243,10 +1244,11 @@ static int verify_recovery(int parent, const char *parent_path,
       fields = sscanf(line, "verify-empty %32[a-f0-9] prepared %20[0-9] %20[0-9] %20[0-9] %20[0-9]%c",
                       transaction, device, inode, old_device, old_inode, &trailer);
       break;
-    case RECONCILE_OWNED_PUBLISHED:
-      opcode = "verify-owned-published";
-      fields = sscanf(line, "verify-owned-published %32[a-f0-9] prepared %20[0-9] %20[0-9]%c",
-                      transaction, device, inode, &trailer);
+    case RECONCILE_OWNED:
+      opcode = "verify-owned";
+      expected_fields = 6;
+      fields = sscanf(line, "verify-owned %32[a-f0-9] prepared %20[0-9] %20[0-9] %20[0-9] %20[0-9]%c",
+                      transaction, device, inode, old_device, old_inode, &trailer);
       break;
     default:
       errno = EPROTO;
@@ -1256,10 +1258,7 @@ static int verify_recovery(int parent, const char *parent_path,
       strcmp(transaction, request->transaction) != 0 ||
       parse_decimal(device, &expected_device) != 0 ||
       parse_decimal(inode, &expected_inode) != 0 ||
-      (request->mode == RECONCILE_OWNED_PUBLISHED &&
-       (expected_device != (unsigned long long)parent_identity->st_dev ||
-        expected_inode == (unsigned long long)parent_identity->st_ino)) ||
-      (request->mode == RECONCILE_EMPTY &&
+      ((request->mode == RECONCILE_EMPTY || request->mode == RECONCILE_OWNED) &&
        (parse_decimal(old_device, &expected_old_device) != 0 ||
         parse_decimal(old_inode, &expected_old_inode) != 0 ||
         expected_device != (unsigned long long)parent_identity->st_dev ||
@@ -1270,9 +1269,9 @@ static int verify_recovery(int parent, const char *parent_path,
     errno = EPROTO;
     return fail("invalid-transfer");
   }
-  if (request->mode == RECONCILE_EMPTY)
-    snprintf(canonical, sizeof(canonical), "verify-empty %s prepared %llu %llu %llu %llu\n",
-             request->transaction, expected_device, expected_inode,
+  if (request->mode == RECONCILE_EMPTY || request->mode == RECONCILE_OWNED)
+    snprintf(canonical, sizeof(canonical), "%s %s prepared %llu %llu %llu %llu\n",
+             opcode, request->transaction, expected_device, expected_inode,
              expected_old_device, expected_old_inode);
   else
     snprintf(canonical, sizeof(canonical), "%s %s prepared %llu %llu\n",
@@ -1304,8 +1303,54 @@ static int verify_recovery(int parent, const char *parent_path,
     }
     aggregate += files[index].length;
   }
+  char old_module[256] = {0};
+  struct artifact old_files[4] = {0};
+  if (request->mode == RECONCILE_OWNED) {
+    char old_record_hash[65] = {0};
+    if (read_reconciliation_line(line, sizeof(line)) != 0 ||
+        sscanf(line, "old-package %255[A-Za-z0-9_] %64[a-f0-9]%c",
+               old_module, old_record_hash, &trailer) != 3 ||
+        trailer != '\n' || strlen(old_record_hash) != 64 ||
+        !valid_old_module(old_module, request->name_max)) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    snprintf(canonical, sizeof(canonical), "old-package %s %s\n", old_module, old_record_hash);
+    if (strcmp(line, canonical) != 0) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    unsigned long long old_aggregate = 0;
+    for (int index = 0; index < 4; index++) {
+      char role[2] = {0};
+      char length[21] = {0};
+      if (read_reconciliation_line(line, sizeof(line)) != 0 ||
+          sscanf(line, "old-artifact %1[0-3] %20[0-9] %64[a-f0-9]%c",
+                 role, length, old_files[index].hash, &trailer) != 4 ||
+          role[0] != '0' + index || trailer != '\n' || strlen(old_files[index].hash) != 64 ||
+          parse_decimal(length, &old_files[index].length) != 0 || old_files[index].length == 0 ||
+          (index == 3 && old_files[index].length > RECORD_LIMIT) ||
+          old_files[index].length > AGGREGATE_LIMIT ||
+          old_aggregate > AGGREGATE_LIMIT - old_files[index].length) {
+        errno = EPROTO;
+        return fail("invalid-transfer");
+      }
+      snprintf(canonical, sizeof(canonical), "old-artifact %d %llu %s\n",
+               index, old_files[index].length, old_files[index].hash);
+      if (strcmp(line, canonical) != 0) {
+        errno = EPROTO;
+        return fail("invalid-transfer");
+      }
+      old_aggregate += old_files[index].length;
+    }
+    if (strcmp(old_record_hash, old_files[3].hash) != 0) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+  }
   int published;
   int old_destination = -1;
+  int check_old_tree = 0;
   const struct recovery_observation *candidate;
   const char *root_name;
   switch (request->mode) {
@@ -1338,11 +1383,24 @@ static int verify_recovery(int parent, const char *parent_path,
       candidate = published ? destination : stage;
       root_name = published ? request->destination : STAGE_NAME;
       break;
-    case RECONCILE_OWNED_PUBLISHED:
-      /* Only the original new root at destination proves this outcome; never read old staging contents. */
-      published = 1;
-      candidate = destination;
-      root_name = request->destination;
+    case RECONCILE_OWNED:
+      if (!destination->present || !S_ISDIR(destination->identity.st_mode)) {
+        errno = ESTALE;
+        return fail("conflict");
+      }
+      published = (unsigned long long)destination->identity.st_dev == expected_device &&
+                  (unsigned long long)destination->identity.st_ino == expected_inode;
+      if (!published) {
+        if ((unsigned long long)destination->identity.st_dev != expected_old_device ||
+            (unsigned long long)destination->identity.st_ino != expected_old_inode) {
+          errno = ESTALE;
+          return fail("conflict");
+        }
+        check_old_tree = 1;
+      }
+      /* Published needs only new output; negative proof additionally retains the original old tree. */
+      candidate = published ? destination : stage;
+      root_name = published ? request->destination : STAGE_NAME;
       break;
     default:
       errno = EPROTO;
@@ -1359,20 +1417,30 @@ static int verify_recovery(int parent, const char *parent_path,
     .root = -1, .sources = -1, .module = -1, .resources = -1
   };
   const char *tree_error = read_recovery_tree(parent, parent_identity,
-                                              request->mode == RECONCILE_OWNED_PUBLISHED, files, &tree);
+                                              request->mode == RECONCILE_OWNED, files, &tree);
   if (tree_error != NULL) return fail(tree_error);
+  struct retained_recovery_tree old_tree = {
+    .root_name = request->destination, .module_name = old_module, .root_identity = &destination->identity,
+    .root = -1, .sources = -1, .module = -1, .resources = -1
+  };
+  if (check_old_tree) {
+    tree_error = read_recovery_tree(parent, parent_identity, 1, old_files, &old_tree);
+    if (tree_error != NULL) return fail(tree_error);
+  }
   if (!parent_matches(parent_path, parent_identity) ||
       verify_bytes(parent, JOURNAL_NAME, journal_identity, journal, journal_length) != 0 ||
       recovery_name_matches(parent, STAGE_NAME, stage) != 0 ||
       recovery_name_matches(parent, UPDATE_NAME, update) != 0 ||
       recovery_name_matches(parent, request->destination, destination) != 0 ||
       recovery_tree_edges(parent, &tree) != 0 ||
+      (check_old_tree && recovery_tree_edges(parent, &old_tree) != 0) ||
       (old_destination >= 0 &&
        (directory_edge(parent, request->destination, old_destination,
                        &destination->identity) != 0 ||
         exact_directory(old_destination, NULL, 0) != 0)))
     return fail("conflict");
   if (close_recovery_tree(&tree) != 0 ||
+      (check_old_tree && close_recovery_tree(&old_tree) != 0) ||
       (old_destination >= 0 && close(old_destination) != 0))
     return fail("helper-failed");
   char receipt[JOURNAL_LIMIT];
@@ -1453,7 +1521,7 @@ int main(int argc, char **argv) {
        strcmp(argv[6], "publish-missing-or-empty") != 0) ||
       (argc == 8 && strcmp(argv[6], "publish-project") != 0) ||
       (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0 &&
-       strcmp(argv[6], "reconcile-empty") != 0 && strcmp(argv[6], "reconcile-owned-published") != 0) ||
+       strcmp(argv[6], "reconcile-empty") != 0 && strcmp(argv[6], "reconcile-owned") != 0) ||
       !valid_transaction(argv[5])) {
     errno = EINVAL;
     return fail("helper-failed");
@@ -1478,8 +1546,8 @@ int main(int argc, char **argv) {
       reconciliation_mode = RECONCILE_MISSING;
     else if (strcmp(argv[6], "reconcile-empty") == 0)
       reconciliation_mode = RECONCILE_EMPTY;
-    else if (strcmp(argv[6], "reconcile-owned-published") == 0)
-      reconciliation_mode = RECONCILE_OWNED_PUBLISHED;
+    else if (strcmp(argv[6], "reconcile-owned") == 0)
+      reconciliation_mode = RECONCILE_OWNED;
     else {
       errno = EINVAL;
       return fail("helper-failed");
@@ -1528,7 +1596,7 @@ int main(int argc, char **argv) {
   if (!parent_matches(parent_path, &parent_identity)) return fail("parent-changed");
   struct stat existing_journal;
   const struct reconciliation_request reconciliation = {
-    destination, module, transaction, reconciliation_mode
+    destination, module, transaction, reconciliation_mode, name_max
   };
   if (fstatat(parent, JOURNAL_NAME, &existing_journal, AT_SYMLINK_NOFOLLOW) == 0)
     return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max,

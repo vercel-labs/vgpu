@@ -15,9 +15,10 @@ them together, then replaces the output directory as one operation.
 > Warning: This is the docs-first publication contract. Staging, missing and empty-destination
 > publication, their bounded read-only reconciliation, and same-owner package exchanges with identical
 > bytes or a changed module name have native test coverage, as does rejection of an old generated
-> subtree on another filesystem device. A real owned exchange whose helper dies before confirming
-> success also has published-only reconciliation coverage. Broader owned-replacement fault handling
-> still needs coverage and implementation. The operational build companion is unfinished.
+> subtree on another filesystem device. Owned exchanges also have read-only recovery coverage after
+> helper death, both after success and before exchange with both original generations intact.
+> Broader owned-replacement fault handling still needs coverage and implementation.
+> The operational build companion is unfinished.
 > The command shim exists; this is not a released end-to-end build workflow.
 
 ## Reserve the destination
@@ -88,7 +89,8 @@ prove the absence of every possible mount or alias topology.
 Publication accepts exactly the four generated files described in
 [Build and verify a Metal package](/native/macos/metal/tooling/build). Their combined raw byte size
 must not exceed 128 MiB. This is a tooling safety boundary, not a promise that every package below
-that size will compile or load on every device.
+that size will compile or load on every device. For an owned replacement, this limit applies
+separately to each generation.
 
 The helper receives file contents in chunks no larger than 64 KiB and writes each chunk relative
 to the retained staging directory. It does not place the complete library in a JSON or base64
@@ -164,18 +166,26 @@ did not happen. For an empty-directory replacement, proving non-publication requ
 intact prepared directory still at staging and the original destination directory still present
 and exactly empty. A missing destination or a different empty directory does not provide that proof.
 
-For an owned exchange, the initial reconciliation can establish only that publication happened:
-the complete new package must be at the destination with its original prepared directory identity,
+For an owned exchange, reconciliation establishes that publication happened when
+the complete new package is at the destination with its original prepared directory identity,
 exact file set, lengths, and hashes. Its generated directories and files must remain on the physical
 parent's filesystem device. The recorded plan must match the original live transaction, including
 the old module, file manifest, integrity record, and configuration identity accepted before exchange.
 This is historical publication evidence, not a fresh ownership or input-freshness check.
 
-An old package left at staging is recovery evidence, not permission to delete it. Reconciliation
-does not clean either generation or the journal. Proving that an owned exchange did not happen
-requires a separate check of both original generations; that negative proof is not enabled in this
-initial slice. An unconfirmed exchange without the checked new package at its destination remains
-unknown, even when an apparently intact package is still at staging.
+Proving that an owned exchange did not happen requires both original generations: the complete old
+package must remain at the destination with its original directory identity, and the complete new
+package must remain at staging with its prepared identity. Each package is checked against its own
+module, exact file set, lengths, and hashes; both retained directory trees and all generated files
+must stay on the physical parent's filesystem device. A missing destination, a substituted root,
+or an incomplete or modified generation leaves the outcome unknown, even when the other package
+appears intact. Equal content hashes alone do not establish either directory's identity.
+
+An old package left at staging is recovery evidence, not permission to delete it. Its contents are
+not required to prove publication of the complete new generation at the destination. Reconciliation
+does not clean either generation or the journal, reopen the current configuration, or authorize
+another exchange. The original failure is still reported after a proved non-publication, without
+a publication receipt.
 
 A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
 into a successful build. The diagnostic preserves the original error and distinguishes reconciled

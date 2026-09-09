@@ -39,7 +39,7 @@ vi.mock("node:child_process", async (original) => {
       if (
         args[0].endsWith("/publication-staging") &&
         Array.isArray(args[1]) &&
-        args[1].includes("reconcile-owned-published")
+        args[1].includes("reconcile-owned")
       ) {
         boundary.beforeReconciliation?.();
         const child = actual.spawn(...args);
@@ -83,7 +83,7 @@ const workerPath = fileURLToPath(
   )
 );
 
-test.each(["published", "missing-destination"] as const)(
+test.each(["published", "missing-destination", "not-published"] as const)(
   "owned reconciliation preserves both generations after interruption (%s)",
   async (outcome) => {
     const input = await projectFixture();
@@ -339,7 +339,7 @@ test.each(["published", "missing-destination"] as const)(
           destination: stageIdentity,
         });
       }
-      // Published dies at RETURN after the actual SWAP; missing-destination dies before RESUME.
+      // Published dies at RETURN after the actual SWAP; both other cases die before RESUME.
       expect(helper?.kill("SIGKILL")).toBe(true);
       expect(await closed).toEqual({ code: null, signal: "SIGKILL" });
       const failure = await operation;
@@ -355,11 +355,20 @@ test.each(["published", "missing-destination"] as const)(
       await expect(lstat(returnAfterSuccess)).rejects.toMatchObject({
         code: "ENOENT",
       });
-      const oldLocation = outcome === "published" ? stage : oldBackup;
+      const oldLocation =
+        outcome === "published"
+          ? stage
+          : outcome === "missing-destination"
+          ? oldBackup
+          : input.outputPath;
       const newLocation = outcome === "published" ? input.outputPath : stage;
       expect(movedOldDestination).toBe(outcome === "missing-destination");
-      if (outcome === "missing-destination")
-        for (const path of [resume, completed, input.outputPath])
+      if (outcome !== "published")
+        for (const path of [
+          resume,
+          completed,
+          ...(outcome === "missing-destination" ? [input.outputPath] : []),
+        ])
           await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
       expect(await treeEvidence(oldLocation)).toEqual(oldBefore);
       expect(await treeEvidence(newLocation)).toEqual(newBefore);
@@ -377,7 +386,7 @@ test.each(["published", "missing-destination"] as const)(
       });
       await expectPackageFiles(oldLocation, original.files);
       await expectPackageFiles(newLocation, prepared.files);
-      if (outcome === "published")
+      if (outcome !== "missing-destination")
         await expect(
           verifyMetalProject({ configurationPath: input.configurationPath })
         ).resolves.toMatchObject({
@@ -391,7 +400,7 @@ test.each(["published", "missing-destination"] as const)(
       expect((await readdir(parent)).sort()).toEqual([
         ".vgpu-native-publication.json",
         ".vgpu-native-stage",
-        ...(outcome === "published" ? ["AppShaders"] : []),
+        ...(outcome !== "missing-destination" ? ["AppShaders"] : []),
       ]);
       expect(failure).toBeInstanceOf(MetalPublicationError);
       expect(
@@ -404,7 +413,7 @@ test.each(["published", "missing-destination"] as const)(
 
       // Physical interruption, complete packages/journal, and original EOF precede outcome assertions.
       expect(failure).toMatchObject({
-        outcome: outcome === "published" ? "published" : "unknown",
+        outcome: outcome === "missing-destination" ? "unknown" : outcome,
       });
       if (outcome === "published")
         expect(failure).toMatchObject({
@@ -422,6 +431,16 @@ test.each(["published", "missing-destination"] as const)(
           },
           recoveryPaths: [stage, journal, input.outputPath],
         });
+      else if (outcome === "not-published")
+        expect(failure).toMatchObject({
+          code: "helper-failed",
+          cause: {
+            code: "helper-failed",
+            message: "Invalid publication staging helper response",
+          },
+          receipt: undefined,
+          recoveryPaths: [stage, journal],
+        });
       else
         expect(failure).toMatchObject({
           code: "helper-failed",
@@ -432,14 +451,22 @@ test.each(["published", "missing-destination"] as const)(
       expect(reconcilers).toHaveLength(1);
       expect(reconcilers[0]!.child.pid).not.toBe(helper?.pid);
       expect(reconciliationCloses).toEqual([
-        { code: outcome === "published" ? 0 : 1, signal: null },
+        { code: outcome === "missing-destination" ? 1 : 0, signal: null },
       ]);
+      const originalPlan = actualPrepared!.publication;
       const expectedRequest =
-        `verify-owned-published ${journalRecord.transactionId} prepared ${stageIdentity.device} ${stageIdentity.inode}\n` +
+        `verify-owned ${journalRecord.transactionId} prepared ${stageIdentity.device} ${stageIdentity.inode} ${oldIdentity.device} ${oldIdentity.inode}\n` +
         actualPrepared!.files
           .map(
             (file: { length: number; sha256: string }, index: number) =>
               `artifact ${index} ${file.length} ${file.sha256}\n`
+          )
+          .join("") +
+        `old-package ${originalPlan.oldModuleName} ${originalPlan.oldRecordSHA256}\n` +
+        originalPlan.oldFiles
+          .map(
+            (file: { length: number; sha256: string }, index: number) =>
+              `old-artifact ${index} ${file.length} ${file.sha256}\n`
           )
           .join("");
       // Exact metadata-only input excludes payload transfer, commit, finalize, retry, and cleanup commands.
@@ -451,13 +478,21 @@ test.each(["published", "missing-destination"] as const)(
           (frame) => frame.kind === "reconciliation-result"
         )
       ).toEqual(
-        outcome === "published"
+        outcome !== "missing-destination"
           ? [
-              expect.objectContaining({
+              {
+                schemaVersion: 1,
+                kind: "reconciliation-result",
                 transactionId: journalRecord.transactionId,
-                outcome: "published",
-                output: stageIdentity,
-              }),
+                phase: "prepared",
+                outcome,
+                parent: actualPrepared!.parent,
+                destinationName: actualPrepared!.destinationName,
+                ...(outcome === "published"
+                  ? { output: stageIdentity }
+                  : { stage: stageIdentity }),
+                recordSHA256: actualPrepared!.recordSHA256,
+              },
             ]
           : []
       );

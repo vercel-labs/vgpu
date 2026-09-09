@@ -1043,7 +1043,7 @@ async function reconcilePublication(
 ): Promise<void> {
   const reconciliationMode =
     publication.renameMode === "swap"
-      ? "reconcile-owned-published"
+      ? "reconcile-owned"
       : publication.renameMode === "replace-empty"
       ? "reconcile-empty"
       : "reconcile-missing";
@@ -1123,7 +1123,7 @@ async function reconcilePublication(
       );
     const command =
       publication.renameMode === "swap"
-        ? `verify-owned-published ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
+        ? `verify-owned ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode} ${publication.oldDestination.device} ${publication.oldDestination.inode}\n`
         : publication.renameMode === "replace-empty"
         ? `verify-empty ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode} ${publication.oldDestination.device} ${publication.oldDestination.inode}\n`
         : `verify-missing ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`;
@@ -1133,15 +1133,26 @@ async function reconcilePublication(
         input,
         Buffer.from(`artifact ${index} ${file.length} ${file.sha256}\n`)
       );
+    if (publication.renameMode === "swap") {
+      await writeBytes(
+        input,
+        Buffer.from(
+          `old-package ${publication.oldModuleName} ${publication.oldRecordSHA256}\n`
+        )
+      );
+      for (const [index, file] of publication.oldFiles.entries())
+        await writeBytes(
+          input,
+          Buffer.from(`old-artifact ${index} ${file.length} ${file.sha256}\n`)
+        );
+    }
     const reply = await receiveMessage(lines);
     const published = reply.outcome === "published";
     if (
       reply.kind !== "reconciliation-result" ||
       reply.transactionId !== prepared.transactionId ||
       reply.phase !== "prepared" ||
-      (!published &&
-        (publication.renameMode === "swap" ||
-          reply.outcome !== "not-published")) ||
+      (!published && reply.outcome !== "not-published") ||
       Object.keys(reply).length !== 9 ||
       !responseIdentity(reply.parent, prepared.parent) ||
       reply.destinationName !== prepared.destinationName ||
