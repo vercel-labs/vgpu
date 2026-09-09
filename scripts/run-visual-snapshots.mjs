@@ -22,7 +22,7 @@ const metadata = {
   vulkan: spawnSync("vulkaninfo", ["--summary"], { encoding: "utf8" }).stdout,
 };
 await writeFile(join(artifactRoot, "environment.json"), JSON.stringify(metadata, null, 2));
-const run = spawnSync("pnpm", ["exec", "vitest", "run", "--maxWorkers=1", "--minWorkers=1",
+const run = spawnSync("pnpm", ["exec", "vitest", "run", "--maxWorkers=1",
   "packages/vgpu-api/tests/scene/primitives",
   "packages/render/tests/inspect/box-normals.test.ts",
   "packages/render/tests/inspect/box-wireframe.test.ts",

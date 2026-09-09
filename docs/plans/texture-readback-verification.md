@@ -411,3 +411,8 @@ count pixels outside tolerance. Tolerated rounding neither creates candidates no
 The focused harness/CLI suite passes 19 tests, including ±1 acceptance, a single RGB delta of 2 or alpha
 delta of 1 failing, negative differences, all-pixel rounding, and baseline preservation in both modes.
 Native CI on the final integrated revision remains the merge gate.
+Replayed both prior native artifact sets through the actual comparator: 237/237 passed in each,
+with 32 and 36 rounded (non-byte-identical) matches respectively. No baseline PNG was changed.
+Integrated `canary` at `ca6cf99f`; its Vitest 4 upgrade removes `--minWorkers`, so the visual runner
+now uses the supported `--maxWorkers=1` limit. Node 22 typecheck and all 19 focused tests also pass
+with the integrated dependencies.
