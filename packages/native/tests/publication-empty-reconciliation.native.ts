@@ -105,11 +105,14 @@ const workerPath = fileURLToPath(
   )
 );
 
-test.each(["original", "changed-old-identity"] as const)(
-  "lost empty-publication ACK uses the original transaction plan (%s journal)",
+test.each(["original", "changed-old-identity", "cancelled"] as const)(
+  "lost empty-publication ACK uses the original transaction plan (%s)",
   async (journalVariant) => {
     const input = await projectFixture();
     const controller = new AbortController();
+    const cancellationReason = new Error(
+      "cancelled while the actual empty rename was paused"
+    );
     let oldDirectory: FileHandle | undefined;
     let helper: import("node:child_process").ChildProcess | undefined;
     let closed:
@@ -121,6 +124,7 @@ test.each(["original", "changed-old-identity"] as const)(
     let reconciliationCount = 0;
     let reconciliationClosed: Promise<void> | undefined;
     let verificationRequested = false;
+    let reconciliationStartedAborted = false;
     try {
       await mkdir(input.outputPath, { recursive: true, mode: 0o750 });
       oldDirectory = await open(
@@ -247,7 +251,8 @@ test.each(["original", "changed-old-identity"] as const)(
       });
       let changedJournal = false;
       boundary.beforeReconciliation = () => {
-        if (journalVariant === "original") return;
+        reconciliationStartedAborted = controller.signal.aborted;
+        if (journalVariant !== "changed-old-identity") return;
         if (changedJournal)
           throw new Error("Unexpected second reconciliation attempt");
         const changed = {
@@ -289,13 +294,17 @@ test.each(["original", "changed-old-identity"] as const)(
           return write(chunk, callback);
         }) as typeof child.stdin.write;
       };
+      if (journalVariant === "cancelled") controller.abort(cancellationReason);
       await writeFile(resume, "resume\n", { flag: "wx" });
 
       const failure = await operation;
       await reconciliationClosed;
       expect(reconciliationCount).toBe(1);
       expect(changedJournal).toBe(journalVariant === "changed-old-identity");
-      expect(verificationRequested).toBe(journalVariant === "original");
+      expect(verificationRequested).toBe(
+        journalVariant !== "changed-old-identity"
+      );
+      expect(reconciliationStartedAborted).toBe(journalVariant === "cancelled");
       expect(boundary.observationFailure).toBeUndefined();
       expect(await closed).toEqual({ code: 97, signal: null });
       expect(watchdogFired).toBe(false);
@@ -349,7 +358,7 @@ test.each(["original", "changed-old-identity"] as const)(
         "AppShaders",
       ]);
 
-      // Physical rename and exact retained evidence must pass before this product RED.
+      // Physical rename and exact retained evidence precede every outcome assertion.
       expect(failure).toBeInstanceOf(MetalPublicationError);
       if (journalVariant === "changed-old-identity") {
         expect(failure).toMatchObject({
@@ -374,11 +383,7 @@ test.each(["original", "changed-old-identity"] as const)(
       }
       expect(failure).toMatchObject({ outcome: "published" });
       expect(failure).toMatchObject({
-        code: "helper-failed",
-        cause: expect.objectContaining({
-          code: "helper-failed",
-          message: "Invalid publication staging helper response",
-        }),
+        code: journalVariant === "cancelled" ? "cancelled" : "helper-failed",
         receipt: {
           confirmation: "reconciled",
           outcome: "published",
@@ -388,6 +393,20 @@ test.each(["original", "changed-old-identity"] as const)(
         },
         recoveryPaths: [journal, input.outputPath],
       });
+      expect(
+        hasFailureMessage(
+          failure,
+          "Invalid publication staging helper response"
+        )
+      ).toBe(true);
+      if (journalVariant === "cancelled") {
+        expect(controller.signal.reason).toBe(cancellationReason);
+        expect(failureChain(failure)).toContain(cancellationReason);
+      } else
+        expect((failure as Error).cause).toMatchObject({
+          code: "helper-failed",
+          message: "Invalid publication staging helper response",
+        });
     } finally {
       controller.abort(new Error("test cleanup"));
       if (helper?.exitCode === null && helper.signalCode === null)
@@ -418,6 +437,18 @@ function hasFailureMessage(cause: unknown, message: string): boolean {
           hasFailureMessage(error, message)
         )))
   );
+}
+
+function failureChain(cause: unknown, seen = new Set<unknown>()): unknown[] {
+  if (cause === null || typeof cause !== "object" || seen.has(cause)) return [];
+  seen.add(cause);
+  return [
+    cause,
+    ...failureChain((cause as { cause?: unknown }).cause, seen),
+    ...(cause instanceof AggregateError
+      ? cause.errors.flatMap((error: unknown) => failureChain(error, seen))
+      : []),
+  ];
 }
 
 async function waitForMarker(path: string): Promise<Record<string, any>> {
