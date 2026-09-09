@@ -123,6 +123,11 @@ paths. The initial workflow does not silently discard an earlier transaction. Pr
 until their relationship to the recorded generation has been established; an unknown or modified
 directory is not eligible for cleanup.
 
+A recognized record must be well-formed and match the locked physical parent. Its diagnostic
+identifies the earlier transaction and recorded output, even when the current configuration names
+a different sibling output. Recognizing the record does not establish package integrity or the
+outcome of publication. Unrecognized or inconsistent records remain conflicts and are left intact.
+
 Matching content hashes are not enough to identify which directory was exchanged: rebuilding
 unchanged inputs can produce identical records. Recovery also checks the expected directory
 identities. Names, modification times, and a staging-name prefix do not authorize deletion.
