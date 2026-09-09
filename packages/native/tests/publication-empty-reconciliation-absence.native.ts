@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { constants, renameSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  type BigIntStats,
+} from "node:fs";
 import {
   lstat,
   mkdir,
@@ -106,287 +115,346 @@ const workerPath = fileURLToPath(
   )
 );
 
-test("an absent old destination cannot prove non-publication of an interrupted empty-directory replacement", async () => {
-  const input = await projectFixture();
-  const controller = new AbortController();
-  let oldDirectory: FileHandle | undefined;
-  let helper: import("node:child_process").ChildProcess | undefined;
-  let closed:
-    | Promise<{ code: number | null; signal: string | null }>
-    | undefined;
-  let operation: Promise<unknown> | undefined;
-  let watchdogFired = false;
-  let publisherCount = 0;
-  let reconciliationCount = 0;
-  let reconciliationArgs: readonly string[] | undefined;
-  let moved = false;
-  const children: {
-    child: import("node:child_process").ChildProcess;
-    closed: Promise<{ code: number | null; signal: string | null }>;
-  }[] = [];
-  function track(child: import("node:child_process").ChildProcess) {
-    const watchdog = setTimeout(() => {
-      watchdogFired = true;
-      child.kill("SIGKILL");
-    }, 20_000);
-    const closed = new Promise<{ code: number | null; signal: string | null }>(
-      (resolveClose) =>
+test.each(["missing", "different-empty"] as const)(
+  "a %s destination cannot prove non-publication of an interrupted empty-directory replacement",
+  async (destinationState) => {
+    const input = await projectFixture();
+    const controller = new AbortController();
+    let oldDirectory: FileHandle | undefined;
+    let replacementDescriptor: number | undefined;
+    let replacementRoot: BigIntStats | undefined;
+    let replacementIdentity: { device: string; inode: string } | undefined;
+    let helper: import("node:child_process").ChildProcess | undefined;
+    let closed:
+      | Promise<{ code: number | null; signal: string | null }>
+      | undefined;
+    let operation: Promise<unknown> | undefined;
+    let watchdogFired = false;
+    let publisherCount = 0;
+    let reconciliationCount = 0;
+    let reconciliationArgs: readonly string[] | undefined;
+    let moved = false;
+    const children: {
+      child: import("node:child_process").ChildProcess;
+      closed: Promise<{ code: number | null; signal: string | null }>;
+    }[] = [];
+    function track(child: import("node:child_process").ChildProcess) {
+      const watchdog = setTimeout(() => {
+        watchdogFired = true;
+        child.kill("SIGKILL");
+      }, 20_000);
+      const closed = new Promise<{
+        code: number | null;
+        signal: string | null;
+      }>((resolveClose) =>
         child.once("close", (code, signal) => {
           clearTimeout(watchdog);
           resolveClose({ code, signal });
         })
-    );
-    children.push({ child, closed });
-    return closed;
-  }
-  try {
-    await mkdir(input.outputPath, { recursive: true, mode: 0o750 });
-    oldDirectory = await open(
-      input.outputPath,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
-    );
-    const oldRoot = await oldDirectory.stat({ bigint: true });
-    const oldIdentity = {
-      device: oldRoot.dev.toString(),
-      inode: oldRoot.ino.toString(),
-    };
-    expect(oldRoot.isDirectory()).toBe(true);
-    expect(await readdir(input.outputPath)).toEqual([]);
-    const oldEvidence = await treeEvidence(input.outputPath);
-    const backup = join(input.directory, "preserved-original-empty");
-    expect(dirname(backup)).not.toBe(dirname(input.outputPath));
-    await expect(lstat(backup)).rejects.toMatchObject({ code: "ENOENT" });
-    const prepared = await prepareMetalProject({
-      configurationPath: input.configurationPath,
-      workerPath,
-    });
-    const observer = join(input.directory, "publication-empty-rename.dylib");
-    await promisify(execFile)(
-      "/usr/bin/xcrun",
-      [
-        "--sdk",
-        "macosx",
-        "clang",
-        "-std=c11",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-mmacosx-version-min=14.0",
-        "-dynamiclib",
-        fileURLToPath(
-          new URL("./fixtures/publication-empty-rename.c", import.meta.url)
-        ),
-        "-o",
-        observer,
-      ],
-      {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter(
-            ([name]) => !name.startsWith("DYLD_") && !name.startsWith("LD_")
-          )
-        ),
-        timeout: 30_000,
-        killSignal: "SIGKILL",
-        maxBuffer: 64 * 1024,
-      }
-    );
-    const paused = join(input.directory, "empty-rename-paused");
-    const resume = join(input.directory, "empty-rename-resume");
-    const completed = join(input.directory, "empty-rename-completed");
-    boundary.environment = {
-      DYLD_INSERT_LIBRARIES: observer,
-      VGPU_EMPTY_RENAME_PAUSED: paused,
-      VGPU_EMPTY_RENAME_RESUME: resume,
-      VGPU_EMPTY_RENAME_COMPLETED: completed,
-    };
-    boundary.onHelper = (child) => {
-      publisherCount++;
-      helper = child;
-      closed = track(child);
-    };
-    boundary.onReconciliation = (child, args) => {
-      reconciliationCount++;
-      reconciliationArgs = [...args];
-      track(child);
-    };
-    operation = publishPreparedMetalOutput({
-      prepared,
-      signal: controller.signal,
-    }).then(
-      () => undefined,
-      (cause: unknown) => cause
-    );
-
-    const pausedRename = await waitForMarker(paused);
-    expect(pausedRename.noFollowAny).toBeGreaterThan(0);
-    expect(pausedRename.flags).toBe(pausedRename.noFollowAny);
-    expect(pausedRename.destination).toEqual(oldIdentity);
-    expect(await readdir(input.outputPath)).toEqual([]);
-    const parent = dirname(input.outputPath);
-    const stage = join(parent, ".vgpu-native-stage");
-    const journal = join(parent, ".vgpu-native-publication.json");
-    const stageRoot = await lstat(stage, { bigint: true });
-    const stageIdentity = {
-      device: stageRoot.dev.toString(),
-      inode: stageRoot.ino.toString(),
-    };
-    expect(stageRoot.isDirectory()).toBe(true);
-    expect(pausedRename.source).toEqual(stageIdentity);
-    expect(stageIdentity).not.toEqual(oldIdentity);
-    const stageBefore = await treeEvidence(stage);
-    const journalBefore = await treeEvidence(journal);
-    expect((await readdir(parent)).sort()).toEqual([
-      ".vgpu-native-publication.json",
-      ".vgpu-native-stage",
-      "AppShaders",
-    ]);
-    const journalBytes = await readFile(journal);
-    const journalRecord = JSON.parse(journalBytes.toString("utf8"));
-    const publication = {
-      renameMode: "replace-empty",
-      expectedDestination: "empty",
-      oldDestination: oldIdentity,
-    };
-    expect(journalRecord).toMatchObject({
-      phase: "prepared",
-      publication,
-      stage: { name: ".vgpu-native-stage", ...stageIdentity },
-    });
-    expect(
-      boundary.messages.find((message) => message.kind === "prepared")
-    ).toMatchObject({
-      transactionId: journalRecord.transactionId,
-      publication,
-      stage: { name: ".vgpu-native-stage", ...stageIdentity },
-    });
-
-    boundary.beforeReconciliation = () => {
-      if (moved) throw new Error("Unexpected second reconciliation attempt");
-      // Keep the original root alive outside the locked parent, without a replacement.
-      renameSync(input.outputPath, backup);
-      moved = true;
-    };
-
-    // Never resume: the real empty-directory replacement syscall must not execute.
-    expect(helper?.kill("SIGKILL")).toBe(true);
-    expect(await closed).toEqual({ code: null, signal: "SIGKILL" });
-    const failure = await operation;
-    await Promise.all(children.map((entry) => entry.closed));
-    expect(publisherCount).toBe(1);
-    expect(reconciliationCount).toBe(1);
-    expect(children).toHaveLength(2);
-    expect(children[1]!.child.pid).toBeGreaterThan(0);
-    expect(children[1]!.child.pid).not.toBe(helper?.pid);
-    expect(reconciliationArgs).toEqual([
-      "vgpu-publication-staging/v1",
-      parent,
-      "AppShaders",
-      prepared.project.configuration.moduleName,
-      journalRecord.transactionId,
-      "reconcile-empty",
-      journalRecord.parent.device,
-      journalRecord.parent.inode,
-    ]);
-    expect(moved).toBe(true);
-    expect(boundary.observationFailure).toBeUndefined();
-    expect(watchdogFired).toBe(false);
-    for (const path of [resume, completed, input.outputPath])
-      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(
-      boundary.messages.some((message) => message.kind === "commit-result")
-    ).toBe(false);
-    expect(
-      boundary.reconciliationMessages.find(
-        (message) => message.kind === "reconciliation"
-      )
-    ).toMatchObject({
-      destination: null,
-      stage: { ...stageIdentity, kind: "directory" },
-    });
-    expect(
-      boundary.reconciliationMessages.find(
-        (message) => message.kind === "error"
-      )
-    ).toMatchObject({
-      code: "conflict",
-    });
-    expect(
-      boundary.reconciliationMessages.some(
-        (message) => message.kind === "reconciliation-result"
-      )
-    ).toBe(false);
-    expect(await treeEvidence(stage)).toEqual(stageBefore);
-    expect(await treeEvidence(journal)).toEqual(journalBefore);
-    expect(await treeEvidence(backup)).toEqual(oldEvidence);
-    expect(await readFile(journal)).toEqual(journalBytes);
-    const retainedOld = await oldDirectory.stat({ bigint: true });
-    expect(retainedOld.isDirectory()).toBe(true);
-    expect({
-      device: retainedOld.dev,
-      inode: retainedOld.ino,
-      mode: retainedOld.mode,
-      links: retainedOld.nlink,
-    }).toEqual({
-      device: oldRoot.dev,
-      inode: oldRoot.ino,
-      mode: oldRoot.mode,
-      links: oldRoot.nlink,
-    });
-    const namedOld = await lstat(backup, { bigint: true });
-    expect(namedOld.isDirectory()).toBe(true);
-    expect({
-      device: namedOld.dev,
-      inode: namedOld.ino,
-      mode: namedOld.mode,
-      links: namedOld.nlink,
-    }).toEqual({
-      device: oldRoot.dev,
-      inode: oldRoot.ino,
-      mode: oldRoot.mode,
-      links: oldRoot.nlink,
-    });
-    expect(await readdir(backup)).toEqual([]);
-    expect(Object.keys(prepared.files)).toHaveLength(4);
-    for (const [name, bytes] of Object.entries(prepared.files)) {
-      const path = join(stage, name);
-      const metadata = await lstat(path);
-      expect(metadata.isFile()).toBe(true);
-      expect(metadata.nlink).toBe(1);
-      expect(metadata.size).toBe(bytes.byteLength);
-      expect(await readFile(path)).toEqual(Buffer.from(bytes));
+      );
+      children.push({ child, closed });
+      return closed;
     }
-    expect((await readdir(parent)).sort()).toEqual([
-      ".vgpu-native-publication.json",
-      ".vgpu-native-stage",
-    ]);
-    expect(failure).toBeInstanceOf(MetalPublicationError);
-    expect(hasOriginalHelperEof(failure)).toBe(true);
+    try {
+      await mkdir(input.outputPath, { recursive: true, mode: 0o750 });
+      oldDirectory = await open(
+        input.outputPath,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const oldRoot = await oldDirectory.stat({ bigint: true });
+      const oldIdentity = {
+        device: oldRoot.dev.toString(),
+        inode: oldRoot.ino.toString(),
+      };
+      expect(oldRoot.isDirectory()).toBe(true);
+      expect(await readdir(input.outputPath)).toEqual([]);
+      const oldEvidence = await treeEvidence(input.outputPath);
+      const backup = join(input.directory, "preserved-original-empty");
+      expect(dirname(backup)).not.toBe(dirname(input.outputPath));
+      await expect(lstat(backup)).rejects.toMatchObject({ code: "ENOENT" });
+      const prepared = await prepareMetalProject({
+        configurationPath: input.configurationPath,
+        workerPath,
+      });
+      const observer = join(input.directory, "publication-empty-rename.dylib");
+      await promisify(execFile)(
+        "/usr/bin/xcrun",
+        [
+          "--sdk",
+          "macosx",
+          "clang",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-mmacosx-version-min=14.0",
+          "-dynamiclib",
+          fileURLToPath(
+            new URL("./fixtures/publication-empty-rename.c", import.meta.url)
+          ),
+          "-o",
+          observer,
+        ],
+        {
+          env: Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) => !name.startsWith("DYLD_") && !name.startsWith("LD_")
+            )
+          ),
+          timeout: 30_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 64 * 1024,
+        }
+      );
+      const paused = join(input.directory, "empty-rename-paused");
+      const resume = join(input.directory, "empty-rename-resume");
+      const completed = join(input.directory, "empty-rename-completed");
+      boundary.environment = {
+        DYLD_INSERT_LIBRARIES: observer,
+        VGPU_EMPTY_RENAME_PAUSED: paused,
+        VGPU_EMPTY_RENAME_RESUME: resume,
+        VGPU_EMPTY_RENAME_COMPLETED: completed,
+      };
+      boundary.onHelper = (child) => {
+        publisherCount++;
+        helper = child;
+        closed = track(child);
+      };
+      boundary.onReconciliation = (child, args) => {
+        reconciliationCount++;
+        reconciliationArgs = [...args];
+        track(child);
+      };
+      operation = publishPreparedMetalOutput({
+        prepared,
+        signal: controller.signal,
+      }).then(
+        () => undefined,
+        (cause: unknown) => cause
+      );
 
-    // Honest GREEN: absence cannot stand in for the original empty destination identity.
-    expect(failure).toMatchObject({
-      code: "helper-failed",
-      outcome: "unknown",
-      receipt: undefined,
-      recoveryPaths: [stage, journal, input.outputPath],
-    });
-  } finally {
-    controller.abort(new Error("test cleanup"));
-    for (const entry of children)
-      if (entry.child.exitCode === null && entry.child.signalCode === null)
-        entry.child.kill("SIGKILL");
-    await Promise.all(children.map((entry) => entry.closed));
-    await operation;
-    await oldDirectory?.close();
-    boundary.environment = undefined;
-    boundary.messages = [];
-    boundary.reconciliationMessages = [];
-    boundary.beforeReconciliation = undefined;
-    boundary.onReconciliation = undefined;
-    boundary.observationFailure = undefined;
-    boundary.onHelper = undefined;
-    await rm(input.directory, { recursive: true, force: true });
+      const pausedRename = await waitForMarker(paused);
+      expect(pausedRename.noFollowAny).toBeGreaterThan(0);
+      expect(pausedRename.flags).toBe(pausedRename.noFollowAny);
+      expect(pausedRename.destination).toEqual(oldIdentity);
+      expect(await readdir(input.outputPath)).toEqual([]);
+      const parent = dirname(input.outputPath);
+      const stage = join(parent, ".vgpu-native-stage");
+      const journal = join(parent, ".vgpu-native-publication.json");
+      const stageRoot = await lstat(stage, { bigint: true });
+      const stageIdentity = {
+        device: stageRoot.dev.toString(),
+        inode: stageRoot.ino.toString(),
+      };
+      expect(stageRoot.isDirectory()).toBe(true);
+      expect(pausedRename.source).toEqual(stageIdentity);
+      expect(stageIdentity).not.toEqual(oldIdentity);
+      const stageBefore = await treeEvidence(stage);
+      const journalBefore = await treeEvidence(journal);
+      expect((await readdir(parent)).sort()).toEqual([
+        ".vgpu-native-publication.json",
+        ".vgpu-native-stage",
+        "AppShaders",
+      ]);
+      const journalBytes = await readFile(journal);
+      const journalRecord = JSON.parse(journalBytes.toString("utf8"));
+      const publication = {
+        renameMode: "replace-empty",
+        expectedDestination: "empty",
+        oldDestination: oldIdentity,
+      };
+      expect(journalRecord).toMatchObject({
+        phase: "prepared",
+        publication,
+        stage: { name: ".vgpu-native-stage", ...stageIdentity },
+      });
+      expect(
+        boundary.messages.find((message) => message.kind === "prepared")
+      ).toMatchObject({
+        transactionId: journalRecord.transactionId,
+        publication,
+        stage: { name: ".vgpu-native-stage", ...stageIdentity },
+      });
+
+      boundary.beforeReconciliation = () => {
+        if (moved) throw new Error("Unexpected second reconciliation attempt");
+        // Keep the original root alive outside the locked parent, preventing inode reuse.
+        renameSync(input.outputPath, backup);
+        if (destinationState === "different-empty") {
+          mkdirSync(input.outputPath, { mode: 0o710 });
+          replacementDescriptor = openSync(
+            input.outputPath,
+            constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+          );
+          replacementRoot = fstatSync(replacementDescriptor, { bigint: true });
+          replacementIdentity = {
+            device: replacementRoot.dev.toString(),
+            inode: replacementRoot.ino.toString(),
+          };
+          expect(replacementRoot.isDirectory()).toBe(true);
+          expect(replacementRoot.dev).toBe(oldRoot.dev);
+          expect(replacementIdentity).not.toEqual(oldIdentity);
+          expect(replacementIdentity).not.toEqual(stageIdentity);
+          expect(readdirSync(input.outputPath)).toEqual([]);
+        }
+        moved = true;
+      };
+
+      // Never resume: the real empty-directory replacement syscall must not execute.
+      expect(helper?.kill("SIGKILL")).toBe(true);
+      expect(await closed).toEqual({ code: null, signal: "SIGKILL" });
+      const failure = await operation;
+      await Promise.all(children.map((entry) => entry.closed));
+      expect(publisherCount).toBe(1);
+      expect(reconciliationCount).toBe(1);
+      expect(children).toHaveLength(2);
+      expect(children[1]!.child.pid).toBeGreaterThan(0);
+      expect(children[1]!.child.pid).not.toBe(helper?.pid);
+      expect(reconciliationArgs).toEqual([
+        "vgpu-publication-staging/v1",
+        parent,
+        "AppShaders",
+        prepared.project.configuration.moduleName,
+        journalRecord.transactionId,
+        "reconcile-empty",
+        journalRecord.parent.device,
+        journalRecord.parent.inode,
+      ]);
+      expect(moved).toBe(true);
+      expect(boundary.observationFailure).toBeUndefined();
+      expect(watchdogFired).toBe(false);
+      for (const path of [resume, completed])
+        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      if (destinationState === "missing")
+        await expect(lstat(input.outputPath)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      else {
+        expect(replacementDescriptor).toBeDefined();
+        expect(replacementRoot).toBeDefined();
+        const retainedReplacement = fstatSync(replacementDescriptor!, {
+          bigint: true,
+        });
+        const namedReplacement = await lstat(input.outputPath, {
+          bigint: true,
+        });
+        for (const observed of [retainedReplacement, namedReplacement]) {
+          expect(observed.isDirectory()).toBe(true);
+          expect({
+            device: observed.dev,
+            inode: observed.ino,
+            mode: observed.mode,
+            links: observed.nlink,
+          }).toEqual({
+            device: replacementRoot!.dev,
+            inode: replacementRoot!.ino,
+            mode: replacementRoot!.mode,
+            links: replacementRoot!.nlink,
+          });
+        }
+        expect(await readdir(input.outputPath)).toEqual([]);
+      }
+      expect(
+        boundary.messages.some((message) => message.kind === "commit-result")
+      ).toBe(false);
+      expect(
+        boundary.reconciliationMessages.find(
+          (message) => message.kind === "reconciliation"
+        )
+      ).toMatchObject({
+        destination:
+          destinationState === "missing"
+            ? null
+            : { ...replacementIdentity, kind: "directory" },
+        stage: { ...stageIdentity, kind: "directory" },
+      });
+      expect(
+        boundary.reconciliationMessages.find(
+          (message) => message.kind === "error"
+        )
+      ).toMatchObject({
+        code: "conflict",
+      });
+      expect(
+        boundary.reconciliationMessages.some(
+          (message) => message.kind === "reconciliation-result"
+        )
+      ).toBe(false);
+      expect(await treeEvidence(stage)).toEqual(stageBefore);
+      expect(await treeEvidence(journal)).toEqual(journalBefore);
+      expect(await treeEvidence(backup)).toEqual(oldEvidence);
+      expect(await readFile(journal)).toEqual(journalBytes);
+      const retainedOld = await oldDirectory.stat({ bigint: true });
+      expect(retainedOld.isDirectory()).toBe(true);
+      expect({
+        device: retainedOld.dev,
+        inode: retainedOld.ino,
+        mode: retainedOld.mode,
+        links: retainedOld.nlink,
+      }).toEqual({
+        device: oldRoot.dev,
+        inode: oldRoot.ino,
+        mode: oldRoot.mode,
+        links: oldRoot.nlink,
+      });
+      const namedOld = await lstat(backup, { bigint: true });
+      expect(namedOld.isDirectory()).toBe(true);
+      expect({
+        device: namedOld.dev,
+        inode: namedOld.ino,
+        mode: namedOld.mode,
+        links: namedOld.nlink,
+      }).toEqual({
+        device: oldRoot.dev,
+        inode: oldRoot.ino,
+        mode: oldRoot.mode,
+        links: oldRoot.nlink,
+      });
+      expect(await readdir(backup)).toEqual([]);
+      expect(Object.keys(prepared.files)).toHaveLength(4);
+      for (const [name, bytes] of Object.entries(prepared.files)) {
+        const path = join(stage, name);
+        const metadata = await lstat(path);
+        expect(metadata.isFile()).toBe(true);
+        expect(metadata.nlink).toBe(1);
+        expect(metadata.size).toBe(bytes.byteLength);
+        expect(await readFile(path)).toEqual(Buffer.from(bytes));
+      }
+      expect((await readdir(parent)).sort()).toEqual([
+        ".vgpu-native-publication.json",
+        ".vgpu-native-stage",
+        ...(destinationState === "different-empty" ? ["AppShaders"] : []),
+      ]);
+      expect(failure).toBeInstanceOf(MetalPublicationError);
+      expect(hasOriginalHelperEof(failure)).toBe(true);
+
+      // Honest GREEN: neither absence nor another empty root is the original destination.
+      expect(failure).toMatchObject({
+        code: "helper-failed",
+        outcome: "unknown",
+        receipt: undefined,
+        recoveryPaths: [stage, journal, input.outputPath],
+      });
+    } finally {
+      controller.abort(new Error("test cleanup"));
+      for (const entry of children)
+        if (entry.child.exitCode === null && entry.child.signalCode === null)
+          entry.child.kill("SIGKILL");
+      await Promise.all(children.map((entry) => entry.closed));
+      await operation;
+      await oldDirectory?.close();
+      if (replacementDescriptor !== undefined) closeSync(replacementDescriptor);
+      boundary.environment = undefined;
+      boundary.messages = [];
+      boundary.reconciliationMessages = [];
+      boundary.beforeReconciliation = undefined;
+      boundary.onReconciliation = undefined;
+      boundary.observationFailure = undefined;
+      boundary.onHelper = undefined;
+      await rm(input.directory, { recursive: true, force: true });
+    }
   }
-});
+);
 
 async function waitForMarker(path: string): Promise<Record<string, any>> {
   const deadline = Date.now() + 10_000;
