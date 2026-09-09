@@ -19,7 +19,7 @@ internal bytes for caller-managed uploads. Storage packing remains application-o
 
 Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
 authored struct names, not physical offsets. Other resource kinds, command
-installation, and atomic output publication remain separate integration work.
+installation, and complete output replacement remain separate integration work.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
@@ -32,6 +32,14 @@ Low-level output verification does not establish input freshness or authorize pu
 `verifyMetalProject` adds original-path checks and compares the intact package with that capture's
 fingerprint. These modules do not yet connect the project configuration to installed commands or
 write generated directories.
+
+`prepareMetalProject` compiles one captured project into the four coherent generated files without
+publishing them. The private publisher currently stages and verifies those files under a physical
+parent lock, then publishes exclusively to a missing destination or atomically replaces an ordinary
+empty directory. Interrupted invocations retain explicit outcomes and recovery evidence. For a
+missing-destination transaction, bounded read-only reconciliation can establish whether the original
+intact generation reached the destination. Reconciliation never retries commit or deletes retained
+recovery state. Complete replacement modes and the installed command workflow remain unfinished.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and

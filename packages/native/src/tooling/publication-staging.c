@@ -248,7 +248,8 @@ static int append_json_string(char *buffer, size_t capacity, size_t *used,
 
 static int build_journal(char *buffer, size_t capacity, const char *phase,
                          const char *transaction, const char *destination,
-                         const char *module, int publish_missing,
+                         const char *module, int publishing,
+                         const struct stat *old_destination_identity,
                          const struct stat *parent_identity,
                          const struct stat *stage_identity,
                          const struct artifact files[4], size_t *length) {
@@ -262,9 +263,18 @@ static int build_journal(char *buffer, size_t capacity, const char *phase,
       append_json_string(buffer, capacity, &used, destination) != 0 ||
       append_json(buffer, capacity, &used, ",\"moduleName\":") != 0 ||
       append_json_string(buffer, capacity, &used, module) != 0) return -1;
-  if (publish_missing && append_json(buffer, capacity, &used,
-      ",\"publication\":{\"renameMode\":\"excl\",\"expectedDestination\":\"missing\"}") != 0)
-    return -1;
+  if (publishing) {
+    if (old_destination_identity != NULL) {
+      if (append_json(buffer, capacity, &used,
+          ",\"publication\":{\"renameMode\":\"replace-empty\",\"expectedDestination\":\"empty\","
+          "\"oldDestination\":{\"device\":\"%llu\",\"inode\":\"%llu\"}}",
+          (unsigned long long)old_destination_identity->st_dev,
+          (unsigned long long)old_destination_identity->st_ino) != 0)
+        return -1;
+    } else if (append_json(buffer, capacity, &used,
+        ",\"publication\":{\"renameMode\":\"excl\",\"expectedDestination\":\"missing\"}") != 0)
+      return -1;
+  }
   if (stage_identity != NULL && append_json(buffer, capacity, &used,
       ",\"stage\":{\"name\":\"%s\",\"device\":\"%llu\",\"inode\":\"%llu\"}",
       STAGE_NAME, (unsigned long long)stage_identity->st_dev,
@@ -919,7 +929,8 @@ static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_
 
 int main(int argc, char **argv) {
   if ((argc != 6 && argc != 7 && argc != 9) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
-      (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0) ||
+      (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0 &&
+       strcmp(argv[6], "publish-missing-or-empty") != 0) ||
       (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0) ||
       !valid_transaction(argv[5])) {
     errno = EINVAL;
@@ -929,7 +940,8 @@ int main(int argc, char **argv) {
   const char *destination = argv[3];
   const char *module = argv[4];
   const char *transaction = argv[5];
-  int publish_missing = argc == 7 && strcmp(argv[6], "publish-missing") == 0;
+  int allow_empty = argc == 7 && strcmp(argv[6], "publish-missing-or-empty") == 0;
+  int publishing = allow_empty || (argc == 7 && strcmp(argv[6], "publish-missing") == 0);
   int reconcile_missing = argc == 9;
   unsigned long long expected_parent_device = 0;
   unsigned long long expected_parent_inode = 0;
@@ -978,26 +990,57 @@ int main(int argc, char **argv) {
     return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max,
                             reconcile_missing ? &reconciliation : NULL);
   if (reconcile_missing || errno != ENOENT) return fail("conflict");
-  if (ensure_absent(parent, destination) != 0 || ensure_absent(parent, JOURNAL_NAME) != 0 ||
+  if (ensure_absent(parent, JOURNAL_NAME) != 0 ||
       ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, STAGE_NAME) != 0)
     return fail("conflict");
+
+  int old_destination = -1;
+  struct stat old_destination_identity = {0};
+  int replace_empty = 0;
+  if (allow_empty) {
+    struct stat observed_destination;
+    if (fstatat(parent, destination, &observed_destination, AT_SYMLINK_NOFOLLOW) == 0) {
+      if (!S_ISDIR(observed_destination.st_mode) ||
+          observed_destination.st_dev != parent_identity.st_dev ||
+          same_identity(&observed_destination, &parent_identity)) {
+        errno = EINVAL;
+        return fail("conflict");
+      }
+      old_destination = open_child_directory(parent, destination);
+      if (old_destination < 0 || fstat(old_destination, &old_destination_identity) != 0 ||
+          directory_edge(parent, destination, old_destination, &observed_destination) != 0 ||
+          exact_directory(old_destination, NULL, 0) != 0)
+        return fail("conflict");
+      replace_empty = 1;
+    } else if (errno != ENOENT) {
+      return fail("conflict");
+    }
+  } else if (ensure_absent(parent, destination) != 0) {
+    return fail("conflict");
+  }
+  const struct stat *old_identity = replace_empty ? &old_destination_identity : NULL;
 
   char journal[JOURNAL_LIMIT];
   size_t journal_length = 0;
   struct stat journal_identity;
   if (build_journal(journal, sizeof(journal), "intent", transaction, destination,
-                    module, publish_missing, &parent_identity, NULL, NULL, &journal_length) != 0 ||
+                    module, publishing, old_identity, &parent_identity, NULL, NULL,
+                    &journal_length) != 0 ||
       install_initial_journal(parent, journal, journal_length, &journal_identity) != 0)
     return fail("helper-failed");
 
   struct stat stage_identity;
   int stage = make_child_directory(parent, STAGE_NAME, &stage_identity);
   if (stage < 0) return fail("helper-failed");
+  if (replace_empty && same_identity(&stage_identity, &old_destination_identity)) {
+    errno = ESTALE;
+    return fail("conflict");
+  }
   int retained_update = 0;
   char next_journal[JOURNAL_LIMIT];
   size_t next_journal_length = 0;
   if (build_journal(next_journal, sizeof(next_journal), "staging", transaction, destination,
-                    module, publish_missing, &parent_identity, &stage_identity, NULL,
+                    module, publishing, old_identity, &parent_identity, &stage_identity, NULL,
                     &next_journal_length) != 0 ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
                             journal, journal_length, &retained_update) != 0)
@@ -1058,7 +1101,7 @@ int main(int argc, char **argv) {
                   &resources_identity, files) != 0)
     return fail("invalid-stage");
   if (build_journal(next_journal, sizeof(next_journal), "prepared", transaction, destination,
-                    module, publish_missing, &parent_identity, &stage_identity, files,
+                    module, publishing, old_identity, &parent_identity, &stage_identity, files,
                     &next_journal_length) != 0 ||
       next_journal_length > JOURNAL_LIMIT ||
       replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
@@ -1070,7 +1113,7 @@ int main(int argc, char **argv) {
   char receipt[JOURNAL_LIMIT];
   size_t receipt_length = 0;
   if (build_journal(receipt, sizeof(receipt), "prepared", transaction, destination,
-                    module, publish_missing, &parent_identity, &stage_identity, files,
+                    module, publishing, old_identity, &parent_identity, &stage_identity, files,
                     &receipt_length) != 0)
     return fail("helper-failed");
   char *kind = strstr(receipt, "\"kind\":\"vgpu-native-publication\",\"phase\":\"prepared\"");
@@ -1086,9 +1129,10 @@ int main(int argc, char **argv) {
   fflush(stdout);
 
   int published = 0;
-  if (publish_missing) {
+  if (publishing) {
     char expected[64];
-    snprintf(expected, sizeof(expected), "commit-missing %s prepared\n", transaction);
+    snprintf(expected, sizeof(expected), "commit-%s %s prepared\n",
+             replace_empty ? "empty" : "missing", transaction);
     if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, expected) != 0)
       return fail("helper-failed");
 
@@ -1104,13 +1148,19 @@ int main(int argc, char **argv) {
                          &resources_identity, files) != 0)
       rejection = "invalid-stage";
     else if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
-             ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, destination) != 0)
+             ensure_absent(parent, UPDATE_NAME) != 0)
+      rejection = "conflict";
+    else if (replace_empty &&
+             (directory_edge(parent, destination, old_destination, &old_destination_identity) != 0 ||
+              exact_directory(old_destination, NULL, 0) != 0))
+      rejection = "conflict";
+    else if (!replace_empty && ensure_absent(parent, destination) != 0)
       rejection = "conflict";
     else if (!parent_matches(parent_path, &parent_identity))
       rejection = "parent-changed";
     else if (renameatx_np(parent, STAGE_NAME, parent, destination,
-                          RENAME_EXCL | RENAME_NOFOLLOW_ANY) != 0)
-      rejection = errno == EEXIST ? "conflict" : "helper-failed";
+                          (replace_empty ? 0 : RENAME_EXCL) | RENAME_NOFOLLOW_ANY) != 0)
+      rejection = errno == EEXIST || (replace_empty && errno == ENOTEMPTY) ? "conflict" : "helper-failed";
     else
       published = 1; /* Historical syscall evidence, before acknowledgment or cleanup. */
 
@@ -1136,7 +1186,7 @@ int main(int argc, char **argv) {
                   module_directory, module, &module_identity, resources,
                   &resources_identity, files) != 0)
     return fail("cleanup-failed");
-  if ((publish_missing && ensure_absent(parent, UPDATE_NAME) != 0) ||
+  if ((publishing && ensure_absent(parent, UPDATE_NAME) != 0) ||
       (published && ensure_absent(parent, STAGE_NAME) != 0))
     return fail("cleanup-failed");
   if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0)
@@ -1164,7 +1214,7 @@ int main(int argc, char **argv) {
   if (verify_bytes(parent, JOURNAL_NAME, &journal_identity, journal, journal_length) != 0 ||
       unlinkat(parent, JOURNAL_NAME, 0) != 0)
     return fail("cleanup-failed");
-  if (publish_missing)
+  if (publishing)
     printf("{\"schemaVersion\":1,\"kind\":\"finalized\",\"transactionId\":\"%s\",\"phase\":\"%s\"}\n",
            transaction, published ? "published" : "prepared");
   else
@@ -1174,6 +1224,7 @@ int main(int argc, char **argv) {
   close(module_directory);
   close(sources);
   close(stage);
+  if (old_destination >= 0) close(old_destination);
   close(parent);
   return 0;
 }

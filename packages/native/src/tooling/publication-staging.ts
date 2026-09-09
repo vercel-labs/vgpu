@@ -15,7 +15,9 @@ import { validateMetalProjectOutputBoundary } from "./project-output-boundary.js
 import { readPublicationResponseLines } from "./publication-response-lines.js";
 import {
   readMetalPublicationRecovery,
+  parseMetalPublicationPlan,
   type InterruptedMetalPublication,
+  type MetalPublicationPlan,
 } from "./publication-recovery.js";
 import {
   metalOutputRecordPath,
@@ -66,6 +68,10 @@ export interface PreparedMetalPublicationStageInput {
   readonly prepared: PreparedMetalProject;
   readonly environment?: NodeJS.ProcessEnv;
   readonly signal?: AbortSignal;
+}
+
+interface PreparedPublishingStage extends PreparedMetalPublicationStage {
+  readonly publication: MetalPublicationPlan;
 }
 
 export class MetalPublicationStagingError extends Error {
@@ -137,6 +143,7 @@ export interface PublishedMetalPublication {
 interface PublicationState {
   outcome: MetalPublicationOutcome;
   prepared?: PreparedMetalPublicationStage;
+  publication?: MetalPublicationPlan;
   receipt?: PublishedMetalPublication;
   finalized: boolean;
   recoveryPaths?: readonly string[];
@@ -192,7 +199,7 @@ type StagingOperation<T> = {
   readonly callback: (receipt: PreparedMetalPublicationStage) => Promise<T>;
 };
 type PublishingOperation = {
-  readonly kind: "publish-missing";
+  readonly kind: "publish-missing-or-empty";
   readonly state: PublicationState;
 };
 
@@ -223,7 +230,7 @@ export function withPreparedMetalPublicationStage<T>(
   return runStaging(snapshot, { kind: "stage-only", callback });
 }
 
-/** Private missing-destination tracer; replacement modes are not enabled by this entry point. */
+/** Private missing-or-empty publisher; replacing owned packages is not enabled yet. */
 export async function publishPreparedMetalOutput(
   input: PreparedMetalPublicationStageInput
 ): Promise<PublishedMetalPublication> {
@@ -256,7 +263,10 @@ export async function publishPreparedMetalOutput(
       );
     throwIfCancelled(snapshot.signal);
     await validateMetalProjectOutputBoundary(boundary);
-    return await runStaging(snapshot, { kind: "publish-missing", state });
+    return await runStaging(snapshot, {
+      kind: "publish-missing-or-empty",
+      state,
+    });
   } catch (cause) {
     throw new MetalPublicationError(state, cause);
   }
@@ -445,7 +455,9 @@ async function runStaging<T>(
         snapshot.destinationName,
         snapshot.moduleName,
         snapshot.transactionId,
-        ...(operation.kind === "publish-missing" ? ["publish-missing"] : []),
+        ...(operation.kind === "publish-missing-or-empty"
+          ? ["publish-missing-or-empty"]
+          : []),
       ],
       { env: snapshot.environment, stdio: ["pipe", "pipe", "pipe"] }
     );
@@ -549,31 +561,39 @@ async function runStaging<T>(
     if (prepared.kind !== "prepared")
       throw helperResponseError(prepared, snapshot.parentPath);
     const receipt = validateReceipt(prepared, snapshot);
-    if (operation.kind === "publish-missing") {
+    if (operation.kind === "publish-missing-or-empty") {
       operation.state.prepared = receipt;
-      if (
-        prepared.publication?.renameMode !== "excl" ||
-        prepared.publication?.expectedDestination !== "missing" ||
-        Object.keys(prepared.publication).length !== 2
-      )
+      const publication = parseMetalPublicationPlan(
+        prepared.publication,
+        receipt.parent,
+        receipt.stage
+      );
+      if (!publication)
         throw new MetalPublicationStagingError(
           "helper-failed",
-          "Prepared helper did not confirm the missing-destination publication mode"
+          "Prepared helper did not confirm a valid missing-or-empty publication plan"
         );
-    }
-    throwIfCancelled(snapshot.signal);
-    transferActive = false;
-    if (operation.kind === "publish-missing")
-      return await commitMissingPublication(
+      const publishingReceipt: PreparedPublishingStage = Object.freeze({
+        ...receipt,
+        publication,
+      });
+      operation.state.prepared = publishingReceipt;
+      operation.state.publication = publication;
+      throwIfCancelled(snapshot.signal);
+      transferActive = false;
+      return await commitPublication(
         childInput,
         lines,
         child,
         closed,
         snapshot,
-        receipt,
+        publishingReceipt,
         operation.state,
         watchProgress
       );
+    }
+    throwIfCancelled(snapshot.signal);
+    transferActive = false;
     let value: T;
     try {
       value = await operation.callback(receipt);
@@ -716,9 +736,10 @@ async function runStaging<T>(
         { cause }
       );
     if (
-      operation.kind === "publish-missing" &&
+      operation.kind === "publish-missing-or-empty" &&
       operation.state.outcome === "unknown" &&
-      operation.state.prepared
+      operation.state.prepared &&
+      operation.state.publication?.renameMode === "excl"
     ) {
       try {
         await reconcileMissingPublication(
@@ -758,13 +779,13 @@ async function runStaging<T>(
   }
 }
 
-async function commitMissingPublication(
+async function commitPublication(
   input: NodeJS.WritableStream,
   lines: AsyncIterator<string>,
   child: ReturnType<typeof spawn>,
   closed: Promise<number | null>,
   snapshot: StagingSnapshot,
-  prepared: PreparedMetalPublicationStage,
+  prepared: PreparedPublishingStage,
   state: PublicationState,
   watchProgress: <U>(operation: Promise<U>) => Promise<U>
 ): Promise<PublishedMetalPublication> {
@@ -801,8 +822,12 @@ async function commitMissingPublication(
   };
   try {
     throwIfCancelled(snapshot.signal);
+    const commit =
+      prepared.publication.renameMode === "excl"
+        ? "commit-missing"
+        : "commit-empty";
     const command = Buffer.from(
-      `commit-missing ${snapshot.transactionId} prepared\n`
+      `${commit} ${snapshot.transactionId} prepared\n`
     );
     // This write can reach the helper even when its callback later fails.
     state.outcome = "unknown";

@@ -11,6 +11,57 @@ type Identity = Readonly<{ device: string; inode: string }>;
 type ObservedEntry = Identity &
   Readonly<{ kind: "directory" | "file" | "symlink" | "other" }>;
 
+export type MetalPublicationPlan =
+  | Readonly<{ renameMode: "excl"; expectedDestination: "missing" }>
+  | Readonly<{
+      renameMode: "replace-empty";
+      expectedDestination: "empty";
+      oldDestination: Identity;
+    }>;
+
+/** Recognize owned plan metadata; filesystem checks still determine publication authority. */
+export function parseMetalPublicationPlan(
+  value: unknown,
+  parent: Identity,
+  stage?: Identity
+): MetalPublicationPlan | undefined {
+  if (
+    !decimal(parent?.device) ||
+    !decimal(parent?.inode) ||
+    (stage !== undefined && (!decimal(stage?.device) || !decimal(stage?.inode)))
+  )
+    return undefined;
+  if (
+    keys(value, ["renameMode", "expectedDestination"]) &&
+    value.renameMode === "excl" &&
+    value.expectedDestination === "missing"
+  )
+    return Object.freeze({
+      renameMode: "excl",
+      expectedDestination: "missing",
+    });
+  if (
+    !keys(value, ["renameMode", "expectedDestination", "oldDestination"]) ||
+    value.renameMode !== "replace-empty" ||
+    value.expectedDestination !== "empty" ||
+    !identity(value.oldDestination) ||
+    value.oldDestination.device !== parent.device ||
+    value.oldDestination.inode === parent.inode ||
+    (stage !== undefined &&
+      value.oldDestination.device === stage.device &&
+      value.oldDestination.inode === stage.inode)
+  )
+    return undefined;
+  return Object.freeze({
+    renameMode: "replace-empty",
+    expectedDestination: "empty",
+    oldDestination: Object.freeze({
+      device: value.oldDestination.device,
+      inode: value.oldDestination.inode,
+    }),
+  });
+}
+
 /** Metadata recognition is not integrity, publication-outcome, or cleanup authority. */
 export interface InterruptedMetalPublication {
   readonly transactionId: string;
@@ -20,10 +71,7 @@ export interface InterruptedMetalPublication {
   readonly outputPath: string;
   readonly moduleName: string;
   readonly stage?: Identity & Readonly<{ name: string }>;
-  readonly publication?: Readonly<{
-    renameMode: "excl";
-    expectedDestination: "missing";
-  }>;
+  readonly publication?: MetalPublicationPlan;
 }
 
 export interface MetalPublicationRecoveryReport {
@@ -164,13 +212,6 @@ function recognizeJournal(
       return undefined;
     validateSwiftIdentifier(value.moduleName, "moduleName");
     if (
-      publicationVariant &&
-      (!keys(value.publication, ["renameMode", "expectedDestination"]) ||
-        value.publication.renameMode !== "excl" ||
-        value.publication.expectedDestination !== "missing")
-    )
-      return undefined;
-    if (
       prepared &&
       !preparedFiles(value.files, value.moduleName, value.recordSHA256)
     )
@@ -190,6 +231,10 @@ function recognizeJournal(
         inode: value.stage.inode,
       });
     }
+    const publication = publicationVariant
+      ? parseMetalPublicationPlan(value.publication, parent, stage)
+      : undefined;
+    if (publicationVariant && !publication) return undefined;
     const transaction: InterruptedMetalPublication = Object.freeze({
       transactionId: value.transactionId,
       phase: value.phase,
@@ -198,14 +243,7 @@ function recognizeJournal(
       outputPath: join(parentPath, value.destinationName),
       moduleName: value.moduleName,
       ...(stage ? { stage } : {}),
-      ...(publicationVariant
-        ? {
-            publication: Object.freeze({
-              renameMode: "excl" as const,
-              expectedDestination: "missing" as const,
-            }),
-          }
-        : {}),
+      ...(publication ? { publication } : {}),
     });
     return Object.freeze({
       transaction,

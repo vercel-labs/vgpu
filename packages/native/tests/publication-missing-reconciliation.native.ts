@@ -23,7 +23,10 @@ vi.mock("node:child_process", async (original) => {
         boundary.environment &&
         args[0].endsWith("/publication-staging") &&
         Array.isArray(args[1]) &&
-        args[1].includes("publish-missing")
+        args[1].some(
+          (arg) =>
+            arg === "publish-missing" || arg === "publish-missing-or-empty"
+        )
       ) {
         const child = actual.spawn(args[0], args[1], {
           ...args[2],
