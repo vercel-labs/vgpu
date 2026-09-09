@@ -157,6 +157,7 @@ test("cleanup preserves a staged transaction when a file is replaced with the sa
     expect(error).toMatchObject({
       name: "MetalPublicationStagingError",
       code: "cleanup-failed",
+      recoveryPaths: [retainedStage, retainedJournal],
     });
     expect(await readFile(join(retainedStage, "Package.swift"))).toEqual(
       Buffer.from(prepared.files["Package.swift"])

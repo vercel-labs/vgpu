@@ -2,9 +2,9 @@ import { execFile, spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { captureToolEnvironment } from "../compiler/environment.js";
 import type { PreparedMetalProject } from "./prepare-project.js";
+import { readPublicationResponseLines } from "./publication-response-lines.js";
 import {
   metalOutputRecordPath,
   parseMetalOutputRecord,
@@ -52,9 +52,12 @@ export interface PreparedMetalPublicationStage {
 export interface PreparedMetalPublicationStageInput {
   readonly prepared: PreparedMetalProject;
   readonly environment?: NodeJS.ProcessEnv;
+  readonly signal?: AbortSignal;
 }
 
 export class MetalPublicationStagingError extends Error {
+  /** Nominal locations that may require inspection; never cleanup authority. */
+  readonly recoveryPaths: readonly string[];
   constructor(
     readonly code:
       | "invalid-preparation"
@@ -65,27 +68,26 @@ export class MetalPublicationStagingError extends Error {
       | "unsupported-filesystem"
       | "parent-changed"
       | "helper-failed"
+      | "cancelled"
       | "cleanup-failed",
     message: string,
-    options?: ErrorOptions
+    options?: ErrorOptions & { readonly recoveryPaths?: readonly string[] }
   ) {
     super(message, options);
     this.name = "MetalPublicationStagingError";
+    this.recoveryPaths = Object.freeze([...(options?.recoveryPaths ?? [])]);
   }
 }
 
 export class MetalPublicationStagingCleanupError extends MetalPublicationStagingError {
   readonly errors: readonly unknown[];
-  /** Nominal recovery locations; callers must revalidate identities before using them. */
-  readonly recoveryPaths: readonly string[];
-
   constructor(errors: readonly unknown[], recoveryPaths: readonly string[]) {
     super("cleanup-failed", "Publication staging cleanup also failed", {
       cause: new AggregateError(errors, "Publication staging failures"),
+      recoveryPaths,
     });
     this.name = "MetalPublicationStagingCleanupError";
     this.errors = Object.freeze([...errors]);
-    this.recoveryPaths = Object.freeze([...recoveryPaths]);
   }
 }
 
@@ -95,6 +97,7 @@ interface StagingSnapshot {
   readonly moduleName: string;
   readonly transactionId: string;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly signal?: AbortSignal;
   readonly files: readonly (MetalPublicationStagedFile & {
     readonly bytes: Uint8Array;
   })[];
@@ -103,6 +106,7 @@ interface StagingSnapshot {
 /**
  * Materialize and verify one prepared generation without publishing it.
  * Mutable prepared bytes and caller options are copied and validated synchronously.
+ * The callback must cooperate with input.signal and settle before the lock is released.
  */
 export function withPreparedMetalPublicationStage<T>(
   input: PreparedMetalPublicationStageInput,
@@ -221,6 +225,7 @@ function snapshotPreparation(
     moduleName,
     transactionId: randomBytes(16).toString("hex"),
     environment,
+    signal: input.signal,
     files: Object.freeze(files),
   });
 }
@@ -247,6 +252,7 @@ async function runStaging<T>(
   snapshot: StagingSnapshot,
   callback: (receipt: PreparedMetalPublicationStage) => Promise<T>
 ): Promise<T> {
+  throwIfCancelled(snapshot.signal);
   if (process.platform !== "darwin")
     throw new MetalPublicationStagingError(
       "helper-failed",
@@ -259,11 +265,25 @@ async function runStaging<T>(
   let closed: Promise<number | null> | undefined;
   let spawnError: Error | undefined;
   let operationFailure: MetalPublicationStagingError | undefined;
+  let cancelTransfer: (() => void) | undefined;
+  let cancellationGrace: ReturnType<typeof setTimeout> | undefined;
+  let transferActive = true;
+  let transferCancelled = false;
+  let replies: AsyncIterator<string> | undefined;
+  let lastMessage: Record<string, any> | undefined;
+  let ioTimedOut = false;
   try {
     const source = join(scratch, "publication-staging.c");
     const executable = join(scratch, "publication-staging");
     await copyFile(new URL("./publication-staging.c", import.meta.url), source);
-    await compileHelper(source, executable, snapshot.environment);
+    throwIfCancelled(snapshot.signal);
+    await compileHelper(
+      source,
+      executable,
+      snapshot.environment,
+      snapshot.signal
+    );
+    throwIfCancelled(snapshot.signal);
     child = spawn(
       executable,
       [
@@ -291,36 +311,77 @@ async function runStaging<T>(
       );
     childInput.on("error", () => {});
     childError.resume();
-    const lines = createInterface({ input: childOutput })[
-      Symbol.asyncIterator
-    ]();
-    const ready = await receiveMessage(lines);
+    const watchProgress = async <U>(operation: Promise<U>): Promise<U> => {
+      const deadline = setTimeout(() => {
+        ioTimedOut = true;
+        child?.kill("SIGKILL");
+      }, 30_000);
+      try {
+        return await operation;
+      } finally {
+        clearTimeout(deadline);
+      }
+    };
+    const lines = readPublicationResponseLines(childOutput);
+    replies = lines;
+    cancelTransfer = () => {
+      if (!transferActive || transferCancelled) return;
+      transferCancelled = true;
+      childInput.end();
+      cancellationGrace = setTimeout(() => child?.kill("SIGKILL"), 5_000);
+    };
+    snapshot.signal?.addEventListener("abort", cancelTransfer, { once: true });
+    if (snapshot.signal?.aborted) cancelTransfer();
+    const ready = (lastMessage = await watchProgress(receiveMessage(lines)));
     if (ready.kind !== "ready") throw helperResponseError(ready);
     for (let index = 0; index < snapshot.files.length; index++) {
+      throwIfCancelled(snapshot.signal);
       const file = snapshot.files[index]!;
-      await writeBytes(
-        childInput,
-        Buffer.from(`file ${index} ${file.length} ${file.sha256}\n`)
-      );
-      for (let offset = 0; offset < file.bytes.byteLength; offset += chunkLimit)
-        await writeBytes(
+      await watchProgress(
+        writeBytes(
           childInput,
-          file.bytes.subarray(
-            offset,
-            Math.min(offset + chunkLimit, file.bytes.byteLength)
+          Buffer.from(`file ${index} ${file.length} ${file.sha256}\n`)
+        )
+      );
+      for (
+        let offset = 0;
+        offset < file.bytes.byteLength;
+        offset += chunkLimit
+      ) {
+        throwIfCancelled(snapshot.signal);
+        await watchProgress(
+          writeBytes(
+            childInput,
+            file.bytes.subarray(
+              offset,
+              Math.min(offset + chunkLimit, file.bytes.byteLength)
+            )
           )
         );
+      }
     }
-    await writeBytes(childInput, Buffer.from("prepare\n"));
-    const prepared = await receiveMessage(lines);
+    throwIfCancelled(snapshot.signal);
+    await watchProgress(writeBytes(childInput, Buffer.from("prepare\n")));
+    const prepared = (lastMessage = await watchProgress(receiveMessage(lines)));
     if (prepared.kind !== "prepared") throw helperResponseError(prepared);
     const receipt = validateReceipt(prepared, snapshot);
+    throwIfCancelled(snapshot.signal);
+    transferActive = false;
     let value: T;
     try {
       value = await callback(receipt);
+      throwIfCancelled(snapshot.signal);
     } catch (cause) {
+      if (snapshot.signal?.aborted && cause === snapshot.signal.reason)
+        cause = new MetalPublicationStagingError(
+          "cancelled",
+          "Publication staging was cancelled",
+          {
+            cause: snapshot.signal.reason,
+          }
+        );
       try {
-        await finalize(childInput, lines);
+        await finalize(childInput, lines, child, closed, snapshot.signal);
       } catch (cleanupCause) {
         throw new MetalPublicationStagingCleanupError(
           [cause, cleanupCause],
@@ -329,8 +390,34 @@ async function runStaging<T>(
       }
       throw cause;
     }
-    await finalize(childInput, lines);
-    childInput.end();
+    try {
+      await finalize(childInput, lines, child, closed, snapshot.signal);
+    } catch (cleanupCause) {
+      if (snapshot.signal?.aborted)
+        throw new MetalPublicationStagingCleanupError(
+          [
+            new MetalPublicationStagingError(
+              "cancelled",
+              "Publication staging was cancelled",
+              {
+                cause: snapshot.signal.reason,
+              }
+            ),
+            cleanupCause,
+          ],
+          [receipt.stagePath, receipt.journalPath]
+        );
+      throw new MetalPublicationStagingError(
+        cleanupCause instanceof MetalPublicationStagingError
+          ? cleanupCause.code
+          : "helper-failed",
+        "Publication staging finalization failed",
+        {
+          cause: cleanupCause,
+          recoveryPaths: [receipt.stagePath, receipt.journalPath],
+        }
+      );
+    }
     const code = await closed;
     if (spawnError || code !== 0)
       throw new MetalPublicationStagingError(
@@ -338,9 +425,63 @@ async function runStaging<T>(
         `Publication staging helper exited with status ${code}`,
         { cause: spawnError }
       );
+    throwIfCancelled(snapshot.signal);
     return value;
   } catch (cause) {
+    if (ioTimedOut)
+      cause = new MetalPublicationStagingError(
+        "helper-failed",
+        "Publication staging helper made no I/O progress for 30 seconds",
+        {
+          cause,
+          recoveryPaths: [
+            join(snapshot.parentPath, stageName),
+            join(snapshot.parentPath, actualJournalName),
+          ],
+        }
+      );
+    if (transferCancelled) {
+      // No response read is abandoned on abort: consume EOF cleanup evidence once.
+      if (lastMessage?.kind !== "error" && replies) {
+        try {
+          lastMessage = await receiveMessage(replies);
+        } catch {
+          lastMessage = undefined;
+        }
+      }
+      child?.stdout?.resume();
+      if (closed) await closed;
+      const recoveryPaths =
+        lastMessage?.cleanup === "cleaned"
+          ? []
+          : [
+              join(snapshot.parentPath, stageName),
+              join(snapshot.parentPath, actualJournalName),
+            ];
+      const cancelled = new MetalPublicationStagingError(
+        "cancelled",
+        "Publication staging was cancelled",
+        {
+          cause: snapshot.signal?.reason,
+          recoveryPaths,
+        }
+      );
+      cause =
+        lastMessage?.cleanupCode === "cleanup-failed"
+          ? new MetalPublicationStagingCleanupError(
+              [
+                cancelled,
+                helperResponseError({
+                  code: "cleanup-failed",
+                  errno: lastMessage.cleanupErrno,
+                }),
+              ],
+              recoveryPaths
+            )
+          : cancelled;
+    }
     child?.kill("SIGTERM");
+    child?.stdout?.resume();
     if (closed) await closed;
     if (spawnError)
       operationFailure = new MetalPublicationStagingError(
@@ -358,26 +499,66 @@ async function runStaging<T>(
       );
     throw operationFailure;
   } finally {
+    clearTimeout(cancellationGrace);
+    if (cancelTransfer)
+      snapshot.signal?.removeEventListener("abort", cancelTransfer);
+    await replies?.return?.();
     try {
       await rm(scratch, { recursive: true, force: true });
     } catch (cause) {
       throw new MetalPublicationStagingCleanupError(
         operationFailure ? [operationFailure, cause] : [cause],
-        operationFailure instanceof MetalPublicationStagingCleanupError
-          ? [...operationFailure.recoveryPaths, scratch]
-          : [scratch]
+        [...(operationFailure?.recoveryPaths ?? []), scratch]
       );
     }
   }
 }
 
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted)
+    throw new MetalPublicationStagingError(
+      "cancelled",
+      "Publication staging was cancelled",
+      {
+        cause: signal.reason,
+      }
+    );
+}
+
 async function finalize(
   input: NodeJS.WritableStream,
-  lines: AsyncIterator<string>
+  lines: AsyncIterator<string>,
+  child: ReturnType<typeof spawn>,
+  closed: Promise<number | null>,
+  signal?: AbortSignal
 ): Promise<void> {
-  await writeBytes(input, Buffer.from("finalize\n"));
-  const message = await receiveMessage(lines);
-  if (message.kind !== "finalized") throw helperResponseError(message);
+  let deadline = setTimeout(() => child.kill("SIGKILL"), 30_000);
+  const cancel = () => {
+    clearTimeout(deadline);
+    deadline = setTimeout(() => child.kill("SIGKILL"), 5_000);
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  try {
+    await writeBytes(input, Buffer.from("finalize\n"));
+    const message = await receiveMessage(lines);
+    if (message.kind !== "finalized") throw helperResponseError(message);
+    input.end();
+    if (!(await lines.next()).done)
+      throw new MetalPublicationStagingError(
+        "helper-failed",
+        "Unexpected response after staging finalization"
+      );
+    const code = await closed;
+    if (code !== 0)
+      throw new MetalPublicationStagingError(
+        "helper-failed",
+        `Publication staging helper exited with status ${code}`
+      );
+  } finally {
+    clearTimeout(deadline);
+    signal?.removeEventListener("abort", cancel);
+  }
 }
 
 function writeBytes(
@@ -476,10 +657,12 @@ function validateReceipt(
 function compileHelper(
   source: string,
   executable: string,
-  environment: NodeJS.ProcessEnv
+  environment: NodeJS.ProcessEnv,
+  signal?: AbortSignal
 ): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    execFile(
+    let failure: Error | null | undefined;
+    const compiler = execFile(
       "/usr/bin/xcrun",
       [
         "--sdk",
@@ -496,21 +679,36 @@ function compileHelper(
       ],
       {
         env: environment,
+        signal,
         timeout: 30_000,
         killSignal: "SIGKILL",
         maxBuffer: recordLimit,
       },
       (error) => {
-        if (error)
-          reject(
-            new MetalPublicationStagingError(
-              "helper-failed",
-              "The selected Xcode C compiler could not build the staging helper",
-              { cause: error }
-            )
-          );
-        else resolvePromise();
+        failure = error;
       }
     );
+    compiler.once("close", () => {
+      if (signal?.aborted)
+        reject(
+          new MetalPublicationStagingError(
+            "cancelled",
+            "Publication staging was cancelled",
+            {
+              cause: signal.reason,
+            }
+          )
+        );
+      else if (failure !== null)
+        reject(
+          new MetalPublicationStagingError(
+            "helper-failed",
+            "The selected Xcode C compiler could not build the staging helper",
+            { cause: failure }
+          )
+        );
+      else resolvePromise();
+    });
+    compiler.stdin?.end();
   });
 }
