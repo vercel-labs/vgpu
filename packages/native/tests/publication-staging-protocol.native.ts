@@ -127,6 +127,66 @@ test("the real staging helper accepts an output-record frame of exactly 64 KiB a
   });
 });
 
+test("a complete payload with changed bytes and its original declared hash is rejected with all evidence retained", async () => {
+  await withStagingHelper(async (helper) => {
+    const journalBefore = await readFile(helper.journal);
+    const journalIdentity = await lstat(helper.journal, { bigint: true });
+    const corrupted = Buffer.from(firstFiles[2].bytes);
+    corrupted[0] = corrupted[0]! ^ 0x01;
+    for (const [index, file] of firstFiles.entries()) {
+      await helper.send(fileHeader(index, file.bytes));
+      await helper.send(index === 2 ? corrupted : file.bytes);
+    }
+    const record = Buffer.from("{}");
+    await helper.send(fileHeader(3, record));
+    await helper.send(record);
+    await helper.send(Buffer.from("prepare\n"));
+
+    expect(await helper.receive()).toMatchObject({
+      schemaVersion: 1,
+      kind: "error",
+      code: "invalid-stage",
+      errno: constants.errno.EBADMSG,
+    });
+    expect(await helper.exited).toEqual({
+      code: 1,
+      signal: null,
+      timedOut: false,
+      spawnError: undefined,
+    });
+    for (const [index, file] of firstFiles.entries())
+      expect(await readFile(join(helper.stage, file.path))).toEqual(
+        index === 2 ? corrupted : file.bytes
+      );
+    expect(
+      await readFile(join(helper.stage, ".vgpu-native-output.json"))
+    ).toEqual(record);
+    expect(await readFile(helper.journal)).toEqual(journalBefore);
+    expect(JSON.parse(journalBefore.toString("utf8"))).toMatchObject({
+      phase: "staging",
+      transactionId,
+    });
+    const journalAfter = await lstat(helper.journal, { bigint: true });
+    expect({
+      device: journalAfter.dev,
+      inode: journalAfter.ino,
+      mode: journalAfter.mode,
+    }).toEqual({
+      device: journalIdentity.dev,
+      inode: journalIdentity.ino,
+      mode: journalIdentity.mode,
+    });
+    expect((await readdir(helper.parent)).sort()).toEqual(
+      [journalName, stageName].sort()
+    );
+    await expect(
+      lstat(join(helper.parent, "AppShaders"))
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+});
+
 test("premature payload EOF removes only the unchanged written prefix and this live transaction's tree", async () => {
   await withStagingHelper(async (helper) => {
     for (const [index, file] of firstFiles.slice(0, 2).entries()) {
