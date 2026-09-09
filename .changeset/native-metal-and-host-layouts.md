@@ -29,4 +29,11 @@ transaction across `set({ a, b })` or a rollback of arbitrary GPU errors. Shared
 uniform updates preserve the previous accepted value on validation failure, and
 half-float packing uses round-to-nearest, ties-to-even.
 
+The strict binding checks and candidate handling add approximately 1.4 KB gzip to
+the measured full client entry; `init-only` is unchanged. The changed WGSL runtime
+modules add approximately 2.8 KB gzip to the tooling entry. Captured-graph modules
+are absent from the measured browser entries. Only the six affected package
+bundle ceilings are updated to the existing 512-byte convention;
+audiences, growth thresholds, and unrelated ceilings are unchanged.
+
 This changeset requests the next minor; it does not assign or publish a version.
