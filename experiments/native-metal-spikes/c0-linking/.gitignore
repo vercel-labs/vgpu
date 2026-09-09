@@ -1,5 +1,0 @@
-.artifacts/
-.build/
-.swiftpm/
-DerivedData/
-*.linkmap

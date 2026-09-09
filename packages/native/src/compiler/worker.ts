@@ -26,7 +26,8 @@ export class TintWorkerError extends Error {
 
 // Trusted vgpu direct-worker build for Tint revision
 // 8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca. Digests copied from
-// c1-tint-direct-build/provenance/source-lock.json build.outputs; callers cannot
+// tooling/native-tint-worker/c1-tint-direct-build/provenance/source-lock.json
+// build.outputs; callers cannot
 // expand this allowlist by supplying an expected digest alongside a binary.
 const TRUSTED_WORKERS = new Set([
   "140be4d7a517a5de1d9dcaa188d7a2c71975de5d3fa354e58375ec31af191e7b",

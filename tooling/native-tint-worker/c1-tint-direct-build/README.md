@@ -1,8 +1,8 @@
-# C1 direct Tint build
+# Direct Tint source build
 
-This spike asks whether the real compiler worker can be built from Tint's direct CMake targets for
-both macOS architectures, without linking Dawn's WebGPU implementation, runtime backends, or
-monolithic release library.
+This maintained build recipe produces the pinned compiler worker from Tint's direct CMake targets
+for both macOS architectures, without linking Dawn's WebGPU implementation, runtime backends, or
+monolithic release library. Its accepted source, toolchain, and output evidence are preserved below.
 
 ## Result
 
@@ -102,7 +102,7 @@ The runner never downloads, installs, fetches, or mutates dependencies. Prepare 
 out of band, then pass their paths explicitly:
 
 ```bash
-bash experiments/native-metal-spikes/c1-tint-direct-build/run.sh \
+bash tooling/native-tint-worker/c1-tint-direct-build/run.sh \
   --dawn-root .context/native-spikes/dawn-8f25-source \
   --jsoncpp-root .context/native-spikes/jsoncpp-1.9.8 \
   --release-root .context/native-spikes/c1-tint-standalone/extracted/Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release \
@@ -120,7 +120,7 @@ When the tracked lock is stale because the previously locked worker, protocol he
 intended request set changed, run the same command with a new output path below `.context`:
 
 ```bash
-bash experiments/native-metal-spikes/c1-tint-direct-build/run.sh \
+bash tooling/native-tint-worker/c1-tint-direct-build/run.sh \
   --dawn-root .context/native-spikes/dawn-8f25-source \
   --jsoncpp-root .context/native-spikes/jsoncpp-1.9.8 \
   --release-root .context/native-spikes/c1-tint-standalone/extracted/Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release \
@@ -211,7 +211,7 @@ to retain all four temporary build trees for inspection.
 Chromium Abseil checkout is part of the static link. SPIRV-Headers is required by Dawn's CMake
 configuration but contributes no linked object to this profile. SPIRV-Tools is recorded only as an
 excluded DEPS pin because SPIR-V validation, readers, writers, and built DXC are all disabled.
-JsonCpp reuses the compiler-protocol spike's exact source-closure and license provenance.
+JsonCpp uses the neighboring compiler-protocol directory's exact source-closure and license provenance.
 
 ## Scope
 
@@ -220,14 +220,13 @@ stable upstream ABI. The measured hashes establish repeatability only for the pi
 toolchain, SDK, and host. The executables are Release builds but are not size-optimized or stripped.
 
 The monolithic release is deliberately retained only as a behavioral oracle. Its larger WebGPU and
-framework closure says nothing about the dependency closure of the direct binaries that this spike
-would distribute.
+framework closure says nothing about the dependency closure of the direct binaries produced here.
 
 Rosetta validates the x86_64 compiler process and byte parity. It does not test an Intel or AMD GPU.
 This direct-build gate stops at MSL text and does not itself invoke Apple's offline compiler or a
-Metal device. Separate C1 gates have compiled and linked the three handwritten MSL fixtures,
-generated runtime-size MSL, and a sampled binding-array translation for the macOS 14 target. The
-full shader corpus emitted by this exact direct worker remains an open offline-compiler gate.
+Metal device. The current `packages/native` tests separately exercise real WGSL translation,
+offline compilation, and GPU consumers for their supported profiles. Those cases do not establish
+offline-compiler coverage for the full corpus accepted by this worker.
 
 The resolver now records exact authored entry-declaration spans with 1-based locations, UTF-16 code
 unit columns, and end-exclusive boundaries. Tint diagnostics remain ranges in resolved virtual WGSL

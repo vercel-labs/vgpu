@@ -32,7 +32,7 @@ const preparedSwift = [
 ].map((match) => match[1]);
 const workerPath = fileURLToPath(
   new URL(
-    "../../../experiments/native-metal-spikes/c1-tint-direct-build/.artifacts/bin/vgpu-tint-worker-arm64",
+    "../../../tooling/native-tint-worker/c1-tint-direct-build/.artifacts/bin/vgpu-tint-worker-arm64",
     import.meta.url
   )
 );
