@@ -47,14 +47,7 @@ export async function runNativeCommand(
       });
       return { code: 0, stdout: renderCheckReport(report) };
     } catch (error) {
-      if (
-        input.signal?.aborted ||
-        !(error instanceof MetalCompileError) ||
-        error.diagnostics.length === 0 ||
-        !error.diagnostics.every(isCheckDiagnostic)
-      )
-        throw error;
-      return { code: 1, stderr: renderCheckDiagnostics(error.diagnostics) };
+      return compilerFailureResult(error, input.signal);
     }
   }
   if (input.command === "build") {
@@ -118,6 +111,20 @@ export async function runNativeCommand(
     code: report.verdict === "healthy" ? 0 : 1,
     stdout: renderDoctorReport(report),
   };
+}
+
+function compilerFailureResult(
+  error: unknown,
+  signal?: AbortSignal
+): NativeCommandResult {
+  if (
+    signal?.aborted ||
+    !(error instanceof MetalCompileError) ||
+    error.diagnostics.length === 0 ||
+    !error.diagnostics.every(isCheckDiagnostic)
+  )
+    throw error;
+  return { code: 1, stderr: renderCheckDiagnostics(error.diagnostics) };
 }
 
 function renderPublicationError(error: MetalPublicationError): string {
