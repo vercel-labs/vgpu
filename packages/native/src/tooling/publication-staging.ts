@@ -990,7 +990,7 @@ async function reconcileMissingPublication(
     await writeBytes(
       input,
       Buffer.from(
-        `verify-published ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
+        `verify-missing ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
       )
     );
     for (const [index, file] of prepared.files.entries())
@@ -999,37 +999,42 @@ async function reconcileMissingPublication(
         Buffer.from(`artifact ${index} ${file.length} ${file.sha256}\n`)
       );
     const reply = await receiveMessage(lines);
+    const published = reply.outcome === "published";
     if (
       reply.kind !== "reconciliation-result" ||
       reply.transactionId !== prepared.transactionId ||
       reply.phase !== "prepared" ||
-      reply.outcome !== "published" ||
+      (!published && reply.outcome !== "not-published") ||
       Object.keys(reply).length !== 9 ||
       !responseIdentity(reply.parent, prepared.parent) ||
       reply.destinationName !== prepared.destinationName ||
-      !responseIdentity(reply.output, prepared.stage) ||
+      !responseIdentity(
+        published ? reply.output : reply.stage,
+        prepared.stage
+      ) ||
       reply.recordSHA256 !== prepared.recordSHA256
     )
       throw new Error(
-        "Publication reconciliation did not establish the expected output"
+        "Publication reconciliation did not establish a checked outcome"
       );
     // Preserve the proved outcome even if releasing the helper subsequently fails.
-    state.outcome = "published";
-    state.receipt = Object.freeze({
-      schemaVersion: 1,
-      kind: "published",
-      outcome: "published",
-      confirmation: "reconciled",
-      transactionId: prepared.transactionId,
-      parent: prepared.parent,
-      destinationName: prepared.destinationName,
-      output: Object.freeze({
-        device: prepared.stage.device,
-        inode: prepared.stage.inode,
-      }),
-      recordSHA256: prepared.recordSHA256,
-      outputPath: join(snapshot.parentPath, snapshot.destinationName),
-    });
+    state.outcome = published ? "published" : "not-published";
+    if (published)
+      state.receipt = Object.freeze({
+        schemaVersion: 1,
+        kind: "published",
+        outcome: "published",
+        confirmation: "reconciled",
+        transactionId: prepared.transactionId,
+        parent: prepared.parent,
+        destinationName: prepared.destinationName,
+        output: Object.freeze({
+          device: prepared.stage.device,
+          inode: prepared.stage.inode,
+        }),
+        recordSHA256: prepared.recordSHA256,
+        outputPath: join(snapshot.parentPath, snapshot.destinationName),
+      });
     input.end();
     if (!(await lines.next()).done || (await closed) !== 0 || spawnError)
       throw new Error(
