@@ -165,7 +165,7 @@ test("slot order is canonical and never mutates the caller's mapping", () => {
     [
       { stage: "fragment", index: 3 },
       { stage: "vertex", index: 5 },
-    ].map(Object.freeze)
+    ].map((slot) => Object.freeze(slot))
   );
   expect(generateSlots(slots)).toEqual(generateSlots([...slots].reverse()));
   expect(slots.map(({ stage }) => stage)).toEqual(["fragment", "vertex"]);
