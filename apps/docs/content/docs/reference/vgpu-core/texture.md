@@ -3,6 +3,10 @@ title: "Texture"
 description: "`Texture` is the core wrapper around a `GPUTexture`. Use it for explicit texture allocation through `Device.createTexture(...)`, cached default views, readback, and wrapper-aware teardown. Its allocation and resource identity are fixed for its lifetime; replace and rebind it to change size."
 ---
 
+This is also the canonical reference for `TextureOptions`, `TextureReadOptions`, `TextureShape` and
+`TextureUsageName`. These types are re-exported by `vgpu`, `vgpu/node` and `vgpu/mock`; the public
+`texture(gpu, opts)` factory uses this same class and contract, with ownership registered on `gpu`.
+
 ## Import
 
 ```ts

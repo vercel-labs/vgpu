@@ -1,6 +1,7 @@
-# Texture
-
-Creates a standalone sampleable/storage texture from the main API (`vgpu`). Use it when a shader needs a texture that is not a render target: compute-written storage textures, 3D lookup tables, texture arrays, or mipmapped inputs. Render outputs still use `target(gpu)`.
+---
+title: "Texture"
+description: "Creates a standalone sampleable/storage texture from the main API (`vgpu`). Use it when a shader needs a texture that is not a render target: compute-written storage textures, 3D lookup tables, texture arrays, or mipmapped inputs. Render outputs still use `target(gpu)`."
+---
 
 ## Import
 

@@ -12,22 +12,27 @@ from `vgpu`, `vgpu/node`, `vgpu/mock` and `vgpu/core`.
 
 ### Explicit kind and usage
 
-Before:
+Before this PR, standalone textures were created through core (`device` is a core `Device`):
 
 ```ts
-const lut = texture(gpu, {
+const lut = device.createTexture({
   size: [32, 32, 32], dimension: "3d", format: "rgba16float",
+  usage: ["storage_binding", "texture_binding"],
 });
 ```
 
-After:
+After, the same core factory accepts the explicit contract:
 
 ```ts
-const lut = texture(gpu, {
+const lut = device.createTexture({
   kind: "3d", size: [32, 32, 32], format: "rgba16float",
   usage: ["storage_binding", "texture_binding"],
 });
 ```
+
+Core already required `usage`; it now rejects an empty list. This PR also introduces
+`texture(gpu, opts)` in the main API, accepting the same options and registering ownership with `gpu`.
+It is a new factory, not an existing factory whose defaults changed.
 
 No capabilities are inferred. Add `copy_src` if you read or copy from the texture, `copy_dst` for
 uploads/copies into it, and `render_attachment` for rendering into it. Empty usages are rejected.
@@ -195,4 +200,7 @@ VGPU_DAWN_FLAGS=backend=opengl node render.mjs
 
 That opt-in retains Dawn's known restricted-mip-view/storage-write bug (392121637). macOS, Windows,
 browser WebGPU and the existing compatibility feature level are unchanged. Docker/CI references now
-use Vulkan/lavapipe; compare exact pixels on the same driver and CPU architecture.
+use one pinned native Linux x64 Vulkan/lavapipe environment and one shared baseline collection.
+The accepted comparison policy allows at most 1/255 per RGB channel with exact alpha, checking every
+pixel without a percentage allowance or antialias exclusion. Raw differences remain in reports;
+tolerated rounding never regenerates references. See [Visual snapshots](../visual-snapshots.md).

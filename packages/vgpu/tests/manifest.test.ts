@@ -11,6 +11,16 @@ const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
 
+test("the public texture reference ships on the website and in curated navigation", () => {
+  expect(docsManifest.records.find((record) => record.package === "vgpu" && record.symbol === "texture"))
+    .toMatchObject({ repoPath: "packages/vgpu-api/src/texture.docs.md", virtualPath: "/vgpu/texture.docs.md", topic: "texture" });
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu/texture.md"), "utf8");
+  expect(page).toContain("Write a selected mip from compute");
+  const nav = JSON.parse(readFileSync(resolve(root, "docs/nav.json"), "utf8"));
+  const topics = nav.topicOrder.vgpu;
+  expect(topics.indexOf("texture")).toBe(topics.indexOf("target") + 1);
+});
+
 test("parses allowlist entries and maps virtual paths", () => {
   const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/buffer.docs.md\n");
 

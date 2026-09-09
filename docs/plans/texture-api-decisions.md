@@ -254,17 +254,15 @@ rules and additional async control flow solely to broaden the rollback guarantee
 
 ## Implementation and compatibility follow-up
 
-None of these decisions has been implemented by this record. The branch currently still returns the core
-`Texture`, accepts optional usage/dimension, and inherits parameterless read and resize methods.
+Implemented on this PR: core and the new public factory share one `Texture` class with explicit kind
+and nonempty usage; parameterless texture reads, Target/Surface read delegates and `Texture.resize()`
+are removed. Core, targets, adapters, examples and docs have been migrated. Tests cover creation,
+3D/array slices, mip/region readback, destroyed-resource diagnostics and attachment rebinding.
 
-Before release, migrate core, targets, adapters, examples and docs explicitly, and add tests for required
-usage/kind, complete 3D/array readback, mip/region selection, destroyed-resource diagnostics, and target
-attachment rebinding.
-
-Ship a migration guide with before/after examples covering required usage, dimension-to-kind conversion,
-array layers, explicit read selection, and replacement of texture resize with create/rebind/populate/destroy.
-Include migration from target reads to explicit attachment reads. Document changed return data for 3D/array reads and the distinction between target bindings and direct
-attachment references. Call out any additional view API changes separately if they are later approved.
+The [migration guide](texture-api-migration.md) documents the actual pre-PR core creation API and the
+new factory, dimension-to-kind conversion, array layers, explicit attachment reads and replacement
+through create/rebind/populate/destroy. Raw native views remain an escape hatch without managed-parent
+lifetime guarantees. These are implemented changes awaiting release, not an announced published version.
 
 The frame-loop pacing improvement is a separate issue, not part of these texture API decisions.
 
