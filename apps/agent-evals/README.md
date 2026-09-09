@@ -428,13 +428,15 @@ that ships next week. It is also the first thing to fix — **the verification
 harness will be iterated in this same PR**, and until it lands, treat a green
 result as "worth reading the transcript", not as proof.
 
-### n1-hero-shader: it re-runs the app, but only diffs the screenshots
+### n1-hero-shader: it re-runs the app and measures the pointer's effect
 
-n1's four hard gates prove three things and no more: something built,
-something served, and five harness-captured screenshots decode and are not
-byte-identical. They do not prove the *pointer* caused what changed, and —
-as shipped — they did not prove the thing serving the app was the thing the
-agent built.
+n1's five hard gates prove four things: something built, something served,
+five harness-captured screenshots decode and are not byte-identical, and at
+every waypoint the change near the pointer is at least 4x the change far from
+every waypoint (the spatial gate, landed 2026-09-09 — see the roadmap table
+for the populations behind the threshold). As first shipped, the gates proved
+neither pointer causality nor that the thing serving the app was the thing
+the agent built.
 
 Two independent mechanisms defeated all four gates with zero graphics code
 in the workspace, found during review:
@@ -508,13 +510,13 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
 1. **Verification harness for `s2`** — re-render the agent's source in a clean
    workspace and grade the PNG that produces, so a forged output cannot pass.
    `n1` already works this way; `s2` does not yet.
-2. **Spatial screenshot check for `n1`** — turn the `spatial` numbers the
-   harness already records per waypoint into a hard gate, so "the trail follows
-   the pointer" becomes deterministic instead of resting on the soft multimodal
-   judge (see "Trust model"). The measurement is in; only the gate is pending,
-   and deliberately so: it lands once a live eval run has produced the field.
-   Three populations measured in a container against the archived green run's
-   own shipped app, all with the shipped code path:
+2. **Spatial screenshot check for `n1` — landed.** `ratio >= 4` at every
+   waypoint is a hard gate since the first live run produced the field
+   (2026-09-09, non-root sandbox, claude-sonnet-5: ratio 1107-100079, far
+   0.00-0.17, max-delta offset 26-56 px on a 1050x637 canvas — a still
+   background that changed only under the pointer). The
+   `maxDeltaOffset <= 10% of the short side` companion is a soft check. The
+   populations that set the threshold, all measured with the shipped code path:
 
    | population | `near` | `far` | `ratio` | max-delta offset |
    | --- | --- | --- | --- | --- |
@@ -523,13 +525,10 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
    | same app, pointer listeners removed | 2.87-4.17 | 3.31-3.46 | 0.85-1.26 | 121-783 px |
    | the archived green run itself (pointer frozen by the refused hovers) | 2.59-4.26 | 2.90-3.54 | 0.89-1.20 | 118-524 px |
 
-   Proposed: **`ratio >= 4` at every waypoint** — 3.6x below the weakest
-   positive and 3.2x above the strongest negative, and a ratio rather than an
-   absolute delta, so flickering the whole background harder cannot buy it
-   (that lifts `far` too). Optional companion if a stricter spatial claim is
-   wanted: `maxDeltaOffset <= 0.1 * min(canvas.w, canvas.h)` (69 px at the
-   observed 1050x693). `far` alone is not a candidate: it is the background's
-   own noise floor and it is ~3/255 whether the pointer works or not.
+   `ratio >= 4` sits 3.6x below the weakest positive and 3.2x above the
+   strongest negative, and is a ratio rather than an absolute delta so
+   flickering the whole background harder cannot buy it (that lifts `far` too).
+   `far` alone was never a candidate: it is the background's own noise floor.
 3. **Journey funnel** — the milestones the evals log today become a reported
    funnel across runs (still never a gate: gating ritual rewards ritual).
 4. **Out-of-container verification.** Run the verify pass outside the
