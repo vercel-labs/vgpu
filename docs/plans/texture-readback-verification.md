@@ -351,10 +351,36 @@ the backend resolution.
 
 ### PR integration
 
-PR #413 targets `canary`. Its successful remote checks are from September 4, before this local refactor.
-A fresh read-only merge simulation reports a conflict in `apps/docs/scripts/example-chunk-budgets.json`.
-No branch rename, merge, commit, push, GitHub review comment or publication was performed.
+PR #413 targets `canary`. The approved implementation was committed as `588a94e7`; current canary
+(`99f26342`) was integrated in `5c483987` and pushed without rewriting history or renaming the branch.
+Resolved the example-budget conflict by retaining both Atmosphere and upstream TypeGPU Liquid Glass,
+and regenerated the conflicting docs manifest from the merged source. Migrated upstream's new prism
+readback test rather than dropping it. No release or merge of the PR was performed.
 
-Next: commit/push the reviewed implementation, run native x64 CI and review its snapshot candidates,
-integrate the canary conflict, then obtain fresh CI on the exact revision intended for release.
-Vulkan adoption and Linux user defaults are already implemented. Do not call this merge-ready.
+#### Native reference review
+
+[CI run 34384558238](https://github.com/vercel-labs/vgpu/actions/runs/34384558238) rendered the
+237-image suite on native Ubuntu x64. Artifact revision `4d5907b18d99077a8a65b09fc108b9162e952dbb`
+is GitHub's merge commit; its tree `ec2266cf3e9be87b905657ba5c429b531c224aa5` exactly matches
+branch revision `5c483987`. Dockerfile/lockfile hashes and every baseline hash match the checkout.
+The actual job name is `visual-snapshots / Verify visual snapshots`, confirming the production gate.
+
+- 32 primitive images differ, all by at most **one channel level**, independently rechecked from
+  decoded PNG bytes. Inspect and edit images match. This is not the same set as the 34 emulated frames.
+- Visually inspected native before/after pairs for icosahedron PBR side (the largest changed patch),
+  capsule PBR iso and torus normal-debug side; no apparent shape, coverage or lighting regression.
+- Only those 32 hash-verified native candidates were adopted. No tolerance changes, architecture
+  duplicates or emulated references were added.
+- The first native run also exposed two integration omissions: the new upstream ray-footprint test
+  used `Target.readFloats()` and the example corpus count remained 27 after combining two new examples.
+  Migrated the test to explicit attachment reads and enabled it in native GPU CI; count is now 28.
+  Existing native fast-suite tests otherwise passed (2861 passed, one catalog assertion failed),
+  including the tests that timed out under emulation.
+
+Native artifacts/logs: `.context/native-snapshots-34384558238/`,
+`.context/native-snapshots-34384558238.log`, `.context/native-test-fast.log`,
+`.context/native-docs-build.log`, `.context/native-docs-parity.log`.
+
+Final gate: all required checks must pass on the latest PR revision after the native references and
+integration fixes. The live PR checks are authoritative for merge readiness; candidate generation or
+old green runs are not substitutes. Vulkan adoption, Linux defaults and native reference review are done.

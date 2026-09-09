@@ -76,7 +76,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e VGPU_VALIDATE=require \
             vgpu-test-dev:ci \
-            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts"'
+            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts" "apps/docs/app/[lang]/(home)/components/prism-background/pipelines/shared/glass/ray-footprint.test.ts"'
       - name: Verify doctor and pixel snapshot CLI in Docker
         run: |
           docker run --rm \

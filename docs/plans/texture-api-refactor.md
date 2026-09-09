@@ -4,9 +4,10 @@ Status: creation, lifecycle and explicit readback checkpoints 1–3 implemented,
 User approved Vulkan for Docker/CI and the Node/Linux default. Implementation is in the worktree,
 without a Dawn update/patch; ARM64 full tests pass after six reviewed reference updates. User selected
 one canonical native x64 Vulkan snapshot environment with reviewed candidates, not per-architecture
-references. The workflow is implemented locally; native regeneration, the PR conflict and fresh remote
-CI remain. See [the contributor workflow](../visual-snapshots.md).
-See [verification evidence and open gates](texture-readback-verification.md). This is not release-ready.
+references. The implementation is pushed, canary conflicts are resolved and the native x64 reference
+candidates were reviewed and adopted. Merge readiness requires green checks on the latest PR #413
+revision; no release or PR merge is implied. See [the contributor workflow](../visual-snapshots.md)
+and [verification evidence and gates](texture-readback-verification.md).
 Accepted contracts: [Texture API decisions](texture-api-decisions.md).
 Recommendations explicitly marked below are not yet accepted decisions.
 
