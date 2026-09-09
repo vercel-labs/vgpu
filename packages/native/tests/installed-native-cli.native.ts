@@ -745,6 +745,51 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
     for (const [filename, before] of archiveEvidence)
       expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    const helperSource = join(project, "shaders/dimensions.wgsl");
+    const helperBefore = await readFile(helperSource);
+    const helperChanged = Buffer.concat([
+      helperBefore,
+      Buffer.from("\n// Changed imported source, same shader behavior.\n"),
+    ]);
+    await writeFile(helperSource, helperChanged);
+    const staleProjectBefore = await treeEvidence(project);
+    const stale = await command(
+      process.execPath,
+      [bin, "native", "verify", "--config", "../project/vgpu.native.json"],
+      runtime,
+      {
+        ...doctorEnvironment,
+        DEVELOPER_DIR: missingDeveloper,
+        TMPDIR: missingVerifyTemp,
+      }
+    );
+    console.info("Installed stale verify actual result", JSON.stringify(stale));
+    expect(stale.code, JSON.stringify(stale)).toBe(1);
+    expect(stale.signal).toBeNull();
+    expect(stale.stdout).toBe("");
+    expect(stale.stderr).toBe(
+      "Generated output is stale; build the Metal package again\n"
+    );
+    expect(await treeEvidence(project)).toEqual(staleProjectBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    expect(await readFile(helperSource)).toEqual(helperChanged);
+    await writeFile(helperSource, helperBefore);
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {

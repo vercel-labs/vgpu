@@ -206,7 +206,12 @@ ownership record, with a combined 128 MiB limit. Payload transport uses chunks n
 transaction-record limits.
 
 Changing an imported helper makes the output stale even if its entry file did not change. Editing
-generated Swift, replacing the library, removing a generated file, or adding an unexpected file
+only a comment in that helper still changes the captured source bytes. If the owned package remains
+intact, the diagnostic is `Generated output is stale; build the Metal package again` on standard
+error, with exit status `1` and no successful report. Verification leaves both the changed source
+and the old package untouched; it does not regenerate or repair either one.
+
+Editing generated Swift, replacing the library, removing a generated file, or adding an unexpected file
 also fails verification. The initial policy treats this directory as an immutable generated
 package: build it as a dependency of your consuming Swift project, whose build products live
 outside this directory. A `.build` directory created by building the generated package directly
