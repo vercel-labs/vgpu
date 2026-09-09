@@ -122,7 +122,7 @@ staging memory and encode your own copy. Do not call `contents()` on a private b
 
 ## Bind an explicit region
 
-The planned binding helper takes a buffer, offset, and visible length:
+The generated binding helper takes a buffer, offset, and visible length:
 
 ```swift
 let gradient = try Gradient.load(device: device)

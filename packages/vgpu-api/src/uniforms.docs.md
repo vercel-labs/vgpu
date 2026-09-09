@@ -58,6 +58,7 @@ globals.set({ exposure: 1.25 });
 ## Notes
 
 - The first shader to bind the object chooses the WGSL layout. Keep struct member names/types/order aligned for every later shader that reuses it.
+- Values must contain only members of that reflected struct. When spreading a shared settings object, select the fields for this binding; unrelated settings are rejected, not ignored. Validation of initial values happens when the first binding adopts its layout.
 - Use shared uniforms for values like time, mouse, camera, exposure, and viewport data consumed by many passes.
 - If one shader needs a different layout, create a second `uniforms(gpu)` object rather than mutating the first layout.
 - `set()` clones and merges into a candidate, packs that candidate into temporary bytes, and commits only after validation succeeds. A rejected update leaves both the retained values and GPU bytes unchanged.

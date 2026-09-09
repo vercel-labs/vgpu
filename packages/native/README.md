@@ -19,8 +19,8 @@ effective runtime-array size data derived from explicit ranges. Prepared binding
 internal bytes for caller-managed uploads. Storage packing remains application-owned.
 
 Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
-authored struct names, not physical offsets. Other resource kinds and the complete installed
-command workflow remain separate integration work.
+authored struct names, not physical offsets. Other resource kinds remain outside the supported
+profile; broader installed replacement/recovery qualification remains separate work.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
@@ -54,8 +54,9 @@ exercises this read-only proof. If the helper dies before exchange, both complet
 generations at their original destination and staging names can instead prove non-publication.
 Both trees are checked against their own modules and manifests; a missing destination remains
 `unknown`, even with an intact new stage. These checks preserve the original failure and recovery
-state, never retry commit or delete either generation. Complete replacement fault handling and
-installed interruption diagnostics remain unfinished.
+state, never retry commit or delete either generation. Broader replacement fault handling and
+installed interruption/unknown-outcome qualification remain unfinished; the specific installed
+controls are described below.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and
