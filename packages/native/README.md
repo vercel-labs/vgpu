@@ -37,8 +37,9 @@ write generated directories.
 publishing them. The private publisher currently stages and verifies those files under a physical
 parent lock, then publishes exclusively to a missing destination, atomically replaces an ordinary
 empty directory, or exchanges an intact package belonging to the same current configuration.
-A native byte-identical rebuild test observes the actual exchange of distinct complete directories
-and checked cleanup of the old package. Broader owned-replacement fault coverage remains pending.
+Native byte-identical and changed-module rebuild tests observe the actual exchange of distinct
+complete directories and cleanup using the old package's own paths and metadata. Broader
+owned-replacement fault coverage remains pending.
 Interrupted invocations retain explicit outcomes and recovery evidence. Bounded
 read-only reconciliation can confirm that the original intact generation reached the destination
 in the missing and empty modes. Owned exchange without an acknowledgment remains `unknown`;
