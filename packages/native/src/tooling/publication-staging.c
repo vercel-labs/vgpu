@@ -20,6 +20,7 @@
 #define RECORD_LIMIT (64U * 1024U)
 #define CHUNK_LIMIT (64U * 1024U)
 #define AGGREGATE_LIMIT (128ULL * 1024ULL * 1024ULL)
+#define TRANSFER_SHORT (-2)
 
 static const char *roles[4] = {
   "package-manifest", "swift-source", "metal-library", "output-record"
@@ -30,6 +31,9 @@ struct artifact {
   char hash[65];
   dev_t device;
   ino_t inode;
+  int created;
+  unsigned long long written_length;
+  char written_hash[65];
 };
 
 static int fail(const char *code) {
@@ -293,38 +297,67 @@ static int receive_file(FILE *input, int directory, const char *name,
     errno = EPROTO;
     return -1;
   }
+  CC_SHA256_CTX written_context;
+  if (CC_SHA256_Init(&written_context) != 1) return -1;
   int output = openat(directory, name,
                       O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
   if (output < 0) return -1;
+  struct stat identity;
+  if (fstat(output, &identity) != 0 || !S_ISREG(identity.st_mode) ||
+      identity.st_nlink != 1 || identity.st_size != 0) {
+    int error = errno;
+    close(output);
+    errno = error == 0 ? EINVAL : error;
+    return -1;
+  }
+  artifact->created = 1;
+  artifact->device = identity.st_dev;
+  artifact->inode = identity.st_ino;
+  artifact->length = length;
+  memcpy(artifact->hash, hash, sizeof(artifact->hash));
   unsigned char chunk[CHUNK_LIMIT];
   unsigned long long remaining = length;
   int result = 0;
   while (remaining > 0) {
     size_t requested = remaining < sizeof(chunk) ? (size_t)remaining : sizeof(chunk);
     size_t count = fread(chunk, 1, requested, input);
-    if (count != requested || write_all(output, chunk, count) != 0) {
+    size_t written = 0;
+    while (written < count) {
+      ssize_t added = write(output, chunk + written, count - written);
+      if (added < 0 && errno == EINTR) continue;
+      if (added <= 0) { result = -1; break; }
+      artifact->written_length += (size_t)added;
+      if (CC_SHA256_Update(&written_context, chunk + written, (CC_LONG)added) != 1) {
+        errno = EIO;
+        result = -1;
+        break;
+      }
+      written += (size_t)added;
+    }
+    if (result != 0) break;
+    remaining -= count;
+    if (count != requested) {
       errno = EPROTO;
-      result = -1;
+      result = feof(input) && !ferror(input) ? TRANSFER_SHORT : -1;
       break;
     }
-    remaining -= count;
   }
-  struct stat identity;
   if (result == 0) result = fstat(output, &identity);
   if (result == 0 && (!S_ISREG(identity.st_mode) || identity.st_nlink != 1 ||
                       (unsigned long long)identity.st_size != length)) {
     errno = EINVAL;
     result = -1;
   }
-  int close_result = close(output);
-  if (result == 0 && close_result != 0) result = -1;
-  if (result == 0) {
-    artifact->length = length;
-    memcpy(artifact->hash, hash, sizeof(artifact->hash));
-    artifact->device = identity.st_dev;
-    artifact->inode = identity.st_ino;
-    *aggregate += length;
+  if (result == 0 || result == TRANSFER_SHORT) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    if (CC_SHA256_Final(digest, &written_context) != 1) result = -1;
+    else for (size_t index = 0; index < sizeof(digest); index++)
+      snprintf(artifact->written_hash + index * 2, 3, "%02x", digest[index]);
   }
+  int close_result = close(output);
+  if (close_result != 0) result = -1;
+  if (result == 0) *aggregate += length;
+  if (result == TRANSFER_SHORT) errno = EPROTO;
   return result;
 }
 
@@ -464,6 +497,60 @@ static int verify_bytes(int parent, const char *name, const struct stat *expecte
   return result;
 }
 
+/* Only a live accepted-payload EOF has a complete ledger of the bytes we wrote. */
+static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_identity,
+                                int sources, const struct stat *sources_identity,
+                                int module, const char *module_name,
+                                const struct stat *module_identity, int resources,
+                                const struct stat *resources_identity,
+                                const struct artifact files[4],
+                                const struct stat *journal_identity,
+                                const char *journal, size_t journal_length) {
+  const int directories[] = { stage, module, resources, stage };
+  const char *names[] = {
+    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  };
+  struct artifact written[4];
+  for (int index = 0; index < 4; index++) {
+    written[index] = files[index];
+    written[index].length = files[index].written_length;
+    memcpy(written[index].hash, files[index].written_hash, sizeof(written[index].hash));
+  }
+  const char *root_entries[3] = { "Sources" };
+  size_t root_count = 1;
+  if (files[0].created) root_entries[root_count++] = names[0];
+  if (files[3].created) root_entries[root_count++] = names[3];
+  const char *sources_entries[] = { module_name };
+  const char *module_entries[2] = { "Resources", "Shaders.generated.swift" };
+  const char *resource_entries[] = { "Shaders.metallib" };
+  if (directory_edge(parent, STAGE_NAME, stage, stage_identity) != 0 ||
+      directory_edge(stage, "Sources", sources, sources_identity) != 0 ||
+      directory_edge(sources, module_name, module, module_identity) != 0 ||
+      directory_edge(module, "Resources", resources, resources_identity) != 0 ||
+      exact_directory(stage, root_entries, root_count) != 0 ||
+      exact_directory(sources, sources_entries, 1) != 0 ||
+      exact_directory(module, module_entries, files[1].created ? 2 : 1) != 0 ||
+      exact_directory(resources, resource_entries, files[2].created ? 1 : 0) != 0 ||
+      ensure_absent(parent, UPDATE_NAME) != 0 ||
+      verify_bytes(parent, JOURNAL_NAME, journal_identity, journal, journal_length) != 0)
+    return -1;
+  /* Check all contents before deleting any part of this transaction. */
+  for (int index = 0; index < 4; index++)
+    if (files[index].created && hash_file(directories[index], names[index], &written[index]) != 0)
+      return -1;
+  for (int index = 0; index < 4; index++)
+    if (files[index].created && remove_artifact(directories[index], names[index], &written[index]) != 0)
+      return -1;
+  if (remove_empty_directory(module, "Resources", resources, resources_identity) != 0 ||
+      remove_empty_directory(sources, module_name, module, module_identity) != 0 ||
+      remove_empty_directory(stage, "Sources", sources, sources_identity) != 0 ||
+      remove_empty_directory(parent, STAGE_NAME, stage, stage_identity) != 0 ||
+      verify_bytes(parent, JOURNAL_NAME, journal_identity, journal, journal_length) != 0 ||
+      unlinkat(parent, JOURNAL_NAME, 0) != 0)
+    return -1;
+  return 0;
+}
+
 int main(int argc, char **argv) {
   if (argc != 6 || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
       !valid_transaction(argv[5])) {
@@ -533,11 +620,36 @@ int main(int argc, char **argv) {
 
   struct artifact files[4] = {0};
   unsigned long long aggregate = 0;
-  if (receive_file(stdin, stage, "Package.swift", 0, &files[0], &aggregate) != 0 ||
-      receive_file(stdin, module_directory, "Shaders.generated.swift", 1, &files[1], &aggregate) != 0 ||
-      receive_file(stdin, resources, "Shaders.metallib", 2, &files[2], &aggregate) != 0 ||
-      receive_file(stdin, stage, ".vgpu-native-output.json", 3, &files[3], &aggregate) != 0)
+  const int directories[] = { stage, module_directory, resources, stage };
+  const char *names[] = {
+    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  };
+  for (int index = 0; index < 4; index++) {
+    int received = receive_file(stdin, directories[index], names[index], index, &files[index], &aggregate);
+    if (received == 0) continue;
+    int transfer_error = errno;
+    if (received == TRANSFER_SHORT &&
+        (!parent_matches(parent_path, &parent_identity) ||
+         cleanup_partial_tree(parent, stage, &stage_identity, sources, &sources_identity,
+                              module_directory, module, &module_identity, resources,
+                              &resources_identity, files, &journal_identity, journal,
+                              journal_length) != 0)) {
+      int cleanup_error = errno;
+      printf("{\"schemaVersion\":1,\"kind\":\"error\",\"code\":\"invalid-transfer\","
+             "\"errno\":%d,\"cleanupCode\":\"cleanup-failed\",\"cleanupErrno\":%d}\n",
+             transfer_error, cleanup_error);
+      fflush(stdout);
+      return 1;
+    }
+    if (received == TRANSFER_SHORT) {
+      printf("{\"schemaVersion\":1,\"kind\":\"error\",\"code\":\"invalid-transfer\","
+             "\"errno\":%d,\"cleanup\":\"cleaned\"}\n", transfer_error);
+      fflush(stdout);
+      return 1;
+    }
+    errno = transfer_error;
     return fail("invalid-transfer");
+  }
   char command[64];
   if (fgets(command, sizeof(command), stdin) == NULL || strcmp(command, "prepare\n") != 0)
     return fail("invalid-transfer");

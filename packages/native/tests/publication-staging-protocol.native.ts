@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   lstat,
   mkdtemp,
+  open,
   readFile,
   readdir,
   realpath,
@@ -11,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
@@ -121,6 +123,105 @@ test("the real staging helper accepts an output-record frame of exactly 64 KiB a
     expect(await readdir(helper.parent)).toEqual([]);
   });
 });
+
+test("premature payload EOF removes only the unchanged written prefix and this live transaction's tree", async () => {
+  await withStagingHelper(async (helper) => {
+    for (const [index, file] of firstFiles.slice(0, 2).entries()) {
+      await helper.send(fileHeader(index, file.bytes));
+      await helper.send(file.bytes);
+    }
+    const planned = Buffer.alloc(3 * 64 * 1024, 0x5a);
+    await helper.send(fileHeader(2, planned));
+    await helper.send(planned.subarray(0, 64 * 1024 + 123));
+    helper.end();
+
+    expect(await helper.receive()).toMatchObject({
+      schemaVersion: 1,
+      kind: "error",
+      code: "invalid-transfer",
+      cleanup: "cleaned",
+    });
+    expect(await helper.exited).toEqual({
+      code: 1,
+      signal: null,
+      timedOut: false,
+      spawnError: undefined,
+    });
+    expect(await readdir(helper.parent)).toEqual([]);
+  });
+});
+
+test("premature EOF preserves the transaction when the persisted prefix changes under the same file identity", async () => {
+  await withStagingHelper(async (helper) => {
+    for (const [index, file] of firstFiles.slice(0, 2).entries()) {
+      await helper.send(fileHeader(index, file.bytes));
+      await helper.send(file.bytes);
+    }
+    const planned = Buffer.alloc(3 * 64 * 1024, 0x5a);
+    const prefix = Buffer.from(planned.subarray(0, 64 * 1024));
+    await helper.send(fileHeader(2, planned));
+    await helper.send(prefix);
+    const target = join(helper.stage, firstFiles[2].path);
+    await waitForFileSize(target, prefix.byteLength);
+    const before = await lstat(target, { bigint: true });
+    const editor = await open(target, "r+");
+    try {
+      prefix[0] = 0x61;
+      await editor.write(prefix.subarray(0, 1), 0, 1, 0);
+    } finally {
+      await editor.close();
+    }
+    const changed = await lstat(target, { bigint: true });
+    expect({
+      device: changed.dev,
+      inode: changed.ino,
+      size: changed.size,
+    }).toEqual({
+      device: before.dev,
+      inode: before.ino,
+      size: before.size,
+    });
+    helper.end();
+
+    expect(await helper.receive()).toMatchObject({
+      schemaVersion: 1,
+      kind: "error",
+      code: "invalid-transfer",
+      cleanupCode: "cleanup-failed",
+    });
+    expect(await helper.exited).toEqual({
+      code: 1,
+      signal: null,
+      timedOut: false,
+      spawnError: undefined,
+    });
+    expect(await readFile(target)).toEqual(prefix);
+    for (const file of firstFiles.slice(0, 2))
+      expect(await readFile(join(helper.stage, file.path))).toEqual(file.bytes);
+    expect(JSON.parse(await readFile(helper.journal, "utf8"))).toMatchObject({
+      phase: "staging",
+      transactionId,
+    });
+    expect((await readdir(helper.parent)).sort()).toEqual(
+      [journalName, stageName].sort()
+    );
+  });
+});
+
+async function waitForFileSize(path: string, size: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const actual = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return undefined;
+    });
+    if (actual?.size === size) return;
+    await delay(5);
+  }
+  throw new Error(
+    "The staging helper did not persist the expected payload prefix"
+  );
+}
 
 function fileHeader(role: number, bytes: Uint8Array): Buffer {
   const hash = createHash("sha256").update(bytes).digest("hex");
