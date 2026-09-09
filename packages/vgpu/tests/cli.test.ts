@@ -23,8 +23,8 @@ const routerHelp = `vgpu ${packageVersion}
 TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and
 the same code running in the browser, headless Node, and your test suite.
 
-## Read the docs
-  npx vgpu docs cat getting-started.md    The guide for using the current API correctly
+## Start here — read this before touching the project
+  npx vgpu docs cat getting-started.md    The current API and defaults, plus the guide index (performance, testing, shipping)
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
   npx vgpu docs cat <path>
 
