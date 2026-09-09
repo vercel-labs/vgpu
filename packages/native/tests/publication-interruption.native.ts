@@ -58,6 +58,8 @@ test.each([
   { phase: "staging", cancelled: false, journalForm: "unknown-field" },
   { phase: "staging", cancelled: false, journalForm: "wrong-parent" },
   { phase: "prepared", cancelled: false, journalForm: "wrong-record-digest" },
+  { phase: "prepared", cancelled: false, journalForm: "publication" },
+  { phase: "prepared", cancelled: false, journalForm: "publication-invalid" },
 ])(
   "a later sibling build preserves interrupted $phase evidence (cancelled: $cancelled, journal: $journalForm)",
   async ({ phase, cancelled, journalForm }) => {
@@ -144,6 +146,7 @@ test.each([
           "EarlierShaders",
           "EarlierShaders",
           transactionId,
+          ...(journalForm.startsWith("publication") ? ["publish-missing"] : []),
         ],
         { stdio: ["pipe", "pipe", "pipe"] }
       );
@@ -261,6 +264,10 @@ test.each([
           (changed.recordSHA256[0] === "0" ? "1" : "0") +
           changed.recordSHA256.slice(1);
         await writeFile(journalPath, JSON.stringify(changed));
+      } else if (journalForm === "publication-invalid") {
+        const changed = JSON.parse(originalJournal.toString("utf8"));
+        changed.publication.renameMode = "swap";
+        await writeFile(journalPath, JSON.stringify(changed));
       }
       const before = await treeEvidence(parent);
 
@@ -307,6 +314,14 @@ test.each([
             phase,
             destinationName: "EarlierShaders",
             outputPath: join(parent, "EarlierShaders"),
+            ...(journalForm === "publication"
+              ? {
+                  publication: {
+                    renameMode: "excl",
+                    expectedDestination: "missing",
+                  },
+                }
+              : {}),
           },
           recoveryPaths,
         };
@@ -318,9 +333,12 @@ test.each([
             cause: { errors: [controller.signal.reason, interrupted] },
           });
         } else if (
-          ["unknown-field", "wrong-parent", "wrong-record-digest"].includes(
-            journalForm
-          )
+          [
+            "unknown-field",
+            "wrong-parent",
+            "wrong-record-digest",
+            "publication-invalid",
+          ].includes(journalForm)
         ) {
           expect(error).toMatchObject({ code: "conflict", recoveryPaths });
           expect(error).not.toHaveProperty("transaction");

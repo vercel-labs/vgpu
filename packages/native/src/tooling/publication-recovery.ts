@@ -20,6 +20,10 @@ export interface InterruptedMetalPublication {
   readonly outputPath: string;
   readonly moduleName: string;
   readonly stage?: Identity & Readonly<{ name: string }>;
+  readonly publication?: Readonly<{
+    renameMode: "excl";
+    expectedDestination: "missing";
+  }>;
 }
 
 export interface MetalPublicationRecoveryReport {
@@ -118,6 +122,10 @@ function recognizeJournal(
       typeof value === "object" &&
       "phase" in value &&
       value.phase === "intent";
+    const publicationVariant =
+      value !== null &&
+      typeof value === "object" &&
+      Object.hasOwn(value, "publication");
     if (
       !keys(value, [
         "schemaVersion",
@@ -129,6 +137,7 @@ function recognizeJournal(
         "moduleName",
         ...(intent ? [] : ["stage"]),
         ...(prepared ? ["recordSHA256", "files"] : []),
+        ...(publicationVariant ? ["publication"] : []),
       ]) ||
       value.schemaVersion !== 1 ||
       value.kind !== "vgpu-native-publication" ||
@@ -146,6 +155,13 @@ function recognizeJournal(
     )
       return undefined;
     validateSwiftIdentifier(value.moduleName, "moduleName");
+    if (
+      publicationVariant &&
+      (!keys(value.publication, ["renameMode", "expectedDestination"]) ||
+        value.publication.renameMode !== "excl" ||
+        value.publication.expectedDestination !== "missing")
+    )
+      return undefined;
     if (
       prepared &&
       !preparedFiles(value.files, value.moduleName, value.recordSHA256)
@@ -174,6 +190,14 @@ function recognizeJournal(
       outputPath: join(parentPath, value.destinationName),
       moduleName: value.moduleName,
       ...(stage ? { stage } : {}),
+      ...(publicationVariant
+        ? {
+            publication: Object.freeze({
+              renameMode: "excl" as const,
+              expectedDestination: "missing" as const,
+            }),
+          }
+        : {}),
     });
   } catch {
     return undefined;
