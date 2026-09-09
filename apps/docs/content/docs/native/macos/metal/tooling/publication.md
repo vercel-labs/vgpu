@@ -131,6 +131,11 @@ Normal cleanup removes only the unchanged, transaction-owned staging and recover
 cleanup fails, the diagnostic retains the original failure and identifies the exact remaining
 path. It must not remove unrelated files in the parent.
 
+If a transfer ends partway through a file, the live helper can clean it only after verifying the
+file's identity and the bytes actually written. The planned complete-file hash does not describe
+that partial file. Changed or unknown contents remain with the recovery record; a later build
+does not inherit the interrupted process's permission to clean them.
+
 `check` and `doctor` are not recovery commands. `verify` can inspect an existing package's integrity
 and input freshness, but a successful verification does not authorize deleting recovery state or
 establish the outcome of an interrupted publication. None of these read-only operations repairs
