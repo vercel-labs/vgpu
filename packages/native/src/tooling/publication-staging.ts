@@ -1014,15 +1014,11 @@ async function reconcilePublication(
       throw new Error(
         "Recovery record does not match the original prepared publication"
       );
-    const command = emptyDestination
-      ? "verify-empty-published"
-      : "verify-missing";
-    await writeBytes(
-      input,
-      Buffer.from(
-        `${command} ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
-      )
-    );
+    const command =
+      publication.renameMode === "replace-empty"
+        ? `verify-empty ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode} ${publication.oldDestination.device} ${publication.oldDestination.inode}\n`
+        : `verify-missing ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`;
+    await writeBytes(input, Buffer.from(command));
     for (const [index, file] of prepared.files.entries())
       await writeBytes(
         input,
@@ -1035,7 +1031,6 @@ async function reconcilePublication(
       reply.transactionId !== prepared.transactionId ||
       reply.phase !== "prepared" ||
       (!published && reply.outcome !== "not-published") ||
-      (emptyDestination && !published) ||
       Object.keys(reply).length !== 9 ||
       !responseIdentity(reply.parent, prepared.parent) ||
       reply.destinationName !== prepared.destinationName ||
