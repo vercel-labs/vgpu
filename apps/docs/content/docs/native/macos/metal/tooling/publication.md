@@ -78,7 +78,11 @@ transfer begins.
 
 ## Replace the directory
 
-The operation depends on the observed destination:
+The helper classifies the destination under the physical parent lock before staging starts.
+That choice remains fixed for the transaction: a missing destination is not reclassified as empty
+if another directory appears while publication is in progress.
+
+The operation depends on that observed destination:
 
 | Destination | Publication behavior |
 | --- | --- |
