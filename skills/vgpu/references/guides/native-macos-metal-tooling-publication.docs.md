@@ -126,15 +126,18 @@ Cancellation stops work before the commit request when possible. After that requ
 must preserve publication evidence while it finishes or reports recovery. It never automatically
 rolls a published package back because a later cleanup step failed.
 
-If the live invocation loses confirmation while publishing to a missing destination, it makes one
-bounded, read-only reconciliation attempt after the original helper exits. It reacquires the
-physical parent lock and compares the recorded transaction, expected directory identity, and
-complete package contents with the generation it prepared. It does not send another commit
-request, recreate a missing parent, or remove recovery state.
+If the live invocation loses confirmation while publishing to a missing destination or replacing
+an empty directory, it makes one bounded, read-only reconciliation attempt after the original
+helper exits. It reacquires the physical parent lock and compares the recorded transaction,
+original destination classification, expected directory identities, and complete package contents
+with the generation it prepared. It does not send another commit request, recreate a missing
+parent, or remove recovery state.
 
 The complete new package at the destination must retain the prepared directory's identity to
-prove publication. If that same intact directory is still at staging and the destination is
-absent, reconciliation can instead establish that publication did not happen.
+prove publication. For a transaction that originally targeted a missing destination, that same
+intact directory still at staging with the destination absent can instead establish that publication
+did not happen. A missing destination does not provide that proof for an empty-directory replacement:
+its original directory identity is also part of the recorded transaction.
 
 A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
 into a successful build. The diagnostic preserves the original error and distinguishes reconciled
