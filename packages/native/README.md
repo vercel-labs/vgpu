@@ -1,7 +1,8 @@
 # @vgpu/native
 
 Private build-time tooling for generated Metal integration. This package is not published and does
-not implement a Swift renderer or a public `vgpu native` command.
+not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor`;
+the installed `check`, `build`, and `verify` operations remain unfinished.
 
 `generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
 returns the files of a self-contained Swift package without writing to disk. Optional reflected
@@ -18,8 +19,8 @@ effective runtime-array size data derived from explicit ranges. Prepared binding
 internal bytes for caller-managed uploads. Storage packing remains application-owned.
 
 Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
-authored struct names, not physical offsets. Other resource kinds, command
-installation, and complete output replacement remain separate integration work.
+authored struct names, not physical offsets. Other resource kinds and the complete installed
+command workflow remain separate integration work.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
@@ -87,6 +88,29 @@ Internal compiler canaries may cover features outside this package's supported p
 not expand the public API or establish support for another GPU architecture. Worker build locks,
 authenticated source/oracle inputs, and licenses remain required build evidence; retired runtime
 experiments are recoverable from Git history, not dependencies of the generated Swift package.
+
+## Local companion candidate
+
+The candidate packaging contract keeps the pinned Tint worker private to this package. Build the
+package normally before running `pnpm pack`, which runs a maintainer-only `prepack` step. It reads the
+accepted universal worker from `tooling/native-tint-worker/c1-tint-direct-build/.artifacts/bin/`,
+checks its locked length and SHA-256, and copies the unchanged bytes into
+`dist/compiler/assets/darwin/vgpu-tint-worker`. It also authenticates and includes the existing
+Dawn/Tint, Abseil, and JsonCpp notices under that directory's `licenses/` subdirectory.
+
+Missing or mismatched accepted inputs fail packaging; existing distribution files are not a
+fallback. Packaging does not rebuild or download Dawn, expand the runtime trust list, or sign a
+different compiler. The runtime resolves only its package-relative worker asset, authenticates
+its bytes, and executes an owned temporary snapshot. The worker is not a public executable or
+a configurable path. Build metadata such as `.tsbuildinfo` is not part of the candidate.
+
+The regular TypeScript/C-source build remains independent of the local worker cache. Assembly is
+not an install, postinstall, or prepare hook. Generated distribution assets and candidate tarballs
+remain untracked. A local offline install with dependency install scripts disabled tests this
+candidate boundary; it does not qualify empty-cache installation, normal dependency install
+scripts, signing/quarantine, or a release compatibility matrix. The local installed doctor is
+exercised through this packaging boundary; project commands remain unfinished and the package
+remains private and unpublished.
 
 ## Checks
 

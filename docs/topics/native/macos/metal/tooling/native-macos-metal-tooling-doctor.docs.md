@@ -13,13 +13,16 @@ Before investigating a project shader, check that the machine can run the native
 npx vgpu native doctor
 ```
 
-> Warning: The internal diagnostic is implemented and tested with the pinned worker and Apple's
-> offline compiler. The `vgpu native doctor` grammar and lazy dispatch exist, but the operational
-> companion and installable workflow are not available yet. These checks do not establish a
-> release compatibility matrix.
+> Warning: `vgpu native doctor` is implemented and exercised from real local package tarballs,
+> installed offline with dependency install scripts disabled. It uses the packaged pinned worker
+> and Apple's offline compiler. The companion remains private and unpublished; the project commands
+> and complete installed build workflow remain unfinished. This does not qualify empty-cache
+> installation, normal dependency install scripts, or a release compatibility matrix.
 
 The command needs no `vgpu.native.json`, does not read project shaders, and writes no generated
 package. It reports evidence and a suggested next action for each failed prerequisite.
+The pinned compiler is a private asset of the optional native companion. Diagnosis does not search
+the current directory or developer checkout for a worker, download one, or accept a worker override.
 
 ## Read the findings
 
@@ -43,6 +46,27 @@ Each finding is successful, failed, or skipped because a prerequisite is unavail
 result is healthy only when every required check succeeds. A skipped check is not evidence of
 support. A healthy result does not establish the release's build-host, Swift-consumer, or physical
 GPU compatibility matrix; those require separate tests.
+
+The human-readable report begins with `Native toolchain: healthy` or `Native toolchain: unhealthy`,
+followed by one finding for each check in the order above. For example, its shape on a healthy host
+is shown below; the actual evidence contains the detected versions, paths, and probe results:
+
+```text
+Native toolchain: healthy
+[ok] node: ...
+[ok] host: ...
+[ok] xcode: ...
+[ok] sdk: ...
+[ok] swift: ...
+[ok] tint: ...
+[ok] metal: ...
+```
+
+Unsuccessful findings use `[fail]` or `[skip]`. Multiline evidence is indented beneath its finding;
+a suggested remedy, when available, appears on an indented `Next:` line. The report goes to standard
+output, including failed findings. Exit status is `0` only for a healthy report and `1` for an
+unhealthy report or a failure that prevents diagnosis. Failures that prevent a report go to standard
+error. Cancellation still waits for owned cleanup; the CLI preserves its signal exit statuses.
 
 ## Use the selected Apple tools
 

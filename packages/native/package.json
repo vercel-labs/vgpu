@@ -7,13 +7,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsc -b && node scripts/copy-assets.mjs",
+    "prepack": "node scripts/prepare-distribution.mjs",
     "test": "vitest run",
     "test:native": "vitest run --config vitest.native.config.ts"
   },

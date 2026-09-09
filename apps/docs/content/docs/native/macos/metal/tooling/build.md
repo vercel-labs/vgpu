@@ -6,10 +6,12 @@ description: "Check the native toolchain, validate shaders, regenerate an owned 
 Native tooling runs on the machine that generates the shaders. The Swift application consumes the
 resulting package without running Node.js or translating WGSL at launch.
 
-> Warning: This is a docs-first workflow contract. The four-command grammar, help, and lazy companion
-> dispatch are implemented, but the operational companion and complete installed workflow are not
-> published yet. Native consumers currently test the internal compiler adapter and generated package
-> directly; that evidence does not establish command installation, output publication, or release support.
+> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, and `doctor`
+> companion are implemented. Doctor has real local-tarball coverage with an offline installation
+> and dependency install scripts disabled. The companion remains private and unpublished;
+> `check`, `build`, and `verify` are not connected to installed commands yet. Internal tests exercise
+> their compiler, publication, and verification modules separately. The complete installed build
+> workflow and release support remain unqualified.
 
 ## Prepare the build machine
 
