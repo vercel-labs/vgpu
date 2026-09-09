@@ -10,7 +10,10 @@ import {
   type NativeDoctorReport,
 } from "./tooling/doctor.js";
 import { prepareMetalProject } from "./tooling/prepare-project.js";
-import { publishPreparedMetalOutput } from "./tooling/publication-staging.js";
+import {
+  MetalPublicationError,
+  publishPreparedMetalOutput,
+} from "./tooling/publication-staging.js";
 
 export const nativeCliProtocol = 1;
 
@@ -62,22 +65,27 @@ export async function runNativeCommand(
       signal,
       environment,
     });
-    const receipt = await publishPreparedMetalOutput({
-      prepared,
-      signal,
-      environment,
-    });
-    return {
-      code: 0,
-      stdout: [
-        "Native package: published",
-        `Module: ${prepared.project.configuration.moduleName}`,
-        `Output: ${receipt.outputPath}`,
-        `Input fingerprint: ${prepared.project.inputFingerprint}`,
-        `Record SHA-256: ${receipt.recordSHA256}`,
-        "",
-      ].join("\n"),
-    };
+    try {
+      const receipt = await publishPreparedMetalOutput({
+        prepared,
+        signal,
+        environment,
+      });
+      return {
+        code: 0,
+        stdout: [
+          "Native package: published",
+          `Module: ${prepared.project.configuration.moduleName}`,
+          `Output: ${receipt.outputPath}`,
+          `Input fingerprint: ${prepared.project.inputFingerprint}`,
+          `Record SHA-256: ${receipt.recordSHA256}`,
+          "",
+        ].join("\n"),
+      };
+    } catch (error) {
+      if (!(error instanceof MetalPublicationError)) throw error;
+      return { code: 1, stderr: renderPublicationError(error) };
+    }
   }
   if (input.command !== "doctor")
     return {
@@ -93,6 +101,19 @@ export async function runNativeCommand(
     code: report.verdict === "healthy" ? 0 : 1,
     stdout: renderDoctorReport(report),
   };
+}
+
+function renderPublicationError(error: MetalPublicationError): string {
+  const lines = [
+    `Native publication: ${error.outcome}`,
+    `[error] ${error.code}: ${error.message.replace(/\r\n|\r|\n/gu, "\n  ")}`,
+  ];
+  if (error.recoveryPaths.length > 0)
+    lines.push(
+      "Inspect retained paths (not cleanup authority):",
+      ...error.recoveryPaths.map((path) => `  ${path}`)
+    );
+  return `${lines.join("\n")}\n`;
 }
 
 function renderCheckReport(report: CheckedMetalProject): string {

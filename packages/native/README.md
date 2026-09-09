@@ -116,6 +116,11 @@ initially-absent build publication are exercised through this packaging boundary
 replacement/recovery diagnostics, and external Swift/GPU consumption of that candidate remain
 unfinished. The package remains private and unpublished.
 
+An installed build encountering an unrecognized recovery record reports its current non-publication
+outcome, original error and retained paths without changing the existing package or recovery files.
+Those paths are for inspection, not cleanup authority. This narrow conflict case does not qualify
+installed interrupted-transaction or published/unknown receipt diagnostics.
+
 ## Checks
 
 From the repository root:

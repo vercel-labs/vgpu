@@ -12,8 +12,12 @@ them together, then replaces the output directory as one operation.
 > subtree on another filesystem device. Owned exchanges also have read-only recovery coverage after
 > helper death, both after success and before exchange with both original generations intact.
 > Broader owned-replacement fault handling still needs coverage and implementation.
-> The operational build companion is unfinished.
-> The command shim exists; this is not a released end-to-end build workflow.
+> The local installed build companion publishes to an initially absent destination and checks the
+> resulting package in an offline local-tarball test with dependency install scripts disabled.
+> That installed workflow also covers an unrecognized recovery record: its conflict report retains
+> the supplied paths while preserving the existing package and recovery files. Installed interrupted-
+> transaction and published/unknown receipt diagnostics remain unqualified; this is not a released
+> end-to-end build workflow.
 
 ## Reserve the destination
 
@@ -203,6 +207,26 @@ A recognized record must be well-formed and match the locked physical parent. It
 identifies the earlier transaction and recorded output, even when the current configuration names
 a different sibling output. Recognizing the record does not establish package integrity or the
 outcome of publication. Unrecognized or inconsistent records remain conflicts and are left intact.
+
+When an unrecognized recovery record prevents this invocation from publishing, the command reports
+`not-published`, its error code and original message, and the retained paths on standard error.
+For an unrecognized record beside a retained staging directory, the report has this shape:
+
+```text
+Native publication: not-published
+[error] conflict: Metal publication not-published: Unrecognized publication recovery record
+Inspect retained paths (not cleanup authority):
+  /absolute/output/parent/.vgpu-native-stage
+  /absolute/output/parent/.vgpu-native-publication.json
+```
+
+This failure exits `1` with empty standard output. The outcome describes the current invocation;
+it does not establish what an earlier transaction did or imply that no output package exists.
+The report preserves the retained paths supplied by the publisher in their original order, rather
+than deriving them from the current configuration or guessing a missing transaction. Inspect these
+locations before deciding how to recover. The command does not delete or repair them, retry the
+build, or print a successful publication report. Signal exit statuses remain as described in
+[Build and verify a Metal package](/native/macos/metal/tooling/build).
 
 Matching content hashes are not enough to identify which directory was exchanged: rebuilding
 unchanged inputs can produce identical records. Recovery also checks the expected directory

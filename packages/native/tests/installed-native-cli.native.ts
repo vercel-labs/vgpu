@@ -628,6 +628,86 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     expect(await readdir(scratch)).toEqual([]);
     for (const [filename, before] of archiveEvidence)
       expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    const outputParent = dirname(output);
+    const retainedStage = join(outputParent, ".vgpu-native-stage");
+    const retainedJournal = join(outputParent, ".vgpu-native-publication.json");
+    for (const path of [retainedStage, retainedJournal])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    await mkdir(retainedStage);
+    const retainedSentinel = join(retainedStage, "handwritten.txt");
+    await writeFile(
+      retainedSentinel,
+      "Unknown staging evidence; preserve me\n",
+      {
+        flag: "wx",
+      }
+    );
+    await writeFile(retainedJournal, "{}\n", { flag: "wx" });
+    for (const path of [retainedJournal, retainedSentinel]) {
+      const metadata = await lstat(path, { bigint: true });
+      expect(metadata.isFile()).toBe(true);
+      expect(metadata.nlink).toBe(1n);
+    }
+    expect(await readFile(retainedJournal, "utf8")).toBe("{}\n");
+    const retainedTreeBefore = await treeEvidence(project);
+    const retainedIdentities = await Promise.all(
+      [
+        outputParent,
+        output,
+        join(output, "Sources"),
+        join(output, "Sources/AppShaders"),
+        join(output, "Sources/AppShaders/Resources"),
+        ...payloadManifest.map(({ path }) => join(output, path)),
+        join(output, ".vgpu-native-output.json"),
+        retainedStage,
+        retainedJournal,
+        retainedSentinel,
+      ].map(async (path) => {
+        const { dev, ino, mode, nlink, size } = await lstat(path, {
+          bigint: true,
+        });
+        return { path, metadata: { dev, ino, mode, nlink, size } };
+      })
+    );
+    const publicationConflict = await command(
+      process.execPath,
+      [bin, "native", "build", "--config", "../project/vgpu.native.json"],
+      runtime,
+      doctorEnvironment
+    );
+    console.info(
+      "Installed retained publication actual result",
+      JSON.stringify(publicationConflict)
+    );
+    expect(publicationConflict.code, JSON.stringify(publicationConflict)).toBe(
+      1
+    );
+    expect(publicationConflict.signal).toBeNull();
+    expect(publicationConflict.stdout).toBe("");
+    expect(publicationConflict.stderr).toContain(
+      "Metal publication not-published: Unrecognized publication recovery record"
+    );
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    expect(
+      publicationConflict.stderr,
+      JSON.stringify(publicationConflict)
+    ).toBe(
+      `Native publication: not-published\n[error] conflict: Metal publication not-published: Unrecognized publication recovery record\nInspect retained paths (not cleanup authority):\n  ${retainedStage}\n  ${retainedJournal}\n`
+    );
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {
