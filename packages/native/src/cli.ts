@@ -1,3 +1,4 @@
+import { MetalCompileError } from "./compiler/errors.js";
 import { installedTintWorkerPath } from "./compiler/installed-worker.js";
 import {
   checkMetalProject,
@@ -31,12 +32,23 @@ export async function runNativeCommand(
   input: NativeCommandInput
 ): Promise<NativeCommandResult> {
   if (input.command === "check") {
-    const report = await checkMetalProject({
-      configurationPath: input.configurationPath,
-      workerPath: installedTintWorkerPath(),
-      signal: input.signal,
-    });
-    return { code: 0, stdout: renderCheckReport(report) };
+    try {
+      const report = await checkMetalProject({
+        configurationPath: input.configurationPath,
+        workerPath: installedTintWorkerPath(),
+        signal: input.signal,
+      });
+      return { code: 0, stdout: renderCheckReport(report) };
+    } catch (error) {
+      if (
+        input.signal?.aborted ||
+        !(error instanceof MetalCompileError) ||
+        error.diagnostics.length === 0 ||
+        !error.diagnostics.every(isCheckDiagnostic)
+      )
+        throw error;
+      return { code: 1, stderr: renderCheckDiagnostics(error.diagnostics) };
+    }
   }
   if (input.command !== "doctor")
     return {
@@ -64,6 +76,87 @@ function renderCheckReport(report: CheckedMetalProject): string {
     `Input fingerprint: ${report.inputFingerprint}`,
     "",
   ].join("\n");
+}
+
+interface CheckDiagnostic {
+  readonly code: string;
+  readonly severity: "note" | "warning" | "error";
+  readonly phase:
+    | "protocol"
+    | "wgsl"
+    | "inspect"
+    | "lower"
+    | "generate"
+    | "internal";
+  readonly message: string;
+  readonly location?: {
+    readonly kind: "generated-wgsl";
+    readonly virtualPath: string;
+    readonly start: { readonly line: number; readonly column: number };
+  };
+}
+
+function isCheckDiagnostic(value: unknown): value is CheckDiagnostic {
+  // The protocol already validates diagnostics; narrow every consumed field, without filtering entries.
+  if (
+    !isRecord(value) ||
+    typeof value.code !== "string" ||
+    value.code.length === 0 ||
+    typeof value.message !== "string" ||
+    value.message.length === 0 ||
+    typeof value.severity !== "string" ||
+    !["note", "warning", "error"].includes(value.severity) ||
+    typeof value.phase !== "string" ||
+    !["protocol", "wgsl", "inspect", "lower", "generate", "internal"].includes(
+      value.phase
+    )
+  )
+    return false;
+  if (!("location" in value)) return true;
+  const location = value.location;
+  return (
+    value.phase === "wgsl" &&
+    isRecord(location) &&
+    location.kind === "generated-wgsl" &&
+    typeof location.virtualPath === "string" &&
+    location.virtualPath.length > 0 &&
+    isRecord(location.start) &&
+    isSourcePosition(location.start.line) &&
+    isSourcePosition(location.start.column)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSourcePosition(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= 0xffffffff
+  );
+}
+
+function renderCheckDiagnostics(
+  diagnostics: readonly CheckDiagnostic[]
+): string {
+  const lines = ["Native shaders: invalid"];
+  for (const diagnostic of diagnostics) {
+    lines.push(
+      `[${diagnostic.severity}] ${diagnostic.code} (${
+        diagnostic.phase
+      }): ${diagnostic.message.replace(/\r\n|\r|\n/gu, "\n  ")}`
+    );
+    if (diagnostic.location) {
+      const { virtualPath, start } = diagnostic.location;
+      lines.push(
+        `  Resolved WGSL: ${virtualPath}:${start.line}:${start.column}`
+      );
+    }
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function renderDoctorReport(report: NativeDoctorReport): string {

@@ -465,6 +465,49 @@ test("an offline installed public vgpu diagnoses its native toolchain and checks
     await expect(lstat(missingDeveloper)).rejects.toMatchObject({
       code: "ENOENT",
     });
+    const countSource = join(project, "shaders/count.wgsl");
+    const countBefore = await readFile(countSource, "utf8");
+    expect(countBefore.split("100u + index")).toHaveLength(2);
+    const outputEvidence = await fileEvidence(output);
+    await writeFile(
+      countSource,
+      countBefore.replace("100u + index", "vec2u(100u)")
+    );
+    const changedProject = await treeEvidence(project);
+    const invalid = await command(
+      process.execPath,
+      [bin, "native", "check", "--config", "../project/vgpu.native.json"],
+      runtime,
+      { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+    );
+    console.info(
+      "Installed invalid check actual result",
+      JSON.stringify(invalid)
+    );
+    expect(invalid.code, JSON.stringify(invalid)).toBe(1);
+    expect(invalid.signal).toBeNull();
+    expect(invalid.stdout).toBe("");
+    expect(invalid.stderr).toContain("vec2<u32>");
+    expect(invalid.stderr).toMatch(/cannot assign[^\n]*to 'u32'/u);
+    expect(await treeEvidence(project)).toEqual(changedProject);
+    expect(await fileEvidence(output)).toEqual(outputEvidence);
+    expect(await lstat(output, { bigint: true })).toMatchObject({
+      dev: outputBefore.dev,
+      ino: outputBefore.ino,
+      mode: outputBefore.mode,
+      nlink: outputBefore.nlink,
+      size: outputBefore.size,
+    });
+    await expect(lstat(missingDeveloper)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(invalid.stderr, JSON.stringify(invalid)).toMatch(
+      /^Native shaders: invalid\n\[error\] VGPU-NATIVE-WGSL-INVALID \(wgsl\): [^\n]+\n  Resolved WGSL: Intermediate\/resolved\.wgsl:[1-9]\d*:[1-9]\d*\n$/u
+    );
+    expect(invalid.stderr).not.toContain("shaders/count.wgsl");
+    expect(invalid.stderr).not.toContain(project);
+    expect(invalid.stderr).not.toContain(workspace);
+    expect(invalid.stderr).not.toContain("Input fingerprint:");
     expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
     expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
     expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);

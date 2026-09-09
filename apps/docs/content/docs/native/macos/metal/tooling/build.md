@@ -76,6 +76,23 @@ Success exits `0`. A failed check exits `1` with a diagnostic on standard error 
 successful report. Cancellation retains the CLI's signal exit statuses. Neither a successful
 check nor its fingerprint claims that an output package exists, is intact, or is current.
 
+When Tint supplies structured diagnostics, the failure report begins with `Native shaders: invalid`
+and preserves each diagnostic's severity, code, phase, and message in its original order. Multiline
+messages are indented beneath the first line. If a diagnostic includes a location, a separate
+indented line identifies it explicitly as resolved WGSL. For example, the shape is:
+
+```text
+Native shaders: invalid
+[error] VGPU-NATIVE-WGSL-INVALID (wgsl): ...
+  Resolved WGSL: Intermediate/resolved.wgsl:<line>:<column>
+```
+
+The line and UTF-8 byte column are one-based positions in the virtual WGSL document passed to Tint,
+not positions in an authored shader file. No authored filename or line is inferred from that range,
+and no location line is added when the compiler supplies none. The report stays on standard error,
+with empty standard output and exit status `1`; it does not print a successful program summary or
+input fingerprint. Other failures retain their ordinary error diagnostic.
+
 ## Generate the package
 
 ```sh
