@@ -14,9 +14,10 @@ It does not describe your application's pipelines, resource allocations, render 
 
 > Warning: This is a docs-first production workflow. The parser, help, lazy dispatch, `doctor`,
 > `check`, `build`, and `verify` are implemented. Local-tarball tests install offline with dependency install
-> scripts disabled and exercise build publication to an initially absent destination. The companion
-> remains private and unpublished; broader installed replacement/recovery diagnostics, external
-> Swift/GPU consumption of that candidate, and the complete release workflow remain unfinished.
+> scripts disabled and exercise build publication to an initially absent destination. An external
+> Swift consumer executes the resulting compute and render programs on this host. The companion
+> remains private and unpublished; broader installed replacement/recovery diagnostics and the
+> complete release workflow remain unfinished.
 
 ## Select the programs
 
@@ -46,9 +47,11 @@ JSON file no larger than one MiB:
 }
 ```
 
-The sources come from [Pack uniforms for Metal](/native/macos/metal/uniforms) and
-[Dispatch WGSL compute](/native/macos/metal/compute/dispatch). Each guide identifies its implemented
-profile and remaining validation work.
+Use the `Gradient` source from [Pack uniforms for Metal](/native/macos/metal/uniforms) and the small
+imported `Count` source from [Resolve shader inputs](/native/macos/metal/tooling/sources).
+[Dispatch WGSL compute](/native/macos/metal/compute/dispatch) provides a separate runtime-array
+`Count` variant with different bindings and results. Each guide identifies its implemented profile
+and remaining validation work.
 
 `moduleName` names the Swift module and library product. A program's `name` names its generated
 Swift type: `Gradient.load(device:)` and `Count.load(device:)` in this example. Names must be safe,

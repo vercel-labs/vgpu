@@ -40,8 +40,9 @@ do not load the compiler.
 > Warning: Native tooling is under development. The dispatcher, help, `native doctor`,
 > `native check`, `native build`, and `native verify` are tested using real local tarballs installed offline with
 > dependency install scripts disabled; build coverage publishes to an initially absent destination.
-> The companion is not published; broader installed replacement/recovery diagnostics,
-> external Swift/GPU consumption of that candidate, and release qualification remain unfinished.
+> An external Swift consumer executes the published compute and render programs on this host.
+> The companion is not published; broader installed replacement/recovery diagnostics and release
+> qualification remain unfinished.
 
 ```terminal
 npx vgpu native --help

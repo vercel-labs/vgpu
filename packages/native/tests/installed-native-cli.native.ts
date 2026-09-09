@@ -19,6 +19,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { runConsumer } from "./native-support.ts";
 import { projectFixture } from "./project-operation-fixture.ts";
 
 const workspace = fileURLToPath(new URL("../../..", import.meta.url));
@@ -49,10 +50,11 @@ const external = {
   zod: "4.4.3",
 };
 
-test("an offline installed public vgpu diagnoses, checks without Apple tools, and builds and verifies documented shaders", async () => {
+test("an offline installed public vgpu diagnoses, checks, builds, verifies, and consumes documented shaders", async () => {
   expect(process.versions.node).toBe("22.19.0");
   expect(process.platform).toBe("darwin");
-  const { command, checked } = boundedCommands(Date.now() + 240_000);
+  const workflowDeadline = Date.now() + 240_000;
+  const { command, checked } = boundedCommands(workflowDeadline);
   const pnpm = await realpath(process.env.npm_execpath!);
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -913,6 +915,147 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
     for (const { path, metadata } of retainedIdentities)
       expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    const consumerFiles: Record<string, Uint8Array> = {};
+    expect(payloadManifest).toHaveLength(3);
+    for (const { path, sha256 } of payloadManifest) {
+      const filename = join(output, path);
+      const bytes = await readFile(filename);
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(sha256);
+      const original = retainedIdentities.find(
+        (entry) => entry.path === filename
+      );
+      expect(original).toBeDefined();
+      expect(BigInt(bytes.length)).toBe(original!.metadata.size);
+      consumerFiles[path] = Uint8Array.from(bytes);
+    }
+    const computeSwift = [
+      ...(
+        await readFile(
+          new URL(
+            "../../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-dispatch.docs.md",
+            import.meta.url
+          ),
+          "utf8"
+        )
+      ).matchAll(/```swift\n([\s\S]*?)\n```/gu),
+    ].map((match) => match[1]!);
+    const uniformSwift = [
+      ...(
+        await readFile(
+          new URL(
+            "../../../docs/topics/native/macos/metal/native-macos-metal-uniforms.docs.md",
+            import.meta.url
+          ),
+          "utf8"
+        )
+      ).matchAll(/```swift\n([\s\S]*?)\n```/gu),
+    ].map((match) => match[1]!);
+    expect(computeSwift).toHaveLength(4);
+    expect(uniformSwift).toHaveLength(3);
+    const consumerSource = `import Foundation
+import Metal
+guard let device = MTLCreateSystemDefaultDevice() else { fatalError("Metal required") }
+${computeSwift[0]}
+${uniformSwift[0]}
+${uniformSwift[1]}
+var countValues: [UInt32] = []
+var pixelValues: [Float] = []
+do {
+  precondition(Count.workgroupSize.width == 2 && Count.workgroupSize.height == 1 && Count.workgroupSize.depth == 1)
+  let outputBuffer = device.makeBuffer(length: 8, options: .storageModeShared)!
+  let bindings = Count.Bindings(output: ShaderBufferRange(buffer: outputBuffer, offset: 0, length: 8))
+  let command = device.makeCommandQueue()!.makeCommandBuffer()!
+  let encoder = command.makeComputeCommandEncoder()!
+${computeSwift[3]}
+  encoder.endEncoding()
+  command.commit()
+  command.waitUntilCompleted()
+  precondition(command.status == .completed, String(describing: command.error))
+  countValues = (0..<2).map { outputBuffer.contents().load(fromByteOffset: $0 * 4, as: UInt32.self).littleEndian }
+}
+do {
+  let functions = try Gradient.load(device: device)
+  let vertices = MTLVertexDescriptor()
+  vertices.attributes[0].format = .float2
+  vertices.attributes[0].offset = 0
+  vertices.attributes[0].bufferIndex = 0
+  vertices.layouts[0].stride = 8
+  vertices.layouts[0].stepFunction = .perVertex
+  let descriptor = MTLRenderPipelineDescriptor()
+  descriptor.vertexFunction = functions.vertex
+  descriptor.fragmentFunction = functions.fragment
+  descriptor.vertexDescriptor = vertices
+  descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+  let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+  let positions: [Float] = [-1, -1, 3, -1, -1, 3]
+  let vertexBuffer = positions.withUnsafeBufferPointer { device.makeBuffer(bytes: $0.baseAddress!, length: $0.count * 4, options: .storageModeShared)! }
+  let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: 1, height: 1, mipmapped: false)
+  textureDescriptor.storageMode = .private
+  textureDescriptor.usage = [.renderTarget]
+  let texture = device.makeTexture(descriptor: textureDescriptor)!
+  let readback = device.makeBuffer(length: 256, options: .storageModeShared)!
+  let command = device.makeCommandQueue()!.makeCommandBuffer()!
+  let pass = MTLRenderPassDescriptor()
+  pass.colorAttachments[0].texture = texture
+  pass.colorAttachments[0].loadAction = .clear
+  pass.colorAttachments[0].storeAction = .store
+  let encoder = command.makeRenderCommandEncoder(descriptor: pass)!
+  encoder.setRenderPipelineState(pipeline)
+  encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+${uniformSwift[2]}
+  encoder.endEncoding()
+  let blit = command.makeBlitCommandEncoder()!
+  blit.copy(from: texture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0), sourceSize: MTLSize(width: 1, height: 1, depth: 1), to: readback, destinationOffset: 0, destinationBytesPerRow: 256, destinationBytesPerImage: 256)
+  blit.endEncoding()
+  command.commit()
+  command.waitUntilCompleted()
+  precondition(command.status == .completed, String(describing: command.error))
+  pixelValues = (0..<4).map { readback.contents().load(fromByteOffset: $0 * 4, as: Float.self) }
+}
+let result: [String: Any] = ["count": countValues, "pixels": pixelValues]
+print(String(data: try JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
+`;
+    // Reserve the helper's four configured child waits (105 s) plus cleanup margin.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
+    const consumerOutput = await runConsumer(
+      { AppShaders: { files: consumerFiles } },
+      consumerSource,
+      undefined,
+      { isolatedDistribution: true }
+    );
+    console.info("Installed candidate GPU actual result", consumerOutput);
+    const gpu = JSON.parse(consumerOutput);
+    expect(Object.keys(gpu).sort()).toEqual(["count", "pixels"]);
+    expect(gpu.count).toEqual([100, 101]);
+    expect(gpu.pixels).toHaveLength(4);
+    for (const [index, expected] of [0.28, 0.44, 0.8, 1].entries()) {
+      expect(Number.isFinite(gpu.pixels[index])).toBe(true);
+      expect(gpu.pixels[index]).toBeCloseTo(expected, 6);
+    }
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    const consumedRecord = await readFile(
+      join(output, ".vgpu-native-output.json")
+    );
+    expect(consumedRecord).toEqual(recordBytes);
+    expect(createHash("sha256").update(consumedRecord).digest("hex")).toBe(
+      recordHash
+    );
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {

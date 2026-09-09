@@ -113,8 +113,13 @@ remain untracked. A local offline install with dependency install scripts disabl
 candidate boundary; it does not qualify empty-cache installation, normal dependency install
 scripts, signing/quarantine, or a release compatibility matrix. Local installed doctor, check and
 initially-absent build publication and current-package verification are exercised through this
-packaging boundary. Broader installed replacement/recovery diagnostics and external Swift/GPU consumption of that candidate remain
-unfinished. The package remains private and unpublished.
+packaging boundary. An external Swift consumer uses exactly the three published payloads, checks
+their original hashes and sizes, builds with no external Swift package or target dependencies,
+relocates the complete build tree, and executes the documented compute and render programs on
+this host. The original package, ownership record and recovery files remain unchanged. Its guards
+detect generation-tool lookup through PATH only; they do not block absolute executable paths or
+SDK discovery, or establish a clean-machine or release-matrix result. Broader installed
+replacement/recovery diagnostics remain unfinished. The package remains private and unpublished.
 
 Installed verification succeeds without compiler or temporary-directory prerequisites and leaves
 parent recovery files untouched. It reports current ownership, integrity and input freshness,

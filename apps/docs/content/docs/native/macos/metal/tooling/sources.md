@@ -11,9 +11,10 @@ a later reread would not validate the same input.
 > imports, relocation, and bounded direct file reads. The internal Metal compiler accepts captured
 > graphs as well as explicit module maps, with real compute and render tests. Native doctor, check,
 > build, and verify also run from real local tarballs installed offline with dependency install scripts
-> disabled; build coverage publishes to an initially absent destination. The companion remains
-> private and unpublished; broader installed replacement/recovery diagnostics, external Swift/GPU
-> consumption of that candidate, and the complete release workflow remain unfinished.
+> disabled; build coverage publishes to an initially absent destination, and an external Swift
+> consumer executes those actual published compute and render programs on this host. The companion
+> remains private and unpublished; broader installed replacement/recovery diagnostics and the
+> complete release workflow remain unfinished.
 
 ## Keep imports in WGSL
 

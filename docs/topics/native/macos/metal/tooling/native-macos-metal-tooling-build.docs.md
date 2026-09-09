@@ -15,9 +15,9 @@ resulting package without running Node.js or translating WGSL at launch.
 > installation and dependency install scripts disabled; build coverage publishes to an initially
 > absent destination and independently checks the resulting files and hashes. Verification succeeds
 > without compiler or temporary-directory prerequisites and leaves parent recovery files untouched.
-> The companion remains private and unpublished. Broader installed replacement/recovery diagnostics,
-> external Swift/GPU consumption of that candidate, and release
-> support remain unqualified. Internal tests exercise those underlying modules separately.
+> An external Swift consumer builds those published payloads, relocates its build tree, and executes
+> the documented compute and render programs on this host. The companion remains private and unpublished.
+> Broader installed replacement/recovery diagnostics and release support remain unqualified.
 
 ## Prepare the build machine
 
@@ -241,6 +241,31 @@ Verification also does not execute shaders or validate the application's resourc
 Commit the generated package when another build machine must consume it without Node.js or the
 Metal compiler. Regenerate it intentionally when changing shaders or compiler versions, and review
 the generated diff together with the source change.
+
+## Consume the generated package
+
+Add the generated local package as a dependency of your Swift project and select its library
+product. Use the [function loaders](/native/macos/metal/functions) and binding helpers with your
+own Metal device, resources, pipelines, encoders, and command buffers. Build the consuming project,
+not the immutable generated directory, and distribute its complete SwiftPM resource bundle.
+
+The local installed test uses the actual published `Package.swift`, generated Swift, and
+`Shaders.metallib` together in an external Swift consumer, checking their hashes and sizes before
+copying them. It does not substitute output from a separate source-level compiler call. The
+ownership record and recovery files stay in the original build project, whose files and retained
+identities remain unchanged after consumption.
+
+For the imported `Count` shader in [Resolve shader inputs](/native/macos/metal/tooling/sources),
+one `(2, 1, 1)` workgroup writes `[100, 101]`. This is distinct from the runtime-array example in
+the compute-dispatch guide. The documented `Gradient` uniforms produce an RGBA pixel approximately
+`[0.28, 0.44, 0.8, 1]`. Checking these GPU results connects the installed tooling's output to the
+application-facing Swift API, beyond merely validating files and hashes.
+
+A local test that builds and relocates the consumer and guards generation-tool lookup through
+`PATH` is still not a clean-machine test: it does not block absolute executable paths or SDK
+discovery. The generated package has no external Swift dependencies, but the consumer build still
+requires Swift and system frameworks. Release support and execution on a machine without the
+generation toolchain require their own qualification.
 
 ## Use the commands in automation
 

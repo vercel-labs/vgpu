@@ -184,6 +184,13 @@ describe("agent readiness metadata", () => {
       "without compiler or temporary-directory prerequisites and leaves parent recovery files untouched"
     );
     expect(build).toContain("support remain unqualified");
+    expect(build).toContain(
+      "An external Swift consumer builds those published payloads, relocates its build tree"
+    );
+    expect(build).toContain(
+      "executes\n> the documented compute and render programs on this host"
+    );
+    expect(build).toContain("does not block absolute executable paths or SDK");
 
     const index = docsContent("index.mdx");
     expect(index).toContain("[Integrate WGSL with native Metal](/docs/native)");
