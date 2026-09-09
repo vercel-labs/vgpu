@@ -110,13 +110,16 @@ export function pipelineKeyOf(parts: {
 }
 
 /**
- * Selects the entry point a pipeline stage compiles: the first entry point of the stage when no name is given
- * (exactly today's behavior), or the named one — validated to exist and to have the requested stage. Callers must
- * run this selection before deriving anything from the result (binding visibility, storage-stage limits, bind
- * group layouts, vertex input layouts), so the whole pipeline reflects the chosen variant.
+ * Selects the entry point a pipeline stage compiles: `fs_main` for fragment when declared, otherwise the first
+ * entry point of the stage when no name is given, or the named one — validated to exist and to have the requested
+ * stage. Callers must run this selection before deriving anything from the result (binding visibility,
+ * storage-stage limits, bind group layouts, vertex input layouts), so the whole pipeline reflects the variant.
  */
 export function selectEntryPoint(label: string, entryPoints: readonly EntryPointInfo[], stage: "vertex" | "fragment" | "compute", name: string | undefined, where: string): EntryPointInfo | undefined {
-  if (name === undefined) return entryPoints.find((entry) => entry.stage === stage);
+  if (name === undefined) {
+    return entryPoints.find((entry) => entry.stage === stage && (stage !== "fragment" || entry.name === "fs_main"))
+      ?? entryPoints.find((entry) => entry.stage === stage);
+  }
   if (typeof name !== "string") {
     throw entryInvalidError(label, `${stage} received ${previewConstant(name)}; expected an entry point name string.`, where);
   }

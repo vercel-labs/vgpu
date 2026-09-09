@@ -39,7 +39,7 @@ interface Effect {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
+| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If several fragment entries exist, a declared `fs_main` is preferred; otherwise the first fragment is used. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
 | effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; effects have no vertex buffers. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes first-set binding ownership and validates reflected bindings. |
 | opts.label | `string` | ✖ | `"effect"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |

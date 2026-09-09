@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { init, draw, effect, sampler, target } from "../../src/node.ts";
+import { draw, effect, frame, init, sampler, target } from "../../src/node.ts";
 
 const SIZE = 8;
 
@@ -16,6 +16,9 @@ const IDENTITY_COPY = `
   return textureSampleLevel(src, srcSampler, uv, 0.0);
 }
 `;
+
+const ISSUE_399_OTHER = `@fragment fn other(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }`;
+const ISSUE_399_MAIN = `@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(0.0, 1.0, 0.0, 1.0); }`;
 
 const WGSL_STD_ORIENTATION = `
 struct FullscreenOut {
@@ -36,6 +39,24 @@ ${UV_PATTERN}
 const dockerTest = process.env.VGPU_DOCKER_TEST === "1";
 
 describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
+  test("prefers fs_main over an earlier fragment entry (#399)", async () => {
+    const gpu = await init();
+    try {
+      const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      const render = async (source: string) => {
+        const shader = effect(gpu, source);
+        frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, shader));
+        return [...(await colorTarget.read()).slice(0, 4)];
+      };
+
+      expect(await render(`${ISSUE_399_OTHER}\n${ISSUE_399_MAIN}`)).toEqual([0, 255, 0, 255]);
+      expect(await render(`${ISSUE_399_MAIN}\n${ISSUE_399_OTHER}`)).toEqual([0, 255, 0, 255]);
+      expect(await render(ISSUE_399_OTHER)).toEqual([255, 0, 0, 255]);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
   test("uses v=0 for the top row", async () => {
     const gpu = await init();
     try {
