@@ -1,5 +1,11 @@
 # @vgpu/wgsl
 
+## 0.4.1
+
+### Patch Changes
+
+- @vgpu/wgsl-std@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes

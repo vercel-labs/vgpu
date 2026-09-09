@@ -307,6 +307,35 @@ export function mainPolicyRunIdFromDetailsUrl(detailsUrl, repository) {
   }
 }
 
+export function mainPolicyWorkflowRunId(checkRun, repository) {
+  const actionsRunId = mainPolicyRunIdFromDetailsUrl(
+    checkRun?.details_url,
+    repository
+  );
+  if (actionsRunId !== null) return actionsRunId;
+
+  const checkRunId = numericId(checkRun?.id);
+  const binding = parseMainPolicyCheckExternalId(checkRun?.external_id);
+  if (checkRunId === null || binding === null) return null;
+
+  try {
+    const url = new URL(checkRun.details_url);
+    const [owner, name] = repository.split("/");
+    const expectedPath = `/${owner}/${name}/runs/${checkRunId}`;
+    if (
+      url.origin !== "https://github.com" ||
+      url.pathname.replace(/\/$/, "") !== expectedPath ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return binding.runId;
+  } catch {
+    return null;
+  }
+}
+
 export function mainPolicyRunName(pullRequest) {
   return `Main policy PR #${pullRequest.number}: ${pullRequest.base.sha} -> ${pullRequest.head.sha}`;
 }
@@ -664,10 +693,10 @@ function validateMainPolicyCheck({
       latest.head_sha ?? "an unknown SHA"
     }, expected PR head ${pullRequest.head.sha}.`
   );
-  const runId = mainPolicyRunIdFromDetailsUrl(latest.details_url, repository);
+  const runId = mainPolicyWorkflowRunId(latest, repository);
   requireCondition(
     runId !== null,
-    `'${MAIN_POLICY_CHECK}' must link to an exact GitHub Actions run URL in ${repository}.`
+    `'${MAIN_POLICY_CHECK}' must link to its exact GitHub Actions workflow or check-run URL in ${repository}.`
   );
   requireCondition(
     String(mainPolicyWorkflowRun?.id) === runId,

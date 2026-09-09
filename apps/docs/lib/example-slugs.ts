@@ -25,6 +25,7 @@ export const exampleSlugs = [
   'tsl-exports',
   'three-tsl',
   'particle-orbit',
+  'typegpu-liquid-glass',
   'adaptive-quality',
 ] as const;
 

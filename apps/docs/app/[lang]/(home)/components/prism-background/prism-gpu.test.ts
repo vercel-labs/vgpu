@@ -60,6 +60,46 @@ const ISOLATED_GLASS: PrismControls = {
 const ISOLATED_GLASS_WALL: PrismControls = { ...ISOLATED_GLASS, view: 'wall' };
 
 describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
+  test('reflected studio panels stay continuous near internal face transitions', async () => {
+    const gpu = await init();
+    try {
+      const output = target(gpu, {
+        size: [1600, 900],
+        format: 'rgba8unorm',
+        label: 'prism-reflection-continuity',
+      });
+      await renderComposite(gpu, output, { controls: ISOLATED_GLASS });
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
+      const red = (x: number, y: number) => pixels[(y * 1600 + x) * 4]!;
+      // Three smooth interiors of the bottom-left studio reflection. The old
+      // ray-origin bias skipped neighboring faces near edges, leaving isolated
+      // dark pixels here even with environment mip selection corrected.
+      const patches = [
+        [538, 568, 544, 583],
+        [560, 580, 574, 589],
+        [545, 606, 568, 615],
+      ] as const;
+      for (const [x0, y0, x1, y1] of patches) {
+        let deepestDip = 0;
+        let brightness = 0;
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            brightness += red(x, y);
+            const neighbors = Math.max(
+              Math.min(red(x - 1, y), red(x + 1, y)),
+              Math.min(red(x, y - 1), red(x, y + 1)),
+            );
+            deepestDip = Math.max(deepestDip, neighbors - red(x, y));
+          }
+        }
+        expect(brightness / ((x1 - x0) * (y1 - y0))).toBeGreaterThan(110);
+        expect(deepestDip, `reflection patch at ${x0},${y0}`).toBeLessThanOrEqual(8);
+      }
+    } finally {
+      gpu.dispose();
+    }
+  });
+
   test('the rainbow lands in the prism’s shadow, and the wall stays dark', async () => {
     const gpu = await init();
     try {

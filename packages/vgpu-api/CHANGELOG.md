@@ -1,5 +1,16 @@
 # vgpu
 
+## 0.4.1
+
+### Patch Changes
+
+- 01470c5: Make the repository skill a version-neutral router that reads documentation from the project's selected `vgpu` package, keeping agent guidance aligned with the installed stable or prerelease version.
+  - @vgpu/core@0.4.1
+  - @vgpu/wgsl@0.4.1
+  - @vgpu/wgsl-std@0.4.1
+  - @vgpu/adapter-node@0.4.1
+  - @vgpu/adapter-mock@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes

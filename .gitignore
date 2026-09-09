@@ -19,3 +19,4 @@ coverage/
 .*.swo
 .tmp-doc-snippets-*/
 .codex/runtime/
+.vercel
