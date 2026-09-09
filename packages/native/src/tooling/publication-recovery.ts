@@ -28,6 +28,16 @@ export interface InterruptedMetalPublication {
 
 export interface MetalPublicationRecoveryReport {
   readonly transaction?: InterruptedMetalPublication;
+  /** Validated metadata only; the live publisher must join this to its original receipt. */
+  readonly prepared?: Readonly<{
+    recordSHA256: string;
+    files: readonly Readonly<{
+      role: string;
+      path: string;
+      length: number;
+      sha256: string;
+    }>[];
+  }>;
   readonly recoveryPaths: readonly string[];
 }
 
@@ -35,7 +45,8 @@ export interface MetalPublicationRecoveryReport {
 export async function readMetalPublicationRecovery(
   header: Record<string, unknown>,
   receive: () => Promise<Record<string, unknown>>,
-  parentPath: string
+  parentPath: string,
+  mode: "recovery" | "reconciliation" = "recovery"
 ): Promise<MetalPublicationRecoveryReport> {
   if (
     !keys(header, [
@@ -49,9 +60,10 @@ export async function readMetalPublicationRecovery(
       "chunkCount",
       "stage",
       "update",
+      ...(mode === "reconciliation" ? ["destination"] : []),
     ]) ||
     header.schemaVersion !== 1 ||
-    header.kind !== "recovery" ||
+    header.kind !== mode ||
     !identity(header.parent) ||
     !identity(header.journal) ||
     !integer(header.nameMax, 1, Number.MAX_SAFE_INTEGER) ||
@@ -59,7 +71,8 @@ export async function readMetalPublicationRecovery(
     !digest(header.sha256) ||
     header.chunkCount !== Math.ceil(header.length / chunkLimit) ||
     !entry(header.stage) ||
-    !entry(header.update)
+    !entry(header.update) ||
+    (mode === "reconciliation" && !entry(header.destination))
   )
     throw new TypeError("Invalid publication recovery header");
   const bytes = Buffer.alloc(header.length);
@@ -92,12 +105,7 @@ export async function readMetalPublicationRecovery(
     ...(header.update === null ? [] : [join(parentPath, updateName)]),
   ]);
   return Object.freeze({
-    transaction: recognizeJournal(
-      bytes,
-      header.parent,
-      header.nameMax,
-      parentPath
-    ),
+    ...recognizeJournal(bytes, header.parent, header.nameMax, parentPath),
     recoveryPaths,
   });
 }
@@ -107,7 +115,7 @@ function recognizeJournal(
   parent: Identity,
   nameMax: number,
   parentPath: string
-): InterruptedMetalPublication | undefined {
+): Omit<MetalPublicationRecoveryReport, "recoveryPaths"> | undefined {
   try {
     const value: unknown = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes)
@@ -182,7 +190,7 @@ function recognizeJournal(
         inode: value.stage.inode,
       });
     }
-    return Object.freeze({
+    const transaction: InterruptedMetalPublication = Object.freeze({
       transactionId: value.transactionId,
       phase: value.phase,
       parent: Object.freeze({ ...parent }),
@@ -195,6 +203,23 @@ function recognizeJournal(
             publication: Object.freeze({
               renameMode: "excl" as const,
               expectedDestination: "missing" as const,
+            }),
+          }
+        : {}),
+    });
+    return Object.freeze({
+      transaction,
+      ...(prepared
+        ? {
+            prepared: Object.freeze({
+              recordSHA256: value.recordSHA256 as string,
+              files: Object.freeze(
+                (
+                  value.files as NonNullable<
+                    MetalPublicationRecoveryReport["prepared"]
+                  >["files"]
+                ).map((file) => Object.freeze({ ...file }))
+              ),
             }),
           }
         : {}),

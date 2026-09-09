@@ -131,6 +131,20 @@ static int valid_transaction(const char *value) {
   return 1;
 }
 
+static int parse_decimal(const char *value, unsigned long long *result) {
+  size_t length = strlen(value);
+  if (length == 0 || length > 20 || (length > 1 && value[0] == '0')) return -1;
+  unsigned long long number = 0;
+  for (size_t index = 0; index < length; index++) {
+    if (value[index] < '0' || value[index] > '9') return -1;
+    unsigned int digit = (unsigned int)(value[index] - '0');
+    if (number > (ULLONG_MAX - digit) / 10) return -1;
+    number = number * 10 + digit;
+  }
+  *result = number;
+  return 0;
+}
+
 static int ensure_absent(int directory, const char *name) {
   struct stat ignored;
   if (fstatat(directory, name, &ignored, AT_SYMLINK_NOFOLLOW) == 0) {
@@ -410,6 +424,21 @@ struct recovery_observation {
   struct stat identity;
 };
 
+struct reconciliation_request {
+  const char *destination;
+  const char *module;
+  const char *transaction;
+};
+
+static int verify_published_recovery(int parent, const char *parent_path,
+                                     const struct stat *parent_identity,
+                                     const struct stat *journal_identity,
+                                     const char *journal, size_t journal_length,
+                                     const struct recovery_observation *stage,
+                                     const struct recovery_observation *update,
+                                     const struct recovery_observation *destination,
+                                     const struct reconciliation_request *request);
+
 static int observe_recovery_name(int parent, const char *name,
                                  struct recovery_observation *observation) {
   if (fstatat(parent, name, &observation->identity, AT_SYMLINK_NOFOLLOW) == 0) {
@@ -450,7 +479,8 @@ static void print_recovery_observation(const struct recovery_observation *observ
 /* Read-only startup report: names are fixed here; journal semantics belong to the caller. */
 static int report_recovery(int parent, const char *parent_path,
                            const struct stat *parent_identity,
-                           const struct stat *named_journal, long name_max) {
+                           const struct stat *named_journal, long name_max,
+                           const struct reconciliation_request *reconciliation) {
   /* Even a nonblocking FIFO open can release another process waiting for a reader. */
   if (!S_ISREG(named_journal->st_mode) || named_journal->st_nlink != 1 ||
       named_journal->st_size <= 0 || named_journal->st_size > JOURNAL_LIMIT) {
@@ -486,8 +516,11 @@ static int report_recovery(int parent, const char *parent_path,
   if (result != 0) { errno = error; return fail("conflict"); }
   struct recovery_observation stage = {0};
   struct recovery_observation update = {0};
+  struct recovery_observation destination = {0};
   if (observe_recovery_name(parent, STAGE_NAME, &stage) != 0 ||
-      observe_recovery_name(parent, UPDATE_NAME, &update) != 0)
+      observe_recovery_name(parent, UPDATE_NAME, &update) != 0 ||
+      (reconciliation != NULL &&
+       observe_recovery_name(parent, reconciliation->destination, &destination) != 0))
     return fail("conflict");
   unsigned char digest[CC_SHA256_DIGEST_LENGTH];
   if (CC_SHA256(bytes, (CC_LONG)length, digest) == NULL) {
@@ -498,16 +531,21 @@ static int report_recovery(int parent, const char *parent_path,
   for (size_t index = 0; index < sizeof(digest); index++)
     snprintf(hash + index * 2, 3, "%02x", digest[index]);
   const size_t chunk_count = (length + RECOVERY_CHUNK_LIMIT - 1) / RECOVERY_CHUNK_LIMIT;
-  printf("{\"schemaVersion\":1,\"kind\":\"recovery\","
+  printf("{\"schemaVersion\":1,\"kind\":\"%s\","
          "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},"
          "\"journal\":{\"device\":\"%llu\",\"inode\":\"%llu\"},"
          "\"nameMax\":%ld,\"length\":%zu,\"sha256\":\"%s\",\"chunkCount\":%zu,\"stage\":",
+         reconciliation == NULL ? "recovery" : "reconciliation",
          (unsigned long long)parent_identity->st_dev, (unsigned long long)parent_identity->st_ino,
          (unsigned long long)identity.st_dev, (unsigned long long)identity.st_ino,
          name_max, length, hash, chunk_count);
   print_recovery_observation(&stage);
   fputs(",\"update\":", stdout);
   print_recovery_observation(&update);
+  if (reconciliation != NULL) {
+    fputs(",\"destination\":", stdout);
+    print_recovery_observation(&destination);
+  }
   fputs("}\n", stdout);
   for (size_t index = 0; index < chunk_count; index++) {
     const size_t offset = index * RECOVERY_CHUNK_LIMIT;
@@ -527,10 +565,17 @@ static int report_recovery(int parent, const char *parent_path,
   if (!parent_matches(parent_path, parent_identity) ||
       verify_bytes(parent, JOURNAL_NAME, &identity, (const char *)bytes, length) != 0 ||
       recovery_name_matches(parent, STAGE_NAME, &stage) != 0 ||
-      recovery_name_matches(parent, UPDATE_NAME, &update) != 0)
+      recovery_name_matches(parent, UPDATE_NAME, &update) != 0 ||
+      (reconciliation != NULL &&
+       recovery_name_matches(parent, reconciliation->destination, &destination) != 0))
     return fail("conflict");
   fputs("{\"schemaVersion\":1,\"kind\":\"recovery-complete\"}\n", stdout);
   if (fflush(stdout) != 0) return 1;
+  if (reconciliation != NULL &&
+      verify_published_recovery(parent, parent_path, parent_identity, &identity,
+                                (const char *)bytes, length, &stage, &update,
+                                &destination, reconciliation) != 0)
+    return 1;
   /* Keep the parent lock until the report consumer closes input; never interpret commands. */
   while (fread(bytes, 1, sizeof(bytes), stdin) > 0) {}
   if (ferror(stdin)) return 1;
@@ -675,6 +720,145 @@ static int verify_bytes(int parent, const char *name, const struct stat *expecte
   return result;
 }
 
+static int read_reconciliation_line(char *line, size_t capacity) {
+  size_t used = 0;
+  while (used + 1 < capacity) {
+    int byte = fgetc(stdin);
+    if (byte == EOF || byte == '\0') break;
+    line[used++] = (char)byte;
+    if (byte == '\n') {
+      line[used] = '\0';
+      return 0;
+    }
+  }
+  errno = EPROTO;
+  return -1;
+}
+
+/* The caller has joined this locked journal to its original prepared receipt. */
+static int verify_published_recovery(int parent, const char *parent_path,
+                                     const struct stat *parent_identity,
+                                     const struct stat *journal_identity,
+                                     const char *journal, size_t journal_length,
+                                     const struct recovery_observation *stage,
+                                     const struct recovery_observation *update,
+                                     const struct recovery_observation *destination,
+                                     const struct reconciliation_request *request) {
+  char line[256];
+  char canonical[256];
+  char transaction[33] = {0};
+  char device[21] = {0};
+  char inode[21] = {0};
+  char trailer = '\0';
+  unsigned long long expected_device = 0;
+  unsigned long long expected_inode = 0;
+  if (read_reconciliation_line(line, sizeof(line)) != 0 ||
+      sscanf(line, "verify-published %32[a-f0-9] prepared %20[0-9] %20[0-9]%c",
+             transaction, device, inode, &trailer) != 4 || trailer != '\n' ||
+      strcmp(transaction, request->transaction) != 0 ||
+      parse_decimal(device, &expected_device) != 0 ||
+      parse_decimal(inode, &expected_inode) != 0) {
+    errno = EPROTO;
+    return fail("invalid-transfer");
+  }
+  snprintf(canonical, sizeof(canonical), "verify-published %s prepared %llu %llu\n",
+           request->transaction, expected_device, expected_inode);
+  if (strcmp(line, canonical) != 0) {
+    errno = EPROTO;
+    return fail("invalid-transfer");
+  }
+  struct artifact files[4] = {0};
+  unsigned long long aggregate = 0;
+  for (int index = 0; index < 4; index++) {
+    char role[2] = {0};
+    char length[21] = {0};
+    if (read_reconciliation_line(line, sizeof(line)) != 0 ||
+        sscanf(line, "artifact %1[0-3] %20[0-9] %64[a-f0-9]%c",
+               role, length, files[index].hash, &trailer) != 4 ||
+        role[0] != '0' + index || trailer != '\n' || strlen(files[index].hash) != 64 ||
+        parse_decimal(length, &files[index].length) != 0 || files[index].length == 0 ||
+        (index == 3 && files[index].length > RECORD_LIMIT) ||
+        files[index].length > AGGREGATE_LIMIT || aggregate > AGGREGATE_LIMIT - files[index].length) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    snprintf(canonical, sizeof(canonical), "artifact %d %llu %s\n",
+             index, files[index].length, files[index].hash);
+    if (strcmp(line, canonical) != 0) {
+      errno = EPROTO;
+      return fail("invalid-transfer");
+    }
+    aggregate += files[index].length;
+  }
+  if (!destination->present || !S_ISDIR(destination->identity.st_mode) ||
+      (unsigned long long)destination->identity.st_dev != expected_device ||
+      (unsigned long long)destination->identity.st_ino != expected_inode) {
+    errno = ESTALE;
+    return fail("conflict");
+  }
+  int output = open_child_directory(parent, request->destination);
+  if (output < 0) return fail("conflict");
+  int sources = open_child_directory(output, "Sources");
+  if (sources < 0) return fail("invalid-stage");
+  int module = open_child_directory(sources, request->module);
+  if (module < 0) return fail("invalid-stage");
+  int resources = open_child_directory(module, "Resources");
+  if (resources < 0) return fail("invalid-stage");
+  struct stat sources_identity;
+  struct stat module_identity;
+  struct stat resources_identity;
+  if (fstat(sources, &sources_identity) != 0 || fstat(module, &module_identity) != 0 ||
+      fstat(resources, &resources_identity) != 0)
+    return fail("invalid-stage");
+  const int directories[] = { output, module, resources, output };
+  const char *names[] = {
+    "Package.swift", "Shaders.generated.swift", "Shaders.metallib", ".vgpu-native-output.json"
+  };
+  for (int index = 0; index < 4; index++) {
+    struct stat identity;
+    if (fstatat(directories[index], names[index], &identity, AT_SYMLINK_NOFOLLOW) != 0)
+      return fail("invalid-stage");
+    if (!S_ISREG(identity.st_mode) || identity.st_nlink != 1 ||
+        (unsigned long long)identity.st_size != files[index].length) {
+      errno = ESTALE;
+      return fail("invalid-stage");
+    }
+    files[index].device = identity.st_dev;
+    files[index].inode = identity.st_ino;
+  }
+  if (verify_tree(parent, request->destination, output, &destination->identity,
+                  sources, &sources_identity, module, request->module, &module_identity,
+                  resources, &resources_identity, files) != 0)
+    return fail("invalid-stage");
+  if (!parent_matches(parent_path, parent_identity) ||
+      verify_bytes(parent, JOURNAL_NAME, journal_identity, journal, journal_length) != 0 ||
+      recovery_name_matches(parent, STAGE_NAME, stage) != 0 ||
+      recovery_name_matches(parent, UPDATE_NAME, update) != 0 ||
+      recovery_name_matches(parent, request->destination, destination) != 0 ||
+      directory_edge(parent, request->destination, output, &destination->identity) != 0 ||
+      directory_edge(output, "Sources", sources, &sources_identity) != 0 ||
+      directory_edge(sources, request->module, module, &module_identity) != 0 ||
+      directory_edge(module, "Resources", resources, &resources_identity) != 0)
+    return fail("conflict");
+  if (close(resources) != 0 || close(module) != 0 || close(sources) != 0 || close(output) != 0)
+    return fail("helper-failed");
+  char receipt[JOURNAL_LIMIT];
+  size_t used = 0;
+  if (append_json(receipt, sizeof(receipt), &used,
+      "{\"schemaVersion\":1,\"kind\":\"reconciliation-result\",\"transactionId\":\"%s\","
+      "\"phase\":\"prepared\",\"outcome\":\"published\","
+      "\"parent\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"destinationName\":",
+      request->transaction, (unsigned long long)parent_identity->st_dev,
+      (unsigned long long)parent_identity->st_ino) != 0 ||
+      append_json_string(receipt, sizeof(receipt), &used, request->destination) != 0 ||
+      append_json(receipt, sizeof(receipt), &used,
+      ",\"output\":{\"device\":\"%llu\",\"inode\":\"%llu\"},\"recordSHA256\":\"%s\"}\n",
+      expected_device, expected_inode, files[3].hash) != 0)
+    return fail("helper-failed");
+  if (fwrite(receipt, 1, used, stdout) != used || fflush(stdout) != 0) return 1;
+  return 0;
+}
+
 /* Only a live accepted-payload EOF has a complete ledger of the bytes we wrote. */
 static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_identity,
                                 int sources, const struct stat *sources_identity,
@@ -730,8 +914,9 @@ static int cleanup_partial_tree(int parent, int stage, const struct stat *stage_
 }
 
 int main(int argc, char **argv) {
-  if ((argc != 6 && argc != 7) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
+  if ((argc != 6 && argc != 7 && argc != 9) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
       (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0) ||
+      (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0) ||
       !valid_transaction(argv[5])) {
     errno = EINVAL;
     return fail("helper-failed");
@@ -741,12 +926,29 @@ int main(int argc, char **argv) {
   const char *module = argv[4];
   const char *transaction = argv[5];
   int publish_missing = argc == 7 && strcmp(argv[6], "publish-missing") == 0;
-  int parent = open_parent(parent_path);
+  int reconcile_missing = argc == 9;
+  unsigned long long expected_parent_device = 0;
+  unsigned long long expected_parent_inode = 0;
+  if (reconcile_missing &&
+      (parse_decimal(argv[7], &expected_parent_device) != 0 ||
+       parse_decimal(argv[8], &expected_parent_inode) != 0 ||
+       parent_path[0] != '/' || strlen(parent_path) >= PATH_MAX)) {
+    errno = EINVAL;
+    return fail("helper-failed");
+  }
+  int parent = reconcile_missing ?
+    open(parent_path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC) : open_parent(parent_path);
   if (parent < 0) return fail("unsafe-parent");
   struct stat parent_identity;
   if (fstat(parent, &parent_identity) != 0) return fail("unsafe-parent");
   if (flock(parent, LOCK_EX | LOCK_NB) != 0)
     return fail(errno == EWOULDBLOCK ? "busy" : "helper-failed");
+  if (reconcile_missing &&
+      ((unsigned long long)parent_identity.st_dev != expected_parent_device ||
+       (unsigned long long)parent_identity.st_ino != expected_parent_inode)) {
+    errno = ESTALE;
+    return fail("parent-changed");
+  }
   long name_max = fpathconf(parent, _PC_NAME_MAX);
   if (name_max <= 0 || !valid_component(destination, name_max) ||
       !valid_component(module, name_max) || strcmp(destination, JOURNAL_NAME) == 0 ||
@@ -767,9 +969,11 @@ int main(int argc, char **argv) {
   }
   if (!parent_matches(parent_path, &parent_identity)) return fail("parent-changed");
   struct stat existing_journal;
+  const struct reconciliation_request reconciliation = { destination, module, transaction };
   if (fstatat(parent, JOURNAL_NAME, &existing_journal, AT_SYMLINK_NOFOLLOW) == 0)
-    return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max);
-  if (errno != ENOENT) return fail("conflict");
+    return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max,
+                            reconcile_missing ? &reconciliation : NULL);
+  if (reconcile_missing || errno != ENOENT) return fail("conflict");
   if (ensure_absent(parent, destination) != 0 || ensure_absent(parent, JOURNAL_NAME) != 0 ||
       ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, STAGE_NAME) != 0)
     return fail("conflict");

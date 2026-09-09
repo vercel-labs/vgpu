@@ -41,6 +41,10 @@ static int observed_renameatx_np(int from_directory, const char *from,
     int length = snprintf(bytes, sizeof(bytes), "%d %d\n", result, saved_error);
     if (length < 0 || (size_t)length >= sizeof(bytes)) _exit(93);
     write_marker(completed, bytes, (size_t)length);
+    const char *exit_after_success = getenv("VGPU_RENAME_EXIT_AFTER_SUCCESS");
+    /* The real syscall has completed, but the helper cannot return or send its ACK. */
+    if (result == 0 && exit_after_success && strcmp(exit_after_success, "1") == 0)
+      _exit(97);
   }
   errno = saved_error;
   return result;

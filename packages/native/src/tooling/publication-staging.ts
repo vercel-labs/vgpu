@@ -125,6 +125,7 @@ export interface PublishedMetalPublication {
   readonly schemaVersion: 1;
   readonly kind: "published";
   readonly outcome: "published";
+  readonly confirmation: "acknowledged" | "reconciled";
   readonly transactionId: string;
   readonly parent: PreparedMetalPublicationStage["parent"];
   readonly destinationName: string;
@@ -138,6 +139,7 @@ interface PublicationState {
   prepared?: PreparedMetalPublicationStage;
   receipt?: PublishedMetalPublication;
   finalized: boolean;
+  recoveryPaths?: readonly string[];
 }
 
 export class MetalPublicationError extends MetalPublicationStagingError {
@@ -171,7 +173,11 @@ export class MetalPublicationError extends MetalPublicationStagingError {
       {
         cause,
         recoveryPaths: [
-          ...new Set([...(known?.recoveryPaths ?? []), ...retained]),
+          ...new Set([
+            ...(known?.recoveryPaths ?? []),
+            ...(state.recoveryPaths ?? []),
+            ...retained,
+          ]),
         ],
       }
     );
@@ -419,9 +425,9 @@ async function runStaging<T>(
   let lastMessage: Record<string, any> | undefined;
   let recoveryFailure: MetalPublicationStagingError | undefined;
   let ioTimedOut = false;
+  const executable = join(scratch, "publication-staging");
   try {
     const source = join(scratch, "publication-staging.c");
-    const executable = join(scratch, "publication-staging");
     await copyFile(new URL("./publication-staging.c", import.meta.url), source);
     throwIfCancelled(snapshot.signal);
     await compileHelper(
@@ -709,6 +715,32 @@ async function runStaging<T>(
         "Publication staging failed",
         { cause }
       );
+    if (
+      operation.kind === "publish-missing" &&
+      operation.state.outcome === "unknown" &&
+      operation.state.prepared
+    ) {
+      try {
+        await reconcileMissingPublication(
+          executable,
+          snapshot,
+          operation.state.prepared,
+          operation.state
+        );
+      } catch (reconciliationFailure) {
+        operationFailure = new MetalPublicationStagingError(
+          operationFailure.code,
+          "Publication failed; read-only reconciliation also failed",
+          {
+            cause: new AggregateError(
+              [operationFailure, reconciliationFailure],
+              "Publication failure and reconciliation diagnostics"
+            ),
+            recoveryPaths: operationFailure.recoveryPaths,
+          }
+        );
+      }
+    }
     throw operationFailure;
   } finally {
     clearTimeout(cancellationGrace);
@@ -830,6 +862,7 @@ async function commitMissingPublication(
       schemaVersion: 1,
       kind: "published",
       outcome: "published",
+      confirmation: "acknowledged",
       transactionId: snapshot.transactionId,
       parent: prepared.parent,
       destinationName: prepared.destinationName,
@@ -869,6 +902,157 @@ async function commitMissingPublication(
   } finally {
     clearTimeout(cancellationGrace);
     snapshot.signal?.removeEventListener("abort", cancel);
+  }
+}
+
+/** One read-only attempt, after the original process has closed; never retries commit. */
+async function reconcileMissingPublication(
+  executable: string,
+  snapshot: StagingSnapshot,
+  prepared: PreparedMetalPublicationStage,
+  state: PublicationState
+): Promise<void> {
+  const child = spawn(
+    executable,
+    [
+      "vgpu-publication-staging/v1",
+      snapshot.parentPath,
+      snapshot.destinationName,
+      snapshot.moduleName,
+      snapshot.transactionId,
+      "reconcile-missing",
+      prepared.parent.device,
+      prepared.parent.inode,
+    ],
+    { env: snapshot.environment, stdio: ["pipe", "pipe", "pipe"] }
+  );
+  let spawnError: Error | undefined;
+  const closed = new Promise<number | null>((resolveClose) => {
+    child.once("error", (error) => {
+      spawnError = error;
+    });
+    child.once("close", resolveClose);
+  });
+  let timedOut = false;
+  // A pre-existing cancellation cannot suppress this independent, finite evidence check.
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, 30_000);
+  let lines: AsyncIterator<string> | undefined;
+  try {
+    const input = child.stdin;
+    const output = child.stdout;
+    if (!input || !output || !child.stderr)
+      throw new Error("Publication reconciliation pipes were unavailable");
+    input.on("error", () => {});
+    child.stderr.resume();
+    lines = readPublicationResponseLines(output);
+    const header = await receiveMessage(lines);
+    if (header.kind !== "reconciliation")
+      throw helperResponseError(header, snapshot.parentPath);
+    const report = await readMetalPublicationRecovery(
+      header,
+      () => receiveMessage(lines!),
+      snapshot.parentPath,
+      "reconciliation"
+    );
+    state.recoveryPaths = report.recoveryPaths;
+    const transaction = report.transaction;
+    const evidence = report.prepared;
+    if (
+      !transaction ||
+      transaction.phase !== "prepared" ||
+      transaction.transactionId !== prepared.transactionId ||
+      !responseIdentity(transaction.parent, prepared.parent) ||
+      transaction.destinationName !== prepared.destinationName ||
+      transaction.moduleName !== prepared.moduleName ||
+      transaction.publication?.renameMode !== "excl" ||
+      transaction.publication.expectedDestination !== "missing" ||
+      transaction.stage?.name !== prepared.stage.name ||
+      transaction.stage.device !== prepared.stage.device ||
+      transaction.stage.inode !== prepared.stage.inode ||
+      evidence?.recordSHA256 !== prepared.recordSHA256 ||
+      evidence.files.length !== prepared.files.length ||
+      !evidence.files.every((file, index) => {
+        const expected = prepared.files[index]!;
+        return (
+          file.role === expected.role &&
+          file.path === expected.path &&
+          file.length === expected.length &&
+          file.sha256 === expected.sha256
+        );
+      })
+    )
+      throw new Error(
+        "Recovery record does not match the original prepared publication"
+      );
+    await writeBytes(
+      input,
+      Buffer.from(
+        `verify-published ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
+      )
+    );
+    for (const [index, file] of prepared.files.entries())
+      await writeBytes(
+        input,
+        Buffer.from(`artifact ${index} ${file.length} ${file.sha256}\n`)
+      );
+    const reply = await receiveMessage(lines);
+    if (
+      reply.kind !== "reconciliation-result" ||
+      reply.transactionId !== prepared.transactionId ||
+      reply.phase !== "prepared" ||
+      reply.outcome !== "published" ||
+      Object.keys(reply).length !== 9 ||
+      !responseIdentity(reply.parent, prepared.parent) ||
+      reply.destinationName !== prepared.destinationName ||
+      !responseIdentity(reply.output, prepared.stage) ||
+      reply.recordSHA256 !== prepared.recordSHA256
+    )
+      throw new Error(
+        "Publication reconciliation did not establish the expected output"
+      );
+    // Preserve the proved outcome even if releasing the helper subsequently fails.
+    state.outcome = "published";
+    state.receipt = Object.freeze({
+      schemaVersion: 1,
+      kind: "published",
+      outcome: "published",
+      confirmation: "reconciled",
+      transactionId: prepared.transactionId,
+      parent: prepared.parent,
+      destinationName: prepared.destinationName,
+      output: Object.freeze({
+        device: prepared.stage.device,
+        inode: prepared.stage.inode,
+      }),
+      recordSHA256: prepared.recordSHA256,
+      outputPath: join(snapshot.parentPath, snapshot.destinationName),
+    });
+    input.end();
+    if (!(await lines.next()).done || (await closed) !== 0 || spawnError)
+      throw new Error(
+        "Publication reconciliation helper did not close cleanly",
+        {
+          cause: spawnError,
+        }
+      );
+  } catch (cause) {
+    throw new MetalPublicationStagingError(
+      "helper-failed",
+      timedOut
+        ? "Read-only publication reconciliation exceeded 30 seconds"
+        : "Read-only publication reconciliation could not complete",
+      { cause }
+    );
+  } finally {
+    clearTimeout(deadline);
+    child.kill("SIGKILL");
+    child.stdout?.resume();
+    child.stderr?.resume();
+    await closed;
+    await lines?.return?.();
   }
 }
 
