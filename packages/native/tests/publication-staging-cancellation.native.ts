@@ -458,9 +458,13 @@ test("scratch cleanup failure retains the recovery paths from a cancelled transf
     );
   } finally {
     processBoundary.onHelper = undefined;
-    if (ownedScratch) await chmod(ownedScratch, 0o700);
+    if (ownedScratch) {
+      await chmod(ownedScratch, 0o700);
+      await rm(ownedScratch, { recursive: true, force: true });
+    }
     await rm(input.directory, { recursive: true, force: true });
   }
+  await expect(lstat(ownedScratch!)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 test("a stopped helper cannot leave readiness waiting indefinitely without cancellation", async () => {
