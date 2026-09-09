@@ -35,17 +35,29 @@ export type BufferWriteData = ArrayBuffer | ArrayBufferView<ArrayBuffer>;
 
 export type TextureUsageName = "copy_src" | "copy_dst" | "texture_binding" | "storage_binding" | "render_attachment";
 
-export interface TextureOptions {
-  readonly size: readonly [width: number, height: number, depthOrArrayLayers?: number];
+/** Read one mip, with texel coordinates relative to that mip. `all` includes every slice. */
+export interface TextureReadOptions {
+  readonly mipLevel: number;
+  readonly region: "all" | {
+    readonly origin: readonly [number, number, number];
+    readonly size: readonly [number, number, number];
+  };
+}
+
+export type TextureShape =
+  | { readonly kind: "1d"; readonly size: readonly [width: number]; readonly layers?: never }
+  | { readonly kind: "2d"; readonly size: readonly [width: number, height: number]; readonly layers?: never }
+  | { readonly kind: "3d"; readonly size: readonly [width: number, height: number, depth: number]; readonly layers?: never }
+  | { readonly kind: "2d-array"; readonly size: readonly [width: number, height: number]; readonly layers: number };
+
+export type TextureOptions = TextureShape & {
   readonly format: GPUTextureFormat;
-  readonly usage: readonly TextureUsageName[];
+  readonly usage: readonly [TextureUsageName, ...TextureUsageName[]];
   /** Number of mip levels. Defaults to 1 when omitted, matching WebGPU. */
   readonly mipLevelCount?: number;
   /** Number of samples per pixel. Use 4 for MSAA; default 1. WebGPU spec restricts color render targets to sampleCount 1 or 4. */
   readonly sampleCount?: 1 | 4;
-  /** Texture dimensionality. Defaults to "2d" when omitted, matching WebGPU. */
-  readonly dimension?: GPUTextureDimension;
   /** Additional view formats allowed for texture view creation. Defaults to none when omitted, matching WebGPU. */
   readonly viewFormats?: readonly GPUTextureFormat[];
   readonly label?: string;
-}
+};

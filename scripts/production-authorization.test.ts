@@ -331,6 +331,21 @@ describe("CI workflow_run validation", () => {
     );
   });
 
+  it("does not accept snapshot candidate generation instead of visual verification", () => {
+    const jobs = CI_REQUIRED_JOBS.map((name, id) => ({
+      id,
+      name: name === "visual-snapshots / Verify visual snapshots"
+        ? "visual-snapshots / Generate candidates (not approval)"
+        : name,
+      status: "completed",
+      conclusion: "success",
+    }));
+    expectPolicyError(
+      () => validateCiWorkflowJobs(jobs),
+      "no completed, successful 'visual-snapshots / Verify visual snapshots' job"
+    );
+  });
+
   it("selects the latest successful canonical push CI for a release SHA", () => {
     const canonical = {
       id: 12,

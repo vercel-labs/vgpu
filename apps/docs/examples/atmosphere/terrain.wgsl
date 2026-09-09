@@ -127,15 +127,18 @@ export fn sampleTerrainAlbedoNoise(map: texture_2d<f32>, mapSampler: sampler, xz
   return textureSampleLevel(map, mapSampler, terrainMapUv(xz), 0.0).rg;
 }
 
-/** Albedo by altitude and slope: grass in the plains, rock on steep faces, snow near the peaks. `noise` comes from terrainAlbedoNoise. */
+/** Linear reflectance by altitude and slope. Dark vegetation and weathered rock leave headroom for sunlit snow. */
 export fn terrainAlbedo(height: f32, normal: vec3f, noise: vec2f) -> vec3f {
-  let grass = vec3f(0.11, 0.13, 0.05);
-  let dry = vec3f(0.22, 0.17, 0.10);
-  let rock = vec3f(0.23, 0.21, 0.19);
+  let mountain = smoothstep(0.02, 0.25, height);
+  let grass = mix(vec3f(0.11, 0.13, 0.05), vec3f(0.035, 0.075, 0.025), mountain);
+  let dry = mix(vec3f(0.22, 0.17, 0.10), vec3f(0.12, 0.085, 0.04), mountain);
+  let rock = mix(vec3f(0.065, 0.075, 0.085), vec3f(0.12, 0.10, 0.075), noise.y);
   let snow = vec3f(0.78, 0.80, 0.84);
   var albedo = mix(grass, dry, noise.x);
   let slope = 1.0 - normal.y;
   albedo = mix(albedo, rock, smoothstep(0.08, 0.35, slope));
+  // Broad material variation remains visible under overhead light, when slope lighting alone has little contrast.
+  albedo *= mix(1.0, mix(0.65, 1.2, smoothstep(0.15, 0.85, noise.x)), mountain);
   let snowLine = 1.9 + 0.35 * (noise.y * 2.0 - 1.0);
   let snowAmount = smoothstep(snowLine, snowLine + 0.5, height) * (1.0 - smoothstep(0.35, 0.6, slope));
   return mix(albedo, snow, snowAmount);

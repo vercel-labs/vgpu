@@ -83,7 +83,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
     try {
       const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-order' });
       await renderComposite(gpu, output, { controls: CAUSTIC_ONLY });
-      const pixels = await output.read();
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       let redY = 0;
       let redCount = 0;
       let violetY = 0;
@@ -155,7 +155,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
       const render = async (arc: number): Promise<Uint8Array> => {
         const output = target(gpu, { size: [160, 90], format: 'rgba8unorm', label: `prism-arc-${arc}` });
         await renderComposite(gpu, output, { lampArc: arc });
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       const low = await render(0);
       const high = await render(1);
@@ -178,7 +178,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
         // Isolate the wall: the intentionally black glass environment now puts
         // valid near-black pixels inside the prism silhouette.
         await renderComposite(gpu, output, { controls: COVERAGE_WALL });
-        const pixels = await output.read();
+        const pixels = await output.color.read({ mipLevel: 0, region: "all" });
         let darkest = 1;
         for (let index = 0; index < pixels.length; index += 4) {
           const luma = (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
@@ -201,7 +201,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       await renderComposite(gpu, wall, { controls: ISOLATED_GLASS_WALL });
 
       const box = prismSilhouette(SIZE[0] / Math.max(1, SIZE[1]));
-      const [withGlass, withoutGlass] = [await glass.read(), await wall.read()];
+      const [withGlass, withoutGlass] = [await glass.color.read({ mipLevel: 0, region: "all" }), await wall.color.read({ mipLevel: 0, region: "all" })];
       let inside = 0;
       let insideChanged = 0;
       let outsideChanged = 0;
@@ -244,7 +244,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       await renderComposite(gpu, wireframe, {
         controls: { ...DEFAULT_PRISM_CONTROLS, wireframe: true },
       });
-      const [withoutLines, withLines] = [await solid.read(), await wireframe.read()];
+      const [withoutLines, withLines] = [await solid.color.read({ mipLevel: 0, region: "all" }), await wireframe.color.read({ mipLevel: 0, region: "all" })];
       expect(changedShare(withoutLines, withLines)).toBeGreaterThan(0.004);
       expect(changedShare(withoutLines, withLines)).toBeLessThan(0.35);
     } finally {
@@ -258,7 +258,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       const render = async (orbit: readonly [number, number], label: string): Promise<Uint8Array> => {
         const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label });
         await renderComposite(gpu, output, { orbit });
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       const rest = await render([0, 0], 'prism-orbit-rest');
       const swung = await render([1, -1], 'prism-orbit-swung');
@@ -282,7 +282,7 @@ describe.skipIf(gpuOnly)('prism-rainbow deterministic mesh', () => {
       const render = async (): Promise<Uint8Array> => {
         const output = target(gpu, { size: [160, 90], format: 'rgba8unorm', label: 'prism-determinism' });
         await renderComposite(gpu, output);
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       // Nothing in the pipeline reads a clock, history texture or random seed.
       expect(Array.from(await render())).toEqual(Array.from(await render()));

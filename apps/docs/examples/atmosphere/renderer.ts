@@ -24,7 +24,7 @@ import {
   type Target,
   type Texture,
 } from 'vgpu';
-import { cameraUniforms, sunDirection, terrainSector, type CameraUniformValues } from './camera';
+import { cameraUniforms, smoothAltitude, smoothSunAngles, sunDirection, terrainSector, type CameraUniformValues } from './camera';
 import { ATMOSPHERE_PHYSICS, CLOUD_TUNING, DEFAULT_PRESET, LUT_SIZES, PRESETS, TONEMAPS, type AtmosphereState } from './tuning';
 import transmittanceLutWgsl from './transmittance-lut.wgsl';
 import multiScatterLutWgsl from './multiscatter-lut.wgsl';
@@ -44,6 +44,9 @@ import curlNoiseWgsl from './curl-noise.wgsl';
 import frameConstantsWgsl from './frame-constants.wgsl';
 import terrainSunDepthWgsl from './terrain-sun-depth.wgsl';
 import cloudShadowWgsl from './cloud-shadow.wgsl';
+import cloudShadowBlurWgsl from './cloud-shadow-blur.wgsl';
+import hazeMarchWgsl from './haze-march.wgsl';
+import hazeResolveWgsl from './haze-resolve.wgsl';
 
 type Output = Surface | Target;
 type Vec3 = readonly [number, number, number];
@@ -66,9 +69,10 @@ type CloudUpdateUniformValues = {
 };
 
 type TerrainMeshUniformValues = { columnOffset: number; columns: number };
+type HazeUpdateUniformValues = { phase: number; blend: number; valid: number; pad: number };
 
 /** Column-major 4x4 matrices mapping a position relative to the ground point under the camera axis to each cascade's clip space. */
-type SunShadowUniformValues = { toShadow0: readonly number[]; toShadow1: readonly number[]; toShadow2: readonly number[]; fromShadow2: readonly number[]; radii: readonly [number, number, number, number]; bias: readonly [number, number, number, number] };
+type SunShadowUniformValues = { toShadow0: readonly number[]; toShadow1: readonly number[]; toShadow2: readonly number[]; fromShadow1: readonly number[]; fromShadow2: readonly number[]; radii: readonly [number, number, number, number]; bias: readonly [number, number, number, number] };
 type CascadeUniformValues = { index: number; pad0: number; pad1: number; pad2: number };
 
 type CloudUniformValues = {
@@ -97,8 +101,13 @@ export interface AtmosphereGraph {
   /** Column window for the sun pass: every column. */
   readonly sunMesh: SharedUniforms<TerrainMeshUniformValues>;
   readonly shadowSampler: GPUSampler;
-  /** Sun transmittance of the cloud layer above each heightmap texel; rebuilt every frame while cloud shadows are on. */
+  /** Far cloud shadow map (260 km wide), rebuilt along with the near map while cloud shadows are on. */
   readonly cloudShadowMap: Texture;
+  /** Near cloud shadow map (60 km wide): 4.3x finer texels, sharing the middle terrain cascade projection. */
+  readonly cloudShadowNearMap: Texture;
+  /** Unfiltered near transmittance; a small map-space blur removes texel-shaped edges before any consumers run. */
+  readonly cloudShadowNearRaw: Texture;
+  readonly cloudShadowBlurCompute: Compute;
   /** Ping-pong cloud buffers: `write` receives this frame, `read` is last frame's history. */
   readonly cloudsTargets: PingPongTargets;
   /** This frame's live cloud texels, packed (clouds-temporal.wgsl); only a viewport of the compact size is drawn. */
@@ -114,6 +123,12 @@ export interface AtmosphereGraph {
   /** Depth prepass of the terrain ring grid (reversed-Z, depth32float); its color is a masked-out dummy. */
   readonly terrainDepth: Target;
   readonly scene: Target;
+  /** Full-resolution volumetric shadow loss, independent of sharp terrain and sun shading. */
+  readonly hazeMarch: Target;
+  readonly hazeTargets: PingPongTargets;
+  readonly hazeUpdate: SharedUniforms<HazeUpdateUniformValues>;
+  readonly hazeMarchEffect: Effect;
+  readonly hazeResolveEffect: Effect;
   readonly transmittanceEffect: Effect;
   readonly multiScatterCompute: Compute;
   readonly skyViewEffect: Effect;
@@ -157,6 +172,11 @@ export interface AtmosphereGraph {
   cloudStateKey?: string;
   currentCamera?: CameraUniformValues;
   previousCamera?: CameraUniformValues;
+  hazeStateKey?: string;
+  hazeTime?: number;
+  hazeHistoryFrames: number;
+  /** Allow the deferred LUTs to catch up after a camera/lighting change before accepting history. */
+  hazeChangeFrames: number;
 }
 
 /** Frames needed for every cloud texel to be re-marched at least once, at rest and right after a change. */
@@ -205,6 +225,8 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   graph.accumulate = true;
   if (bench) await bench.mountBenchReport(canvas, await bench.runBench(gpu, [canvas.clientWidth, canvas.clientHeight]));
   const controls = installControls(canvas, { ...PRESETS[DEFAULT_PRESET] });
+  let renderedSun: Pick<AtmosphereState, 'sunElevation' | 'sunAzimuth'> = controls.getState();
+  let renderedAltitude = controls.getState().altitudeKm;
   let disposed = false;
   let sawInitialResize = false;
   const unsubscribeResize = surface.onResize(() => {
@@ -216,7 +238,10 @@ export async function run(canvas: HTMLCanvasElement): Promise<() => void> {
   let fpsWindowStart = performance.now();
   let fpsWindowFrames = 0;
   const loop = frameLoop(gpu, (frame) => {
-    const state = { ...controls.getState(), time: timeline.time };
+    const configured = controls.getState();
+    renderedSun = smoothSunAngles(renderedSun, configured, timeline.deltaTime);
+    renderedAltitude = smoothAltitude(renderedAltitude, configured.altitudeKm, timeline.deltaTime);
+    const state = { ...configured, ...renderedSun, altitudeKm: renderedAltitude, time: timeline.time };
     applyState(graph, state, surface.size);
     renderGraph(frame, graph, surface);
     // Frame rate over half-second windows, so the cap and the cost of a change are visible in the panel.
@@ -320,7 +345,7 @@ export async function renderThumb(gpu: Gpu, output: Target, opts: ThumbOptions =
   const graph = await createGraph(gpu, output, 'atmosphere-thumb');
   renderState(gpu, graph, output, PRESETS.noon);
   await gpu.gpu.queue.onSubmittedWorkDone();
-  await opts.onVariantRendered?.('noon', await output.read(), output.size);
+  await opts.onVariantRendered?.('noon', await output.color.read({ mipLevel: 0, region: "all" }), output.size);
   renderState(gpu, graph, output, PRESETS[DEFAULT_PRESET]);
   await gpu.gpu.queue.onSubmittedWorkDone();
   await gpu.settled();
@@ -355,37 +380,43 @@ export async function createGraph(gpu: Gpu, output: Output, label: string): Prom
   const terrainMesh = createUniforms<TerrainMeshUniformValues>(gpu, { columnOffset: 0, columns: 0 });
   const noiseSampler = createSampler(gpu, { minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', addressModeW: 'repeat' });
   const transmittance = createTarget(gpu, { size: LUT_SIZES.transmittance, format: HDR_FORMAT, label: `${label}-transmittance` });
-  const multiScatter = createTexture(gpu, { size: [LUT_SIZES.multiScatter, LUT_SIZES.multiScatter], format: HDR_FORMAT, label: `${label}-multiscatter` });
+  const multiScatter = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [LUT_SIZES.multiScatter, LUT_SIZES.multiScatter], format: HDR_FORMAT, label: `${label}-multiscatter` });
   const skyView = createTarget(gpu, { size: LUT_SIZES.skyView, format: HDR_FORMAT, label: `${label}-sky-view` });
-  const aerial = createTexture(gpu, { size: LUT_SIZES.aerial, format: HDR_FORMAT, dimension: '3d', label: `${label}-aerial` });
-  const aerialUnshadowed = createTexture(gpu, { size: LUT_SIZES.aerial, format: HDR_FORMAT, dimension: '3d', label: `${label}-aerial-unshadowed` });
-  const aerialDirect = createTexture(gpu, { size: LUT_SIZES.aerial, format: HDR_FORMAT, dimension: '3d', label: `${label}-aerial-direct` });
+  const aerial = createTexture(gpu, { kind: '3d', usage: ['texture_binding', 'storage_binding'], size: LUT_SIZES.aerial, format: HDR_FORMAT, label: `${label}-aerial` });
+  const aerialUnshadowed = createTexture(gpu, { kind: '3d', usage: ['texture_binding', 'storage_binding'], size: LUT_SIZES.aerial, format: HDR_FORMAT, label: `${label}-aerial-unshadowed` });
+  const aerialDirect = createTexture(gpu, { kind: '3d', usage: ['texture_binding', 'storage_binding'], size: LUT_SIZES.aerial, format: HDR_FORMAT, label: `${label}-aerial-direct` });
   const terrainDepth = createTarget(gpu, { size: output.size, format: 'r8unorm', depth: 'depth32float', label: `${label}-terrain-depth` });
   const scene = createTarget(gpu, { size: output.size, format: HDR_FORMAT, label: `${label}-scene` });
+  const hazeMarch = createTarget(gpu, { size: output.size, format: HDR_FORMAT, label: `${label}-haze-march` });
+  const hazeTargets = pingPong(gpu, output.size[0], output.size[1], { format: HDR_FORMAT, label: `${label}-haze` });
+  const hazeUpdate = createUniforms<HazeUpdateUniformValues>(gpu, { phase: 0, blend: 1, valid: 0, pad: 0 });
   const cloudSize = cloudSizeFor(output.size);
   const cloudsTargets = pingPong(gpu, cloudSize[0], cloudSize[1], { format: HDR_FORMAT, label: `${label}-clouds` });
   const cloudMarch = createTarget(gpu, { size: cloudSize, format: HDR_FORMAT, label: `${label}-cloud-march` });
   const cloudUpdate = createUniforms<CloudUpdateUniformValues>(gpu, cloudUpdateUniforms({ valid: false, frame: 0, accumulate: false, fast: false, restFrames: 0, size: cloudSize }));
   const noise = CLOUD_TUNING.noise;
-  const shapeNoise = createTexture(gpu, { size: [noise.shape, noise.shape, noise.shape], format: 'rgba8unorm', dimension: '3d', label: `${label}-cloud-shape` });
-  const detailNoise = createTexture(gpu, { size: [noise.detail, noise.detail, noise.detail], format: 'rgba8unorm', dimension: '3d', label: `${label}-cloud-detail` });
-  const weatherMap = createTexture(gpu, { size: [noise.weather, noise.weather], format: 'rgba8unorm', label: `${label}-weather` });
-  const terrainMap = createTexture(gpu, { size: [TERRAIN_MAP_SIZE, TERRAIN_MAP_SIZE], format: HDR_FORMAT, label: `${label}-terrain` });
-  const terrainAlbedoMap = createTexture(gpu, { size: [TERRAIN_MAP_SIZE, TERRAIN_MAP_SIZE], format: 'rgba8unorm', label: `${label}-terrain-albedo` });
+  const shapeNoise = createTexture(gpu, { kind: '3d', usage: ['texture_binding', 'storage_binding'], size: [noise.shape, noise.shape, noise.shape], format: 'rgba8unorm', label: `${label}-cloud-shape` });
+  const detailNoise = createTexture(gpu, { kind: '3d', usage: ['texture_binding', 'storage_binding'], size: [noise.detail, noise.detail, noise.detail], format: 'rgba8unorm', label: `${label}-cloud-detail` });
+  const weatherMap = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [noise.weather, noise.weather], format: 'rgba8unorm', label: `${label}-weather` });
+  const terrainMap = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [TERRAIN_MAP_SIZE, TERRAIN_MAP_SIZE], format: HDR_FORMAT, label: `${label}-terrain` });
+  const terrainAlbedoMap = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [TERRAIN_MAP_SIZE, TERRAIN_MAP_SIZE], format: 'rgba8unorm', label: `${label}-terrain-albedo` });
   const sunShadows = SUN_SHADOW_RADII.map((_, index) => createTarget(gpu, { size: [SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE], format: 'r8unorm', depth: 'depth32float', label: `${label}-sun-shadow-${index}` }));
   const sunShadowUniforms = createUniforms<SunShadowUniformValues>(gpu, sunShadowUniformValues(sunDirection(PRESETS[DEFAULT_PRESET])));
   const cascadeUniforms = SUN_SHADOW_RADII.map((_, index) => createUniforms<CascadeUniformValues>(gpu, { index, pad0: 0, pad1: 0, pad2: 0 }));
   const sunMesh = createUniforms<TerrainMeshUniformValues>(gpu, { columnOffset: 0, columns: TERRAIN_MESH_COLUMNS });
   // Linear comparison sampler: the hardware compares the four neighbours and blends the results, a first level of penumbra.
   const shadowSampler = createSampler(gpu, { compare: 'less-equal', minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
-  const cloudShadowMap = createTexture(gpu, { size: [CLOUD_SHADOW_MAP_SIZE, CLOUD_SHADOW_MAP_SIZE], format: HDR_FORMAT, label: `${label}-cloud-shadow` });
-  const curlNoise = createTexture(gpu, { size: [CURL_SIZE, CURL_SIZE], format: 'rgba8unorm', label: `${label}-curl` });
+  const cloudShadowMap = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [CLOUD_SHADOW_MAP_SIZE, CLOUD_SHADOW_MAP_SIZE], format: HDR_FORMAT, label: `${label}-cloud-shadow` });
+  const cloudShadowNearMap = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [CLOUD_SHADOW_MAP_SIZE, CLOUD_SHADOW_MAP_SIZE], format: HDR_FORMAT, label: `${label}-cloud-shadow-near` });
+  const cloudShadowNearRaw = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [CLOUD_SHADOW_MAP_SIZE, CLOUD_SHADOW_MAP_SIZE], format: HDR_FORMAT, label: `${label}-cloud-shadow-near-raw` });
+  const curlNoise = createTexture(gpu, { kind: '2d', usage: ['texture_binding', 'storage_binding'], size: [CURL_SIZE, CURL_SIZE], format: 'rgba8unorm', label: `${label}-curl` });
 
   const transmittanceEffect = createEffect(gpu, transmittanceLutWgsl, { label: `${label}-transmittance`, set: { atmosphere } });
   const multiScatterCompute = createCompute(gpu, multiScatterLutWgsl, { label: `${label}-multiscatter`, set: { atmosphere, transmittanceLut: transmittance, lutSampler: sampler, multiScatterLut: multiScatter } });
   const skyViewEffect = createEffect(gpu, skyViewLutWgsl, { label: `${label}-sky-view`, set: { atmosphere, camera, transmittanceLut: transmittance, multiScatterLut: multiScatter, lutSampler: sampler } });
-  const aerialCompute = createCompute(gpu, aerialLutWgsl, { label: `${label}-aerial`, set: { atmosphere, camera, transmittanceLut: transmittance, multiScatterLut: multiScatter, lutSampler: sampler, aerialLut: aerial, sunShadowMap0: sunShadows[0]!, sunShadowMap1: sunShadows[1]!, sunShadowMap2: sunShadows[2]!, aerialUnshadowedLut: aerialUnshadowed, aerialDirectLut: aerialDirect, clouds, cloudShadowMap, shadowSampler, sunShadow: sunShadowUniforms } });
-  const cloudShadowCompute = createCompute(gpu, cloudShadowWgsl, { label: `${label}-cloud-shadow`, set: { atmosphere, clouds, shapeNoise, detailNoise, weatherMap, curlNoise, noiseSampler, cloudShadowMap, sunShadow: sunShadowUniforms } });
+  const aerialCompute = createCompute(gpu, aerialLutWgsl, { label: `${label}-aerial`, set: { atmosphere, camera, transmittanceLut: transmittance, multiScatterLut: multiScatter, lutSampler: sampler, aerialLut: aerial, sunShadowMap0: sunShadows[0]!, sunShadowMap1: sunShadows[1]!, sunShadowMap2: sunShadows[2]!, aerialUnshadowedLut: aerialUnshadowed, aerialDirectLut: aerialDirect, clouds, cloudShadowNearMap, cloudShadowMap, shadowSampler, sunShadow: sunShadowUniforms } });
+  const cloudShadowCompute = createCompute(gpu, cloudShadowWgsl, { label: `${label}-cloud-shadow`, set: { atmosphere, clouds, shapeNoise, detailNoise, weatherMap, curlNoise, noiseSampler, cloudShadowNearMap: cloudShadowNearRaw, cloudShadowMap, sunShadow: sunShadowUniforms } });
+  const cloudShadowBlurCompute = createCompute(gpu, cloudShadowBlurWgsl, { label: `${label}-cloud-shadow-blur`, set: { source: cloudShadowNearRaw, filtered: cloudShadowNearMap, linearSampler: sampler } });
   const frameConstants = createStorage(gpu, FRAME_CONSTANTS_BYTES, 'read-write');
   const frameConstantsCompute = createCompute(gpu, frameConstantsWgsl, { label: `${label}-frame-constants`, set: { atmosphere, camera, transmittanceLut: transmittance, skyViewLut: skyView.color, lutSampler: sampler, frameConstants, terrainMap } });
   const terrainSunDepthDraws = cascadeUniforms.map((cascade, index) => createDraw(gpu, {
@@ -404,7 +435,9 @@ export async function createGraph(gpu: Gpu, output: Output, label: string): Prom
     writeMask: [],
     set: { atmosphere, camera, mesh: terrainMesh, terrainMap, lutSampler: sampler },
   });
-  const sceneEffect = createEffect(gpu, sceneWgsl, { label: `${label}-scene`, set: { atmosphere, camera, transmittanceLut: transmittance, skyViewLut: skyView, aerialLut: aerial, lutSampler: sampler, clouds, terrainMap, terrainAlbedoMap, frame: frameConstants, aerialUnshadowedLut: aerialUnshadowed, aerialDirectLut: aerialDirect, terrainDepth: terrainDepth.depth!, cloudShadowMap, sunShadowMap0: sunShadows[0]!, sunShadowMap1: sunShadows[1]!, sunShadowMap2: sunShadows[2]!, shadowSampler, sunShadow: sunShadowUniforms } });
+  const hazeMarchEffect = createEffect(gpu, hazeMarchWgsl, { label: `${label}-haze-march`, set: { atmosphere, camera, clouds, update: hazeUpdate, aerialDirectLut: aerialDirect, lutSampler: sampler, terrainDepth: terrainDepth.depth!, cloudShadowNearMap, cloudShadowMap, sunShadowMap0: sunShadows[0]!, sunShadowMap1: sunShadows[1]!, sunShadowMap2: sunShadows[2]!, shadowSampler, sunShadow: sunShadowUniforms } });
+  const hazeResolveEffect = createEffect(gpu, hazeResolveWgsl, { label: `${label}-haze-resolve`, set: { march: hazeMarch, history: hazeTargets.read, update: hazeUpdate } });
+  const sceneEffect = createEffect(gpu, sceneWgsl, { label: `${label}-scene`, set: { atmosphere, camera, transmittanceLut: transmittance, skyViewLut: skyView, aerialLut: aerial, lutSampler: sampler, clouds, terrainMap, terrainAlbedoMap, frame: frameConstants, aerialUnshadowedLut: aerialUnshadowed, hazeLoss: hazeTargets.write, terrainDepth: terrainDepth.depth!, cloudShadowNearMap, cloudShadowMap, sunShadowMap0: sunShadows[0]!, sunShadowMap1: sunShadows[1]!, sunShadowMap2: sunShadows[2]!, shadowSampler, sunShadow: sunShadowUniforms } });
   const cloudMarchEffect = createEffect(gpu, cloudsMarchWgsl, { label: `${label}-cloud-march`, set: {
     atmosphere, camera, clouds, transmittanceLut: transmittance, aerialLut: aerial, shapeNoise, detailNoise, weatherMap, curlNoise, sceneHdr: scene,
     lutSampler: sampler, noiseSampler, update: cloudUpdate, frame: frameConstants,
@@ -421,7 +454,9 @@ export async function createGraph(gpu: Gpu, output: Output, label: string): Prom
   const lutPreview = createEffect(gpu, lutPreviewWgsl, { label: `${label}-lut-preview` });
 
   const graph: AtmosphereGraph = {
-    atmosphere, camera, clouds, terrainMesh, shapeNoise, detailNoise, weatherMap, curlNoise, terrainMap, terrainAlbedoMap, sunShadows, sunShadowUniforms, cascadeUniforms, sunMesh, shadowSampler, cloudShadowMap, cloudsTargets, cloudMarch, cloudUpdate, transmittance, multiScatter, skyView, aerial, aerialUnshadowed, aerialDirect, terrainDepth, scene,
+    cloudShadowNearRaw, cloudShadowBlurCompute,
+    hazeMarch, hazeTargets, hazeUpdate, hazeMarchEffect, hazeResolveEffect, hazeHistoryFrames: 0, hazeChangeFrames: 2,
+    atmosphere, camera, clouds, terrainMesh, shapeNoise, detailNoise, weatherMap, curlNoise, terrainMap, terrainAlbedoMap, sunShadows, sunShadowUniforms, cascadeUniforms, sunMesh, shadowSampler, cloudShadowNearMap, cloudShadowMap, cloudsTargets, cloudMarch, cloudUpdate, transmittance, multiScatter, skyView, aerial, aerialUnshadowed, aerialDirect, terrainDepth, scene,
     transmittanceEffect, multiScatterCompute, skyViewEffect, aerialCompute, terrainSunDepthDraws, cloudShadowCompute, frameConstants, frameConstantsCompute, terrainDraw, sceneEffect, cloudMarchEffect, cloudResolveEffect, presentEffect, lutPreview, sampler,
     lutPhase: 'stale', bakedHaze: 1, frame: 0, accumulate: false, cloudChangeFrames: CLOUD_FAST_REFRESH_PERIOD, cloudRestFrames: 0, sunDirection: sunDirection(PRESETS[DEFAULT_PRESET]), cloudShadows: true, terrainColumns: 0,
   };
@@ -431,6 +466,8 @@ export async function createGraph(gpu: Gpu, output: Output, label: string): Prom
     terrainDraw.compile(terrainDepth),
     ...terrainSunDepthDraws.map((draw, index) => draw.compile(sunShadows[index]!)),
     sceneEffect.compile(scene),
+    hazeMarchEffect.compile(hazeMarch),
+    hazeResolveEffect.compile(hazeTargets.write),
     cloudMarchEffect.compile(cloudMarch),
     cloudResolveEffect.compile(cloudsTargets.write),
     presentEffect.compile({ colors: [output.format] }),
@@ -481,6 +518,16 @@ export function applyState(graph: AtmosphereGraph, state: AtmosphereState, size:
     graph.cloudRestFrames = 0;
   }
   graph.cloudStateKey = cloudStateKey;
+  // Exact-pixel history is safe only with the same view and lighting. Exposure/tonemap are applied later and need
+  // no reset. Normal wind advances keep a short, clipped history; time jumps (including resumed tabs) discard it.
+  const hazeStateKey = [cloudStateKey, state.cloudShadows, ...size].join(',');
+  const timeJump = graph.hazeTime !== undefined && (state.time < graph.hazeTime || state.time - graph.hazeTime > 0.25);
+  if (graph.hazeStateKey !== hazeStateKey || timeJump) {
+    graph.hazeHistoryFrames = 0;
+    graph.hazeChangeFrames = 2;
+  }
+  graph.hazeStateKey = hazeStateKey;
+  graph.hazeTime = state.time;
 }
 
 /**
@@ -513,7 +560,8 @@ export function encodeSunShadow(frame: Frame, graph: AtmosphereGraph): void {
   graph.sunShadowUniforms.set(sunShadowUniformValues(graph.sunDirection));
   graph.sunShadows.forEach((target, index) => {
     frame.pass({ target, clear: [0, 0, 0, 0], clearDepth: 1 }, (pass) => {
-      if (graph.sunDirection[1] > 0) pass.draw(graph.terrainSunDepthDraws[index]!, { instances: TERRAIN_MESH_COLUMNS });
+      // Elevated terrain and air can still see the sun below the ground-level horizon.
+      pass.draw(graph.terrainSunDepthDraws[index]!, { instances: TERRAIN_MESH_COLUMNS });
     });
   });
   graph.bakedSunDirection = graph.sunDirection;
@@ -525,22 +573,28 @@ export function encodeSunShadow(frame: Frame, graph: AtmosphereGraph): void {
  * radius around the camera axis and SUN_SHADOW_HEIGHT tall; the depth range of every cascade reaches back to the
  * whole terrain toward the sun, since a far peak shadows the near disc along the light just the same.
  */
-function sunShadowUniformValues(sun: Vec3): SunShadowUniformValues {
+export function sunShadowUniformValues(sun: Vec3): SunShadowUniformValues {
   let right = cross([0, 1, 0], sun);
   if (Math.hypot(...right) < 1e-4) right = [1, 0, 0];
   right = normalize(right);
   const up = cross(sun, right);
   const light: Vec3 = [-sun[0], -sun[1], -sun[2]];
-  const sinE = Math.max(sun[1], 0);
+  const sinE = sun[1];
   const cosE = Math.sqrt(Math.max(1 - sinE * sinE, 0));
   const farthest = SUN_SHADOW_RADII[SUN_SHADOW_RADII.length - 1]!;
-  const zNear = -farthest * cosE - SUN_SHADOW_HEIGHT * sinE;
+  const groundRadius = ATMOSPHERE_PHYSICS.groundRadius;
+  const groundFloor = (radius: number) => -radius * radius / (groundRadius + Math.sqrt(groundRadius * groundRadius - radius * radius));
+  // Project both ends of the height interval with the signed sun angle. Below the horizon the top of the
+  // cylinder changes which depth bound it extends; curvature also places distant ground below tangent-plane y=0.
+  const minLightHeight = Math.min(-SUN_SHADOW_HEIGHT * sinE, -groundFloor(farthest) * sinE);
+  const maxLightHeight = Math.max(-SUN_SHADOW_HEIGHT * sinE, -groundFloor(farthest) * sinE);
+  const zNear = -farthest * cosE + minLightHeight;
   const matrices = SUN_SHADOW_RADII.map((radius) => {
-    const yMin = -radius * sinE;
-    const yMax = radius * sinE + SUN_SHADOW_HEIGHT * cosE;
+    const yMin = -radius * Math.abs(sinE) + groundFloor(radius) * cosE;
+    const yMax = radius * Math.abs(sinE) + SUN_SHADOW_HEIGHT * cosE;
     const yCenter = 0.5 * (yMin + yMax);
     const yHalf = Math.max(0.5 * (yMax - yMin), 1e-3);
-    const zFar = radius * cosE + SUN_SHADOW_HEIGHT;
+    const zFar = radius * cosE + maxLightHeight;
     const zRange = zFar - zNear;
     // Rows of the mapping; WGSL wants columns.
     const rows = [
@@ -563,7 +617,7 @@ function sunShadowUniformValues(sun: Vec3): SunShadowUniformValues {
     return { matrix, inverse, bias };
   });
   return {
-    toShadow0: matrices[0]!.matrix, toShadow1: matrices[1]!.matrix, toShadow2: matrices[2]!.matrix, fromShadow2: matrices[2]!.inverse,
+    toShadow0: matrices[0]!.matrix, toShadow1: matrices[1]!.matrix, toShadow2: matrices[2]!.matrix, fromShadow1: matrices[1]!.inverse, fromShadow2: matrices[2]!.inverse,
     radii: [SUN_SHADOW_RADII[0], SUN_SHADOW_RADII[1], SUN_SHADOW_RADII[2], 0],
     bias: [matrices[0]!.bias, matrices[1]!.bias, matrices[2]!.bias, 0],
   };
@@ -582,7 +636,8 @@ function normalize(v: Vec3): Vec3 {
 export function encodeCloudShadow(graph: AtmosphereGraph): void {
   if (!graph.cloudShadows) return;
   const groups = CLOUD_SHADOW_MAP_SIZE / WEATHER_WORKGROUP;
-  graph.cloudShadowCompute.dispatch(groups, groups, 1);
+  graph.cloudShadowCompute.dispatch(groups, groups, 2);
+  graph.cloudShadowBlurCompute.dispatch(groups, groups, 1);
 }
 
 export function encodeAerial(graph: AtmosphereGraph): void {
@@ -598,11 +653,21 @@ export function encodeSkyView(frame: Frame, graph: AtmosphereGraph): void {
   frame.pass({ target: graph.skyView, clear: CLEAR }, (pass) => pass.draw(graph.skyViewEffect));
 }
 
-/** Terrain depth prepass (reversed-Z, cleared to 0 = no terrain), then one fullscreen pass shades every pixel once. */
+/** Terrain depth, temporally filtered haze, then full-resolution surface/sky shading. */
 export function encodeScene(frame: Frame, graph: AtmosphereGraph): void {
   frame.pass({ target: graph.terrainDepth, clear: [0, 0, 0, 0], clearDepth: 0 }, (pass) => {
     if (graph.terrainColumns > 0) pass.draw(graph.terrainDraw, { instances: graph.terrainColumns });
   });
+  const valid = graph.hazeHistoryFrames > 0 && graph.hazeChangeFrames === 0;
+  graph.hazeUpdate.set({
+    phase: (graph.frame * 0.618033988749895) % 1,
+    blend: valid ? Math.max(1 / (graph.hazeHistoryFrames + 1), 1 / 16) : 1,
+    valid: valid ? 1 : 0, pad: 0,
+  });
+  graph.hazeResolveEffect.set({ history: graph.hazeTargets.read });
+  frame.pass({ target: graph.hazeMarch, clear: CLEAR }, (pass) => pass.draw(graph.hazeMarchEffect));
+  frame.pass({ target: graph.hazeTargets.write, clear: CLEAR }, (pass) => pass.draw(graph.hazeResolveEffect));
+  graph.sceneEffect.set({ hazeLoss: graph.hazeTargets.write });
   frame.pass({ target: graph.scene, clear: CLEAR }, (pass) => pass.draw(graph.sceneEffect));
 }
 
@@ -634,9 +699,12 @@ export function encodePresent(frame: Frame, graph: AtmosphereGraph, output: Outp
   frame.pass({ target: output, clear: CLEAR }, (pass) => pass.draw(graph.presentEffect));
 }
 
-/** Swaps the cloud history and advances the temporal sequence; once per frame, after the passes. */
+/** Swaps cloud/haze histories and advances their temporal sequences; once per frame, after the passes. */
 export function finishFrame(graph: AtmosphereGraph): void {
   graph.cloudsTargets.swap();
+  graph.hazeTargets.swap();
+  if (graph.hazeChangeFrames > 0) graph.hazeChangeFrames -= 1;
+  else graph.hazeHistoryFrames = Math.min(graph.hazeHistoryFrames + 1, 16);
   graph.previousCamera = graph.currentCamera;
   graph.frame += 1;
   if (graph.cloudChangeFrames > 0) graph.cloudChangeFrames -= 1;
@@ -682,11 +750,17 @@ function cloudUpdateUniforms({ valid, frame, accumulate, fast, restFrames, size 
   };
 }
 
-function resizeGraph(graph: AtmosphereGraph, size: readonly [number, number]): void {
+export function resizeGraph(graph: AtmosphereGraph, size: readonly [number, number]): void {
   graph.scene.resize(size);
   graph.terrainDepth.resize(size);
+  graph.hazeMarch.resize(size);
+  graph.hazeTargets.read.resize(size);
+  graph.hazeTargets.write.resize(size);
+  graph.hazeHistoryFrames = 0;
+  graph.hazeChangeFrames = 2;
   // The scene reads the depth attachment itself (a texture_2d<f32> binding, see scene.wgsl); the resize replaced it.
   graph.sceneEffect.set({ terrainDepth: graph.terrainDepth.depth! });
+  graph.hazeMarchEffect.set({ terrainDepth: graph.terrainDepth.depth! });
   const cloudSize = cloudSizeFor(size);
   graph.cloudsTargets.read.resize(cloudSize);
   graph.cloudsTargets.write.resize(cloudSize);
@@ -717,8 +791,8 @@ function sameDirection(a: Vec3 | undefined, b: Vec3): boolean {
 }
 
 export function destroyGraph(graph: AtmosphereGraph): void {
-  for (const target of [graph.transmittance, graph.skyView, graph.scene, graph.terrainDepth, ...graph.sunShadows, graph.cloudsTargets.read, graph.cloudsTargets.write, graph.cloudMarch]) for (const color of target.colors) color.destroy();
+  for (const target of [graph.transmittance, graph.skyView, graph.scene, graph.terrainDepth, ...graph.sunShadows, graph.cloudsTargets.read, graph.cloudsTargets.write, graph.cloudMarch, graph.hazeMarch, graph.hazeTargets.read, graph.hazeTargets.write]) for (const color of target.colors) color.destroy();
   graph.terrainDepth.depth?.destroy();
   for (const target of graph.sunShadows) target.depth?.destroy();
-  for (const texture of [graph.multiScatter, graph.aerial, graph.aerialUnshadowed, graph.aerialDirect, graph.shapeNoise, graph.detailNoise, graph.weatherMap, graph.curlNoise, graph.terrainMap, graph.terrainAlbedoMap, graph.cloudShadowMap]) texture.destroy();
+  for (const texture of [graph.multiScatter, graph.aerial, graph.aerialUnshadowed, graph.aerialDirect, graph.shapeNoise, graph.detailNoise, graph.weatherMap, graph.curlNoise, graph.terrainMap, graph.terrainAlbedoMap, graph.cloudShadowNearRaw, graph.cloudShadowNearMap, graph.cloudShadowMap]) texture.destroy();
 }

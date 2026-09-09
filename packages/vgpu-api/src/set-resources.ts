@@ -1,12 +1,13 @@
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
-import { incompatibleResourceError, textureFilterabilityError } from "./errors.ts";
+import { destroyedBindingError, incompatibleResourceError, textureFilterabilityError } from "./errors.ts";
 import type { Target } from "./target.ts";
 import { assertBufferUsable } from "./lifecycle.ts";
 import { BINDING_RESOURCE, bindingResourceOf } from "./draw-protocols.ts";
 
 export interface NormalizedBindingResource {
+  readonly resourceLabel?: string;
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;
   readonly unsubscribe?: (cb: () => void) => UnsubscribeResourceDestroy;
@@ -41,6 +42,17 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 /** Normalizes resources for the reflected binding kind and rejects incompatible values with vgpu fix-its. */
 export function normalizeResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
+  try { return normalizeLiveResource(binding, value, context); }
+  catch (error) {
+    if ((error as { code?: string })?.code === "VGPU-CORE-TEXTURE-DESTROYED") {
+      const label = value instanceof Texture ? value.label : asTarget(value)?.color.label;
+      throw destroyedBindingError(context.sourceHint, binding, label);
+    }
+    throw error;
+  }
+}
+
+function normalizeLiveResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
   switch (binding.bindingLayout?.kind) {
     case "buffer": return normalizeBufferResource(binding, value, context);
     case "texture": return normalizeTextureResource(binding, value, context);
@@ -78,12 +90,16 @@ function normalizeTextureResource(binding: BindingInfo, value: unknown, context:
     const texture = depthBinding ? target.depth! : target.color;
     validateTextureFilterability(binding, texture, context);
     const onTexturesRecreated = target.onTexturesRecreated?.bind(target);
-    return { resource: texture.createView(textureViewDescriptor(texture)), identity: texture.resourceIdentity, unsubscribe: (cb) => target.onDestroy(cb), onRecreate: onTexturesRecreated ? (cb) => onTexturesRecreated(cb) : undefined };
+    return { resourceLabel: texture.label, resource: texture.createView(textureViewDescriptor(texture)), identity: texture.resourceIdentity, unsubscribe: (cb) => {
+      const unsubscribeTarget = target.onDestroy(cb);
+      const unsubscribeTexture = texture.onDestroy(cb);
+      return () => { unsubscribeTarget(); unsubscribeTexture(); };
+    }, onRecreate: onTexturesRecreated ? (cb) => onTexturesRecreated(cb) : undefined };
   }
   if (value instanceof Texture) {
     validateTextureUsage(binding, value.usage);
     validateTextureFilterability(binding, value, context);
-    return { resource: value.createView(textureViewDescriptor(value)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
+    return { resourceLabel: value.label, resource: value.createView(textureViewDescriptor(value)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }
   if (isTextureLike(value)) return { resource: value.createView(), identity: value.resourceIdentity ?? syntheticIdentity(value) };
   if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
@@ -93,11 +109,11 @@ function normalizeTextureResource(binding: BindingInfo, value: unknown, context:
 function normalizeStorageTextureResource(binding: BindingInfo, value: unknown): NormalizedBindingResource {
   const layout = binding.bindingLayout?.kind === "storageTexture" ? binding.bindingLayout.storageTexture : undefined;
   const expected: ExpectedStorageTexture = { format: layout?.format as GPUTextureFormat | undefined, viewDimension: (layout?.viewDimension ?? "2d") as GPUTextureViewDimension };
-  const create = `texture(gpu, { size, format: "${expected.format ?? "rgba8unorm"}"${expected.viewDimension === "3d" ? ', dimension: "3d"' : ""} })`;
+  const create = `texture(gpu, { kind: "${expected.viewDimension}", size${expected.viewDimension === "2d-array" ? ", layers" : ""}, format: "${expected.format ?? "rgba8unorm"}", usage: ["storage_binding"] })`;
   if (asTarget(value)) throw incompatibleResourceError(binding, "a storage texture, not a Target", `Render targets are not storage textures. Create one with ${create} and set({ ${binding.name}: texture }).`);
   if (value instanceof Texture) {
     validateStorageTexture(binding, value, expected, create);
-    return { resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
+    return { resourceLabel: value.label, resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
   }
   if (isTextureLike(value)) return { resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity ?? syntheticIdentity(value) };
   if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
@@ -108,12 +124,12 @@ interface ExpectedStorageTexture { readonly format?: GPUTextureFormat; readonly 
 
 function validateStorageTexture(binding: BindingInfo, texture: Texture, expected: ExpectedStorageTexture, create: string): void {
   const name = texture.label ?? "texture";
-  if (!texture.usage.includes("storage_binding")) throw incompatibleResourceError(binding, "a texture with storage_binding usage", `Create it with ${create} (usage defaults include storage_binding).`);
+  if (!texture.usage.includes("storage_binding")) throw incompatibleResourceError(binding, "a texture with storage_binding usage", `Create it with ${create}; include texture_binding too if you also sample it.`);
   if (expected.format && texture.format !== expected.format) {
     throw incompatibleResourceError(binding, `format ${expected.format}`, `Texture '${name}' is ${texture.format}. Create it with ${create} or declare texture_storage_${expected.viewDimension.replace("-", "_")}<${texture.format}, ...> in WGSL.`);
   }
   const dimension = textureDimensionFor(expected.viewDimension);
-  if (dimension && texture.dimension !== dimension) throw incompatibleResourceError(binding, `dimension "${dimension}"`, `Texture '${name}' is "${texture.dimension}". Create it with texture(gpu, { ..., dimension: "${dimension}" }).`);
+  if (dimension && texture.dimension !== dimension) throw incompatibleResourceError(binding, `dimension "${dimension}"`, `Texture '${name}' has kind "${texture.kind}". Create it with ${create}.`);
 }
 
 /** Storage bindings address exactly one mip level; WebGPU rejects views spanning several. */

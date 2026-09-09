@@ -10,6 +10,30 @@ export type CameraUniformValues = {
 }
 
 const DEG = Math.PI / 180;
+type SunAngles = Pick<AtmosphereState, 'sunElevation' | 'sunAzimuth'>;
+
+const sliderBlend = (deltaTime: number) => 1 - Math.exp(-12 * Math.max(0, Math.min(deltaTime, 0.1)));
+
+/** Ease altitude in km, settling within 10 cm so temporal history can resume. */
+export function smoothAltitude(current: number, target: number, deltaTime: number): number {
+  const next = current + (target - current) * sliderBlend(deltaTime);
+  return Math.abs(target - next) < 0.0001 ? target : next;
+}
+
+/** Frame-rate-independent easing, reaching ~95% of a slider change in 250 ms. */
+export function smoothSunAngles(current: SunAngles, target: SunAngles, deltaTime: number): SunAngles {
+  const blend = sliderBlend(deltaTime);
+  const elevationDelta = target.sunElevation - current.sunElevation;
+  const azimuthDelta = target.sunAzimuth - current.sunAzimuth;
+  const shortestAzimuth = azimuthDelta - 360 * Math.round(azimuthDelta / 360);
+  // Settle exactly so tiny residual motion stops invalidating cloud/haze history and rebuilding terrain shadows.
+  const ease = (value: number, destination: number, delta: number) =>
+    Math.abs(delta * (1 - blend)) < 0.001 ? destination : value + delta * blend;
+  return {
+    sunElevation: ease(current.sunElevation, target.sunElevation, elevationDelta),
+    sunAzimuth: ease(current.sunAzimuth, target.sunAzimuth, shortestAzimuth),
+  };
+}
 
 /** Direction from elevation/azimuth angles in degrees; azimuth 0 points toward +Z. */
 export function directionFromAngles(elevationDeg: number, azimuthDeg: number): Vec3 {

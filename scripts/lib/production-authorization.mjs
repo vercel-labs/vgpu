@@ -28,6 +28,7 @@ export const PUBLISHED_PACKAGES = Object.freeze([
 export const CI_REQUIRED_JOBS = Object.freeze([
   "test-fast",
   "docker-gpu",
+  "visual-snapshots / Verify visual snapshots",
   "docs-app-build",
   "docs-generated",
   "examples-api-generated",

@@ -18,8 +18,9 @@ const textures = pingPong(device, textureOptions); // TextureOptions -> TextureP
 const buffers = pingPong(device, bufferOptions);   // BufferOptions -> BufferPingPong
 ```
 
-- `TextureOptions` creates two `Texture` halves. `size` may be 2D or 3D:
-  `[width, height]` or `[width, height, depthOrArrayLayers]`.
+- `TextureOptions` creates two `Texture` halves. Explicit `kind` determines the spatial
+  size: `[width]`, `[width, height]` or `[width, height, depth]`. Arrays use a 2D size
+  and a separate required `layers` count, preserved across resize.
 - `BufferOptions` creates two `Buffer` halves. `size` is the byte length.
 - Runtime dispatch follows the option shape: numeric `size` is a buffer;
   tuple `size` is a texture.
@@ -40,9 +41,14 @@ const buffers = pingPong(device, bufferOptions);   // BufferOptions -> BufferPin
   idempotent.
 - Calling `resize()` after `destroy()` throws `PingPong is destroyed`.
 
-Resize through the pair. Resizing or replacing a half directly would desync the
-pair because the halves are intentionally ordinary, individually bindable VGPU
-resources.
+Texture halves have no `resize()`: resize through the pair. Its kind, layers, format,
+usage, mip count and sample count stay fixed. A successful resize destroys both old
+textures and resets parity; explicitly rebind the new halves and reseed their contents.
+Texture-pair preparation is synchronous: if creating either replacement throws, any
+partial allocation is cleaned and the old pair, size, contents and parity stay intact.
+Errors reported later by native WebGPU are not rollback-safe and use normal device
+error reporting. These preparation guarantees describe the texture overload, not the
+buffer overload. There is no asynchronous/checked resize variant.
 
 ## Texture example
 
@@ -51,6 +57,7 @@ import { pingPong, type Device } from "@vgpu/core";
 
 function reactionDiffusion(device: Device, width: number, height: number) {
   const state = pingPong(device, {
+    kind: "2d",
     label: "gray-scott",
     size: [width, height], // `[width, height, depth]` also works for 3D sims
     format: "rgba16float",

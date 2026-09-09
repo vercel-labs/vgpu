@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
 import { PNG } from "pngjs";
+import { compareVisualSnapshot } from "../../../../scripts/lib/visual-snapshot.mjs";
 import { expect } from "vitest";
 import type { Device } from "@vgpu/core";
 import { perspectiveCamera, type Mat4, type Vec3 } from "vgpu/scene";
@@ -22,8 +21,8 @@ export async function renderEditMesh(device: Device, mesh: Mesh, angle: keyof ty
 }
 
 export async function renderEditMeshWireframe(device: Device, mesh: Mesh, angle: keyof typeof ANGLES, wireColor: readonly [number, number, number] = [1, 1, 1]): Promise<Uint8Array> {
-  const color = device.createTexture({ size: [256, 256], format: "rgba8unorm-srgb", usage: ["render_attachment", "copy_src"] });
-  const depth = device.createTexture({ size: [256, 256], format: "depth24plus", usage: ["render_attachment"] });
+  const color = device.createTexture({ kind: "2d", size: [256, 256], format: "rgba8unorm-srgb", usage: ["render_attachment", "copy_src"] });
+  const depth = device.createTexture({ kind: "2d", size: [256, 256], format: "depth24plus", usage: ["render_attachment"] });
   const base = normalDebugMaterial({ device, targetFormat: "rgba8unorm-srgb" });
   const overlay = wireframeOverlayMaterial({ device, targetFormat: "rgba8unorm-srgb", color: wireColor });
   const baseUniform = device.createBuffer({ label: "edit-wireframe.base-uniform", size: base.uniformByteSize, usage: ["uniform", "copy_dst"] });
@@ -46,7 +45,7 @@ export async function renderEditMeshWireframe(device: Device, mesh: Mesh, angle:
     pass.end();
     device.queue.gpu.submit([encoder.finish()]);
     const png = new PNG({ width: 256, height: 256 });
-    png.data.set(await color.read());
+    png.data.set(await color.read({ mipLevel: 0, region: "all" }));
     return PNG.sync.write(png);
   } finally {
     baseUniform.destroy(); overlayUniform.destroy(); depth.destroy(); color.destroy();
@@ -68,11 +67,7 @@ export function highlightMesh(device: Device, em: EditableMesh, sel: ElementSele
 }
 
 export async function expectEditSnapshot(name: string, pngBytes: Uint8Array): Promise<void> {
-  const expectedPath = join(process.cwd(), SNAPSHOT_DIR, name);
-  if (process.env.VGPU_WRITE_SNAPSHOTS === "1") { await mkdir(join(process.cwd(), SNAPSHOT_DIR), { recursive: true }); await writeFile(expectedPath, pngBytes); return; }
-  const expected = PNG.sync.read(await readFile(expectedPath)), actual = PNG.sync.read(Buffer.from(pngBytes));
-  expect(actual.width).toBe(256); expect(actual.height).toBe(256); expect(expected.width).toBe(256); expect(expected.height).toBe(256);
-  expect(Buffer.compare(Buffer.from(actual.data), Buffer.from(expected.data))).toBe(0);
+  await compareVisualSnapshot(SNAPSHOT_DIR, name, pngBytes, { onMismatch: (message: string) => expect.soft(false, message).toBe(true) });
 }
 
 export function editableSignature(em: EditableMesh): string {

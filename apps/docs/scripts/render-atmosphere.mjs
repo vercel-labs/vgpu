@@ -46,7 +46,7 @@ for (const name of presetNames) {
     const started = performance.now();
     if (args.accumulate) await renderAccumulated(gpu, target, state, args.accumulate);
     else await renderStill(gpu, target, state, args.debug);
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     const suffix = args.debug ? `.${args.debug}` : '';
     const file = path.join(outDir, `${name}${suffix}.png`);
     await writePng(file, pixels, size[0], size[1]);
@@ -101,7 +101,7 @@ async function temporal(gpu, target, state, name, args) {
     applyState(graph, current, target.size);
     frame(gpu, (f) => renderGraph(f, graph, target));
     await gpu.gpu.queue.onSubmittedWorkDone();
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     recent.push(pixels);
     if (recent.length > 8) recent.shift();
     if (sweep) {
@@ -109,7 +109,7 @@ async function temporal(gpu, target, state, name, args) {
       if (i % (args.every ?? 8) === 0 || i === args.temporal - 1) {
         const referenceTarget = createTarget(gpu, { size: target.size, format: 'rgba8unorm', label: 'atmosphere-reference' });
         await renderStill(gpu, referenceTarget, current);
-        const reference = await referenceTarget.read();
+        const reference = await referenceTarget.color.read({ mipLevel: 0, region: "all" });
         referenceTarget.color.destroy();
         const tag = `${name}.sweep.${String(i).padStart(3, '0')}`;
         await writePng(path.join(outDir, `${tag}.png`), pixels, width, height);

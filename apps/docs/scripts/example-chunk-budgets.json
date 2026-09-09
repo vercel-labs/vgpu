@@ -20,7 +20,7 @@
     "fft-ocean": 57413,
     "fft-ocean-surface": 77154,
     "raymarched-fractal": 53573,
-    "glass-fractal": 78160,
+    "glass-fractal": 83587,
     "environment-map": 64637,
     "transmission": 76076,
     "clipping": 59215,
@@ -34,7 +34,7 @@
     "three-tsl": 279113,
     "particle-orbit": 160967,
     "adaptive-quality": 56238,
-    "atmosphere": 99230
+    "atmosphere": 106391
   },
   "exampleGrowth": {
     "percent": 2,

@@ -12,6 +12,8 @@
     "typecheck:fixtures": "tsc -p packages/core/tests/tsconfig.create-sampler-types.json && tsc -p packages/core/tests/tsconfig.types.json && tsc -p packages/vgpu-api/tests/uniforms/tsconfig.types.json",
     "docs:verify-snippets": "node scripts/verify-docs-snippets.mjs",
     "test": "vitest run",
+    "snapshots:check": "node scripts/snapshots.mjs check",
+    "snapshots:update": "node scripts/snapshots.mjs update",
     "test:fast": "vitest run packages/adapter-mock packages/core packages/wgsl packages/render scripts",
     "test:docker": "bash infra/test-docker/run.sh",
     "test:doctor:docker": "bash infra/test-docker-doctor/run.sh",

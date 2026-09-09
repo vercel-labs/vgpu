@@ -33,7 +33,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("sampleable depth on Dawn"
         current.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => pass.draw(geometry));
         current.pass({ target: output, clear: [0, 0, 0, 1] }, (pass) => pass.draw(fog));
       });
-      const pixels = await output.read();
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       // Clip-space z = 0.25 is stored: reference 0.5 is not less than it, reference 0.1 is.
       // A depth buffer left at its clear value (1.0) would pass both references.
       expect(pixels[0]).toBe(0);

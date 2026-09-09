@@ -3,6 +3,16 @@ import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 
+export function destroyedBindingError(label: string, binding: BindingInfo, resourceName = "resource"): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-BINDING-DESTROYED",
+    message: `Binding '${binding.name}' (@group(${binding.group}) @binding(${binding.binding})) in '${label}' refers to destroyed resource '${resourceName}'.`,
+    where: `${label}.${binding.name}`,
+    fix: `Create a live resource and call set({ ${binding.name}: replacement }). Direct attachment references do not follow target.resize(); bind the Target itself to follow replacements. Re-record bundles that captured the old resource.`,
+    detail: { binding: binding.binding, bindingName: binding.name, resourceName },
+  });
+}
+
 export function storageStageLimitError(label: string, stage: "vertex" | "fragment", entryPoint: string, count: number, limit: number, bindings: readonly BindingInfo[]): VGPUError {
   const title = stage === "vertex" ? "Vertex" : "Fragment";
   const suffix = stage === "vertex" ? "VERTEX" : "FRAGMENT";
@@ -494,24 +504,6 @@ export function targetSizeRequiredError(): VGPUError {
     code: "VGPU-TARGET-SIZE-REQUIRED",
     message: "Target size required. Fix: target(gpu, { size: [w,h] }); update surface-derived targets in onResize.",
     where: "target",
-  });
-}
-
-export function textureSizeRequiredError(): VGPUError {
-  return new VGPUError({
-    code: "VGPU-TEXTURE-SIZE-REQUIRED",
-    message: "Texture size required. Fix: texture(gpu, { size: [w,h] }) or texture(gpu, { size: [w,h,d], dimension: \"3d\" }); every entry must be an integer >= 1.",
-    where: "texture",
-  });
-}
-
-export function textureStorageFormatError(format: GPUTextureFormat): VGPUError {
-  return new VGPUError({
-    code: "VGPU-TEXTURE-STORAGE-FORMAT",
-    message: `Format '${format}' is not storage-capable, but usage includes storage_binding.`,
-    fix: "Use a storage-capable format (rgba8unorm, rgba16float, r32float, rgba32float, ...) or pass usage without storage_binding, e.g. usage: ['texture_binding', 'copy_dst'].",
-    where: "texture",
-    detail: { format },
   });
 }
 

@@ -10,6 +10,7 @@ import { CLOUD_SHADOW_MAP_SIZE, Clouds, cloudDensity } from "./clouds-common.wgs
 @group(0) @binding(6) var noiseSampler: sampler;
 @group(0) @binding(7) var cloudShadowMap: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(8) var<uniform> sunShadow: SunShadow;
+@group(0) @binding(9) var cloudShadowNearMap: texture_storage_2d<rgba16float, write>;
 
 /** Samples through the cloud layer along the sun; the map's texels are coarser than this anyway. */
 const SAMPLES: i32 = 8;
@@ -27,7 +28,8 @@ fn lineSphere(origin: vec3f, dir: vec3f, radius: f32) -> vec2f {
 }
 
 /**
- * Cloud shadow as a map in the sun's frame: each texel is one light ray of the far shadow cascade, and stores the
+ * Two cloud shadow maps in the sun's frame: z=0 covers the middle terrain cascade (60 km), z=1 the far one (260 km).
+ * Each texel is one light ray and stores the
  * transmittance of the cloud layer along it. Anything below the layer on that ray, terrain or air at any altitude,
  * reads the same value with a projection through the cascade's matrix, which is exactly the shadow it receives.
  * Rebuilt every frame: the wind moves the clouds and the sun may move too; eight cheap density samples per texel.
@@ -36,10 +38,13 @@ fn lineSphere(origin: vec3f, dir: vec3f, radius: f32) -> vec2f {
 fn main(@builtin(global_invocation_id) id: vec3u) {
   let p = atmosphere;
   var transmittance = 1.0;
-  if (p.sunDirection.y > 0.02 && clouds.coverage > 0.0) {
+  // The cloud layer can remain sunlit below 0 degrees; its spherical intersections work on either side of sunset.
+  if (clouds.coverage > 0.0) {
     // The ray of this texel: any point of it back in world space (relative to the ground point, then planet-centric).
     let clip = (vec2f(id.xy) + 0.5) / CLOUD_SHADOW_MAP_SIZE * 2.0 - 1.0;
-    let onRay = (sunShadow.fromShadow2 * vec4f(clip.x, -clip.y, 0.0, 1.0)).xyz + vec3f(0.0, p.groundRadius, 0.0);
+    var fromShadow = sunShadow.fromShadow2;
+    if (id.z == 0u) { fromShadow = sunShadow.fromShadow1; }
+    let onRay = (fromShadow * vec4f(clip.x, -clip.y, 0.0, 1.0)).xyz + vec3f(0.0, p.groundRadius, 0.0);
     // The layer along the line toward the sun: from where the line leaves the bottom sphere (or enters the top one when
     // it misses the bottom) to where it leaves the top sphere.
     let top = lineSphere(onRay, p.sunDirection, p.groundRadius + clouds.top);
@@ -59,5 +64,6 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
       }
     }
   }
-  textureStore(cloudShadowMap, id.xy, vec4f(transmittance, 0.0, 0.0, 1.0));
+  if (id.z == 0u) { textureStore(cloudShadowNearMap, id.xy, vec4f(transmittance, 0.0, 0.0, 1.0)); }
+  else { textureStore(cloudShadowMap, id.xy, vec4f(transmittance, 0.0, 0.0, 1.0)); }
 }

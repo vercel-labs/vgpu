@@ -35,7 +35,7 @@ export async function regionStats(
   output: Target,
   region: { readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number },
 ): Promise<RegionStats> {
-  const floats = await output.readFloats();
+  const floats = await output.color.readFloats({ mipLevel: 0, region: "all" });
   const [width, height] = output.size;
   const from = [Math.floor(region.x0 * width), Math.floor(region.y0 * height)] as const;
   const to = [Math.ceil(region.x1 * width), Math.ceil(region.y1 * height)] as const;

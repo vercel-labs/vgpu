@@ -16,13 +16,13 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("rgba16float target readback k
     const colorTarget = target(gpu, { size: [2, 2], format: "rgba16float" });
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effect(gpu, HDR))));
 
-    const floats = await colorTarget.readFloats();
+    const floats = await colorTarget.color.readFloats({ mipLevel: 0, region: "all" });
     expect(floats).toBeInstanceOf(Float32Array);
     expect(floats).toHaveLength(2 * 2 * 4);
     expect([...floats.subarray(0, 4)]).toEqual([2.5, -1.25, 100, 1]);
 
     // read() stays raw bytes and is now 8 bytes per texel instead of throwing VGPU-CORE-UNSUPPORTED-FORMAT.
-    const bytes = await colorTarget.read();
+    const bytes = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     expect(bytes.byteLength).toBe(2 * 2 * 8);
   } finally {
     gpu.dispose();
@@ -35,10 +35,10 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("rgba32float target readback i
     const colorTarget = target(gpu, { size: [2, 2], format: "rgba32float" });
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effect(gpu, HDR))));
 
-    const floats = await colorTarget.readFloats();
+    const floats = await colorTarget.color.readFloats({ mipLevel: 0, region: "all" });
     expect(floats).toHaveLength(2 * 2 * 4);
     expect([...floats.subarray(0, 4)]).toEqual([2.5, -1.25, 100, 1]);
-    expect((await colorTarget.read()).byteLength).toBe(2 * 2 * 16);
+    expect((await colorTarget.color.read({ mipLevel: 0, region: "all" })).byteLength).toBe(2 * 2 * 16);
   } finally {
     gpu.dispose();
   }
@@ -51,7 +51,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("r32float target reads back on
     const colorTarget = target(gpu, { size: [3, 2], format: "r32float" });
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(effect(gpu, RED_CHANNEL))));
 
-    const floats = await colorTarget.readFloats();
+    const floats = await colorTarget.color.readFloats({ mipLevel: 0, region: "all" });
     expect(floats).toHaveLength(3 * 2);
     expect([...floats]).toEqual([8.5, 8.5, 8.5, 8.5, 8.5, 8.5]);
   } finally {
@@ -67,10 +67,10 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("rgba8unorm readback is unchan
       @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }
     `))));
 
-    const bytes = await colorTarget.read();
+    const bytes = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     expect(bytes.byteLength).toBe(2 * 2 * 4);
     expect([...bytes.subarray(0, 4)]).toEqual([255, 0, 0, 255]);
-    expect([...(await colorTarget.readFloats()).subarray(0, 4)]).toEqual([1, 0, 0, 1]);
+    expect([...(await colorTarget.color.readFloats({ mipLevel: 0, region: "all" })).subarray(0, 4)]).toEqual([1, 0, 0, 1]);
   } finally {
     gpu.dispose();
   }

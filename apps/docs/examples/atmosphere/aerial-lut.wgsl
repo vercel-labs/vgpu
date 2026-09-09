@@ -1,6 +1,8 @@
 import { AERIAL_KM_PER_SLICE, AERIAL_LUT_DEPTH, AERIAL_LUT_HEIGHT, AERIAL_LUT_WIDTH, Atmosphere, Camera, PLANET_RADIUS_OFFSET, SunShadow, cameraRay, meanTransmittance, miePhase, rayleighPhase, raySphere, sampleMedium, sampleMultiScatter, sampleTransmittance, sunShadowSample } from "./atmosphere-common.wgsl";
 import { Clouds, sampleCloudShadow } from "./clouds-common.wgsl";
 
+@group(0) @binding(15) var cloudShadowNearMap: texture_2d<f32>;
+
 @group(0) @binding(0) var<uniform> atmosphere: Atmosphere;
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var transmittanceLut: texture_2d<f32>;
@@ -58,7 +60,7 @@ fn integrateAerial(p: Atmosphere, origin: vec3f, dir: vec3f, tMaxMax: f32, sampl
     let fromGround = position - vec3f(0.0, p.groundRadius, 0.0);
     var lit = sunShadowSample(sunShadow, sunShadowMap0, sunShadowMap1, sunShadowMap2, shadowSampler, fromGround, 1.0);
     // The cloud shadow map is one light ray per texel, so the air below the layer reads exactly its own column.
-    if (viewHeight - p.groundRadius < clouds.bottom) { lit *= sampleCloudShadow(clouds, sunShadow, cloudShadowMap, lutSampler, fromGround); }
+    if (viewHeight - p.groundRadius < clouds.bottom) { lit *= sampleCloudShadow(clouds, sunShadow, cloudShadowNearMap, cloudShadowMap, lutSampler, fromGround); }
     let multiScatter = sampleMultiScatter(p, multiScatterLut, lutSampler, viewHeight, sunZenithCos);
     let direct = p.sunIlluminance * (earthShadow * sunTransmittance * (medium.mie * phaseMie + medium.rayleigh * phaseRayleigh));
     let ambient = p.sunIlluminance * (multiScatter * medium.scattering);

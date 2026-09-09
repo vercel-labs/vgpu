@@ -53,9 +53,9 @@ export struct FrameConstants {
  * ground point under the camera axis and covering discs of `radii` km; the last one reaches the whole terrain.
  * Each `toShadowN` maps a position relative to that ground point to the cascade's clip space: xy in [-1, 1] across
  * the map, z in [0, 1] along the light, nearest first. `bias` per cascade is two texels of ground in depth units.
- * `fromShadow2` inverts the last cascade: the cloud shadow map (cloud-shadow.wgsl) is laid out in that space.
+ * `fromShadow1/2` invert the middle/far cascades, which also lay out the near/far cloud shadow maps.
  */
-export struct SunShadow { toShadow0: mat4x4f, toShadow1: mat4x4f, toShadow2: mat4x4f, fromShadow2: mat4x4f, radii: vec4f, bias: vec4f };
+export struct SunShadow { toShadow0: mat4x4f, toShadow1: mat4x4f, toShadow2: mat4x4f, fromShadow1: mat4x4f, fromShadow2: mat4x4f, radii: vec4f, bias: vec4f };
 export const SUN_SHADOW_CASCADES: i32 = 3;
 
 export fn sunShadowCascade(shadow: SunShadow, fromGround: vec3f) -> i32 {

@@ -93,6 +93,7 @@ async function bakeEnvironment(
     const env = own(
       owned,
       gpu.device.createTexture({
+        kind: "2d",
         size: [...ENV_SIZE],
         format: HDR_FORMAT,
         mipLevelCount: 8,

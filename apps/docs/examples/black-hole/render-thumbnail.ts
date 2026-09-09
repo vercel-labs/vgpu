@@ -37,14 +37,14 @@ export async function renderThumbnail(
     await gpu.gpu.queue.onSubmittedWorkDone();
     await opts.onVariantRendered?.(
       'time-delta',
-      await colorTarget.read(),
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
       colorTarget.size,
     );
     render(time, [0.72, 0.34]);
     await gpu.gpu.queue.onSubmittedWorkDone();
     await opts.onVariantRendered?.(
       'pointer-orbit',
-      await colorTarget.read(),
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
       colorTarget.size,
     );
     render(time, [0, 0.05]);

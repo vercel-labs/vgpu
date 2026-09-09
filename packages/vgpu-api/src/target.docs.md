@@ -37,8 +37,6 @@ interface Target {
   readonly sampleCount: 1 | 4;
   readonly resourceIdentity: ResourceIdentity;
   resize(size: readonly [number, number]): void;
-  read(): Promise<Uint8Array>;
-  readFloats(): Promise<Float32Array>;
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy;
   renderPassDescriptor(opts?: {
     readonly clear?: ClearColor;
@@ -65,9 +63,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 | opts.msaa | `boolean \| 4` | ✖ | `false` / sample count `1` | Only `true` or `4` enables MSAA, creating color/depth attachments with sample count `4` and resolving to sampleable `.color(s)`. |
 | opts.clearColor | `ClearColor` | ✖ | `[0, 0, 0, 1]` | Default clear color of this target, used by passes that clear without naming one. Writable at runtime as `target.clearColor`; a pass `clear` color still wins for that pass. Four finite numbers, or a `GPUColor` object. |
 | opts.label | `string` | ✖ | `undefined` | Prefix for created texture labels. |
-| target.resize.size | `readonly [number, number]` | ✔ | — | Recreates offscreen textures unless size is unchanged. |
-| target.read | — | — | — | No parameters; reads `target.color` and returns its raw unpadded texel bytes (4 per texel for `rgba8unorm`, 8 for `rgba16float`, 16 for `rgba32float`). `bgra8unorm` / `bgra8unorm-srgb` are supported and swizzled to RGBA, matching canvas preferred formats on platforms such as macOS. |
-| target.readFloats | — | — | — | No parameters; reads `target.color` and decodes it to one f32 per component — the HDR readback for `rgba16float` / `rgba32float` targets. `unorm8` formats decode to `[0, 1]`. |
+| target.resize.size | `readonly [number, number]` | ✔ | — | Two positive safe integers. Recreates offscreen textures unless size is unchanged. Synchronous preparation failure preserves the old size and attachments. |
 | target.onDestroy.cb | `ResourceDestroyCallback<Target>` | ✔ | — | Subscribes to target destruction. |
 | target.renderPassDescriptor.clear | `ClearColor` | ✖ | `[0, 0, 0, 1]` | Clear color for all color attachments unless `preserve` is true. `Frame.pass` supplies `target.clearColor` for omitted/`true` clears and a per-pass color when provided. |
 | target.renderPassDescriptor.preserve | `boolean` | ✖ | `false` | Optional implementer hook used by `Frame.pass({ clear: false })`; when true, color and depth attachments should load existing contents and omit clear values. |
@@ -79,7 +75,7 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 | pingPong.opts | `TargetTextureOptions` | ✖ | `{}` | Texture options for both targets. Size is intentionally not accepted; positional width/height win. |
 | pingPongStorage.bytes | `number` | ✔ | — | Creates two `"read-write"` storage buffers. |
 
-**Returns:** `target(gpu)` returns `Target`; `resize()` returns `void`; `read()` returns `Promise<Uint8Array>`; `readFloats()` returns `Promise<Float32Array>`; `renderPassDescriptor(opts?)` returns a WebGPU render pass descriptor; `pingPong(gpu)` returns `PingPongTargets`; `pingPongStorage(gpu)` returns `PingPongStorage`.
+**Returns:** `target(gpu)` returns `Target`; `resize()` returns `void`; `renderPassDescriptor(opts?)` returns a WebGPU render pass descriptor; `pingPong(gpu)` returns `PingPongTargets`; `pingPongStorage(gpu)` returns `PingPongStorage`. For readback, select `.color` or `.colors[index]` and use `Texture.read(options)` / `Texture.readFloats(options)`.
 
 **Throws:** `VGPU-CORE-UNSUPPORTED-FORMAT` when `read()` / `readFloats()` runs on a color format outside the readback table (see `Texture`); `VGPU-TARGET-SIZE-REQUIRED` when runtime JS calls `target(gpu)` without `size`; `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` when a `texture_depth_*` binding receives a target without a depth attachment; `VGPU-TARGET-MSAA-INVALID` when runtime JS passes an unsupported `msaa` value (only `true` / `4` are accepted); `VGPU-TARGET-DEPTH-STENCIL-ONLY` when `depth` receives the stencil-only `"stencil8"` format (stencil-only depth targets are not supported yet); `VGPU-RING1-UNSUPPORTED` when `msaa: true` / `4` with `rgba16float` is used on a Dawn compatibility-mode device; underlying core texture/readback operations can throw native WebGPU validation errors.
 
@@ -168,7 +164,7 @@ const bloom = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return
 
 frame(gpu, (currentFrame) => currentFrame.pass(hdr, bloom));
 
-const floats = await hdr.readFloats(); // Float32Array, 64 * 64 * 4 components
+const floats = await hdr.color.readFloats({ mipLevel: 0, region: "all" }); // Float32Array, 64 * 64 * 4 components
 console.log(floats[0]); // 4 — values above 1 survive the readback
 ```
 
@@ -194,12 +190,15 @@ pair.swap();
 - Choose `Target` for offscreen intermediates that must be reused, sampled, read back, or ping-ponged; choose `Surface` only for the canvas swapchain (see `Surface`). A target can be rendered in multiple passes and sampled by later effects.
 - Use simple `format` for one color attachment. Use `colors` when a pass writes multiple attachments (MRT/G-buffer), then consume `target.colors[i]` in later lighting/post passes.
 - Set `depth: true` for ordinary z-testing; choose `depth: "depth24plus-stencil8"` when stencil masking is required. Enable `msaa: true`/`4` for anti-aliased 3D geometry, but do not combine MSAA with `clear: false` preservation or `depthReadOnly`: the internal multisample render attachments (including depth) are discarded, while the resolved `.color(s)` remain sampleable/readable.
-- `target.read()` / `target.readFloats()` are intended for tests, snapshots, and diagnostics—not a per-frame hot path. For iterative simulation or post-processing, use `pingPong(gpu, ...)` and swap targets instead of readback.
+- `target.color.read({ mipLevel: 0, region: "all" })` / `target.color.readFloats({ mipLevel: 0, region: "all" })` are intended for tests, snapshots, and diagnostics—not a per-frame hot path. For iterative simulation or post-processing, use `pingPong(gpu, ...)` and swap targets instead of readback.
 - There is no global resolution binding. Pass `target.size` or `target.texelSize` explicitly to shaders.
 - `Surface.color` wraps the canvas current texture; offscreen target colors are stable until resize/destroy.
-- `target.read()` and `surface.read()` return raw texel bytes in the target's own color format, with row padding removed and BGRA canvas formats swizzled to RGBA. For `rgba8unorm` targets that is exactly the previous RGBA byte layout.
-- Float targets (`rgba16float`, `rgba32float`, `r16float`, `r32float`, `rg16float`, `rg32float`) read back through `target.readFloats()`, which decodes half/float texels into a `Float32Array` of components — HDR values above `1` and negatives are preserved. `readFloats()` also works on `unorm8` targets (normalized to `[0, 1]`), so tooling can stay format-agnostic.
-- Custom `Target` implementers must provide `readFloats()`; delegating to `this.color.readFloats()` (as `target(gpu)` and `surface(gpu)` do) is enough.
+- Offscreen resize prepares all color/MSAA/depth replacements before publishing them. Synchronous preparation failure cleans partial allocations and leaves old attachments and bindings intact. Late native validation/out-of-memory errors use normal WebGPU reporting without rollback; this is not an async resize API.
+- Successful resize publishes one coherent attachment generation, notifies Target bindings, then releases old textures. Subscriber failures do not roll back an already committed replacement; other subscribers and cleanup still run. Recursive resize inside replacement callbacks is rejected. Destroyed targets cannot be resized, including to the same size.
+- Binding `target.color`/`target.depth` retains that exact attachment; it does not follow resize. Rebind the replacement after resizing, or bind the Target itself to follow its selected color/depth attachment. Tracked destroyed references fail at draw/dispatch; recorded bundles must be re-recorded.
+- `target.color.read({ mipLevel: 0, region: "all" })` and `surface.color.read({ mipLevel: 0, region: "all" })` return raw texel bytes in the target's own color format, with row padding removed and BGRA canvas formats swizzled to RGBA. For `rgba8unorm` targets that is exactly the previous RGBA byte layout.
+- Float targets (`rgba16float`, `rgba32float`, `r16float`, `r32float`, `rg16float`, `rg32float`) read back through `target.color.readFloats({ mipLevel: 0, region: "all" })`, which decodes half/float texels into a `Float32Array` of components — HDR values above `1` and negatives are preserved. `readFloats()` also works on `unorm8` targets (normalized to `[0, 1]`), so tooling can stay format-agnostic.
+- `Target` and `Surface` have no read methods. Select `.color` or `.colors[index]`, then use that texture's required mip/region selection. Custom implementations expose attachments, not readback delegates.
 - Size-dependent targets derived from a surface should be created from the real initial `surface.size` and resized from `surface.onResize(...)`.
 - Custom `Target` implementers should honor the optional `renderPassDescriptor(opts?)` options-bag fields to participate in `Frame.pass({ clear: false })`, `FramePassOptions.clearDepth`, `FramePassOptions.clearStencil`, and `FramePassOptions.depthReadOnly`; implementations that ignore a field will clear (with depth `1`, stencil `0`) instead.
 - Depth formats with a stencil aspect (`"depth24plus-stencil8"`, `"depth32float-stencil8"`) emit `stencilLoadOp`/`stencilStoreOp` on the pass depth-stencil attachment, mirroring the depth load/store behavior with `stencilClearValue` from `FramePassOptions.clearStencil` (default `0`), as WebGPU requires when the stencil aspect is writable.

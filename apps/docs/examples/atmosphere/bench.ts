@@ -57,7 +57,7 @@ export async function runBench(gpu: Gpu, cssSize: readonly [number, number], dpr
     const cloudsFrame = passFrame((frame) => { encodeClouds(frame, graph); finishFrame(graph); });
 
     await time('full frame', passFrame((frame) => renderGraph(frame, graph, output)));
-    await time('scene: terrain depth + shading + sky', passFrame((frame) => encodeScene(frame, graph)));
+    await time('scene: terrain + haze accumulation + sky', passFrame((frame) => encodeScene(frame, graph)));
     await time('clouds: 1/16 of the texels marched', cloudsFrame);
     applyState(graph, { ...preset, cloudCoverage: 0 }, size);
     await time('clouds: coverage 0, resolve only', cloudsFrame);

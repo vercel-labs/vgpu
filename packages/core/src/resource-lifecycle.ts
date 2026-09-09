@@ -32,7 +32,12 @@ export class DestroySignal<T> {
     this.destroyed = true;
     const callbacks = [...this.callbacks];
     this.callbacks.clear();
-    for (const cb of callbacks) cb(resource);
+    const errors: unknown[] = [];
+    for (const cb of callbacks) {
+      try { cb(resource); } catch (error) { errors.push(error); }
+    }
+    // Lifecycle bookkeeping must finish even if a consumer callback throws.
+    if (errors.length) throw errors[0];
     return true;
   }
 }

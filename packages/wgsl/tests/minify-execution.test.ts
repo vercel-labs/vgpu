@@ -329,6 +329,9 @@ fn main() {
     expect(minified).not.toContain("shadow_result");
     expect(minified).not.toContain("collision_result");
     expect(minified).not.toContain("result_inner");
-    expect(minified).not.toContain("long_value");
+    // The #251 safety guard intentionally preserves both shadowed declarations and their
+    // references; requiring this name to disappear contradicts minify-local-guard.test.ts.
+    // Keep the GPU equivalence assertion above and verify that all four occurrences survive.
+    expect(minified.match(/\blong_value\b/g)).toHaveLength(4);
   });
 });

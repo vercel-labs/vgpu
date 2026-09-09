@@ -102,7 +102,7 @@ async function renderOne(renderers, example, size, metaThumb, output) {
           ? (stats) => { assertFluidState(stats); fluidState = stats; }
           : slug === 'radiance-cascades' ? (stats) => { radianceStats = stats; } : undefined,
       });
-    const pixels = await colorTarget.read();
+    const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
     const fluidMetrics = slug === 'fluid' && !args.proofDir && !args.fluidSoak && !args.fluidDrag
       ? assertFluidMetrics(pixels, size[0], size[1])

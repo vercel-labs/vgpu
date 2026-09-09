@@ -41,7 +41,12 @@ fn terrainSunVisibility(p: Atmosphere) -> f32 {
 fn main(@builtin(local_invocation_id) local: vec3u) {
   let p = atmosphere;
   let entryHeight = f32(local.x) / f32(TERRAIN_TRANSMITTANCE_ENTRIES - 1u) * TERRAIN_MAX_HEIGHT;
-  frameConstants.terrainSunTransmittance[local.x] = vec4f(sampleTransmittance(p, transmittanceLut, lutSampler, p.groundRadius + entryHeight, p.sunDirection.y), 0.0);
+  // Sunset is altitude-dependent: peaks see a depressed horizon. Fade over the finite solar disc instead of
+  // turning direct terrain light off globally at zero elevation (or lighting terrain through the planet).
+  let horizonCos = -sqrt(entryHeight * (2.0 * p.groundRadius + entryHeight)) / (p.groundRadius + entryHeight);
+  let sunEdge = sin(camera.sunAngularRadius);
+  let planetVisibility = smoothstep(horizonCos - sunEdge, horizonCos + sunEdge, p.sunDirection.y);
+  frameConstants.terrainSunTransmittance[local.x] = vec4f(planetVisibility * sampleTransmittance(p, transmittanceLut, lutSampler, p.groundRadius + entryHeight, p.sunDirection.y), 0.0);
   if (local.x != 0u) { return; }
   let viewHeight = length(camera.position);
   let up = camera.position / viewHeight;

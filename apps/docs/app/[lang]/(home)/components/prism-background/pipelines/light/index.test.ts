@@ -215,6 +215,7 @@ describe("light pipeline ownership", () => {
     const environment = () =>
       ({
         texture: gpu.device.createTexture({
+          kind: "2d",
           size: [2, 1],
           format: "rgba16float",
           usage: ["texture_binding", "copy_dst"],
@@ -226,6 +227,7 @@ describe("light pipeline ownership", () => {
     const assetLoader: LightTextureLoader = {
       async load(currentGpu, spec) {
         const texture = currentGpu.device.createTexture({
+          kind: "2d",
           size: [1, 1],
           format: "rgba8unorm",
           usage: ["texture_binding", "copy_dst"],

@@ -10,7 +10,7 @@ export struct Clouds {
   typeBias: f32, seed: f32, shadows: f32, pad1: f32,
 };
 
-/** The cloud shadow map (cloud-shadow.wgsl) covers the far shadow cascade's window at this resolution. */
+/** Both cloud shadow maps use this resolution: the middle terrain cascade's window nearby, the far one beyond it. */
 export const CLOUD_SHADOW_MAP_SIZE: f32 = 512.0;
 
 /** Mean of the detail fbm over the noise volume (measured 0.494 over the 32-cube): what the erosion applies where its pattern has faded out. */
@@ -138,10 +138,24 @@ export fn cloudRange(c: Clouds, origin: vec3f, dir: vec3f, viewHeight: f32) -> M
   return MarchRange(0.0, exit, true);
 }
 
-/** Sun transmittance of the cloud layer along the light through a point (relative to the ground point under the camera); 1 when cloud shadows are off. */
-export fn sampleCloudShadow(c: Clouds, shadow: SunShadow, map: texture_2d<f32>, mapSampler: sampler, fromGround: vec3f) -> f32 {
-  if (c.shadows < 0.5) { return 1.0; }
+/**
+ * Sun transmittance along the light through a receiver. Blend the near map into the far one over 24–30 km,
+ * also fading at the near projection's edges for elevated receivers. Away from the blend, only one map is read.
+ */
+export fn sampleCloudShadow(c: Clouds, shadow: SunShadow, nearMap: texture_2d<f32>, map: texture_2d<f32>, mapSampler: sampler, fromGround: vec3f) -> f32 {
+  if (c.shadows < 0.5 || c.coverage <= 0.0) { return 1.0; }
+  let near = shadow.toShadow1 * vec4f(fromGround, 1.0);
+  let edge = max(length(fromGround.xz) / shadow.radii.y, max(abs(near.x), abs(near.y)));
+  let blend = smoothstep(0.8, 1.0, edge);
+  var nearLit = 1.0;
+  if (blend < 1.0) {
+    nearLit = textureSampleLevel(nearMap, mapSampler, vec2f(near.x * 0.5 + 0.5, 0.5 - near.y * 0.5), 0.0).r;
+    if (blend <= 0.0) { return nearLit; }
+  }
   let s = shadow.toShadow2 * vec4f(fromGround, 1.0);
-  if (any(abs(s.xy) > vec2f(1.0))) { return 1.0; }
-  return textureSampleLevel(map, mapSampler, vec2f(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5), 0.0).r;
+  var farLit = 1.0;
+  if (all(abs(s.xy) <= vec2f(1.0))) {
+    farLit = textureSampleLevel(map, mapSampler, vec2f(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5), 0.0).r;
+  }
+  return mix(nearLit, farLit, blend);
 }
