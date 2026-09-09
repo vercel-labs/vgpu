@@ -180,6 +180,8 @@ or an incomplete or modified generation leaves the outcome unknown, even when th
 appears intact. Equal content hashes alone do not establish either directory's identity.
 An in-place edit to an old payload prevents this negative proof even when its directory and file
 identities and its byte length have not changed.
+The two module names may differ. An intact old package can provide this historical evidence even
+though it no longer matches the current project's module or input fingerprint.
 
 An old package left at staging is recovery evidence, not permission to delete it. Its contents are
 not required to prove publication of the complete new generation at the destination. Reconciliation

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   constants,
@@ -79,12 +80,18 @@ vi.mock("node:child_process", async (original) => {
 });
 
 import { prepareMetalProject } from "../src/tooling/prepare-project.ts";
-import { MetalOutputVerificationError } from "../src/tooling/output-verification.ts";
+import {
+  MetalOutputVerificationError,
+  verifyMetalOutput,
+} from "../src/tooling/output-verification.ts";
 import {
   MetalPublicationError,
   publishPreparedMetalOutput,
 } from "../src/tooling/publication-staging.ts";
-import { verifyMetalProject } from "../src/tooling/verify-project.ts";
+import {
+  MetalProjectVerificationError,
+  verifyMetalProject,
+} from "../src/tooling/verify-project.ts";
 import { projectFixture } from "./project-operation-fixture.ts";
 
 const workerPath = fileURLToPath(
@@ -99,6 +106,7 @@ test.each([
   "missing-destination",
   "not-published",
   "changed-old-payload",
+  "changed-module-negative",
 ] as const)(
   "owned reconciliation preserves both generations after interruption (%s)",
   async (outcome) => {
@@ -123,6 +131,8 @@ test.each([
     const expectedOutcome =
       outcome === "missing-destination" || outcome === "changed-old-payload"
         ? "unknown"
+        : outcome === "changed-module-negative"
+        ? "not-published"
         : outcome;
     const frames: Record<string, any>[] = [];
     const reconciliationFrames: Record<string, any>[] = [];
@@ -188,22 +198,68 @@ test.each([
       const oldRecordBytes = await readFile(
         join(input.outputPath, ".vgpu-native-output.json")
       );
+      if (outcome === "changed-module-negative") {
+        const configurationBefore = await lstat(input.configurationPath, {
+          bigint: true,
+        });
+        expect(configurationBefore.isFile()).toBe(true);
+        const configuration = JSON.parse(
+          await readFile(input.configurationPath, "utf8")
+        );
+        configuration.moduleName = "RebuiltShadersLonger";
+        await writeFile(input.configurationPath, JSON.stringify(configuration));
+        const configurationAfter = await lstat(input.configurationPath, {
+          bigint: true,
+        });
+        expect(configurationAfter.isFile()).toBe(true);
+        expect({
+          device: configurationAfter.dev,
+          inode: configurationAfter.ino,
+          mode: configurationAfter.mode,
+        }).toEqual({
+          device: configurationBefore.dev,
+          inode: configurationBefore.ino,
+          mode: configurationBefore.mode,
+        });
+      }
       const prepared = await prepareMetalProject({
         configurationPath: input.configurationPath,
         workerPath,
       });
-      expect(Object.keys(prepared.files).sort()).toEqual(
-        Object.keys(original.files).sort()
-      );
       expect(Object.keys(prepared.files)).toHaveLength(4);
-      for (const [name, bytes] of Object.entries(prepared.files))
-        expect(Buffer.from(bytes)).toEqual(Buffer.from(original.files[name]!));
-      expect(Buffer.from(prepared.files[".vgpu-native-output.json"]!)).toEqual(
-        oldRecordBytes
-      );
-      expect(prepared.project.inputFingerprint).toBe(
-        original.project.inputFingerprint
-      );
+      if (outcome === "changed-module-negative") {
+        const newRecordBytes = Buffer.from(
+          prepared.files[".vgpu-native-output.json"]!
+        );
+        expect(original.record.moduleName).toBe("AppShaders");
+        expect(prepared.record.moduleName).toBe("RebuiltShadersLonger");
+        expect(prepared.project.inputFingerprint).not.toBe(
+          original.project.inputFingerprint
+        );
+        expect(prepared.record.files).not.toEqual(original.record.files);
+        expect(Object.keys(prepared.files).sort()).not.toEqual(
+          Object.keys(original.files).sort()
+        );
+        expect(prepared.files["Package.swift"]!.byteLength).not.toBe(
+          original.files["Package.swift"]!.byteLength
+        );
+        expect(newRecordBytes.byteLength).not.toBe(oldRecordBytes.byteLength);
+        expect(newRecordBytes).not.toEqual(oldRecordBytes);
+      } else {
+        expect(Object.keys(prepared.files).sort()).toEqual(
+          Object.keys(original.files).sort()
+        );
+        for (const [name, bytes] of Object.entries(prepared.files))
+          expect(Buffer.from(bytes)).toEqual(
+            Buffer.from(original.files[name]!)
+          );
+        expect(
+          Buffer.from(prepared.files[".vgpu-native-output.json"]!)
+        ).toEqual(oldRecordBytes);
+        expect(prepared.project.inputFingerprint).toBe(
+          original.project.inputFingerprint
+        );
+      }
 
       const observer = join(input.directory, "publication-owned-rename.dylib");
       await promisify(execFile)(
@@ -394,6 +450,30 @@ test.each([
         stage: { name: ".vgpu-native-stage", ...stageIdentity },
       });
       expect(actualPrepared?.publication).toEqual(journalRecord.publication);
+      if (outcome === "changed-module-negative") {
+        const oldPlan = actualPrepared!.publication;
+        expect(oldPlan.oldModuleName).toBe("AppShaders");
+        expect(actualPrepared!.moduleName).toBe("RebuiltShadersLonger");
+        expect(oldPlan.oldFiles).not.toEqual(actualPrepared!.files);
+        expect(oldPlan.oldRecordSHA256).toBe(
+          createHash("sha256").update(oldRecordBytes).digest("hex")
+        );
+        expect(actualPrepared!.recordSHA256).not.toBe(oldPlan.oldRecordSHA256);
+        for (const [manifest, files] of [
+          [oldPlan.oldFiles, original.files],
+          [actualPrepared!.files, prepared.files],
+        ] as const) {
+          expect(manifest).toHaveLength(4);
+          for (const file of manifest) {
+            const bytes = files[file.path]!;
+            expect(bytes).toBeDefined();
+            expect(file.length).toBe(bytes.byteLength);
+            expect(file.sha256).toBe(
+              createHash("sha256").update(bytes).digest("hex")
+            );
+          }
+        }
+      }
       expect(await treeEvidence(input.outputPath)).toEqual(oldBefore);
       await expectPackageFiles(stage, prepared.files);
       if (outcome === "published") {
@@ -468,6 +548,23 @@ test.each([
           code: "invalid-output",
           message: "Generated file has changed: Package.swift",
         });
+      } else if (outcome === "changed-module-negative") {
+        await expect(
+          verifyMetalOutput({
+            outputPath: input.outputPath,
+            configurationPath: input.configurationPath,
+          })
+        ).resolves.toEqual(original.record);
+        const verificationFailure = await verifyMetalProject({
+          configurationPath: input.configurationPath,
+        }).catch((cause: unknown) => cause);
+        expect(verificationFailure).toBeInstanceOf(
+          MetalProjectVerificationError
+        );
+        expect(verificationFailure).toMatchObject({
+          code: "stale-output",
+          outputPath: input.outputPath,
+        });
       } else if (outcome !== "missing-destination")
         await expect(
           verifyMetalProject({ configurationPath: input.configurationPath })
@@ -513,7 +610,7 @@ test.each([
           },
           recoveryPaths: [stage, journal, input.outputPath],
         });
-      else if (outcome === "not-published")
+      else if (expectedOutcome === "not-published")
         expect(failure).toMatchObject({
           code: "helper-failed",
           cause: {
