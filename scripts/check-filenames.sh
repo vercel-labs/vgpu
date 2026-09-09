@@ -18,6 +18,11 @@ violations=$(
         if (fname ~ /^next-env\.d\.ts$/) return 1
         if (fname ~ /\.d\.ts$/) return 1
 
+        # Eve overrides are discovered by built-in tool slug. Keep the exception
+        # to the exact underscore-bearing defaults and agent tool directories
+        # this factory explicitly disables.
+        if (path ~ /^apps\/factory\/agent\/(tools|subagents\/issue_security_triager\/tools)\/(ask_question|load_skill|read_file|write_file|web_fetch|web_search)\.ts$/) return 1
+
         # Binary/data/source formats where external/generated names are accepted here.
         if (fname ~ /\.(jpg|jpeg|gif|svg|ico|webp|wgsl|json|yaml|yml|css|txt|lock)$/) return 1
 

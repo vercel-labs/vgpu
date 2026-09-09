@@ -1,5 +1,5 @@
 import type { ImportDecl, ModuleParse } from "./parser.ts";
-import type { Token } from "./scanner.ts";
+import { scan, type Token } from "./scanner.ts";
 import { wgslError } from "./errors.ts";
 import { xxh64 } from "./xxh64.ts";
 
@@ -135,7 +135,51 @@ function seek(tokens: readonly Token[], start: number, text: string): number | u
 function matchPair(tokens: readonly Token[], openIndex: number, open: string, close: string): number | undefined { let depth = 0; for (let i = openIndex; i < tokens.length; i++) { if (tokens[i]!.text === open) depth++; else if (tokens[i]!.text === close && --depth === 0) return i; } return undefined; }
 function blocked(tokens: readonly Token[], i: number): boolean { const prev = tokens[i - 1]?.text, next = tokens[i + 1]?.text; return prev === "@" || prev === "." || (next === ":" && !declared(tokens, i)) || prev === "enable" || prev === "requires" || prev === "override"; }
 function declared(tokens: readonly Token[], i: number): boolean { for (let j = i - 1; j >= 0 && tokens[j]?.text !== ";" && tokens[j]?.text !== "{" && tokens[j]?.text !== "}"; j--) if (["var", "let", "const", "override"].includes(tokens[j]!.text)) return true; return false; }
-function stripExports(source: string): string { return source.replace(/\bexport\s+(?=@|fn|struct|const|alias|var|override)/g, "").replace(/(@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*)export\s+(?=fn|struct|const|alias|var|override)/g, "$1"); }
+const exportDeclarationKinds = new Set(["fn", "struct", "const", "alias", "var", "override"]);
+
+function stripExports(source: string): string {
+  const tokens = scan(source);
+  let out = "";
+  let cursor = 0;
+  let depth = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (isCommentToken(token)) continue;
+    if (token.text === "{") { depth++; continue; }
+    if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
+    if (depth > 0 || token.text !== "export" || declarationKindAfterExport(tokens, i) === undefined) continue;
+    out += source.slice(cursor, token.start);
+    cursor = token.end;
+  }
+  return cursor === 0 ? source : out + source.slice(cursor);
+}
+
+function declarationKindAfterExport(tokens: readonly Token[], exportIndex: number): string | undefined {
+  let i = nextCodeToken(tokens, exportIndex + 1);
+  while (tokens[i]?.text === "@") {
+    const nameIndex = nextCodeToken(tokens, i + 1);
+    if (tokens[nameIndex]?.kind !== "ident" && tokens[nameIndex]?.kind !== "keyword") return undefined;
+    i = nextCodeToken(tokens, nameIndex + 1);
+    if (tokens[i]?.text === "(") {
+      const close = matchPair(tokens, i, "(", ")");
+      if (close === undefined) return undefined;
+      i = nextCodeToken(tokens, close + 1);
+    }
+  }
+  return exportDeclarationKinds.has(tokens[i]?.text ?? "") ? tokens[i]!.text : undefined;
+}
+
+function nextCodeToken(tokens: readonly Token[], start: number): number {
+  let i = start;
+  while (tokens[i] && isCommentToken(tokens[i]!)) i++;
+  return i;
+}
+
+function isCommentToken(token: Token): boolean { return token.kind === "lineComment" || token.kind === "blockComment"; }
+function attributeNameAt(tokens: readonly Token[], atIndex: number): string | undefined {
+  if (tokens[atIndex]?.text !== "@") return undefined;
+  return tokens[nextCodeToken(tokens, atIndex + 1)]?.text;
+}
 function isVisible(kind: string, module: MangleModule, name: string): boolean { return kind === "override" || isEntryPoint(module, name) || isBindingVar(module, name); }
 function isBindingVar(module: MangleModule, name: string): boolean {
   for (let i = 0; i < module.tokens.length; i++) {
@@ -143,7 +187,7 @@ function isBindingVar(module: MangleModule, name: string): boolean {
     const nameIndex = varNameIndex(module.tokens, i);
     if (module.tokens[nameIndex]?.text !== name) continue;
     for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
-      if (module.tokens[j]?.text === "@" && ["group", "binding"].includes(module.tokens[j + 1]?.text ?? "")) return true;
+      if (["group", "binding"].includes(attributeNameAt(module.tokens, j) ?? "")) return true;
     }
   }
   return false;
@@ -160,16 +204,16 @@ function varNameIndex(tokens: readonly Token[], varIndex: number): number {
   }
   return varIndex + 1;
 }
-function isEntryPoint(module: MangleModule, name: string): boolean {
+export function isEntryPoint(module: MangleModule, name: string): boolean {
   let depth = 0;
   for (let i = 0; i < module.tokens.length; i++) {
     const token = module.tokens[i]!;
     if (token.text === "{") { depth++; continue; }
     if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
     if (depth > 0) continue;
-    if (token.text !== "fn" || module.tokens[i + 1]?.text !== name) continue;
+    if (token.text !== "fn" || module.tokens[nextCodeToken(module.tokens, i + 1)]?.text !== name) continue;
     for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
-      if (module.tokens[j]?.text === "@" && ["vertex", "fragment", "compute"].includes(module.tokens[j + 1]?.text ?? "")) return true;
+      if (["vertex", "fragment", "compute"].includes(attributeNameAt(module.tokens, j) ?? "")) return true;
     }
   }
   return false;

@@ -71,8 +71,8 @@ export function createNoiseVolume(
   label = "black-hole-noise"
 ) {
   const texture = gpu.device.createTexture({
+    kind: "3d",
     size: [size, size, size],
-    dimension: "3d",
     format: FORMAT,
     usage: ["texture_binding", "copy_dst"],
     label,

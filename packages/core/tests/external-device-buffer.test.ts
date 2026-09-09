@@ -88,10 +88,10 @@ test("external buffer validates usage, alignment, and range", async () => {
 test("retained texture operations reject after device disposal", () => {
   const f = fakeDevice();
   const device = new Device(f.gpu, null, "external");
-  const texture = device.createTexture({ size: [1, 1], format: "rgba8unorm", usage: ["texture_binding"] });
+  const texture = device.createTexture({ kind: "2d", size: [1, 1], format: "rgba8unorm", usage: ["texture_binding"] });
   device.dispose();
   expect(() => texture.createView()).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
-  expect(() => texture.resize([2, 2])).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
+  expect(() => texture.view).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
   expect(f.destroy).not.toHaveBeenCalled();
 });
 

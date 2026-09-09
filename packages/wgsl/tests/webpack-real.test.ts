@@ -56,12 +56,12 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
       optimization: { minimize: false },
     });
 
-    const bundle = await readFile(join(outDir, bundleName), "utf8");
-    expect(bundle).not.toContain("helper_color");
-    expect(bundle).toContain("return b();");
-    expect(bundle).toContain("fn a()-> vec4f");
-    expect(bundle).not.toContain("helper comment");
-    expect(bundle).not.toContain("entry comment");
+    const wgsl = requireShaderSource(join(outDir, bundleName)).wgsl;
+    expect(wgsl).not.toContain("helper_color");
+    expect(wgsl).toContain("return b();");
+    expect(wgsl).toContain("fn a()-> vec4f");
+    expect(wgsl).not.toContain("helper comment");
+    expect(wgsl).not.toContain("entry comment");
   });
 
   it("triggers re-compile when a transitively imported .wgsl changes (addDependency wiring)", async () => {
@@ -123,6 +123,15 @@ async function installWorkspacePackage(dir: string): Promise<void> {
 
 function resolveWebpackLoader(): string {
   return require.resolve("@vgpu/wgsl/loader-webpack");
+}
+
+function requireShaderSource(path: string): { readonly wgsl: string } {
+  const loaded = require(path) as { readonly default?: unknown };
+  const value = loaded.default ?? loaded;
+  if (!value || typeof value !== "object" || !("wgsl" in value) || typeof value.wgsl !== "string") {
+    throw new Error("webpack bundle did not export a ShaderSource");
+  }
+  return value as { readonly wgsl: string };
 }
 
 function expectBundleContainsResolvedWgsl(bundle: string): void {

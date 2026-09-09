@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9903,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9903",
+    "sourceId": "issue:9903",
+    "title": "Add JPEG as an output format",
+    "body": "Would you consider supporting JPEG output with a configurable quality option? Our thumbnail pipeline does not need transparency, and encoding directly would avoid a second conversion step. This is a feature request rather than a report of broken existing behavior.",
+    "author": "fixture-reporter",
+    "createdAt": "2026-08-22T12:00:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "enhancement", "description": "New feature or request" },
+    { "name": "question", "description": "Further information is requested" }
+  ],
+  "availableSourceIds": ["issue:9903"],
+  "contextWarnings": [],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": true }
+}

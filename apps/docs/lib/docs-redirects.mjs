@@ -63,6 +63,11 @@ export const CONSOLIDATED_CONCEPT_GUIDES = [
 export const SECTION_ROOTS = [
   { source: "/docs/reference/vgpu", destination: "/docs/reference/vgpu/init", dir: "reference/vgpu" },
   {
+    source: "/docs/reference/vgpu-three",
+    destination: "/docs/reference/vgpu-three/tsl-exports",
+    dir: "reference/vgpu-three",
+  },
+  {
     source: "/docs/reference/vgpu-scene",
     destination: "/docs/reference/vgpu-scene/camera",
     dir: "reference/vgpu-scene",

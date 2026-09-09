@@ -14,7 +14,7 @@ describe("issue #34 headline pyramid+bevel scene availability", () => {
 });
 
 (HAS_CONE ? describe : describe.skip)("issue #34 headline pyramid+bevel scene", () => {
-  test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("renders the pyramid+bevel scene byte-equal to snapshot", async () => {
+  test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("renders the pyramid+bevel scene byte-equal to snapshot", async () => {
     const device = await createNodeAdapter().requestDevice();
     try {
       const cone = (Mesh as unknown as { cone: (opts: unknown) => Mesh }).cone;

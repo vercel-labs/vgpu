@@ -10,8 +10,8 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §13 headless Node
   const first = await renderGradientHeadless();
   const second = await renderGradientHeadless();
   try {
-    const a = await first.target.read();
-    const b = await second.target.read();
+    const a = await first.target.color.read({ mipLevel: 0, region: "all" });
+    const b = await second.target.color.read({ mipLevel: 0, region: "all" });
     expect(Array.from(b)).toEqual(Array.from(a));
   } finally {
     first.gpu.dispose();

@@ -1,6 +1,6 @@
 # Practical texture-format matrix
 
-Choose a target format from the operations it must support, not just its channel precision. In vgpu, `format` is passed through to WebGPU for render-target capability; the API rejects a filtering binding for 32-bit float textures unless the device was initialized with `float32-filterable` support. `target.read()` returns raw texel bytes and `target.readFloats()` decodes them to f32 components, so HDR and scalar targets read back directly.
+Choose a target format from the operations it must support, not just its channel precision. In vgpu, `format` is passed through to WebGPU for render-target capability; the API rejects a filtering binding for 32-bit float textures unless the device was initialized with `float32-filterable` support. `target.color.read({ mipLevel: 0, region: "all" })` returns raw texel bytes and `target.color.readFloats({ mipLevel: 0, region: "all" })` decodes them to f32 components, so HDR and scalar targets read back directly.
 
 ## Common color and scalar formats
 
@@ -28,7 +28,7 @@ import { init, target } from "vgpu/node";
 const gpu = await init();
 const hdr = target(gpu, { size: [256, 256], format: "rgba16float" });
 // ...render into hdr...
-const floats = await hdr.readFloats(); // 256 * 256 * 4 components, HDR values intact
+const floats = await hdr.color.readFloats({ mipLevel: 0, region: "all" }); // 256 * 256 * 4 components, HDR values intact
 console.log(floats[0]);
 ```
 

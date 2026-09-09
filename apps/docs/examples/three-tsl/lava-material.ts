@@ -15,15 +15,23 @@ import {
 } from "three/tsl";
 import type { ShaderNodeObject } from "three/tsl";
 import type { Node } from "three/webgpu";
+import { tslExports } from "vgpu/three";
 import lavaModule from "./lava.wgsl";
-import { tslExports } from "./wgsl-tsl";
 import {
   sampleDisplacementVolume,
   sampleFieldVolume,
   type LavaFieldVolumes,
 } from "./bake-lava";
 
-const { blackbody, perlin3 } = tslExports(lavaModule, ["blackbody", "perlin3"]);
+type LavaMaterialExports = {
+  blackbody: { t: Node };
+  perlin3: { position: Node };
+};
+
+const { blackbody, perlin3 } = tslExports<LavaMaterialExports>(lavaModule)(
+  "blackbody",
+  "perlin3",
+);
 
 export interface LavaMaterialOptions {
   /** Pre-baked field volumes from `bakeLavaVolumes`. */

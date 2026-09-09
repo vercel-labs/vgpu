@@ -3,13 +3,14 @@
 ## Regeneration command
 
 ```sh
-VGPU_WRITE_SNAPSHOTS=1 VGPU_DOCKER_TEST=1 pnpm test:docker -- packages/render/tests/primitives
+pnpm snapshots:update
 ```
 
-Re-run without `VGPU_WRITE_SNAPSHOTS` before committing:
+This renders the pushed revision in native x64 CI and downloads unapproved candidates plus a visual
+report. Review and copy only intentional changes, then commit/push them and verify:
 
 ```sh
-VGPU_DOCKER_TEST=1 pnpm test:docker -- packages/render/tests/primitives
+pnpm snapshots:check
 ```
 
 ## Camera convention
@@ -39,4 +40,6 @@ Snapshots clear to `(63, 63, 80, 255)`. The dark blue-gray background keeps silh
 
 ## Determinism
 
-These snapshots are gated on `VGPU_DOCKER_TEST=1` and are only deterministic on the Docker/Dawn path. Non-Docker WebGPU implementations may produce different bytes.
+These snapshots run in the pinned Linux x64 Vulkan CI environment, separately from functional GPU
+tests. Docker on ARM64 is not byte-equivalent to x64. `pnpm test` does not opt into canonical visual
+comparisons. See `docs/visual-snapshots.md` for the contributor workflow and environment pins.

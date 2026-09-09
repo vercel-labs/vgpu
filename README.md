@@ -93,6 +93,12 @@ npx vgpu examples search "raymarching"
 npx vgpu examples pull <id> --out ./example
 ```
 
+Agents with skill support can install vgpu's thin documentation router. The skill contains no versioned API reference; it queries the docs bundled with the `vgpu` version installed in the project.
+
+```bash
+npx skills add vercel-labs/vgpu
+```
+
 - [Agent readiness manifest](https://vgpu.sh/agents.md) — how agents should discover and use vgpu
 - [llms.txt](https://vgpu.sh/llms.txt) and [llms-full.txt](https://vgpu.sh/llms-full.txt) — documentation index and full export for LLMs
 - [Examples discovery API](https://vgpu.sh/docs/examples-api) — tokenless and read-only, described by [OpenAPI](https://vgpu.sh/openapi.json)

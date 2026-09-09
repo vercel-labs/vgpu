@@ -8,7 +8,7 @@
 //
 // Design, in one screen:
 //
-//  * ADDITIVE. `generate:docs` (skill mirror + docs-manifest.generated.js) keeps running exactly as
+//  * ADDITIVE. `generate:docs` (thin skill router + docs-manifest.generated.js) keeps running exactly as
 //    before; this is a second, independent writer with its own npm script and its own output tree.
 //
 //  * ONE SOURCE FILE ⇒ ONE PAGE (fact 5 of the design doc). A reference topic page is one

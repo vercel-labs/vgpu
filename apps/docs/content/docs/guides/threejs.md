@@ -1,65 +1,49 @@
 ---
-title: "Using vgpu WGSL modules with three.js"
-description: "Copy the three-tsl reference helper to turn vgpu-resolved pure WGSL functions into callable three.js TSL nodes for node materials."
+title: "Use WGSL modules in three.js TSL"
+description: "Turn pure functions from vgpu-resolved WGSL modules into callable three.js TSL nodes with the vgpu/three adapter."
 ---
 
-vgpu's WGSL loader can flatten a reusable WGSL module graph into ordinary WGSL, while three.js TSL can call a WGSL function from a node material. The [`three-tsl` example](/examples/three-tsl) connects those two pieces with a small reference helper.
+vgpu can resolve a reusable WGSL module graph, and three.js TSL can call WGSL functions from node materials. `tslExports()` connects those pieces without taking ownership of your renderer, scene, materials, or render loop.
 
-> `wgsl-tsl.ts` is example code, not an export from `@vgpu/wgsl`. Copy it into your project and keep it covered by your own tests if you adapt it or upgrade three.js.
-
-Read [WGSL modules](/concepts/wgsl-modules) first if you need the `import`/`export` syntax, pure-module rule, or an explanation of the flattened output. This guide focuses on the three.js bridge.
+Use this integration when you want to author shader logic as portable WGSL modules while three.js continues to own bindings and shader entry points.
 
 ## Install
 
 ```sh
-npm install @vgpu/wgsl @vgpu/wgsl-std three@^0.180.0
+npm install vgpu three@^0.180.0
 npm install --save-dev @types/three@^0.180.0 vite typescript
 ```
 
-The reference implementation is tested against three.js r180. The sample below uses Vite. For webpack, Turbopack, and the ambient TypeScript declaration in more detail, see [Using vgpu with Next.js and other bundlers](nextjs.docs.md).
+`vgpu` includes its WGSL resolver and bundler loaders, so the application does not need to install `@vgpu/wgsl` separately. The adapter loads Three only when you import `vgpu/three`.
 
-## Copy the reference helper
+## Configure Vite
 
-Copy [`examples/three-tsl/src/wgsl-tsl.ts`](https://github.com/vercel-labs/vgpu/blob/main/examples/three-tsl/src/wgsl-tsl.ts) into your source tree, for example as `src/wgsl-tsl.ts`. The same file is visible in the source panel of the [live example](/examples/three-tsl).
-
-The helper exports three pieces:
-
-- `tslExports(source, names)` returns one callable TSL node for each requested WGSL function.
-- `parseFunctionHeader(source, name)` finds the resolved function and reads its parameters and return type.
-- `forwardingWrapper(header)` creates the small WGSL function that `wgslFn` calls.
-
-Keep the helper local. It deliberately follows the emitted naming and function syntax used by the current example, so it is a useful starting point rather than a versioned package API.
-
-## Configure the WGSL loader
-
+<!-- test:three-tsl-vite-config -->
 ```ts
 // vite.config.ts
-import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+import { wgslVitePlugin } from "vgpu/client";
 
 export default {
-  plugins: [
-    wgslVitePlugin({
-      minify: { whitespace: true },
-    }),
-  ],
+  plugins: [wgslVitePlugin({ minify: true })],
 };
 ```
 
-Whitespace-only minification preserves the authored function and parameter names that the reference helper reads. Omitting `minify` is also supported.
+`minify: true` enables whitespace and safe identifier minification. The loader keeps the authored names needed by `tslExports()` in the complete shader artifact even when the emitted WGSL uses shorter identifiers.
 
-Do **not** use `minify: true` with this helper. That preset enables identifier minification, which can rename the functions and parameters that `tslExports()` looks up by authored name. Use `minify: { whitespace: true }` or leave minification disabled.
-
-Type `.wgsl` imports from an ambient declaration in your project:
+Type `.wgsl` imports through the client entry point:
 
 ```text
-// src/wgsl-env.d.ts
-/// <reference types="@vgpu/wgsl/wgsl-types" />
+// src/vgpu-env.d.ts
+/// <reference types="vgpu/client" />
 ```
 
-## Write a pure WGSL function library
+For webpack and Turbopack configuration, see [Using vgpu with Next.js and other bundlers](nextjs.docs.md).
 
-The bridge works best with functions whose inputs arrive through parameters. Let three.js own bindings and shader entry points.
+## Export pure WGSL functions
 
+Write ordinary helper functions, then mark only the functions you want JavaScript to address with `export`:
+
+<!-- test:three-tsl-surface-wgsl -->
 ```wgsl
 // surface.wgsl
 import { perlin3d } from "@vgpu/wgsl-std/noise/perlin";
@@ -79,22 +63,35 @@ export fn surfaceRoughness(position: vec3f, timeSeconds: f32) -> f32 {
 }
 ```
 
-This entry imports another WGSL module, so the loader resolves the graph, removes the author-only `import`/`export` syntax, gives private declarations collision-safe names, and returns `{ version: 1, wgsl }` to TypeScript.
+These are library functions, not `@vertex`, `@fragment`, or `@compute` entry points. They receive values through parameters, return a value, and declare no `@group` or `@binding` resources. Three remains responsible for the generated shader stages and bind groups.
 
-A `.wgsl` file with no imports takes the loader's leaf fast path. In a leaf file, write an ordinary `fn` without vgpu's `export` marker; an exported leaf is not resolved by the current loader path.
+A module does not need an import to participate. A leaf containing `export fn` goes through the same resolver path, so the loader removes the author-only `export` marker and records its public function identity.
 
-## Connect the functions to a node material
+## Create callable TSL nodes
 
-```tsx
+Pass the complete `.wgsl` import to `tslExports()` and request the authored export names you need:
+
+<!-- test:three-tsl-material -->
+```ts
 import * as THREE from "three/webgpu";
+import type { Node } from "three/webgpu";
 import { positionLocal, time } from "three/tsl";
+import { tslExports } from "vgpu/three";
 import surfaceModule from "./surface.wgsl";
-import { tslExports } from "./wgsl-tsl";
 
-const { surfaceColor, surfaceRoughness } = tslExports(
+type SurfaceInputs = {
+  position: Node;
+  timeSeconds: Node | number;
+};
+
+type SurfaceExports = {
+  surfaceColor: SurfaceInputs;
+  surfaceRoughness: SurfaceInputs;
+};
+
+const { surfaceColor, surfaceRoughness } = tslExports<SurfaceExports>(
   surfaceModule,
-  ["surfaceColor", "surfaceRoughness"] as const,
-);
+)("surfaceColor", "surfaceRoughness");
 
 const inputs = {
   position: positionLocal,
@@ -106,45 +103,69 @@ material.colorNode = surfaceColor(inputs);
 material.roughnessNode = surfaceRoughness(inputs);
 ```
 
-The input object keys must match the WGSL parameter names exactly. Numbers and TSL nodes are both accepted by the reference helper, so a call can mix constants, uniforms, and built-in nodes.
+Each returned function accepts one object keyed by the authored WGSL parameter names. Values can be Three TSL nodes or JavaScript numbers, matching `wgslFn()`.
 
-Request every function used by one material in the same `tslExports()` call. The helper then creates one shared `wgsl()` include for the flattened module and attaches it to each generated `wgslFn` wrapper.
+Request functions that share a material with one selector call. `tslExports(surfaceModule)` creates one shared `wgsl()` include for the resolved module; its selector creates one small forwarding function for each positional export name.
 
-## What the helper emits
+## Add a manual TypeScript contract
 
-For a resolved function such as:
+The positional export names give the returned object typed properties, but a normal `.wgsl` import does not carry a file-specific TypeScript signature. By default, each callable therefore accepts any named object of Three nodes or numbers.
 
-```wgsl
-fn _vgsl_1234abcd__surfaceRoughness(position: vec3f, timeSeconds: f32) -> f32 {
-  // ...
-}
+Defining a manual contract next to each `tslExports()` call, as in the primary example above, is the recommended practice for application code and examples. TypeScript then checks selected names and input objects against the contract you wrote. For example, omitting `timeSeconds` from the `surfaceColor()` call above becomes a type error.
+
+The contract is a compile-time assertion; TypeScript does not compare it with the WGSL. A contract may describe the complete module while a selector requests only the subset it needs. TypeScript rejects a selected name outside the contract and does not expose unselected keys, but it cannot prove that a contract name exists in the shader. Three's general `Node` type also does not prove WGSL distinctions such as `f32` versus `vec3f`. The shader artifact and Three's shader builder remain the runtime authorities.
+
+Use literal positional names as shown above. If names already live in an array, declare it `as const` and spread it into the selector so TypeScript preserves the exact returned keys. A union-valued name produces a union of possible result objects; narrow it with a property check such as `"surfaceColor" in selected` before calling that property.
+
+## Keep the complete artifact
+
+Pass `surfaceModule`, not `surfaceModule.wgsl`:
+
+```ts
+import { tslExports } from "vgpu/three";
+import surfaceModule from "./surface.wgsl";
+
+// Correct: keeps exported-function identity produced by the loader.
+const { surfaceColor } = tslExports(surfaceModule)("surfaceColor");
+
+// Avoid: this drops the resolver's authored-to-minified references.
+const { surfaceColor: broken } = tslExports(surfaceModule.wgsl)("surfaceColor");
 ```
 
-the helper builds a forwarding function shaped like this:
+Identifier minification is fully supported when you pass the full artifact. The resolver records each authored export name, its authored parameter names, and the corresponding declaration name in the minified WGSL. Passing only the emitted string discards those references; that compatibility path is limited to hand-written or legacy WGSL whose identifiers have not changed.
 
-```wgsl
-fn surfaceRoughness_vtsl(position: vec3f, timeSeconds: f32) -> f32 {
-  return _vgsl_1234abcd__surfaceRoughness(position, timeSeconds);
-}
-```
+## Export boundaries
 
-`wgslFn` turns that forwarding function into a callable TSL node. Passing values as parameters leaves three.js in control of the actual `@group`/`@binding` layout.
+Only direct `export fn` declarations in the resolved graph become addressable:
 
-## Constraints and troubleshooting
+- Private `fn` helpers are included when needed but cannot be requested from a new loader artifact.
+- Import aliases affect WGSL call sites; they do not create new public export names.
+- Two reachable modules may both directly export the same authored name, but requesting that name is ambiguous. Add one uniquely named forwarding export for the Three-facing API.
+- Re-export syntax is not supported.
+- Top-level declarations whose names start with `_vgpu_three_` are reserved for the adapter's private forwarding functions.
+- Functions must return a value. Void functions, shader entry points, resource-owning modules, and parameter or return forms that Three's `wgslFn()` cannot represent are unsupported.
+- Global `enable`, `requires`, and `diagnostic` directives are unsupported because Three emits `wgsl()` includes after its own global declarations. An `@diagnostic(...)` attribute is not a module directive and is not rejected by this check; the adapter's other signature constraints still apply.
 
-| Symptom | Cause | Fix |
+## Errors
+
+`tslExports()` throws an error with a stable `code` when it cannot create the requested callable. Match `error.code`; no adapter-specific error class or `instanceof` contract is exported. Import the type-only `TslExportsErrorCode` union from `vgpu/three` when a helper accepts or exhaustively handles these codes.
+
+| Code | Meaning | Fix |
 | --- | --- | --- |
-| `WGSL module has no function named ...` | The name is misspelled, the function was removed from the resolved graph, or identifier minification renamed it. | Request the authored function name and use `minify: { whitespace: true }` or no minification. |
-| `WGSL module has multiple functions answering to ...` | Two reachable modules contain the same authored function name. | Add a uniquely named exported forwarding function to the WGSL entry module and request that name. |
-| TSL reports a missing input | A JavaScript object key differs from the WGSL parameter name. | Use the exact authored names, including casing. |
-| WGSL validation reports bindings or entry-point errors | The bridged code owns resources or a shader stage. | Bridge pure value-returning functions; let three.js create bindings and stages. |
-| An exported leaf reaches three.js unchanged | A file with no imports took the loader's leaf fast path. | Remove the `export` marker from the leaf, or introduce a real module graph and resolve it through the loader. |
+| `VGPU-THREE-TSL-EXPORT-NOT-FOUND` | No surviving direct export has the requested authored name. | Fix the name, add `export` to the declaration, or ensure an entry-point graph did not prune it. |
+| `VGPU-THREE-TSL-EXPORT-AMBIGUOUS` | More than one surviving direct export has that authored name. | Add a uniquely named Three-facing forwarding export. |
+| `VGPU-THREE-TSL-SIGNATURE-UNSUPPORTED` | The function cannot be forwarded, or the module contains a global WGSL directive. | Use a pure value-returning function with `wgslFn()`-compatible parameters and no global `enable`, `requires`, or `diagnostic` directive. `@diagnostic(...)` attributes are distinct from module directives. |
+| `VGPU-THREE-TSL-SOURCE-INVALID` | Export metadata and the emitted WGSL disagree, the final declaration cannot be read, or source uses the private `_vgpu_three_` namespace. | Rename private-namespace declarations or rebuild the WGSL artifact with matching vgpu packages; report the mismatch if it persists. |
 
-The helper recognizes vgpu's current `_vgsl_<hash>__<name>` private-name format and parses function headers from emitted text. If your project needs other WGSL syntax, stronger type inference, or a different three.js release, adapt the helper and extend its tests rather than depending on undocumented behavior.
+Errors thrown later by Three while building a material are left unchanged.
 
-## Run the complete example
+## Try the examples
 
-The [WGSL in three.js example](/examples/three-tsl) goes beyond this minimal material: it drives twelve `MeshPhysicalNodeMaterial` slots, pre-bakes field volumes, renders interactively in the browser, and renders headlessly by sharing a Dawn-backed `GPUDevice` with three.js.
+Start with [Three.js WGSL modules](/examples/tsl-exports). Its source is intentionally small: one leaf WGSL module, one direct export, one `tslExports()` call, and one `MeshPhysicalNodeMaterial`.
+
+The advanced [Lava material](/examples/three-tsl) example uses the same adapter for a larger set of material inputs and for functions that pre-bake field volumes.
+
+Both examples keep a manual TypeScript contract beside each `tslExports()` call. Follow that pattern when adding or changing WGSL exports so TypeScript checks selections and input objects against the nearby contract; keep the contract aligned with the shader, which remains the runtime authority.
 
 In a checkout of this repository:
 
@@ -153,11 +174,10 @@ pnpm --filter @vgpu/example-three-tsl test
 pnpm --filter @vgpu/example-three-tsl dev
 ```
 
-The helper tests cover header parsing, wrapper generation, a real resolved WGSL graph, and callable TSL nodes. Use them as the baseline when copying or adapting the bridge.
-
 ## See also
 
-- [WGSL modules](/concepts/wgsl-modules) — how imports, exports, purity, mangling, and graph emission work.
+- [`tslExports` API reference](/reference/vgpu-three/tsl-exports#tslexports) — signature, accepted sources, return value, and error contract.
+- [WGSL modules](/concepts/wgsl-modules) — imports, direct exports, purity, mangling, and graph emission.
 - [Using vgpu with Next.js and other bundlers](nextjs.docs.md) — webpack, Turbopack, Vite, and `.wgsl` TypeScript setup.
-- [Using vgpu without a bundler](no-bundler.docs.md) — resolve a WGSL graph directly from Node.js or custom tooling.
-- [WGSL in three.js example](/examples/three-tsl) — the complete material, renderer, helper, and tests.
+- [Three.js WGSL modules](/examples/tsl-exports) — the smallest working adapter example.
+- [Lava material](/examples/three-tsl) — a complete material and baking workflow.

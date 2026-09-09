@@ -1,8 +1,8 @@
 name: ORT init device Node E2E
 
 # `on.pull_request.paths` used to gate whether this workflow triggered at all. But
-# `ort-init-device-node` is also a *required* status check on `main` (classic branch
-# protection, 11 required contexts). GitHub only clears a required context when a
+# `ort-init-device-node` can also be a *required* status check on the long-lived branches
+# (classic branch protection). GitHub only clears a required context when a
 # `pull_request`-event run actually reports a conclusion for the PR's head SHA — a
 # workflow-level path filter that skips the run entirely leaves that context stuck at
 # "Expected" forever for any PR that never touches these paths (e.g. docs-only changes).
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Full history so the merge-base diff below can always resolve the PR's base
-          # and head commits, however far main has moved since the branch was created.
+          # and head commits, however far the base branch has moved since the branch was created.
           fetch-depth: 0
 
       - name: Detect relevant path changes

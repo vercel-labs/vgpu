@@ -1,9 +1,10 @@
 export const meta = {
   slug: "three-tsl",
-  title: "WGSL in three.js",
+  title: "Lava material",
   description:
     "Author a procedural lava material as plain WGSL modules and wire them into a three.js node material — twelve surface slots, all driven from shader source.",
-  tags: ["3d", "shader", "lighting", "hdr"],
+  tags: ["three", "3d", "shader", "lighting", "hdr"],
+  guide: "/docs/guides/threejs",
   capabilities: [
     "webgpu",
     "pointer-orbit",
@@ -22,7 +23,6 @@ export const meta = {
     "scenes.ts",
     "lava-material.ts",
     "bake-lava.ts",
-    "wgsl-tsl.ts",
     "environment.ts",
     "lava.wgsl",
     "noise.wgsl",

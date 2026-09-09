@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
-import { wgslVitePlugin } from "@vgpu/wgsl/loader-vite";
+import { wgslVitePlugin } from "vgpu/client";
 
 export default defineConfig({
-  plugins: [wgslVitePlugin()],
+  plugins: [wgslVitePlugin({ minify: true })],
 });

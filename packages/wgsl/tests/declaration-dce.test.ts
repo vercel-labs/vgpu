@@ -110,6 +110,19 @@ fn unusedHelper() {}`,
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
 });
 
+test("comment trivia inside binding attributes preserves an unused resource", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `@ /* group trivia */ group(0) @ /* binding trivia */ binding(0) var<uniform> resource: vec4f;
+@fragment fn main() -> @location(0) vec4f { return vec4f(1.0); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(/@ \/\* group trivia \*\/ group\(0\) @ \/\* binding trivia \*\/ binding\(0\) var<uniform>/u);
+});
+
 test("module-scope private variables are pruned unless reachable", async () => {
   const resolved = await resolveShader({
     entry: "/main.wgsl",
@@ -144,6 +157,20 @@ fn unusedHelper() -> vec4f { return vec4f(0.0); }
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
 });
 
+test("comment trivia inside a stage attribute preserves every entry point", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `@fragment fn first() -> @location(0) vec4f { return vec4f(1.0); }
+@ /* stage trivia */ fragment fn second() -> @location(0) vec4f { return vec4f(0.0); }`,
+    },
+  });
+
+  expect(resolved.wgsl).toMatch(/@ \/\* stage trivia \*\/ fragment fn second\s*\(/u);
+  expect(resolved.reflection.entryPoints.map((entry) => entry.name)).toEqual(["first", "second"]);
+});
+
 test("top-level non-declaration directives survive DCE", async () => {
   const resolved = await resolveShader({
     entry: "/main.wgsl",
@@ -161,6 +188,32 @@ fn unusedHelper() {}
   expect(resolved.wgsl).toContain("diagnostic(off, derivative_uniformity);");
   expect(resolved.wgsl).toContain("const_assert true;");
   expect(resolved.wgsl).not.toMatch(helperPattern("unusedHelper"));
+});
+
+test("removes comment-separated attributes with a dead declaration", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `@fragment fn main() -> @location(0) vec4f { return vec4f(1.0); }
+export @must_use /* attached trivia */ fn dead(value: f32) -> f32 { return value; }`,
+    },
+  });
+
+  expect(resolved.wgsl).not.toContain("@must_use");
+});
+
+test("removes dead attributes containing comment trivia", async () => {
+  const resolved = await resolveShader({
+    entry: "/main.wgsl",
+    validate: false,
+    modules: {
+      "/main.wgsl": `@fragment fn main() -> @location(0) vec4f { return vec4f(1.0); }
+export @ /* attribute trivia */ must_use fn dead(value: f32) -> f32 { return value; }`,
+    },
+  });
+
+  expect(resolved.wgsl).not.toContain("@ /* attribute trivia */ must_use");
 });
 
 test("top-level const_assert references are DCE roots", async () => {

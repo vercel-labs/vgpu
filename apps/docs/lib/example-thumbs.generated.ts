@@ -6,6 +6,10 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
+  "adaptive-quality": {
+    "card": "/examples/adaptive-quality.card.png",
+    "hero": "/examples/adaptive-quality.hero.png"
+  },
   "agent-radiance-cascades": {
     "card": "/examples/agent-radiance-cascades.card.png",
     "hero": "/examples/agent-radiance-cascades.hero.png"
@@ -17,6 +21,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "anti-aliasing": {
     "card": "/examples/anti-aliasing.card.png",
     "hero": "/examples/anti-aliasing.hero.png"
+  },
+  "atmosphere": {
+    "card": "/examples/atmosphere.card.png",
+    "hero": "/examples/atmosphere.hero.png"
   },
   "batch-rendering": {
     "card": "/examples/batch-rendering.card.png",
@@ -101,5 +109,13 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "triangle-led-front": {
     "card": "/examples/triangle-led-front.card.png",
     "hero": "/examples/triangle-led-front.hero.png"
+  },
+  "tsl-exports": {
+    "card": "/examples/tsl-exports.card.png",
+    "hero": "/examples/tsl-exports.hero.png"
+  },
+  "typegpu-liquid-glass": {
+    "card": "/examples/typegpu-liquid-glass.card.png",
+    "hero": "/examples/typegpu-liquid-glass.hero.png"
   }
 };

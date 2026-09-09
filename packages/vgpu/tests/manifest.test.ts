@@ -7,12 +7,28 @@ import { buildIndex } from "../lib/docs/index.js";
 import { resolveDocsTarget } from "../lib/docs/commands/resolve.js";
 import { createManifest, parseAllowlist, serializeManifest, virtualPathFor } from "../lib/docs/generate/manifest.js";
 import { loadManifest } from "../lib/docs/generate/generate.js";
-import { buildSkill } from "../lib/docs/generate/skill.js";
 import { docsManifest } from "../lib/generated/docs-manifest.generated.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
+
+test("the public texture reference ships on the website and in curated navigation", () => {
+  expect(docsManifest.records.find((record) => record.package === "vgpu" && record.symbol === "texture"))
+    .toMatchObject({ repoPath: "packages/vgpu-api/src/texture.docs.md", virtualPath: "/vgpu/texture.docs.md", topic: "texture" });
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu/texture.md"), "utf8");
+  expect(page).toContain("Write a selected mip from compute");
+  const nav = JSON.parse(readFileSync(resolve(root, "docs/nav.json"), "utf8"));
+  const topics = nav.topicOrder.vgpu;
+  expect(topics.indexOf("texture")).toBe(topics.indexOf("target") + 1);
+});
+
+test.each(["TextureReadOptions", "TextureShape", "TextureUsageName"])("new texture type %s has a real heading for its website deep link", (symbol) => {
+  const record = docsManifest.records.find((entry) => entry.package === "vgpu/core" && entry.symbol === symbol);
+  expect(record?.anchor).toBe(symbol.toLowerCase());
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu-core/texture.md"), "utf8");
+  expect(page).toContain(`### ${symbol}\n`);
+});
 
 test("parses allowlist entries and maps virtual paths", () => {
   const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/buffer.docs.md\n");
@@ -155,7 +171,7 @@ test("manifest includes getting-started as a guide", () => {
   });
 });
 
-test("exports the CLI reference to the docs corpus and skill", () => {
+test("exports the CLI reference to the docs corpus", () => {
   expect(docsManifest.records.find((record) => record.symbol === "cli")).toMatchObject({
     package: "guides",
     symbol: "cli",
@@ -165,10 +181,6 @@ test("exports the CLI reference to the docs corpus and skill", () => {
     topicTitle: "CLI",
     websitePath: "/cli",
   });
-
-  const skill = buildSkill(docsManifest);
-  expect(skill.get("SKILL.md")).toContain("## CLI reference");
-  expect(skill.get("references/guides/cli.docs.md")).toContain("# CLI");
 });
 
 test("getting-started cat references resolve against the docs index", () => {
@@ -215,15 +227,6 @@ test("concept guides preserve canonical title and numeric website order", () => 
     topicTitle: title,
     order,
   })));
-
-  const router = buildSkill(manifest).get("SKILL.md");
-  expect(router).toBeDefined();
-  const concepts = router?.slice(router.indexOf("## Core concepts"), router.indexOf("## Performance guides"));
-  expect([...concepts?.matchAll(/^- \*\*([^*]+)\*\*/gmu) ?? []].map((match) => match[1])).toEqual([
-    "Context", "Draws", "Compilation", "Effects", "Passes", "Frames", "Render bundles",
-  ]);
-  expect(concepts).toContain("**Context** — Everything in vgpu starts from one call.");
-  expect(concepts).not.toContain("— ---");
 });
 
 test("rejects a non-numeric guide order", () => {

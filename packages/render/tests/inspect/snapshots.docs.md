@@ -10,8 +10,8 @@ snapshots render `Mesh.box` directly because they do not require readback.
 
 ## Regeneration steps
 
-1. Run `VGPU_WRITE_SNAPSHOTS=1 pnpm test:docker -- packages/render/tests/inspect`
-   to write 6 PNGs from the current code.
+1. Commit/push the intended code, then run `pnpm snapshots:update` to generate unapproved candidates
+   in the pinned native x64 Vulkan CI environment and download a before/actual/diff report.
 2. Visually inspect each PNG. Expected appearance:
    - `box-wireframe-front.png`: looking mostly down the -Z axis with slight elevation; front face dominates with a sliver of the top face visible.
    - `box-wireframe-iso.png`: roughly 9 visible white edges from the 3 visible cube faces.
@@ -19,10 +19,10 @@ snapshots render `Mesh.box` directly because they do not require readback.
    - `box-normals-front.png`: solid blue, near `(187, 187, 255, 255)` after sRGB encoding.
    - `box-normals-iso.png`: 3 visible faces — green-, red-, and blue-tinted.
    - `box-normals-side.png`: solid red, near `(255, 187, 187, 255)` after sRGB encoding.
-3. Commit the new PNGs.
-4. Re-run the test suite without `VGPU_WRITE_SNAPSHOTS` to confirm byte-equal pass.
+3. Copy only reviewed candidates to their matching repository paths, then commit/push the PNGs.
+4. Run `pnpm snapshots:check` to confirm byte-equal pass on the pushed revision.
 
 ## Determinism
 
-Snapshots assume Docker/Dawn rendering. Local non-Dawn runs may differ.
-The test suite gates these tests on `VGPU_DOCKER_TEST=1`.
+Snapshots use one pinned native Linux x64 Vulkan environment. ARM64 Docker and local GPUs may differ.
+Functional GPU tests remain independent; see `docs/visual-snapshots.md` for the full workflow.

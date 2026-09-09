@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { agent, nav, navbarVariant } from "./geistdocs";
+import { agent, github, nav, navbarVariant } from "./geistdocs";
 import { AGENT_INSTRUCTIONS, AGENT_USE_CASES } from "./lib/agent-guidance";
 import { buildMetaFiles } from "../../packages/vgpu/lib/docs/generate/generate-geistdocs.js";
 
@@ -11,6 +11,7 @@ describe("agent readiness metadata", () => {
   it("keeps project trust links out of the primary navigation", () => {
     expect(nav.map((item) => item.label)).toEqual(["Docs", "Examples"]);
     expect(navbarVariant).toBe("standard");
+    expect(github.branch).toBe("canary");
   });
 
   it("advertises the real developer resources and public MCP endpoint", () => {
@@ -44,6 +45,8 @@ describe("agent readiness metadata", () => {
     expect(agent.instructions).toEqual(AGENT_INSTRUCTIONS);
     const instructions = agent.instructions?.join("\n") ?? "";
     expect(instructions).toContain("npx vgpu mcp --output-dir /absolute/path");
+    expect(instructions).toContain("current stable documentation");
+    expect(instructions).toContain("match an installed package or prerelease");
     expect(instructions).toContain("relative `destination`");
     expect(instructions).toContain("configured output directory");
   });
@@ -64,6 +67,9 @@ describe("agent readiness metadata", () => {
     const agents = docsContent("get-started/agents.mdx");
     expect(agents).toContain("https://vgpu.sh/api/mcp");
     expect(agents).toContain("[MCP reference](/docs/mcp)");
+    expect(agents).toContain("small, version-independent router");
+    expect(agents).toContain("restores or invokes that exact selection");
+    expect(agents).toContain("neither the project nor the user has selected a version");
     expect(agents.indexOf("## Point your agent at the docs")).toBeLessThan(
       agents.indexOf("## Install the skill")
     );

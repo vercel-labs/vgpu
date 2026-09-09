@@ -143,7 +143,7 @@ With the webpack, Turbopack, or Vite integration configured, import only the ent
 | --- | --- | --- |
 | Next.js, Turbopack, or webpack | `@vgpu/wgsl/loader-webpack` | [Using vgpu with Next.js and other bundlers](nextjs.docs.md) |
 | Vite or Rollup | `@vgpu/wgsl/loader-vite` | [Using vgpu with Next.js and other bundlers](nextjs.docs.md) |
-| three.js TSL node materials | `@vgpu/wgsl/loader-vite` plus the example reference helper | [Using vgpu WGSL modules with three.js](/guides/threejs) |
+| three.js TSL node materials | `wgslVitePlugin()` from `vgpu/client` plus `tslExports()` from `vgpu/three` | [Use WGSL modules in three.js TSL](/guides/threejs) |
 | Node.js, scripts, tests, or custom tooling | `resolveShader()` from `@vgpu/wgsl/runtime` | [Using vgpu without a bundler](no-bundler.docs.md) |
 
 The loaders register transitive imports with the bundler, so edits to a shared `.wgsl` file participate in watch mode and HMR. Use `resolveShader()` when there is no bundler to read and flatten the files for you.
@@ -175,7 +175,7 @@ The [`resolveShader` reference](/@vgpu/wgsl/runtime/resolve-shader.docs.md) list
 ## Next steps
 
 - [Using vgpu with Next.js and other bundlers](nextjs.docs.md) — configure `.wgsl` imports and TypeScript types.
-- [Using vgpu WGSL modules with three.js](/guides/threejs) — adapt the example helper to call pure resolved WGSL functions from TSL node materials.
+- [Use WGSL modules in three.js TSL](/guides/threejs) — turn pure, direct WGSL function exports into callable Three TSL nodes, including with identifier minification.
 - [Using vgpu without a bundler](no-bundler.docs.md) — resolve an entry graph from Node.js, scripts, or tests.
 - [Publishing WGSL module packages](publishing-wgsl-packages.docs.md) — expose reusable `.wgsl` modules through an npm package.
 - [The default shader workflow](shader-workflow.docs.md) — validate, render, inspect, and test shader changes.

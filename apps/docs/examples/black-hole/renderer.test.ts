@@ -100,7 +100,7 @@ function setup(options: { failCompile?: boolean } = {}) {
     resize: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     format: string;
-    read: ReturnType<typeof vi.fn>;
+    color: { read: ReturnType<typeof vi.fn> };
   }> = [];
   const effects: Array<{ set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }> = [];
   const surface = { size: [200, 100], format: 'bgra8unorm', dispose: vi.fn() };
@@ -130,7 +130,7 @@ function setup(options: { failCompile?: boolean } = {}) {
           resize: vi.fn(),
           destroy: vi.fn(),
           format: 'rgba16float',
-          read: vi.fn(async () => new Uint8Array()),
+          color: { read: vi.fn(async () => new Uint8Array()) },
         };
         targetObjects.push(target);
         return target;
@@ -245,7 +245,7 @@ test('thumbnail destroys its target graph when prewarm fails', async () => {
   const output = {
     size: [160, 90],
     format: 'rgba8unorm',
-    read: vi.fn(async () => new Uint8Array()),
+    color: { read: vi.fn(async () => new Uint8Array()) },
   };
   const drainPending = deferred<void>();
   const settledPending = deferred<void>();

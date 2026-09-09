@@ -14,6 +14,7 @@ export interface ExampleMetaDefinition {
   readonly title: string;
   readonly description: string;
   readonly tags: readonly string[];
+  readonly guide?: string;
   readonly capabilities: readonly string[];
   readonly files: readonly string[];
   readonly thumb?: ExampleThumbOptions;

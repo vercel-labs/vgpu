@@ -69,6 +69,45 @@ test("loop local shadows", async () => expect((await shadows("loop { var x = 0u;
 test("switch case local shadows", async () => expect((await shadows("switch (0u) { case 0u: { let bar = 1u; let y = bar; } default: {} }", "bar")).wgsl).toContain("let y = bar"));
 test("function parameter shadows", async () => expect((await shadows("fn f(foo: u32){ let y = foo; }", "foo")).wgsl).toContain("let y = foo"));
 test("entry point names are not mangled", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" }, validate: false })).wgsl).toContain("fn main("));
+test("comment trivia after fn does not mangle an entry point", async () => {
+  const shader = await resolveShader({
+    entry: "/m.wgsl",
+    validate: false,
+    modules: {
+      "/m.wgsl": "@fragment export fn /* declaration trivia */ fs_main() -> @location(0) vec4f { return vec4f(1.0); }",
+    },
+  });
+
+  expect(shader.reflection.entryPoints[0]).toMatchObject({ name: "fs_main", mangledName: "fs_main" });
+  expect(shader.wgsl).toMatch(/fn\s+\/\* declaration trivia \*\/\s+fs_main\s*\(/u);
+});
+test("comment trivia inside a stage attribute does not mangle an entry point", async () => {
+  const shader = await resolveShader({
+    entry: "/m.wgsl",
+    validate: false,
+    modules: {
+      "/m.wgsl": "@ /* stage trivia */ fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }",
+    },
+  });
+
+  expect(shader.wgsl).toMatch(/@ \/\* stage trivia \*\/ fragment fn fs_main\s*\(/u);
+});
+test("comment trivia inside binding attributes keeps reflection aligned with emitted WGSL", async () => {
+  const shader = await resolveShader({
+    entry: "/m.wgsl",
+    validate: false,
+    modules: {
+      "/m.wgsl": `@ /* group trivia */ group(0) @ /* binding trivia */ binding(0) var<uniform> resource: vec4f;
+@fragment fn main() -> @location(0) vec4f { return resource; }`,
+    },
+  });
+
+  expect(shader.wgsl).toMatch(/var<uniform> resource\s*:/u);
+  expect(shader.reflection.bindings[0]).toMatchObject({
+    name: "resource",
+    mangledName: "resource",
+  });
+});
 test("original entry-point appears verbatim", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "@compute @workgroup_size(1) fn main(){}" }, validate: false })).wgsl.includes("fn main(")).toBe(true));
 test("override name appears verbatim", async () => expect((await resolveShader({ entry: "/m.wgsl", modules: { "/m.wgsl": "override SAMPLES: u32 = 4u;" }, validate: false })).wgsl).toContain("override SAMPLES"));
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("entry point main works and mangled fails", async () => {

@@ -8,6 +8,6 @@
  * function`). Keep it honest; mirror `@vgpu/wgsl`'s own `wgsl-types.d.ts`.
  */
 declare module '*.wgsl' {
-  const source: { readonly version: 1; readonly wgsl: string };
+  const source: import('vgpu/client').ShaderSource;
   export default source;
 }

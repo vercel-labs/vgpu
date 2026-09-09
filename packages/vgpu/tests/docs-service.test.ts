@@ -47,6 +47,31 @@ test("docs service resolves a symbol to its canonical document path", () => {
   });
 });
 
+test.each([
+  ["texture", "vgpu", "/vgpu/texture.docs.md"],
+  ["TextureOptions", "vgpu/core", "/vgpu/core/texture.docs.md"],
+  ["TextureReadOptions", "vgpu/core", "/vgpu/core/texture.docs.md"],
+  ["TextureShape", "vgpu/core", "/vgpu/core/texture.docs.md"],
+  ["TextureUsageName", "vgpu/core", "/vgpu/core/texture.docs.md"],
+])("texture API symbol %s is discoverable and readable without ambiguity", (symbol, packageName, virtualPath) => {
+  const docs = createDocsService();
+  expect(docs.execute({ operation: "resolve", target: symbol })).toMatchObject({
+    symbol, package: packageName, virtualPath,
+  });
+  const result = docs.execute({ operation: "read", target: symbol });
+  expect(result.document.content).toContain("TextureReadOptions");
+  expect(result.document.content).toContain("mipLevel");
+  expect(result.document.content).toContain("region");
+});
+
+test("public texture docs explain direct storage bindings versus raw mip views", () => {
+  const { document } = createDocsService().execute({ operation: "read", target: "texture" });
+  expect(document.content).toContain("Direct `Texture` storage bindings select mip level `0`");
+  expect(document.content).toContain("baseMipLevel: 1, mipLevelCount: 1");
+  expect(document.content).toContain("bypasses wrapper-aware binding validation");
+  expect(document.content).not.toContain("Storage views always bind mip level `0`");
+});
+
 test("docs service reports ambiguous symbols with actionable candidates", () => {
   const docs = createDocsService();
 

@@ -1,8 +1,12 @@
 # three-tsl
 
-Imports WGSL modules through the `@vgpu/wgsl` Vite loader and connects their
-functions to a three.js `MeshPhysicalNodeMaterial` as TSL nodes, driving a
-procedural lava demo.
+Imports WGSL modules with `wgslVitePlugin({ minify: true })` from `vgpu/client`,
+then adapts their exported functions into three.js TSL nodes with
+`tslExports` from `vgpu/three`. Those nodes drive a procedural
+`MeshPhysicalNodeMaterial` lava demo.
+
+See the [three.js integration guide](https://vgpu.sh/docs/guides/threejs) for
+the focused setup and API walkthrough.
 
 ![Lava preview](./previews/lava.png)
 
@@ -20,7 +24,6 @@ system requirements: `VK_ICD_FILENAMES`, `XDG_RUNTIME_DIR`,
 src/noise.wgsl         shared value/fbm noise plus bake-only periodic 2D noise
 src/lava.wgsl          heat, crust, sink, and blackbody fields; uses
                        @vgpu/wgsl-std voronoi3d + noise.wgsl
-src/wgsl-tsl.ts        tslExports(): loader output -> callable wgslFn TSL nodes
 src/lava-material.ts   physical material: emissive cracks, bump normals, and
                        vertex relief all driven by lava.wgsl
 src/scenes.ts          shared scene/lights/mesh builders
@@ -100,22 +103,40 @@ so harness screenshots match the on-screen image only on the post path
 
 ## How the bridge works
 
-- `import lavaModule from "./lava.wgsl"` returns `{ version: 1, wgsl }`:
-  the flattened module graph, with imported helpers mangled to
-  `_vgsl_<hash>__<name>` and no `export` keywords left.
-- `tslExports(lavaModule, ["lavaGlow", "blackbody"])` finds each function by
-  its authored name (accepting the mangle prefix), reads its parameter list
-  and return type from the header, and emits a forwarding wrapper via TSL's
-  `wgslFn`, attaching the whole module once as a shared `wgsl()` include.
+- `wgslVitePlugin({ minify: true })` from `vgpu/client` resolves each imported
+  WGSL graph before Vite emits it.
+- `import lavaModule from "./lava.wgsl"` returns the complete
+  `{ version: 1, wgsl, functionExports }` artifact. `functionExports` preserves
+  authored export and parameter names while mapping each export to its final
+  `resolvedName`, so identifier minification remains safe.
+- `tslExports<LavaExports>(lavaModule)("lavaGlow", "blackbody")` selects exports by their
+  authored names, reads their final signatures, and emits a `wgslFn` forwarding
+  wrapper for each one. All wrappers share one `wgsl()` include for the module.
 - The returned nodes are callable with inputs keyed by WGSL parameter names.
   TSL uniforms flow in as plain function parameters — three owns the actual
   `@group/@binding` layout when it builds the shader:
 
 ```ts
-const { lavaGlow, blackbody } = tslExports(lavaModule, ["lavaGlow", "blackbody"]);
+import type { Node } from "three/webgpu";
+import { positionLocal, time, uniform } from "three/tsl";
+import { tslExports } from "vgpu/three";
+import lavaModule from "./lava.wgsl";
+
+type LavaExports = {
+  lavaGlow: { position: Node; t: Node };
+  blackbody: { t: Node };
+};
+
+const { lavaGlow, blackbody } = tslExports<LavaExports>(lavaModule)(
+  "lavaGlow",
+  "blackbody",
+);
 const glowIntensity = uniform(2.4);
 material.emissiveNode = blackbody({ t: lavaGlow({ position: positionLocal, t: time }).x }).mul(glowIntensity);
 ```
+
+Pass the complete loader artifact to `tslExports`, never only
+`lavaModule.wgsl`: the string drops the minification-safe export metadata.
 
 Entry points and functions that touch `@group/@binding` resources do not map
 to `wgslFn` — TSL manages bindings itself. Pure functions (like everything in
@@ -123,9 +144,9 @@ to `wgslFn` — TSL manages bindings itself. Pure functions (like everything in
 
 ## Tests
 
-`pnpm --filter @vgpu/example-three-tsl test` covers the header parser and
-wrapper generation, and resolves `src/lava.wgsl` through
-`@vgpu/wgsl/runtime` to check the bridge against real loader output.
+`pnpm --filter @vgpu/example-three-tsl test` checks that the real, minified
+`lava.wgsl` loader artifact adapts through the public `vgpu/three` API, then
+covers the periodic bake contracts and scene behavior used by the demo.
 
 `/harness.html` (dev server) renders the material into a `RenderTarget` with a
 stubbed canvas context and reports lit/distinct pixel counts on

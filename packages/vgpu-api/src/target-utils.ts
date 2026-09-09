@@ -47,7 +47,7 @@ export function sampleCountFor(options: TargetTextureOptions): 1 | 4 {
 }
 
 export function validateTargetOptions(options: Partial<TargetOptions> | undefined, caps: TargetDeviceCaps): void {
-  if (!options?.size) throw targetSizeRequiredError();
+  if (!Array.isArray(options?.size) || options.size.length !== 2 || !Array.from(options.size).every(value => Number.isSafeInteger(value) && value > 0)) throw targetSizeRequiredError();
   const depthFormat = depthFormatFor(options);
   // Stencil-only formats have no depth aspect, so the default depth state (depthWriteEnabled: true) cannot compile against them.
   if (depthFormat === "stencil8") throw targetStencilOnlyDepthError(depthFormat);

@@ -1,107 +1,22 @@
-import { fileURLToPath } from "node:url";
-import { resolveShader } from "@vgpu/wgsl/runtime";
 import { vec3 } from "three/tsl";
+import { tslExports } from "vgpu/three";
 import { describe, expect, it } from "vitest";
-import { forwardingWrapper, parseFunctionHeader, tslExports } from "../src/wgsl-tsl.ts";
+import lavaModule from "../src/lava.wgsl";
+import noiseModule from "../src/noise.wgsl";
 
-const SOURCE = `
-// A helper the wrapper must skip: fn decoy(x: f32) -> f32
-fn valueNoise3(position: vec3f) -> f32 { return position.x; }
+it("adapts the complete lava artifact through the public vgpu/three API", () => {
+  const names = ["lavaGlow", "blackbody", "bakeMicroDetail", "bakeSharpDetail"] as const;
+  const lavaGlow = lavaModule.functionExports?.find((item) => item.name === "lavaGlow");
 
-/* block comment with fn inside(a: f32) -> f32 */
-fn fbm3(position: vec3f, octaves: u32) -> f32 {
-  return valueNoise3(position) * f32(octaves);
-}
-
-fn remap(inRange: vec2<f32>, outRange: vec2<f32>, value: f32) -> f32 {
-  return outRange.x + (value - inRange.x) * (outRange.y - outRange.x) / (inRange.y - inRange.x);
-}
-
-fn logOnly() { return; }
-`;
-
-describe("parseFunctionHeader", () => {
-  it("reads name, params, and return type", () => {
-    const header = parseFunctionHeader(SOURCE, "fbm3");
-    expect(header.params).toBe("position: vec3f, octaves: u32");
-    expect(header.paramNames).toEqual(["position", "octaves"]);
-    expect(header.returnType).toBe("f32");
+  expect(lavaGlow).toMatchObject({
+    resolvedName: expect.any(String),
+    parameterNames: ["position", "t"],
   });
+  expect(lavaModule.wgsl).not.toMatch(/\bexport\b/u);
 
-  it("keeps generic parameter types intact", () => {
-    const header = parseFunctionHeader(SOURCE, "remap");
-    expect(header.paramNames).toEqual(["inRange", "outRange", "value"]);
-    expect(header.returnType).toBe("f32");
-  });
-
-  it("supports functions without a return type", () => {
-    const header = parseFunctionHeader(SOURCE, "logOnly");
-    expect(header.params).toBe("");
-    expect(header.paramNames).toEqual([]);
-    expect(header.returnType).toBe("");
-  });
-
-  it("ignores fn mentions inside comments", () => {
-    expect(() => parseFunctionHeader(SOURCE, "decoy")).toThrow(/no function named decoy/);
-    expect(() => parseFunctionHeader(SOURCE, "inside")).toThrow(/no function named inside/);
-  });
-});
-
-describe("forwardingWrapper", () => {
-  it("forwards every parameter to the wrapped function", () => {
-    const wrapper = forwardingWrapper(parseFunctionHeader(SOURCE, "fbm3"));
-    expect(wrapper).toBe(
-      "fn fbm3_vtsl(position: vec3f, octaves: u32) -> f32 { return fbm3(position, octaves); }",
-    );
-  });
-});
-
-describe("tslExports over a vgpu-resolved module", () => {
-  it("wraps every lava.wgsl export, including functions from imported modules", async () => {
-    const entry = fileURLToPath(new URL("../src/lava.wgsl", import.meta.url));
-    const resolved = await resolveShader({ entry });
-
-    const names = ["lavaGlow", "meltSkin", "blackbody", "crustHeight", "crustSurface", "crustPbr", "lavaSink", "bakeMicroDetail", "bakeSharpDetail"] as const;
-    const nodes = tslExports(resolved.wgsl, names);
-    for (const name of names) expect(typeof nodes[name]).toBe("function");
-
-    // lavaGlow's signature survives the flatten+mangle round trip.
-    const header = parseFunctionHeader(resolved.wgsl, "lavaGlow");
-    expect(header.paramNames).toEqual(["position", "t"]);
-    expect(header.returnType).toBe("vec2f");
-
-    const microBake = parseFunctionHeader(resolved.wgsl, "bakeMicroDetail");
-    expect(microBake.paramNames).toEqual(["tileUv"]);
-    expect(microBake.returnType).toBe("vec4f");
-
-    const sharpBake = parseFunctionHeader(resolved.wgsl, "bakeSharpDetail");
-    expect(sharpBake.paramNames).toEqual(["tileUv"]);
-    expect(sharpBake.returnType).toBe("vec4f");
-    expect(() => parseFunctionHeader(resolved.wgsl, "sharpDetail")).toThrow(/no function named sharpDetail/);
-    expect(() => parseFunctionHeader(resolved.wgsl, "sharpScabs")).toThrow(/no function named sharpScabs/);
-  });
-
-  it("wraps the flattened module graph by authored names", async () => {
-    const entry = fileURLToPath(new URL("../src/lava.wgsl", import.meta.url));
-    const resolved = await resolveShader({ entry });
-
-    // Non-entry-point functions are mangled per module; export keywords are gone.
-    expect(resolved.wgsl).toMatch(/fn _vgsl_[0-9a-f]{8}__lavaGlow\(/);
-    expect(resolved.wgsl).toMatch(/_vgsl_[0-9a-f]{8}__voronoi3d/);
-    expect(resolved.wgsl).not.toMatch(/\bexport\b/);
-
-    // The helper resolves functions by their authored names.
-    const header = parseFunctionHeader(resolved.wgsl, "blackbody");
-    expect(header.resolvedName).toMatch(/^_vgsl_[0-9a-f]{8}__blackbody$/);
-    expect(header.paramNames).toEqual(["t"]);
-    expect(forwardingWrapper(header)).toContain(`return ${header.resolvedName}(t);`);
-
-    // wgslFn returns a callable; invoking it with named inputs builds a call node.
-    const nodes = tslExports(resolved.wgsl, ["lavaGlow", "blackbody"]);
-    expect(typeof nodes.blackbody).toBe("function");
-    const call = nodes.lavaGlow({ position: vec3(0, 0, 0), t: 6 });
-    expect(call.isNode).toBe(true);
-  });
+  const nodes = tslExports(lavaModule)(...names);
+  for (const name of names) expect(typeof nodes[name]).toBe("function");
+  expect(nodes.lavaGlow({ position: vec3(0, 0, 0), t: 6 }).isNode).toBe(true);
 });
 
 // f32 shader arithmetic is not required for these topology checks: wrapping
@@ -234,13 +149,13 @@ function periodicVoronoi2Ref(
 }
 
 describe("periodic detail-bake contract", () => {
-  it("resolves the periodic WGSL helpers", async () => {
-    const entry = fileURLToPath(new URL("../src/noise.wgsl", import.meta.url));
-    const resolved = await resolveShader({ entry });
-    expect(parseFunctionHeader(resolved.wgsl, "periodicPerlin2").returnType).toBe("f32");
-    expect(parseFunctionHeader(resolved.wgsl, "periodicTurbulence2").returnType).toBe("f32");
-    expect(parseFunctionHeader(resolved.wgsl, "periodicFbm2").returnType).toBe("f32");
-    expect(parseFunctionHeader(resolved.wgsl, "periodicVoronoi2").returnType).toBe("vec3f");
+  it("exposes the periodic WGSL helpers through the complete artifact", () => {
+    const names = ["periodicPerlin2", "periodicTurbulence2", "periodicFbm2", "periodicVoronoi2"] as const;
+    const exportedNames = (noiseModule.functionExports ?? []).map((item) => item.name);
+
+    expect(exportedNames).toEqual(expect.arrayContaining([...names]));
+    const nodes = tslExports(noiseModule)(...names);
+    for (const name of names) expect(typeof nodes[name]).toBe("function");
   });
 
   it("keeps Voronoi values and gradients continuous across either tile axis", () => {

@@ -84,7 +84,7 @@ effect(
 `
 ).draw(colorTarget);
 
-const pixels = await colorTarget.read();
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
 const slot0 = [...pixels.slice(0, 3)].map((byte) => byte / 255);
 console.log(slot0);
 gpu.dispose();
@@ -144,14 +144,14 @@ import type { Target } from "vgpu";
 export async function dump(target: Target, file: string): Promise<void> {
   const [width, height] = target.size;
   const png = new PNG({ width, height });
-  png.data.set(await target.read());
+  png.data.set(await target.color.read({ mipLevel: 0, region: "all" }));
   writeFileSync(file, PNG.sync.write(png));
 }
 ```
 
 ### Encode HDR targets before reading
 
-Float targets can be read directly: `target.read()` returns their raw texel bytes, while `target.readFloats()` decodes `rgba16float` and `rgba32float` into a `Float32Array` without clipping HDR values. For a displayable PNG, render an encode pass into a separate `rgba8unorm` target and read that target. Choose an encoding for the quantity: the example maps signed directions with `x * 0.5 + 0.5`; use a fixed range appropriate to distances or radiance instead.
+Float targets can be read directly: `target.color.read({ mipLevel: 0, region: "all" })` returns their raw texel bytes, while `target.color.readFloats({ mipLevel: 0, region: "all" })` decodes `rgba16float` and `rgba32float` into a `Float32Array` without clipping HDR values. For a displayable PNG, render an encode pass into a separate `rgba8unorm` target and read that target. Choose an encoding for the quantity: the example maps signed directions with `x * 0.5 + 0.5`; use a fixed range appropriate to distances or radiance instead.
 
 ```typescript
 import { init, effect, sampler, target } from "vgpu/node";
@@ -178,7 +178,7 @@ encode
     sourceSampler: sampler(gpu, { minFilter: "linear", magFilter: "linear" }),
   })
   .draw(encoded);
-const pixels = await encoded.read();
+const pixels = await encoded.color.read({ mipLevel: 0, region: "all" });
 gpu.dispose();
 ```
 
@@ -204,15 +204,15 @@ fn cone_rotation(pixel: vec2f) -> f32 {
 
 ## 6. When the host has no adapter: the Docker fallback
 
-If `npx vgpu doctor` still fails after applying its own fixes, run the harness inside a container with a software GPU. In the vgpu repository, that image is the one CI uses:
+If `npx vgpu doctor` still fails after applying its own fixes, run the harness inside a container with a software GPU. In the vgpu repository, the development image is:
 
 ```bash
 docker build -t vgpu-test-dev:ci -f infra/test-docker/Dockerfile.dev .
 docker run --rm -v "$PWD:/workspace" -w /workspace -e VGPU_DOCKER_TEST=1 vgpu-test-dev:ci \
-  sh -lc 'Xvfb :99 -screen 0 1024x768x24 & DISPLAY=:99 node snippet.mjs'
+  node snippet.mjs
 ```
 
-Mount an output directory (`-v "$OUT:/out"`) and have the harness write its JSON and PNGs there so the evidence survives the container. This is the vgpu repository's own infrastructure: results are deterministic and identical to CI. In other projects, any Linux container with a software Vulkan stack (Mesa lavapipe or SwiftShader) plus Xvfb works the same way.
+Mount an output directory (`-v "$OUT:/out"`) and have the harness write its JSON and PNGs there so the evidence survives the container. This is the vgpu repository's own Vulkan/lavapipe infrastructure. For the repository's exact visual-reference checks, use `pnpm snapshots:check`; it renders the pushed revision in CI's pinned native x64 environment. `pnpm snapshots:update` downloads unapproved candidates for review, never overwriting references automatically. Docker on another CPU architecture is not necessarily pixel-equivalent. Other projects can also use a Linux container with a compatible software Vulkan stack; Xvfb is not required.
 
 ## See also
 

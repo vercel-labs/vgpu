@@ -1,9 +1,10 @@
 import { dirname } from "node:path";
+import type { ShaderFunctionExport } from "../types.ts";
 import { sourceMap, toAstModule } from "./ast-projection.ts";
 import { assertModulesHaveNoBindings } from "./assert-module-purity.ts";
 import { cacheKeys } from "./cache-key.ts";
 import type { DiagnosticList } from "./diagnostic-types.ts";
-import { assertNoMangleCollisions, emitModule, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
+import { assertNoMangleCollisions, emitModule, isEntryPoint, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
 import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./minify.ts";
 import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
 import { type ImportDecl } from "./parser.ts";
@@ -11,6 +12,8 @@ import { reflect, type EntryPointInfo, type Reflection } from "./reflect.ts";
 import { reservedIdentifierDiagnostics } from "./reserved-identifiers.ts";
 import { reflectSource } from "./reflect-source.ts";
 import { eliminateDeadDeclarations } from "./declaration-dce.ts";
+import { collectFunctionExports, finalizeFunctionExports } from "./function-exports.ts";
+import { applyIdentifierMinifyWgsl } from "./identifier-minify.ts";
 import { wgslError } from "./errors.ts";
 import { parseDeclarations } from "./reflect-declarations.ts";
 import { loadModuleGraph, reachableModules, resolvedEdge, type ModuleGraph } from "./module-graph.ts";
@@ -23,7 +26,7 @@ export { captureShaderGraph, type CaptureShaderGraphOptions, type ShaderGraphSna
 export { checkedSnapshot as copyShaderGraphSnapshot } from "./shader-graph-validation.ts";
 export type { BindingInfo, BindingKind, BindingRef, EntryPointInfo, EntryPointInputInfo, HostShareableLayout, LayoutMember, ReflectedBindingLayout, Reflection, ReflectionFacade, SamplingPair, WGSLType } from "./reflect.ts";
 export type { MinifyOption, MinifyOptions, NormalizedMinifyOptions } from "./minify.ts";
-export type { ShaderSource } from "../types.ts";
+export type { ShaderFunctionExport, ShaderSource } from "../types.ts";
 export interface ResolveOptions {
   readonly entry: string;
   readonly rootDir?: string;
@@ -78,7 +81,7 @@ export interface WGSLModule {
 }
 export interface WGSLAst { readonly version: 1; readonly modules: readonly WGSLModule[]; readonly diagnostics: DiagnosticList; readonly sourceMap: SourceMap; readonly cacheKey: Record<string, string> }
 export interface SourceMap { readonly version: 3; readonly sources: readonly string[]; readonly mappings: string }
-export interface ResolvedShader { readonly wgsl: string; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection; readonly validation: { readonly mode: ValidateMode; readonly attempted: boolean; readonly ok: boolean; readonly skipped?: { readonly code: string; readonly message: string; readonly fix?: string } } }
+export interface ResolvedShader { readonly wgsl: string; readonly functionExports: readonly ShaderFunctionExport[]; readonly deps: readonly string[]; readonly cacheKey: Record<string, string>; readonly ast: WGSLAst; readonly sourceMap: SourceMap; readonly diagnostics: DiagnosticList; readonly reflection: Reflection; readonly validation: { readonly mode: ValidateMode; readonly attempted: boolean; readonly ok: boolean; readonly skipped?: { readonly code: string; readonly message: string; readonly fix?: string } } }
 
 /** `true` -> `"require"`, `false` -> `"off"`, unset -> `VGPU_VALIDATE` (default `"auto"`). */
 function normalizeValidateMode(value: ResolveOptions["validate"]): ValidateMode {
@@ -116,6 +119,7 @@ async function resolveGraph(entry: string, graph: ModuleGraph, opts: ResolveOpti
   const exportsByPath = buildExports(modules);
   const pathOf = (from: string, imp: ImportDecl) => resolvedEdge(graph, from, imp.from);
   const emittedWgsl = eliminateDeadDeclarations(modules.map((module) => `// vgsl-module: ${module.path}\n${emitModule(module, exportsByPath, pathOf).trim()}\n`).join("\n"));
+  const functionExportCandidates = collectFunctionExports(modules);
   const reflection = reflect(modules, pathOf);
   const emittedReflection = reflectSource(emittedWgsl, entry);
   for (const reflectedEntry of reflection.entryPoints) {
@@ -138,9 +142,16 @@ async function resolveGraph(entry: string, graph: ModuleGraph, opts: ResolveOpti
   if (validateMode !== "off") retainValidationDevice();
   let validationOutcome: ValidationOutcome;
   let wgsl: string;
+  let identifierReplacements: ReadonlyMap<number, string> = new Map();
   try {
     validationOutcome = validateMode === "off" ? { attempted: false, ok: true } : await validateWGSL(emittedWgsl, validateMode);
-    wgsl = applyMinifyWgsl(emittedWgsl, minify);
+    if (minify.identifiers === "safe") {
+      const result = applyIdentifierMinifyWgsl(emittedWgsl, { whitespace: minify.whitespace });
+      wgsl = result.wgsl;
+      identifierReplacements = result.replacements;
+    } else {
+      wgsl = applyMinifyWgsl(emittedWgsl, minify);
+    }
     if (validateMode !== "off" && wgsl !== emittedWgsl) {
       // The artifact the caller receives is the artifact that gets validated. The first pass above
       // stays because it runs on the pre-minify text and so yields accurate line/column diagnostics;
@@ -157,7 +168,8 @@ async function resolveGraph(entry: string, graph: ModuleGraph, opts: ResolveOpti
   }
   const cacheKey = cacheKeys(modules, reflection, opts.rootDir ?? dirname(entry));
   const ast: WGSLAst = { version: 1, modules: modules.map(toAstModule), diagnostics, sourceMap: map, cacheKey };
-  return { wgsl, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection, validation: { mode: validateMode, ...validationOutcome } };
+  const functionExports = finalizeFunctionExports(functionExportCandidates, emittedWgsl, identifierReplacements);
+  return { wgsl, functionExports, deps, cacheKey, ast, sourceMap: map, diagnostics, reflection, validation: { mode: validateMode, ...validationOutcome } };
 }
 
 function buildExports(modules: readonly MangleModule[]): ReadonlyMap<string, ExportMap> {
@@ -189,17 +201,3 @@ function assertNoJsVisibleDuplicates(modules: readonly MangleModule[]): void {
 }
 function duplicate(map: Map<string, string>, name: string, path: string, code: string): void { const previous = map.get(name); if (previous) throw wgslError(code, `${name} appears in ${previous} and ${path}`); map.set(name, path); }
 function entryKind(module: MangleModule, name: string, kind: string): string { return isEntryPoint(module, name) ? "entry" : kind; }
-function isEntryPoint(module: MangleModule, name: string): boolean {
-  let depth = 0;
-  for (let i = 0; i < module.tokens.length; i++) {
-    const token = module.tokens[i]!;
-    if (token.text === "{") { depth++; continue; }
-    if (token.text === "}") { depth = Math.max(0, depth - 1); continue; }
-    if (depth > 0) continue;
-    if (token.text !== "fn" || module.tokens[i + 1]?.text !== name) continue;
-    for (let j = i - 1; j >= 0 && module.tokens[j]?.text !== ";" && module.tokens[j]?.text !== "}"; j--) {
-      if (module.tokens[j]?.text === "@" && ["vertex", "fragment", "compute"].includes(module.tokens[j + 1]?.text ?? "")) return true;
-    }
-  }
-  return false;
-}

@@ -150,7 +150,7 @@ test("a FramePass retained by user code cannot encode after its frame is cancele
   gpu.dispose();
 });
 
-test("cancel() inside frame(gpu, cb) leaves the submit in finally a no-op", async () => {
+test("cancel() inside frame(gpu, cb) leaves the implicit submit-on-return a no-op", async () => {
   const gpu = await initWithTimestampQuery();
   const submits = spyQueueSubmits(gpu.device.gpu);
   const gpuTimer = timer(gpu);

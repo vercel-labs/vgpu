@@ -5,6 +5,7 @@ export const exampleSlugs = [
   'black-hole',
   'optimized-black-hole',
   'earth',
+  'atmosphere',
   'fluid',
   'instanced-rendering',
   'batch-rendering',
@@ -21,8 +22,11 @@ export const exampleSlugs = [
   'depth-estimation',
   'mnist-classifier',
   'air-painting',
+  'tsl-exports',
   'three-tsl',
   'particle-orbit',
+  'typegpu-liquid-glass',
+  'adaptive-quality',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];

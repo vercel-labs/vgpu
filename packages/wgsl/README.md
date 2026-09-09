@@ -224,7 +224,7 @@ Transitive `.wgsl` imports are registered with each bundler's watch graph:
 
 | Export | Purpose |
 | --- | --- |
-| `@vgpu/wgsl` | `compile()` for plain WGSL source strings plus shared public types. |
+| `@vgpu/wgsl` | `compile()` for plain WGSL source strings, `isShaderFunctionExport()` for unknown export metadata, plus shared public types. |
 | `@vgpu/wgsl/runtime` | `resolveShader()` for file/module graph resolution and reflection. |
 | `@vgpu/wgsl/loader-webpack` | Default webpack-compatible `.wgsl` loader. |
 | `@vgpu/wgsl/loader-vite` | Default/named `wgslVitePlugin()` and `transformWgsl()`. |

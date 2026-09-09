@@ -11,7 +11,7 @@ import { translations } from "@/geistdocs";
 import { examples, getExample } from "@/lib/examples-registry";
 import { buildExamplePrompt, buildV0OpenUrl } from "@/lib/example-actions";
 import { buildExampleSourceMarkdown } from "@/lib/example-readme";
-import { SITE_OG_IMAGE_PATH, siteUrl } from "@/lib/site";
+import { localizedSitePath, SITE_OG_IMAGE_PATH, siteUrl } from "@/lib/site";
 
 interface ExampleDetailPageProps {
   params: Promise<{ lang: string; slug: string }>;
@@ -52,7 +52,7 @@ export async function generateMetadata({
 }
 
 const ExampleDetailPage = async ({ params }: ExampleDetailPageProps) => {
-  const { slug } = await params;
+  const { lang, slug } = await params;
   const example = getExample(slug);
   if (!example) notFound();
 
@@ -66,7 +66,12 @@ const ExampleDetailPage = async ({ params }: ExampleDetailPageProps) => {
           <h1 className="font-medium! text-heading-32 text-gray-1000 tracking-tighter sm:text-heading-40">
             {example.meta.title}
           </h1>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+            {example.meta.guide ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={localizedSitePath(example.meta.guide, lang)}>Read guide</Link>
+              </Button>
+            ) : null}
             <Button asChild size="sm" variant="outline">
               <Link href={`/preview/${example.meta.slug}`}>Open fullscreen</Link>
             </Button>

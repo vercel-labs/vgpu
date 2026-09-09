@@ -8,11 +8,13 @@ export type { GeometryAttributeOverride, GeometryAttributes, GeometryBuffer, Geo
 export type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "./frame.ts";
 export type { Effect, EffectOptions } from "./effect.ts";
 export type { CompileTarget, Target, TargetOptions, TargetSignature, TargetTextureOptions } from "./target.ts";
+export type { TextureOptions, TextureReadOptions, TextureShape, TextureUsageName } from "./texture.ts";
 export { VGPUError } from "./errors.ts";
 export type { Buffer, Device, ResourceIdentity, Texture, VGPUAdapter } from "@vgpu/core";
 export { Uniform } from "./core/uniform.ts";
 export type { UniformOptions } from "./core/uniform.ts";
-export type { ResolvedShader, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
+export { isShaderFunctionExport } from "@vgpu/wgsl";
+export type { ResolvedShader, ShaderFunctionExport, ShaderSource, SourceMap, WGSLAst, WGSLSource } from "@vgpu/wgsl";
 
 // --- The public creation API: gpu-first free functions. There is no facade — the `Gpu` is a
 // device handle plus a lifetime, and everything else takes it as its first argument.
@@ -31,6 +33,7 @@ export { storage } from "./storage.ts";
 export { surface } from "./surface.ts";
 export type { SurfaceCanvas } from "./surface.ts";
 export { target } from "./target-offscreen.ts";
+export { texture } from "./texture.ts";
 export { timer } from "./timer.ts";
 export { uniforms } from "./uniforms.ts";
 export { visibility } from "./visibility.ts";

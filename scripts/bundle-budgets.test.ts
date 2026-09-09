@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -325,6 +326,18 @@ test("bundle-check gates, warns and re-baselines a workspace", () => {
   expect(run(root, "--update").stdout).toContain("nothing to update");
 });
 
+test("bundle-check externalizes declared peer package subpaths", () => {
+  const root = writePeerFixture();
+
+  const result = run(root);
+
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain("peer-consumer [client]");
+  const measured = Number(/(\d+) B gzip/.exec(result.stdout)?.[1]);
+  expect(measured).toBeGreaterThan(0);
+  expect(measured).toBeLessThanOrEqual(512);
+});
+
 test("bundle-check honours --threshold and rejects nonsense flags", () => {
   const root = writeFixture();
   const manifest = join(root, "packages", "demo", "package.json");
@@ -346,6 +359,32 @@ function writeFixture() {
     join(root, "packages", "demo", "package.json"),
     `${JSON.stringify({ name: "demo", version: "0.0.0", exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } }, vgpuExportBundleBudgetsGzipBytes: { ".": 1_000_000 } }, null, 2)}\n`,
   );
+  return root;
+}
+
+function writePeerFixture() {
+  const root = mkdtempSync(join(tmpdir(), "bundle-budgets-peer-"));
+  const consumer = join(root, "packages", "peer-consumer");
+  const peer = join(root, "node_modules", "render-peer");
+  mkdirSync(join(consumer, "dist"), { recursive: true });
+  mkdirSync(peer, { recursive: true });
+  writeFileSync(join(consumer, "dist", "index.js"), 'export { peerValue } from "render-peer/tsl";\n');
+  writeFileSync(
+    join(consumer, "package.json"),
+    `${JSON.stringify({
+      name: "peer-consumer",
+      version: "0.0.0",
+      exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
+      peerDependencies: { "render-peer": ">=1.0.0" },
+      vgpuExportBundleBudgetsGzipBytes: { ".": 512 },
+    }, null, 2)}\n`,
+  );
+  writeFileSync(
+    join(peer, "package.json"),
+    `${JSON.stringify({ name: "render-peer", version: "1.0.0", type: "module", exports: { "./tsl": "./tsl.js" } }, null, 2)}\n`,
+  );
+  const payload = Array.from({ length: 256 }, (_, index) => createHash("sha256").update(`${index}`).digest("hex")).join("");
+  writeFileSync(join(peer, "tsl.js"), `export const peerValue = ${JSON.stringify(payload)};\n`);
   return root;
 }
 

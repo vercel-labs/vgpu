@@ -19,6 +19,6 @@ export async function renderOnce(canvas: HTMLCanvasElement) {
 
 - Use fixed DPR/size (`dpr: 1`, `autoResize: false`, or explicit `size`) for pixel snapshots.
 - Submit with `frame(gpu, ...)` for one deterministic frame, not `requestAnimationFrame` loops.
-- Read from explicit surfaces or offscreen targets with `target.read()`.
+- Read from explicit surfaces or offscreen targets with `target.color.read({ mipLevel: 0, region: "all" })`.
 - Keep WGSL imports pure: modules export helpers only; bindings live in the entry shader. If a module declares a binding, fix `VGPU-RESOLVE-MODULE-BINDING`.
 - For headless tests use `vgpu/mock` for deterministic unit tests and `vgpu/node` only when Dawn/WebGPU behavior is under test.

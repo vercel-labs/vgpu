@@ -25,12 +25,12 @@ import { projectFixture } from "./project-operation-fixture.ts";
 
 const workspace = fileURLToPath(new URL("../../..", import.meta.url));
 const packages = [
-  ["@vgpu/wgsl-std", "wgsl-std", "0.3.1"],
-  ["@vgpu/wgsl", "wgsl", "0.3.1"],
-  ["@vgpu/core", "core", "0.3.1"],
-  ["@vgpu/adapter-mock", "adapter-mock", "0.3.1"],
-  ["@vgpu/adapter-node", "adapter-node", "0.3.1"],
-  ["vgpu", "vgpu-api", "0.3.1"],
+  ["@vgpu/wgsl-std", "wgsl-std", "0.4.1"],
+  ["@vgpu/wgsl", "wgsl", "0.4.1"],
+  ["@vgpu/core", "core", "0.4.1"],
+  ["@vgpu/adapter-mock", "adapter-mock", "0.4.1"],
+  ["@vgpu/adapter-node", "adapter-node", "0.4.1"],
+  ["vgpu", "vgpu-api", "0.4.1"],
   ["@vgpu/native", "native", "0.0.0"],
 ] as const;
 const external = {
@@ -40,7 +40,7 @@ const external = {
   ajv: "8.20.0",
   debug: "4.4.3",
   "fast-deep-equal": "3.1.3",
-  "fast-uri": "3.1.5",
+  "fast-uri": "3.1.7",
   "json-schema-traverse": "1.0.0",
   ms: "2.1.3",
   pixelmatch: "7.2.0",
