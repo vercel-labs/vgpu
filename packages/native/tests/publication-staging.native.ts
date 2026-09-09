@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmod,
   lstat,
   mkdir,
   readFile,
@@ -215,6 +216,45 @@ test("a callback failure and changed-stage cleanup failure retain both causes an
       )
     ).toBe("released");
   } finally {
+    await rm(input.directory, { recursive: true, force: true });
+  }
+});
+
+test("helper scratch cleanup failure preserves the original failure and identifies its remaining directory", async () => {
+  const input = await projectFixture();
+  let ownedScratch: string | undefined;
+  try {
+    const prepared = await prepareMetalProject({
+      configurationPath: input.configurationPath,
+      workerPath,
+    });
+    const scratchRoot = join(input.directory, "HelperScratch");
+    await mkdir(scratchRoot);
+    const primary = new Error("caller recovery evidence");
+    const error = await withPreparedMetalPublicationStage(
+      { prepared, environment: { ...process.env, TMPDIR: scratchRoot } },
+      async () => {
+        const entries = await readdir(scratchRoot);
+        expect(entries).toHaveLength(1);
+        ownedScratch = join(scratchRoot, entries[0]!);
+        await chmod(ownedScratch, 0o500);
+        throw primary;
+      }
+    ).catch((cause: unknown) => cause);
+
+    expect(error).toMatchObject({
+      name: "MetalPublicationStagingCleanupError",
+      code: "cleanup-failed",
+      errors: [{ cause: primary }, { code: "EACCES" }],
+      recoveryPaths: [ownedScratch],
+    });
+    expect((error as { errors: { cause: unknown }[] }).errors[0]!.cause).toBe(
+      primary
+    );
+    expect(await readdir(ownedScratch!)).toContain("publication-staging.c");
+    expect(await readdir(dirname(input.outputPath))).toEqual([]);
+  } finally {
+    if (ownedScratch) await chmod(ownedScratch, 0o700);
     await rm(input.directory, { recursive: true, force: true });
   }
 });

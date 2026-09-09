@@ -258,6 +258,7 @@ async function runStaging<T>(
   let child: ReturnType<typeof spawn> | undefined;
   let closed: Promise<number | null> | undefined;
   let spawnError: Error | undefined;
+  let operationFailure: MetalPublicationStagingError | undefined;
   try {
     const source = join(scratch, "publication-staging.c");
     const executable = join(scratch, "publication-staging");
@@ -342,19 +343,31 @@ async function runStaging<T>(
     child?.kill("SIGTERM");
     if (closed) await closed;
     if (spawnError)
-      throw new MetalPublicationStagingError(
+      operationFailure = new MetalPublicationStagingError(
         "helper-failed",
         "Publication staging helper could not be started",
         { cause: spawnError }
       );
-    if (cause instanceof MetalPublicationStagingError) throw cause;
-    throw new MetalPublicationStagingError(
-      "helper-failed",
-      "Publication staging failed",
-      { cause }
-    );
+    else if (cause instanceof MetalPublicationStagingError)
+      operationFailure = cause;
+    else
+      operationFailure = new MetalPublicationStagingError(
+        "helper-failed",
+        "Publication staging failed",
+        { cause }
+      );
+    throw operationFailure;
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    try {
+      await rm(scratch, { recursive: true, force: true });
+    } catch (cause) {
+      throw new MetalPublicationStagingCleanupError(
+        operationFailure ? [operationFailure, cause] : [cause],
+        operationFailure instanceof MetalPublicationStagingCleanupError
+          ? [...operationFailure.recoveryPaths, scratch]
+          : [scratch]
+      );
+    }
   }
 }
 
