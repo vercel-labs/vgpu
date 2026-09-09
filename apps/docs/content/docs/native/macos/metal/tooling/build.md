@@ -105,6 +105,12 @@ The build validates the inputs, translates every selected stage, compiles and li
 library, and generates the Swift package. It completes a sibling staging directory before
 publishing it to the configured output.
 
+A WGSL rejection during preparation uses the same structured Tint failure report as `check`,
+including severity, code, phase, message and any resolved-WGSL location. It exits `1` with that
+diagnostic on standard error and no successful report. It does not label this compiler failure
+as a publication outcome or report existing sibling recovery paths: preparation failed before
+entering the publisher. The existing package and recovery files remain untouched.
+
 The library, generated Swift, and ownership record come from the same captured project. Editing
 a shader during compilation does not splice newer source into part of that package. A later
 verification can report the captured generation as stale against those edits.

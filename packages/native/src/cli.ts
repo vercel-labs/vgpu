@@ -9,7 +9,10 @@ import {
   doctorMetalToolchain,
   type NativeDoctorReport,
 } from "./tooling/doctor.js";
-import { prepareMetalProject } from "./tooling/prepare-project.js";
+import {
+  prepareMetalProject,
+  type PreparedMetalProject,
+} from "./tooling/prepare-project.js";
 import {
   MetalPublicationError,
   publishPreparedMetalOutput,
@@ -53,12 +56,17 @@ export async function runNativeCommand(
   if (input.command === "build") {
     const environment = captureToolEnvironment();
     const { configurationPath, signal } = input;
-    const prepared = await prepareMetalProject({
-      configurationPath,
-      workerPath: installedTintWorkerPath(),
-      signal,
-      environment,
-    });
+    let prepared: PreparedMetalProject;
+    try {
+      prepared = await prepareMetalProject({
+        configurationPath,
+        workerPath: installedTintWorkerPath(),
+        signal,
+        environment,
+      });
+    } catch (error) {
+      return compilerFailureResult(error, signal);
+    }
     try {
       const receipt = await publishPreparedMetalOutput({
         prepared,

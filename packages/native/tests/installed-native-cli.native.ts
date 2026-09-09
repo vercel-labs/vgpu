@@ -859,6 +859,60 @@ test("an offline installed public vgpu diagnoses, checks without Apple tools, an
     expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
     for (const { path, metadata } of retainedIdentities)
       expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect(await readFile(countSource, "utf8")).toBe(countBefore);
+    const invalidBuildSource = countBefore.replace(
+      "100u + index",
+      "vec2u(100u)"
+    );
+    await writeFile(countSource, invalidBuildSource);
+    const invalidBuildTreeBefore = await treeEvidence(project);
+    const invalidBuild = await command(
+      process.execPath,
+      [bin, "native", "build", "--config", "../project/vgpu.native.json"],
+      runtime,
+      { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+    );
+    console.info(
+      "Installed invalid build actual result",
+      JSON.stringify(invalidBuild)
+    );
+    expect(invalidBuild.code, JSON.stringify(invalidBuild)).toBe(1);
+    expect(invalidBuild.signal).toBeNull();
+    expect(invalidBuild.stdout).toBe("");
+    expect(invalidBuild.stderr).toContain("vec2<u32>");
+    expect(invalidBuild.stderr).toMatch(/cannot assign[^\n]*to 'u32'/u);
+    expect(await treeEvidence(project)).toEqual(invalidBuildTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await readdir(outputParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+      "AppShaders",
+    ]);
+    const invalidBuildRecord = await readFile(
+      join(output, ".vgpu-native-output.json")
+    );
+    expect(invalidBuildRecord).toEqual(recordBytes);
+    expect(createHash("sha256").update(invalidBuildRecord).digest("hex")).toBe(
+      recordHash
+    );
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    expect(invalidBuild.stderr, JSON.stringify(invalidBuild)).toBe(
+      invalid.stderr
+    );
+    expect(await readFile(countSource, "utf8")).toBe(invalidBuildSource);
+    await writeFile(countSource, countBefore);
+    expect(await treeEvidence(project)).toEqual(retainedTreeBefore);
+    for (const { path, metadata } of retainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {
