@@ -55,7 +55,8 @@ export function createHeroGlassAssets(
       );
     }
     environment = gpu.device.createTexture({
-      size: [faceSize, faceSize, 6],
+      kind: "2d-array",
+      size: [faceSize, faceSize], layers: 6,
       format: "rgba8unorm-srgb",
       usage: ["texture_binding", "copy_dst"],
       mipLevelCount,

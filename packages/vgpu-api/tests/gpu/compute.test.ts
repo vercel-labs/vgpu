@@ -68,7 +68,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Lane C GPU compute + ping
         });
         pair.swap();
       }
-      const pixels = await pair.read.read();
+      const pixels = await pair.read.color.read({ mipLevel: 0, region: "all" });
       const pixel = pixels.slice(0, 4);
       expect(pixel[0]).toBeGreaterThan(240);
       expect(pixel[3]).toBe(255);

@@ -11,7 +11,7 @@ test("by-example §7 renders HDR scene then samples it with explicit texel size"
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §7 HDR target feeds a post pass", async () => {
   const { gpu, output } = await runHdrPostExample();
   try {
-    const pixels = await output.read();
+    const pixels = await output.color.read({ mipLevel: 0, region: "all" });
     expect(pixels[1]).toBeGreaterThan(100);
     expect(pixels[2]).toBeGreaterThan(150);
   } finally {

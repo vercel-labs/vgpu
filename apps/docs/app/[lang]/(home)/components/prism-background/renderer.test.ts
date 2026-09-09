@@ -540,6 +540,7 @@ test("renders the deterministic light once and idles until something changes", a
   for (const environmentTexture of live.textures) {
     expect(environmentTexture.options).toEqual(
       expect.objectContaining({
+        kind: "2d",
         size: [1024, 512],
         format: "rgba16float",
         mipLevelCount: 8,

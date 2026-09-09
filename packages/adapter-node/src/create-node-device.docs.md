@@ -94,6 +94,7 @@ const device = await createNodeDevice({ label: `snapshot.${scene.name}.device` }
 
 try {
   const target = device.createTexture({
+    kind: "2d",
     label: `snapshot.${scene.name}.target`,
     size: [width, height],
     format,
@@ -146,7 +147,7 @@ try {
   device.queue.gpu.submit([encoder.finish()]);
   await device.queue.flush();
 
-  const rgba = await target.read();
+  const rgba = await target.color.read({ mipLevel: 0, region: "all" });
   // Pass `rgba` to project-owned PNG or pixel-diff tooling.
 
   target.destroy();
@@ -194,7 +195,7 @@ if (process.env.VGPU_WRITE_SNAPSHOTS === "1") {
 On Linux, the stock Dawn binary shipped by `webgpu@0.4.0` targets recent glibc
 (2.38 on arm64). vgpu no longer treats that as a hard requirement: when the
 stock binary fails to load, the adapter falls back to vgpu's portable Dawn
-prebuild — built against GLIBC 2.30, downloaded from GitHub Releases, verified
+prebuild — built against GLIBC 2.31, downloaded from GitHub Releases, verified
 against a pinned SHA-256, and cached per version. The fallback also runs at
 `postinstall` (best-effort, never fails your install) and can be invoked
 manually with `npx vgpu install-dawn`. `VGPU_DAWN_BINARY` overrides resolution
@@ -209,10 +210,10 @@ than as a GLIBC workaround:
 pnpm test:docker
 ```
 
-The Docker image uses Node 22 on Debian trixie with Mesa/EGL/GL and Xvfb for
-the OpenGL software stack. It also sets the headless defaults used by the
-adapter: `LIBGL_ALWAYS_SOFTWARE=1`, `DISPLAY=:99`, and
-`XDG_RUNTIME_DIR=/tmp/xdg-runtime`. To update project snapshots in that
+The Docker image uses Node 22 on Debian trixie with Vulkan and Mesa/lavapipe for
+CPU rendering. Linux users also default to Vulkan, independently of display variables.
+The image pins `VK_ICD_FILENAMES` and `VK_DRIVER_FILES` to the installed lavapipe ICD
+and sets `XDG_RUNTIME_DIR=/tmp/xdg-runtime`; no Xvfb is needed. To update project snapshots in that
 environment, use a project convention such as:
 
 ```bash
@@ -323,11 +324,11 @@ escape-hatch/native interop cases where you also own the consequences.
 - **Missing `copy_src` usage**: the render target must include `"copy_src"` in
   addition to `"render_attachment"`; otherwise readback copy validation fails.
 - **Unflushed queue**: submit the render commands and `await device.queue.flush()`
-  before `await target.read()` so the readback observes the completed frame.
+  before `await target.color.read({ mipLevel: 0, region: "all" })` so the readback observes the completed frame.
 - **Non-deterministic inputs**: freeze clock, random seeds, camera, viewport,
   device options, and fixture data. Include those names in labels and snapshot
   filenames.
-- **Native environment failures**: Xvfb or Mesa setup problems are
+- **Native environment failures**: Vulkan driver or Mesa setup problems are
   host/container issues — re-run in `pnpm test:docker`. Dawn load errors are
   handled by the adapter's portable-prebuild fallback; if one still surfaces,
   the structured `VGPU-NODE-*` error names the fix (typically

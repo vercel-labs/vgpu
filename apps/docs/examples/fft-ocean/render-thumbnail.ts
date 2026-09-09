@@ -43,7 +43,7 @@ export async function renderThumbnail(
     await gpu.gpu.queue.onSubmittedWorkDone();
     await options.onVariantRendered?.(
       "time-delta",
-      await output.read(),
+      await output.color.read({ mipLevel: 0, region: "all" }),
       output.size
     );
 
@@ -88,7 +88,7 @@ async function renderDisplacement(
     await gpu.gpu.queue.onSubmittedWorkDone();
     await onRendered(
       "displacement",
-      await previewTarget.read(),
+      await previewTarget.color.read({ mipLevel: 0, region: "all" }),
       previewTarget.size
     );
   } catch (error) {

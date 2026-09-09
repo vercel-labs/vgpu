@@ -25,7 +25,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("glass ray footprint GPU",
             const normalDy: Vec3 = bevel ? [0, 0, 0.005] : [0, 0, 0];
             probe.set({ inputs: { incident, incidentDx, incidentDy, normal, normalDx, normalDy, eta } });
             frame(gpu, (current) => current.pass({ target: output }, (pass) => pass.draw(probe)));
-            const pixels = await output.readFloats();
+            const pixels = await output.color.readFloats({ mipLevel: 0, region: "all" });
             for (const [operation, offset] of [[reflect, 0], [refract, 3]] as const) {
               const reference = operation(incident, normal, eta);
               const derivatives = [[incidentDx, normalDx], [incidentDy, normalDy]].map(([dd, dn]) => {

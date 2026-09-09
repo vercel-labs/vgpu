@@ -11,6 +11,9 @@ permissions:
   contents: read
 
 jobs:
+  visual-snapshots:
+    uses: ./.github/workflows/snapshots.yml
+
   test-fast:
     runs-on: ubuntu-24.04-arm
     steps:
@@ -77,7 +80,7 @@ jobs:
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts packages/wgsl/tests/runtime-cjs-require.test.ts
 
   docker-gpu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -92,8 +95,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -w typecheck
       - name: Build Docker GPU image
-        run: docker build -t vgpu-test-dev:ci -f infra/test-docker/Dockerfile.dev .
-      - name: Run Dawn GPU validation in Docker
+        run: docker build --platform linux/amd64 -t vgpu-test-dev:ci -f infra/snapshots/Dockerfile .
+      - name: Run Dawn Vulkan GPU validation in Docker
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
@@ -101,10 +104,8 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e VGPU_VALIDATE=require \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts"; \
-              s=$?; kill $xp; exit $s'
-      - name: Run pixel snapshot CLI in Docker
+            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts" "apps/docs/app/[lang]/(home)/components/prism-background/pipelines/shared/glass/ray-footprint.test.ts"'
+      - name: Verify doctor and pixel snapshot CLI in Docker
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
@@ -112,9 +113,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              node packages/vgpu/bin/vgpu.js snapshot --ci; \
-              s=$?; kill $xp; exit $s'
+            sh -lc 'node packages/vgpu/bin/vgpu.js doctor && node packages/vgpu/bin/vgpu.js snapshot --ci'
       - name: Render docs example proofs in Docker
         run: |
           rm -rf artifacts/example-renders
@@ -124,9 +123,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter docs render:proof; \
-              s=$?; kill $xp; exit $s'
+            pnpm --filter docs render:proof
       - name: Upload docs example render proofs
         if: always()
         uses: actions/upload-artifact@v4
@@ -144,9 +141,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter docs thumbs:check -- --artifact-dir ../../artifacts/thumb-diffs; \
-              s=$?; kill $xp; exit $s'
+            pnpm --filter docs thumbs:check -- --artifact-dir ../../artifacts/thumb-diffs
       - name: Upload docs thumbnail comparison
         if: always()
         uses: actions/upload-artifact@v4

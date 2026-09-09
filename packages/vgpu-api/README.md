@@ -54,7 +54,7 @@ const colorTarget = target(gpu, { size: [256, 256], format: "rgba8unorm" });
 const triangle = draw(gpu, { shader: triangleShader });
 
 frame(gpu, (f) => f.pass(colorTarget, triangle));
-const pixels = await colorTarget.read();
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
 gpu.dispose();
 ```
 

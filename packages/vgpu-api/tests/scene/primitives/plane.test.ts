@@ -36,7 +36,7 @@ test("Mesh.plane validates params", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("plane primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("plane primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("plane", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.plane({ device, width: 1.5, height: 1, widthSegments: 4, heightSegments: 3 }), camera: primitiveCamera(angle), material, baseColor: [0.4, 0.65, 0.85] })); }
   finally { device.destroy(); }

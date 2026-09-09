@@ -37,12 +37,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
       const canvasSurface = surface(gpu, canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
       const red = effect(gpu, RED, { label: "surfaceRed" });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(red)));
-      expect(rgbaAt(await canvasSurface.read(), 8, 4, 4)).toEqual([255, 0, 0, 255]);
+      expect(rgbaAt(await canvasSurface.color.read({ mipLevel: 0, region: "all" }), 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
       canvasSurface.resize([12, 4]);
       const green = effect(gpu, GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(green)));
-      const pixels = await canvasSurface.read();
+      const pixels = await canvasSurface.color.read({ mipLevel: 0, region: "all" });
       expect(canvasSurface.size).toEqual([12, 4]);
       expect(pixels.byteLength).toBe(12 * 4 * 4);
       const pixel = rgbaAt(pixels, 12, 6, 2);
@@ -74,8 +74,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
         currentFrame.pass({ target: b }, (pass) => pass.draw(yellow));
       });
 
-      expect(rgbaAt(await a.read(), 6, 3, 3)).toEqual([0, 0, 255, 255]);
-      expect(rgbaAt(await b.read(), 5, 2, 2)).toEqual([255, 255, 0, 255]);
+      expect(rgbaAt(await a.color.read({ mipLevel: 0, region: "all" }), 6, 3, 3)).toEqual([0, 0, 255, 255]);
+      expect(rgbaAt(await b.color.read({ mipLevel: 0, region: "all" }), 5, 2, 2)).toEqual([255, 255, 0, 255]);
     } finally {
       gpu.dispose();
     }
@@ -142,7 +142,7 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
         const initial = [...surface.size];
         surface.resize([20, 10]);
         frame(gpu, (frame) => frame.pass({ target: half }, (p) => p.draw(effect)));
-        const pixels = await half.read();
+        const pixels = await half.color.read({ mipLevel: 0, region: "all" });
         const offset = 4 * (2 * half.size[0] + 5);
         parentPort.postMessage({ initial, resized: [...surface.size], half: [...half.size], pixel: [pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3]] });
       } finally {

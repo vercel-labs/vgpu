@@ -15,6 +15,20 @@ pnpm changeset
 
 Choose each affected `@vgpu/*` package, select the appropriate semver bump (`patch`, `minor`, or `major`), and write a short summary. That summary becomes the changelog entry for the release.
 
+## Visual tests
+
+Run `pnpm test` locally. Exact image comparisons use one pinned native Linux x64 Vulkan environment
+in CI, so local ARM64/Metal rounding differences do not fail the visual reference tests.
+
+```sh
+pnpm snapshots:check   # Verify the committed and pushed revision in CI; download the diff report.
+pnpm snapshots:update  # Generate unapproved candidates in CI; never overwrite references locally.
+```
+
+Both commands require GitHub CLI authentication and a clean, pushed branch. Review before/actual/diff
+images before applying any candidate PNGs. See [the visual snapshot workflow](docs/visual-snapshots.md)
+for bootstrap, artifacts and intentional updates. Functional GPU tests remain separate.
+
 ## Branches and release channels
 
 - `canary` is the default development branch and the normal target for feature, fix, docs,
@@ -82,7 +96,7 @@ Before installing dependencies, the workflow verifies that the release event, ta
 commit resolve to the same SHA; that the release is the current tip of `canary`; and that the tag
 version matches every publishable workspace package. A tag
 with another prerelease identifier, a checkbox mismatch, the wrong commit, or an unversioned
-public package fails without publishing. It requires the canonical push `CI` run and all twelve
+public package fails without publishing. It requires the canonical push `CI` run and all required
 jobs to have succeeded on that exact commit. For a stable release, the current `main` tip must also
 be an ancestor of the release commit, which catches a missing or incorrectly squashed back-merge
 before npm changes. Every release re-reads its remote refs immediately before the first npm call;

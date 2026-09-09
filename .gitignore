@@ -6,6 +6,8 @@ packages/*/dist/
 *.log
 .env*
 coverage/
+/artifacts/
+/docs/plans/
 .vscode/
 .idea/
 # Editor backup/swap files

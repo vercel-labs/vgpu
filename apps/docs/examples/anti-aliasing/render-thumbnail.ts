@@ -28,7 +28,7 @@ export async function renderThumbnail(
     for (const mode of ALL_MODES) {
       frame(gpu, (currentFrame) => scene!.render(currentFrame, mode, time));
       await gpu.gpu.queue.onSubmittedWorkDone();
-      await options.onModeRendered?.(mode, await output.read(), output.size);
+      await options.onModeRendered?.(mode, await output.color.read({ mipLevel: 0, region: "all" }), output.size);
     }
     for (let i = 0; i < Math.max(1, options.warmupFrames ?? 60); i++) {
       time += options.dt ?? 1 / 60;
