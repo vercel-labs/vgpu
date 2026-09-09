@@ -50,7 +50,7 @@ including Mesa and LLVM. The workspace lockfile pins Dawn and other JS dependenc
 `ubuntu-24.04` x64 and does not pass through a hardware GPU. Docs proofs, thumbnail checks and the CLI
 probe also use this pinned image; their existing comparison policies are unchanged.
 
-The visual workflow additionally fixes `GALLIUM_OVERRIDE_CPU_CAPS=sse2` and
+The visual workflow additionally fixes `GALLIUM_OVERRIDE_CPU_CAPS=nosse` and
 `LP_NATIVE_VECTOR_WIDTH=128`. Pinning the OS and packages alone did not produce identical images
 across native x64 runners: Mesa also selects shader instructions from host CPU capabilities.
 These overrides are restricted to the snapshot job, not library defaults or functional GPU tests.

@@ -388,7 +388,9 @@ old green runs are not substitutes. Vulkan adoption and Linux defaults are done.
 The second native run (`34385008080`) exposed CPU-dependent visual output despite identical pinned
 packages: 36 images differed by at most one channel level, and all 237 captures matched the earlier
 emulated run. The first reference adoption therefore did not establish a stable oracle. The visual
-job now fixes Mesa CPU capabilities to SSE2 and its vector width to 128; this does not affect library
+job now disables Mesa's CPU-specific SIMD paths (`nosse`) and fixes its vector width to 128; this does not affect library
 defaults or functional GPU jobs. Native repeated-capture verification and reference review remain
 required before calling the snapshot migration complete. CPU identity is now included in artifacts.
 The same run found one lost documentation anchor, restored with an explicit replacement explanation.
+An intermediate SSE2-only cap still produced host-dependent output (native run `34385630231`);
+Mesa's explicit approximate SIMD math paths must also be disabled. Local `nosse` rendering succeeds.
