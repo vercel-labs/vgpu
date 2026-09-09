@@ -39,7 +39,6 @@ jobs:
             -v "$PWD:/workspace" -w /workspace \
             -e CI=true -e GITHUB_SHA -e GITHUB_ACTIONS \
             -e VGPU_SNAPSHOT_MODE="$SNAPSHOT_MODE" \
-            -e GALLIUM_OVERRIDE_CPU_CAPS=nosse -e LP_NATIVE_VECTOR_WIDTH=128 \
             vgpu-snapshots:ci \
             sh -lc 'pnpm install --frozen-lockfile && pnpm build && node scripts/run-visual-snapshots.mjs'
       - name: Upload before, actual, diff and unapproved candidates

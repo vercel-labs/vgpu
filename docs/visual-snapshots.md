@@ -50,11 +50,10 @@ including Mesa and LLVM. The workspace lockfile pins Dawn and other JS dependenc
 `ubuntu-24.04` x64 and does not pass through a hardware GPU. Docs proofs, thumbnail checks and the CLI
 probe also use this pinned image; their existing comparison policies are unchanged.
 
-The visual workflow additionally fixes `GALLIUM_OVERRIDE_CPU_CAPS=nosse` and
-`LP_NATIVE_VECTOR_WIDTH=128`. Pinning the OS and packages alone did not produce identical images
-across native x64 runners: Mesa also selects shader instructions from host CPU capabilities.
-These overrides are restricted to the snapshot job, not library defaults or functional GPU tests.
-See Mesa's [CPU capability override](https://docs.mesa3d.org/envvars.html#envvar-GALLIUM_OVERRIDE_CPU_CAPS).
+Pinning the OS and packages alone has not yet established byte-identical images across native x64
+runners. CPU-capability overrides were tested and rejected: they did not remove cross-host variation.
+CPU identity is recorded in artifacts to help diagnose this. The exact comparison remains enabled;
+the visual gate must not be bypassed or described as stable until this remaining issue is resolved.
 
 Docker alone is not a promise of cross-architecture pixel equality. Emulated x64 on a Mac is useful
 for testing the harness, but its captures are not automatically promoted to canonical references.

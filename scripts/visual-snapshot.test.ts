@@ -8,7 +8,6 @@ import { assertSnapshotEnvironment, compareVisualSnapshot, SNAPSHOT_ENV, SNAPSHO
 const env = {
   VGPU_SNAPSHOT_MODE: "check", VGPU_SNAPSHOT_ENV: SNAPSHOT_ENV, VGPU_DAWN_FLAGS: "backend=vulkan",
   VK_DRIVER_FILES: "/usr/share/vulkan/icd.d/lvp_icd.json", VK_ICD_FILENAMES: "/usr/share/vulkan/icd.d/lvp_icd.json",
-  GALLIUM_OVERRIDE_CPU_CAPS: "nosse", LP_NATIVE_VECTOR_WIDTH: "128",
 };
 const directories: string[] = [];
 afterEach(async () => { for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }); });
@@ -20,9 +19,6 @@ test("the canonical environment is explicit and legacy update flags cannot bypas
   }
   expect(() => assertSnapshotEnvironment(env, "linux", "arm64")).toThrow();
   expect(() => assertSnapshotEnvironment(env, "darwin", "x64")).toThrow();
-  for (const changes of [{ GALLIUM_OVERRIDE_CPU_CAPS: undefined }, { GALLIUM_OVERRIDE_CPU_CAPS: "sse2" }, { GALLIUM_OVERRIDE_CPU_CAPS: "avx" }, { LP_NATIVE_VECTOR_WIDTH: "256" }]) {
-    expect(() => assertSnapshotEnvironment({ ...env, ...changes }, "linux", "x64")).toThrow();
-  }
 });
 
 test("only known baseline directories and plain PNG names are accepted", () => {
