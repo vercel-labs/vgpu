@@ -14,6 +14,7 @@ const aggregateLimit = 128 * 1024 * 1024;
 const chunkLimit = 64 * 1024;
 const recordLimit = 64 * 1024;
 const actualJournalName = ".vgpu-native-publication.json";
+const journalUpdateName = ".vgpu-native-publication.update.json";
 const stageName = ".vgpu-native-stage";
 
 type ArtifactRole =
@@ -333,7 +334,8 @@ async function runStaging<T>(
     snapshot.signal?.addEventListener("abort", cancelTransfer, { once: true });
     if (snapshot.signal?.aborted) cancelTransfer();
     const ready = (lastMessage = await watchProgress(receiveMessage(lines)));
-    if (ready.kind !== "ready") throw helperResponseError(ready);
+    if (ready.kind !== "ready")
+      throw helperResponseError(ready, snapshot.parentPath);
     for (let index = 0; index < snapshot.files.length; index++) {
       throwIfCancelled(snapshot.signal);
       const file = snapshot.files[index]!;
@@ -363,7 +365,8 @@ async function runStaging<T>(
     throwIfCancelled(snapshot.signal);
     await watchProgress(writeBytes(childInput, Buffer.from("prepare\n")));
     const prepared = (lastMessage = await watchProgress(receiveMessage(lines)));
-    if (prepared.kind !== "prepared") throw helperResponseError(prepared);
+    if (prepared.kind !== "prepared")
+      throw helperResponseError(prepared, snapshot.parentPath);
     const receipt = validateReceipt(prepared, snapshot);
     throwIfCancelled(snapshot.signal);
     transferActive = false;
@@ -451,18 +454,28 @@ async function runStaging<T>(
       }
       child?.stdout?.resume();
       if (closed) await closed;
-      const recoveryPaths =
-        lastMessage?.cleanup === "cleaned"
-          ? []
-          : [
-              join(snapshot.parentPath, stageName),
-              join(snapshot.parentPath, actualJournalName),
-            ];
+      const retainedUpdateFailure =
+        lastMessage?.retainedUpdate === true
+          ? helperResponseError(lastMessage, snapshot.parentPath)
+          : undefined;
+      const recoveryPaths = retainedUpdateFailure
+        ? retainedUpdateFailure.recoveryPaths
+        : lastMessage?.cleanup === "cleaned"
+        ? []
+        : [
+            join(snapshot.parentPath, stageName),
+            join(snapshot.parentPath, actualJournalName),
+          ];
       const cancelled = new MetalPublicationStagingError(
         "cancelled",
         "Publication staging was cancelled",
         {
-          cause: snapshot.signal?.reason,
+          cause: retainedUpdateFailure
+            ? new AggregateError(
+                [snapshot.signal?.reason, retainedUpdateFailure],
+                "Publication staging cancellation and journal update failure"
+              )
+            : snapshot.signal?.reason,
           recoveryPaths,
         }
       );
@@ -599,7 +612,10 @@ async function receiveMessage(
   return message;
 }
 
-function helperResponseError(message: Record<string, any>): Error {
+function helperResponseError(
+  message: Record<string, any>,
+  parentPath?: string
+): MetalPublicationStagingError {
   const allowed = new Set([
     "busy",
     "conflict",
@@ -614,7 +630,15 @@ function helperResponseError(message: Record<string, any>): Error {
     code,
     `Publication staging helper failed: ${String(message.code)} (errno ${
       message.errno
-    })`
+    })`,
+    {
+      recoveryPaths:
+        message.retainedUpdate === true && parentPath
+          ? [stageName, actualJournalName, journalUpdateName].map((name) =>
+              join(parentPath, name)
+            )
+          : [],
+    }
   );
 }
 
