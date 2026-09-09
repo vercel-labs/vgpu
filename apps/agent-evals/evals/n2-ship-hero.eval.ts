@@ -98,8 +98,13 @@ const QUESTIONS: { label: string; criteria: string; material: "pr" | "diff+pr" |
 export default defineEval({
   description: `${TASK_ID}: a working hero is approved; get it ready to merge and write PR.md`,
 
-  // Build-only verification after the turn: no browser, no server. 20 minutes
-  // (the shared default) is generous.
+  // 30 minutes, like n1, overriding evals.config.ts's shared 20. The verify pass
+  // is build-only, but the TURN is not small: an agent that follows the
+  // shipping-to-production guide end to end (gates, measurements, pre-warm, a
+  // headless snapshot, sometimes a browser check, then PR.md) legitimately
+  // needs it — gpt-5 timed out at 20 on the first run with the CLI pointer.
+  timeoutMs: 1_800_000,
+
   async test(t) {
     if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
       t.skip("no AI Gateway credential (set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN)");

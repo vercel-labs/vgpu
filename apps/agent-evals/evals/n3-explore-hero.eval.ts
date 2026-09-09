@@ -62,6 +62,10 @@ const QUESTIONS: { label: string; criteria: string }[] = [
 export default defineEval({
   description: `${TASK_ID}: control — still exploring the look, asks only for a warmer palette`,
 
+  // Same 30-minute budget as n2: the pair must not differ in what it lets a
+  // run finish, or a budget difference could masquerade as a behavior difference.
+  timeoutMs: 1_800_000,
+
   async test(t) {
     if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
       t.skip("no AI Gateway credential (set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN)");
