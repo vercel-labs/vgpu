@@ -7,9 +7,11 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
+  writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
@@ -18,6 +20,7 @@ import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 const journalName = ".vgpu-native-publication.json";
+const updateName = ".vgpu-native-publication.update.json";
 const stageName = ".vgpu-native-stage";
 const transactionId = "0123456789abcdef0123456789abcdef";
 const firstFiles = [
@@ -208,6 +211,239 @@ test("premature EOF preserves the transaction when the persisted prefix changes 
   });
 });
 
+test("a real short journal update write preserves the partial update and unchanged prior journal", async () => {
+  await withStagingHelper(
+    async (helper) => {
+      const prior = await readFile(helper.journal);
+      const priorIdentity = await lstat(helper.journal, { bigint: true });
+      expect(prior.byteLength).toBeLessThan(512);
+      for (const [index, file] of firstFiles.entries()) {
+        await helper.send(fileHeader(index, file.bytes));
+        await helper.send(file.bytes);
+      }
+      const record = Buffer.from("{}");
+      await helper.send(fileHeader(3, record));
+      await helper.send(record);
+      await helper.send(Buffer.from("prepare\n"));
+
+      const response = await helper.receive();
+      expect(response).toMatchObject({
+        schemaVersion: 1,
+        kind: "error",
+        code: "helper-failed",
+        errno: constants.errno.EFBIG,
+      });
+      expect(await helper.exited).toEqual({
+        code: 1,
+        signal: null,
+        timedOut: false,
+        spawnError: undefined,
+      });
+      const partial = await readFile(join(helper.parent, updateName));
+      expect(partial.byteLength).toBe(512);
+      const plannedFiles = [
+        ...firstFiles.map((file, index) => ({
+          ...file,
+          role: ["package-manifest", "swift-source", "metal-library"][index],
+        })),
+        {
+          path: ".vgpu-native-output.json",
+          bytes: record,
+          role: "output-record",
+        },
+      ];
+      const expectedUpdate = Buffer.from(
+        `${JSON.stringify({
+          ...JSON.parse(prior.toString("utf8")),
+          phase: "prepared",
+          recordSHA256: createHash("sha256").update(record).digest("hex"),
+          files: plannedFiles.map(({ role, path, bytes }) => ({
+            role,
+            path,
+            length: bytes.byteLength,
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+          })),
+        })}\n`
+      );
+      expect(expectedUpdate.byteLength).toBeGreaterThan(512);
+      expect(partial).toEqual(expectedUpdate.subarray(0, 512));
+      expect(() => JSON.parse(partial.toString("utf8"))).toThrow();
+      expect(await readFile(helper.journal)).toEqual(prior);
+      const current = await lstat(helper.journal, { bigint: true });
+      expect({
+        device: current.dev,
+        inode: current.ino,
+        mode: current.mode,
+      }).toEqual({
+        device: priorIdentity.dev,
+        inode: priorIdentity.ino,
+        mode: priorIdentity.mode,
+      });
+      expect(response).toMatchObject({ retainedUpdate: true });
+      expect((await readdir(helper.parent)).sort()).toEqual(
+        [journalName, updateName, stageName].sort()
+      );
+      for (const file of firstFiles)
+        expect(await readFile(join(helper.stage, file.path))).toEqual(
+          file.bytes
+        );
+    },
+    { limitFileSize: true }
+  );
+});
+
+test("a prior journal changed under the same identity before prepare is rejected without replacement", async () => {
+  await withStagingHelper(async (helper) => {
+    const prior = await readFile(helper.journal);
+    const before = await lstat(helper.journal, { bigint: true });
+    const changed = Buffer.from(prior);
+    const phaseOffset = changed.indexOf(Buffer.from('"phase":"staging"'));
+    expect(phaseOffset).toBeGreaterThanOrEqual(0);
+    changed[phaseOffset + Buffer.byteLength('"phase":"')] = 0x78;
+    const editor = await open(helper.journal, "r+");
+    try {
+      await editor.write(changed, 0, changed.byteLength, 0);
+    } finally {
+      await editor.close();
+    }
+    const edited = await lstat(helper.journal, { bigint: true });
+    expect({
+      device: edited.dev,
+      inode: edited.ino,
+      size: edited.size,
+    }).toEqual({
+      device: before.dev,
+      inode: before.ino,
+      size: before.size,
+    });
+    for (const [index, file] of firstFiles.entries()) {
+      await helper.send(fileHeader(index, file.bytes));
+      await helper.send(file.bytes);
+    }
+    const record = Buffer.from("{}");
+    await helper.send(fileHeader(3, record));
+    await helper.send(record);
+    await helper.send(Buffer.from("prepare\n"));
+
+    expect(await helper.receive()).toMatchObject({
+      schemaVersion: 1,
+      kind: "error",
+      code: "helper-failed",
+      errno: constants.errno.ESTALE,
+    });
+    expect(await helper.exited).toEqual({
+      code: 1,
+      signal: null,
+      timedOut: false,
+      spawnError: undefined,
+    });
+    expect(await readFile(helper.journal)).toEqual(changed);
+    const after = await lstat(helper.journal, { bigint: true });
+    expect({ device: after.dev, inode: after.ino, mode: after.mode }).toEqual({
+      device: before.dev,
+      inode: before.ino,
+      mode: before.mode,
+    });
+    expect((await readdir(helper.parent)).sort()).toEqual(
+      [journalName, stageName].sort()
+    );
+    for (const file of firstFiles)
+      expect(await readFile(join(helper.stage, file.path))).toEqual(file.bytes);
+  });
+});
+
+test.each(["same-inode edit", "same-byte replacement"] as const)(
+  "a prepared journal candidate changed after close is preserved without replacing the prior journal (%s)",
+  async (mutation) => {
+    await withStagingHelper(
+      async (helper) => {
+        const prior = await readFile(helper.journal);
+        const before = await lstat(helper.journal, { bigint: true });
+        for (const [index, file] of firstFiles.entries()) {
+          await helper.send(fileHeader(index, file.bytes));
+          await helper.send(file.bytes);
+        }
+        const record = Buffer.from("{}");
+        await helper.send(fileHeader(3, record));
+        await helper.send(record);
+        await helper.send(Buffer.from("prepare\n"));
+        await waitForFileSize(helper.updateClosedPath, 7);
+
+        const updatePath = join(helper.parent, updateName);
+        const candidate = await readFile(updatePath);
+        const originalCandidate = await lstat(updatePath, { bigint: true });
+        const changed = Buffer.from(candidate);
+        if (mutation === "same-inode edit") {
+          const phaseOffset = changed.indexOf(
+            Buffer.from('"phase":"prepared"')
+          );
+          expect(phaseOffset).toBeGreaterThanOrEqual(0);
+          changed[phaseOffset + Buffer.byteLength('"phase":"')] = 0x78;
+          const editor = await open(updatePath, "r+");
+          try {
+            await editor.write(changed, 0, changed.byteLength, 0);
+          } finally {
+            await editor.close();
+          }
+        } else {
+          const replacement = join(helper.parent, "replacement-candidate");
+          await writeFile(replacement, changed, { flag: "wx" });
+          await rename(replacement, updatePath);
+        }
+        const edited = await lstat(updatePath, { bigint: true });
+        expect({ device: edited.dev, size: edited.size }).toEqual({
+          device: originalCandidate.dev,
+          size: originalCandidate.size,
+        });
+        if (mutation === "same-inode edit")
+          expect(edited.ino).toBe(originalCandidate.ino);
+        else expect(edited.ino).not.toBe(originalCandidate.ino);
+        await writeFile(helper.updateResumePath, "resume\n");
+
+        expect(await helper.receive()).toMatchObject({
+          schemaVersion: 1,
+          kind: "error",
+          code: "helper-failed",
+          errno: constants.errno.ESTALE,
+          retainedUpdate: true,
+        });
+        expect(await helper.exited).toEqual({
+          code: 1,
+          signal: null,
+          timedOut: false,
+          spawnError: undefined,
+        });
+        expect(await readFile(helper.journal)).toEqual(prior);
+        const after = await lstat(helper.journal, { bigint: true });
+        expect({
+          device: after.dev,
+          inode: after.ino,
+          mode: after.mode,
+        }).toEqual({
+          device: before.dev,
+          inode: before.ino,
+          mode: before.mode,
+        });
+        expect(await readFile(updatePath)).toEqual(changed);
+        const retained = await lstat(updatePath, { bigint: true });
+        expect({
+          device: retained.dev,
+          inode: retained.ino,
+          mode: retained.mode,
+        }).toEqual({
+          device: edited.dev,
+          inode: edited.ino,
+          mode: edited.mode,
+        });
+        expect((await readdir(helper.parent)).sort()).toEqual(
+          [journalName, updateName, stageName].sort()
+        );
+      },
+      { pausePreparedUpdate: true }
+    );
+  }
+);
+
 async function waitForFileSize(path: string, size: number): Promise<void> {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
@@ -232,6 +468,8 @@ interface StagingHelper {
   readonly parent: string;
   readonly stage: string;
   readonly journal: string;
+  readonly updateClosedPath: string;
+  readonly updateResumePath: string;
   readonly exited: Promise<{
     code: number | null;
     signal: NodeJS.Signals | null;
@@ -244,7 +482,11 @@ interface StagingHelper {
 }
 
 async function withStagingHelper(
-  callback: (helper: StagingHelper) => Promise<void>
+  callback: (helper: StagingHelper) => Promise<void>,
+  options: {
+    readonly limitFileSize?: boolean;
+    readonly pausePreparedUpdate?: boolean;
+  } = {}
 ): Promise<void> {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "vgpu-staging-protocol-"))
@@ -280,10 +522,70 @@ async function withStagingHelper(
         maxBuffer: 64 * 1024,
       }
     );
+    let launcher = executable;
+    if (options.limitFileSize) {
+      launcher = join(root, "publication-file-size-limit");
+      await promisify(execFile)(
+        "/usr/bin/xcrun",
+        [
+          "--sdk",
+          "macosx",
+          "clang",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          fileURLToPath(
+            new URL("./fixtures/publication-file-size-limit.c", import.meta.url)
+          ),
+          "-o",
+          launcher,
+        ],
+        {
+          env: environment,
+          timeout: 30_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 64 * 1024,
+        }
+      );
+    }
+    const updateClosedPath = join(root, "update-closed");
+    const updateResumePath = join(root, "update-resume");
+    if (options.pausePreparedUpdate) {
+      const observer = join(root, "publication-journal-close.dylib");
+      await promisify(execFile)(
+        "/usr/bin/xcrun",
+        [
+          "--sdk",
+          "macosx",
+          "clang",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-dynamiclib",
+          fileURLToPath(
+            new URL("./fixtures/publication-journal-close.c", import.meta.url)
+          ),
+          "-o",
+          observer,
+        ],
+        {
+          env: environment,
+          timeout: 30_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 64 * 1024,
+        }
+      );
+      environment.DYLD_INSERT_LIBRARIES = observer;
+      environment.VGPU_JOURNAL_CLOSED = updateClosedPath;
+      environment.VGPU_JOURNAL_RESUME = updateResumePath;
+    }
     const parent = join(root, "Generated");
     const child = spawn(
-      executable,
+      launcher,
       [
+        ...(options.limitFileSize ? [executable] : []),
         "vgpu-publication-staging/v1",
         parent,
         "AppShaders",
@@ -315,6 +617,8 @@ async function withStagingHelper(
       parent,
       stage: join(parent, stageName),
       journal: join(parent, journalName),
+      updateClosedPath,
+      updateResumePath,
       exited,
       send: (bytes) =>
         new Promise((resolveSend, reject) => {

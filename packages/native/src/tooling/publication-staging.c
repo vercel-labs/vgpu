@@ -44,6 +44,15 @@ static int fail(const char *code) {
   return 1;
 }
 
+static int fail_journal_update(int retained_update) {
+  if (!retained_update) return fail("helper-failed");
+  int error = errno;
+  printf("{\"schemaVersion\":1,\"kind\":\"error\",\"code\":\"helper-failed\","
+         "\"errno\":%d,\"retainedUpdate\":true}\n", error);
+  fflush(stdout);
+  return 1;
+}
+
 /* Only container creation is allowed here. Never remove ancestors on failure. */
 static int open_parent(const char *path) {
   const int flags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC;
@@ -157,31 +166,40 @@ static int install_initial_journal(int parent, const char *bytes, size_t length,
   return result;
 }
 
+static int verify_bytes(int parent, const char *name, const struct stat *expected_identity,
+                        const char *expected, size_t length);
+
 static int replace_owned_journal(int parent, const char *bytes, size_t length,
-                                 struct stat *identity) {
+                                 struct stat *identity, const char *previous,
+                                 size_t previous_length, int *retained_update) {
+  *retained_update = 0;
+  if (verify_bytes(parent, JOURNAL_NAME, identity, previous, previous_length) != 0)
+    return -1;
   int descriptor = openat(parent, UPDATE_NAME,
                           O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
   if (descriptor < 0) return -1;
+  *retained_update = 1;
   struct stat update_identity;
   int result = write_all(descriptor, (const unsigned char *)bytes, length);
   if (result == 0) result = fstat(descriptor, &update_identity);
+  int error = result != 0 ? errno : 0;
   int close_result = close(descriptor);
-  if (result == 0 && close_result != 0) result = -1;
-  struct stat observed;
-  if (result == 0) result = fstatat(parent, JOURNAL_NAME, &observed, AT_SYMLINK_NOFOLLOW);
-  if (result == 0 && (!same_identity(identity, &observed) || !S_ISREG(observed.st_mode) ||
-                      observed.st_nlink != 1)) {
-    errno = ESTALE;
+  if (result == 0 && close_result != 0) {
     result = -1;
+    error = errno;
   }
-  if (result == 0) result = renameat(parent, UPDATE_NAME, parent, JOURNAL_NAME);
-  if (result == 0) *identity = update_identity;
+  /* An incomplete update has no verified actual-byte ledger. Preserve it on failure. */
   if (result != 0) {
-    int error = errno;
-    unlinkat(parent, UPDATE_NAME, 0);
     errno = error;
+    return -1;
   }
-  return result;
+  if (verify_bytes(parent, UPDATE_NAME, &update_identity, bytes, length) != 0 ||
+      verify_bytes(parent, JOURNAL_NAME, identity, previous, previous_length) != 0 ||
+      renameat(parent, UPDATE_NAME, parent, JOURNAL_NAME) != 0)
+    return -1;
+  *identity = update_identity;
+  *retained_update = 0;
+  return 0;
 }
 
 static int append_json(char *buffer, size_t capacity, size_t *used,
@@ -601,10 +619,16 @@ int main(int argc, char **argv) {
   struct stat stage_identity;
   int stage = make_child_directory(parent, STAGE_NAME, &stage_identity);
   if (stage < 0) return fail("helper-failed");
-  if (build_journal(journal, sizeof(journal), "staging", transaction, destination,
-                    module, &parent_identity, &stage_identity, NULL, &journal_length) != 0 ||
-      replace_owned_journal(parent, journal, journal_length, &journal_identity) != 0)
-    return fail("helper-failed");
+  int retained_update = 0;
+  char next_journal[JOURNAL_LIMIT];
+  size_t next_journal_length = 0;
+  if (build_journal(next_journal, sizeof(next_journal), "staging", transaction, destination,
+                    module, &parent_identity, &stage_identity, NULL, &next_journal_length) != 0 ||
+      replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
+                            journal, journal_length, &retained_update) != 0)
+    return fail_journal_update(retained_update);
+  memcpy(journal, next_journal, next_journal_length + 1);
+  journal_length = next_journal_length;
 
   struct stat sources_identity;
   struct stat module_identity;
@@ -658,11 +682,14 @@ int main(int argc, char **argv) {
                   module_directory, module, &module_identity, resources,
                   &resources_identity, files) != 0)
     return fail("invalid-stage");
-  if (build_journal(journal, sizeof(journal), "prepared", transaction, destination,
-                    module, &parent_identity, &stage_identity, files, &journal_length) != 0 ||
-      journal_length > JOURNAL_LIMIT ||
-      replace_owned_journal(parent, journal, journal_length, &journal_identity) != 0)
-    return fail("helper-failed");
+  if (build_journal(next_journal, sizeof(next_journal), "prepared", transaction, destination,
+                    module, &parent_identity, &stage_identity, files, &next_journal_length) != 0 ||
+      next_journal_length > JOURNAL_LIMIT ||
+      replace_owned_journal(parent, next_journal, next_journal_length, &journal_identity,
+                            journal, journal_length, &retained_update) != 0)
+    return fail_journal_update(retained_update);
+  memcpy(journal, next_journal, next_journal_length + 1);
+  journal_length = next_journal_length;
 
   char receipt[JOURNAL_LIMIT];
   size_t receipt_length = 0;
