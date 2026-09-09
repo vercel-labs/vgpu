@@ -6,10 +6,11 @@ description: "Select WGSL entry points and an owned output directory for a gener
 A native configuration selects the shader programs that ship together in one Swift package.
 It does not describe your application's pipelines, resource allocations, render passes, or frame loop.
 
-> Warning: This is a docs-first production workflow. The parser, help, lazy dispatch, `doctor`, and
-> `check` are implemented. Doctor and check run from real local tarballs installed offline with
-> dependency install scripts disabled. The companion remains private and unpublished; installed
-> `build` and `verify` and the complete release workflow remain unfinished.
+> Warning: This is a docs-first production workflow. The parser, help, lazy dispatch, `doctor`,
+> `check`, and `build` are implemented. Local-tarball tests install offline with dependency install
+> scripts disabled and exercise build publication to an initially absent destination. The companion
+> remains private and unpublished; installed `verify`, replacement/recovery diagnostics, external
+> Swift/GPU consumption of that candidate, and the complete release workflow remain unfinished.
 
 ## Select the programs
 

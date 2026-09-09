@@ -1,4 +1,5 @@
 import { MetalCompileError } from "./compiler/errors.js";
+import { captureToolEnvironment } from "./compiler/environment.js";
 import { installedTintWorkerPath } from "./compiler/installed-worker.js";
 import {
   checkMetalProject,
@@ -8,6 +9,8 @@ import {
   doctorMetalToolchain,
   type NativeDoctorReport,
 } from "./tooling/doctor.js";
+import { prepareMetalProject } from "./tooling/prepare-project.js";
+import { publishPreparedMetalOutput } from "./tooling/publication-staging.js";
 
 export const nativeCliProtocol = 1;
 
@@ -49,6 +52,32 @@ export async function runNativeCommand(
         throw error;
       return { code: 1, stderr: renderCheckDiagnostics(error.diagnostics) };
     }
+  }
+  if (input.command === "build") {
+    const environment = captureToolEnvironment();
+    const { configurationPath, signal } = input;
+    const prepared = await prepareMetalProject({
+      configurationPath,
+      workerPath: installedTintWorkerPath(),
+      signal,
+      environment,
+    });
+    const receipt = await publishPreparedMetalOutput({
+      prepared,
+      signal,
+      environment,
+    });
+    return {
+      code: 0,
+      stdout: [
+        "Native package: published",
+        `Module: ${prepared.project.configuration.moduleName}`,
+        `Output: ${receipt.outputPath}`,
+        `Input fingerprint: ${prepared.project.inputFingerprint}`,
+        `Record SHA-256: ${receipt.recordSHA256}`,
+        "",
+      ].join("\n"),
+    };
   }
   if (input.command !== "doctor")
     return {

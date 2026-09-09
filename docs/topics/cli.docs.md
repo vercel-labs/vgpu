@@ -40,10 +40,11 @@ Native tooling compiles WGSL for application-owned Metal code. Its command dispa
 optional `@vgpu/native` companion only for native operations; other vgpu commands and native help
 do not load the compiler.
 
-> Warning: Native tooling is under development. The dispatcher, help, `native doctor`, and
-> `native check` are tested; both commands run from real local tarballs installed offline with
-> dependency install scripts disabled. The companion is not published; `native build`,
-> `native verify`, and the complete installed build workflow remain unfinished.
+> Warning: Native tooling is under development. The dispatcher, help, `native doctor`,
+> `native check`, and `native build` are tested using real local tarballs installed offline with
+> dependency install scripts disabled; build coverage publishes to an initially absent destination.
+> The companion is not published; installed `native verify`, replacement/recovery diagnostics,
+> external Swift/GPU consumption of that candidate, and release qualification remain unfinished.
 
 ```terminal
 npx vgpu native --help

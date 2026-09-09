@@ -10,12 +10,13 @@ keywords: native, macos, metal, swift, doctor, check, build, verify, output, int
 Native tooling runs on the machine that generates the shaders. The Swift application consumes the
 resulting package without running Node.js or translating WGSL at launch.
 
-> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, `doctor`, and
-> `check` are implemented. Both commands have real local-tarball coverage with an offline installation
-> and dependency install scripts disabled. The companion remains private and unpublished;
-> `build` and `verify` are not connected to installed commands yet. Internal tests exercise their
-> compiler, publication, and verification modules separately. The complete installed build workflow
-> and release support remain unqualified.
+> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, `doctor`,
+> `check`, and `build` are implemented. These commands have real local-tarball coverage with an offline
+> installation and dependency install scripts disabled; build coverage publishes to an initially
+> absent destination and independently checks the resulting files and hashes. The companion remains
+> private and unpublished; `verify` is not connected to its installed command yet. Installed
+> replacement/recovery diagnostics, external Swift/GPU consumption of that candidate, and release
+> support remain unqualified. Internal tests exercise those underlying modules separately.
 
 ## Prepare the build machine
 
@@ -115,6 +116,22 @@ The build captures its selected tool environment before awaiting project work. R
 `DEVELOPER_DIR` and `TMPDIR` selections keep their meaning from that invocation's working directory;
 changing the process environment later does not switch the Apple compiler halfway through the build.
 These host settings are not copied into the generated package or its logical input fingerprint.
+
+A successful build writes a human-readable publication report to standard output and exits `0`.
+The module and input fingerprint identify the captured project; the absolute output path and
+ownership-record hash come from the checked publication receipt. The report has this shape:
+
+```text
+Native package: published
+Module: AppShaders
+Output: /absolute/path/to/Generated/AppShaders
+Input fingerprint: ...
+Record SHA-256: ...
+```
+
+Both hashes are 64 lowercase hexadecimal characters. Compilation or staging alone is not success:
+the command reports publication only after the publisher returns its checked receipt. A failure
+does not print this successful report; the diagnostic retains any known publication outcome.
 
 A failed program, cancelled build before publication, or rejected output boundary leaves the last
 valid package unchanged. Publishing replaces the directory as one operation: the output path names

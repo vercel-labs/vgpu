@@ -11,9 +11,11 @@ npx vgpu native doctor
 
 > Warning: `vgpu native doctor` is implemented and exercised from real local package tarballs,
 > installed offline with dependency install scripts disabled. It uses the packaged pinned worker
-> and Apple's offline compiler. The companion remains private and unpublished; `build`, `verify`,
-> and the complete installed build workflow remain unfinished. This does not qualify empty-cache
-> installation, normal dependency install scripts, or a release compatibility matrix.
+> and Apple's offline compiler. The same installed workflow checks shaders and builds a package at
+> an initially absent destination. The companion remains private and unpublished; installed `verify`,
+> replacement/recovery diagnostics, and external Swift/GPU consumption of that candidate remain
+> unfinished. This does not qualify empty-cache installation, normal dependency install scripts,
+> or a release compatibility matrix.
 
 The command needs no `vgpu.native.json`, does not read project shaders, and writes no generated
 package. It reports evidence and a suggested next action for each failed prerequisite.

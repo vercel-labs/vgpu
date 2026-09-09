@@ -173,14 +173,17 @@ describe("agent readiness metadata", () => {
     expect(macos).not.toContain("Earlier proposals");
     const build = docsContent("native/macos/metal/tooling/build.md");
     expect(build).toContain(
-      "Both commands have real local-tarball coverage with an offline installation"
+      "These commands have real local-tarball coverage with an offline"
     );
     expect(build).toContain("dependency install scripts disabled");
-    expect(build).toContain("The companion remains private and unpublished");
     expect(build).toContain(
-      "`build` and `verify` are not connected to installed commands yet"
+      "absent destination and independently checks the resulting files and hashes"
     );
-    expect(build).toContain("and release support remain unqualified");
+    expect(build).toContain("private and unpublished");
+    expect(build).toContain(
+      "`verify` is not connected to its installed command yet"
+    );
+    expect(build).toContain("support remain unqualified");
 
     const index = docsContent("index.mdx");
     expect(index).toContain("[Integrate WGSL with native Metal](/docs/native)");

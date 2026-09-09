@@ -1,14 +1,18 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { isUtf8 } from "node:buffer";
+import { constants } from "node:fs";
 import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   realpath,
   rename,
   rm,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -45,7 +49,7 @@ const external = {
   zod: "4.4.3",
 };
 
-test("an offline installed public vgpu diagnoses its native toolchain and checks documented shaders without output or Apple tools", async () => {
+test("an offline installed public vgpu diagnoses, checks without Apple tools, and builds documented shaders", async () => {
   expect(process.versions.node).toBe("22.19.0");
   expect(process.platform).toBe("darwin");
   const { command, checked } = boundedCommands(Date.now() + 240_000);
@@ -508,6 +512,115 @@ test("an offline installed public vgpu diagnoses its native toolchain and checks
     expect(invalid.stderr).not.toContain(project);
     expect(invalid.stderr).not.toContain(workspace);
     expect(invalid.stderr).not.toContain("Input fingerprint:");
+    expect(await readFile(countSource, "utf8")).toBe(
+      countBefore.replace("100u + index", "vec2u(100u)")
+    );
+    await writeFile(countSource, countBefore);
+    expect(await treeEvidence(project)).toEqual(projectBefore);
+    expect(await fileEvidence(output)).toEqual(outputEvidence);
+    expect(await lstat(output, { bigint: true })).toMatchObject({
+      dev: outputBefore.dev,
+      ino: outputBefore.ino,
+      mode: outputBefore.mode,
+      nlink: outputBefore.nlink,
+      size: outputBefore.size,
+    });
+    await unlink(output); // Only the verified test-owned sentinel is removed as arrangement.
+    await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(dirname(output))).toEqual([]);
+    const inputBeforeBuild = [
+      await fileEvidence(join(project, "vgpu.native.json")),
+      await treeEvidence(join(project, "shaders")),
+    ];
+    const build = await command(
+      process.execPath,
+      [bin, "native", "build", "--config", "../project/vgpu.native.json"],
+      runtime,
+      doctorEnvironment
+    );
+    console.info("Installed build actual result", JSON.stringify(build));
+    // Publication is observed through the real installed command before inspecting any result artifact.
+    expect(build.code, JSON.stringify(build)).toBe(0);
+    expect(build.signal).toBeNull();
+    expect(build.stderr).toBe("");
+    for (const [directory, children] of [
+      ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
+      ["Sources", ["AppShaders"]],
+      ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
+      ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
+    ] as const) {
+      const path = join(output, directory);
+      expect((await lstat(path)).isDirectory()).toBe(true);
+      expect((await readdir(path)).sort()).toEqual(children);
+    }
+    const payloadManifest = [];
+    for (const path of [
+      "Package.swift",
+      "Sources/AppShaders/Resources/Shaders.metallib",
+      "Sources/AppShaders/Shaders.generated.swift",
+    ]) {
+      const filename = join(output, path);
+      const metadata = await lstat(filename, { bigint: true });
+      expect(metadata.isFile()).toBe(true);
+      expect(metadata.nlink).toBe(1n);
+      expect(metadata.size).toBeGreaterThan(0n);
+      const evidence = await fileEvidence(filename);
+      payloadManifest.push({ path, sha256: evidence.sha256 });
+    }
+    const recordFile = await open(
+      join(output, ".vgpu-native-output.json"),
+      constants.O_RDONLY | constants.O_NOFOLLOW
+    );
+    let recordBytes: Buffer;
+    try {
+      const metadata = await recordFile.stat({ bigint: true });
+      expect(metadata.isFile()).toBe(true);
+      expect(metadata.nlink).toBe(1n);
+      expect(metadata.size).toBeGreaterThan(0n);
+      expect(metadata.size).toBeLessThanOrEqual(65536n);
+      const buffer = Buffer.alloc(65537);
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await recordFile.read(
+          buffer,
+          length,
+          buffer.length - length,
+          length
+        );
+        if (bytesRead === 0) break;
+        length += bytesRead;
+      }
+      expect(BigInt(length)).toBe(metadata.size);
+      recordBytes = buffer.subarray(0, length);
+    } finally {
+      await recordFile.close();
+    }
+    expect(isUtf8(recordBytes)).toBe(true);
+    const fingerprint = check.stdout.match(
+      /^Input fingerprint: ([a-f0-9]{64})$/mu
+    )![1];
+    expect(JSON.parse(recordBytes.toString("utf8"))).toEqual({
+      schemaVersion: 1,
+      format: "vgpu-metal-package/v1",
+      moduleName: "AppShaders",
+      ownerConfiguration: "../../vgpu.native.json",
+      inputFingerprint: fingerprint,
+      files: payloadManifest,
+    });
+    const recordHash = createHash("sha256").update(recordBytes).digest("hex");
+    expect(build.stdout).toBe(
+      `Native package: published\nModule: AppShaders\nOutput: ${output}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${recordHash}\n`
+    );
+    expect((await readdir(project)).sort()).toEqual([
+      "Generated",
+      "shaders",
+      "vgpu.native.json",
+    ]);
+    expect(await readdir(dirname(output))).toEqual(["AppShaders"]);
+    expect([
+      await fileEvidence(join(project, "vgpu.native.json")),
+      await treeEvidence(join(project, "shaders")),
+    ]).toEqual(inputBeforeBuild);
     expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
     expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
     expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);

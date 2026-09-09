@@ -1,8 +1,8 @@
 # @vgpu/native
 
 Private build-time tooling for generated Metal integration. This package is not published and does
-not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor` and
-`vgpu native check`; the installed `build` and `verify` operations remain unfinished.
+not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor`,
+`vgpu native check`, and `vgpu native build`; installed `verify` remains unfinished.
 
 `generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
 returns the files of a self-contained Swift package without writing to disk. Optional reflected
@@ -31,11 +31,14 @@ validate output boundaries, and verify an existing package's exact file tree and
 Low-level output verification does not establish input freshness or authorize publication.
 `checkMetalProject` validates one captured configured project without inspecting output;
 `verifyMetalProject` adds original-path checks and compares the intact package with that capture's
-fingerprint. The installed check connects configuration to validation; installed build and verify
-remain unfinished. These read-only modules do not write generated directories.
+fingerprint. The installed check connects configuration to validation; installed verify remains
+unfinished. These read-only modules do not write generated directories.
 
 `prepareMetalProject` compiles one captured project into the four coherent generated files without
-publishing them. The private publisher currently stages and verifies those files under a physical
+publishing them. The installed build connects this preparation to the private publisher and reports
+success only from its checked publication receipt. Local-tarball coverage exercises an initially
+absent destination and independently verifies the published file set, hashes and input fingerprint.
+The private publisher currently stages and verifies those files under a physical
 parent lock, then publishes exclusively to a missing destination, atomically replaces an ordinary
 empty directory, or exchanges an intact package belonging to the same current configuration.
 Native byte-identical and changed-module rebuild tests observe the actual exchange of distinct
@@ -108,9 +111,10 @@ The regular TypeScript/C-source build remains independent of the local worker ca
 not an install, postinstall, or prepare hook. Generated distribution assets and candidate tarballs
 remain untracked. A local offline install with dependency install scripts disabled tests this
 candidate boundary; it does not qualify empty-cache installation, normal dependency install
-scripts, signing/quarantine, or a release compatibility matrix. The local installed doctor and check
-are exercised through this packaging boundary; build and verify remain unfinished and the package
-remains private and unpublished.
+scripts, signing/quarantine, or a release compatibility matrix. Local installed doctor, check and
+initially-absent build publication are exercised through this packaging boundary. Installed verify,
+replacement/recovery diagnostics, and external Swift/GPU consumption of that candidate remain
+unfinished. The package remains private and unpublished.
 
 ## Checks
 
