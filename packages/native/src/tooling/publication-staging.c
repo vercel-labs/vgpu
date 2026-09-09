@@ -17,6 +17,7 @@
 #define UPDATE_NAME ".vgpu-native-publication.update.json"
 #define STAGE_NAME ".vgpu-native-stage"
 #define JOURNAL_LIMIT (64U * 1024U)
+#define RECORD_LIMIT (64U * 1024U)
 #define CHUNK_LIMIT (64U * 1024U)
 #define AGGREGATE_LIMIT (128ULL * 1024ULL * 1024ULL)
 
@@ -287,7 +288,8 @@ static int receive_file(FILE *input, int directory, const char *name,
   char trailer = '\0';
   if (sscanf(header, "file %d %llu %64[a-f0-9]%c", &role, &length, hash, &trailer) != 4 ||
       role != expected_role || trailer != '\n' || strlen(hash) != 64 ||
-      length == 0 || length > AGGREGATE_LIMIT || *aggregate > AGGREGATE_LIMIT - length) {
+      length == 0 || (expected_role == 3 && length > RECORD_LIMIT) ||
+      length > AGGREGATE_LIMIT || *aggregate > AGGREGATE_LIMIT - length) {
     errno = EPROTO;
     return -1;
   }
