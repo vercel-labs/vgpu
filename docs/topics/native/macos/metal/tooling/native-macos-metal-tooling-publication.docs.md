@@ -120,6 +120,18 @@ Cancellation stops work before the commit request when possible. After that requ
 must preserve publication evidence while it finishes or reports recovery. It never automatically
 rolls a published package back because a later cleanup step failed.
 
+If the live invocation loses confirmation while publishing to a missing destination, it makes one
+bounded, read-only reconciliation attempt after the original helper exits. It reacquires the
+physical parent lock and compares the recorded transaction, expected directory identity, and
+complete package contents with the generation it prepared. It does not send another commit
+request, recreate a missing parent, or remove recovery state.
+
+A conclusive reconciliation refines the reported outcome; it does not turn the failed invocation
+into a successful build. The diagnostic preserves the original error and distinguishes reconciled
+publication from an acknowledged commit. If the lock, identities, record, or contents cannot be
+verified, the outcome remains unknown. An already requested cancellation does not skip this
+bounded evidence check.
+
 ## Recover without guessing
 
 A new build encountering an interrupted transaction reports the recorded output and recovery

@@ -6,8 +6,8 @@ description: >-
   and /perf only as slim tooling subpaths. Bundles performance guides and the API
   reference; load one doc at a time.
 vgpuVersion: 0.3.1
-gitSha: 3d5365a581577010749ff95b3d72a30773c12f79
-generatedAt: 2026-09-09T01:36:44.499Z
+gitSha: 0628c9888c9655189d2ebcdbf511f4f43b1823f2
+generatedAt: 2026-09-09T13:39:37.013Z
 ---
 
 # vgpu
