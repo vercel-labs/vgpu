@@ -74,6 +74,21 @@ export class MetalPublicationStagingError extends Error {
   }
 }
 
+export class MetalPublicationStagingCleanupError extends MetalPublicationStagingError {
+  readonly errors: readonly unknown[];
+  /** Nominal recovery locations; callers must revalidate identities before using them. */
+  readonly recoveryPaths: readonly string[];
+
+  constructor(errors: readonly unknown[], recoveryPaths: readonly string[]) {
+    super("cleanup-failed", "Publication staging cleanup also failed", {
+      cause: new AggregateError(errors, "Publication staging failures"),
+    });
+    this.name = "MetalPublicationStagingCleanupError";
+    this.errors = Object.freeze([...errors]);
+    this.recoveryPaths = Object.freeze([...recoveryPaths]);
+  }
+}
+
 interface StagingSnapshot {
   readonly parentPath: string;
   readonly destinationName: string;
@@ -303,7 +318,14 @@ async function runStaging<T>(
     try {
       value = await callback(receipt);
     } catch (cause) {
-      await finalize(childInput, lines);
+      try {
+        await finalize(childInput, lines);
+      } catch (cleanupCause) {
+        throw new MetalPublicationStagingCleanupError(
+          [cause, cleanupCause],
+          [receipt.stagePath, receipt.journalPath]
+        );
+      }
       throw cause;
     }
     await finalize(childInput, lines);

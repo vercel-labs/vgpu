@@ -172,6 +172,53 @@ test("cleanup preserves a staged transaction when a file is replaced with the sa
   }
 });
 
+test("a callback failure and changed-stage cleanup failure retain both causes and the recovery paths", async () => {
+  const input = await projectFixture();
+  try {
+    const prepared = await prepareMetalProject({
+      configurationPath: input.configurationPath,
+      workerPath,
+    });
+    const primary = new Error("caller stopped before publication");
+    let stagePath = "";
+    let journalPath = "";
+    const error = await withPreparedMetalPublicationStage(
+      { prepared },
+      async (receipt) => {
+        stagePath = receipt.stagePath;
+        journalPath = receipt.journalPath;
+        await writeFile(
+          join(stagePath, "unexpected.txt"),
+          "preserve this evidence"
+        );
+        throw primary;
+      }
+    ).catch((cause: unknown) => cause);
+
+    expect(error).toMatchObject({
+      name: "MetalPublicationStagingCleanupError",
+      code: "cleanup-failed",
+      errors: [primary, { code: "cleanup-failed" }],
+      recoveryPaths: [stagePath, journalPath],
+    });
+    expect((error as { errors: unknown[] }).errors[0]).toBe(primary);
+    expect(await readFile(join(stagePath, "unexpected.txt"), "utf8")).toBe(
+      "preserve this evidence"
+    );
+    await expect(lstat(input.outputPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(
+      await withMetalPublicationSession(
+        { parentPath: dirname(input.outputPath) },
+        async () => "released"
+      )
+    ).toBe("released");
+  } finally {
+    await rm(input.directory, { recursive: true, force: true });
+  }
+});
+
 test("pre-existing destination, journal, and journal update entries are rejected without modification", async () => {
   const cases = [
     { name: "AppShaders", directory: true },
