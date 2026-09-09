@@ -25,6 +25,6 @@
     "vgpu": "workspace:^",
     "vite": "^6.0.0",
     "vite-node": "^3.2.4",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.11"
   }
 }

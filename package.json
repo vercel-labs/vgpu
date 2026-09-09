@@ -47,20 +47,36 @@
     "portless": "0.13.0",
     "typescript": "^5.7.3",
     "vgpu": "workspace:*",
-    "vitest": "^3.2.7",
+    "vitest": "^4.1.11",
     "webgpu": "0.4.0"
   },
   "pnpm": {
+    "patchedDependencies": {
+      "image-size@2.0.2": "patches/image-size@2.0.2.patch"
+    },
     "overrides": {
       "vite": "^6.4.3",
-      "fast-uri": "^3.1.5",
+      "esbuild": "^0.28.1",
+      "fast-uri": "^3.1.6",
+      "browserslist": "^4.28.7",
+      "baseline-browser-mapping": "^2.11.0",
+      "js-yaml@^3": "^3.15.2",
+      "js-yaml@^4": "^4.3.2",
+      "undici@^6": "^6.28.0",
+      "nanoid@^3": "^3.3.18",
       "postcss": "^8.5.23",
-      "sharp": "^0.35.0"
+      "sharp": "^0.35.4"
     },
     "overridesNotes": {
-      "fast-uri": "GHSA-9j5g-h5jm-jm3g (dependabot #47): ajv@8.20.0 (via schema-utils <- webpack, used by @next/mdx and packages/wgsl's webpack devDependency) depends on fast-uri@^3.0.1 and resolved to the vulnerable 3.1.4. Raised the floor from the pre-existing ^3.1.4 override to ^3.1.5 (the patched release); still within ajv's declared range.",
-      "postcss": "Dependabot #20/#44/#45/#46: next@16.2.12 (already npm-latest, used by apps/docs) and next@15.5.22 (examples/next-wgsl) both hard-pin an exact, unpatched `postcss: 8.4.31` as a direct dependency of next itself -- bumping next further does not change this pin. Overriding forces every instance to >=8.5.23 (the version already used elsewhere in the tree via vite).",
-      "sharp": "Dependabot #25 (libvips CVE-2026-33327/33328/35590/35591): next's `sharp: ^0.34.5` optional dependency (same next versions as above) is below the 0.35.0 patched release upstream. Overriding to ^0.35.0 exceeds next's own declared range; verified sharp's 0.35.0 breaking changes (Node >=20.9 floor, AVIF quality metric, removed already-deprecated props) don't affect next's narrow resize/format usage."
+      "esbuild": "GHSA-g7r4-m6w7-qqqr: require the patched Windows development server. This deliberately exceeds Vite 6's ^0.25.0 and tsx's ^0.27 ranges; retain bundler integration tests on Node 22/24. Vitest 4 supports the existing Vite 6 override.",
+      "fast-uri": "Dependabot #94-97: fast-uri >=3.1.6 fixes URI canonicalization and host-confusion SSRF advisories, within ajv's ^3.0.1 range.",
+      "browserslist": "Dependabot #92-93: >=4.28.7 fixes custom-stats prototype writes, crashes and unbounded cache growth; remains on major 4.",
+      "baseline-browser-mapping": "GHSA-w5vr-8v7q-w6rv: >=2.11.0 rejects invalid input without terminating the process.",
+      "js-yaml": "GHSA-5p4m-2wfm-xmqj and GHSA-2883-xcg3-v3hh: patched floors for both supported majors, preserving the Changesets v3 safeLoad API and v4 consumers.",
+      "undici": "Require >=6.28.0 on major 6 for cookie/header injection and retry desynchronization fixes. Docs AI SDK 6 patches remove undici 5; do not downgrade the separate major 7/8 consumers. Overrides cannot replace dependencies vendored inside Eve.",
+      "nanoid": "GHSA-2v37-7h3g-55p8: require >=3.3.18 for major 3 consumers such as PostCSS, retaining their CommonJS support without changing major 5 consumers.",
+      "postcss": "Retain >=8.5.23 for prior PostCSS security fixes. Next 16.3.3 now pins 8.5.23 itself; this floor also covers other consumers.",
+      "sharp": "GHSA-rgj7-g3m4-5g8c: >=0.35.4 ships patched libheif. Next 16.3.3 permits ^0.35.3; retain the security floor and the existing 0.35-series override for the Next 15 example."
     }
   }
 }
