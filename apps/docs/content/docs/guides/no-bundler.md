@@ -75,7 +75,7 @@ const colorTarget = target(gpu, { size: [width, height] });
 const shader = effect(gpu, resolved.wgsl, { set: { params: { time: 0 } } });
 shader.draw(colorTarget);
 
-const pixels = await colorTarget.read();   // RGBA bytes — assert on them
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });   // RGBA bytes — assert on them
 const png = new PNG({ width, height });
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));

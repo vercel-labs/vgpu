@@ -42,8 +42,12 @@ const help = `vgpu ${VERSION}
 TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and
 the same code running in the browser, headless Node, and your test suite.
 
-## Read the docs
-  npx vgpu docs cat getting-started.md    The guide for using the current API correctly
+## Run this first
+  npx vgpu docs cat getting-started.md
+  Always read this when working with vgpu, do not skip.
+  It is short and covers the API, project setup, and what to do before a PR.
+
+## Find anything else in the docs
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
   npx vgpu docs cat <path>
 

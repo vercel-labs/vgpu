@@ -35,7 +35,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
       const wave = effect(gpu, WAVE, { label: "wave", set: { speed: 2 } });
       wave.set({ time: Math.PI / 4 });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(wave)));
-      const pixels = await colorTarget.read();
+      const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(pixel[2]).toBeGreaterThan(245);
       expect(pixel[3]).toBe(255);
@@ -64,12 +64,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
           p.draw(post);
         });
       });
-      const msaaPixels = await msaaScene.read();
+      const msaaPixels = await msaaScene.color.read({ mipLevel: 0, region: "all" });
       const msaaPixel = [...msaaPixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(msaaPixel[1]).toBeGreaterThan(100);
       expect(msaaPixel[2]).toBeGreaterThan(150);
 
-      const pixels = await output.read();
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(pixel[1]).toBeGreaterThan(100);
       expect(pixel[2]).toBeGreaterThan(150);
@@ -91,7 +91,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu ring-1 Docker GPU ac
         currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
         currentFrame.pass({ target: output }, (p) => { post.set({ src: scene, texel: scene.texelSize }); p.draw(post); });
       });
-      const pixels = await output.read();
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       const pixel = [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
       expect(pixel[1]).toBeGreaterThan(100);
       expect(pixel[2]).toBeGreaterThan(150);

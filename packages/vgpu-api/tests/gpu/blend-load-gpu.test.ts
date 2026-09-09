@@ -27,7 +27,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("additive blend accumulates re
       pass.draw(additive);
     }));
 
-    const px = await colorTarget.read();
+    const px = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     expect(px[0]).toBeGreaterThanOrEqual(126);
     expect(px[0]).toBeLessThanOrEqual(129);
     expect(px[1]).toBe(0);
@@ -45,7 +45,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("writeMask can preserve alpha 
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 0.5] }, (pass) => pass.draw(rgbOnly)));
 
-    const px = await colorTarget.read();
+    const px = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     expect(px[0]).toBe(255);
     expect(px[1]).toBe(0);
     expect(px[2]).toBe(0);
@@ -67,7 +67,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("MSAA target resolves additive
       pass.draw(additive);
     }));
 
-    const px = await colorTarget.read();
+    const px = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     expect(px[0]).toBeGreaterThanOrEqual(126);
     expect(px[0]).toBeLessThanOrEqual(129);
     expect(px[1]).toBe(0);
@@ -86,7 +86,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("clear false preserves offscre
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [1, 0, 0, 1] }, () => undefined));
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: false }, (pass) => pass.draw(halfGreen)));
 
-    const px = await colorTarget.read();
+    const px = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     const left = 0;
     const right = (4 - 1) * 4;
     expect([...px.slice(left, left + 4)]).toEqual([0, 255, 0, 255]);

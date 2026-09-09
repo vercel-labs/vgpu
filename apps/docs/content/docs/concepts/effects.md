@@ -9,7 +9,7 @@ Effects chain through targets: render one effect into an offscreen [`Target`](/r
 
 The `uv` varying that `effect(gpu)` injects is top-origin: `(0, 0)` is the
 top-left corner and `v` grows downward — the same convention as WebGPU texture
-coordinates, `@builtin(position)`, and `target.read()`. Sampling any texture
+coordinates, `@builtin(position)`, and `target.color.read({ mipLevel: 0, region: "all" })`. Sampling any texture
 with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
 image exactly. If you are porting a WebGL or Shadertoy shader that assumes
 `v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep

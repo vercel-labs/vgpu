@@ -52,11 +52,12 @@ export function createReadableBoxMesh(device: Device, size = 1): Mesh {
 
 export async function renderInspectFrame(spec: RenderInspectFrameSpec): Promise<Uint8Array> {
   const color = spec.device.createTexture({
+    kind: "2d",
     size: [WIDTH, HEIGHT],
     format: spec.targetFormat ?? DEFAULT_TARGET_FORMAT,
     usage: ["render_attachment", "copy_src"],
   });
-  const depth = spec.device.createTexture({ size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
+  const depth = spec.device.createTexture({ kind: "2d", size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
   const uniformBuffer = spec.device.createBuffer({
     label: "renderInspectFrame.uniform",
     size: spec.material.uniformByteSize,
@@ -101,7 +102,7 @@ export async function renderInspectFrame(spec: RenderInspectFrameSpec): Promise<
     spec.device.queue.gpu.submit([encoder.finish()]);
 
     const png = new PNG({ width: WIDTH, height: HEIGHT });
-    png.data.set(await color.read());
+    png.data.set(await color.read({ mipLevel: 0, region: "all" }));
     return PNG.sync.write(png);
   } finally {
     uniformBuffer.destroy();

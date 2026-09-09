@@ -167,7 +167,7 @@ frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass)
 - Layout-backed detection is structural: `typeof canvas.clientWidth === "number"`; it does not use `instanceof`.
 - Resize callbacks run in surface creation order at the frame boundary, before the user frame callback.
 - Manual `surface.resize()` fires callbacks synchronously at the call site and works for `OffscreenCanvas`.
-- `surface.read()` returns RGBA bytes. Canvas formats `bgra8unorm` and `bgra8unorm-srgb` are supported and swizzled to RGBA, which matters on platforms where `navigator.gpu.getPreferredCanvasFormat()` returns BGRA.
-- `surface.readFloats()` returns the same pixels decoded to a `Float32Array` of components (`unorm8` canvas formats normalized to `[0, 1]`); it is the readback to use if a surface is ever configured with a float format.
+- `surface.color.read({ mipLevel: 0, region: "all" })` returns RGBA bytes. Canvas formats `bgra8unorm` and `bgra8unorm-srgb` are supported and swizzled to RGBA, which matters on platforms where `navigator.gpu.getPreferredCanvasFormat()` returns BGRA.
+- `surface.color.readFloats({ mipLevel: 0, region: "all" })` returns the same pixels decoded to a `Float32Array` of components (`unorm8` canvas formats normalized to `[0, 1]`); it is the readback to use if a surface is ever configured with a float format.
 - A canvas can have only one live surface. Call `surface.dispose()` before creating another one for the same canvas.
 - **See also:** `init`, `surface`, `Target`, `Frame`, `Bundle`.

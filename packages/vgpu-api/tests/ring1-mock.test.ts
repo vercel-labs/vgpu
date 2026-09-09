@@ -226,8 +226,8 @@ test("target recreation subscriptions refresh across repeated resizes and are re
 
   events.length = 0;
   sourceC.destroy();
-  sourceC.resize([16, 16]);
-  expect(events).toEqual([]);
+  expect(() => sourceC.resize([16, 16])).toThrow(/destroyed/);
+  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", newIdentity: expect.stringContaining("destroyed:") })]);
   gpu.dispose();
 });
 

@@ -1,9 +1,12 @@
 import { expect, test, vi } from "vitest";
 
 const routed = vi.hoisted(() => ({
-  effect: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.effect(...args),
-  sampler: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.sampler(...args),
-  target: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.target(...args),
+  effect: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["effect"]>) =>
+    gpu.fns.effect(...args),
+  sampler: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["sampler"]>) =>
+    gpu.fns.sampler(...args),
+  target: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["target"]>) =>
+    gpu.fns.target(...args),
 }));
 
 vi.mock("vgpu", () => routed);
@@ -33,9 +36,16 @@ interface FakeTarget {
 
 interface FakeGpu {
   fns: {
-    effect: ReturnType<typeof vi.fn>;
-    sampler: ReturnType<typeof vi.fn>;
-    target: ReturnType<typeof vi.fn>;
+    effect: ReturnType<typeof vi.fn<() => FakeEffect>>;
+    sampler: ReturnType<typeof vi.fn<() => object>>;
+    target: ReturnType<
+      typeof vi.fn<
+        (options: {
+          format: GPUTextureFormat;
+          size: [number, number];
+        }) => FakeTarget
+      >
+    >;
   };
 }
 
