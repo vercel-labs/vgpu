@@ -18,6 +18,16 @@ const CHILD_DISABLED_TOOLS = DISABLED_EVE_TOOLS.filter(
 );
 const ROOT_AGENT_NODE_ID = "__root__";
 const SECURITY_SUBAGENT_NODE_ID = `subagents/${SECURITY_SUBAGENT_NAME}`;
+const EVE_HTTP_ROUTES = [
+  "GET /eve/v1/info",
+  "POST /eve/v1/session",
+  "POST /eve/v1/session/reset",
+  "POST /eve/v1/session/clear",
+  "POST /eve/v1/session/compact",
+  "POST /eve/v1/session/:sessionId",
+  "POST /eve/v1/session/:sessionId/cancel",
+  "GET /eve/v1/session/:sessionId/stream",
+] as const;
 
 interface ResolvedRuntimeAgentGraph {
   readonly nodesByNodeId: ReadonlyMap<string, unknown>;
@@ -84,7 +94,6 @@ function assertEmptyCapabilities(
     "skills",
     "connections",
     "remoteAgents",
-    "channels",
     "schedules",
     "hooks",
     "sandboxWorkspaces",
@@ -125,9 +134,45 @@ function assertEmptyCapabilities(
   }
 }
 
+function assertRootChannels(value: unknown): void {
+  const routes = array(value, "root.channels").map((value, index) => {
+    const name = `root.channels[${index}]`;
+    const channel = record(value, name);
+    assertExactStrings(
+      Object.keys(channel),
+      [
+        "kind",
+        "name",
+        "logicalPath",
+        "method",
+        "urlPath",
+        "sourceId",
+        "sourceKind",
+        "adapterKind",
+      ],
+      `${name} fields`
+    );
+    if (
+      channel.kind !== "channel" ||
+      channel.name !== "eve" ||
+      channel.logicalPath !== "channels/eve.ts" ||
+      channel.sourceId !== "channels/eve.ts" ||
+      channel.sourceKind !== "module" ||
+      channel.adapterKind !== "http"
+    ) {
+      fail(`${name} must be the authored Eve HTTP channel.`);
+    }
+    return `${String(channel.method)} ${String(channel.urlPath)}`;
+  });
+  // Pin all eight authenticated routes. An absent override silently restores
+  // Eve's implicit localDev channel, and any added channel widens ingress.
+  assertExactStrings(routes, EVE_HTTP_ROUTES, "root Eve HTTP routes");
+}
+
 export function assertAgentSurface(manifestValue: unknown): void {
   const manifest = record(manifestValue, "manifest");
   assertEmptyCapabilities(manifest, "root");
+  assertRootChannels(manifest.channels);
   assertExactStrings(
     stringArray(manifest.disabledFrameworkTools, "root.disabledFrameworkTools"),
     DISABLED_EVE_TOOLS,
@@ -145,6 +190,12 @@ export function assertAgentSurface(manifestValue: unknown): void {
 
   const childAgent = record(subagent.agent, `${SECURITY_SUBAGENT_NAME}.agent`);
   assertEmptyCapabilities(childAgent, SECURITY_SUBAGENT_NAME);
+  if (
+    array(childAgent.channels, `${SECURITY_SUBAGENT_NAME}.channels`).length !==
+    0
+  ) {
+    fail(`${SECURITY_SUBAGENT_NAME}.channels must be empty.`);
+  }
   assertExactStrings(
     stringArray(
       childAgent.disabledFrameworkTools,

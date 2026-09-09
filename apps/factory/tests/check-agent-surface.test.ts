@@ -33,6 +33,25 @@ function safeManifest(): Record<string, unknown> {
   const childNodeId = "subagents/issue_security_triager";
   return {
     ...emptyAgent(DISABLED_EVE_TOOLS),
+    channels: [
+      ["GET", "/eve/v1/info"],
+      ["POST", "/eve/v1/session"],
+      ["POST", "/eve/v1/session/reset"],
+      ["POST", "/eve/v1/session/clear"],
+      ["POST", "/eve/v1/session/compact"],
+      ["POST", "/eve/v1/session/:sessionId"],
+      ["POST", "/eve/v1/session/:sessionId/cancel"],
+      ["GET", "/eve/v1/session/:sessionId/stream"],
+    ].map(([method, urlPath]) => ({
+      kind: "channel",
+      name: "eve",
+      logicalPath: "channels/eve.ts",
+      method,
+      urlPath,
+      sourceId: "channels/eve.ts",
+      sourceKind: "module",
+      adapterKind: "http",
+    })),
     subagents: [
       {
         name: SECURITY_SUBAGENT_NAME,
@@ -79,7 +98,6 @@ describe("assertAgentSurface", () => {
       ["connections", [{}]],
       ["skills", [{}]],
       ["remoteAgents", [{}]],
-      ["channels", [{}]],
       ["schedules", [{}]],
       ["hooks", [{}]],
       ["extensionMounts", [{}]],
@@ -115,6 +133,45 @@ describe("assertAgentSurface", () => {
         (tool) => tool !== "agent" && tool !== "load_skill"
       );
     expect(() => assertAgentSurface(childManifest)).toThrow("expected");
+  });
+
+  it("requires the exact authenticated Eve channel override", () => {
+    const missing = safeManifest();
+    missing.channels = [];
+    expect(() => assertAgentSurface(missing)).toThrow("root Eve HTTP routes");
+
+    for (const [key, value] of [
+      ["name", "other"],
+      ["kind", "disabled"],
+      ["logicalPath", "channels/other.ts"],
+      ["sourceId", "channels/other.ts"],
+      ["sourceKind", "external"],
+      ["adapterKind", "slack"],
+      ["method", "PUT"],
+      ["urlPath", "/unreviewed"],
+      ["cors", {}],
+    ]) {
+      const manifest = safeManifest();
+      (manifest.channels as Array<Record<string, unknown>>)[0]![key as string] =
+        value;
+      expect(() => assertAgentSurface(manifest), String(key)).toThrow(
+        "Unsafe Eve agent surface"
+      );
+    }
+
+    const extra = safeManifest();
+    const routes = extra.channels as unknown[];
+    routes.push(routes[0]);
+    expect(() => assertAgentSurface(extra)).toThrow("root Eve HTTP routes");
+
+    const childChannels = safeManifest();
+    const child = (
+      childChannels.subagents as Array<Record<string, unknown>>
+    )[0]!;
+    (child.agent as Record<string, unknown>).channels = childChannels.channels;
+    expect(() => assertAgentSurface(childChannels)).toThrow(
+      "issue_security_triager.channels must be empty"
+    );
   });
 
   it("rejects extra or tool-enabled subagents", () => {

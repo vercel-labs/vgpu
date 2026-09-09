@@ -6,6 +6,33 @@ import {
   type EvalChildProcess,
 } from "../scripts/evals.ts";
 import { FactoryConfigurationError } from "../src/errors.ts";
+import type { EveChildProcess } from "../src/eve-runner.ts";
+
+class FakeServer extends EventEmitter implements EveChildProcess {
+  stdout = null;
+  stderr = null;
+  exitCode = null;
+  signalCode: NodeJS.Signals | null = null;
+  kill(signal: NodeJS.Signals = "SIGTERM") {
+    this.signalCode = signal;
+    this.emit("exit", null, signal);
+    return true;
+  }
+}
+
+function serverDependencies() {
+  return {
+    findOpenPort: async () => 43210,
+    createClient: () => ({
+      health: async () => undefined,
+      session: () => {
+        throw new Error("unused");
+      },
+    }),
+    spawn: () => new FakeServer(),
+    signalTarget: new EventEmitter(),
+  };
+}
 
 class FakeChild extends EventEmitter implements EvalChildProcess {
   killed = false;
@@ -24,6 +51,26 @@ class FakeChild extends EventEmitter implements EvalChildProcess {
 }
 
 describe("runFactoryEvals", () => {
+  it.each([
+    ["--url", "https://example.com"],
+    ["--url=https://example.com"],
+    ["--", "--url", "https://example.com"],
+  ])(
+    "refuses target overrides before starting credential-bearing processes: %j",
+    async (...argv) => {
+      const spawn = vi.fn();
+      const buildEnvironment = vi.fn();
+      await expect(
+        runFactoryEvals(argv, {
+          nodeVersion: "24.0.0",
+          spawn,
+          buildEnvironment,
+        })
+      ).rejects.toThrow("local managed target");
+      expect(spawn).not.toHaveBeenCalled();
+      expect(buildEnvironment).not.toHaveBeenCalled();
+    }
+  );
   it("spawns Eve eval with only the sanitized child environment", async () => {
     const child = new FakeChild();
     const spawn = vi.fn(() => {
@@ -57,6 +104,7 @@ describe("runFactoryEvals", () => {
         }),
         signalTarget,
         spawn,
+        serverDependencies: serverDependencies(),
       })
     ).resolves.toBe(0);
 
@@ -68,10 +116,15 @@ describe("runFactoryEvals", () => {
         "--tag",
         "triage",
         "--strict",
+        "--url",
+        "http://127.0.0.1:43210",
       ],
       {
         cwd: "/repo/apps/factory",
-        env: sanitizedEnvironment,
+        env: {
+          ...sanitizedEnvironment,
+          EVE_EVAL_AUTH_TOKEN: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
         stdio: "inherit",
       }
     );
@@ -99,6 +152,7 @@ describe("runFactoryEvals", () => {
           model: "model",
         }),
         signalTarget: new EventEmitter(),
+        serverDependencies: serverDependencies(),
         spawn: () => {
           queueMicrotask(() => child.exit(2));
           return child;
@@ -118,6 +172,7 @@ describe("runFactoryEvals", () => {
         model: "model",
       }),
       signalTarget,
+      serverDependencies: serverDependencies(),
       spawn: () => {
         queueMicrotask(() => {
           signalTarget.emit("SIGTERM");
@@ -152,6 +207,7 @@ describe("runFactoryEvals", () => {
         model: "model",
       }),
       signalTarget: new EventEmitter(),
+      serverDependencies: serverDependencies(),
       spawn: () => {
         queueMicrotask(() => child.emit("error", new Error("ENOENT")));
         return child;

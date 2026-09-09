@@ -68,8 +68,12 @@ describe("withEveDevServer", () => {
         appRoot: "/repo/apps/factory",
         environment: { PATH: "/bin", AI_GATEWAY_API_KEY: "secret" },
         dependencies: {
-          createClient: (host) => {
+          createClient: (host, token) => {
             expect(host).toBe("http://127.0.0.1:43210");
+            expect(token).toMatch(/^[a-f0-9]{64}$/);
+            expect(spawn.mock.calls[0]![2].env.VGPU_FACTORY_LOCAL_TOKEN).toBe(
+              token
+            );
             return clientWithHealth(health);
           },
           findOpenPort: async () => 43210,
@@ -96,7 +100,11 @@ describe("withEveDevServer", () => {
     ]);
     expect(spawnOptions).toEqual({
       cwd: "/repo/apps/factory",
-      env: { PATH: "/bin", AI_GATEWAY_API_KEY: "secret" },
+      env: {
+        PATH: "/bin",
+        AI_GATEWAY_API_KEY: "secret",
+        VGPU_FACTORY_LOCAL_TOKEN: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
     expect(child.kills).toEqual(["SIGTERM"]);
     expect(signalTarget.listenerCount("SIGINT")).toBe(0);

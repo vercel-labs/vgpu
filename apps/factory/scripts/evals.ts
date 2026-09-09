@@ -12,7 +12,12 @@ import {
   displayError,
   exitCodeForError,
   FactoryRuntimeError,
+  FactoryUsageError,
 } from "../src/errors.ts";
+import {
+  withEveDevServer,
+  type EveRunnerDependencies,
+} from "../src/eve-runner.ts";
 
 const APP_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -40,6 +45,7 @@ export interface EvalLauncherDependencies {
     hostEnvironment: NodeJS.ProcessEnv;
   }) => Promise<SanitizedEveEnvironment>;
   readonly signalTarget?: SignalTarget;
+  readonly serverDependencies?: EveRunnerDependencies;
   readonly spawn?: (
     command: string,
     args: readonly string[],
@@ -65,6 +71,15 @@ export async function runFactoryEvals(
   dependencies: EvalLauncherDependencies = {}
 ): Promise<number> {
   assertSupportedNodeVersion(dependencies.nodeVersion ?? process.versions.node);
+  if (
+    argv.some(
+      (arg) => arg === "--" || arg === "--url" || arg.startsWith("--url=")
+    )
+  ) {
+    throw new FactoryUsageError(
+      "Factory evals require the local managed target; --url and -- are not supported."
+    );
+  }
   const appRoot = dependencies.appRoot ?? APP_ROOT;
   const hostEnvironment = dependencies.environment ?? process.env;
   const sanitized = await (
@@ -72,12 +87,38 @@ export async function runFactoryEvals(
   )({ appRoot, hostEnvironment });
 
   const eveBin = resolve(appRoot, "node_modules/eve/bin/eve.js");
+  return withEveDevServer(
+    {
+      appRoot,
+      environment: sanitized.environment,
+      dependencies: dependencies.serverDependencies,
+    },
+    async (_client, serverSignal, { host, token }) =>
+      launchEval(
+        [...argv, "--url", host],
+        appRoot,
+        eveBin,
+        { ...sanitized.environment, EVE_EVAL_AUTH_TOKEN: token },
+        serverSignal,
+        dependencies
+      )
+  );
+}
+
+async function launchEval(
+  argv: readonly string[],
+  appRoot: string,
+  eveBin: string,
+  environment: NodeJS.ProcessEnv,
+  serverSignal: AbortSignal,
+  dependencies: EvalLauncherDependencies
+): Promise<number> {
   const spawnProcess = dependencies.spawn ?? spawnEval;
   let child: EvalChildProcess;
   try {
     child = spawnProcess(process.execPath, [eveBin, "eval", ...argv], {
       cwd: appRoot,
-      env: sanitized.environment,
+      env: environment,
       stdio: "inherit",
     });
   } catch (error) {
@@ -100,6 +141,14 @@ export async function runFactoryEvals(
   };
   const onSigint = onSignal("SIGINT");
   const onSigterm = onSignal("SIGTERM");
+  const onServerAbort = () => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* Child already exited. */
+    }
+  };
+  serverSignal.addEventListener("abort", onServerAbort, { once: true });
   signalTarget.on("SIGINT", onSigint);
   signalTarget.on("SIGTERM", onSigterm);
 
@@ -127,6 +176,7 @@ export async function runFactoryEvals(
       });
     });
   } finally {
+    serverSignal.removeEventListener("abort", onServerAbort);
     signalTarget.off("SIGINT", onSigint);
     signalTarget.off("SIGTERM", onSigterm);
   }

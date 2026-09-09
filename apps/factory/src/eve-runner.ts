@@ -1,4 +1,5 @@
 import { createServer } from "node:net";
+import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Client, type MessageResult } from "eve/client";
@@ -49,7 +50,7 @@ interface SignalTarget {
 }
 
 export interface EveRunnerDependencies {
-  readonly createClient?: (host: string) => EveClientLike;
+  readonly createClient?: (host: string, token: string) => EveClientLike;
   readonly findOpenPort?: () => Promise<number>;
   readonly signalTarget?: SignalTarget;
   readonly sleep?: (milliseconds: number) => Promise<void>;
@@ -140,7 +141,11 @@ function appendBoundedLog(current: string, chunk: unknown): string {
 
 function redactLog(log: string, environment: NodeJS.ProcessEnv): string {
   let redacted = log;
-  for (const key of ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"] as const) {
+  for (const key of [
+    "AI_GATEWAY_API_KEY",
+    "VERCEL_OIDC_TOKEN",
+    "VGPU_FACTORY_LOCAL_TOKEN",
+  ] as const) {
     const value = environment[key];
     if (value) {
       redacted = redacted.replaceAll(value, "[REDACTED]");
@@ -151,16 +156,24 @@ function redactLog(log: string, environment: NodeJS.ProcessEnv): string {
 
 export async function withEveDevServer<T>(
   options: EveServerOptions,
-  useServer: (client: EveClientLike, signal: AbortSignal) => Promise<T>
+  useServer: (
+    client: EveClientLike,
+    signal: AbortSignal,
+    connection: { host: string; token: string }
+  ) => Promise<T>
 ): Promise<T> {
   const dependencies = options.dependencies ?? {};
   const findPort = dependencies.findOpenPort ?? findOpenLoopbackPort;
   const sleep = dependencies.sleep ?? delay;
   const timeout = dependencies.timeout ?? abortableDelay;
-  const createClient: (host: string) => EveClientLike =
+  const createClient: (host: string, token: string) => EveClientLike =
     dependencies.createClient ??
-    ((host: string) => {
-      const client = new Client({ host, redirect: "error" });
+    ((host: string, token: string) => {
+      const client = new Client({
+        host,
+        auth: { bearer: token },
+        redirect: "error",
+      });
       return {
         health: () => client.health(),
         session: () => ({
@@ -172,11 +185,16 @@ export async function withEveDevServer<T>(
   const signalTarget = dependencies.signalTarget ?? process;
   const port = await findPort();
   const host = `http://127.0.0.1:${port}`;
+  const token = randomBytes(32).toString("hex");
+  const environment = {
+    ...options.environment,
+    VGPU_FACTORY_LOCAL_TOKEN: token,
+  };
   const eveBin = resolve(options.appRoot, "node_modules/eve/bin/eve.js");
   const child = spawnProcess(
     process.execPath,
     [eveBin, "dev", "--no-ui", "--host", "127.0.0.1", "--port", String(port)],
-    { cwd: options.appRoot, env: options.environment }
+    { cwd: options.appRoot, env: environment }
   );
 
   let output = "";
@@ -214,11 +232,7 @@ export async function withEveDevServer<T>(
         new FactoryRuntimeError(
           `eve dev exited unexpectedly (${
             signal ?? `code ${code ?? "unknown"}`
-          }).${
-            output.length > 0
-              ? `\n${redactLog(output, options.environment)}`
-              : ""
-          }`
+          }).${output.length > 0 ? `\n${redactLog(output, environment)}` : ""}`
         )
       );
     }
@@ -286,14 +300,14 @@ export async function withEveDevServer<T>(
   ).then<never>(() => {
     throw new FactoryRuntimeError(
       `eve dev did not become healthy before the startup deadline.${
-        output.length > 0 ? `\n${redactLog(output, options.environment)}` : ""
+        output.length > 0 ? `\n${redactLog(output, environment)}` : ""
       }`
     );
   });
   void startupDeadline.catch(() => undefined);
 
   try {
-    const client = createClient(host);
+    const client = createClient(host, token);
     while (true) {
       if (spawnError !== undefined) {
         throw new FactoryRuntimeError("Unable to start eve dev.", {
@@ -328,7 +342,7 @@ export async function withEveDevServer<T>(
     }
 
     return await Promise.race([
-      useServer(client, abortController.signal),
+      useServer(client, abortController.signal, { host, token }),
       unexpectedExit,
       interrupted,
     ]);
