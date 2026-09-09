@@ -10,4 +10,4 @@ Breaking changes for this pre-1.0 minor: remove `Texture.resize()` and Target/Su
 
 Texture pairs and Targets prepare replacements before publishing them; synchronous preparation failures preserve the old generation. Destroyed tracked bindings fail early, and bundles capturing destroyed resources become stale. Raw native views retain native lifetime validation. Compute cache entries are isolated from draw entries even when they bind the same resource.
 
-See `docs/plans/texture-api-migration.md` in the repository for old/new creation, readback, metadata and replacement examples. This changeset requests the next minor; it does not publish or assign a release version.
+See `docs/texture-api-migration.md` in the repository for old/new creation, readback, metadata and replacement examples. This changeset requests the next minor; it does not publish or assign a release version.

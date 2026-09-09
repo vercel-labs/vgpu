@@ -203,4 +203,4 @@ browser WebGPU and the existing compatibility feature level are unchanged. Docke
 use one pinned native Linux x64 Vulkan/lavapipe environment and one shared baseline collection.
 The accepted comparison policy allows at most 1/255 per RGB channel with exact alpha, checking every
 pixel without a percentage allowance or antialias exclusion. Raw differences remain in reports;
-tolerated rounding never regenerates references. See [Visual snapshots](../visual-snapshots.md).
+tolerated rounding never regenerates references. See [Visual snapshots](visual-snapshots.md).

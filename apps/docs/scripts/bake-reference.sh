@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Renders the bake-plan reference set into $1 (see docs/plans/atmosphere-bakes.md).
+# Renders the atmosphere bake reference set into $1.
 set -euo pipefail
 out=$1
 cd "$(dirname "$0")/.."
