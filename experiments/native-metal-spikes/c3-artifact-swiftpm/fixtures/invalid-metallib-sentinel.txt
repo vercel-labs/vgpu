@@ -1,3 +1,0 @@
-VGPU-C3-STRUCTURAL-SENTINEL-NOT-A-METALLIB
-This UTF-8 fixture only proves deterministic packaging and Bundle.module lookup.
-Metal must never receive these bytes.
