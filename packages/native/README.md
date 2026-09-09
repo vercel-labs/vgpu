@@ -36,10 +36,10 @@ write generated directories.
 `prepareMetalProject` compiles one captured project into the four coherent generated files without
 publishing them. The private publisher currently stages and verifies those files under a physical
 parent lock, then publishes exclusively to a missing destination or atomically replaces an ordinary
-empty directory. Interrupted invocations retain explicit outcomes and recovery evidence. For a
-missing-destination transaction, bounded read-only reconciliation can establish whether the original
-intact generation reached the destination. Reconciliation never retries commit or deletes retained
-recovery state. Complete replacement modes and the installed command workflow remain unfinished.
+empty directory. Interrupted invocations retain explicit outcomes and recovery evidence. Bounded
+read-only reconciliation can confirm that the original intact generation reached the destination
+in either mode. Reconciliation never retries commit or deletes retained recovery state. Complete
+replacement modes and the installed command workflow remain unfinished.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and

@@ -6,9 +6,9 @@ description: "Understand output ownership, atomic replacement, cancellation, and
 A generated package contains Swift code and a compiled library that must agree. The build prepares
 them together, then replaces the output directory as one operation.
 
-> Warning: This is the docs-first publication contract. Staging, missing-destination publication,
-> and bounded read-only reconciliation have native test coverage. The complete replacement workflow
-> and operational build companion are not implemented yet. The command shim exists; this is not a
+> Warning: This is the docs-first publication contract. Staging, missing and empty-destination
+> publication, and bounded read-only reconciliation have native test coverage. The complete replacement
+> workflow and operational build companion are not implemented yet. The command shim exists; this is not a
 > released end-to-end build workflow.
 
 ## Reserve the destination

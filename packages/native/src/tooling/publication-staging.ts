@@ -739,13 +739,14 @@ async function runStaging<T>(
       operation.kind === "publish-missing-or-empty" &&
       operation.state.outcome === "unknown" &&
       operation.state.prepared &&
-      operation.state.publication?.renameMode === "excl"
+      operation.state.publication
     ) {
       try {
-        await reconcileMissingPublication(
+        await reconcilePublication(
           executable,
           snapshot,
           operation.state.prepared,
+          operation.state.publication,
           operation.state
         );
       } catch (reconciliationFailure) {
@@ -931,12 +932,14 @@ async function commitPublication(
 }
 
 /** One read-only attempt, after the original process has closed; never retries commit. */
-async function reconcileMissingPublication(
+async function reconcilePublication(
   executable: string,
   snapshot: StagingSnapshot,
   prepared: PreparedMetalPublicationStage,
+  publication: MetalPublicationPlan,
   state: PublicationState
 ): Promise<void> {
+  const emptyDestination = publication.renameMode === "replace-empty";
   const child = spawn(
     executable,
     [
@@ -945,7 +948,7 @@ async function reconcileMissingPublication(
       snapshot.destinationName,
       snapshot.moduleName,
       snapshot.transactionId,
-      "reconcile-missing",
+      emptyDestination ? "reconcile-empty" : "reconcile-missing",
       prepared.parent.device,
       prepared.parent.inode,
     ],
@@ -992,8 +995,7 @@ async function reconcileMissingPublication(
       !responseIdentity(transaction.parent, prepared.parent) ||
       transaction.destinationName !== prepared.destinationName ||
       transaction.moduleName !== prepared.moduleName ||
-      transaction.publication?.renameMode !== "excl" ||
-      transaction.publication.expectedDestination !== "missing" ||
+      !samePublicationPlan(transaction.publication, publication) ||
       transaction.stage?.name !== prepared.stage.name ||
       transaction.stage.device !== prepared.stage.device ||
       transaction.stage.inode !== prepared.stage.inode ||
@@ -1012,10 +1014,13 @@ async function reconcileMissingPublication(
       throw new Error(
         "Recovery record does not match the original prepared publication"
       );
+    const command = emptyDestination
+      ? "verify-empty-published"
+      : "verify-missing";
     await writeBytes(
       input,
       Buffer.from(
-        `verify-missing ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
+        `${command} ${prepared.transactionId} prepared ${prepared.stage.device} ${prepared.stage.inode}\n`
       )
     );
     for (const [index, file] of prepared.files.entries())
@@ -1030,6 +1035,7 @@ async function reconcileMissingPublication(
       reply.transactionId !== prepared.transactionId ||
       reply.phase !== "prepared" ||
       (!published && reply.outcome !== "not-published") ||
+      (emptyDestination && !published) ||
       Object.keys(reply).length !== 9 ||
       !responseIdentity(reply.parent, prepared.parent) ||
       reply.destinationName !== prepared.destinationName ||
@@ -1084,6 +1090,23 @@ async function reconcileMissingPublication(
     await closed;
     await lines?.return?.();
   }
+}
+
+function samePublicationPlan(
+  observed: MetalPublicationPlan | undefined,
+  expected: MetalPublicationPlan
+): boolean {
+  if (
+    !observed ||
+    observed.renameMode !== expected.renameMode ||
+    observed.expectedDestination !== expected.expectedDestination
+  )
+    return false;
+  return (
+    expected.renameMode === "excl" ||
+    (observed.renameMode === "replace-empty" &&
+      responseIdentity(observed.oldDestination, expected.oldDestination))
+  );
 }
 
 function responseIdentity(

@@ -74,6 +74,9 @@ static int observed_renameatx_np(int from_directory, const char *from,
       "{\"result\":%d,\"errno\":%d,\"destination\":%s}\n", result, saved_error, identity);
     if (length < 0 || (size_t)length >= sizeof(bytes)) _exit(92);
     write_marker(completed, bytes, (size_t)length);
+    const char *exit_after_success = getenv("VGPU_EMPTY_RENAME_EXIT_AFTER_SUCCESS");
+    if (result == 0 && exit_after_success && strcmp(exit_after_success, "1") == 0)
+      _exit(97);
   }
   errno = saved_error;
   return result;

@@ -438,9 +438,10 @@ struct reconciliation_request {
   const char *destination;
   const char *module;
   const char *transaction;
+  int empty_destination;
 };
 
-static int verify_missing_recovery(int parent, const char *parent_path,
+static int verify_recovery(int parent, const char *parent_path,
                                      const struct stat *parent_identity,
                                      const struct stat *journal_identity,
                                      const char *journal, size_t journal_length,
@@ -582,7 +583,7 @@ static int report_recovery(int parent, const char *parent_path,
   fputs("{\"schemaVersion\":1,\"kind\":\"recovery-complete\"}\n", stdout);
   if (fflush(stdout) != 0) return 1;
   if (reconciliation != NULL &&
-      verify_missing_recovery(parent, parent_path, parent_identity, &identity,
+      verify_recovery(parent, parent_path, parent_identity, &identity,
                                 (const char *)bytes, length, &stage, &update,
                                 &destination, reconciliation) != 0)
     return 1;
@@ -746,7 +747,7 @@ static int read_reconciliation_line(char *line, size_t capacity) {
 }
 
 /* The caller has joined this locked journal to its original prepared receipt. */
-static int verify_missing_recovery(int parent, const char *parent_path,
+static int verify_recovery(int parent, const char *parent_path,
                                      const struct stat *parent_identity,
                                      const struct stat *journal_identity,
                                      const char *journal, size_t journal_length,
@@ -762,16 +763,19 @@ static int verify_missing_recovery(int parent, const char *parent_path,
   char trailer = '\0';
   unsigned long long expected_device = 0;
   unsigned long long expected_inode = 0;
+  const char *format = request->empty_destination ?
+    "verify-empty-published %32[a-f0-9] prepared %20[0-9] %20[0-9]%c" :
+    "verify-missing %32[a-f0-9] prepared %20[0-9] %20[0-9]%c";
   if (read_reconciliation_line(line, sizeof(line)) != 0 ||
-      sscanf(line, "verify-missing %32[a-f0-9] prepared %20[0-9] %20[0-9]%c",
-             transaction, device, inode, &trailer) != 4 || trailer != '\n' ||
+      sscanf(line, format, transaction, device, inode, &trailer) != 4 || trailer != '\n' ||
       strcmp(transaction, request->transaction) != 0 ||
       parse_decimal(device, &expected_device) != 0 ||
       parse_decimal(inode, &expected_inode) != 0) {
     errno = EPROTO;
     return fail("invalid-transfer");
   }
-  snprintf(canonical, sizeof(canonical), "verify-missing %s prepared %llu %llu\n",
+  snprintf(canonical, sizeof(canonical), "%s %s prepared %llu %llu\n",
+           request->empty_destination ? "verify-empty-published" : "verify-missing",
            request->transaction, expected_device, expected_inode);
   if (strcmp(line, canonical) != 0) {
     errno = EPROTO;
@@ -799,6 +803,11 @@ static int verify_missing_recovery(int parent, const char *parent_path,
       return fail("invalid-transfer");
     }
     aggregate += files[index].length;
+  }
+  /* Empty replacement has no absent-destination proof of non-publication. */
+  if (request->empty_destination && !destination->present) {
+    errno = ESTALE;
+    return fail("conflict");
   }
   int published = destination->present;
   const struct recovery_observation *candidate = published ? destination : stage;
@@ -931,7 +940,8 @@ int main(int argc, char **argv) {
   if ((argc != 6 && argc != 7 && argc != 9) || strcmp(argv[1], "vgpu-publication-staging/v1") != 0 ||
       (argc == 7 && strcmp(argv[6], "stage-only") != 0 && strcmp(argv[6], "publish-missing") != 0 &&
        strcmp(argv[6], "publish-missing-or-empty") != 0) ||
-      (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0) ||
+      (argc == 9 && strcmp(argv[6], "reconcile-missing") != 0 &&
+       strcmp(argv[6], "reconcile-empty") != 0) ||
       !valid_transaction(argv[5])) {
     errno = EINVAL;
     return fail("helper-failed");
@@ -942,24 +952,25 @@ int main(int argc, char **argv) {
   const char *transaction = argv[5];
   int allow_empty = argc == 7 && strcmp(argv[6], "publish-missing-or-empty") == 0;
   int publishing = allow_empty || (argc == 7 && strcmp(argv[6], "publish-missing") == 0);
-  int reconcile_missing = argc == 9;
+  int reconciling = argc == 9;
+  int reconcile_empty = reconciling && strcmp(argv[6], "reconcile-empty") == 0;
   unsigned long long expected_parent_device = 0;
   unsigned long long expected_parent_inode = 0;
-  if (reconcile_missing &&
+  if (reconciling &&
       (parse_decimal(argv[7], &expected_parent_device) != 0 ||
        parse_decimal(argv[8], &expected_parent_inode) != 0 ||
        parent_path[0] != '/' || strlen(parent_path) >= PATH_MAX)) {
     errno = EINVAL;
     return fail("helper-failed");
   }
-  int parent = reconcile_missing ?
+  int parent = reconciling ?
     open(parent_path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC) : open_parent(parent_path);
   if (parent < 0) return fail("unsafe-parent");
   struct stat parent_identity;
   if (fstat(parent, &parent_identity) != 0) return fail("unsafe-parent");
   if (flock(parent, LOCK_EX | LOCK_NB) != 0)
     return fail(errno == EWOULDBLOCK ? "busy" : "helper-failed");
-  if (reconcile_missing &&
+  if (reconciling &&
       ((unsigned long long)parent_identity.st_dev != expected_parent_device ||
        (unsigned long long)parent_identity.st_ino != expected_parent_inode)) {
     errno = ESTALE;
@@ -985,11 +996,13 @@ int main(int argc, char **argv) {
   }
   if (!parent_matches(parent_path, &parent_identity)) return fail("parent-changed");
   struct stat existing_journal;
-  const struct reconciliation_request reconciliation = { destination, module, transaction };
+  const struct reconciliation_request reconciliation = {
+    destination, module, transaction, reconcile_empty
+  };
   if (fstatat(parent, JOURNAL_NAME, &existing_journal, AT_SYMLINK_NOFOLLOW) == 0)
     return report_recovery(parent, parent_path, &parent_identity, &existing_journal, name_max,
-                            reconcile_missing ? &reconciliation : NULL);
-  if (reconcile_missing || errno != ENOENT) return fail("conflict");
+                            reconciling ? &reconciliation : NULL);
+  if (reconciling || errno != ENOENT) return fail("conflict");
   if (ensure_absent(parent, JOURNAL_NAME) != 0 ||
       ensure_absent(parent, UPDATE_NAME) != 0 || ensure_absent(parent, STAGE_NAME) != 0)
     return fail("conflict");
