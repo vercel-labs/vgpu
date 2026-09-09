@@ -52,9 +52,3 @@ Continue with [uniform packing](/native/macos/metal/uniforms),
 [compute dispatch](/native/macos/metal/compute/dispatch). Each guide states its supported profile.
 
 macOS and Metal are the initial target. Windows and Vulkan are future work, not available backends.
-
-## Earlier proposals
-
-Pages labeled **Earlier proposal** retain the previous Swift-runtime exploration. Its context,
-frame, view, and runtime-package APIs are not the API being shipped here. Start with the direct
-Metal guides above when designing a new consumer.

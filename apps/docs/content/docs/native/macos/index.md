@@ -73,9 +73,3 @@ compiler does not silently substitute a different program.
 This limits the generated integration, not the Metal features available to the rest of the
 application. Combine supported generated shaders with your own native resources, pipelines, and
 other shader code where needed.
-
-## Earlier proposals
-
-The pages labeled **Earlier proposal** describe the superseded Swift renderer, not required
-dependencies or upcoming guarantees for this package. Their runtime types, views, and extra CLI
-commands are not part of the direct Metal workflow.

@@ -171,16 +171,6 @@
       "    Check the native toolchain @ /native/macos/metal/tooling/doctor",
       "    Build and verify a Metal package @ /native/macos/metal/tooling/build",
       "    Publish generated packages @ /native/macos/metal/tooling/publication",
-      "    Earlier proposal — Programs @ /native/macos/programs",
-      "    Earlier proposal — Bindings and generated types @ /native/macos/bindings",
-      "    Earlier proposal — Resources and Metal interop @ /native/macos/resources",
-      "    Earlier proposal — Rendering primitives @ /native/macos/rendering",
-      "    Earlier proposal — GPU-driven drawing @ /native/macos/gpu-driven-drawing",
-      "    Earlier proposal — SwiftUI and MetalKit @ /native/macos/views",
-      "    Earlier proposal — Ownership and lifecycle @ /native/macos/lifecycle",
-      "    Earlier proposal — Generated artifacts @ /native/macos/artifacts",
-      "    Earlier proposal — Build and verify @ /native/macos/build",
-      "    Earlier proposal — Compare WebGPU and Metal @ /native/macos/compare",
       "API Reference @ /reference",
       "  ..."
     ]

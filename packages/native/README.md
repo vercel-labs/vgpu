@@ -57,6 +57,25 @@ The generated consumer API is documented in
 and [Render computed data](../../docs/topics/native/macos/metal/compute/native-macos-metal-compute-rendering.docs.md).
 Keep the guides, generated Swift, and external consumer fixtures aligned when changing the API.
 
+## Compiler boundary
+
+Source semantics, pinned Tint validation, and the generated Metal interface are separate
+boundaries. The translation worker compares the selected entry's core-IR interface with the
+request, runs Tint's official Metal writer with its preflight, and checks the raised interface.
+Request metadata alone is not evidence that translation honored the request. Physical buffer
+offsets and stage slots come from validated compiler responses, not authored source names.
+
+The generated package exposes the Metal data its caller needs, not Tint's private raised structs
+or the superseded Swift runtime artifact envelope. Sparse vertex attributes and fragment color
+locations retain their indices. Resource-class/index/count validation does not independently
+recover original WGSL binding identities from the raised wrapper: their source-to-slot association
+depends on the pinned compiler's binding remapper.
+
+Internal compiler canaries may cover features outside this package's supported profile. They do
+not expand the public API or establish support for another GPU architecture. Worker build locks,
+authenticated source/oracle inputs, and licenses remain required build evidence; retired runtime
+experiments are recoverable from Git history, not dependencies of the generated Swift package.
+
 ## Checks
 
 From the repository root:

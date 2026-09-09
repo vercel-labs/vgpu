@@ -2,16 +2,6 @@
   "title": "macOS",
   "pages": [
     "metal",
-    "programs",
-    "bindings",
-    "resources",
-    "rendering",
-    "gpu-driven-drawing",
-    "views",
-    "lifecycle",
-    "artifacts",
-    "build",
-    "compare",
     "..."
   ]
 }
