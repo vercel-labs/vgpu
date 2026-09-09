@@ -18,6 +18,12 @@ directory. Replacing a nonempty directory requires the owning configuration's un
 including its exact file set and integrity record. A stale input fingerprint does not remove that
 ownership; modified or unexpected output does.
 
+The package records a relative path back to its owning configuration. Ownership compares the
+current configuration files, not their path spelling or contents. An accepted alias to the same
+configuration, an earlier atomic save, or moving the project and package together does not by
+itself transfer ownership. A different configuration with identical contents is still a different
+owner. The old generated module name and fingerprint need not match the new generation.
+
 The build checks the original output path and every captured source path before preparing to
 publish. It must not overwrite its configuration, shaders, or their physical ancestors. See
 [Configure a Metal package](/native/macos/metal/tooling/configuration) for path restrictions and
@@ -52,6 +58,13 @@ proof that its contents are tool-owned.
 The recovery record is separate from `.vgpu-native-output.json`, which remains inside each
 generated package. Neither is an application runtime dependency or an author signature. An
 unrecognized file occupying a reserved recovery name is a conflict, not a file to overwrite.
+
+For an owned replacement, the helper opens the old package under the same physical parent lock
+and reads its bounded integrity record before creating transaction state. The tool validates that
+record and its configuration ownership, then the helper checks the old package's complete tree
+and actual bytes through the retained directories. The new generation does not supply the old
+module's paths, lengths, or hashes. Ownership and integrity are rechecked before exchange; old
+package cleanup uses its own verified file set, with the recovery record removed last.
 
 ### Bound one transaction
 
