@@ -107,6 +107,7 @@ test.each([
   "not-published",
   "changed-old-payload",
   "changed-module-negative",
+  "published-with-altered-old-stage",
 ] as const)(
   "owned reconciliation preserves both generations after interruption (%s)",
   async (outcome) => {
@@ -133,6 +134,8 @@ test.each([
         ? "unknown"
         : outcome === "changed-module-negative"
         ? "not-published"
+        : outcome === "published-with-altered-old-stage"
+        ? "published"
         : outcome;
     const frames: Record<string, any>[] = [];
     const reconciliationFrames: Record<string, any>[] = [];
@@ -329,7 +332,10 @@ test.each([
           renameSync(input.outputPath, oldBackup);
           movedOldDestination = true;
         }
-        if (outcome === "changed-old-payload") {
+        if (
+          outcome === "changed-old-payload" ||
+          outcome === "published-with-altered-old-stage"
+        ) {
           if (!originalClosed || changedOldBefore !== undefined)
             throw new Error(
               "Old payload must change once, after original helper close"
@@ -338,8 +344,10 @@ test.each([
           expect(changedPackage.byteLength).toBeGreaterThan(0);
           const offset = Math.floor(changedPackage.byteLength / 2);
           changedPackage[offset] = changedPackage[offset]! ^ 1;
+          const oldPath =
+            expectedOutcome === "published" ? stage : input.outputPath;
           const descriptor = openSync(
-            join(input.outputPath, "Package.swift"),
+            join(oldPath, "Package.swift"),
             constants.O_WRONLY | constants.O_NOFOLLOW
           );
           try {
@@ -354,7 +362,7 @@ test.each([
             "Package.swift": changedPackage,
           };
           // Capture before actual spawn; every identity, mode, size and other byte must remain original.
-          changedOldBefore = treeEvidence(input.outputPath);
+          changedOldBefore = treeEvidence(oldPath);
           const originalTree = oldBefore as {
             children: [string, Record<string, unknown>][];
           };
@@ -367,11 +375,15 @@ test.each([
                 : evidence,
             ]),
           });
-          expect(treeEvidence(stage)).toEqual(newBefore);
+          expect(
+            treeEvidence(
+              expectedOutcome === "published" ? input.outputPath : stage
+            )
+          ).toEqual(newBefore);
           expect(treeEvidence(journal)).toEqual(journalBefore);
           expect(readFileSync(journal)).toEqual(journalBytes);
           expect(
-            readFileSync(join(input.outputPath, ".vgpu-native-output.json"))
+            readFileSync(join(oldPath, ".vgpu-native-output.json"))
           ).toEqual(oldRecordBytes);
         }
       };
@@ -476,7 +488,7 @@ test.each([
       }
       expect(await treeEvidence(input.outputPath)).toEqual(oldBefore);
       await expectPackageFiles(stage, prepared.files);
-      if (outcome === "published") {
+      if (expectedOutcome === "published") {
         await writeFile(resume, "resume\n", { flag: "wx" });
         markerWait = waitForMarker(completed, markerController.signal);
         const after = await markerWait;
@@ -503,14 +515,15 @@ test.each([
         code: "ENOENT",
       });
       const oldLocation =
-        outcome === "published"
+        expectedOutcome === "published"
           ? stage
           : outcome === "missing-destination"
           ? oldBackup
           : input.outputPath;
-      const newLocation = outcome === "published" ? input.outputPath : stage;
+      const newLocation =
+        expectedOutcome === "published" ? input.outputPath : stage;
       expect(movedOldDestination).toBe(outcome === "missing-destination");
-      if (outcome !== "published")
+      if (expectedOutcome !== "published")
         for (const path of [
           resume,
           completed,
@@ -519,7 +532,8 @@ test.each([
           await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
       const expectedOldTree = changedOldBefore ?? oldBefore;
       expect(changedOldBefore !== undefined).toBe(
-        outcome === "changed-old-payload"
+        outcome === "changed-old-payload" ||
+          outcome === "published-with-altered-old-stage"
       );
       expect(await treeEvidence(oldLocation)).toEqual(expectedOldTree);
       expect(await treeEvidence(newLocation)).toEqual(newBefore);
@@ -594,7 +608,7 @@ test.each([
       expect(failure).toMatchObject({
         outcome: expectedOutcome,
       });
-      if (outcome === "published")
+      if (expectedOutcome === "published")
         expect(failure).toMatchObject({
           code: "helper-failed",
           cause: {
@@ -667,7 +681,7 @@ test.each([
                 outcome: expectedOutcome,
                 parent: actualPrepared!.parent,
                 destinationName: actualPrepared!.destinationName,
-                ...(outcome === "published"
+                ...(expectedOutcome === "published"
                   ? { output: stageIdentity }
                   : { stage: stageIdentity }),
                 recordSHA256: actualPrepared!.recordSHA256,

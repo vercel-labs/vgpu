@@ -187,7 +187,8 @@ though it no longer matches the current project's module or input fingerprint.
 
 An old package left at staging is recovery evidence, not permission to delete it. Its contents are
 not required to prove publication of the complete new generation at the destination. Reconciliation
-does not clean either generation or the journal, reopen the current configuration, or authorize
+does not downgrade that proof because old staging bytes have changed. It does not clean either
+generation or the journal, reopen the current configuration, or authorize
 another exchange. The original failure is still reported after a proved non-publication, without
 a publication receipt.
 
