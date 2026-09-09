@@ -25,8 +25,8 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Run this first
   npx vgpu docs cat getting-started.md
-  The API changed in 0.4: code written from memory calls functions that no longer exist.
-  The guide is short and covers the current API, project setup, and what to do before a PR.
+  The guide is the current API. Do not write vgpu code from memory.
+  It is short and covers the API, project setup, and what to do before a PR.
 
 ## Find anything else in the docs
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
