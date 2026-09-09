@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,5 +51,39 @@ test("a real diagnostic pins its original Xcode selection despite later ambient 
   } finally {
     if (previous === undefined) delete process.env.DEVELOPER_DIR;
     else process.env.DEVELOPER_DIR = previous;
+  }
+});
+
+test("a real diagnostic pins its original TMPDIR for Tint and Apple probes despite later ambient changes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "vgpu-native-doctor-tmpdir-"));
+  const replacement = join(directory, "missing-after-start");
+  const previous = process.env.TMPDIR;
+  let pending: ReturnType<typeof doctorMetalToolchain> | undefined;
+  try {
+    expect(await readdir(directory)).toEqual([]);
+    await expect(lstat(replacement)).rejects.toMatchObject({ code: "ENOENT" });
+    process.env.TMPDIR = directory;
+    pending = doctorMetalToolchain({ workerPath });
+    process.env.TMPDIR = replacement;
+    const report = await pending;
+    expect(await readdir(directory)).toEqual([]);
+    await expect(lstat(replacement)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(report.verdict, JSON.stringify(report)).toBe("healthy");
+    expect(report.findings).toEqual(
+      ["node", "host", "xcode", "sdk", "swift", "tint", "metal"].map(
+        (probe) => ({ probe, status: "ok", evidence: expect.any(String) })
+      )
+    );
+    expect(report.findings[5].evidence).toContain(
+      "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    );
+    expect(report.findings[6].evidence).toMatch(
+      /Compiled and linked [1-9]\d* bytes with macos-metal2\.4 targeting macOS 14\./u
+    );
+  } finally {
+    await pending?.catch(() => {});
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    await rm(directory, { recursive: true, force: true });
   }
 });

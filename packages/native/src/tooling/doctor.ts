@@ -222,6 +222,7 @@ export async function doctorMetalToolchain(input: {
           },
           workerPath,
           signal,
+          environment,
         });
         return `Checked WGSL semantic and Metal translation responses from pinned Tint ${compilerIdentity.upstream.revision}.`;
       },

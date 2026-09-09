@@ -91,6 +91,10 @@ Discovery commands have short deadlines and bounded output. Compiler probes also
 a hung subprocess cannot leave the diagnostic waiting indefinitely. Cancelling stops further
 probes and cleans up the temporary files owned by the run.
 
+The diagnostic captures its temporary-directory selection when the invocation starts; a relative
+`TMPDIR` belongs to that invocation's working directory. Both Tint and Apple probes keep that
+captured context even if the process environment changes while diagnosis is running.
+
 Temporary-file or cleanup failures are reported as failures, not a healthy result. The diagnostic
 does not remove unrelated files or clean interrupted project builds. After the toolchain passes,
 continue with [Build and verify a Metal package](/native/macos/metal/tooling/build).
