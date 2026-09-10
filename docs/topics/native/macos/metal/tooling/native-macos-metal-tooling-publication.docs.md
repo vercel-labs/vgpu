@@ -25,6 +25,9 @@ them together, then replaces the output directory as one operation.
 > current verification. These normal rebuilds do not qualify installed interruption or cleanup failures.
 > Installed integrity-conflict coverage also rejects a modified `Package.swift` without changing the
 > conflicting bytes or original ownership record, or creating staging or a recovery record.
+> A test-instrumented installed invocation receives a real SIGINT before its commit request. It exits
+> `130`, reports `not-published` without confirmation, and preserves its complete prepared staging
+> package and recovery record with the configured output still absent.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -32,7 +35,7 @@ them together, then replaces the output directory as one operation.
 > retains the original failure, and preserves the published package and journal. This instrumentation
 > does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
 > recognizes that same retained transaction, reports its original output and journal, and leaves the
-> evidence intact. Broader installed interruption and unknown-outcome diagnostics remain unqualified;
+> evidence intact. Installed post-commit signals and unknown-outcome diagnostics remain unqualified;
 > this is not a released end-to-end build workflow.
 
 ## Reserve the destination
@@ -185,6 +188,14 @@ Successful replacement is the commit point. Diagnostics distinguish three outcom
 Cancellation stops work before the commit request when possible. After that request, the build
 must preserve publication evidence while it finishes or reports recovery. It never automatically
 rolls a published package back because a later cleanup step failed.
+
+A pre-commit SIGINT can leave a complete prepared staging package and its recovery record while
+reporting `not-published` and exiting `130`. There is no publication confirmation in that report.
+The retained paths are evidence to inspect, not permission to retry or delete the staged package.
+
+If SIGTERM arrives after an acknowledged publication, the interrupted command exits `143` while
+reporting `published` and `Confirmation: acknowledged`. Completed cleanup can leave no retained
+paths to report; the interruption still does not roll back the complete published package.
 
 If the live invocation loses publication confirmation, it makes one bounded, read-only
 reconciliation attempt after the original helper exits. It reacquires the physical parent lock

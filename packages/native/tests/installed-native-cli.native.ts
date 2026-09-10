@@ -2269,6 +2269,297 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       // The public process-group deadline owns shutdown, even if barrier/evidence setup fails.
       await faultOperation;
     }
+
+    // Deliver a real SIGINT before commit through the completed prepare-write callback.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(75_000);
+    const signalInput = await projectFixture();
+    unplacedProject = signalInput.directory;
+    const signalProject = join(fixture, "signal-project");
+    const signalOutput = join(
+      signalProject,
+      relative(signalInput.directory, signalInput.outputPath)
+    );
+    await rename(signalInput.directory, signalProject);
+    unplacedProject = undefined;
+    const signalConfiguration = join(signalProject, "vgpu.native.json");
+    const signalParent = dirname(signalOutput);
+    const signalStage = join(signalParent, ".vgpu-native-stage");
+    const signalJournalPath = join(
+      signalParent,
+      ".vgpu-native-publication.json"
+    );
+    await mkdir(signalParent);
+    expect(await readdir(signalParent)).toEqual([]);
+    await expect(lstat(signalOutput)).rejects.toMatchObject({ code: "ENOENT" });
+    expect([
+      await fileEvidence(signalConfiguration),
+      await treeEvidence(join(signalProject, "shaders")),
+    ]).toEqual(inputBeforeBuild);
+    const signalParentBefore = await lstat(signalParent, { bigint: true });
+    const signalEvidence = join(fixture, "publication-signal");
+    await mkdir(signalEvidence);
+    const signalPreload = new URL(
+      "./fixtures/publication-cli-signal-injection.mjs",
+      import.meta.url
+    );
+    const signalPreloadBefore = await fileEvidence(
+      fileURLToPath(signalPreload)
+    );
+    const signalProtectedTrees = await Promise.all(
+      [project, emptyProject, faultEvidence].map(async (path) => ({
+        path,
+        tree: await treeEvidence(path),
+      }))
+    );
+    const signalProtectedPaths = [
+      project,
+      emptyProject,
+      faultEvidence,
+      signalConfiguration,
+      join(signalProject, "shaders"),
+    ];
+    const signalProtectedIdentities = [];
+    for (let index = 0; index < signalProtectedPaths.length; index++) {
+      const path = signalProtectedPaths[index]!;
+      const metadata = await lstat(path, { bigint: true });
+      const { dev, ino, mode, nlink, size } = metadata;
+      signalProtectedIdentities.push({
+        path,
+        metadata: { dev, ino, mode, nlink, size },
+      });
+      if (metadata.isDirectory())
+        signalProtectedPaths.push(
+          ...(await readdir(path)).sort().map((name) => join(path, name))
+        );
+    }
+    const signalResult = await boundedCommands(
+      Math.min(workflowDeadline, Date.now() + 60_000)
+    ).command(
+      process.execPath,
+      [
+        "--import",
+        signalPreload.href,
+        bin,
+        "native",
+        "build",
+        "--config",
+        "../signal-project/vgpu.native.json",
+      ],
+      runtime,
+      {
+        ...doctorEnvironment,
+        VGPU_CLI_SIGNAL_PARENT_PID: String(process.pid),
+        VGPU_CLI_SIGNAL_SETTINGS: JSON.stringify({
+          bin,
+          configurationPath: signalConfiguration,
+          configurationArgument: "../signal-project/vgpu.native.json",
+          parentPath: signalParent,
+          scratch,
+          evidence: signalEvidence,
+        }),
+      }
+    );
+    console.info(
+      "Installed pre-commit SIGINT actual result",
+      JSON.stringify(signalResult)
+    );
+    // Missing instrumentation or a watchdog is a setup failure, not the intended cancellation.
+    expect(
+      (await readdir(signalEvidence)).sort(),
+      JSON.stringify(signalResult)
+    ).toEqual([
+      "entry.json",
+      "gate.json",
+      "publisher-close.json",
+      "publisher.json",
+    ]);
+    const signalSidecars = new Map();
+    for (const name of ["entry", "publisher", "gate", "publisher-close"]) {
+      const sidecar = await boundedFaultFile(
+        join(signalEvidence, `${name}.json`)
+      );
+      expect(sidecar.bytes.length).toBeLessThanOrEqual(8192);
+      expect(sidecar.metadata.mode & 0o777n).toBe(0o600n);
+      expect(isUtf8(sidecar.bytes)).toBe(true);
+      signalSidecars.set(name, JSON.parse(sidecar.bytes.toString("utf8")));
+    }
+    const signalEntry = signalSidecars.get("entry");
+    const signalPublisher = signalSidecars.get("publisher");
+    const signalGate = signalSidecars.get("gate");
+    expect(signalEntry).toEqual({
+      pid: expect.any(Number),
+      parentPid: process.pid,
+      argv: [
+        process.execPath,
+        bin,
+        "native",
+        "build",
+        "--config",
+        "../signal-project/vgpu.native.json",
+      ],
+    });
+    expect(signalPublisher).toEqual({
+      pid: expect.any(Number),
+      executable: expect.any(String),
+      args: [
+        "vgpu-publication-staging/v1",
+        signalParent,
+        "AppShaders",
+        "AppShaders",
+        expect.stringMatching(/^[a-f0-9]{32}$/u),
+        "publish-project",
+        signalConfiguration,
+      ],
+      sanitized: true,
+    });
+    expect(signalPublisher.pid).not.toBe(signalEntry.pid);
+    expect(dirname(dirname(signalPublisher.executable))).toBe(scratch);
+    expect(signalGate).toEqual({
+      pid: signalEntry.pid,
+      helperPid: signalPublisher.pid,
+      transactionId: signalPublisher.args[4],
+      write: "prepare\n",
+      priorSignalListeners: expect.any(Number),
+    });
+    expect(signalGate.priorSignalListeners).toBeGreaterThanOrEqual(1);
+    expect(signalSidecars.get("publisher-close")).toEqual({
+      pid: signalPublisher.pid,
+      code: 1,
+      signal: null,
+      prepareWrites: 1,
+      commitRequests: 0,
+      signalEvents: 1,
+      callbackReleases: 1,
+      watchdogFired: false,
+    });
+    const signalJournal = await boundedFaultFile(signalJournalPath);
+    expect(isUtf8(signalJournal.bytes)).toBe(true);
+    expect(signalJournal.metadata.dev).toBe(signalParentBefore.dev);
+    const signalStageRoot = await lstat(signalStage, { bigint: true });
+    const signalRetainedBefore = await treeEvidence(signalParent);
+    const signalGeneration = await readInstalledGeneration(
+      signalStage,
+      "AppShaders",
+      fingerprint,
+      signalParentBefore.dev
+    );
+    const signalFiles = [];
+    for (const [role, path] of [
+      ["package-manifest", "Package.swift"],
+      ["swift-source", "Sources/AppShaders/Shaders.generated.swift"],
+      ["metal-library", "Sources/AppShaders/Resources/Shaders.metallib"],
+      ["output-record", ".vgpu-native-output.json"],
+    ] as const) {
+      const evidence = await fileEvidence(join(signalStage, path));
+      signalFiles.push({
+        role,
+        path,
+        length: evidence.bytes,
+        sha256: evidence.sha256,
+      });
+    }
+    expect(JSON.parse(signalJournal.bytes.toString("utf8"))).toEqual({
+      schemaVersion: 1,
+      kind: "vgpu-native-publication",
+      phase: "prepared",
+      transactionId: signalPublisher.args[4],
+      parent: {
+        device: signalParentBefore.dev.toString(),
+        inode: signalParentBefore.ino.toString(),
+      },
+      destinationName: "AppShaders",
+      moduleName: "AppShaders",
+      publication: { renameMode: "excl", expectedDestination: "missing" },
+      stage: {
+        name: ".vgpu-native-stage",
+        device: signalStageRoot.dev.toString(),
+        inode: signalStageRoot.ino.toString(),
+      },
+      recordSHA256: signalGeneration.recordHash,
+      files: signalFiles,
+    });
+    const signalRetainedIdentities = await Promise.all(
+      [
+        signalStage,
+        join(signalStage, "Sources"),
+        join(signalStage, "Sources/AppShaders"),
+        join(signalStage, "Sources/AppShaders/Resources"),
+        ...signalFiles.map(({ path }) => join(signalStage, path)),
+        signalJournalPath,
+      ].map(async (path) => {
+        const { dev, ino, mode, nlink, size } = await lstat(path, {
+          bigint: true,
+        });
+        return { path, metadata: { dev, ino, mode, nlink, size } };
+      })
+    );
+    for (const { path, tree } of signalProtectedTrees)
+      expect(await treeEvidence(path)).toEqual(tree);
+    for (const { path, metadata } of signalProtectedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect([
+      await fileEvidence(signalConfiguration),
+      await treeEvidence(join(signalProject, "shaders")),
+    ]).toEqual(inputBeforeBuild);
+    expect((await readdir(signalProject)).sort()).toEqual([
+      "Generated",
+      "shaders",
+      "vgpu.native.json",
+    ]);
+    expect(await lstat(signalParent, { bigint: true })).toMatchObject({
+      dev: signalParentBefore.dev,
+      ino: signalParentBefore.ino,
+      mode: signalParentBefore.mode,
+    });
+    expect((await readdir(signalParent)).sort()).toEqual([
+      ".vgpu-native-publication.json",
+      ".vgpu-native-stage",
+    ]);
+    for (const path of [
+      signalOutput,
+      join(signalParent, ".vgpu-native-publication.update.json"),
+      join(signalEvidence, "failure.json"),
+    ])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await treeEvidence(signalParent)).toEqual(signalRetainedBefore);
+    expect(await lstat(signalStage, { bigint: true })).toMatchObject({
+      dev: signalStageRoot.dev,
+      ino: signalStageRoot.ino,
+      mode: signalStageRoot.mode,
+      nlink: signalStageRoot.nlink,
+    });
+    for (const { path, metadata } of signalRetainedIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    const signalJournalAfter = await boundedFaultFile(signalJournalPath);
+    expect(signalJournalAfter.bytes).toEqual(signalJournal.bytes);
+    expect(signalJournalAfter.metadata).toMatchObject({
+      dev: signalJournal.metadata.dev,
+      ino: signalJournal.metadata.ino,
+      mode: signalJournal.metadata.mode,
+      nlink: signalJournal.metadata.nlink,
+      size: signalJournal.metadata.size,
+    });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    for (const [path, evidence] of sourceEvidence)
+      expect(await fileEvidence(path)).toEqual(evidence);
+    expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
+      faultSourceEvidence
+    );
+    expect(await fileEvidence(fileURLToPath(signalPreload))).toEqual(
+      signalPreloadBefore
+    );
+    expect(signalResult.code, JSON.stringify(signalResult)).toBe(130);
+    expect(signalResult.signal).toBeNull();
+    expect(signalResult.stdout).toBe("");
+    expect(signalResult.stderr, JSON.stringify(signalResult)).toBe(
+      `Native publication: not-published\n[error] cancelled: Metal publication not-published: Publication staging was cancelled\nInspect retained paths (not cleanup authority):\n  ${signalStage}\n  ${signalJournalPath}\n`
+    );
   } finally {
     const cleanupFailures: unknown[] = [];
     for (const [path, evidence] of sourceEvidence) {

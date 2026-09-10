@@ -141,7 +141,11 @@ only the selected helper's spawn environment; it does not qualify ordinary loade
 or quarantine. A subsequent ordinary build recognizes that same retained transaction and reports
 its original transaction ID, output and remaining journal without changing the package or evidence.
 Its `not-published` outcome concerns only that new invocation; it has no publication receipt.
-Broader installed interruption and unknown-outcome diagnostics remain unqualified.
+A separate installed invocation receives a real SIGINT at a test-only pre-commit write-completion
+gate. It exits 130 with a not-published cancellation report, no confirmation, a complete prepared
+stage and journal, and no output. The instrumented process sends no commit request and preserves
+the existing projects and recovery evidence. Post-commit signal and unknown-outcome diagnostics
+remain unqualified.
 
 ## Checks
 
