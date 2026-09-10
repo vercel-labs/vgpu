@@ -51,9 +51,9 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@vgpu/adapter-node": ">=0.1.6 <1.0.0",
-    "@vgpu/wgsl": ">=0.1.6 <1.0.0",
-    "vgpu": ">=0.1.6 <1.0.0"
+    "@vgpu/adapter-node": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0",
+    "@vgpu/wgsl": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0",
+    "vgpu": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0"
   },
   "peerDependenciesMeta": {
     "@vgpu/adapter-node": {

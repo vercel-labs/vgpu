@@ -1,5 +1,11 @@
 # @vgpu/wgsl
 
+## 0.5.0-rc.0
+
+### Patch Changes
+
+- @vgpu/wgsl-std@0.5.0-rc.0
+
 ## 0.4.1
 
 ### Patch Changes

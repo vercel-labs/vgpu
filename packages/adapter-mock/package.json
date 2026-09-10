@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/adapter-mock",
-  "version": "0.4.1",
+  "version": "0.5.0-rc.0",
   "description": "Mock GPU adapter for testing vgpu code without real WebGPU hardware.",
   "keywords": [
     "webgpu",
