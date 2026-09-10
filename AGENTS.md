@@ -20,12 +20,13 @@ before opening the release PR; do not wait for publishing CI to discover an unfi
 
 Include exactly one `## Release impact` section in the PR description:
 
-- `none — <specific reason consumers are unaffected>` for tests, CI, docs-only work, release preparation, behavior-preserving internal refactors, or promotion/synchronization of changes already accounted for in their original PRs.
+- `none — <specific reason consumers are unaffected>` for tests, CI, repository/site docs with no published-package effect, release preparation, behavior-preserving internal refactors, or promotion/synchronization of changes already accounted for in their original PRs.
 - `changeset — .changeset/<id>.md` for changes to published behavior. List multiple new changesets with commas.
 
 Use a meaningful filename, not the placeholders above. The `release-impact` check runs again when
 the PR description changes. Review the declaration against the diff: CI checks structure, not the
 truth of a compatibility claim. Never declare `none` merely to satisfy a failing check.
+Documentation bundled into the CLI/MCP corpus affects the published package and needs a changeset.
 
 ## Write migration notes while changing code
 
@@ -62,6 +63,8 @@ the inputs, target version or guide require another review; never hand-edit a re
 cleanup. Records, the index and CLI/web copies are generated; individual version guides are editorial.
 Author progressive notes in `.changeset/*.md`; edit the consolidated guide during release preparation.
 RCs upsert sources by ID and preserve the guide for revision, rather than overwriting it.
-Do not rename or delete changesets already included in an RC. Stable records are finalized; new
-fragments belong to the next release, not a rewrite of the previous finalized stable guide.
+Do not rename or delete changesets already included in an RC. Stable source collections are frozen;
+new fragments belong to the next release. The current prepared guide can still receive editorial
+corrections during its release PR: edit it and run `release:finalize` again. Do not restore consumed
+stable changesets to make such corrections; that would accidentally queue them for another release.
 Released npm packages and Git tags remain immutable; never rewrite/reuse a release tag.

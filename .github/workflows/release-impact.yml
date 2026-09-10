@@ -3,10 +3,11 @@ name: Release impact
 on:
   pull_request_target:
     branches: [canary, main]
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review, closed, edited]
 
 concurrency:
-  group: release-impact-${{ github.event.pull_request.number }}
+  # The check is commit-scoped, so all PRs with this head share one serialized evaluation.
+  group: release-impact-${{ github.event.pull_request.head.sha }}
   cancel-in-progress: true
 
 permissions:

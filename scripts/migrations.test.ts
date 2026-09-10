@@ -122,7 +122,11 @@ describe("release collection", () => {
     expect(() => syncMigration(root, "0.5.0", { "new-api": source() })).toThrow("finalized");
     expect(() => syncMigration(root, "0.5.0", {})).not.toThrow();
     editGuide(root, "Changed instructions after stable finalization.");
-    expect(() => finalizeMigration(root)).toThrow("finalized");
+    expect(() => checkMigrations(root, { release: true })).toThrow("review drift");
+    expect(() => finalizeMigration(root)).not.toThrow();
+    expect(() => checkMigrations(root, { release: true })).not.toThrow();
+    setVersion(root, "0.6.0-rc.0");
+    expect(() => finalizeMigration(root)).toThrow("Missing migration record");
   });
   it("blocks missing collection, direct-version bypass, uncollected changes and guide drift", () => {
     const root = fixture();

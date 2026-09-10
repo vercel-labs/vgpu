@@ -17,7 +17,8 @@ Type is independent of release impact. Release PRs require the Migration review 
 none — <specific reason consumers are unaffected>
 changeset — .changeset/<id>.md
 For multiple new changesets, separate paths with commas. This decision is reviewed against the diff.
-Tests, CI, docs-only work, release preparation and behavior-preserving internal refactors may use none.
+Tests, CI, repository/site docs without published-package effects, release preparation and
+behavior-preserving internal refactors may use none. Bundled CLI/MCP documentation needs a changeset.
 -->
 <describe release impact>
 

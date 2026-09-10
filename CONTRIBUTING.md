@@ -31,10 +31,11 @@ Choose each affected `@vgpu/*` package, select the appropriate semver bump (`pat
 
 Every PR description must contain exactly one `## Release impact` section. Use either
 `none — <specific justification>` or `changeset — .changeset/<id>.md` (comma-separated for multiple
-new files). Tests, CI, docs-only changes, release preparation and behavior-preserving internal
+new files). Tests, CI, repository/site docs with no published-package effect, release preparation and behavior-preserving internal
 refactors do not need a changeset. Stable promotions and branch synchronization may also use `none`
 when their changes were already accounted for in the original PRs. Changes affecting published behavior do. Review the declaration
 against the diff: automation cannot prove that a change has no consumer impact.
+Documentation bundled in the published CLI/MCP corpus does need a changeset, even without an API change.
 
 Every changeset must use this body structure after its normal package/bump frontmatter:
 
@@ -54,10 +55,18 @@ under level-four headings where useful, and explain how to validate the result. 
 deployment requirements or defaults, not only removed APIs. Do not infer it from the semver bump.
 Historical or partial code samples may use a `ts illustrative` fence; complete current-API examples
 use `ts` and participate in `pnpm docs:verify-snippets`.
+Older destination guides retain the examples checked for their own release. The current guide is
+checked once its archive targets the exact package version and contains every pending changeset
+unchanged; development with new or edited uncollected changesets defers that guide until release
+preparation. Future guides and regular API/topic documentation remain checked.
 
 Run `pnpm migrations:check` before opening the PR. The `release-impact` check validates the PR
 description and new changesets, including on description edits. It executes trusted policy code
 and reads candidate Git blobs as data, never running candidate code with write permissions.
+GitHub attaches checks to commits, so the check validates every open PR targeting `canary` or `main`
+with the same head SHA. An invalid declaration in any of those PRs blocks the shared commit. Correct
+the declaration or close the duplicate PR to refresh the result. If a duplicate moves to a different
+head SHA, edit the remaining PR's description to refresh the old commit's result.
 When first deploying this workflow, merge it to `canary` and configure `release-impact` as a required
 check on both `canary` and `main`; configure `release-migrations` as required on `canary` too.
 Existing open PRs need both type and impact declarations and an edit/synchronize event after rollout. Branch protection
@@ -126,7 +135,7 @@ Run `pnpm build` first, since budgets are measured from `dist`.
 - [ ] Code changes to a published package include a `.changeset/*.md` file.
 - [ ] The PR declares release impact; changesets declare a migration or a justified `None`.
 - [ ] `pnpm migrations:check` passes.
-- [ ] Docs-only and CI-only PRs may skip a changeset.
+- [ ] Repository/site docs without published-package impact and CI-only PRs may skip a changeset; bundled CLI/MCP documentation may not.
 - [ ] `pnpm typecheck` passes locally.
 - [ ] `pnpm test:fast` passes locally.
 
@@ -208,6 +217,9 @@ versions or overwriting the guide; review and finalize again afterward. Commit t
 and regenerated docs. The release workflow runs `pnpm migrations:check --release` and rejects missing,
 stale or wrong-version collections and absent/outdated review attestations. CI cannot prove the
 editorial quality of the guide. Do not call `changeset version` directly or hand-edit records/fingerprints.
+The current prepared guide can be corrected and re-finalized during its PR, including stable
+preparation. Finalization is not publication. After stable versioning has consumed changesets,
+make editorial corrections in the guide, not by restoring consumed files as new pending changesets.
 
 Private packages (`@vgpu/cli`, the docs app) are versioned so they get changelog entries,
 but they are never published. `@vgpu/cli` ships _inside_ the `vgpu` tarball: `copy-cli.mjs`

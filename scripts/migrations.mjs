@@ -39,9 +39,8 @@ export function finalizeMigration(root) {
   const guide = readFileSync(guidePath, "utf8");
   validateMigrationGuide(guide, record.version);
   const digest = reviewDigest(record, guide);
-  if (record.preparedVersion === record.version && record.review && record.review !== digest) {
-    throw new Error(`Migration ${record.version} is finalized; do not rewrite a finalized stable guide.`);
-  }
+  // Finalization precedes PR review, so the current stable preparation can still receive
+  // editorial corrections. Published tags/packages are immutable, not this local attestation.
   record.review = digest;
   writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
 }

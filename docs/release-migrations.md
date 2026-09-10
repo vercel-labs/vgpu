@@ -39,6 +39,10 @@ Keep its title/frontmatter and these three level-two sections (use subheadings f
 
 Use before/after code for nontrivial API changes, exact replacement names and explicit affected usage.
 Keep complete current-API snippets typechecked; mark historical/partial samples `ts illustrative`.
+Older destination guides retain the examples checked for their own release. The current guide is
+checked once its archive targets the exact package version and contains every pending changeset
+unchanged; development with new or edited uncollected changesets defers that guide until release
+preparation. Future guides and regular API/topic documentation remain checked.
 Cover deployment/default changes as well as removed APIs. Remove duplicates, contradictory steps and
 obsolete intermediate APIs. If nothing requires migration, explain that in both origin sections;
 do not omit the guide or use placeholder text.
@@ -80,8 +84,14 @@ before merge once that check is required; do not postpone finalization until the
 CI checks structure and freshness, not whether you read, understood or correctly synthesized the
 inputs. Treat finalization and the release PR review as substantive editorial responsibilities.
 Never calculate or hand-edit a fingerprint to bypass the workflow. Published packages/tags are
-immutable; finalized stable guides cannot be rewritten by these commands.
+immutable. The current prepared guide can still be corrected and re-finalized during PR review,
+including stable preparation or after a docs-generation failure. This does not rewrite any published
+tag or npm package; older guides are not the current command's authoring target.
 
-If a changeset needs correction after preparation, edit its source and run
+During an RC cycle, if a changeset needs correction after preparation, edit its source and run
 `pnpm migrations:sync <current-exact-version>` to recollect without bumping versions or overwriting the
 guide, then repeat the editorial review and finalization. Never use sync to change the release version.
+After stable versioning consumes changesets, make editorial corrections directly in the consolidated
+guide and re-finalize it. Never restore consumed changesets just to edit prose: they would be queued
+for another release. If the bump or changelog inputs themselves are wrong, stop and re-prepare from
+the pre-version state with a reviewed recovery plan, preserving unrelated work; do not hand-edit records.
