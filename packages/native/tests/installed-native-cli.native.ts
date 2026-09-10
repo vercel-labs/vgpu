@@ -788,6 +788,200 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
       expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
       for (const [filename, before] of archiveEvidence)
         expect(await fileEvidence(join(archives, filename))).toEqual(before);
+
+      // Rebuild this now-owned package through the same ordinary installed command.
+      expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(180_000);
+      const ownedCommands = boundedCommands(
+        Math.min(workflowDeadline, Date.now() + 60_000)
+      );
+      expect(await treeEvidence(emptyOutput)).toEqual(
+        emptyGenerationBeforeVerify
+      );
+      const ownedDirectory = await open(
+        emptyOutput,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const oldOwnedFiles: {
+        file: Awaited<ReturnType<typeof open>>;
+        bytes: Buffer;
+      }[] = [];
+      try {
+        const oldOwnedRoot = await ownedDirectory.stat({ bigint: true });
+        expect(oldOwnedRoot).toMatchObject({
+          dev: newEmptyOutput.dev,
+          ino: newEmptyOutput.ino,
+          mode: newEmptyOutput.mode,
+        });
+        for (const { path, sha256 } of [
+          ...emptyManifest,
+          { path: ".vgpu-native-output.json", sha256: emptyRecordHash },
+        ]) {
+          const file = await open(
+            join(emptyOutput, path),
+            constants.O_RDONLY | constants.O_NOFOLLOW
+          );
+          const snapshot = { file, bytes: Buffer.alloc(0) };
+          oldOwnedFiles.push(snapshot);
+          const metadata = await file.stat({ bigint: true });
+          expect(metadata.isFile()).toBe(true);
+          expect(metadata.dev).toBe(oldOwnedRoot.dev);
+          expect(metadata.nlink).toBe(1n);
+          snapshot.bytes = await file.readFile();
+          expect(
+            createHash("sha256").update(snapshot.bytes).digest("hex")
+          ).toBe(sha256);
+        }
+        const ownedBuild = await ownedCommands.command(
+          process.execPath,
+          [
+            bin,
+            "native",
+            "build",
+            "--config",
+            "../empty-project/vgpu.native.json",
+          ],
+          runtime,
+          doctorEnvironment
+        );
+        console.info(
+          "Installed owned rebuild actual result",
+          JSON.stringify(ownedBuild)
+        );
+        expect(ownedBuild.code, JSON.stringify(ownedBuild)).toBe(0);
+        expect(ownedBuild.signal).toBeNull();
+        expect(ownedBuild.stderr).toBe("");
+        const newOwnedOutput = await lstat(emptyOutput, { bigint: true });
+        expect(newOwnedOutput.isDirectory()).toBe(true);
+        expect(newOwnedOutput.dev).toBe(oldOwnedRoot.dev);
+        expect(newOwnedOutput.ino).not.toBe(oldOwnedRoot.ino);
+        expect(await ownedDirectory.stat({ bigint: true })).toMatchObject({
+          dev: oldOwnedRoot.dev,
+          ino: oldOwnedRoot.ino,
+          mode: oldOwnedRoot.mode,
+        });
+        for (const { file, bytes } of oldOwnedFiles) {
+          expect((await file.stat({ bigint: true })).nlink).toBe(0n);
+          const retained = Buffer.alloc(bytes.length + 1);
+          let length = 0;
+          while (length < retained.length) {
+            const { bytesRead } = await file.read(
+              retained,
+              length,
+              retained.length - length,
+              length
+            );
+            if (bytesRead === 0) break;
+            length += bytesRead;
+          }
+          expect(retained.subarray(0, length)).toEqual(bytes);
+        }
+        for (const [directory, children] of [
+          ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
+          ["Sources", ["AppShaders"]],
+          ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
+          ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
+        ] as const) {
+          const path = join(emptyOutput, directory);
+          const metadata = await lstat(path, { bigint: true });
+          expect(metadata.isDirectory()).toBe(true);
+          expect(metadata.dev).toBe(newOwnedOutput.dev);
+          expect((await readdir(path)).sort()).toEqual(children);
+        }
+        const ownedManifest = [];
+        for (const { path } of payloadManifest) {
+          const filename = join(emptyOutput, path);
+          const metadata = await lstat(filename, { bigint: true });
+          expect(metadata.isFile()).toBe(true);
+          expect(metadata.dev).toBe(newOwnedOutput.dev);
+          expect(metadata.nlink).toBe(1n);
+          expect(metadata.size).toBeGreaterThan(0n);
+          const evidence = await fileEvidence(filename);
+          ownedManifest.push({ path, sha256: evidence.sha256 });
+        }
+        const ownedRecord = await boundedFaultFile(
+          join(emptyOutput, ".vgpu-native-output.json")
+        );
+        expect(ownedRecord.metadata.dev).toBe(newOwnedOutput.dev);
+        expect(isUtf8(ownedRecord.bytes)).toBe(true);
+        expect(JSON.parse(ownedRecord.bytes.toString("utf8"))).toEqual({
+          schemaVersion: 1,
+          format: "vgpu-metal-package/v1",
+          moduleName: "AppShaders",
+          ownerConfiguration: "../../vgpu.native.json",
+          inputFingerprint: fingerprint,
+          files: ownedManifest,
+        });
+        const ownedRecordHash = createHash("sha256")
+          .update(ownedRecord.bytes)
+          .digest("hex");
+        expect(ownedBuild.stdout).toBe(
+          `Native package: published\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${ownedRecordHash}\n`
+        );
+        const ownedGenerationBeforeVerify = await treeEvidence(emptyOutput);
+        const ownedVerify = await ownedCommands.command(
+          process.execPath,
+          [
+            bin,
+            "native",
+            "verify",
+            "--config",
+            "../empty-project/vgpu.native.json",
+          ],
+          runtime,
+          { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+        );
+        console.info(
+          "Installed owned rebuild verify actual result",
+          JSON.stringify(ownedVerify)
+        );
+        expect(ownedVerify.code, JSON.stringify(ownedVerify)).toBe(0);
+        expect(ownedVerify.signal).toBeNull();
+        expect(ownedVerify.stderr).toBe("");
+        expect(ownedVerify.stdout).toBe(
+          `Native package: current\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\n`
+        );
+        expect(await treeEvidence(emptyOutput)).toEqual(
+          ownedGenerationBeforeVerify
+        );
+        expect(await lstat(emptyOutput, { bigint: true })).toMatchObject({
+          dev: newOwnedOutput.dev,
+          ino: newOwnedOutput.ino,
+          mode: newOwnedOutput.mode,
+        });
+        expect((await readdir(emptyProject)).sort()).toEqual([
+          "Generated",
+          "shaders",
+          "vgpu.native.json",
+        ]);
+        expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+        expect([
+          await fileEvidence(join(emptyProject, "vgpu.native.json")),
+          await treeEvidence(join(emptyProject, "shaders")),
+        ]).toEqual(emptyInputsBefore);
+        expect(await treeEvidence(project)).toEqual(originalProjectBeforeEmpty);
+        expect(await lstat(output, { bigint: true })).toMatchObject({
+          dev: originalOutputBeforeEmpty.dev,
+          ino: originalOutputBeforeEmpty.ino,
+          mode: originalOutputBeforeEmpty.mode,
+        });
+        expect(await readdir(scratch)).toEqual([]);
+        expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+        expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+        expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+        expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+        for (const [filename, before] of archiveEvidence)
+          expect(await fileEvidence(join(archives, filename))).toEqual(before);
+      } finally {
+        const closed = await Promise.allSettled([
+          ownedDirectory.close(),
+          ...oldOwnedFiles.map(({ file }) => file.close()),
+        ]);
+        const failures = closed.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : []
+        );
+        if (failures.length)
+          throw new AggregateError(failures, "Owned generation close failed");
+      }
     } finally {
       await emptyDirectory.close();
     }

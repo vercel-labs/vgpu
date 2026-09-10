@@ -18,9 +18,10 @@ them together, then replaces the output directory as one operation.
 > Broader owned-replacement fault handling still needs coverage and implementation.
 > The local installed build companion publishes to an initially absent destination and checks the
 > resulting package in an offline local-tarball test with dependency install scripts disabled.
-> The same installed workflow replaces an ordinary empty directory in a separate project, checks
-> the new generation's own file hashes and record, and verifies it as current. This does not yet
-> qualify installed replacement of an existing generated package.
+> The same installed workflow replaces an ordinary empty directory in a separate project and then
+> rebuilds its intact owned package with unchanged inputs. It checks each new generation's own hashes
+> and record, removal of the previous owned files without changing their bytes, and current verification.
+> This does not yet qualify installed rebuilds with changed module names or shader contents.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
