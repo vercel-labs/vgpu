@@ -20,7 +20,7 @@ internal bytes for caller-managed uploads. Storage packing remains application-o
 
 Physical layouts and stage mappings come from checked compiler metadata; the resolver supplies
 authored struct names, not physical offsets. Other resource kinds remain outside the supported
-profile; broader installed replacement/recovery qualification remains separate work.
+profile.
 
 The internal `checkMetalPackage` adapter runs the same source, semantic, translation, and generated
 interface validation as compilation, but returns only a program/stage summary. It does not invoke
@@ -49,8 +49,7 @@ empty directory, or exchanges an intact package belonging to the same current co
 Native byte-identical and changed-module rebuild tests observe the actual exchange of distinct
 complete directories and cleanup using the old package's own paths and metadata. Old generated
 subtrees on another filesystem device are rejected before staging; a real mounted-image regression
-checks this boundary and preservation of the existing package. Broader owned-replacement fault
-coverage remains pending.
+checks this boundary and preservation of the existing package.
 Interrupted invocations retain explicit outcomes and recovery evidence. Bounded
 read-only reconciliation can confirm that the original intact generation reached the destination
 in the missing and empty modes. Owned exchange can also be confirmed as published when its original
@@ -59,9 +58,8 @@ exercises this read-only proof. If the helper dies before exchange, both complet
 generations at their original destination and staging names can instead prove non-publication.
 Both trees are checked against their own modules and manifests; a missing destination remains
 `unknown`, even with an intact new stage. These checks preserve the original failure and recovery
-state, never retry commit or delete either generation. Broader replacement fault handling and
-installed interruption/unknown-outcome qualification remain unfinished; the specific installed
-controls are described below.
+state, never retry commit or delete either generation. The bounded installed qualification is
+described below; it does not establish every possible fault combination.
 
 `loadMetalProject` captures configuration and all shader inputs into an immutable compiler input.
 Its logical fingerprint includes the generation profile, selected programs, source hashes, and
@@ -124,8 +122,8 @@ their original hashes and sizes, builds with no external Swift package or target
 relocates the complete build tree, and executes the documented compute and render programs on
 this host. The original package, ownership record and recovery files remain unchanged. Its guards
 detect generation-tool lookup through PATH only; they do not block absolute executable paths or
-SDK discovery, or establish a clean-machine or release-matrix result. Broader installed
-replacement/recovery diagnostics remain unfinished. The package remains private and unpublished.
+SDK discovery, or establish a clean-machine or release-matrix result. The package remains private
+and unpublished.
 
 Installed verification succeeds without compiler or temporary-directory prerequisites and leaves
 parent recovery files untouched. It reports current ownership, integrity and input freshness,
@@ -157,7 +155,15 @@ old stage, new output and unchanged journal; current verify leaves both complete
 In another pre-exchange interruption test, the instrumentation changes one old payload byte
 in place before read-only reconciliation. The command reports unknown without confirmation and preserves
 the original helper error alongside the reconciliation failure, exact changed output, complete new
-stage and unchanged journal. Installed post-publication cleanup refusal remains unqualified.
+stage and unchanged journal. Finally, an unexpected test-created entry in the old stage makes
+acknowledged finalization refuse cleanup before removing the old files. The failed command reports
+published/acknowledged and cleanup-failed, with the old four files plus entry, original journal and
+complete current new output retained. It neither rolls back nor reconciles that known publication.
+This is integrity-based cleanup-refusal coverage, not every possible filesystem cleanup failure.
+
+See the seven-family
+[local installed qualification](../../docs/topics/native/macos/metal/tooling/native-macos-metal-tooling-publication.docs.md#local-installed-qualification)
+for the exact scope and remaining installation/platform/release exclusions.
 
 ## Checks
 

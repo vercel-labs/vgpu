@@ -17,8 +17,9 @@ a later reread would not validate the same input.
 > build, and verify also run from real local tarballs installed offline with dependency install scripts
 > disabled; build coverage publishes to an initially absent destination, and an external Swift
 > consumer executes those actual published compute and render programs on this host. The companion
-> remains private and unpublished; broader installed replacement/recovery diagnostics and the
-> complete release workflow remain unfinished.
+> remains private and unpublished. See
+> [Local installed qualification](/native/macos/metal/tooling/publication#local-installed-qualification)
+> for replacement and recovery coverage; the complete release workflow remains unqualified.
 
 ## Keep imports in WGSL
 

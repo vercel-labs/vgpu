@@ -10,8 +10,9 @@ It does not describe your application's pipelines, resource allocations, render 
 > `check`, `build`, and `verify` are implemented. Local-tarball tests install offline with dependency install
 > scripts disabled and exercise build publication to an initially absent destination. An external
 > Swift consumer executes the resulting compute and render programs on this host. The companion
-> remains private and unpublished; broader installed replacement/recovery diagnostics and the
-> complete release workflow remain unfinished.
+> remains private and unpublished. See
+> [Local installed qualification](/native/macos/metal/tooling/publication#local-installed-qualification)
+> for replacement and recovery coverage; the complete release workflow remains unqualified.
 
 ## Select the programs
 

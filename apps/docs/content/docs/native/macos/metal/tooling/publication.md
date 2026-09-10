@@ -6,48 +6,47 @@ description: "Understand output ownership, atomic replacement, cancellation, and
 A generated package contains Swift code and a compiled library that must agree. The build prepares
 them together, then replaces the output directory as one operation.
 
-> Warning: This is the docs-first publication contract. Staging, missing and empty-destination
-> publication, their bounded read-only reconciliation, and same-owner package exchanges with identical
-> bytes or a changed module name have native test coverage, as does rejection of an old generated
-> subtree on another filesystem device. Owned exchanges also have read-only recovery coverage after
-> helper death, both after success and before exchange with both original generations intact.
-> Broader owned-replacement fault handling still needs coverage and implementation.
-> The local installed build companion publishes to an initially absent destination and checks the
-> resulting package in an offline local-tarball test with dependency install scripts disabled.
-> The same installed workflow replaces an ordinary empty directory in a separate project, rebuilds
-> its intact owned package with unchanged inputs, and then changes the module name and shader contents
-> while keeping the same owner and output path. It checks each new generation's own hashes and record,
-> the new module's exact file set, removal of the previous files without changing their bytes, and
-> current verification. These normal rebuilds do not qualify installed interruption or cleanup failures.
-> Installed integrity-conflict coverage also rejects a modified `Package.swift` without changing the
-> conflicting bytes or original ownership record, or creating staging or a recovery record.
-> A test-instrumented installed invocation receives a real SIGINT before its commit request. It exits
-> `130`, reports `not-published` without confirmation, and preserves its complete prepared staging
-> package and recovery record with the configured output still absent.
-> A second instrumented invocation receives a real SIGTERM after its publication acknowledgment has
-> been checked. It exits `143` with `published` / `acknowledged`, completes cleanup without retained
-> paths, and leaves a package that ordinary installed verification reports as current.
-> An owned-replacement invocation also loses its real helper after the commit request but before
-> the directory exchange. One uninjected read-only reconciliation establishes `not-published`
-> without confirmation. The failed command preserves its original error, complete old output,
-> complete new staging package and original recovery record; ordinary verification remains current.
-> A second owned replacement completes the real exchange, then loses the helper before acknowledgment.
-> Its one read-only reconciliation reports `published` / `reconciled` while retaining the original
-> error, complete old package at staging, complete new output and unchanged recovery record.
-> Ordinary verification reports that new output as current without changing either generation.
-> In another pre-exchange interruption test, the instrumentation changes one old payload byte
-> in place before reconciliation. The installed command reports `unknown` without confirmation,
-> preserving the original helper failure and reconciliation-failure context, the exact changed output,
-> complete new stage and journal.
-> That installed workflow also covers an unrecognized recovery record: its conflict report retains
-> the supplied paths while preserving the existing package and recovery files. A separate,
-> explicitly fault-instrumented invocation of the same candidate observes a successful real rename
-> followed by helper death before acknowledgment. Its report includes `Confirmation: reconciled`,
-> retains the original failure, and preserves the published package and journal. This instrumentation
-> does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
-> recognizes that same retained transaction, reports its original output and journal, and leaves the
-> evidence intact. Installed post-publication cleanup refusal remains unqualified;
-> this is not a released end-to-end build workflow.
+> Warning: The companion remains private and unpublished. The local qualification below uses
+> an offline local-tarball installation with a warm dependency store and dependency install scripts
+> disabled. It does not qualify empty-cache installation, normal dependency install scripts,
+> signing, quarantine, other hosts or filesystems, or a release compatibility matrix.
+> Fault instrumentation does not establish ordinary loader behavior. This is not a released workflow.
+
+## Local installed qualification
+
+The installed public command has representative coverage for seven publication and recovery families:
+
+1. **Normal replacement:** missing and ordinary empty destinations, followed by owned rebuilds with
+   unchanged inputs and changed module/shader contents. Each actual generation has independently
+   checked files, hashes, ownership record and current verification. Old files are removed through
+   checked cleanup without changing their bytes. This is not a binary reproducibility guarantee.
+2. **Integrity conflicts:** an in-place edit to `Package.swift` is rejected without changing the
+   conflicting bytes, original ownership record or identities, or creating transaction state.
+3. **Real signals:** pre-commit SIGINT exits `130` / `not-published` without confirmation, retaining
+   a complete prepared stage and journal with output absent. Post-acknowledgment SIGTERM exits
+   `143` / `published` / `acknowledged`, completes cleanup and leaves current output.
+4. **Lost owned-exchange acknowledgment:** actual helper death before exchange yields `not-published`
+   without confirmation; death after the real exchange yields `published` / `reconciled`.
+   One uninjected read-only reconciliation preserves the original error, both complete generations
+   and the original journal. Ordinary verification checks the old or new current output respectively.
+5. **Inconclusive reconciliation:** after pre-exchange helper death, test instrumentation changes one
+   old payload byte in place. The command reports `unknown` without confirmation, retaining the
+   original helper error and reconciliation-failure context, exact changed output, complete new
+   stage and unchanged journal. It neither retries publication nor deletes the evidence.
+6. **Post-publication cleanup refusal:** an unexpected test-created entry in the old stage prevents
+   finalization cleanup. The failed command reports `published` / `acknowledged` and `cleanup-failed`,
+   retaining all four old files, the unexpected entry and journal. The complete new output verifies
+   as current; there is no rollback or reconciliation. This checks integrity-based cleanup refusal,
+   not every possible unlink, permission or disk failure.
+7. **Subsequent invocations:** unrecognized recovery records remain conflicts. A later ordinary build
+   recognizes the journal retained after an actual missing-destination publication with lost
+   acknowledgment and reports that earlier transaction without changing its package or evidence.
+   Its `not-published` outcome concerns the new invocation, not the earlier publication.
+
+Complementary lower-level native tests cover staging, missing/empty publication and read-only
+reconciliation, byte-identical and changed-module owned exchanges, owned recovery before and after
+exchange, and rejection of an old generated subtree on another filesystem device. These bounded
+representatives do not establish every fault combination or a broader platform support matrix.
 
 ## Reserve the destination
 
@@ -337,6 +336,11 @@ identities. Names, modification times, and a staging-name prefix do not authoriz
 Normal cleanup removes only the unchanged, transaction-owned staging and recovery state. If
 cleanup fails, the diagnostic retains the original failure and identifies the exact remaining
 path. It must not remove unrelated files in the parent.
+
+For an acknowledged owned exchange, an unexpected old-stage entry discovered by finalization's
+tree check prevents cleanup before the old generated files are removed. The failed invocation
+still reports `published` and `Confirmation: acknowledged`; the new package is not rolled back.
+The old staging package, including the unexpected entry, and recovery record remain for inspection.
 
 If a transfer ends partway through a file, the live helper can clean it only after verifying the
 file's identity and the bytes actually written. The planned complete-file hash does not describe

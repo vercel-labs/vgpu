@@ -17,7 +17,8 @@ resulting package without running Node.js or translating WGSL at launch.
 > without compiler or temporary-directory prerequisites and leaves parent recovery files untouched.
 > An external Swift consumer builds those published payloads, relocates its build tree, and executes
 > the documented compute and render programs on this host. The companion remains private and unpublished.
-> Broader installed replacement/recovery diagnostics and release support remain unqualified.
+> See [Local installed qualification](/native/macos/metal/tooling/publication#local-installed-qualification)
+> for replacement, interruption and recovery coverage. Empty-cache installation and release support remain unqualified.
 
 ## Prepare the build machine
 

@@ -14,8 +14,9 @@ npx vgpu native doctor
 > and Apple's offline compiler. The same installed workflow checks shaders, builds a package at
 > an initially absent destination, and verifies that package without compiler prerequisites. A separate
 > Swift consumer executes the published compute and render programs on this host; that GPU coverage
-> comes from the consumer, not the doctor probe. The companion remains private and unpublished;
-> broader installed replacement/recovery diagnostics remain unfinished. This does not qualify
+> comes from the consumer, not the doctor probe. The companion remains private and unpublished.
+> See [Local installed qualification](/native/macos/metal/tooling/publication#local-installed-qualification)
+> for replacement and recovery coverage. This does not qualify
 > empty-cache installation, normal dependency install scripts, or a release compatibility matrix.
 
 The command needs no `vgpu.native.json`, does not read project shaders, and writes no generated

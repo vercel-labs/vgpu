@@ -1,4 +1,4 @@
-// Test-only explicit --import: kill one actual owned publisher around its real SWAP.
+// Test-only explicit --import: interrupt one actual owned publisher around its real SWAP.
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
 import { createHash } from "node:crypto";
@@ -118,10 +118,12 @@ function install() {
   assert.ok(
     boundary === "before-swap" ||
       boundary === "after-swap" ||
-      boundary === "before-swap-with-corrupt-old-payload"
+      boundary === "before-swap-with-corrupt-old-payload" ||
+      boundary === "after-swap-with-cleanup-refusal"
   );
   const afterSwap = boundary === "after-swap";
   const corruptOldPayload = boundary === "before-swap-with-corrupt-old-payload";
+  const cleanupRefusal = boundary === "after-swap-with-cleanup-refusal";
   for (const path of [
     bin,
     configurationPath,
@@ -143,8 +145,10 @@ function install() {
     afterSwap
       ? "owned-after-swap-project"
       : corruptOldPayload
-        ? "owned-corrupt-old-project"
-        : "owned-before-swap-project"
+      ? "owned-corrupt-old-project"
+      : cleanupRefusal
+      ? "owned-cleanup-refusal-project"
+      : "owned-before-swap-project"
   );
   assert.equal(parentPath, join(dirname(configurationPath), "Generated"));
   assert.equal(dirname(evidence), dirname(scratch));
@@ -173,6 +177,10 @@ function install() {
   let reconciliation;
   let reconciliationChild;
   let commitRequests = 0;
+  let finalizeRequests = 0;
+  let reconciliationRequests = 0;
+  let injectionKillRequests = 0;
+  let cleanupReleased = false;
   let pollTimer;
   let began;
   let resumed = false;
@@ -196,8 +204,10 @@ function install() {
       }
     } finally {
       for (const child of [publisherChild, reconciliationChild])
-        if (child?.exitCode === null && child.signalCode === null)
+        if (child?.exitCode === null && child.signalCode === null) {
+          injectionKillRequests++;
           child.kill("SIGKILL");
+        }
     }
   };
   const observeBoundary = () => {
@@ -267,7 +277,9 @@ function install() {
         assert.equal(resumed, false);
         assert.equal(originalOldRoot, undefined);
         assert.equal(originalOldPayload, undefined);
-        const root = lstatSync(join(parentPath, "AppShaders"), { bigint: true });
+        const root = lstatSync(join(parentPath, "AppShaders"), {
+          bigint: true,
+        });
         const payload = lstatSync(
           join(parentPath, "AppShaders", "Package.swift"),
           { bigint: true }
@@ -297,7 +309,7 @@ function install() {
       }
       assert.equal(publisherChild.exitCode, null);
       assert.equal(publisherChild.signalCode, null);
-      if (afterSwap && !resumed) {
+      if ((afterSwap || cleanupRefusal) && !resumed) {
         pausedMarker = marker;
         pausedSHA256 = sha256(observation.bytes);
         pauseElapsedMs = elapsedMs;
@@ -306,6 +318,10 @@ function install() {
         began = performance.now();
         writeFileSync(resume, "resume\n", { flag: "wx", mode: 0o600 });
         pollTimer = setTimeout(observeBoundary, 0);
+        return;
+      }
+      if (cleanupRefusal) {
+        releaseForCleanup(observation);
         return;
       }
       const delivered = publisherChild.kill("SIGKILL");
@@ -331,7 +347,11 @@ function install() {
   };
   const mutateOldPayload = () => {
     assert.ok(corruptOldPayload && originalOldRoot && originalOldPayload);
-    assert.equal(mutationAttempted, false, "Exactly one fixed payload mutation");
+    assert.equal(
+      mutationAttempted,
+      false,
+      "Exactly one fixed payload mutation"
+    );
     mutationAttempted = true;
     const root = join(parentPath, "AppShaders");
     const path = join(root, "Package.swift");
@@ -362,7 +382,11 @@ function install() {
       const newByte = oldByte ^ 1;
       assert.equal(writeSync(descriptor, Buffer.from([newByte]), 0, 1, 0), 1);
       assert.equal(readSync(descriptor, byte, 0, 1, 0), 1);
-      assert.equal(byte[0], newByte, "Read back the actual positional byte write");
+      assert.equal(
+        byte[0],
+        newByte,
+        "Read back the actual positional byte write"
+      );
       const after = fstatSync(descriptor, { bigint: true });
       assert.deepEqual(metadata(after), metadata(before));
       validateNamed();
@@ -420,8 +444,205 @@ function install() {
     return {
       journal: { ...journal.metadata, sha256: sha256(journal.bytes) },
       stage: tree(".vgpu-native-stage"),
-      ...(afterSwap || corruptOldPayload ? { output: tree("AppShaders") } : {}),
+      ...(afterSwap || corruptOldPayload || cleanupRefusal
+        ? { output: tree("AppShaders") }
+        : {}),
     };
+  };
+  const releaseForCleanup = (observation) => {
+    assert.ok(cleanupRefusal && resumed && !cleanupReleased && !killed);
+    const stageRoot = join(parentPath, ".vgpu-native-stage");
+    const outputRoot = join(parentPath, "AppShaders");
+    const journalPath = join(parentPath, ".vgpu-native-publication.json");
+    const sentinelName = ".vgpu-cli-cleanup-sentinel";
+    const sentinelPath = join(stageRoot, sentinelName);
+    const sentinelBytes = Buffer.from("retained cleanup sentinel\n");
+    const withHashes = (root, entries) =>
+      entries.map((entry) => {
+        const path = join(root, entry.path);
+        const stat = lstatSync(path, { bigint: true });
+        assert.deepEqual(metadata(stat), entry.metadata);
+        if (entry.kind === "directory") {
+          assert.ok(stat.isDirectory());
+          return entry;
+        }
+        assert.ok(stat.isFile() && stat.nlink === 1n);
+        const file = boundedFile(path, 64 * 1024);
+        assert.deepEqual(file.metadata, entry.metadata);
+        return { ...entry, sha256: sha256(file.bytes) };
+      });
+    const observed = beforeReconciliation();
+    const before = {
+      journal: observed.journal,
+      stage: withHashes(stageRoot, observed.stage),
+      output: withHashes(outputRoot, observed.output),
+    };
+    const journalFile = boundedFile(journalPath, 64 * 1024);
+    assert.deepEqual(before.journal, {
+      ...journalFile.metadata,
+      sha256: sha256(journalFile.bytes),
+    });
+    const journal = JSON.parse(journalFile.bytes.toString("utf8"));
+    const parent = lstatSync(parentPath, { bigint: true });
+    assert.ok(parent.isDirectory());
+    assert.equal(journal.schemaVersion, 1);
+    assert.equal(journal.kind, "vgpu-native-publication");
+    assert.equal(journal.phase, "prepared");
+    assert.equal(journal.transactionId, publisher.args[4]);
+    assert.deepEqual(journal.parent, {
+      device: String(parent.dev),
+      inode: String(parent.ino),
+    });
+    assert.equal(journal.destinationName, "AppShaders");
+    assert.equal(journal.moduleName, "AppShaders");
+    assert.equal(journal.publication.renameMode, "swap");
+    assert.equal(journal.publication.expectedDestination, "owned");
+    assert.equal(journal.publication.oldModuleName, "AppShaders");
+    assert.deepEqual(
+      journal.publication.oldDestination,
+      pausedMarker.destination
+    );
+    assert.deepEqual(journal.stage, {
+      name: ".vgpu-native-stage",
+      ...pausedMarker.source,
+    });
+    const fixedFiles = [
+      ["package-manifest", "Package.swift"],
+      ["swift-source", "Sources/AppShaders/Shaders.generated.swift"],
+      ["metal-library", "Sources/AppShaders/Resources/Shaders.metallib"],
+      ["output-record", ".vgpu-native-output.json"],
+    ];
+    for (const [entries, files, recordSHA256, identity] of [
+      [
+        before.stage,
+        journal.publication.oldFiles,
+        journal.publication.oldRecordSHA256,
+        pausedMarker.destination,
+      ],
+      [before.output, journal.files, journal.recordSHA256, pausedMarker.source],
+    ]) {
+      assert.deepEqual(identity, {
+        device: entries[0].metadata.device,
+        inode: entries[0].metadata.inode,
+      });
+      // Fixed fixture paths only; journal path strings never become filesystem authority.
+      assert.deepEqual(
+        files,
+        fixedFiles.map(([role, path]) => {
+          const entry = entries.find((item) => item.path === path);
+          assert.ok(entry && entry.kind === "file");
+          assert.equal(entry.metadata.device, journal.parent.device);
+          return {
+            role,
+            path,
+            length: Number(entry.metadata.size),
+            sha256: entry.sha256,
+          };
+        })
+      );
+      assert.equal(
+        recordSHA256,
+        entries.find((entry) => entry.path === ".vgpu-native-output.json")
+          .sha256
+      );
+    }
+    const directoryNames = before.stage
+      .filter((entry) => entry.kind === "directory")
+      .map((entry) => [
+        entry.path,
+        readdirSync(join(stageRoot, entry.path)).sort(),
+      ]);
+    absent(sentinelPath);
+    const descriptor = openSync(
+      sentinelPath,
+      constants.O_WRONLY |
+        constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_NOFOLLOW |
+        constants.O_NONBLOCK,
+      0o600
+    );
+    let sentinelMetadata;
+    try {
+      assert.equal(
+        writeSync(descriptor, sentinelBytes, 0, sentinelBytes.length, 0),
+        sentinelBytes.length
+      );
+      const stat = fstatSync(descriptor, { bigint: true });
+      assert.ok(stat.isFile() && stat.nlink === 1n);
+      assert.equal(stat.dev, parent.dev);
+      assert.equal(stat.size, BigInt(sentinelBytes.length));
+      sentinelMetadata = metadata(stat);
+      assert.deepEqual(
+        metadata(lstatSync(sentinelPath, { bigint: true })),
+        sentinelMetadata
+      );
+    } finally {
+      closeSync(descriptor);
+    }
+    const sentinelFile = boundedFile(sentinelPath, 64 * 1024);
+    assert.deepEqual(sentinelFile.bytes, sentinelBytes);
+    assert.deepEqual(sentinelFile.metadata, sentinelMetadata);
+    const sentinel = {
+      path: sentinelName,
+      metadata: sentinelMetadata,
+      sha256: sha256(sentinelFile.bytes),
+    };
+    const rootAfter = metadata(lstatSync(stageRoot, { bigint: true }));
+    // Adding one file can change directory size and link count, but not identity or mode.
+    assert.deepEqual(
+      {
+        ...rootAfter,
+        size: before.stage[0].metadata.size,
+        nlink: before.stage[0].metadata.nlink,
+      },
+      before.stage[0].metadata
+    );
+    const stageAfter = withHashes(
+      stageRoot,
+      before.stage.map((entry) =>
+        entry.path === "" ? { ...entry, metadata: rootAfter } : entry
+      )
+    );
+    assert.deepEqual(stageAfter.slice(1), before.stage.slice(1));
+    for (const [path, names] of directoryNames)
+      assert.deepEqual(
+        readdirSync(join(stageRoot, path)).sort(),
+        path === "" ? [...names, sentinelName].sort() : names
+      );
+    stageAfter.push({ ...sentinel, kind: "file" });
+    stageAfter.sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+    );
+    assert.deepEqual(withHashes(outputRoot, before.output), before.output);
+    const journalAfter = boundedFile(journalPath, 64 * 1024);
+    assert.deepEqual(journalAfter, journalFile);
+    absent(returnMarker);
+    const elapsedMs = performance.now() - began;
+    if (elapsedMs >= 3000) {
+      watchdogFired = true;
+      throw new Error(
+        "Cleanup insertion missed the original completed phase deadline"
+      );
+    }
+    assert.equal(publisherChild.exitCode, null);
+    assert.equal(publisherChild.signalCode, null);
+    writeFileSync(returnMarker, "return\n", { flag: "wx", mode: 0o600 });
+    cleanupReleased = true;
+    const returned = boundedFile(returnMarker, 512);
+    assert.deepEqual(returned.bytes, Buffer.from("return\n"));
+    record("cleanup", {
+      pid: publisherChild.pid,
+      boundary,
+      commitRequests,
+      pausedSHA256,
+      completedSHA256: sha256(observation.bytes),
+      pauseElapsedMs,
+      elapsedMs,
+      before,
+      after: { stage: stageAfter, sentinel },
+      return: { metadata: returned.metadata, sha256: sha256(returned.bytes) },
+    });
   };
   // Save a function VALUE before updating Node's named ESM export.
   const originalSpawn = childProcess.spawn;
@@ -456,6 +677,19 @@ function install() {
           (value) =>
             typeof value === "string" && /^(?:0|[1-9]\d*)$/u.test(value)
         );
+    if (
+      cleanupRefusal &&
+      common &&
+      typeof args[5] === "string" &&
+      args[5].startsWith("reconcile-")
+    ) {
+      reconciliationRequests++;
+      const error = new Error(
+        "Cleanup refusal must not attempt reconciliation"
+      );
+      failSetup(error);
+      throw error;
+    }
     if (!selected && !recovering)
       return Reflect.apply(originalSpawn, this, arguments);
     try {
@@ -482,7 +716,9 @@ function install() {
               VGPU_OWNED_RENAME_PAUSED: paused,
               VGPU_OWNED_RENAME_RESUME: resume,
               VGPU_OWNED_RENAME_COMPLETED: completed,
-              ...(afterSwap ? { VGPU_OWNED_RENAME_RETURN: returnMarker } : {}),
+              ...(afterSwap || cleanupRefusal
+                ? { VGPU_OWNED_RENAME_RETURN: returnMarker }
+                : {}),
             },
           },
         ]);
@@ -500,9 +736,31 @@ function install() {
             code,
             signal,
             commitRequests,
+            ...(cleanupRefusal
+              ? {
+                  finalizeRequests,
+                  reconciliationRequests,
+                  injectionKillRequests,
+                }
+              : {}),
             watchdogFired,
           };
-          if (
+          if (cleanupRefusal) {
+            if (
+              !cleanupReleased ||
+              killed ||
+              code !== 1 ||
+              signal !== null ||
+              commitRequests !== 1 ||
+              finalizeRequests !== 1 ||
+              reconciliationRequests !== 0 ||
+              injectionKillRequests !== 0 ||
+              watchdogFired
+            )
+              failSetup(
+                new Error("Publisher closed without exact cleanup refusal")
+              );
+          } else if (
             !killed ||
             code !== null ||
             signal !== "SIGKILL" ||
@@ -521,6 +779,7 @@ function install() {
         const input = child.stdin;
         const originalWrite = input.write;
         const commit = `commit-owned ${args[4]} prepared\n`;
+        const finalize = `finalize ${args[4]} published\n`;
         input.write = function (...writeArgs) {
           const bytes = writeArgs[0];
           if (
@@ -533,6 +792,21 @@ function install() {
             assert.equal(commitRequests, 1, "One real owned commit request");
             began = performance.now();
             pollTimer = setTimeout(observeBoundary, 0);
+          }
+          if (
+            cleanupRefusal &&
+            this === input &&
+            bytes instanceof Uint8Array &&
+            bytes.byteLength === Buffer.byteLength(finalize) &&
+            Buffer.from(bytes).toString("utf8") === finalize
+          ) {
+            assert.equal(cleanupReleased, true);
+            finalizeRequests++;
+            assert.equal(
+              finalizeRequests,
+              1,
+              "One real acknowledged finalization"
+            );
           }
           // Observe call entry only: no held callback, changed bytes, or fabricated reply.
           return Reflect.apply(originalWrite, this, writeArgs);

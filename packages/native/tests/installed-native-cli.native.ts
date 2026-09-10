@@ -2854,13 +2854,17 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       "before-swap",
       "after-swap",
       "before-swap-with-corrupt-old-payload",
+      "after-swap-with-cleanup-refusal",
     ] as const) {
-      const afterSwap = boundary === "after-swap";
+      const cleanupRefusal = boundary === "after-swap-with-cleanup-refusal";
+      const afterSwap = boundary === "after-swap" || cleanupRefusal;
       const corruptOld = boundary === "before-swap-with-corrupt-old-payload";
       expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
       const ownedBeforeInput = await projectFixture();
       unplacedProject = ownedBeforeInput.directory;
-      const ownedProjectName = corruptOld
+      const ownedProjectName = cleanupRefusal
+        ? "owned-cleanup-refusal-project"
+        : corruptOld
         ? "owned-corrupt-old-project"
         : `owned-${boundary}-project`;
       const ownedBeforeProject = join(fixture, ownedProjectName);
@@ -2892,7 +2896,9 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       });
       const ownedBeforeEvidence = join(
         fixture,
-        corruptOld
+        cleanupRefusal
+          ? "publication-owned-cleanup-refusal"
+          : corruptOld
           ? "publication-owned-corrupt-old"
           : afterSwap
           ? "publication-owned-after"
@@ -3123,29 +3129,39 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
           `Installed owned ${boundary} actual result`,
           JSON.stringify(ownedBeforeResult)
         );
+        const ownedEvidenceEntries = (
+          await readdir(ownedBeforeEvidence)
+        ).sort();
+        const fixtureFailure = ownedEvidenceEntries.includes("failure.json")
+          ? (
+              await boundedFaultFile(join(ownedBeforeEvidence, "failure.json"))
+            ).bytes.toString("utf8")
+          : undefined;
         expect(
-          (await readdir(ownedBeforeEvidence)).sort(),
-          JSON.stringify(ownedBeforeResult)
+          ownedEvidenceEntries,
+          JSON.stringify({ ...ownedBeforeResult, fixtureFailure })
         ).toEqual([
+          ...(cleanupRefusal ? ["cleanup.json"] : []),
           ...(afterSwap ? ["completed"] : []),
           "entry.json",
-          "killed.json",
+          ...(cleanupRefusal ? [] : ["killed.json"]),
           "paused",
           "publisher-close.json",
           "publisher.json",
-          "reconciliation-close.json",
-          "reconciliation.json",
+          ...(cleanupRefusal
+            ? []
+            : ["reconciliation-close.json", "reconciliation.json"]),
           "rename-observer.dylib",
           ...(afterSwap ? ["resume"] : []),
+          ...(cleanupRefusal ? ["return"] : []),
         ]);
         const sidecars = new Map();
         for (const name of [
           "entry",
           "publisher",
-          "killed",
+          ...(cleanupRefusal ? ["cleanup"] : ["killed"]),
           "publisher-close",
-          "reconciliation",
-          "reconciliation-close",
+          ...(cleanupRefusal ? [] : ["reconciliation", "reconciliation-close"]),
         ]) {
           const sidecar = await boundedFaultFile(
             join(ownedBeforeEvidence, `${name}.json`)
@@ -3159,6 +3175,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         const publisher = sidecars.get("publisher");
         const publisherClose = sidecars.get("publisher-close");
         const reconciliation = sidecars.get("reconciliation");
+        const cleanup = sidecars.get("cleanup");
         expect(entry).toEqual({
           pid: expect.any(Number),
           parentPid: process.pid,
@@ -3220,82 +3237,141 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             destination: marker.source,
           });
         }
-        const killed = sidecars.get("killed");
-        expect(killed).toEqual({
-          boundary,
-          pid: publisher.pid,
-          signal: "SIGKILL",
-          delivered: true,
-          commitRequests: 1,
-          markerSHA256: createHash("sha256")
-            .update(terminalMarker.bytes)
-            .digest("hex"),
-          elapsedMs: expect.any(Number),
-          ...(afterSwap
-            ? {
-                pausedSHA256: createHash("sha256")
-                  .update(paused.bytes)
-                  .digest("hex"),
-                pauseElapsedMs: expect.any(Number),
-              }
-            : {}),
-        });
-        expect(killed.elapsedMs).toBeGreaterThanOrEqual(0);
-        expect(killed.elapsedMs).toBeLessThan(3000);
-        if (afterSwap) {
-          expect(killed.pauseElapsedMs).toBeGreaterThanOrEqual(0);
-          expect(killed.pauseElapsedMs).toBeLessThan(3000);
+        if (cleanupRefusal) {
+          const returned = await boundedFaultFile(
+            join(ownedBeforeEvidence, "return")
+          );
+          expect(returned.bytes.toString("utf8")).toBe("return\n");
+          expect(returned.metadata.mode & 0o777n).toBe(0o600n);
+          expect(cleanup).toEqual({
+            pid: publisher.pid,
+            boundary,
+            commitRequests: 1,
+            pausedSHA256: createHash("sha256")
+              .update(paused.bytes)
+              .digest("hex"),
+            completedSHA256: createHash("sha256")
+              .update(terminalMarker.bytes)
+              .digest("hex"),
+            pauseElapsedMs: expect.any(Number),
+            elapsedMs: expect.any(Number),
+            before: expect.any(Object),
+            after: expect.any(Object),
+            return: {
+              metadata: {
+                device: returned.metadata.dev.toString(),
+                inode: returned.metadata.ino.toString(),
+                mode: returned.metadata.mode.toString(),
+                nlink: returned.metadata.nlink.toString(),
+                size: returned.metadata.size.toString(),
+              },
+              sha256: createHash("sha256").update(returned.bytes).digest("hex"),
+            },
+          });
+          for (const elapsed of [cleanup.pauseElapsedMs, cleanup.elapsedMs]) {
+            expect(elapsed).toBeGreaterThanOrEqual(0);
+            expect(elapsed).toBeLessThan(3000);
+          }
+          expect(Object.keys(cleanup.before).sort()).toEqual([
+            "journal",
+            "output",
+            "stage",
+          ]);
+          expect(Object.keys(cleanup.after).sort()).toEqual([
+            "sentinel",
+            "stage",
+          ]);
+          expect(publisherClose).toEqual({
+            pid: publisher.pid,
+            code: 1,
+            signal: null,
+            commitRequests: 1,
+            finalizeRequests: 1,
+            reconciliationRequests: 0,
+            injectionKillRequests: 0,
+            watchdogFired: false,
+          });
+        } else {
+          const killed = sidecars.get("killed");
+          expect(killed).toEqual({
+            boundary,
+            pid: publisher.pid,
+            signal: "SIGKILL",
+            delivered: true,
+            commitRequests: 1,
+            markerSHA256: createHash("sha256")
+              .update(terminalMarker.bytes)
+              .digest("hex"),
+            elapsedMs: expect.any(Number),
+            ...(afterSwap
+              ? {
+                  pausedSHA256: createHash("sha256")
+                    .update(paused.bytes)
+                    .digest("hex"),
+                  pauseElapsedMs: expect.any(Number),
+                }
+              : {}),
+          });
+          expect(killed.elapsedMs).toBeGreaterThanOrEqual(0);
+          expect(killed.elapsedMs).toBeLessThan(3000);
+          if (afterSwap) {
+            expect(killed.pauseElapsedMs).toBeGreaterThanOrEqual(0);
+            expect(killed.pauseElapsedMs).toBeLessThan(3000);
+          }
+          expect(publisherClose).toEqual({
+            pid: publisher.pid,
+            code: null,
+            signal: "SIGKILL",
+            commitRequests: 1,
+            watchdogFired: false,
+          });
+          expect(reconciliation).toEqual({
+            pid: expect.any(Number),
+            executable: publisher.executable,
+            args: [
+              "vgpu-publication-staging/v1",
+              ownedBeforeParent,
+              "AppShaders",
+              "AppShaders",
+              publisher.args[4],
+              "reconcile-owned",
+              ownedBeforeParentIdentity.dev.toString(),
+              ownedBeforeParentIdentity.ino.toString(),
+            ],
+            afterPublisherClose: publisherClose,
+            injected: false,
+            before: expect.any(Object),
+            ...(corruptOld
+              ? {
+                  mutation: {
+                    path: "Package.swift",
+                    offset: 0,
+                    oldByte: originalPackage.bytes[0],
+                    newByte: expectedPackage[0],
+                    before: originalPackageIdentity,
+                    after: originalPackageIdentity,
+                  },
+                }
+              : {}),
+          });
+          expect(reconciliation.pid).not.toBe(publisher.pid);
+          expect(sidecars.get("reconciliation-close")).toEqual({
+            pid: reconciliation.pid,
+            code: corruptOld ? 1 : 0,
+            signal: null,
+          });
+          expect(Object.keys(reconciliation.before).sort()).toEqual([
+            "journal",
+            ...(afterSwap || corruptOld ? ["output"] : []),
+            "stage",
+          ]);
         }
-        expect(publisherClose).toEqual({
-          pid: publisher.pid,
-          code: null,
-          signal: "SIGKILL",
-          commitRequests: 1,
-          watchdogFired: false,
-        });
-        expect(reconciliation).toEqual({
-          pid: expect.any(Number),
-          executable: publisher.executable,
-          args: [
-            "vgpu-publication-staging/v1",
-            ownedBeforeParent,
-            "AppShaders",
-            "AppShaders",
-            publisher.args[4],
-            "reconcile-owned",
-            ownedBeforeParentIdentity.dev.toString(),
-            ownedBeforeParentIdentity.ino.toString(),
-          ],
-          afterPublisherClose: publisherClose,
-          injected: false,
-          before: expect.any(Object),
-          ...(corruptOld
-            ? {
-                mutation: {
-                  path: "Package.swift",
-                  offset: 0,
-                  oldByte: originalPackage.bytes[0],
-                  newByte: expectedPackage[0],
-                  before: originalPackageIdentity,
-                  after: originalPackageIdentity,
-                },
-              }
-            : {}),
-        });
-        expect(reconciliation.pid).not.toBe(publisher.pid);
-        expect(sidecars.get("reconciliation-close")).toEqual({
-          pid: reconciliation.pid,
-          code: corruptOld ? 1 : 0,
-          signal: null,
-        });
-        expect(Object.keys(reconciliation.before).sort()).toEqual([
-          "journal",
-          ...(afterSwap || corruptOld ? ["output"] : []),
-          "stage",
-        ]);
+        const beforeEvidence = cleanupRefusal
+          ? cleanup.before
+          : reconciliation.before;
         const journal = await boundedFaultFile(ownedBeforeJournal);
         expect(isUtf8(journal.bytes)).toBe(true);
-        expect(reconciliation.before.journal).toEqual({
+        expect(beforeEvidence.journal).toEqual({
           device: journal.metadata.dev.toString(),
           inode: journal.metadata.ino.toString(),
           mode: journal.metadata.mode.toString(),
@@ -3369,14 +3445,84 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
           recordSHA256: generation.recordHash,
           files: stagedFiles,
         });
+        if (cleanupRefusal) {
+          const beforeOldEntries = [
+            ...oldDirectoryIdentities.map(({ path, metadata }) => ({
+              path,
+              kind: "directory",
+              metadata: {
+                device: metadata.dev.toString(),
+                inode: metadata.ino.toString(),
+                mode: metadata.mode.toString(),
+                nlink: metadata.nlink.toString(),
+                size: metadata.size.toString(),
+              },
+            })),
+            ...oldArtifacts.map(({ path, metadata, sha256 }) => ({
+              path,
+              kind: "file",
+              metadata: {
+                device: metadata.dev.toString(),
+                inode: metadata.ino.toString(),
+                mode: metadata.mode.toString(),
+                nlink: metadata.nlink.toString(),
+                size: metadata.size.toString(),
+              },
+              sha256,
+            })),
+          ].sort((left, right) =>
+            left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+          );
+          expect(cleanup.before.stage).toEqual(beforeOldEntries);
+          const cleanupSentinel = await boundedFaultFile(
+            join(ownedBeforeStage, ".vgpu-cli-cleanup-sentinel")
+          );
+          expect(cleanupSentinel.bytes.toString("utf8")).toBe(
+            "retained cleanup sentinel\n"
+          );
+          expect(cleanupSentinel.metadata.mode & 0o777n).toBe(0o600n);
+          expect(cleanupSentinel.metadata.dev).toBe(oldRoot.dev);
+          const sentinelHash = createHash("sha256")
+            .update(cleanupSentinel.bytes)
+            .digest("hex");
+          expect(cleanup.after.sentinel).toEqual({
+            path: ".vgpu-cli-cleanup-sentinel",
+            metadata: {
+              device: cleanupSentinel.metadata.dev.toString(),
+              inode: cleanupSentinel.metadata.ino.toString(),
+              mode: cleanupSentinel.metadata.mode.toString(),
+              nlink: cleanupSentinel.metadata.nlink.toString(),
+              size: cleanupSentinel.metadata.size.toString(),
+            },
+            sha256: sentinelHash,
+          });
+          if (!Array.isArray(ownedBeforeOldTree))
+            throw new Error("Expected original package tree evidence");
+          expectedOldTree = [
+            [
+              ".vgpu-cli-cleanup-sentinel",
+              {
+                mode: Number(cleanupSentinel.metadata.mode),
+                bytes: cleanupSentinel.bytes.length,
+                sha256: sentinelHash,
+              },
+            ],
+            ...ownedBeforeOldTree,
+          ];
+        }
         const retainedStageIdentities = [];
         for (const observedTree of [
-          { root: ownedBeforeStage, entries: reconciliation.before.stage },
+          {
+            root: ownedBeforeStage,
+            entries: cleanupRefusal
+              ? cleanup.after.stage
+              : beforeEvidence.stage,
+          },
           ...(afterSwap || corruptOld
             ? [
                 {
                   root: ownedBeforeOutput,
-                  entries: reconciliation.before.output,
+                  entries: beforeEvidence.output,
                 },
               ]
             : []),
@@ -3385,6 +3531,9 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             observedTree.entries.map((item: { path: string }) => item.path)
           ).toEqual([
             "",
+            ...(cleanupRefusal && observedTree.root === ownedBeforeStage
+              ? [".vgpu-cli-cleanup-sentinel"]
+              : []),
             ".vgpu-native-output.json",
             "Package.swift",
             "Sources",
@@ -3397,6 +3546,10 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             const path = join(observedTree.root, observed.path);
             const metadata = await lstat(path, { bigint: true });
             const { dev, ino, mode, nlink, size } = metadata;
+            const hashed =
+              cleanupRefusal && metadata.isFile()
+                ? await boundedFaultFile(path)
+                : undefined;
             expect(observed).toEqual({
               path: observed.path,
               kind: metadata.isDirectory() ? "directory" : "file",
@@ -3407,6 +3560,13 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
                 nlink: nlink.toString(),
                 size: size.toString(),
               },
+              ...(hashed
+                ? {
+                    sha256: createHash("sha256")
+                      .update(hashed.bytes)
+                      .digest("hex"),
+                  }
+                : {}),
             });
             retainedStageIdentities.push({
               path,
@@ -3448,12 +3608,26 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             ino: oldRoot.ino,
             mode: oldRoot.mode,
             nlink: oldRoot.nlink,
+            ...(cleanupRefusal
+              ? {
+                  nlink: BigInt(cleanup.after.stage[0].metadata.nlink),
+                  size: BigInt(cleanup.after.stage[0].metadata.size),
+                }
+              : {}),
           }
         );
         for (const { path, metadata } of oldDirectoryIdentities)
           expect(
             await lstat(join(oldRootPath, path), { bigint: true })
-          ).toMatchObject(metadata);
+          ).toMatchObject(
+            cleanupRefusal && path === ""
+              ? {
+                  ...metadata,
+                  nlink: BigInt(cleanup.after.stage[0].metadata.nlink),
+                  size: BigInt(cleanup.after.stage[0].metadata.size),
+                }
+              : metadata
+          );
         for (const { file, path, bytes, metadata } of oldArtifacts) {
           const expected = {
             dev: metadata.dev,
@@ -3514,7 +3688,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
           join(ownedBeforeParent, ".vgpu-native-publication.update.json"),
           ...[
             ...(afterSwap ? [] : ["resume", "completed"]),
-            "return",
+            ...(cleanupRefusal ? [] : ["return"]),
             "failure.json",
           ].map((name) => join(ownedBeforeEvidence, name)),
         ])
@@ -3589,7 +3763,14 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             "",
           ]);
           expect(ownedBeforeResult.stderr).not.toContain("Confirmation:");
-        } else
+        } else if (cleanupRefusal)
+          expect(
+            ownedBeforeResult.stderr,
+            JSON.stringify(ownedBeforeResult)
+          ).toBe(
+            `Native publication: published\nConfirmation: acknowledged\n[error] cleanup-failed: Metal publication published: Publication staging helper failed: cleanup-failed (errno ${osConstants.errno.ENOTEMPTY})\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n  ${ownedBeforeOutput}\n`
+          );
+        else
           expect(
             ownedBeforeResult.stderr,
             JSON.stringify(ownedBeforeResult)
