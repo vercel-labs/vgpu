@@ -67,7 +67,7 @@ effect(gpu, `
   }
 `).draw(colorTarget);
 
-const pixels = await colorTarget.read();          // RGBA bytes, row-major, no padding
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });          // RGBA bytes, row-major, no padding
 const png = new PNG({ width, height });
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));

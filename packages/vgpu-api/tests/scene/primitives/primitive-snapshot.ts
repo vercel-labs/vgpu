@@ -1,29 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import pixelmatch from "pixelmatch";
-import { PNG } from "pngjs";
+import { compareVisualSnapshot } from "../../../../../scripts/lib/visual-snapshot.mjs";
 import { expect } from "vitest";
-
-const WIDTH = 256;
-const HEIGHT = 256;
 const SNAPSHOT_DIR = "packages/vgpu-api/tests/scene/primitives/__snapshots__";
 
 export async function expectSnapshot(name: string, pngBytes: Uint8Array): Promise<void> {
-  const expectedPath = join(process.cwd(), SNAPSHOT_DIR, name);
-  if (process.env.VGPU_WRITE_SNAPSHOTS === "1") {
-    await mkdir(join(process.cwd(), SNAPSHOT_DIR), { recursive: true });
-    await writeFile(expectedPath, pngBytes);
-    return;
-  }
-  const expected = PNG.sync.read(await readFile(expectedPath));
-  const actual = PNG.sync.read(Buffer.from(pngBytes));
-  expect(actual.width).toBe(WIDTH);
-  expect(actual.height).toBe(HEIGHT);
-  expect(expected.width).toBe(WIDTH);
-  expect(expected.height).toBe(HEIGHT);
-  const mismatched = pixelmatch(actual.data, expected.data, null, WIDTH, HEIGHT, { threshold: 0 });
-  expect(mismatched).toBe(0);
+  await compareVisualSnapshot(SNAPSHOT_DIR, name, pngBytes, { onMismatch: (message: string) => expect.soft(false, message).toBe(true) });
 }
 
 export function assertAllDistinct(pngs: Record<string, Uint8Array>): void {

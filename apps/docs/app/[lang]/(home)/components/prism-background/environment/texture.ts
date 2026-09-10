@@ -35,6 +35,7 @@ export function createEnvironmentTexture(
   debug: boolean
 ): EnvironmentTexture {
   const texture = gpu.device.createTexture({
+    kind: "2d",
     size: [...ENVIRONMENT_SIZE],
     format: "rgba16float",
     mipLevelCount: ENVIRONMENT_LEVELS,

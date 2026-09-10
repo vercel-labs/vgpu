@@ -22,6 +22,7 @@ vgpu BundleOptions packages/vgpu-api/src/bundle.docs.md
 vgpu BundleRecorder packages/vgpu-api/src/bundle.docs.md
 vgpu Target packages/vgpu-api/src/target.docs.md
 vgpu TargetOptions packages/vgpu-api/src/target.docs.md
+vgpu texture packages/vgpu-api/src/texture.docs.md
 vgpu PingPongTargets packages/vgpu-api/src/target.docs.md
 vgpu PingPongStorage packages/vgpu-api/src/target.docs.md
 vgpu SharedUniforms packages/vgpu-api/src/uniforms.docs.md
@@ -45,6 +46,9 @@ vgpu/core Buffer packages/core/src/buffer.docs.md
 vgpu/core BufferOptions packages/core/src/buffer.docs.md
 vgpu/core Texture packages/core/src/texture.docs.md
 vgpu/core TextureOptions packages/core/src/texture.docs.md
+vgpu/core TextureReadOptions packages/core/src/texture.docs.md
+vgpu/core TextureShape packages/core/src/texture.docs.md
+vgpu/core TextureUsageName packages/core/src/texture.docs.md
 vgpu/core Queue packages/core/src/queue.docs.md
 vgpu/core VGPUError packages/core/src/vgpu-error.docs.md
 vgpu/core ValidationError packages/core/src/vgpu-error.docs.md

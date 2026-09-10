@@ -426,6 +426,7 @@ function createFrameTexture(
   sourceHeight: number
 ): Texture {
   return gpu.device.createTexture({
+    kind: "2d",
     size: [sourceWidth, sourceHeight],
     format: "rgba8unorm",
     usage: ["texture_binding", "copy_dst", "render_attachment"],

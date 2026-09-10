@@ -5,6 +5,7 @@ export const exampleSlugs = [
   'black-hole',
   'optimized-black-hole',
   'earth',
+  'atmosphere',
   'fluid',
   'instanced-rendering',
   'batch-rendering',
@@ -24,6 +25,7 @@ export const exampleSlugs = [
   'tsl-exports',
   'three-tsl',
   'particle-orbit',
+  'typegpu-liquid-glass',
   'adaptive-quality',
   'spiral-galaxy',
 ] as const;

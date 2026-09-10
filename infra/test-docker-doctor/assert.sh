@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mode=$1
-if [[ $mode == xvfb ]]; then Xvfb :99 -screen 0 640x480x24 >/tmp/xvfb.log 2>&1 & trap 'kill $!' EXIT; fi
+if [[ $mode == xvfb ]]; then
+  # This fixture deliberately tests the retained explicit OpenGL opt-in, not Linux defaults.
+  export VGPU_DAWN_FLAGS=backend=opengl
+  Xvfb :99 -screen 0 640x480x24 >/tmp/xvfb.log 2>&1 & trap 'kill $!' EXIT
+fi
 if [[ $mode == vulkan ]]; then
   unset DISPLAY WAYLAND_DISPLAY
   icd=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' | head -1)

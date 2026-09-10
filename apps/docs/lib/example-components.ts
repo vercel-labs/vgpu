@@ -14,6 +14,7 @@ export const exampleComponentLoaders = {
   'black-hole': () => import('../examples/black-hole/index'),
   'optimized-black-hole': () => import('../examples/optimized-black-hole/index'),
   earth: () => import('../examples/earth/index'),
+  atmosphere: () => import('../examples/atmosphere/index'),
   fluid: () => import('../examples/fluid/index'),
   'instanced-rendering': () => import('../examples/instanced-rendering/index'),
   'batch-rendering': () => import('../examples/batch-rendering/index'),
@@ -33,6 +34,7 @@ export const exampleComponentLoaders = {
   'tsl-exports': () => import('../examples/tsl-exports/index'),
   'three-tsl': () => import('../examples/three-tsl/index'),
   'particle-orbit': () => import('../examples/particle-orbit/index'),
+  'typegpu-liquid-glass': () => import('../examples/typegpu-liquid-glass/index'),
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
   'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;

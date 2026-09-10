@@ -10,7 +10,7 @@ test("by-example §8 separates fill and copy passes for ping-pong target identit
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §8 ping-pong alternates target identities", async () => {
   const { gpu, target } = await runPingPongExample();
   try {
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     expect(pixels[2]).toBeGreaterThan(100);
   } finally {
     gpu.dispose();

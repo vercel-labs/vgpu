@@ -10,7 +10,7 @@ test("by-example §2 uses explicit JS time/speed uniforms in a fragment-only ful
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §2 fullscreen effect renders explicit time", async () => {
   const { gpu, target } = await runFullscreenExample();
   try {
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     expect(pixels[4 * (4 * 8 + 4) + 2]).toBeGreaterThan(245);
   } finally {
     gpu.dispose();

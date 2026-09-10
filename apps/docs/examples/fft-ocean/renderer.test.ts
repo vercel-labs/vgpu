@@ -36,10 +36,9 @@ import {
 } from "./renderer";
 
 interface FakeTarget {
-  color: { destroy: ReturnType<typeof vi.fn> };
+  color: { destroy: ReturnType<typeof vi.fn>; read: ReturnType<typeof vi.fn> };
   format: GPUTextureFormat;
   label: string;
-  read: ReturnType<typeof vi.fn>;
   size: [number, number];
   texelSize: [number, number];
 }
@@ -86,7 +85,7 @@ function setupGpu(
       resize = callback;
       return unsubscribe;
     }),
-    read: vi.fn(async () => pixels),
+    color: { read: vi.fn(async () => pixels) },
     size: options.size ?? ([320, 180] as [number, number]),
   };
 
@@ -150,10 +149,9 @@ function setupGpu(
             descriptor.size[1],
           ];
           const value: FakeTarget = {
-            color: { destroy: vi.fn() },
+            color: { destroy: vi.fn(), read: vi.fn(async () => pixels) },
             format: descriptor.format,
             label: descriptor.label,
-            read: vi.fn(async () => pixels),
             size,
             texelSize: [1 / size[0], 1 / size[1]],
           };

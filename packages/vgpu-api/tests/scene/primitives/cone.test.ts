@@ -39,7 +39,7 @@ test("Mesh.cone validates params", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("cone primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("cone primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("cone", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.cone({ device, radius: 0.5, height: 1, radialSegments: 32 }), camera: primitiveCamera(angle), material, baseColor: [0.8, 0.45, 0.35] })); }
   finally { device.destroy(); }

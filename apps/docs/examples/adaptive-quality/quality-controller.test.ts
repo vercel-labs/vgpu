@@ -5,7 +5,7 @@ import { createQualityController, type TierResources } from './quality-controlle
 
 interface FakeTier extends TierResources {
   readonly tier: QualityTier;
-  readonly destroy: ReturnType<typeof vi.fn>;
+  readonly destroy: ReturnType<typeof vi.fn<() => void>>;
   resolvePrepare(): void;
   rejectPrepare(error: Error): void;
 }

@@ -71,7 +71,7 @@ const makeCleanupCases = (): readonly Case[] => {
 };
 
 for (const op of ["extrude", "bevel", "inset", "subdivide-edges", "subdivide-faces", "loop-cut", "bridge", "fill-hole", "grid-fill", "dissolve-vertices", "dissolve-edges", "dissolve-faces", "merge-by-distance", "heal-manifold", "recompute-normals"] as const) {
-  test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")(`${op} snapshot battery`, async () => {
+  test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)(`${op} snapshot battery`, async () => {
     const device = await createNodeAdapter().requestDevice();
     try {
       const c = [...makeCases(toEditable(Mesh.box({ device, size: 1 }))), ...makeConnectivityCases(), ...makeDissolveCases(), ...makeCleanupCases()].find((v) => v.name === op)!;

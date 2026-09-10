@@ -23,6 +23,7 @@ import {
   mainPolicyCheckExternalId,
   mainPolicyRunIdFromDetailsUrl,
   mainPolicyRunName,
+  mainPolicyWorkflowRunId,
   normalizeGraphqlPullRequest,
   parseMainPolicyCheckExternalId,
   releaseRunIdFromStatusTarget,
@@ -328,6 +329,21 @@ describe("CI workflow_run validation", () => {
           )
         ),
       "no completed, successful 'docs-app-build' job"
+    );
+  });
+
+  it("does not accept snapshot candidate generation instead of visual verification", () => {
+    const jobs = CI_REQUIRED_JOBS.map((name, id) => ({
+      id,
+      name: name === "visual-snapshots / Verify visual snapshots"
+        ? "visual-snapshots / Generate candidates (not approval)"
+        : name,
+      status: "completed",
+      conclusion: "success",
+    }));
+    expectPolicyError(
+      () => validateCiWorkflowJobs(jobs),
+      "no completed, successful 'visual-snapshots / Verify visual snapshots' job"
     );
   });
 
@@ -672,6 +688,16 @@ describe("web-only authorization", () => {
   });
 
   it("binds main-policy to its canonical workflow run and PR head", () => {
+    expect(
+      evaluateSite({
+        checkRuns: [
+          {
+            ...successfulMainPolicy,
+            details_url: `https://github.com/${repository}/runs/${successfulMainPolicy.id}`,
+          },
+        ],
+      })
+    ).toMatchObject({ kind: "site" });
     expectPolicyError(
       () =>
         evaluateSite({
@@ -683,7 +709,7 @@ describe("web-only authorization", () => {
             },
           ],
         }),
-      "exact GitHub Actions run URL"
+      "exact GitHub Actions workflow or check-run URL"
     );
     expectPolicyError(
       () =>
@@ -1128,6 +1154,37 @@ describe("status and release helpers", () => {
     expect(
       mainPolicyRunIdFromDetailsUrl(
         `https://github.com/${repository}/actions/runs/200/job/300`,
+        repository
+      )
+    ).toBeNull();
+  });
+
+  it("resolves GitHub's canonical check-run URL through the bound workflow metadata", () => {
+    expect(
+      mainPolicyWorkflowRunId(
+        {
+          ...successfulMainPolicy,
+          details_url: `https://github.com/${repository}/runs/${successfulMainPolicy.id}`,
+        },
+        repository
+      )
+    ).toBe("200");
+    expect(
+      mainPolicyWorkflowRunId(
+        {
+          ...successfulMainPolicy,
+          details_url: `https://github.com/${repository}/runs/999`,
+        },
+        repository
+      )
+    ).toBeNull();
+    expect(
+      mainPolicyWorkflowRunId(
+        {
+          ...successfulMainPolicy,
+          details_url: `https://github.com/${repository}/runs/${successfulMainPolicy.id}`,
+          external_id: "main-policy:invalid",
+        },
         repository
       )
     ).toBeNull();

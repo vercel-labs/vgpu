@@ -13,7 +13,7 @@ import { init } from "vgpu/mock";
 ## Signature
 
 ```ts
-import type { Bundle, BundleOptions, BundleRecorder, Clock, Compute, ComputeOptions, Draw, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FrameLoopOptions, Geometry, GeometryOptions, GeometryRecipe, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
+import type { Bundle, BundleOptions, BundleRecorder, Clock, Compute, ComputeOptions, Draw, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FrameLoopOptions, Geometry, GeometryOptions, GeometryRecipe, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Texture, TextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
 import type { Device } from "vgpu/core";
 import type { ShaderSource } from "vgpu";
 
@@ -32,6 +32,7 @@ declare function surface(gpu: Gpu, canvas: HTMLCanvasElement | OffscreenCanvas, 
 declare function effect(gpu: Gpu, source: string | ShaderSource, opts?: EffectOptions): Effect;
 declare function draw(gpu: Gpu, opts: DrawOptions): Draw;
 declare function target(gpu: Gpu, opts: TargetOptions): Target;
+declare function texture(gpu: Gpu, opts: TextureOptions): Texture;
 declare function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame;
 declare function frameLoop(gpu: Gpu, cb: (frame: Frame) => void, opts?: FrameLoopOptions): FrameLoopHandle;
 declare function sampler(gpu: Gpu, desc?: GPUSamplerDescriptor): GPUSampler;
@@ -59,6 +60,7 @@ declare function clock(gpu: Gpu): Clock;
 | effect.opts | `EffectOptions` | ✖ | `{}` | `label` defaults to `"effect"`; `set` defaults to no initial bindings. |
 | draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
+| texture.opts | `TextureOptions` | ✔ | — | Standalone sampled/storage texture. `size` and `format` are required; usage defaults to sampled, storage, and copy usage. |
 | frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits when the callback returns and cancels (submits nothing) when it throws; if omitted, caller must call `frame.submit()` or `frame.cancel()`. |
 | sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `sampler(gpu)` is the canonical default sampler. |
 | geometry.input | `GeometryOptions \\| GeometryRecipe` | ✔ | — | A raw buffer descriptor, or a `vgpu/scene` recipe such as `box()` or `plane()`. |

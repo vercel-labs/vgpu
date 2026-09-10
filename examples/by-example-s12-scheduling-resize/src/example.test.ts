@@ -10,7 +10,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §12 explicit resi
   const { gpu, target } = await runSchedulingResizeExample();
   try {
     expect(target.size).toEqual([8, 8]);
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     expect(pixels.length).toBe(8 * 8 * 4);
     expect(pixels[0]).toBeGreaterThanOrEqual(30);
     expect(pixels[0]).toBeLessThanOrEqual(34);
