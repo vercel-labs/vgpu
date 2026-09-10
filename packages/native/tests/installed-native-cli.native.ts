@@ -631,6 +631,167 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
     expect(await readdir(scratch)).toEqual([]);
     for (const [filename, before] of archiveEvidence)
       expect(await fileEvidence(join(archives, filename))).toEqual(before);
+
+    // One ordinary installed replacement in a separate project, without fault instrumentation.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(180_000);
+    const emptyCommands = boundedCommands(
+      Math.min(workflowDeadline, Date.now() + 60_000)
+    );
+    const originalProjectBeforeEmpty = await treeEvidence(project);
+    const originalOutputBeforeEmpty = await lstat(output, { bigint: true });
+    const emptyInput = await projectFixture();
+    unplacedProject = emptyInput.directory;
+    const emptyProject = join(fixture, "empty-project");
+    const emptyOutput = join(
+      emptyProject,
+      relative(emptyInput.directory, emptyInput.outputPath)
+    );
+    await rename(emptyInput.directory, emptyProject);
+    unplacedProject = undefined;
+    const emptyInputsBefore = [
+      await fileEvidence(join(emptyProject, "vgpu.native.json")),
+      await treeEvidence(join(emptyProject, "shaders")),
+    ];
+    expect(emptyInputsBefore).toEqual(inputBeforeBuild);
+    await mkdir(emptyOutput, { recursive: true, mode: 0o750 });
+    const emptyDirectory = await open(
+      emptyOutput,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+    );
+    try {
+      const oldEmpty = await emptyDirectory.stat({ bigint: true });
+      expect(oldEmpty.isDirectory()).toBe(true);
+      expect(await readdir(emptyOutput)).toEqual([]);
+      expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+      const emptyBuild = await emptyCommands.command(
+        process.execPath,
+        [
+          bin,
+          "native",
+          "build",
+          "--config",
+          "../empty-project/vgpu.native.json",
+        ],
+        runtime,
+        doctorEnvironment
+      );
+      console.info(
+        "Installed empty replacement actual result",
+        JSON.stringify(emptyBuild)
+      );
+      expect(emptyBuild.code, JSON.stringify(emptyBuild)).toBe(0);
+      expect(emptyBuild.signal).toBeNull();
+      expect(emptyBuild.stderr).toBe("");
+      const newEmptyOutput = await lstat(emptyOutput, { bigint: true });
+      expect(newEmptyOutput.isDirectory()).toBe(true);
+      expect(newEmptyOutput.dev).toBe(oldEmpty.dev);
+      expect(newEmptyOutput.ino).not.toBe(oldEmpty.ino);
+      // The original empty root remains pinned, ruling out reuse of its inode.
+      expect(await emptyDirectory.stat({ bigint: true })).toMatchObject({
+        dev: oldEmpty.dev,
+        ino: oldEmpty.ino,
+        mode: oldEmpty.mode,
+      });
+      for (const [directory, children] of [
+        ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
+        ["Sources", ["AppShaders"]],
+        ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
+        ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
+      ] as const) {
+        const path = join(emptyOutput, directory);
+        const metadata = await lstat(path, { bigint: true });
+        expect(metadata.isDirectory()).toBe(true);
+        expect(metadata.dev).toBe(newEmptyOutput.dev);
+        expect((await readdir(path)).sort()).toEqual(children);
+      }
+      const emptyManifest = [];
+      for (const { path } of payloadManifest) {
+        const filename = join(emptyOutput, path);
+        const metadata = await lstat(filename, { bigint: true });
+        expect(metadata.isFile()).toBe(true);
+        expect(metadata.dev).toBe(newEmptyOutput.dev);
+        expect(metadata.nlink).toBe(1n);
+        expect(metadata.size).toBeGreaterThan(0n);
+        const evidence = await fileEvidence(filename);
+        emptyManifest.push({ path, sha256: evidence.sha256 });
+      }
+      const emptyRecord = await boundedFaultFile(
+        join(emptyOutput, ".vgpu-native-output.json")
+      );
+      expect(emptyRecord.metadata.dev).toBe(newEmptyOutput.dev);
+      expect(isUtf8(emptyRecord.bytes)).toBe(true);
+      expect(JSON.parse(emptyRecord.bytes.toString("utf8"))).toEqual({
+        schemaVersion: 1,
+        format: "vgpu-metal-package/v1",
+        moduleName: "AppShaders",
+        ownerConfiguration: "../../vgpu.native.json",
+        inputFingerprint: fingerprint,
+        files: emptyManifest,
+      });
+      const emptyRecordHash = createHash("sha256")
+        .update(emptyRecord.bytes)
+        .digest("hex");
+      expect(emptyBuild.stdout).toBe(
+        `Native package: published\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${emptyRecordHash}\n`
+      );
+      const emptyGenerationBeforeVerify = await treeEvidence(emptyOutput);
+      const emptyVerify = await emptyCommands.command(
+        process.execPath,
+        [
+          bin,
+          "native",
+          "verify",
+          "--config",
+          "../empty-project/vgpu.native.json",
+        ],
+        runtime,
+        { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+      );
+      console.info(
+        "Installed empty replacement verify actual result",
+        JSON.stringify(emptyVerify)
+      );
+      expect(emptyVerify.code, JSON.stringify(emptyVerify)).toBe(0);
+      expect(emptyVerify.signal).toBeNull();
+      expect(emptyVerify.stderr).toBe("");
+      expect(emptyVerify.stdout).toBe(
+        `Native package: current\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\n`
+      );
+      expect(await treeEvidence(emptyOutput)).toEqual(
+        emptyGenerationBeforeVerify
+      );
+      expect(await lstat(emptyOutput, { bigint: true })).toMatchObject({
+        dev: newEmptyOutput.dev,
+        ino: newEmptyOutput.ino,
+        mode: newEmptyOutput.mode,
+      });
+      expect((await readdir(emptyProject)).sort()).toEqual([
+        "Generated",
+        "shaders",
+        "vgpu.native.json",
+      ]);
+      expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+      expect([
+        await fileEvidence(join(emptyProject, "vgpu.native.json")),
+        await treeEvidence(join(emptyProject, "shaders")),
+      ]).toEqual(emptyInputsBefore);
+      expect(await treeEvidence(project)).toEqual(originalProjectBeforeEmpty);
+      expect(await lstat(output, { bigint: true })).toMatchObject({
+        dev: originalOutputBeforeEmpty.dev,
+        ino: originalOutputBeforeEmpty.ino,
+        mode: originalOutputBeforeEmpty.mode,
+      });
+      expect(await readdir(scratch)).toEqual([]);
+      expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+      expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+      expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+      expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+      for (const [filename, before] of archiveEvidence)
+        expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    } finally {
+      await emptyDirectory.close();
+    }
+
     const outputParent = dirname(output);
     const retainedStage = join(outputParent, ".vgpu-native-stage");
     const retainedJournal = join(outputParent, ".vgpu-native-publication.json");

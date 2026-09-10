@@ -36,8 +36,10 @@ inspection respectively. These read-only modules do not write generated director
 
 `prepareMetalProject` compiles one captured project into the four coherent generated files without
 publishing them. The installed build connects this preparation to the private publisher and reports
-success only from its checked publication receipt. Local-tarball coverage exercises an initially
-absent destination and independently verifies the published file set, hashes and input fingerprint.
+success only from its checked publication receipt. Local-tarball coverage exercises initially
+absent and ordinary empty destinations and independently verifies each published file set, hashes
+and input fingerprint. The empty-directory case also verifies the resulting package as current;
+it does not establish installed replacement of an existing generated package.
 The private publisher currently stages and verifies those files under a physical
 parent lock, then publishes exclusively to a missing destination, atomically replaces an ordinary
 empty directory, or exchanges an intact package belonging to the same current configuration.

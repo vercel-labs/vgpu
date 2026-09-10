@@ -18,6 +18,9 @@ them together, then replaces the output directory as one operation.
 > Broader owned-replacement fault handling still needs coverage and implementation.
 > The local installed build companion publishes to an initially absent destination and checks the
 > resulting package in an offline local-tarball test with dependency install scripts disabled.
+> The same installed workflow replaces an ordinary empty directory in a separate project, checks
+> the new generation's own file hashes and record, and verifies it as current. This does not yet
+> qualify installed replacement of an existing generated package.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -142,6 +145,24 @@ Do not edit generated output or move its parent concurrently with the build. The
 do not guarantee safety against a process deliberately changing files between validation and
 replacement. Atomic namespace replacement also does not by itself promise persistence after
 power loss.
+
+### Repeat a build
+
+Use the same `vgpu native build` command for the first generation and later rebuilds. An ordinary
+empty output directory can receive the first package; it does not need an ownership record yet.
+A nonempty output must instead be an intact generated package owned by the selected configuration.
+Both a current package and an intact package made stale by shader changes can be rebuilt.
+
+A successful rebuild reports `Native package: published`. The new output contains only its new
+generation's files, even when the generated module name changed. Cleanup uses the old generation's
+recorded paths; it does not keep obsolete generated files or remove unrelated files from the parent.
+Run `vgpu native verify` with the same configuration to check that the resulting package is current.
+Verification does not establish whether a directory exchange occurred or clean recovery files.
+
+Modified generated files, additional handwritten files, or a different owning configuration prevent
+ordinary replacement. There is no force option that discards those conflicts. A retained transaction
+also prevents an ordinary retry: follow [Recover without guessing](#recover-without-guessing) before
+deciding what to do with that evidence.
 
 ## Interpret an interruption
 
