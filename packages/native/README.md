@@ -154,7 +154,10 @@ stage and raw recovery record. Ordinary installed verification of the old output
 A second owned invocation completes the actual exchange before losing its helper acknowledgment.
 Its one uninjected reconciliation reports published/reconciled with the original error and retained
 old stage, new output and unchanged journal; current verify leaves both complete generations intact.
-Installed unknown-outcome diagnostics and post-publication cleanup refusal remain unqualified.
+In another pre-exchange interruption test, the instrumentation changes one old payload byte
+in place before read-only reconciliation. The command reports unknown without confirmation and preserves
+the original helper error alongside the reconciliation failure, exact changed output, complete new
+stage and unchanged journal. Installed post-publication cleanup refusal remains unqualified.
 
 ## Checks
 

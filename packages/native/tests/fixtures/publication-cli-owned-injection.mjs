@@ -11,6 +11,7 @@ import {
   readSync,
   readdirSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -114,8 +115,13 @@ function install() {
     process.argv[5] !== configurationArgument
   )
     return;
-  assert.ok(boundary === "before-swap" || boundary === "after-swap");
+  assert.ok(
+    boundary === "before-swap" ||
+      boundary === "after-swap" ||
+      boundary === "before-swap-with-corrupt-old-payload"
+  );
   const afterSwap = boundary === "after-swap";
+  const corruptOldPayload = boundary === "before-swap-with-corrupt-old-payload";
   for (const path of [
     bin,
     configurationPath,
@@ -134,7 +140,11 @@ function install() {
   assert.equal(basename(configurationPath), "vgpu.native.json");
   assert.equal(
     basename(dirname(configurationPath)),
-    afterSwap ? "owned-after-swap-project" : "owned-before-swap-project"
+    afterSwap
+      ? "owned-after-swap-project"
+      : corruptOldPayload
+        ? "owned-corrupt-old-project"
+        : "owned-before-swap-project"
   );
   assert.equal(parentPath, join(dirname(configurationPath), "Generated"));
   assert.equal(dirname(evidence), dirname(scratch));
@@ -169,6 +179,9 @@ function install() {
   let pausedMarker;
   let pausedSHA256;
   let pauseElapsedMs;
+  let originalOldRoot;
+  let originalOldPayload;
+  let mutationAttempted = false;
   let killed = false;
   let watchdogFired = false;
   let failed = false;
@@ -250,6 +263,28 @@ function install() {
         });
       }
       assert.notDeepEqual(marker.source, marker.destination);
+      if (corruptOldPayload) {
+        assert.equal(resumed, false);
+        assert.equal(originalOldRoot, undefined);
+        assert.equal(originalOldPayload, undefined);
+        const root = lstatSync(join(parentPath, "AppShaders"), { bigint: true });
+        const payload = lstatSync(
+          join(parentPath, "AppShaders", "Package.swift"),
+          { bigint: true }
+        );
+        assert.ok(root.isDirectory());
+        assert.deepEqual(marker.destination, {
+          device: String(root.dev),
+          inode: String(root.ino),
+        });
+        assert.ok(payload.isFile() && payload.nlink === 1n);
+        assert.equal(payload.dev, root.dev);
+        assert.ok(
+          payload.size > 0n && payload.size <= BigInt(Number.MAX_SAFE_INTEGER)
+        );
+        originalOldRoot = metadata(root);
+        originalOldPayload = metadata(payload);
+      }
       if (!resumed) {
         absent(resume);
         absent(completed);
@@ -294,6 +329,55 @@ function install() {
       failSetup(error);
     }
   };
+  const mutateOldPayload = () => {
+    assert.ok(corruptOldPayload && originalOldRoot && originalOldPayload);
+    assert.equal(mutationAttempted, false, "Exactly one fixed payload mutation");
+    mutationAttempted = true;
+    const root = join(parentPath, "AppShaders");
+    const path = join(root, "Package.swift");
+    const validateNamed = () => {
+      const namedRoot = lstatSync(root, { bigint: true });
+      const namedPayload = lstatSync(path, { bigint: true });
+      assert.ok(namedRoot.isDirectory());
+      assert.ok(namedPayload.isFile() && namedPayload.nlink === 1n);
+      assert.deepEqual(metadata(namedRoot), originalOldRoot);
+      assert.deepEqual(metadata(namedPayload), originalOldPayload);
+    };
+    validateNamed();
+    const descriptor = openSync(
+      path,
+      constants.O_RDWR | constants.O_NONBLOCK | constants.O_NOFOLLOW
+    );
+    try {
+      const before = fstatSync(descriptor, { bigint: true });
+      assert.ok(before.isFile() && before.nlink === 1n);
+      assert.ok(
+        before.size > 0n && before.size <= BigInt(Number.MAX_SAFE_INTEGER)
+      );
+      assert.deepEqual(metadata(before), originalOldPayload);
+      validateNamed();
+      const byte = Buffer.alloc(1);
+      assert.equal(readSync(descriptor, byte, 0, 1, 0), 1);
+      const oldByte = byte[0];
+      const newByte = oldByte ^ 1;
+      assert.equal(writeSync(descriptor, Buffer.from([newByte]), 0, 1, 0), 1);
+      assert.equal(readSync(descriptor, byte, 0, 1, 0), 1);
+      assert.equal(byte[0], newByte, "Read back the actual positional byte write");
+      const after = fstatSync(descriptor, { bigint: true });
+      assert.deepEqual(metadata(after), metadata(before));
+      validateNamed();
+      return {
+        path: "Package.swift",
+        offset: 0,
+        oldByte,
+        newByte,
+        before: metadata(before),
+        after: metadata(after),
+      };
+    } finally {
+      closeSync(descriptor);
+    }
+  };
   const beforeReconciliation = () => {
     const journal = boundedFile(
       join(parentPath, ".vgpu-native-publication.json"),
@@ -336,7 +420,7 @@ function install() {
     return {
       journal: { ...journal.metadata, sha256: sha256(journal.bytes) },
       stage: tree(".vgpu-native-stage"),
-      ...(afterSwap ? { output: tree("AppShaders") } : {}),
+      ...(afterSwap || corruptOldPayload ? { output: tree("AppShaders") } : {}),
     };
   };
   // Save a function VALUE before updating Node's named ESM export.
@@ -459,6 +543,7 @@ function install() {
       assert.equal(reconciliation, undefined, "Exactly one genuine reconciler");
       assert.equal(executable, publisher.executable);
       assert.equal(args[4], publisher.args[4]);
+      const mutation = corruptOldPayload ? mutateOldPayload() : undefined;
       const before = beforeReconciliation();
       // The genuine read-only helper gets the ORIGINAL arguments, options and environment.
       const child = Reflect.apply(originalSpawn, this, arguments);
@@ -470,6 +555,7 @@ function install() {
         afterPublisherClose: publisherClose,
         injected: false,
         before,
+        ...(corruptOldPayload ? { mutation } : {}),
       };
       child.once("close", (code, signal) =>
         record("reconciliation-close", { pid: child.pid, code, signal })

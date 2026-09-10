@@ -35,6 +35,10 @@ them together, then replaces the output directory as one operation.
 > Its one read-only reconciliation reports `published` / `reconciled` while retaining the original
 > error, complete old package at staging, complete new output and unchanged recovery record.
 > Ordinary verification reports that new output as current without changing either generation.
+> In another pre-exchange interruption test, the instrumentation changes one old payload byte
+> in place before reconciliation. The installed command reports `unknown` without confirmation,
+> preserving the original helper failure and reconciliation-failure context, the exact changed output,
+> complete new stage and journal.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -42,8 +46,8 @@ them together, then replaces the output directory as one operation.
 > retains the original failure, and preserves the published package and journal. This instrumentation
 > does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
 > recognizes that same retained transaction, reports its original output and journal, and leaves the
-> evidence intact. Installed unknown-outcome diagnostics and post-publication cleanup refusal remain
-> unqualified; this is not a released end-to-end build workflow.
+> evidence intact. Installed post-publication cleanup refusal remains unqualified;
+> this is not a released end-to-end build workflow.
 
 ## Reserve the destination
 
@@ -249,6 +253,10 @@ into a successful build. The diagnostic preserves the original error and disting
 publication from an acknowledged commit. If the lock, identities, record, or contents cannot be
 verified, the outcome remains unknown. An already requested cancellation does not skip this
 bounded evidence check.
+
+If reconciliation itself fails, the command reports the original publication error alongside
+the reconciliation failure. The original failure remains visible. Failure to establish a checked
+outcome must not add a publication confirmation.
 
 When a failed invocation carries a checked publication receipt, its command report prints
 `Confirmation: acknowledged` or `Confirmation: reconciled` immediately after the publication

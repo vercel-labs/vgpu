@@ -833,7 +833,7 @@ async function runStaging<T>(
       } catch (reconciliationFailure) {
         operationFailure = new MetalPublicationStagingError(
           operationFailure.code,
-          "Publication failed; read-only reconciliation also failed",
+          `Publication failed: ${operationFailure.message}; read-only reconciliation also failed`,
           {
             cause: new AggregateError(
               [operationFailure, reconciliationFailure],

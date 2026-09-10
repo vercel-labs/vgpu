@@ -2850,13 +2850,21 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         size: bigint;
       };
     }[] = [];
-    for (const boundary of ["before-swap", "after-swap"] as const) {
+    for (const boundary of [
+      "before-swap",
+      "after-swap",
+      "before-swap-with-corrupt-old-payload",
+    ] as const) {
       const afterSwap = boundary === "after-swap";
+      const corruptOld = boundary === "before-swap-with-corrupt-old-payload";
       expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
       const ownedBeforeInput = await projectFixture();
       unplacedProject = ownedBeforeInput.directory;
-      const ownedBeforeProject = join(fixture, `owned-${boundary}-project`);
-      const ownedConfigurationArgument = `../owned-${boundary}-project/vgpu.native.json`;
+      const ownedProjectName = corruptOld
+        ? "owned-corrupt-old-project"
+        : `owned-${boundary}-project`;
+      const ownedBeforeProject = join(fixture, ownedProjectName);
+      const ownedConfigurationArgument = `../${ownedProjectName}/vgpu.native.json`;
       const ownedBeforeOutput = join(
         ownedBeforeProject,
         relative(ownedBeforeInput.directory, ownedBeforeInput.outputPath)
@@ -2884,7 +2892,11 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       });
       const ownedBeforeEvidence = join(
         fixture,
-        afterSwap ? "publication-owned-after" : "publication-owned-before"
+        corruptOld
+          ? "publication-owned-corrupt-old"
+          : afterSwap
+          ? "publication-owned-after"
+          : "publication-owned-before"
       );
       await mkdir(ownedBeforeEvidence);
       const ownedBeforePreload = new URL(
@@ -3043,6 +3055,43 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             return { path, metadata: { dev, ino, mode, nlink, size } };
           })
         );
+        const originalPackage = oldArtifacts.find(
+          ({ path }) => path === "Package.swift"
+        )!;
+        const originalPackageIdentity = {
+          device: originalPackage.metadata.dev.toString(),
+          inode: originalPackage.metadata.ino.toString(),
+          mode: originalPackage.metadata.mode.toString(),
+          nlink: originalPackage.metadata.nlink.toString(),
+          size: originalPackage.metadata.size.toString(),
+        };
+        const expectedPackage = Buffer.from(originalPackage.bytes);
+        let expectedOldTree = ownedBeforeOldTree;
+        if (corruptOld) {
+          expect(expectedPackage.length).toBeGreaterThan(0);
+          expectedPackage[0] = expectedPackage[0]! ^ 1;
+          expect(
+            createHash("sha256").update(expectedPackage).digest("hex")
+          ).not.toBe(originalPackage.sha256);
+          if (!Array.isArray(ownedBeforeOldTree))
+            throw new Error("Expected original package tree evidence");
+          expectedOldTree = ownedBeforeOldTree.map((entry) => {
+            if (!Array.isArray(entry) || entry.length !== 2)
+              throw new Error("Expected original package entry evidence");
+            return entry[0] === "Package.swift"
+              ? [
+                  "Package.swift",
+                  {
+                    mode: Number(originalPackage.metadata.mode),
+                    bytes: expectedPackage.length,
+                    sha256: createHash("sha256")
+                      .update(expectedPackage)
+                      .digest("hex"),
+                  },
+                ]
+              : entry;
+          });
+        }
         const ownedBeforeResult = await ownedBeforeCommands.command(
           process.execPath,
           [
@@ -3220,16 +3269,28 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
           afterPublisherClose: publisherClose,
           injected: false,
           before: expect.any(Object),
+          ...(corruptOld
+            ? {
+                mutation: {
+                  path: "Package.swift",
+                  offset: 0,
+                  oldByte: originalPackage.bytes[0],
+                  newByte: expectedPackage[0],
+                  before: originalPackageIdentity,
+                  after: originalPackageIdentity,
+                },
+              }
+            : {}),
         });
         expect(reconciliation.pid).not.toBe(publisher.pid);
         expect(sidecars.get("reconciliation-close")).toEqual({
           pid: reconciliation.pid,
-          code: 0,
+          code: corruptOld ? 1 : 0,
           signal: null,
         });
         expect(Object.keys(reconciliation.before).sort()).toEqual([
           "journal",
-          ...(afterSwap ? ["output"] : []),
+          ...(afterSwap || corruptOld ? ["output"] : []),
           "stage",
         ]);
         const journal = await boundedFaultFile(ownedBeforeJournal);
@@ -3311,7 +3372,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         const retainedStageIdentities = [];
         for (const observedTree of [
           { root: ownedBeforeStage, entries: reconciliation.before.stage },
-          ...(afterSwap
+          ...(afterSwap || corruptOld
             ? [
                 {
                   root: ownedBeforeOutput,
@@ -3355,29 +3416,32 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         }
         const retainedBeforeVerify = await treeEvidence(ownedBeforeParent);
         const evidenceBeforeVerify = await treeEvidence(ownedBeforeEvidence);
-        const ownedBeforeVerify = await ownedBeforeCommands.command(
-          process.execPath,
-          [bin, "native", "verify", "--config", ownedConfigurationArgument],
-          runtime,
-          {
-            ...doctorEnvironment,
-            DEVELOPER_DIR: missingDeveloper,
-            TMPDIR: missingVerifyTemp,
-          }
-        );
-        console.info(
-          `Installed owned ${boundary} current verify actual result`,
-          JSON.stringify(ownedBeforeVerify)
-        );
-        expect(ownedBeforeVerify.code, JSON.stringify(ownedBeforeVerify)).toBe(
-          0
-        );
-        expect(ownedBeforeVerify.signal).toBeNull();
-        expect(ownedBeforeVerify.stderr).toBe("");
-        expect(ownedBeforeVerify.stdout).toBe(
-          `Native package: current\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\n`
-        );
-        expect(await treeEvidence(oldRootPath)).toEqual(ownedBeforeOldTree);
+        if (!corruptOld) {
+          const ownedBeforeVerify = await ownedBeforeCommands.command(
+            process.execPath,
+            [bin, "native", "verify", "--config", ownedConfigurationArgument],
+            runtime,
+            {
+              ...doctorEnvironment,
+              DEVELOPER_DIR: missingDeveloper,
+              TMPDIR: missingVerifyTemp,
+            }
+          );
+          console.info(
+            `Installed owned ${boundary} current verify actual result`,
+            JSON.stringify(ownedBeforeVerify)
+          );
+          expect(
+            ownedBeforeVerify.code,
+            JSON.stringify(ownedBeforeVerify)
+          ).toBe(0);
+          expect(ownedBeforeVerify.signal).toBeNull();
+          expect(ownedBeforeVerify.stderr).toBe("");
+          expect(ownedBeforeVerify.stdout).toBe(
+            `Native package: current\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\n`
+          );
+        }
+        expect(await treeEvidence(oldRootPath)).toEqual(expectedOldTree);
         expect(await ownedBeforeDirectory.stat({ bigint: true })).toMatchObject(
           {
             dev: oldRoot.dev,
@@ -3414,7 +3478,13 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
             if (bytesRead === 0) break;
             length += bytesRead;
           }
-          expect(retained.subarray(0, length)).toEqual(bytes);
+          const expectedBytes =
+            corruptOld && path === "Package.swift" ? expectedPackage : bytes;
+          expect(retained.subarray(0, length)).toEqual(expectedBytes);
+          if (corruptOld)
+            expect(await readFile(join(oldRootPath, path))).toEqual(
+              expectedBytes
+            );
         }
         expect(await treeEvidence(ownedBeforeParent)).toEqual(
           retainedBeforeVerify
@@ -3502,14 +3572,32 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         );
         expect(ownedBeforeResult.signal).toBeNull();
         expect(ownedBeforeResult.stdout).toBe("");
-        expect(
-          ownedBeforeResult.stderr,
-          JSON.stringify(ownedBeforeResult)
-        ).toBe(
-          afterSwap
-            ? `Native publication: published\nConfirmation: reconciled\n[error] helper-failed: Metal publication published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n  ${ownedBeforeOutput}\n`
-            : `Native publication: not-published\n[error] helper-failed: Metal publication not-published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n`
-        );
+        if (corruptOld) {
+          const lines = ownedBeforeResult.stderr.split("\n");
+          expect(lines[0], JSON.stringify(ownedBeforeResult)).toBe(
+            "Native publication: unknown"
+          );
+          expect(lines[1]).toMatch(
+            /^\[error\] helper-failed: Metal publication unknown: [^\r\n]+$/u
+          );
+          expect(lines[1]).toContain("read-only reconciliation also failed");
+          expect(lines.slice(2)).toEqual([
+            "Inspect retained paths (not cleanup authority):",
+            `  ${ownedBeforeStage}`,
+            `  ${ownedBeforeJournal}`,
+            `  ${ownedBeforeOutput}`,
+            "",
+          ]);
+          expect(ownedBeforeResult.stderr).not.toContain("Confirmation:");
+        } else
+          expect(
+            ownedBeforeResult.stderr,
+            JSON.stringify(ownedBeforeResult)
+          ).toBe(
+            afterSwap
+              ? `Native publication: published\nConfirmation: reconciled\n[error] helper-failed: Metal publication published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n  ${ownedBeforeOutput}\n`
+              : `Native publication: not-published\n[error] helper-failed: Metal publication not-published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n`
+          );
         for (const path of [ownedBeforeProject, ownedBeforeEvidence])
           retainedOwnedTrees.push({ path, tree: await treeEvidence(path) });
         const ownedRetainedPaths = [ownedBeforeProject, ownedBeforeEvidence];
@@ -3526,6 +3614,11 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
               ...(await readdir(path)).sort().map((name) => join(path, name))
             );
         }
+        if (corruptOld)
+          expect(
+            ownedBeforeResult.stderr,
+            JSON.stringify(ownedBeforeResult)
+          ).toContain("Invalid publication staging helper response");
       } finally {
         const closed = await Promise.allSettled([
           ownedBeforeDirectory.close(),
