@@ -135,6 +135,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify collected migration documentation
+        run: pnpm migrations:check --release
+
       - name: Build all packages
         run: pnpm build
 

@@ -15,6 +15,40 @@ pnpm changeset
 
 Choose each affected `@vgpu/*` package, select the appropriate semver bump (`patch`, `minor`, or `major`), and write a short summary. That summary becomes the changelog entry for the release.
 
+Every PR description must contain exactly one `## Release impact` section. Use either
+`none — <specific justification>` or `changeset — .changeset/<id>.md` (comma-separated for multiple
+new files). Tests, CI, docs-only changes, release preparation and behavior-preserving internal
+refactors do not need a changeset. Stable promotions and branch synchronization may also use `none`
+when their changes were already accounted for in the original PRs. Changes affecting published behavior do. Review the declaration
+against the diff: automation cannot prove that a change has no consumer impact.
+
+Every changeset must use this body structure after its normal package/bump frontmatter:
+
+```md
+## Summary
+
+Describe the observable change for the changelog.
+
+## Migration
+
+None: explain specifically why existing consumers need no adaptation.
+```
+
+If adaptation is required, replace the `None:` line with `### Affected usage`, `### Steps`, and
+`### Verification`. Identify applicable source versions or API usage, include before/after examples
+under level-four headings where useful, and explain how to validate the result. Migration can involve
+deployment requirements or defaults, not only removed APIs. Do not infer it from the semver bump.
+Historical or partial code samples may use a `ts illustrative` fence; complete current-API examples
+use `ts` and participate in `pnpm docs:verify-snippets`.
+
+Run `pnpm migrations:check` before opening the PR. The `release-impact` check validates the PR
+description and new changesets, including on description edits. It executes trusted policy code
+and reads candidate Git blobs as data, never running candidate code with write permissions.
+When first deploying this workflow, merge it to `canary` and configure `release-impact` as a required
+check on both `canary` and `main`; configure `release-migrations` as required on `canary` too.
+Existing open PRs need the declaration and an edit/synchronize event after rollout. Branch protection
+is a separate GitHub setting; adding workflow YAML alone does not make a check merge-blocking.
+
 ## Visual tests
 
 Run `pnpm test` locally. Exact image comparisons use one pinned native Linux x64 Vulkan environment
@@ -75,6 +109,8 @@ Run `pnpm build` first, since budgets are measured from `dist`.
 
 - [ ] Normal work targets `canary`; only `site/*` and `promote/vX.Y.Z` target `main`.
 - [ ] Code changes to a published package include a `.changeset/*.md` file.
+- [ ] The PR declares release impact; changesets declare a migration or a justified `None`.
+- [ ] `pnpm migrations:check` passes.
 - [ ] Docs-only and CI-only PRs may skip a changeset.
 - [ ] `pnpm typecheck` passes locally.
 - [ ] `pnpm test:fast` passes locally.
@@ -122,15 +158,26 @@ versions before committing; do not publish an unexpected major or hand-edit gene
 ```bash
 pnpm changeset status   # what will be bumped, and why
 pnpm changeset pre enter rc
-pnpm changeset version  # applies the bumps, writes CHANGELOGs, consumes .changeset/*.md
-pnpm install            # refresh the lockfile with the new internal versions
+pnpm release:version    # versions, migration collection, lockfile and CLI/web docs
 ```
 
 Commit `.changeset/pre.json` along with the generated versions and changelogs. Review the
 diff—the changelog text is the public release note—then open a PR such as
 `chore(release): 0.5.0-rc.0` targeting `canary`. For later candidates in the same cycle,
-leave prerelease mode active and run `pnpm changeset version` again after new changesets land;
+leave prerelease mode active and run `pnpm release:version` again after new changesets land;
 Changesets increments the `-rc.N` suffix.
+
+`release:version` reads the Changesets plan and captures fragments before versioning can consume
+them. Summary sections become changelogs with immutable release-tag links to required migrations; Migration sections become
+`docs/migrations/<stable-destination>.docs.md`, served by the website and bundled with the local
+CLI/MCP. For example: `pnpm exec vgpu docs cat /migrations/0.5.0.docs.md`.
+Source snapshots are archived under `docs/migrations/records/`; they are generated release metadata,
+not a second authoring location. Within an RC cycle, collection upserts by changeset ID instead of
+appending duplicates. Review the complete guide for overlapping or contradictory instructions.
+Use `pnpm migrations:sync <exact-release-version>` only to regenerate an already-prepared guide;
+it does not version packages or publish anything. Commit its record, guide and regenerated web docs.
+The release workflow runs `pnpm migrations:check --release` and rejects missing, stale or wrong-version
+collections. Do not call `changeset version` directly or hand-edit generated guides/records.
 
 Private packages (`@vgpu/cli`, the docs app) are versioned so they get changelog entries,
 but they are never published. `@vgpu/cli` ships _inside_ the `vgpu` tarball: `copy-cli.mjs`
@@ -155,8 +202,7 @@ and exit prerelease mode:
 
 ```bash
 pnpm changeset pre exit
-pnpm changeset version
-pnpm install
+pnpm release:version
 ```
 
 The resulting package versions must be the stable `X.Y.Z` with no suffix. Merge that release

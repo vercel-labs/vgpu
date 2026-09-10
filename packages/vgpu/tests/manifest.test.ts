@@ -11,6 +11,16 @@ const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
 
+test("versioned migrations are discoverable from the shared CLI/MCP corpus and website", () => {
+  const record = docsManifest.records.find(record => record.virtualPath === "/migrations/0.5.0.docs.md");
+  expect(record).toMatchObject({ package: "migrations", kind: "guide", symbol: "migration-0.5.0", websitePath: "/migrations/0.5.0" });
+  expect(record?.content).toContain("### Affected usage");
+  expect(record?.content).toContain("Linux Vulkan Default");
+  const index = buildIndex(docsManifest);
+  expect(resolveDocsTarget(index, "/migrations/0.5.0.docs.md")).toBeTruthy();
+  expect(readFileSync(resolve(root, "apps/docs/content/docs/migrations/0.5.0.md"), "utf8")).toContain("### Verification");
+});
+
 test("the public texture reference ships on the website and in curated navigation", () => {
   expect(docsManifest.records.find((record) => record.package === "vgpu" && record.symbol === "texture"))
     .toMatchObject({ repoPath: "packages/vgpu-api/src/texture.docs.md", virtualPath: "/vgpu/texture.docs.md", topic: "texture" });

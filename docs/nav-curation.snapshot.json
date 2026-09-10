@@ -152,6 +152,8 @@
       "  Performance",
       "  Testing",
       "  ...",
+      "Migrations @ /migrations",
+      "  ...",
       "Examples @ /examples",
       "  ...",
       "CLI @ /cli",

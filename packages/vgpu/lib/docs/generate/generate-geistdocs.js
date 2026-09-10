@@ -434,6 +434,12 @@ export function buildMetaFiles(nav, pages) {
   }
 
   // -- reference: packageOrder, then topicOrder per package ------------------
+  const migrationPages = pages.filter(page => page.segments[0] === "migrations").map(page => page.segments[1] ?? "index");
+  if (migrationPages.length) {
+    migrationPages.sort((a, b) => a === "index" ? -1 : b === "index" ? 1 : b.localeCompare(a, "en", { numeric: true }));
+    files.set("migrations/meta.json", serializeJson({ title: "Migrations", pages: migrationPages }));
+  }
+
   const referenceSection = findSection(nav, "API Reference");
   const packageOrder = nav.packageOrder ?? [];
   const referencePages = packageOrder.map((entry) => (isCatchAll(entry) ? "..." : slugifyPackage(entry)));
