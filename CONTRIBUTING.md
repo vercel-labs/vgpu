@@ -112,6 +112,13 @@ keep independent lineages outside that group.
 For the first release candidate in a cycle, create a release branch from an up-to-date
 `canary` and enter Changesets prerelease mode:
 
+Before versioning, make sure internal peer ranges explicitly accept the intended RC line.
+Stable ranges such as `>=0.1.6 <1.0.0` exclude prereleases; Changesets can interpret the
+out-of-range peer as a major bump and propagate it to the entire fixed group. Preserve the
+stable range and add the specific RC line (for example, `>=0.1.6 <1.0.0 || ^0.5.0-rc.0`)
+in `packages/wgsl/package.json` and `packages/vgpu/package.json`. Review the generated
+versions before committing; do not publish an unexpected major or hand-edit generated versions.
+
 ```bash
 pnpm changeset status   # what will be bumped, and why
 pnpm changeset pre enter rc

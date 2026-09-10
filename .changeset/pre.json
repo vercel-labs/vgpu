@@ -1,0 +1,21 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@vgpu/agent-evals": "0.0.0",
+    "docs": "0.1.7",
+    "@vgpu/factory": "0.0.0",
+    "@vgpu/adapter-mock": "0.4.1",
+    "@vgpu/adapter-node": "0.4.1",
+    "@vgpu/core": "0.4.1",
+    "@vgpu/render": "0.4.1",
+    "@vgpu/cli": "0.2.2",
+    "vgpu": "0.4.1",
+    "@vgpu/wgsl": "0.4.1",
+    "@vgpu/wgsl-std": "0.4.1"
+  },
+  "changesets": [
+    "explicit-texture-contract",
+    "linux-vulkan-default"
+  ]
+}
