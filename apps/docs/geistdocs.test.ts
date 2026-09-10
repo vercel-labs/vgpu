@@ -69,7 +69,9 @@ describe("agent readiness metadata", () => {
     expect(agents).toContain("[MCP reference](/docs/mcp)");
     expect(agents).toContain("small, version-independent router");
     expect(agents).toContain("restores or invokes that exact selection");
-    expect(agents).toContain("neither the project nor the user has selected a version");
+    expect(agents).toContain(
+      "neither the project nor the user has selected a version"
+    );
     expect(agents.indexOf("## Point your agent at the docs")).toBeLessThan(
       agents.indexOf("## Install the skill")
     );
@@ -225,7 +227,10 @@ describe("agent readiness metadata", () => {
         { path: "native/index.md" },
         { path: "native/linux/index.md" },
         { path: "native/linux/programs.md" },
-      ]
+      ].map(({ path }) => ({
+        path,
+        segments: path.replace(/(?:\/index)?\.md$/u, "").split("/"),
+      }))
     );
 
     expect(JSON.parse(files.get("native/meta.json")!)).toEqual({
@@ -299,7 +304,10 @@ describe("agent readiness metadata", () => {
         { path: "native/macos/metal/functions.md" },
         { path: "native/macos/metal/bindings.md" },
         { path: "native/macos/metal/build/setup.md" },
-      ]
+      ].map(({ path }) => ({
+        path,
+        segments: path.replace(/(?:\/index)?\.md$/u, "").split("/"),
+      }))
     );
 
     expect(JSON.parse(files.get("native/macos/meta.json")!)).toEqual({
