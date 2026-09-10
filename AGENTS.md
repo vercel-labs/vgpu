@@ -2,6 +2,20 @@
 
 Normal development targets `canary`. Read CONTRIBUTING.md before preparing a PR or release.
 
+## Every PR declares its type
+
+Include exactly one `## PR type` section with exactly `development` or `release`, never a default
+or inference from the title/branch. `release` prepares a new RC/stable package version on `canary`;
+all other work uses `development`, including promotions to `main` (governed by main-policy) and
+synchronization of versions already accounted for on the target branch. This is independent of impact:
+a release-preparation PR normally declares impact `none`.
+
+The trusted `release-impact` check validates this decision on commits AND description edits. New public
+package version changes on `canary` cannot be labeled `development`. A `release` PR must advance the
+current canary version, have coherent public package versions, include a substantive `## Migration review`
+section and pass the same strict migration readiness check used at publication. Finalize the guide
+before opening the release PR; do not wait for publishing CI to discover an unfinished review.
+
 ## Every PR declares release impact
 
 Include exactly one `## Release impact` section in the PR description:

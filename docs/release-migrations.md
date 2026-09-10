@@ -67,10 +67,15 @@ subtracting changesets. The same reasoning applies to partial reversals and mult
    release readiness. A changed target or input invalidates the review; guide edits need a new
    attestation. Even an unchanged guide must be reviewed again for a new RC or stable target.
 4. Run `pnpm check:skill-drift` and the normal release validations. Review the entire generated diff.
-5. In the release PR, include a `## Migration review` section with the exact target, source stable/RC
+5. In the release PR, explicitly declare `## PR type` as `release` (independent of its normally `none`
+   release impact). Include a `## Migration review` section with the exact target, source stable/RC
    versions considered, a compact **per-changeset coverage** list from your notes, resolution of
    overlaps/reversals, and verification results/limitations. Link the consolidated guide. Do not paste
    a generic "reviewed" checkbox instead of this evidence.
+
+The trusted PR check validates public package version coherence and the same strict migration readiness
+rules as publication, including after description edits. An unfinished review blocks release preparation
+before merge once that check is required; do not postpone finalization until the publish workflow.
 
 CI checks structure and freshness, not whether you read, understood or correctly synthesized the
 inputs. Treat finalization and the release PR review as substantive editorial responsibilities.

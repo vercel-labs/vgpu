@@ -2,6 +2,15 @@
 
 Describe the change and why it is needed.
 
+## PR type
+
+<!-- Replace with exactly development or release; there is no default.
+release = preparation of a new RC/stable package version, targeting canary.
+development = other work, including promotion to main or synchronization already accounted for.
+Type is independent of release impact. Release PRs require the Migration review section below.
+-->
+<choose PR type>
+
 ## Release impact
 
 <!-- Replace the placeholder with exactly one declaration:

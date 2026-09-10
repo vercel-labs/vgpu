@@ -51,7 +51,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-      - name: Validate description and changeset blobs without executing PR code
+      # Includes strict migration readiness for release PRs, including description-only edits.
+      # The trusted evaluator materializes allowlisted data blobs, never candidate scripts.
+      - name: Validate PR type, release impact and release readiness without executing PR code
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .release-impact/trusted/scripts/check-release-impact.mjs .release-impact/candidate

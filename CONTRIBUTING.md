@@ -7,6 +7,20 @@
 
 ## Making changes
 
+Every PR description must contain exactly one `## PR type` section with exactly `development` or
+`release` (no default). Use `release` only to prepare a new RC/stable package version on `canary`.
+Use `development` for other work, including stable promotions to `main` and branch synchronization
+whose versions are already accounted for on the target. Titles and branch names do not determine type.
+
+Type is independent of `Release impact`: a release-preparation PR normally has impact `none` because
+its changes were accounted for in earlier PRs. The trusted `release-impact` check rejects new public
+package version changes labeled `development` on `canary`. Release PRs must advance the current
+canary version, have coherent public package versions, contain a substantive `## Migration review`
+section and pass the same `migrations:check --release` validation used at publication. These checks
+run before merge and rerun on description edits, without executing candidate code with write access.
+Private tooling version changes or new package creation alone do not constitute release preparation.
+Promotions to `main` remain subject to their separate main-policy, not the new-version preparation gate.
+
 If your PR changes published package behavior, add a changeset before opening it:
 
 ```bash
@@ -46,7 +60,7 @@ description and new changesets, including on description edits. It executes trus
 and reads candidate Git blobs as data, never running candidate code with write permissions.
 When first deploying this workflow, merge it to `canary` and configure `release-impact` as a required
 check on both `canary` and `main`; configure `release-migrations` as required on `canary` too.
-Existing open PRs need the declaration and an edit/synchronize event after rollout. Branch protection
+Existing open PRs need both type and impact declarations and an edit/synchronize event after rollout. Branch protection
 is a separate GitHub setting; adding workflow YAML alone does not make a check merge-blocking.
 
 ## Visual tests
@@ -108,6 +122,7 @@ Run `pnpm build` first, since budgets are measured from `dist`.
 ## PR checklist
 
 - [ ] Normal work targets `canary`; only `site/*` and `promote/vX.Y.Z` target `main`.
+- [ ] The PR explicitly declares `development` or `release`; release preparation passes the strict readiness checks before merge.
 - [ ] Code changes to a published package include a `.changeset/*.md` file.
 - [ ] The PR declares release impact; changesets declare a migration or a justified `None`.
 - [ ] `pnpm migrations:check` passes.
@@ -165,7 +180,9 @@ pnpm release:finalize   # only after editorial review; attest and generate CLI/w
 
 Commit `.changeset/pre.json` along with the generated versions and changelogs. Review the
 diff—the changelog text is the public release note—then open a PR such as
-`chore(release): 0.5.0-rc.0` targeting `canary`. For later candidates in the same cycle,
+`chore(release): 0.5.0-rc.0` targeting `canary`, explicitly declaring `## PR type` as `release`.
+Its trusted PR check validates finalized migrations and package versions before merge.
+For later candidates in the same cycle,
 leave prerelease mode active and run `pnpm release:version` again after new changesets land;
 Changesets increments the `-rc.N` suffix.
 

@@ -66,14 +66,30 @@ export function parseChangeset(text, id) {
   return { id, packages, ...parseNotes(match[2]) };
 }
 
-export function parseImpact(body) {
+export function prSection(body, title) {
   body = (body ?? "").replace(/<!--[\s\S]*?-->/gu, "");
-  const sections = headings(body ?? "", 2);
-  const matches = sections.filter(section => section.title === "Release impact");
-  if (matches.length !== 1) throw new Error("PR description requires exactly one ## Release impact section.");
+  const sections = headings(body, 2);
+  const matches = sections.filter(section => section.title === title);
+  if (matches.length !== 1) throw new Error(`PR description requires exactly one ## ${title} section.`);
   const section = matches[0];
   const next = sections.find(item => item.start > section.start);
-  const declaration = body.slice(section.end, next?.start).trim();
+  return body.slice(section.end, next?.start).trim();
+}
+
+export function parsePrType(body) {
+  const type = prSection(body, "PR type");
+  if (type !== "development" && type !== "release") throw new Error("PR type must be exactly development or release (no default).");
+  return type;
+}
+
+export function validateMigrationReview(body) {
+  const review = prSection(body, "Migration review");
+  meaningful(review, "Migration review");
+  if (review.length < 40) throw new Error("Migration review must describe origins, changeset coverage and verification, not just a reviewed checkbox.");
+}
+
+export function parseImpact(body) {
+  const declaration = prSection(body, "Release impact");
   const none = declaration.match(/^none\s+[—–-]\s+([^\n]+)$/u);
   if (none) {
     meaningful(none[1], "Release impact reason");
