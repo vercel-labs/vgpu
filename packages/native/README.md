@@ -147,8 +147,11 @@ stage and journal, and no output. The instrumented process sends no commit reque
 the existing projects and recovery evidence. A second invocation receives real SIGTERM at the
 successful finalization-write completion, after its acknowledgment was checked. It exits 143 with
 published/acknowledged cancellation, completes cleanup without retained paths and leaves output
-that ordinary installed verification reports as current. Broader installed owned-exchange recovery
-and unknown-outcome diagnostics remain unqualified.
+that ordinary installed verification reports as current. An owned replacement also loses its actual
+helper after the commit request but before exchange. One uninjected read-only reconciliation proves
+non-publication without a receipt, preserving the original error, complete old output, complete new
+stage and raw recovery record. Ordinary installed verification of the old output remains current.
+Installed recovery after successful owned exchange and unknown-outcome diagnostics remain unqualified.
 
 ## Checks
 

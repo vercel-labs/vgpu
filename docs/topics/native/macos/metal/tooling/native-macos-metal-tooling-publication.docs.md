@@ -31,6 +31,10 @@ them together, then replaces the output directory as one operation.
 > A second instrumented invocation receives a real SIGTERM after its publication acknowledgment has
 > been checked. It exits `143` with `published` / `acknowledged`, completes cleanup without retained
 > paths, and leaves a package that ordinary installed verification reports as current.
+> An owned-replacement invocation also loses its real helper after the commit request but before
+> the directory exchange. One uninjected read-only reconciliation establishes `not-published`
+> without confirmation. The failed command preserves its original error, complete old output,
+> complete new staging package and original recovery record; ordinary verification remains current.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -38,7 +42,7 @@ them together, then replaces the output directory as one operation.
 > retains the original failure, and preserves the published package and journal. This instrumentation
 > does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
 > recognizes that same retained transaction, reports its original output and journal, and leaves the
-> evidence intact. Broader installed owned-exchange recovery and unknown-outcome diagnostics remain
+> evidence intact. Installed recovery after a successful owned exchange and unknown-outcome diagnostics remain
 > unqualified; this is not a released end-to-end build workflow.
 
 ## Reserve the destination
