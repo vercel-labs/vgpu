@@ -63,6 +63,13 @@ preparation. Future guides and regular API/topic documentation remain checked.
 Run `pnpm migrations:check` before opening the PR. The `release-impact` check validates the PR
 description and new changesets, including on description edits. It executes trusted policy code
 and reads candidate Git blobs as data, never running candidate code with write permissions.
+
+The required `release-impact` check is the Actions job itself. Do not replace it with a check
+created through the Checks API using `GITHUB_TOKEN`: after multiple executions on the same commit,
+GitHub can attach that check to an older workflow suite and leave the merge requirement `Expected`
+despite a successful evaluation. The job reports checkout, validation, cancellation and timeout
+outcomes directly, without `checks: write` permission. Description edits must still trigger it.
+
 GitHub attaches checks to commits, so the check validates every open PR targeting `canary` or `main`
 with the same head SHA. An invalid declaration in any of those PRs blocks the shared commit. Correct
 the declaration or close the duplicate PR to refresh the result. If a duplicate moves to a different

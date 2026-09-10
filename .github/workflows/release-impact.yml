@@ -13,29 +13,14 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read
-  checks: write
 
 jobs:
   evaluate:
-    name: release-impact-evaluator
+    # Keep the required check on this execution's Actions suite (see CONTRIBUTING.md).
+    name: release-impact
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Mark the head pending before any checkout can fail; always finalize below. Otherwise an
-      # edited description could keep an old green check if checkout or policy execution fails.
-      - name: Start release-impact check on the PR head
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          check_id="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/check-runs" \
-            --field name=release-impact --field head_sha="$PR_HEAD_SHA" \
-            --field status=in_progress --field details_url="$RUN_URL" --jq '.id')"
-          [[ "$check_id" =~ ^[1-9][0-9]*$ ]]
-          echo "id=$check_id" >> "$GITHUB_OUTPUT"
       - name: Checkout trusted policy
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -58,18 +43,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .release-impact/trusted/scripts/check-release-impact.mjs .release-impact/candidate
-      - name: Complete release-impact check, including checkout failures
-        if: ${{ always() && steps.check.outputs.id != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECK_ID: ${{ steps.check.outputs.id }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          set -euo pipefail
-          conclusion=failure
-          if [ "$JOB_STATUS" = success ]; then conclusion=success; fi
-          if ! gh api --method PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" \
-            --field status=completed --field conclusion="$conclusion"; then
-            observed="$(gh api "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" --jq '[.status, .conclusion] | join(":")')"
-            test "$observed" = "completed:$conclusion"
-          fi

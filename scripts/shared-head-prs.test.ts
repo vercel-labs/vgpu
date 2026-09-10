@@ -97,6 +97,25 @@ describe("commit-scoped release impact", () => {
     expect(workflow).toContain("closed, edited]");
     expect(workflow).toContain("group: release-impact-${{ github.event.pull_request.head.sha }}");
     expect(workflow).toContain("ref: ${{ github.workflow_sha }}");
+    expect(workflow).toContain("ref: ${{ github.event.pull_request.head.sha }}");
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(2);
     expect(workflow).not.toContain("pnpm install");
+  });
+
+  it("declares the required check as the unconditional Actions job", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/release-impact.yml", import.meta.url), "utf8");
+    expect(workflow.match(/^    name: release-impact$/gm)).toHaveLength(1);
+    expect(workflow).not.toMatch(/^\s+(?:if|continue-on-error):/m);
+    expect(workflow).toContain("timeout-minutes: 5");
+    expect(workflow).toMatch(/^        run: node \.release-impact\/trusted\/scripts\/check-release-impact\.mjs \.release-impact\/candidate$/m);
+  });
+
+  it("leaves check reporting to Actions with read-only token permissions", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/release-impact.yml", import.meta.url), "utf8");
+    expect(workflow).toContain("  contents: read");
+    expect(workflow).toContain("  pull-requests: read");
+    expect(workflow).not.toMatch(/:\s*write(?:-all)?\s*(?:#.*)?$/m);
+    expect(workflow).not.toContain("check-runs");
+    expect(workflow).not.toContain("gh api");
   });
 });
