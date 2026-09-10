@@ -2350,6 +2350,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         ...doctorEnvironment,
         VGPU_CLI_SIGNAL_PARENT_PID: String(process.pid),
         VGPU_CLI_SIGNAL_SETTINGS: JSON.stringify({
+          boundary: "before-commit",
           bin,
           configurationPath: signalConfiguration,
           configurationArgument: "../signal-project/vgpu.native.json",
@@ -2419,6 +2420,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       helperPid: signalPublisher.pid,
       transactionId: signalPublisher.args[4],
       write: "prepare\n",
+      signal: "SIGINT",
       priorSignalListeners: expect.any(Number),
     });
     expect(signalGate.priorSignalListeners).toBeGreaterThanOrEqual(1);
@@ -2559,6 +2561,281 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
     expect(signalResult.stdout).toBe("");
     expect(signalResult.stderr, JSON.stringify(signalResult)).toBe(
       `Native publication: not-published\n[error] cancelled: Metal publication not-published: Publication staging was cancelled\nInspect retained paths (not cleanup authority):\n  ${signalStage}\n  ${signalJournalPath}\n`
+    );
+
+    // A real SIGTERM after the validated ACK preserves publication despite cancellation.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(75_000);
+    const postAckInput = await projectFixture();
+    unplacedProject = postAckInput.directory;
+    const postAckProject = join(fixture, "post-ack-signal-project");
+    const postAckOutput = join(
+      postAckProject,
+      relative(postAckInput.directory, postAckInput.outputPath)
+    );
+    await rename(postAckInput.directory, postAckProject);
+    unplacedProject = undefined;
+    const postAckConfiguration = join(postAckProject, "vgpu.native.json");
+    const postAckParent = dirname(postAckOutput);
+    await mkdir(postAckParent);
+    expect(await readdir(postAckParent)).toEqual([]);
+    await expect(lstat(postAckOutput)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect([
+      await fileEvidence(postAckConfiguration),
+      await treeEvidence(join(postAckProject, "shaders")),
+    ]).toEqual(inputBeforeBuild);
+    const postAckParentBefore = await lstat(postAckParent, { bigint: true });
+    const postAckEvidence = join(fixture, "publication-post-ack-signal");
+    await mkdir(postAckEvidence);
+    const postAckProtectedTrees = [
+      ...signalProtectedTrees,
+      { path: signalProject, tree: await treeEvidence(signalProject) },
+      { path: signalEvidence, tree: await treeEvidence(signalEvidence) },
+    ];
+    const postAckAdditionalIdentities = await Promise.all(
+      [
+        signalProject,
+        signalParent,
+        signalEvidence,
+        ...(
+          await readdir(signalEvidence)
+        ).map((name) => join(signalEvidence, name)),
+        postAckProject,
+        postAckConfiguration,
+        join(postAckProject, "shaders"),
+        ...["count.wgsl", "dimensions.wgsl", "gradient.wgsl"].map((name) =>
+          join(postAckProject, "shaders", name)
+        ),
+      ].map(async (path) => {
+        const { dev, ino, mode, nlink, size } = await lstat(path, {
+          bigint: true,
+        });
+        return { path, metadata: { dev, ino, mode, nlink, size } };
+      })
+    );
+    const postAckCommands = boundedCommands(
+      Math.min(workflowDeadline, Date.now() + 60_000)
+    );
+    const postAckResult = await postAckCommands.command(
+      process.execPath,
+      [
+        "--import",
+        signalPreload.href,
+        bin,
+        "native",
+        "build",
+        "--config",
+        "../post-ack-signal-project/vgpu.native.json",
+      ],
+      runtime,
+      {
+        ...doctorEnvironment,
+        VGPU_CLI_SIGNAL_PARENT_PID: String(process.pid),
+        VGPU_CLI_SIGNAL_SETTINGS: JSON.stringify({
+          boundary: "after-ack",
+          bin,
+          configurationPath: postAckConfiguration,
+          configurationArgument: "../post-ack-signal-project/vgpu.native.json",
+          parentPath: postAckParent,
+          scratch,
+          evidence: postAckEvidence,
+        }),
+      }
+    );
+    console.info(
+      "Installed post-ACK SIGTERM actual result",
+      JSON.stringify(postAckResult)
+    );
+    expect(
+      (await readdir(postAckEvidence)).sort(),
+      JSON.stringify(postAckResult)
+    ).toEqual([
+      "entry.json",
+      "gate.json",
+      "publisher-close.json",
+      "publisher.json",
+    ]);
+    const postAckSidecars = new Map();
+    for (const name of ["entry", "publisher", "gate", "publisher-close"]) {
+      const sidecar = await boundedFaultFile(
+        join(postAckEvidence, `${name}.json`)
+      );
+      expect(sidecar.bytes.length).toBeLessThanOrEqual(8192);
+      expect(sidecar.metadata.mode & 0o777n).toBe(0o600n);
+      expect(isUtf8(sidecar.bytes)).toBe(true);
+      postAckSidecars.set(name, JSON.parse(sidecar.bytes.toString("utf8")));
+    }
+    const postAckEntry = postAckSidecars.get("entry");
+    const postAckPublisher = postAckSidecars.get("publisher");
+    const postAckGate = postAckSidecars.get("gate");
+    expect(postAckEntry).toEqual({
+      pid: expect.any(Number),
+      parentPid: process.pid,
+      argv: [
+        process.execPath,
+        bin,
+        "native",
+        "build",
+        "--config",
+        "../post-ack-signal-project/vgpu.native.json",
+      ],
+    });
+    expect(postAckPublisher).toEqual({
+      pid: expect.any(Number),
+      executable: expect.any(String),
+      args: [
+        "vgpu-publication-staging/v1",
+        postAckParent,
+        "AppShaders",
+        "AppShaders",
+        expect.stringMatching(/^[a-f0-9]{32}$/u),
+        "publish-project",
+        postAckConfiguration,
+      ],
+      sanitized: true,
+    });
+    expect(postAckPublisher.pid).not.toBe(postAckEntry.pid);
+    expect(dirname(dirname(postAckPublisher.executable))).toBe(scratch);
+    expect(postAckGate).toEqual({
+      pid: postAckEntry.pid,
+      helperPid: postAckPublisher.pid,
+      transactionId: postAckPublisher.args[4],
+      write: `finalize ${postAckPublisher.args[4]} published\n`,
+      signal: "SIGTERM",
+      priorSignalListeners: expect.any(Number),
+    });
+    expect(postAckGate.priorSignalListeners).toBeGreaterThanOrEqual(1);
+    expect(postAckSidecars.get("publisher-close")).toEqual({
+      pid: postAckPublisher.pid,
+      code: 0,
+      signal: null,
+      prepareWrites: 1,
+      commitRequests: 1,
+      signalEvents: 1,
+      callbackReleases: 1,
+      watchdogFired: false,
+    });
+    const postAckGeneration = await readInstalledGeneration(
+      postAckOutput,
+      "AppShaders",
+      fingerprint,
+      postAckParentBefore.dev
+    );
+    const postAckOutputBeforeVerify = await treeEvidence(postAckOutput);
+    const postAckOutputIdentities = await Promise.all(
+      [
+        postAckOutput,
+        join(postAckOutput, "Sources"),
+        join(postAckOutput, "Sources/AppShaders"),
+        join(postAckOutput, "Sources/AppShaders/Resources"),
+        ...postAckGeneration.manifest.map(({ path }) =>
+          join(postAckOutput, path)
+        ),
+        join(postAckOutput, ".vgpu-native-output.json"),
+      ].map(async (path) => {
+        const { dev, ino, mode, nlink, size } = await lstat(path, {
+          bigint: true,
+        });
+        return { path, metadata: { dev, ino, mode, nlink, size } };
+      })
+    );
+    const postAckEvidenceBeforeVerify = await treeEvidence(postAckEvidence);
+    const postAckVerify = await postAckCommands.command(
+      process.execPath,
+      [
+        bin,
+        "native",
+        "verify",
+        "--config",
+        "../post-ack-signal-project/vgpu.native.json",
+      ],
+      runtime,
+      {
+        ...doctorEnvironment,
+        DEVELOPER_DIR: missingDeveloper,
+        TMPDIR: missingVerifyTemp,
+      }
+    );
+    console.info(
+      "Installed post-ACK current verify actual result",
+      JSON.stringify(postAckVerify)
+    );
+    expect(postAckVerify.code, JSON.stringify(postAckVerify)).toBe(0);
+    expect(postAckVerify.signal).toBeNull();
+    expect(postAckVerify.stderr).toBe("");
+    expect(postAckVerify.stdout).toBe(
+      `Native package: current\nModule: AppShaders\nOutput: ${postAckOutput}\nInput fingerprint: ${fingerprint}\n`
+    );
+    expect(await treeEvidence(postAckOutput)).toEqual(
+      postAckOutputBeforeVerify
+    );
+    for (const { path, metadata } of postAckOutputIdentities)
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect(
+      (await boundedFaultFile(join(postAckOutput, ".vgpu-native-output.json")))
+        .bytes
+    ).toEqual(postAckGeneration.record.bytes);
+    expect(await treeEvidence(postAckEvidence)).toEqual(
+      postAckEvidenceBeforeVerify
+    );
+    expect(await readdir(postAckParent)).toEqual(["AppShaders"]);
+    expect(await lstat(postAckParent, { bigint: true })).toMatchObject({
+      dev: postAckParentBefore.dev,
+      ino: postAckParentBefore.ino,
+      mode: postAckParentBefore.mode,
+    });
+    for (const name of [
+      ".vgpu-native-stage",
+      ".vgpu-native-publication.json",
+      ".vgpu-native-publication.update.json",
+    ])
+      await expect(lstat(join(postAckParent, name))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    for (const { path, tree } of postAckProtectedTrees)
+      expect(await treeEvidence(path)).toEqual(tree);
+    for (const { path, metadata } of [
+      ...signalProtectedIdentities,
+      ...signalRetainedIdentities,
+      ...postAckAdditionalIdentities,
+    ])
+      expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+    expect((await boundedFaultFile(signalJournalPath)).bytes).toEqual(
+      signalJournal.bytes
+    );
+    expect(await treeEvidence(signalParent)).toEqual(signalRetainedBefore);
+    expect([
+      await fileEvidence(postAckConfiguration),
+      await treeEvidence(join(postAckProject, "shaders")),
+    ]).toEqual(inputBeforeBuild);
+    expect((await readdir(postAckProject)).sort()).toEqual([
+      "Generated",
+      "shaders",
+      "vgpu.native.json",
+    ]);
+    for (const path of [missingDeveloper, missingVerifyTemp])
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(scratch)).toEqual([]);
+    expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+    expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+    expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+    expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+    for (const [filename, before] of archiveEvidence)
+      expect(await fileEvidence(join(archives, filename))).toEqual(before);
+    for (const [path, evidence] of sourceEvidence)
+      expect(await fileEvidence(path)).toEqual(evidence);
+    expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
+      faultSourceEvidence
+    );
+    expect(await fileEvidence(fileURLToPath(signalPreload))).toEqual(
+      signalPreloadBefore
+    );
+    expect(postAckResult.code, JSON.stringify(postAckResult)).toBe(143);
+    expect(postAckResult.signal).toBeNull();
+    expect(postAckResult.stdout).toBe("");
+    expect(postAckResult.stderr, JSON.stringify(postAckResult)).toBe(
+      "Native publication: published\nConfirmation: acknowledged\n[error] cancelled: Metal publication published: Publication staging was cancelled\n"
     );
   } finally {
     const cleanupFailures: unknown[] = [];

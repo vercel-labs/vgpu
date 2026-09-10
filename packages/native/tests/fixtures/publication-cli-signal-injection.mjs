@@ -1,4 +1,4 @@
-// Test-only explicit --import: one real SIGINT before an installed build's commit request.
+// Test-only explicit --import: real signals at two fixed installed-build boundaries.
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -18,6 +18,7 @@ function install() {
   const settings = JSON.parse(process.env.VGPU_CLI_SIGNAL_SETTINGS);
   assert.deepEqual(Object.keys(settings).sort(), [
     "bin",
+    "boundary",
     "configurationArgument",
     "configurationPath",
     "evidence",
@@ -26,6 +27,7 @@ function install() {
   ]);
   const {
     bin,
+    boundary,
     configurationPath,
     configurationArgument,
     parentPath,
@@ -41,6 +43,9 @@ function install() {
     process.argv[5] !== configurationArgument
   )
     return;
+  assert.ok(boundary === "before-commit" || boundary === "after-ack");
+  const afterAcknowledgment = boundary === "after-ack";
+  const signalName = afterAcknowledgment ? "SIGTERM" : "SIGINT";
   for (const path of [bin, configurationPath, parentPath, scratch, evidence]) {
     assert.ok(typeof path === "string" && isAbsolute(path));
     assert.equal(resolve(path), path);
@@ -50,7 +55,10 @@ function install() {
     configurationPath
   );
   assert.equal(basename(configurationPath), "vgpu.native.json");
-  assert.equal(basename(dirname(configurationPath)), "signal-project");
+  assert.equal(
+    basename(dirname(configurationPath)),
+    afterAcknowledgment ? "post-ack-signal-project" : "signal-project"
+  );
   assert.equal(parentPath, join(dirname(configurationPath), "Generated"));
   assert.equal(dirname(evidence), dirname(scratch));
 
@@ -116,7 +124,12 @@ function install() {
     const input = child.stdin;
     const originalWrite = input.write;
     const transactionId = args[4];
+    const gateToken = afterAcknowledgment
+      ? `finalize ${transactionId} published\n`
+      : "prepare\n";
+    const expectedCommitRequests = afterAcknowledgment ? 1 : 0;
     let prepareWrites = 0;
+    let gateWrites = 0;
     let commitRequests = 0;
     let signalEvents = 0;
     let callbackReleases = 0;
@@ -124,6 +137,10 @@ function install() {
     let watchdog;
     let onSignal;
     let heldRelease;
+    let resolveGateRelease;
+    const gateReleased = new Promise((resolveRelease) => {
+      resolveGateRelease = resolveRelease;
+    });
     const commits = ["missing", "empty", "owned"].map(
       (mode) => `commit-${mode} ${transactionId} prepared\n`
     );
@@ -134,16 +151,20 @@ function install() {
           ? Buffer.from(bytes).toString("utf8")
           : undefined;
       if (commits.includes(token)) commitRequests++;
-      if (token !== "prepare\n")
+      if (token === "prepare\n") {
+        prepareWrites++;
+        assert.equal(prepareWrites, 1, "One actual prepare write");
+      }
+      if (token !== gateToken)
         return Reflect.apply(originalWrite, this, writeArgs);
-      prepareWrites++;
-      assert.equal(prepareWrites, 1, "One actual prepare write");
+      gateWrites++;
+      assert.equal(gateWrites, 1, "One actual boundary write");
       assert.equal(writeArgs.length, 2);
       const callback = writeArgs[1];
       assert.equal(typeof callback, "function");
       writeArgs[1] = function (...completionArgs) {
         if (completionArgs[0]) {
-          failSetup("The real prepare write failed before the signal gate");
+          failSetup("The real boundary write failed before the signal gate");
           return Reflect.apply(callback, this, completionArgs);
         }
         const callbackThis = this;
@@ -155,29 +176,32 @@ function install() {
           );
           callbackReleases++;
           clearTimeout(watchdog);
-          process.removeListener("SIGINT", onSignal);
+          process.removeListener(signalName, onSignal);
           Reflect.apply(callback, callbackThis, completionArgs);
+          resolveGateRelease();
         };
         heldRelease = release;
-        const priorSignalListeners = process.listenerCount("SIGINT");
+        const priorSignalListeners = process.listenerCount(signalName);
         assert.ok(
           priorSignalListeners >= 1,
           "Public signal handler is installed"
         );
         assert.equal(
           commitRequests,
-          0,
-          "No commit before successful prepare write"
+          expectedCommitRequests,
+          "Exact commit count at the successful boundary write"
         );
         onSignal = () => {
           signalEvents++;
           // Existing public handlers synchronously abort before any driver continuation.
           queueMicrotask(release);
         };
-        process.once("SIGINT", onSignal);
+        process.once(signalName, onSignal);
         watchdog = setTimeout(() => {
           watchdogFired = true;
-          failSetup("The actual SIGINT event did not release the prepare gate");
+          failSetup(
+            "The actual signal event did not release the boundary gate"
+          );
           input.end();
           child.kill("SIGKILL");
           release();
@@ -186,31 +210,37 @@ function install() {
           pid: process.pid,
           helperPid: child.pid,
           transactionId,
-          write: "prepare\n",
+          write: gateToken,
+          signal: signalName,
           priorSignalListeners,
         });
         // Kernel-delivered signal, never process.emit or an injected AbortController.
-        process.kill(process.pid, "SIGINT");
+        process.kill(process.pid, signalName);
       };
       // Preserve the real stream's immediate return/backpressure and completion arguments.
       return Reflect.apply(originalWrite, this, writeArgs);
     };
-    child.once("close", (code, signal) => {
+    child.once("close", async (code, signal) => {
+      // Finalization may close the real helper before OS signal dispatch. Only this
+      // observer waits; the real close event and the driver's own listener are untouched.
+      if (afterAcknowledgment && heldRelease && callbackReleases === 0)
+        await gateReleased;
       clearTimeout(watchdog);
-      if (onSignal) process.removeListener("SIGINT", onSignal);
+      if (onSignal) process.removeListener(signalName, onSignal);
       if (heldRelease && callbackReleases === 0) {
-        failSetup("The real helper closed before the SIGINT gate released");
+        failSetup("The real helper closed before the signal gate released");
         heldRelease();
       }
       if (
         prepareWrites !== 1 ||
-        commitRequests !== 0 ||
+        gateWrites !== 1 ||
+        commitRequests !== expectedCommitRequests ||
         signalEvents !== 1 ||
         callbackReleases !== 1 ||
         watchdogFired
       )
         failSetup(
-          "The real helper closed without the exact SIGINT gate evidence"
+          "The real helper closed without the exact signal gate evidence"
         );
       record("publisher-close", {
         pid: child.pid,

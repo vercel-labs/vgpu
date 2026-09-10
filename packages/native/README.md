@@ -144,8 +144,11 @@ Its `not-published` outcome concerns only that new invocation; it has no publica
 A separate installed invocation receives a real SIGINT at a test-only pre-commit write-completion
 gate. It exits 130 with a not-published cancellation report, no confirmation, a complete prepared
 stage and journal, and no output. The instrumented process sends no commit request and preserves
-the existing projects and recovery evidence. Post-commit signal and unknown-outcome diagnostics
-remain unqualified.
+the existing projects and recovery evidence. A second invocation receives real SIGTERM at the
+successful finalization-write completion, after its acknowledgment was checked. It exits 143 with
+published/acknowledged cancellation, completes cleanup without retained paths and leaves output
+that ordinary installed verification reports as current. Broader installed owned-exchange recovery
+and unknown-outcome diagnostics remain unqualified.
 
 ## Checks
 
