@@ -692,45 +692,13 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
         ino: oldEmpty.ino,
         mode: oldEmpty.mode,
       });
-      for (const [directory, children] of [
-        ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
-        ["Sources", ["AppShaders"]],
-        ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
-        ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
-      ] as const) {
-        const path = join(emptyOutput, directory);
-        const metadata = await lstat(path, { bigint: true });
-        expect(metadata.isDirectory()).toBe(true);
-        expect(metadata.dev).toBe(newEmptyOutput.dev);
-        expect((await readdir(path)).sort()).toEqual(children);
-      }
-      const emptyManifest = [];
-      for (const { path } of payloadManifest) {
-        const filename = join(emptyOutput, path);
-        const metadata = await lstat(filename, { bigint: true });
-        expect(metadata.isFile()).toBe(true);
-        expect(metadata.dev).toBe(newEmptyOutput.dev);
-        expect(metadata.nlink).toBe(1n);
-        expect(metadata.size).toBeGreaterThan(0n);
-        const evidence = await fileEvidence(filename);
-        emptyManifest.push({ path, sha256: evidence.sha256 });
-      }
-      const emptyRecord = await boundedFaultFile(
-        join(emptyOutput, ".vgpu-native-output.json")
-      );
-      expect(emptyRecord.metadata.dev).toBe(newEmptyOutput.dev);
-      expect(isUtf8(emptyRecord.bytes)).toBe(true);
-      expect(JSON.parse(emptyRecord.bytes.toString("utf8"))).toEqual({
-        schemaVersion: 1,
-        format: "vgpu-metal-package/v1",
-        moduleName: "AppShaders",
-        ownerConfiguration: "../../vgpu.native.json",
-        inputFingerprint: fingerprint,
-        files: emptyManifest,
-      });
-      const emptyRecordHash = createHash("sha256")
-        .update(emptyRecord.bytes)
-        .digest("hex");
+      const { manifest: emptyManifest, recordHash: emptyRecordHash } =
+        await readInstalledGeneration(
+          emptyOutput,
+          "AppShaders",
+          fingerprint,
+          newEmptyOutput.dev
+        );
       expect(emptyBuild.stdout).toBe(
         `Native package: published\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${emptyRecordHash}\n`
       );
@@ -875,45 +843,12 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
           }
           expect(retained.subarray(0, length)).toEqual(bytes);
         }
-        for (const [directory, children] of [
-          ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
-          ["Sources", ["AppShaders"]],
-          ["Sources/AppShaders", ["Resources", "Shaders.generated.swift"]],
-          ["Sources/AppShaders/Resources", ["Shaders.metallib"]],
-        ] as const) {
-          const path = join(emptyOutput, directory);
-          const metadata = await lstat(path, { bigint: true });
-          expect(metadata.isDirectory()).toBe(true);
-          expect(metadata.dev).toBe(newOwnedOutput.dev);
-          expect((await readdir(path)).sort()).toEqual(children);
-        }
-        const ownedManifest = [];
-        for (const { path } of payloadManifest) {
-          const filename = join(emptyOutput, path);
-          const metadata = await lstat(filename, { bigint: true });
-          expect(metadata.isFile()).toBe(true);
-          expect(metadata.dev).toBe(newOwnedOutput.dev);
-          expect(metadata.nlink).toBe(1n);
-          expect(metadata.size).toBeGreaterThan(0n);
-          const evidence = await fileEvidence(filename);
-          ownedManifest.push({ path, sha256: evidence.sha256 });
-        }
-        const ownedRecord = await boundedFaultFile(
-          join(emptyOutput, ".vgpu-native-output.json")
+        const { recordHash: ownedRecordHash } = await readInstalledGeneration(
+          emptyOutput,
+          "AppShaders",
+          fingerprint,
+          newOwnedOutput.dev
         );
-        expect(ownedRecord.metadata.dev).toBe(newOwnedOutput.dev);
-        expect(isUtf8(ownedRecord.bytes)).toBe(true);
-        expect(JSON.parse(ownedRecord.bytes.toString("utf8"))).toEqual({
-          schemaVersion: 1,
-          format: "vgpu-metal-package/v1",
-          moduleName: "AppShaders",
-          ownerConfiguration: "../../vgpu.native.json",
-          inputFingerprint: fingerprint,
-          files: ownedManifest,
-        });
-        const ownedRecordHash = createHash("sha256")
-          .update(ownedRecord.bytes)
-          .digest("hex");
         expect(ownedBuild.stdout).toBe(
           `Native package: published\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${ownedRecordHash}\n`
         );
@@ -2070,6 +2005,57 @@ async function fileEvidence(path: string) {
     bytes: bytes.length,
     sha256: createHash("sha256").update(bytes).digest("hex"),
   };
+}
+
+async function readInstalledGeneration(
+  outputPath: string,
+  moduleName: string,
+  fingerprint: string,
+  expectedDevice: bigint
+) {
+  const modulePath = `Sources/${moduleName}`;
+  for (const [directory, children] of [
+    ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
+    ["Sources", [moduleName]],
+    [modulePath, ["Resources", "Shaders.generated.swift"]],
+    [`${modulePath}/Resources`, ["Shaders.metallib"]],
+  ] as const) {
+    const path = join(outputPath, directory);
+    const metadata = await lstat(path, { bigint: true });
+    expect(metadata.isDirectory()).toBe(true);
+    expect(metadata.dev).toBe(expectedDevice);
+    expect((await readdir(path)).sort()).toEqual(children);
+  }
+  const manifest = [];
+  for (const path of [
+    "Package.swift",
+    `${modulePath}/Resources/Shaders.metallib`,
+    `${modulePath}/Shaders.generated.swift`,
+  ]) {
+    const filename = join(outputPath, path);
+    const metadata = await lstat(filename, { bigint: true });
+    expect(metadata.isFile()).toBe(true);
+    expect(metadata.dev).toBe(expectedDevice);
+    expect(metadata.nlink).toBe(1n);
+    expect(metadata.size).toBeGreaterThan(0n);
+    const evidence = await fileEvidence(filename);
+    manifest.push({ path, sha256: evidence.sha256 });
+  }
+  const record = await boundedFaultFile(
+    join(outputPath, ".vgpu-native-output.json")
+  );
+  expect(record.metadata.dev).toBe(expectedDevice);
+  expect(isUtf8(record.bytes)).toBe(true);
+  expect(JSON.parse(record.bytes.toString("utf8"))).toEqual({
+    schemaVersion: 1,
+    format: "vgpu-metal-package/v1",
+    moduleName,
+    ownerConfiguration: "../../vgpu.native.json",
+    inputFingerprint: fingerprint,
+    files: manifest,
+  });
+  const recordHash = createHash("sha256").update(record.bytes).digest("hex");
+  return { manifest, record, recordHash };
 }
 
 async function boundedFaultFile(path: string) {
