@@ -58,6 +58,9 @@ export function loadManifest(root) {
     exists: (path) => existsSync(resolve(root, path)),
     read: (path) => readFileSync(resolve(root, path), "utf8"),
     guides,
+    migrations: existsSync(resolve(root, "docs/migrations"))
+      ? readdirSync(resolve(root, "docs/migrations")).filter(file => file.endsWith(".docs.md")).sort().map(file => `docs/migrations/${file}`)
+      : [],
   });
 }
 

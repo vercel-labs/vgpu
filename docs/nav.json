@@ -190,6 +190,11 @@
       ]
     },
     {
+      "title": "Migrations",
+      "href": "/migrations",
+      "groups": [{ "...": [] }]
+    },
+    {
       "title": "Examples",
       "href": "/examples",
       "groups": [{ "...": [] }]

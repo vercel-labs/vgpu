@@ -82,6 +82,13 @@ started for unfamiliar projects, use \`find\` for task or symbol discovery, use 
 mentioned inside pages, and \`cat\` every relevant guide and API page before changing code. Let
 \`docs --help\` from that installed version define the available commands.
 
+When upgrading a project, record its previous version before changing dependencies. After selecting
+the authorized target version, run \`docs ls /migrations\` through that version's local CLI and read
+the intervening version guides in order. Each guide identifies affected usage and verification steps;
+skip changes already applied, including when moving between RCs of the same release. Older packages
+may not bundle migration guides: report that absence and consult the exact release's notes instead
+of silently substituting the current hosted docs.
+
 For MCP-based lookup, start \`vgpu mcp\` through the same project-local executable so it serves the
 same bundled corpus. A hosted MCP server is a convenience for current stable documentation, not
 the authority for a project pinned to another version.

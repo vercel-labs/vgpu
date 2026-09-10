@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "description": "vgpu documentation site (geistdocs).",
-  "version": "0.1.7",
+  "version": "0.1.8-rc.0",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-prism-gpu-benchmarks.mjs && node scripts/prepare-ort-assets.mjs && node scripts/prepare-depth-models.mjs && node scripts/ingest-examples.mjs && pnpm run examples-api:generate",

@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/wgsl",
-  "version": "0.4.1",
+  "version": "0.5.0-rc.0",
   "description": "WGSL shader compilation, runtime resolution, and webpack/vite loaders for vgpu.",
   "keywords": [
     "webgpu",
@@ -75,7 +75,7 @@
     "@vgpu/wgsl-std": "workspace:*"
   },
   "peerDependencies": {
-    "@vgpu/adapter-node": ">=0.1.6 <1.0.0"
+    "@vgpu/adapter-node": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0"
   },
   "peerDependenciesMeta": {
     "@vgpu/adapter-node": {

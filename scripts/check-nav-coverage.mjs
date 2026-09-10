@@ -15,7 +15,8 @@
  *    /guides/<symbol>): guideGroups.
  *  - Guide records WITH a `websitePath` (kind: "guide", rendered at a fixed route
  *    like /cli or /ml/browser via getDocsRecordByWebsitePath): the literal href
- *    strings under docs/nav.json's "sections" tree.
+ *    strings under docs/nav.json's "sections" tree, or versioned migration pages
+ *    under an explicit /migrations section with a groups catch-all.
  *
  * Deliberately out of scope (see docs/nav.json comments in the PR description):
  *  - "sections" entries for Get started / Concepts / Examples / API Reference are
@@ -71,6 +72,17 @@ function collectHrefs(node, into) {
     if (typeof node.href === 'string') into.add(node.href);
     for (const value of Object.values(node)) collectHrefs(value, into);
   }
+}
+
+// Migration pages are emitted automatically under this explicitly opted-in section.
+// Keep the namespace narrow: a migration catch-all must not hide missing unrelated routes.
+export function websitePathCovered(path, sections) {
+  const hrefs = new Set();
+  collectHrefs(sections, hrefs);
+  if (hrefs.has(path)) return true;
+  return /^\/migrations\/\d+\.\d+\.\d+$/.test(path) && sections.some(section =>
+    section.href === '/migrations' && Array.isArray(section.groups) && section.groups.some(isCatchAll),
+  );
 }
 
 async function main() {
@@ -139,14 +151,14 @@ async function main() {
   collectHrefs(nav.sections ?? [], hrefsInSections);
 
   const websitePaths = new Set(websiteGuideRecords.map((r) => r.websitePath));
-  const websitePathsNotFound = [...websitePaths].filter((p) => !hrefsInSections.has(p));
+  const websitePathsNotFound = [...websitePaths].filter((p) => !websitePathCovered(p, nav.sections ?? []));
   if (websitePathsNotFound.length > 0) {
     fail(`sections: websitePath-backed guide records missing from the nav href tree: ${websitePathsNotFound.join(', ')}`);
   }
-  // Reverse-check only inside the websitePath-owned namespaces (/cli, /ml*, /native*) —
+  // Reverse-check only inside websitePath-owned namespaces (/cli, /ml*, /native*, /migrations*) —
   // other hrefs (Get started, Concepts, Examples) are literal routes with no
   // manifest-record backing by design and are out of scope (see file header).
-  const websitePathLikeHrefs = [...hrefsInSections].filter((href) => /^\/(cli|ml|native)(\/|$)/.test(href));
+  const websitePathLikeHrefs = [...hrefsInSections].filter((href) => /^\/(cli|ml|native|migrations)(\/|$)/.test(href));
   const staleWebsitePathHrefs = websitePathLikeHrefs.filter((href) => !websitePaths.has(href));
   if (staleWebsitePathHrefs.length > 0) {
     fail(`sections: websitePath-owned hrefs do not resolve to any manifest record: ${staleWebsitePathHrefs.join(', ')}`);
@@ -164,7 +176,7 @@ async function main() {
   );
 }
 
-main().catch((error) => {
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main().catch((error) => {
   console.error('docs/nav.json coverage check crashed:', error);
   process.exit(1);
 });
