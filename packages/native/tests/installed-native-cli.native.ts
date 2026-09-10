@@ -2838,616 +2838,708 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       "Native publication: published\nConfirmation: acknowledged\n[error] cancelled: Metal publication published: Publication staging was cancelled\n"
     );
 
-    // Lose the owned helper before real SWAP; read-only reconciliation must prove no publication.
-    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
-    const ownedBeforeInput = await projectFixture();
-    unplacedProject = ownedBeforeInput.directory;
-    const ownedBeforeProject = join(fixture, "owned-before-swap-project");
-    const ownedBeforeOutput = join(
-      ownedBeforeProject,
-      relative(ownedBeforeInput.directory, ownedBeforeInput.outputPath)
-    );
-    await rename(ownedBeforeInput.directory, ownedBeforeProject);
-    unplacedProject = undefined;
-    const ownedBeforeConfiguration = join(
-      ownedBeforeProject,
-      "vgpu.native.json"
-    );
-    const ownedBeforeParent = dirname(ownedBeforeOutput);
-    const ownedBeforeStage = join(ownedBeforeParent, ".vgpu-native-stage");
-    const ownedBeforeJournal = join(
-      ownedBeforeParent,
-      ".vgpu-native-publication.json"
-    );
-    await mkdir(ownedBeforeParent);
-    expect(await readdir(ownedBeforeParent)).toEqual([]);
-    expect([
-      await fileEvidence(ownedBeforeConfiguration),
-      await treeEvidence(join(ownedBeforeProject, "shaders")),
-    ]).toEqual(inputBeforeBuild);
-    const ownedBeforeParentIdentity = await lstat(ownedBeforeParent, {
-      bigint: true,
-    });
-    const ownedBeforeEvidence = join(fixture, "publication-owned-before");
-    await mkdir(ownedBeforeEvidence);
-    const ownedBeforePreload = new URL(
-      "./fixtures/publication-cli-owned-injection.mjs",
-      import.meta.url
-    );
-    const ownedBeforeObserverSource = new URL(
-      "./fixtures/publication-owned-rename.c",
-      import.meta.url
-    );
-    const ownedBeforeSources = [
-      fileURLToPath(ownedBeforePreload),
-      fileURLToPath(ownedBeforeObserverSource),
-    ];
-    const ownedBeforeSourceEvidence = await Promise.all(
-      ownedBeforeSources.map(fileEvidence)
-    );
-    const ownedBeforeObserver = join(
-      ownedBeforeEvidence,
-      "rename-observer.dylib"
-    );
-    await boundedCommands(
-      Math.min(workflowDeadline, Date.now() + 30_000)
-    ).checked(
-      "/usr/bin/xcrun",
-      [
-        "--sdk",
-        "macosx",
-        "clang",
-        "-std=c11",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-mmacosx-version-min=14.0",
-        "-dynamiclib",
-        fileURLToPath(ownedBeforeObserverSource),
-        "-o",
-        ownedBeforeObserver,
-      ],
-      fixture,
-      doctorEnvironment
-    );
-    const ownedBeforeObserverEvidence = await fileEvidence(ownedBeforeObserver);
-    const ownedBeforeProtectedTrees = [
-      ...postAckProtectedTrees,
-      { path: postAckProject, tree: await treeEvidence(postAckProject) },
-      { path: postAckEvidence, tree: await treeEvidence(postAckEvidence) },
-    ];
-    const ownedBeforeAdditionalIdentities = await Promise.all(
-      [
-        postAckParent,
-        postAckEvidence,
-        ...(
-          await readdir(postAckEvidence)
-        ).map((name) => join(postAckEvidence, name)),
-        ownedBeforeProject,
-        ownedBeforeConfiguration,
-        join(ownedBeforeProject, "shaders"),
-        ...["count.wgsl", "dimensions.wgsl", "gradient.wgsl"].map((name) =>
-          join(ownedBeforeProject, "shaders", name)
-        ),
-      ].map(async (path) => {
-        const { dev, ino, mode, nlink, size } = await lstat(path, {
-          bigint: true,
-        });
-        return { path, metadata: { dev, ino, mode, nlink, size } };
-      })
-    );
-    const ownedBeforeCommands = boundedCommands(
-      Math.min(workflowDeadline, Date.now() + 90_000)
-    );
-    const ownedBeforeBaseline = await ownedBeforeCommands.command(
-      process.execPath,
-      [
-        bin,
-        "native",
-        "build",
-        "--config",
-        "../owned-before-swap-project/vgpu.native.json",
-      ],
-      runtime,
-      doctorEnvironment
-    );
-    console.info(
-      "Installed owned-before baseline actual result",
-      JSON.stringify(ownedBeforeBaseline)
-    );
-    expect(ownedBeforeBaseline.code, JSON.stringify(ownedBeforeBaseline)).toBe(
-      0
-    );
-    expect(ownedBeforeBaseline.signal).toBeNull();
-    expect(ownedBeforeBaseline.stderr).toBe("");
-    const ownedBeforeOldGeneration = await readInstalledGeneration(
-      ownedBeforeOutput,
-      "AppShaders",
-      fingerprint,
-      ownedBeforeParentIdentity.dev
-    );
-    expect(ownedBeforeBaseline.stdout).toBe(
-      `Native package: published\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${ownedBeforeOldGeneration.recordHash}\n`
-    );
-    expect(await readdir(ownedBeforeParent)).toEqual(["AppShaders"]);
-    const ownedBeforeOldTree = await treeEvidence(ownedBeforeOutput);
-    const ownedBeforeDirectory = await open(
-      ownedBeforeOutput,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
-    );
-    const ownedBeforeHandles: Awaited<ReturnType<typeof open>>[] = [];
-    try {
-      const oldRoot = await ownedBeforeDirectory.stat({ bigint: true });
-      expect(oldRoot.isDirectory()).toBe(true);
-      const oldIdentity = {
-        device: oldRoot.dev.toString(),
-        inode: oldRoot.ino.toString(),
+    // Observe both fixed sides of real SWAP without discarding an earlier case's evidence.
+    const retainedOwnedTrees: { path: string; tree: unknown }[] = [];
+    const retainedOwnedIdentities: {
+      path: string;
+      metadata: {
+        dev: bigint;
+        ino: bigint;
+        mode: bigint;
+        nlink: bigint;
+        size: bigint;
       };
-      const oldArtifacts = [];
-      for (const [role, path] of [
-        ["package-manifest", "Package.swift"],
-        ["swift-source", "Sources/AppShaders/Shaders.generated.swift"],
-        ["metal-library", "Sources/AppShaders/Resources/Shaders.metallib"],
-        ["output-record", ".vgpu-native-output.json"],
-      ] as const) {
-        const file = await open(
-          join(ownedBeforeOutput, path),
-          constants.O_RDONLY | constants.O_NOFOLLOW
-        );
-        ownedBeforeHandles.push(file);
-        const metadata = await file.stat({ bigint: true });
-        expect(metadata.isFile()).toBe(true);
-        expect(metadata.nlink).toBe(1n);
-        expect(metadata.dev).toBe(oldRoot.dev);
-        const bytes = await file.readFile();
-        expect(BigInt(bytes.length)).toBe(metadata.size);
-        const sha256 = createHash("sha256").update(bytes).digest("hex");
-        expect(sha256).toBe(
-          path === ".vgpu-native-output.json"
-            ? ownedBeforeOldGeneration.recordHash
-            : ownedBeforeOldGeneration.manifest.find(
-                (entry) => entry.path === path
-              )!.sha256
-        );
-        oldArtifacts.push({ role, path, file, bytes, metadata, sha256 });
-      }
-      const oldDirectoryIdentities = await Promise.all(
-        [
-          "",
-          "Sources",
-          "Sources/AppShaders",
-          "Sources/AppShaders/Resources",
-        ].map(async (path) => {
-          const { dev, ino, mode, nlink, size } = await lstat(
-            join(ownedBeforeOutput, path),
-            { bigint: true }
-          );
-          return { path, metadata: { dev, ino, mode, nlink, size } };
-        })
+    }[] = [];
+    for (const boundary of ["before-swap", "after-swap"] as const) {
+      const afterSwap = boundary === "after-swap";
+      expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
+      const ownedBeforeInput = await projectFixture();
+      unplacedProject = ownedBeforeInput.directory;
+      const ownedBeforeProject = join(fixture, `owned-${boundary}-project`);
+      const ownedConfigurationArgument = `../owned-${boundary}-project/vgpu.native.json`;
+      const ownedBeforeOutput = join(
+        ownedBeforeProject,
+        relative(ownedBeforeInput.directory, ownedBeforeInput.outputPath)
       );
-      const ownedBeforeResult = await ownedBeforeCommands.command(
-        process.execPath,
-        [
-          "--import",
-          ownedBeforePreload.href,
-          bin,
-          "native",
-          "build",
-          "--config",
-          "../owned-before-swap-project/vgpu.native.json",
-        ],
-        runtime,
-        {
-          ...doctorEnvironment,
-          VGPU_CLI_OWNED_PARENT_PID: String(process.pid),
-          VGPU_CLI_OWNED_SETTINGS: JSON.stringify({
-            bin,
-            configurationPath: ownedBeforeConfiguration,
-            configurationArgument:
-              "../owned-before-swap-project/vgpu.native.json",
-            parentPath: ownedBeforeParent,
-            scratch,
-            evidence: ownedBeforeEvidence,
-            observer: ownedBeforeObserver,
-          }),
-        }
+      await rename(ownedBeforeInput.directory, ownedBeforeProject);
+      unplacedProject = undefined;
+      const ownedBeforeConfiguration = join(
+        ownedBeforeProject,
+        "vgpu.native.json"
       );
-      console.info(
-        "Installed owned-before-SWAP actual result",
-        JSON.stringify(ownedBeforeResult)
+      const ownedBeforeParent = dirname(ownedBeforeOutput);
+      const ownedBeforeStage = join(ownedBeforeParent, ".vgpu-native-stage");
+      const ownedBeforeJournal = join(
+        ownedBeforeParent,
+        ".vgpu-native-publication.json"
       );
-      expect(
-        (await readdir(ownedBeforeEvidence)).sort(),
-        JSON.stringify(ownedBeforeResult)
-      ).toEqual([
-        "entry.json",
-        "killed.json",
-        "paused",
-        "publisher-close.json",
-        "publisher.json",
-        "reconciliation-close.json",
-        "reconciliation.json",
-        "rename-observer.dylib",
-      ]);
-      const sidecars = new Map();
-      for (const name of [
-        "entry",
-        "publisher",
-        "killed",
-        "publisher-close",
-        "reconciliation",
-        "reconciliation-close",
-      ]) {
-        const sidecar = await boundedFaultFile(
-          join(ownedBeforeEvidence, `${name}.json`)
-        );
-        expect(sidecar.bytes.length).toBeLessThanOrEqual(8192);
-        expect(sidecar.metadata.mode & 0o777n).toBe(0o600n);
-        expect(isUtf8(sidecar.bytes)).toBe(true);
-        sidecars.set(name, JSON.parse(sidecar.bytes.toString("utf8")));
-      }
-      const entry = sidecars.get("entry");
-      const publisher = sidecars.get("publisher");
-      const publisherClose = sidecars.get("publisher-close");
-      const reconciliation = sidecars.get("reconciliation");
-      expect(entry).toEqual({
-        pid: expect.any(Number),
-        parentPid: process.pid,
-        argv: [
-          process.execPath,
-          bin,
-          "native",
-          "build",
-          "--config",
-          "../owned-before-swap-project/vgpu.native.json",
-        ],
-      });
-      expect(publisher).toEqual({
-        pid: expect.any(Number),
-        executable: expect.any(String),
-        sanitized: true,
-        args: [
-          "vgpu-publication-staging/v1",
-          ownedBeforeParent,
-          "AppShaders",
-          "AppShaders",
-          expect.stringMatching(/^[a-f0-9]{32}$/u),
-          "publish-project",
-          ownedBeforeConfiguration,
-        ],
-      });
-      expect(publisher.pid).not.toBe(entry.pid);
-      expect(dirname(dirname(publisher.executable))).toBe(scratch);
-      const paused = await boundedFaultFile(
-        join(ownedBeforeEvidence, "paused")
-      );
-      expect(paused.bytes.length).toBeLessThanOrEqual(512);
-      const marker = JSON.parse(paused.bytes.toString("utf8"));
-      expect(marker).toEqual({
-        flags: expect.any(Number),
-        swap: expect.any(Number),
-        noFollowAny: expect.any(Number),
-        source: { device: expect.any(String), inode: expect.any(String) },
-        destination: oldIdentity,
-      });
-      expect(marker.swap).toBeGreaterThan(0);
-      expect(marker.noFollowAny).toBeGreaterThan(0);
-      expect(marker.flags).toBe(marker.swap | marker.noFollowAny);
-      const killed = sidecars.get("killed");
-      expect(killed).toEqual({
-        pid: publisher.pid,
-        signal: "SIGKILL",
-        delivered: true,
-        commitRequests: 1,
-        markerSHA256: createHash("sha256").update(paused.bytes).digest("hex"),
-        elapsedMs: expect.any(Number),
-      });
-      expect(killed.elapsedMs).toBeGreaterThanOrEqual(0);
-      expect(killed.elapsedMs).toBeLessThan(3000);
-      expect(publisherClose).toEqual({
-        pid: publisher.pid,
-        code: null,
-        signal: "SIGKILL",
-        commitRequests: 1,
-        watchdogFired: false,
-      });
-      expect(reconciliation).toEqual({
-        pid: expect.any(Number),
-        executable: publisher.executable,
-        args: [
-          "vgpu-publication-staging/v1",
-          ownedBeforeParent,
-          "AppShaders",
-          "AppShaders",
-          publisher.args[4],
-          "reconcile-owned",
-          ownedBeforeParentIdentity.dev.toString(),
-          ownedBeforeParentIdentity.ino.toString(),
-        ],
-        afterPublisherClose: publisherClose,
-        injected: false,
-        before: expect.any(Object),
-      });
-      expect(reconciliation.pid).not.toBe(publisher.pid);
-      expect(sidecars.get("reconciliation-close")).toEqual({
-        pid: reconciliation.pid,
-        code: 0,
-        signal: null,
-      });
-      expect(Object.keys(reconciliation.before).sort()).toEqual([
-        "journal",
-        "stage",
-      ]);
-      const journal = await boundedFaultFile(ownedBeforeJournal);
-      expect(isUtf8(journal.bytes)).toBe(true);
-      expect(reconciliation.before.journal).toEqual({
-        device: journal.metadata.dev.toString(),
-        inode: journal.metadata.ino.toString(),
-        mode: journal.metadata.mode.toString(),
-        nlink: journal.metadata.nlink.toString(),
-        size: journal.metadata.size.toString(),
-        sha256: createHash("sha256").update(journal.bytes).digest("hex"),
-      });
-      const stage = await lstat(ownedBeforeStage, { bigint: true });
-      expect(marker.source).toEqual({
-        device: stage.dev.toString(),
-        inode: stage.ino.toString(),
-      });
-      expect(stage.ino).not.toBe(oldRoot.ino);
-      const generation = await readInstalledGeneration(
-        ownedBeforeStage,
-        "AppShaders",
-        fingerprint,
-        ownedBeforeParentIdentity.dev
-      );
-      const configurationIdentity = ownedBeforeAdditionalIdentities.find(
-        ({ path }) => path === ownedBeforeConfiguration
-      )!.metadata;
-      const stagedFiles = [];
-      for (const { role, path } of oldArtifacts) {
-        const evidence = await fileEvidence(join(ownedBeforeStage, path));
-        stagedFiles.push({
-          role,
-          path,
-          length: evidence.bytes,
-          sha256: evidence.sha256,
-        });
-      }
-      expect(JSON.parse(journal.bytes.toString("utf8"))).toEqual({
-        schemaVersion: 1,
-        kind: "vgpu-native-publication",
-        phase: "prepared",
-        transactionId: publisher.args[4],
-        parent: {
-          device: ownedBeforeParentIdentity.dev.toString(),
-          inode: ownedBeforeParentIdentity.ino.toString(),
-        },
-        destinationName: "AppShaders",
-        moduleName: "AppShaders",
-        publication: {
-          renameMode: "swap",
-          expectedDestination: "owned",
-          oldDestination: oldIdentity,
-          oldModuleName: "AppShaders",
-          oldRecordSHA256: ownedBeforeOldGeneration.recordHash,
-          oldFiles: oldArtifacts.map(({ role, path, bytes, sha256 }) => ({
-            role,
-            path,
-            length: bytes.length,
-            sha256,
-          })),
-          ownership: {
-            ownerConfiguration: "../../vgpu.native.json",
-            configuration: {
-              device: configurationIdentity.dev.toString(),
-              inode: configurationIdentity.ino.toString(),
-            },
-          },
-        },
-        stage: {
-          name: ".vgpu-native-stage",
-          device: stage.dev.toString(),
-          inode: stage.ino.toString(),
-        },
-        recordSHA256: generation.recordHash,
-        files: stagedFiles,
-      });
-      expect(
-        reconciliation.before.stage.map((item: { path: string }) => item.path)
-      ).toEqual([
-        "",
-        ".vgpu-native-output.json",
-        "Package.swift",
-        "Sources",
-        "Sources/AppShaders",
-        "Sources/AppShaders/Resources",
-        "Sources/AppShaders/Resources/Shaders.metallib",
-        "Sources/AppShaders/Shaders.generated.swift",
-      ]);
-      const retainedStageIdentities = [];
-      for (const observed of reconciliation.before.stage) {
-        const path = join(ownedBeforeStage, observed.path);
-        const metadata = await lstat(path, { bigint: true });
-        const { dev, ino, mode, nlink, size } = metadata;
-        expect(observed).toEqual({
-          path: observed.path,
-          kind: metadata.isDirectory() ? "directory" : "file",
-          metadata: {
-            device: dev.toString(),
-            inode: ino.toString(),
-            mode: mode.toString(),
-            nlink: nlink.toString(),
-            size: size.toString(),
-          },
-        });
-        retainedStageIdentities.push({
-          path,
-          metadata: { dev, ino, mode, nlink, size },
-        });
-      }
-      const retainedBeforeVerify = await treeEvidence(ownedBeforeParent);
-      const evidenceBeforeVerify = await treeEvidence(ownedBeforeEvidence);
-      const ownedBeforeVerify = await ownedBeforeCommands.command(
-        process.execPath,
-        [
-          bin,
-          "native",
-          "verify",
-          "--config",
-          "../owned-before-swap-project/vgpu.native.json",
-        ],
-        runtime,
-        {
-          ...doctorEnvironment,
-          DEVELOPER_DIR: missingDeveloper,
-          TMPDIR: missingVerifyTemp,
-        }
-      );
-      console.info(
-        "Installed owned-before current verify actual result",
-        JSON.stringify(ownedBeforeVerify)
-      );
-      expect(ownedBeforeVerify.code, JSON.stringify(ownedBeforeVerify)).toBe(0);
-      expect(ownedBeforeVerify.signal).toBeNull();
-      expect(ownedBeforeVerify.stderr).toBe("");
-      expect(ownedBeforeVerify.stdout).toBe(
-        `Native package: current\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\n`
-      );
-      expect(await treeEvidence(ownedBeforeOutput)).toEqual(ownedBeforeOldTree);
-      expect(await ownedBeforeDirectory.stat({ bigint: true })).toMatchObject({
-        dev: oldRoot.dev,
-        ino: oldRoot.ino,
-        mode: oldRoot.mode,
-        nlink: oldRoot.nlink,
-      });
-      for (const { path, metadata } of oldDirectoryIdentities)
-        expect(
-          await lstat(join(ownedBeforeOutput, path), { bigint: true })
-        ).toMatchObject(metadata);
-      for (const { file, path, bytes, metadata } of oldArtifacts) {
-        const expected = {
-          dev: metadata.dev,
-          ino: metadata.ino,
-          mode: metadata.mode,
-          nlink: metadata.nlink,
-          size: metadata.size,
-        };
-        expect(await file.stat({ bigint: true })).toMatchObject(expected);
-        expect(
-          await lstat(join(ownedBeforeOutput, path), { bigint: true })
-        ).toMatchObject(expected);
-        const retained = Buffer.alloc(bytes.length + 1);
-        let length = 0;
-        while (length < retained.length) {
-          const { bytesRead } = await file.read(
-            retained,
-            length,
-            retained.length - length,
-            length
-          );
-          if (bytesRead === 0) break;
-          length += bytesRead;
-        }
-        expect(retained.subarray(0, length)).toEqual(bytes);
-      }
-      expect(await treeEvidence(ownedBeforeParent)).toEqual(
-        retainedBeforeVerify
-      );
-      for (const { path, metadata } of retainedStageIdentities)
-        expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
-      const journalAfter = await boundedFaultFile(ownedBeforeJournal);
-      expect(journalAfter.bytes).toEqual(journal.bytes);
-      expect(journalAfter.metadata).toMatchObject({
-        dev: journal.metadata.dev,
-        ino: journal.metadata.ino,
-        mode: journal.metadata.mode,
-        nlink: journal.metadata.nlink,
-        size: journal.metadata.size,
-      });
-      expect((await readdir(ownedBeforeParent)).sort()).toEqual([
-        ".vgpu-native-publication.json",
-        ".vgpu-native-stage",
-        "AppShaders",
-      ]);
-      expect(await lstat(ownedBeforeParent, { bigint: true })).toMatchObject({
-        dev: ownedBeforeParentIdentity.dev,
-        ino: ownedBeforeParentIdentity.ino,
-        mode: ownedBeforeParentIdentity.mode,
-      });
-      for (const path of [
-        join(ownedBeforeParent, ".vgpu-native-publication.update.json"),
-        ...["resume", "completed", "return", "failure.json"].map((name) =>
-          join(ownedBeforeEvidence, name)
-        ),
-      ])
-        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await treeEvidence(ownedBeforeEvidence)).toEqual(
-        evidenceBeforeVerify
-      );
-      for (const { path, tree } of ownedBeforeProtectedTrees)
-        expect(await treeEvidence(path)).toEqual(tree);
-      for (const { path, metadata } of [
-        ...signalProtectedIdentities,
-        ...signalRetainedIdentities,
-        ...postAckAdditionalIdentities,
-        ...postAckOutputIdentities,
-        ...ownedBeforeAdditionalIdentities,
-      ])
-        expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
-      expect((await boundedFaultFile(signalJournalPath)).bytes).toEqual(
-        signalJournal.bytes
-      );
+      await mkdir(ownedBeforeParent);
+      expect(await readdir(ownedBeforeParent)).toEqual([]);
       expect([
         await fileEvidence(ownedBeforeConfiguration),
         await treeEvidence(join(ownedBeforeProject, "shaders")),
       ]).toEqual(inputBeforeBuild);
-      expect((await readdir(ownedBeforeProject)).sort()).toEqual([
-        "Generated",
-        "shaders",
-        "vgpu.native.json",
-      ]);
-      for (const path of [missingDeveloper, missingVerifyTemp])
-        await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readdir(scratch)).toEqual([]);
-      expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
-      expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
-      expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
-      expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
-      for (const [filename, before] of archiveEvidence)
-        expect(await fileEvidence(join(archives, filename))).toEqual(before);
-      for (const [path, evidence] of sourceEvidence)
-        expect(await fileEvidence(path)).toEqual(evidence);
-      expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
-        faultSourceEvidence
+      const ownedBeforeParentIdentity = await lstat(ownedBeforeParent, {
+        bigint: true,
+      });
+      const ownedBeforeEvidence = join(
+        fixture,
+        afterSwap ? "publication-owned-after" : "publication-owned-before"
       );
-      expect(await fileEvidence(fileURLToPath(signalPreload))).toEqual(
-        signalPreloadBefore
+      await mkdir(ownedBeforeEvidence);
+      const ownedBeforePreload = new URL(
+        "./fixtures/publication-cli-owned-injection.mjs",
+        import.meta.url
       );
-      expect(await Promise.all(ownedBeforeSources.map(fileEvidence))).toEqual(
-        ownedBeforeSourceEvidence
+      const ownedBeforeObserverSource = new URL(
+        "./fixtures/publication-owned-rename.c",
+        import.meta.url
       );
-      expect(await fileEvidence(ownedBeforeObserver)).toEqual(
-        ownedBeforeObserverEvidence
+      const ownedBeforeSources = [
+        fileURLToPath(ownedBeforePreload),
+        fileURLToPath(ownedBeforeObserverSource),
+      ];
+      const ownedBeforeSourceEvidence = await Promise.all(
+        ownedBeforeSources.map(fileEvidence)
       );
-      expect(ownedBeforeResult.code, JSON.stringify(ownedBeforeResult)).toBe(1);
-      expect(ownedBeforeResult.signal).toBeNull();
-      expect(ownedBeforeResult.stdout).toBe("");
-      expect(ownedBeforeResult.stderr, JSON.stringify(ownedBeforeResult)).toBe(
-        `Native publication: not-published\n[error] helper-failed: Metal publication not-published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n`
+      const ownedBeforeObserver = join(
+        ownedBeforeEvidence,
+        "rename-observer.dylib"
       );
-    } finally {
-      const closed = await Promise.allSettled([
-        ownedBeforeDirectory.close(),
-        ...ownedBeforeHandles.map((file) => file.close()),
-      ]);
-      const failures = closed.flatMap((result) =>
-        result.status === "rejected" ? [result.reason] : []
+      await boundedCommands(
+        Math.min(workflowDeadline, Date.now() + 30_000)
+      ).checked(
+        "/usr/bin/xcrun",
+        [
+          "--sdk",
+          "macosx",
+          "clang",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-mmacosx-version-min=14.0",
+          "-dynamiclib",
+          fileURLToPath(ownedBeforeObserverSource),
+          "-o",
+          ownedBeforeObserver,
+        ],
+        fixture,
+        doctorEnvironment
       );
-      if (failures.length)
-        throw new AggregateError(
-          failures,
-          "Owned-before generation close failed"
+      const ownedBeforeObserverEvidence = await fileEvidence(
+        ownedBeforeObserver
+      );
+      const ownedBeforeProtectedTrees = [
+        ...retainedOwnedTrees,
+        ...postAckProtectedTrees,
+        { path: postAckProject, tree: await treeEvidence(postAckProject) },
+        { path: postAckEvidence, tree: await treeEvidence(postAckEvidence) },
+      ];
+      const ownedBeforeAdditionalIdentities = [
+        ...retainedOwnedIdentities,
+        ...(await Promise.all(
+          [
+            postAckParent,
+            postAckEvidence,
+            ...(
+              await readdir(postAckEvidence)
+            ).map((name) => join(postAckEvidence, name)),
+            ownedBeforeProject,
+            ownedBeforeConfiguration,
+            join(ownedBeforeProject, "shaders"),
+            ...["count.wgsl", "dimensions.wgsl", "gradient.wgsl"].map((name) =>
+              join(ownedBeforeProject, "shaders", name)
+            ),
+          ].map(async (path) => {
+            const { dev, ino, mode, nlink, size } = await lstat(path, {
+              bigint: true,
+            });
+            return { path, metadata: { dev, ino, mode, nlink, size } };
+          })
+        )),
+      ];
+      const ownedBeforeCommands = boundedCommands(
+        Math.min(workflowDeadline, Date.now() + 90_000)
+      );
+      const ownedBeforeBaseline = await ownedBeforeCommands.command(
+        process.execPath,
+        [bin, "native", "build", "--config", ownedConfigurationArgument],
+        runtime,
+        doctorEnvironment
+      );
+      console.info(
+        `Installed owned ${boundary} baseline actual result`,
+        JSON.stringify(ownedBeforeBaseline)
+      );
+      expect(
+        ownedBeforeBaseline.code,
+        JSON.stringify(ownedBeforeBaseline)
+      ).toBe(0);
+      expect(ownedBeforeBaseline.signal).toBeNull();
+      expect(ownedBeforeBaseline.stderr).toBe("");
+      const ownedBeforeOldGeneration = await readInstalledGeneration(
+        ownedBeforeOutput,
+        "AppShaders",
+        fingerprint,
+        ownedBeforeParentIdentity.dev
+      );
+      expect(ownedBeforeBaseline.stdout).toBe(
+        `Native package: published\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${ownedBeforeOldGeneration.recordHash}\n`
+      );
+      expect(await readdir(ownedBeforeParent)).toEqual(["AppShaders"]);
+      const ownedBeforeOldTree = await treeEvidence(ownedBeforeOutput);
+      const ownedBeforeDirectory = await open(
+        ownedBeforeOutput,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const ownedBeforeHandles: Awaited<ReturnType<typeof open>>[] = [];
+      try {
+        const oldRoot = await ownedBeforeDirectory.stat({ bigint: true });
+        expect(oldRoot.isDirectory()).toBe(true);
+        const oldIdentity = {
+          device: oldRoot.dev.toString(),
+          inode: oldRoot.ino.toString(),
+        };
+        const oldArtifacts = [];
+        for (const [role, path] of [
+          ["package-manifest", "Package.swift"],
+          ["swift-source", "Sources/AppShaders/Shaders.generated.swift"],
+          ["metal-library", "Sources/AppShaders/Resources/Shaders.metallib"],
+          ["output-record", ".vgpu-native-output.json"],
+        ] as const) {
+          const file = await open(
+            join(ownedBeforeOutput, path),
+            constants.O_RDONLY | constants.O_NOFOLLOW
+          );
+          ownedBeforeHandles.push(file);
+          const metadata = await file.stat({ bigint: true });
+          expect(metadata.isFile()).toBe(true);
+          expect(metadata.nlink).toBe(1n);
+          expect(metadata.dev).toBe(oldRoot.dev);
+          const bytes = await file.readFile();
+          expect(BigInt(bytes.length)).toBe(metadata.size);
+          const sha256 = createHash("sha256").update(bytes).digest("hex");
+          expect(sha256).toBe(
+            path === ".vgpu-native-output.json"
+              ? ownedBeforeOldGeneration.recordHash
+              : ownedBeforeOldGeneration.manifest.find(
+                  (entry) => entry.path === path
+                )!.sha256
+          );
+          oldArtifacts.push({ role, path, file, bytes, metadata, sha256 });
+        }
+        const oldDirectoryIdentities = await Promise.all(
+          [
+            "",
+            "Sources",
+            "Sources/AppShaders",
+            "Sources/AppShaders/Resources",
+          ].map(async (path) => {
+            const { dev, ino, mode, nlink, size } = await lstat(
+              join(ownedBeforeOutput, path),
+              { bigint: true }
+            );
+            return { path, metadata: { dev, ino, mode, nlink, size } };
+          })
         );
+        const ownedBeforeResult = await ownedBeforeCommands.command(
+          process.execPath,
+          [
+            "--import",
+            ownedBeforePreload.href,
+            bin,
+            "native",
+            "build",
+            "--config",
+            ownedConfigurationArgument,
+          ],
+          runtime,
+          {
+            ...doctorEnvironment,
+            VGPU_CLI_OWNED_PARENT_PID: String(process.pid),
+            VGPU_CLI_OWNED_SETTINGS: JSON.stringify({
+              boundary,
+              bin,
+              configurationPath: ownedBeforeConfiguration,
+              configurationArgument: ownedConfigurationArgument,
+              parentPath: ownedBeforeParent,
+              scratch,
+              evidence: ownedBeforeEvidence,
+              observer: ownedBeforeObserver,
+            }),
+          }
+        );
+        console.info(
+          `Installed owned ${boundary} actual result`,
+          JSON.stringify(ownedBeforeResult)
+        );
+        expect(
+          (await readdir(ownedBeforeEvidence)).sort(),
+          JSON.stringify(ownedBeforeResult)
+        ).toEqual([
+          ...(afterSwap ? ["completed"] : []),
+          "entry.json",
+          "killed.json",
+          "paused",
+          "publisher-close.json",
+          "publisher.json",
+          "reconciliation-close.json",
+          "reconciliation.json",
+          "rename-observer.dylib",
+          ...(afterSwap ? ["resume"] : []),
+        ]);
+        const sidecars = new Map();
+        for (const name of [
+          "entry",
+          "publisher",
+          "killed",
+          "publisher-close",
+          "reconciliation",
+          "reconciliation-close",
+        ]) {
+          const sidecar = await boundedFaultFile(
+            join(ownedBeforeEvidence, `${name}.json`)
+          );
+          expect(sidecar.bytes.length).toBeLessThanOrEqual(8192);
+          expect(sidecar.metadata.mode & 0o777n).toBe(0o600n);
+          expect(isUtf8(sidecar.bytes)).toBe(true);
+          sidecars.set(name, JSON.parse(sidecar.bytes.toString("utf8")));
+        }
+        const entry = sidecars.get("entry");
+        const publisher = sidecars.get("publisher");
+        const publisherClose = sidecars.get("publisher-close");
+        const reconciliation = sidecars.get("reconciliation");
+        expect(entry).toEqual({
+          pid: expect.any(Number),
+          parentPid: process.pid,
+          argv: [
+            process.execPath,
+            bin,
+            "native",
+            "build",
+            "--config",
+            ownedConfigurationArgument,
+          ],
+        });
+        expect(publisher).toEqual({
+          pid: expect.any(Number),
+          executable: expect.any(String),
+          sanitized: true,
+          args: [
+            "vgpu-publication-staging/v1",
+            ownedBeforeParent,
+            "AppShaders",
+            "AppShaders",
+            expect.stringMatching(/^[a-f0-9]{32}$/u),
+            "publish-project",
+            ownedBeforeConfiguration,
+          ],
+        });
+        expect(publisher.pid).not.toBe(entry.pid);
+        expect(dirname(dirname(publisher.executable))).toBe(scratch);
+        const paused = await boundedFaultFile(
+          join(ownedBeforeEvidence, "paused")
+        );
+        expect(paused.bytes.length).toBeLessThanOrEqual(512);
+        const marker = JSON.parse(paused.bytes.toString("utf8"));
+        expect(marker).toEqual({
+          flags: expect.any(Number),
+          swap: expect.any(Number),
+          noFollowAny: expect.any(Number),
+          source: { device: expect.any(String), inode: expect.any(String) },
+          destination: oldIdentity,
+        });
+        expect(marker.swap).toBeGreaterThan(0);
+        expect(marker.noFollowAny).toBeGreaterThan(0);
+        expect(marker.flags).toBe(marker.swap | marker.noFollowAny);
+        let terminalMarker = paused;
+        if (afterSwap) {
+          const resumed = await boundedFaultFile(
+            join(ownedBeforeEvidence, "resume")
+          );
+          expect(resumed.bytes.toString("utf8")).toBe("resume\n");
+          expect(resumed.metadata.mode & 0o777n).toBe(0o600n);
+          terminalMarker = await boundedFaultFile(
+            join(ownedBeforeEvidence, "completed")
+          );
+          expect(terminalMarker.bytes.length).toBeLessThanOrEqual(512);
+          expect(JSON.parse(terminalMarker.bytes.toString("utf8"))).toEqual({
+            result: 0,
+            errno: expect.any(Number),
+            source: oldIdentity,
+            destination: marker.source,
+          });
+        }
+        const killed = sidecars.get("killed");
+        expect(killed).toEqual({
+          boundary,
+          pid: publisher.pid,
+          signal: "SIGKILL",
+          delivered: true,
+          commitRequests: 1,
+          markerSHA256: createHash("sha256")
+            .update(terminalMarker.bytes)
+            .digest("hex"),
+          elapsedMs: expect.any(Number),
+          ...(afterSwap
+            ? {
+                pausedSHA256: createHash("sha256")
+                  .update(paused.bytes)
+                  .digest("hex"),
+                pauseElapsedMs: expect.any(Number),
+              }
+            : {}),
+        });
+        expect(killed.elapsedMs).toBeGreaterThanOrEqual(0);
+        expect(killed.elapsedMs).toBeLessThan(3000);
+        if (afterSwap) {
+          expect(killed.pauseElapsedMs).toBeGreaterThanOrEqual(0);
+          expect(killed.pauseElapsedMs).toBeLessThan(3000);
+        }
+        expect(publisherClose).toEqual({
+          pid: publisher.pid,
+          code: null,
+          signal: "SIGKILL",
+          commitRequests: 1,
+          watchdogFired: false,
+        });
+        expect(reconciliation).toEqual({
+          pid: expect.any(Number),
+          executable: publisher.executable,
+          args: [
+            "vgpu-publication-staging/v1",
+            ownedBeforeParent,
+            "AppShaders",
+            "AppShaders",
+            publisher.args[4],
+            "reconcile-owned",
+            ownedBeforeParentIdentity.dev.toString(),
+            ownedBeforeParentIdentity.ino.toString(),
+          ],
+          afterPublisherClose: publisherClose,
+          injected: false,
+          before: expect.any(Object),
+        });
+        expect(reconciliation.pid).not.toBe(publisher.pid);
+        expect(sidecars.get("reconciliation-close")).toEqual({
+          pid: reconciliation.pid,
+          code: 0,
+          signal: null,
+        });
+        expect(Object.keys(reconciliation.before).sort()).toEqual([
+          "journal",
+          ...(afterSwap ? ["output"] : []),
+          "stage",
+        ]);
+        const journal = await boundedFaultFile(ownedBeforeJournal);
+        expect(isUtf8(journal.bytes)).toBe(true);
+        expect(reconciliation.before.journal).toEqual({
+          device: journal.metadata.dev.toString(),
+          inode: journal.metadata.ino.toString(),
+          mode: journal.metadata.mode.toString(),
+          nlink: journal.metadata.nlink.toString(),
+          size: journal.metadata.size.toString(),
+          sha256: createHash("sha256").update(journal.bytes).digest("hex"),
+        });
+        const newRootPath = afterSwap ? ownedBeforeOutput : ownedBeforeStage;
+        const oldRootPath = afterSwap ? ownedBeforeStage : ownedBeforeOutput;
+        const stage = await lstat(newRootPath, { bigint: true });
+        expect(marker.source).toEqual({
+          device: stage.dev.toString(),
+          inode: stage.ino.toString(),
+        });
+        expect(stage.ino).not.toBe(oldRoot.ino);
+        const generation = await readInstalledGeneration(
+          newRootPath,
+          "AppShaders",
+          fingerprint,
+          ownedBeforeParentIdentity.dev
+        );
+        const configurationIdentity = ownedBeforeAdditionalIdentities.find(
+          ({ path }) => path === ownedBeforeConfiguration
+        )!.metadata;
+        const stagedFiles = [];
+        for (const { role, path } of oldArtifacts) {
+          const evidence = await fileEvidence(join(newRootPath, path));
+          stagedFiles.push({
+            role,
+            path,
+            length: evidence.bytes,
+            sha256: evidence.sha256,
+          });
+        }
+        expect(JSON.parse(journal.bytes.toString("utf8"))).toEqual({
+          schemaVersion: 1,
+          kind: "vgpu-native-publication",
+          phase: "prepared",
+          transactionId: publisher.args[4],
+          parent: {
+            device: ownedBeforeParentIdentity.dev.toString(),
+            inode: ownedBeforeParentIdentity.ino.toString(),
+          },
+          destinationName: "AppShaders",
+          moduleName: "AppShaders",
+          publication: {
+            renameMode: "swap",
+            expectedDestination: "owned",
+            oldDestination: oldIdentity,
+            oldModuleName: "AppShaders",
+            oldRecordSHA256: ownedBeforeOldGeneration.recordHash,
+            oldFiles: oldArtifacts.map(({ role, path, bytes, sha256 }) => ({
+              role,
+              path,
+              length: bytes.length,
+              sha256,
+            })),
+            ownership: {
+              ownerConfiguration: "../../vgpu.native.json",
+              configuration: {
+                device: configurationIdentity.dev.toString(),
+                inode: configurationIdentity.ino.toString(),
+              },
+            },
+          },
+          stage: {
+            name: ".vgpu-native-stage",
+            device: stage.dev.toString(),
+            inode: stage.ino.toString(),
+          },
+          recordSHA256: generation.recordHash,
+          files: stagedFiles,
+        });
+        const retainedStageIdentities = [];
+        for (const observedTree of [
+          { root: ownedBeforeStage, entries: reconciliation.before.stage },
+          ...(afterSwap
+            ? [
+                {
+                  root: ownedBeforeOutput,
+                  entries: reconciliation.before.output,
+                },
+              ]
+            : []),
+        ]) {
+          expect(
+            observedTree.entries.map((item: { path: string }) => item.path)
+          ).toEqual([
+            "",
+            ".vgpu-native-output.json",
+            "Package.swift",
+            "Sources",
+            "Sources/AppShaders",
+            "Sources/AppShaders/Resources",
+            "Sources/AppShaders/Resources/Shaders.metallib",
+            "Sources/AppShaders/Shaders.generated.swift",
+          ]);
+          for (const observed of observedTree.entries) {
+            const path = join(observedTree.root, observed.path);
+            const metadata = await lstat(path, { bigint: true });
+            const { dev, ino, mode, nlink, size } = metadata;
+            expect(observed).toEqual({
+              path: observed.path,
+              kind: metadata.isDirectory() ? "directory" : "file",
+              metadata: {
+                device: dev.toString(),
+                inode: ino.toString(),
+                mode: mode.toString(),
+                nlink: nlink.toString(),
+                size: size.toString(),
+              },
+            });
+            retainedStageIdentities.push({
+              path,
+              metadata: { dev, ino, mode, nlink, size },
+            });
+          }
+        }
+        const retainedBeforeVerify = await treeEvidence(ownedBeforeParent);
+        const evidenceBeforeVerify = await treeEvidence(ownedBeforeEvidence);
+        const ownedBeforeVerify = await ownedBeforeCommands.command(
+          process.execPath,
+          [bin, "native", "verify", "--config", ownedConfigurationArgument],
+          runtime,
+          {
+            ...doctorEnvironment,
+            DEVELOPER_DIR: missingDeveloper,
+            TMPDIR: missingVerifyTemp,
+          }
+        );
+        console.info(
+          `Installed owned ${boundary} current verify actual result`,
+          JSON.stringify(ownedBeforeVerify)
+        );
+        expect(ownedBeforeVerify.code, JSON.stringify(ownedBeforeVerify)).toBe(
+          0
+        );
+        expect(ownedBeforeVerify.signal).toBeNull();
+        expect(ownedBeforeVerify.stderr).toBe("");
+        expect(ownedBeforeVerify.stdout).toBe(
+          `Native package: current\nModule: AppShaders\nOutput: ${ownedBeforeOutput}\nInput fingerprint: ${fingerprint}\n`
+        );
+        expect(await treeEvidence(oldRootPath)).toEqual(ownedBeforeOldTree);
+        expect(await ownedBeforeDirectory.stat({ bigint: true })).toMatchObject(
+          {
+            dev: oldRoot.dev,
+            ino: oldRoot.ino,
+            mode: oldRoot.mode,
+            nlink: oldRoot.nlink,
+          }
+        );
+        for (const { path, metadata } of oldDirectoryIdentities)
+          expect(
+            await lstat(join(oldRootPath, path), { bigint: true })
+          ).toMatchObject(metadata);
+        for (const { file, path, bytes, metadata } of oldArtifacts) {
+          const expected = {
+            dev: metadata.dev,
+            ino: metadata.ino,
+            mode: metadata.mode,
+            nlink: metadata.nlink,
+            size: metadata.size,
+          };
+          expect(await file.stat({ bigint: true })).toMatchObject(expected);
+          expect(
+            await lstat(join(oldRootPath, path), { bigint: true })
+          ).toMatchObject(expected);
+          const retained = Buffer.alloc(bytes.length + 1);
+          let length = 0;
+          while (length < retained.length) {
+            const { bytesRead } = await file.read(
+              retained,
+              length,
+              retained.length - length,
+              length
+            );
+            if (bytesRead === 0) break;
+            length += bytesRead;
+          }
+          expect(retained.subarray(0, length)).toEqual(bytes);
+        }
+        expect(await treeEvidence(ownedBeforeParent)).toEqual(
+          retainedBeforeVerify
+        );
+        for (const { path, metadata } of retainedStageIdentities)
+          expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+        const journalAfter = await boundedFaultFile(ownedBeforeJournal);
+        expect(journalAfter.bytes).toEqual(journal.bytes);
+        expect(journalAfter.metadata).toMatchObject({
+          dev: journal.metadata.dev,
+          ino: journal.metadata.ino,
+          mode: journal.metadata.mode,
+          nlink: journal.metadata.nlink,
+          size: journal.metadata.size,
+        });
+        expect((await readdir(ownedBeforeParent)).sort()).toEqual([
+          ".vgpu-native-publication.json",
+          ".vgpu-native-stage",
+          "AppShaders",
+        ]);
+        expect(await lstat(ownedBeforeParent, { bigint: true })).toMatchObject({
+          dev: ownedBeforeParentIdentity.dev,
+          ino: ownedBeforeParentIdentity.ino,
+          mode: ownedBeforeParentIdentity.mode,
+        });
+        for (const path of [
+          join(ownedBeforeParent, ".vgpu-native-publication.update.json"),
+          ...[
+            ...(afterSwap ? [] : ["resume", "completed"]),
+            "return",
+            "failure.json",
+          ].map((name) => join(ownedBeforeEvidence, name)),
+        ])
+          await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+        expect(await treeEvidence(ownedBeforeEvidence)).toEqual(
+          evidenceBeforeVerify
+        );
+        for (const { path, tree } of ownedBeforeProtectedTrees)
+          expect(await treeEvidence(path)).toEqual(tree);
+        for (const { path, metadata } of [
+          ...signalProtectedIdentities,
+          ...signalRetainedIdentities,
+          ...postAckAdditionalIdentities,
+          ...postAckOutputIdentities,
+          ...ownedBeforeAdditionalIdentities,
+        ])
+          expect(await lstat(path, { bigint: true })).toMatchObject(metadata);
+        expect((await boundedFaultFile(signalJournalPath)).bytes).toEqual(
+          signalJournal.bytes
+        );
+        expect([
+          await fileEvidence(ownedBeforeConfiguration),
+          await treeEvidence(join(ownedBeforeProject, "shaders")),
+        ]).toEqual(inputBeforeBuild);
+        expect((await readdir(ownedBeforeProject)).sort()).toEqual([
+          "Generated",
+          "shaders",
+          "vgpu.native.json",
+        ]);
+        for (const path of [missingDeveloper, missingVerifyTemp])
+          await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+        expect(await readdir(scratch)).toEqual([]);
+        expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+        expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+        expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+        expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+        for (const [filename, before] of archiveEvidence)
+          expect(await fileEvidence(join(archives, filename))).toEqual(before);
+        for (const [path, evidence] of sourceEvidence)
+          expect(await fileEvidence(path)).toEqual(evidence);
+        expect(await Promise.all(faultSources.map(fileEvidence))).toEqual(
+          faultSourceEvidence
+        );
+        expect(await fileEvidence(fileURLToPath(signalPreload))).toEqual(
+          signalPreloadBefore
+        );
+        expect(await Promise.all(ownedBeforeSources.map(fileEvidence))).toEqual(
+          ownedBeforeSourceEvidence
+        );
+        expect(await fileEvidence(ownedBeforeObserver)).toEqual(
+          ownedBeforeObserverEvidence
+        );
+        expect(ownedBeforeResult.code, JSON.stringify(ownedBeforeResult)).toBe(
+          1
+        );
+        expect(ownedBeforeResult.signal).toBeNull();
+        expect(ownedBeforeResult.stdout).toBe("");
+        expect(
+          ownedBeforeResult.stderr,
+          JSON.stringify(ownedBeforeResult)
+        ).toBe(
+          afterSwap
+            ? `Native publication: published\nConfirmation: reconciled\n[error] helper-failed: Metal publication published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n  ${ownedBeforeOutput}\n`
+            : `Native publication: not-published\n[error] helper-failed: Metal publication not-published: Invalid publication staging helper response\nInspect retained paths (not cleanup authority):\n  ${ownedBeforeStage}\n  ${ownedBeforeJournal}\n`
+        );
+        for (const path of [ownedBeforeProject, ownedBeforeEvidence])
+          retainedOwnedTrees.push({ path, tree: await treeEvidence(path) });
+        const ownedRetainedPaths = [ownedBeforeProject, ownedBeforeEvidence];
+        for (let index = 0; index < ownedRetainedPaths.length; index++) {
+          const path = ownedRetainedPaths[index]!;
+          const metadata = await lstat(path, { bigint: true });
+          const { dev, ino, mode, nlink, size } = metadata;
+          retainedOwnedIdentities.push({
+            path,
+            metadata: { dev, ino, mode, nlink, size },
+          });
+          if (metadata.isDirectory())
+            ownedRetainedPaths.push(
+              ...(await readdir(path)).sort().map((name) => join(path, name))
+            );
+        }
+      } finally {
+        const closed = await Promise.allSettled([
+          ownedBeforeDirectory.close(),
+          ...ownedBeforeHandles.map((file) => file.close()),
+        ]);
+        const failures = closed.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : []
+        );
+        if (failures.length)
+          throw new AggregateError(
+            failures,
+            `Owned ${boundary} generation close failed`
+          );
+      }
     }
   } finally {
     const cleanupFailures: unknown[] = [];

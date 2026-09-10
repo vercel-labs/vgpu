@@ -1,4 +1,4 @@
-// Test-only explicit --import: kill one actual owned publisher before its real SWAP.
+// Test-only explicit --import: kill one actual owned publisher around its real SWAP.
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
 import { createHash } from "node:crypto";
@@ -87,6 +87,7 @@ function install() {
   const settings = JSON.parse(process.env.VGPU_CLI_OWNED_SETTINGS);
   assert.deepEqual(Object.keys(settings).sort(), [
     "bin",
+    "boundary",
     "configurationArgument",
     "configurationPath",
     "evidence",
@@ -96,6 +97,7 @@ function install() {
   ]);
   const {
     bin,
+    boundary,
     configurationPath,
     configurationArgument,
     parentPath,
@@ -112,6 +114,8 @@ function install() {
     process.argv[5] !== configurationArgument
   )
     return;
+  assert.ok(boundary === "before-swap" || boundary === "after-swap");
+  const afterSwap = boundary === "after-swap";
   for (const path of [
     bin,
     configurationPath,
@@ -130,7 +134,7 @@ function install() {
   assert.equal(basename(configurationPath), "vgpu.native.json");
   assert.equal(
     basename(dirname(configurationPath)),
-    "owned-before-swap-project"
+    afterSwap ? "owned-after-swap-project" : "owned-before-swap-project"
   );
   assert.equal(parentPath, join(dirname(configurationPath), "Generated"));
   assert.equal(dirname(evidence), dirname(scratch));
@@ -138,7 +142,8 @@ function install() {
   const paused = join(evidence, "paused");
   const resume = join(evidence, "resume");
   const completed = join(evidence, "completed");
-  for (const path of [paused, resume, completed]) absent(path);
+  const returnMarker = join(evidence, "return");
+  for (const path of [paused, resume, completed, returnMarker]) absent(path);
   const record = (name, value) => {
     const bytes = `${JSON.stringify(value)}\n`;
     assert.ok(Buffer.byteLength(bytes) <= 8192, "Bounded owned sidecar");
@@ -160,6 +165,10 @@ function install() {
   let commitRequests = 0;
   let pollTimer;
   let began;
+  let resumed = false;
+  let pausedMarker;
+  let pausedSHA256;
+  let pauseElapsedMs;
   let killed = false;
   let watchdogFired = false;
   let failed = false;
@@ -178,38 +187,52 @@ function install() {
           child.kill("SIGKILL");
     }
   };
-  const observePaused = () => {
+  const observeBoundary = () => {
     try {
       if (publisherClose) return;
       if (performance.now() - began >= 3000) {
         watchdogFired = true;
         throw new Error(
-          "The real owned pause was not observed within 3000 ms of commit"
+          "The real owned boundary was not observed within its 3000 ms phase"
         );
       }
-      const observation = boundedFile(paused, 512, true);
+      const observation = boundedFile(resumed ? completed : paused, 512, true);
       if (
         !observation ||
         observation.bytes.length === 0 ||
         !observation.bytes.includes(10)
       ) {
-        pollTimer = setTimeout(observePaused, 1);
+        pollTimer = setTimeout(observeBoundary, 1);
         return;
       }
       assert.equal(observation.bytes.indexOf(10), observation.bytes.length - 1);
       const marker = JSON.parse(observation.bytes.toString("utf8"));
-      assert.deepEqual(Object.keys(marker).sort(), [
-        "destination",
-        "flags",
-        "noFollowAny",
-        "source",
-        "swap",
-      ]);
-      for (const value of [marker.flags, marker.swap, marker.noFollowAny])
-        assert.ok(
-          Number.isSafeInteger(value) && value > 0 && value <= 0xffffffff
-        );
-      assert.equal(marker.flags, (marker.swap | marker.noFollowAny) >>> 0);
+      if (resumed) {
+        assert.deepEqual(Object.keys(marker).sort(), [
+          "destination",
+          "errno",
+          "result",
+          "source",
+        ]);
+        assert.equal(marker.result, 0, "The real owned SWAP succeeded");
+        assert.ok(Number.isSafeInteger(marker.errno));
+        // Success need not clear errno; the two actual root identities prove the exchange.
+        assert.deepEqual(marker.source, pausedMarker.destination);
+        assert.deepEqual(marker.destination, pausedMarker.source);
+      } else {
+        assert.deepEqual(Object.keys(marker).sort(), [
+          "destination",
+          "flags",
+          "noFollowAny",
+          "source",
+          "swap",
+        ]);
+        for (const value of [marker.flags, marker.swap, marker.noFollowAny])
+          assert.ok(
+            Number.isSafeInteger(value) && value > 0 && value <= 0xffffffff
+          );
+        assert.equal(marker.flags, (marker.swap | marker.noFollowAny) >>> 0);
+      }
       for (const [identity, name] of [
         [marker.source, ".vgpu-native-stage"],
         [marker.destination, "AppShaders"],
@@ -227,29 +250,45 @@ function install() {
         });
       }
       assert.notDeepEqual(marker.source, marker.destination);
-      absent(resume);
-      absent(completed);
+      if (!resumed) {
+        absent(resume);
+        absent(completed);
+      }
+      absent(returnMarker);
       const elapsedMs = performance.now() - began;
       if (elapsedMs >= 3000) {
         watchdogFired = true;
-        throw new Error("The complete owned marker missed its commit deadline");
+        throw new Error("The complete owned marker missed its phase deadline");
       }
       assert.equal(publisherChild.exitCode, null);
       assert.equal(publisherChild.signalCode, null);
+      if (afterSwap && !resumed) {
+        pausedMarker = marker;
+        pausedSHA256 = sha256(observation.bytes);
+        pauseElapsedMs = elapsedMs;
+        resumed = true;
+        // Start before the real resume becomes visible, ahead of C's RETURN barrier.
+        began = performance.now();
+        writeFileSync(resume, "resume\n", { flag: "wx", mode: 0o600 });
+        pollTimer = setTimeout(observeBoundary, 0);
+        return;
+      }
       const delivered = publisherChild.kill("SIGKILL");
       killed = delivered;
       record("killed", {
         pid: publisherChild.pid,
+        boundary,
         signal: "SIGKILL",
         delivered,
         commitRequests,
         markerSHA256: sha256(observation.bytes),
         elapsedMs,
+        ...(afterSwap ? { pausedSHA256, pauseElapsedMs } : {}),
       });
       assert.equal(
         delivered,
         true,
-        "Kill the retained actual helper before resume"
+        "Kill the retained actual helper at the selected real boundary"
       );
     } catch (error) {
       failSetup(error);
@@ -260,7 +299,6 @@ function install() {
       join(parentPath, ".vgpu-native-publication.json"),
       64 * 1024
     );
-    const stageRoot = join(parentPath, ".vgpu-native-stage");
     const directories = [
       ["", [".vgpu-native-output.json", "Package.swift", "Sources"]],
       ["Sources", ["AppShaders"]],
@@ -277,23 +315,28 @@ function install() {
       "Sources/AppShaders/Resources/Shaders.metallib",
       "Sources/AppShaders/Shaders.generated.swift",
     ];
-    const stage = paths.map((path) => {
-      const stat = lstatSync(join(stageRoot, path), { bigint: true });
-      const directory = directories.some(([name]) => name === path);
-      assert.ok(
-        directory ? stat.isDirectory() : stat.isFile() && stat.nlink === 1n
-      );
-      return {
-        path,
-        kind: directory ? "directory" : "file",
-        metadata: metadata(stat),
-      };
-    });
-    for (const [path, entries] of directories)
-      assert.deepEqual(readdirSync(join(stageRoot, path)).sort(), entries);
+    const tree = (name) => {
+      const root = join(parentPath, name);
+      const entries = paths.map((path) => {
+        const stat = lstatSync(join(root, path), { bigint: true });
+        const directory = directories.some(([name]) => name === path);
+        assert.ok(
+          directory ? stat.isDirectory() : stat.isFile() && stat.nlink === 1n
+        );
+        return {
+          path,
+          kind: directory ? "directory" : "file",
+          metadata: metadata(stat),
+        };
+      });
+      for (const [path, names] of directories)
+        assert.deepEqual(readdirSync(join(root, path)).sort(), names);
+      return entries;
+    };
     return {
       journal: { ...journal.metadata, sha256: sha256(journal.bytes) },
-      stage,
+      stage: tree(".vgpu-native-stage"),
+      ...(afterSwap ? { output: tree("AppShaders") } : {}),
     };
   };
   // Save a function VALUE before updating Node's named ESM export.
@@ -355,6 +398,7 @@ function install() {
               VGPU_OWNED_RENAME_PAUSED: paused,
               VGPU_OWNED_RENAME_RESUME: resume,
               VGPU_OWNED_RENAME_COMPLETED: completed,
+              ...(afterSwap ? { VGPU_OWNED_RENAME_RETURN: returnMarker } : {}),
             },
           },
         ]);
@@ -383,7 +427,7 @@ function install() {
           )
             failSetup(
               new Error(
-                "Publisher closed without the exact before-SWAP interruption"
+                "Publisher closed without the exact owned boundary interruption"
               )
             );
           record("publisher-close", publisherClose);
@@ -404,7 +448,7 @@ function install() {
             commitRequests++;
             assert.equal(commitRequests, 1, "One real owned commit request");
             began = performance.now();
-            pollTimer = setTimeout(observePaused, 0);
+            pollTimer = setTimeout(observeBoundary, 0);
           }
           // Observe call entry only: no held callback, changed bytes, or fabricated reply.
           return Reflect.apply(originalWrite, this, writeArgs);

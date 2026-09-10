@@ -31,6 +31,10 @@ them together, then replaces the output directory as one operation.
 > the directory exchange. One uninjected read-only reconciliation establishes `not-published`
 > without confirmation. The failed command preserves its original error, complete old output,
 > complete new staging package and original recovery record; ordinary verification remains current.
+> A second owned replacement completes the real exchange, then loses the helper before acknowledgment.
+> Its one read-only reconciliation reports `published` / `reconciled` while retaining the original
+> error, complete old package at staging, complete new output and unchanged recovery record.
+> Ordinary verification reports that new output as current without changing either generation.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -38,7 +42,7 @@ them together, then replaces the output directory as one operation.
 > retains the original failure, and preserves the published package and journal. This instrumentation
 > does not qualify ordinary loader behavior, signing, or quarantine. A subsequent ordinary build
 > recognizes that same retained transaction, reports its original output and journal, and leaves the
-> evidence intact. Installed recovery after a successful owned exchange and unknown-outcome diagnostics remain
+> evidence intact. Installed unknown-outcome diagnostics and post-publication cleanup refusal remain
 > unqualified; this is not a released end-to-end build workflow.
 
 ## Reserve the destination

@@ -151,7 +151,10 @@ that ordinary installed verification reports as current. An owned replacement al
 helper after the commit request but before exchange. One uninjected read-only reconciliation proves
 non-publication without a receipt, preserving the original error, complete old output, complete new
 stage and raw recovery record. Ordinary installed verification of the old output remains current.
-Installed recovery after successful owned exchange and unknown-outcome diagnostics remain unqualified.
+A second owned invocation completes the actual exchange before losing its helper acknowledgment.
+Its one uninjected reconciliation reports published/reconciled with the original error and retained
+old stage, new output and unchanged journal; current verify leaves both complete generations intact.
+Installed unknown-outcome diagnostics and post-publication cleanup refusal remain unqualified.
 
 ## Checks
 
