@@ -183,6 +183,16 @@ The portable suite checks generation and input validation. The separate native s
 Apple silicon and requires a Metal device, Swift tooling, and Xcode's Metal compiler component.
 Missing tool or device prerequisites fail the native suite; passing the portable suite does not
 imply native coverage. The suite does not enforce an architecture gate or establish Intel support.
+Installed qualification requires one complete run of the ordinary CLI, relocated Swift consumer,
+and selected interruption/recovery scenarios. A passing earlier phase or a green portable CI run
+does not substitute for that result. The harness reserves time before starting bounded child
+operations; a failed reservation is incomplete qualification, not an observed publication failure.
+Investigate cumulative stage timings before changing the harness, and preserve all byte/identity
+checks, child-process closure and recovery scenarios when removing redundant test work.
+The owned-output fault cases compile their unchanged observer once, then load fresh authenticated
+copies from separate case directories. Admission reserves 30 seconds for that shared compilation
+plus the first 90-second command phase; subsequent cases reserve only their 90-second command
+phase. The overall 240-second workflow budget and all fault/preservation checks remain unchanged.
 The owned-package filesystem-boundary regression also uses macOS `hdiutil` to create and mount a
 disposable read-only image inside its temporary fixture. It detaches that image before removing
 the fixture; if detach cannot be confirmed, it preserves the fixture and reports the failure.

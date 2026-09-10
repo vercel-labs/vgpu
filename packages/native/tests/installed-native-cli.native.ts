@@ -22,6 +22,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { expect, test } from "vitest";
 import { runConsumer } from "./native-support.ts";
 import { projectFixture } from "./project-operation-fixture.ts";
+import { copyInstalledObserver } from "./installed-observer.ts";
 
 const workspace = fileURLToPath(new URL("../../..", import.meta.url));
 const packages = [
@@ -2838,8 +2839,63 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       "Native publication: published\nConfirmation: acknowledged\n[error] cancelled: Metal publication published: Publication staging was cancelled\n"
     );
 
+    // Compile the invariant observer once. Reserve compilation plus the first case before
+    // starting; later cases need only their command phase, not another compilation budget.
+    expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
+    const ownedObserverSource = fileURLToPath(
+      new URL("./fixtures/publication-owned-rename.c", import.meta.url)
+    );
+    const ownedObserverSourceEvidence = await fileEvidence(ownedObserverSource);
+    sourceEvidence.set(ownedObserverSource, ownedObserverSourceEvidence);
+    const ownedObserverDirectory = join(fixture, "owned-observer-template");
+    await mkdir(ownedObserverDirectory);
+    const ownedObserverPath = join(
+      ownedObserverDirectory,
+      "rename-observer.dylib"
+    );
+    await boundedCommands(
+      Math.min(workflowDeadline, Date.now() + 30_000)
+    ).checked(
+      "/usr/bin/xcrun",
+      [
+        "--sdk",
+        "macosx",
+        "clang",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mmacosx-version-min=14.0",
+        "-dynamiclib",
+        ownedObserverSource,
+        "-o",
+        ownedObserverPath,
+      ],
+      fixture,
+      doctorEnvironment
+    );
+    expect(await fileEvidence(ownedObserverSource)).toEqual(
+      ownedObserverSourceEvidence
+    );
+    const ownedObserverTemplateEvidence = await fileEvidence(ownedObserverPath);
+    const ownedObserverTemplate = {
+      path: ownedObserverPath,
+      bytes: await readFile(ownedObserverPath),
+      metadata: await lstat(ownedObserverPath, { bigint: true }),
+    };
+    expect(ownedObserverTemplate.metadata.isFile()).toBe(true);
+    expect(ownedObserverTemplate.metadata.nlink).toBe(1n);
+    expect(
+      createHash("sha256").update(ownedObserverTemplate.bytes).digest("hex")
+    ).toBe(ownedObserverTemplateEvidence.sha256);
+
     // Observe both fixed sides of real SWAP without discarding an earlier case's evidence.
-    const retainedOwnedTrees: { path: string; tree: unknown }[] = [];
+    const retainedOwnedTrees: { path: string; tree: unknown }[] = [
+      {
+        path: ownedObserverDirectory,
+        tree: await treeEvidence(ownedObserverDirectory),
+      },
+    ];
     const retainedOwnedIdentities: {
       path: string;
       metadata: {
@@ -2850,6 +2906,15 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         size: bigint;
       };
     }[] = [];
+    for (const path of [ownedObserverDirectory, ownedObserverPath]) {
+      const { dev, ino, mode, nlink, size } = await lstat(path, {
+        bigint: true,
+      });
+      retainedOwnedIdentities.push({
+        path,
+        metadata: { dev, ino, mode, nlink, size },
+      });
+    }
     for (const boundary of [
       "before-swap",
       "after-swap",
@@ -2859,7 +2924,7 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
       const cleanupRefusal = boundary === "after-swap-with-cleanup-refusal";
       const afterSwap = boundary === "after-swap" || cleanupRefusal;
       const corruptOld = boundary === "before-swap-with-corrupt-old-payload";
-      expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(120_000);
+      expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(90_000);
       const ownedBeforeInput = await projectFixture();
       unplacedProject = ownedBeforeInput.directory;
       const ownedProjectName = cleanupRefusal
@@ -2924,29 +2989,12 @@ print(String(data: try JSONSerialization.data(withJSONObject: result), encoding:
         ownedBeforeEvidence,
         "rename-observer.dylib"
       );
-      await boundedCommands(
-        Math.min(workflowDeadline, Date.now() + 30_000)
-      ).checked(
-        "/usr/bin/xcrun",
-        [
-          "--sdk",
-          "macosx",
-          "clang",
-          "-std=c11",
-          "-Wall",
-          "-Wextra",
-          "-Werror",
-          "-mmacosx-version-min=14.0",
-          "-dynamiclib",
-          fileURLToPath(ownedBeforeObserverSource),
-          "-o",
-          ownedBeforeObserver,
-        ],
-        fixture,
-        doctorEnvironment
-      );
+      await copyInstalledObserver(ownedObserverTemplate, ownedBeforeObserver);
       const ownedBeforeObserverEvidence = await fileEvidence(
         ownedBeforeObserver
+      );
+      expect(ownedBeforeObserverEvidence).toEqual(
+        ownedObserverTemplateEvidence
       );
       const ownedBeforeProtectedTrees = [
         ...retainedOwnedTrees,
