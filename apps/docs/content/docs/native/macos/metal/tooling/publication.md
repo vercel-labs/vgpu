@@ -19,6 +19,8 @@ them together, then replaces the output directory as one operation.
 > while keeping the same owner and output path. It checks each new generation's own hashes and record,
 > the new module's exact file set, removal of the previous files without changing their bytes, and
 > current verification. These normal rebuilds do not qualify installed interruption or cleanup failures.
+> Installed integrity-conflict coverage also rejects a modified `Package.swift` without changing the
+> conflicting bytes or original ownership record, or creating staging or a recovery record.
 > That installed workflow also covers an unrecognized recovery record: its conflict report retains
 > the supplied paths while preserving the existing package and recovery files. A separate,
 > explicitly fault-instrumented invocation of the same candidate observes a successful real rename
@@ -158,8 +160,10 @@ Run `vgpu native verify` with the same configuration to check that the resulting
 Verification does not establish whether a directory exchange occurred or clean recovery files.
 
 Modified generated files, additional handwritten files, or a different owning configuration prevent
-ordinary replacement. There is no force option that discards those conflicts. A retained transaction
-also prevents an ordinary retry: follow [Recover without guessing](#recover-without-guessing) before
+ordinary replacement. Rejection preserves the conflicting file bytes and original ownership record;
+the build does not repair them or rewrite the record to accept the edit. There is no force option
+that discards those conflicts. A retained transaction also prevents an ordinary retry:
+follow [Recover without guessing](#recover-without-guessing) before
 deciding what to do with that evidence.
 
 ## Interpret an interruption

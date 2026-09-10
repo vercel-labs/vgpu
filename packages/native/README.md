@@ -41,6 +41,8 @@ absent and ordinary empty destinations, followed by unchanged-input and changed-
 of the owned package at the same output path. It independently verifies each generation's file set,
 hashes and input fingerprint; replacement checks distinct retained directory identities, the new
 module's exact file set, removal of old files without changing their bytes, and current verification.
+An installed build also rejects an in-place modification of `Package.swift`, preserving the modified
+package, original record and identities without creating transaction state or repairing the edit.
 The private publisher currently stages and verifies those files under a physical
 parent lock, then publishes exclusively to a missing destination, atomically replaces an ordinary
 empty directory, or exchanges an intact package belonging to the same current configuration.

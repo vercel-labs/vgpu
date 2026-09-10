@@ -15,7 +15,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1152,6 +1152,181 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
             expect(await fileEvidence(join(archives, filename))).toEqual(
               before
             );
+
+          // Refuse one modified owned payload without repairing or replacing its evidence.
+          expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(180_000);
+          const unsafeCommands = boundedCommands(
+            Math.min(workflowDeadline, Date.now() + 60_000)
+          );
+          const unsafeDirectory = await open(
+            emptyOutput,
+            constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+          );
+          let unsafeFile: Awaited<ReturnType<typeof open>> | undefined;
+          try {
+            expect(await unsafeDirectory.stat({ bigint: true })).toMatchObject({
+              dev: rebuiltRoot.dev,
+              ino: rebuiltRoot.ino,
+              mode: rebuiltRoot.mode,
+            });
+            const unsafePath = join(emptyOutput, "Package.swift");
+            unsafeFile = await open(
+              unsafePath,
+              constants.O_RDWR | constants.O_NOFOLLOW
+            );
+            const unsafeMetadata = await unsafeFile.stat({ bigint: true });
+            expect(unsafeMetadata.isFile()).toBe(true);
+            expect(unsafeMetadata.nlink).toBe(1n);
+            expect(unsafeMetadata.dev).toBe(rebuiltRoot.dev);
+            const unsafeIdentities = await Promise.all(
+              [
+                emptyProject,
+                rebuiltConfiguration,
+                join(emptyProject, "shaders"),
+                ...["count.wgsl", "dimensions.wgsl", "gradient.wgsl"].map(
+                  (name) => join(emptyProject, "shaders", name)
+                ),
+                dirname(emptyOutput),
+                emptyOutput,
+                join(emptyOutput, "Sources"),
+                join(emptyOutput, "Sources/RebuiltShadersLonger"),
+                join(emptyOutput, "Sources/RebuiltShadersLonger/Resources"),
+                ...generation.manifest.map(({ path }) =>
+                  join(emptyOutput, path)
+                ),
+                join(emptyOutput, ".vgpu-native-output.json"),
+              ].map(async (path) => {
+                const { dev, ino, mode, nlink, size } = await lstat(path, {
+                  bigint: true,
+                });
+                return { path, metadata: { dev, ino, mode, nlink, size } };
+              })
+            );
+            expect(await lstat(unsafePath, { bigint: true })).toMatchObject({
+              dev: unsafeMetadata.dev,
+              ino: unsafeMetadata.ino,
+              mode: unsafeMetadata.mode,
+              nlink: unsafeMetadata.nlink,
+              size: unsafeMetadata.size,
+            });
+            const unsafeOriginal = await unsafeFile.readFile();
+            expect(BigInt(unsafeOriginal.length)).toBe(unsafeMetadata.size);
+            expect(unsafeOriginal.length).toBeGreaterThan(0);
+            expect(
+              createHash("sha256").update(unsafeOriginal).digest("hex")
+            ).toBe(
+              generation.manifest.find(({ path }) => path === "Package.swift")!
+                .sha256
+            );
+            const unsafeChanged = Buffer.from(unsafeOriginal);
+            unsafeChanged[0] = unsafeChanged[0]! ^ 1;
+            expect(
+              (await unsafeFile.write(unsafeChanged, 0, 1, 0)).bytesWritten
+            ).toBe(1);
+            expect(await readFile(unsafePath)).toEqual(unsafeChanged);
+            for (const { path, metadata } of unsafeIdentities)
+              expect(await lstat(path, { bigint: true })).toMatchObject(
+                metadata
+              );
+            for (const { path, sha256 } of generation.manifest.filter(
+              ({ path }) => path !== "Package.swift"
+            ))
+              expect((await fileEvidence(join(emptyOutput, path))).sha256).toBe(
+                sha256
+              );
+            expect(
+              await readFile(join(emptyOutput, ".vgpu-native-output.json"))
+            ).toEqual(generation.record.bytes);
+            expect([
+              await fileEvidence(rebuiltConfiguration),
+              await treeEvidence(join(emptyProject, "shaders")),
+            ]).toEqual(changedInputsBefore);
+            expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+            const unsafeTreeBefore = await treeEvidence(emptyProject);
+            const unsafeBuild = await unsafeCommands.command(
+              process.execPath,
+              [
+                bin,
+                "native",
+                "build",
+                "--config",
+                "../empty-project/vgpu.native.json",
+              ],
+              runtime,
+              doctorEnvironment
+            );
+            console.info(
+              "Installed unsafe owned-output actual result",
+              JSON.stringify(unsafeBuild)
+            );
+            expect(unsafeBuild.code, JSON.stringify(unsafeBuild)).toBe(1);
+            expect(unsafeBuild.signal).toBeNull();
+            expect(unsafeBuild.stdout).toBe("");
+            expect(await treeEvidence(emptyProject)).toEqual(unsafeTreeBefore);
+            for (const { path, metadata } of unsafeIdentities)
+              expect(await lstat(path, { bigint: true })).toMatchObject(
+                metadata
+              );
+            expect(await unsafeDirectory.stat({ bigint: true })).toMatchObject({
+              dev: rebuiltRoot.dev,
+              ino: rebuiltRoot.ino,
+              mode: rebuiltRoot.mode,
+            });
+            expect(await unsafeFile.stat({ bigint: true })).toMatchObject({
+              dev: unsafeMetadata.dev,
+              ino: unsafeMetadata.ino,
+              mode: unsafeMetadata.mode,
+              nlink: unsafeMetadata.nlink,
+              size: unsafeMetadata.size,
+            });
+            const retained = Buffer.alloc(unsafeChanged.length + 1);
+            let length = 0;
+            while (length < retained.length) {
+              const { bytesRead } = await unsafeFile.read(
+                retained,
+                length,
+                retained.length - length,
+                length
+              );
+              if (bytesRead === 0) break;
+              length += bytesRead;
+            }
+            expect(retained.subarray(0, length)).toEqual(unsafeChanged);
+            expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+            expect(await treeEvidence(project)).toEqual(
+              originalProjectBeforeEmpty
+            );
+            expect(await lstat(output, { bigint: true })).toMatchObject({
+              dev: originalOutputBeforeEmpty.dev,
+              ino: originalOutputBeforeEmpty.ino,
+              mode: originalOutputBeforeEmpty.mode,
+            });
+            expect(await readdir(scratch)).toEqual([]);
+            expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+            expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+            expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+            expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+            for (const [filename, before] of archiveEvidence)
+              expect(await fileEvidence(join(archives, filename))).toEqual(
+                before
+              );
+            expect(unsafeBuild.stderr, JSON.stringify(unsafeBuild)).toBe(
+              `Native publication: not-published\n[error] conflict: Metal publication not-published: Publication staging helper failed: conflict (errno ${osConstants.errno.EBADMSG})\n`
+            );
+          } finally {
+            const closed = await Promise.allSettled([
+              unsafeDirectory.close(),
+              ...(unsafeFile ? [unsafeFile.close()] : []),
+            ]);
+            const failures = closed.flatMap((result) =>
+              result.status === "rejected" ? [result.reason] : []
+            );
+            if (failures.length)
+              throw new AggregateError(
+                failures,
+                "Unsafe generation close failed"
+              );
+          }
         } finally {
           const closed = await Promise.allSettled([
             previousDirectory.close(),
