@@ -843,12 +843,13 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
           }
           expect(retained.subarray(0, length)).toEqual(bytes);
         }
-        const { recordHash: ownedRecordHash } = await readInstalledGeneration(
-          emptyOutput,
-          "AppShaders",
-          fingerprint,
-          newOwnedOutput.dev
-        );
+        const { manifest: ownedManifest, recordHash: ownedRecordHash } =
+          await readInstalledGeneration(
+            emptyOutput,
+            "AppShaders",
+            fingerprint,
+            newOwnedOutput.dev
+          );
         expect(ownedBuild.stdout).toBe(
           `Native package: published\nModule: AppShaders\nOutput: ${emptyOutput}\nInput fingerprint: ${fingerprint}\nRecord SHA-256: ${ownedRecordHash}\n`
         );
@@ -906,6 +907,265 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
         expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
         for (const [filename, before] of archiveEvidence)
           expect(await fileEvidence(join(archives, filename))).toEqual(before);
+
+        // Change only this project's module and Count content, keeping its physical owner/output.
+        expect(workflowDeadline - Date.now()).toBeGreaterThanOrEqual(180_000);
+        const rebuiltCommands = boundedCommands(
+          Math.min(workflowDeadline, Date.now() + 60_000)
+        );
+        const rebuiltConfiguration = join(emptyProject, "vgpu.native.json");
+        const rebuiltCountSource = join(emptyProject, "shaders/count.wgsl");
+        const configurationIdentity = await lstat(rebuiltConfiguration, {
+          bigint: true,
+        });
+        const countIdentity = await lstat(rebuiltCountSource, { bigint: true });
+        const configurationBefore = await readFile(
+          rebuiltConfiguration,
+          "utf8"
+        );
+        const countBeforeRebuild = await readFile(rebuiltCountSource, "utf8");
+        expect(countBeforeRebuild.split("100u + index")).toHaveLength(2);
+        const changedConfiguration = JSON.stringify({
+          ...JSON.parse(configurationBefore),
+          moduleName: "RebuiltShadersLonger",
+        });
+        const changedCount = countBeforeRebuild.replace(
+          "100u + index",
+          "200u + index"
+        );
+        const previousDirectory = await open(
+          emptyOutput,
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+        );
+        const previousFiles: {
+          file: Awaited<ReturnType<typeof open>>;
+          bytes: Buffer;
+        }[] = [];
+        try {
+          const previousRoot = await previousDirectory.stat({ bigint: true });
+          expect(previousRoot).toMatchObject({
+            dev: newOwnedOutput.dev,
+            ino: newOwnedOutput.ino,
+            mode: newOwnedOutput.mode,
+          });
+          expect(await treeEvidence(emptyOutput)).toEqual(
+            ownedGenerationBeforeVerify
+          );
+          for (const { path, sha256 } of [
+            ...ownedManifest,
+            { path: ".vgpu-native-output.json", sha256: ownedRecordHash },
+          ]) {
+            const file = await open(
+              join(emptyOutput, path),
+              constants.O_RDONLY | constants.O_NOFOLLOW
+            );
+            const snapshot = { file, bytes: Buffer.alloc(0) };
+            previousFiles.push(snapshot);
+            const metadata = await file.stat({ bigint: true });
+            expect(metadata.isFile()).toBe(true);
+            expect(metadata.dev).toBe(previousRoot.dev);
+            expect(metadata.nlink).toBe(1n);
+            snapshot.bytes = await file.readFile();
+            expect(
+              createHash("sha256").update(snapshot.bytes).digest("hex")
+            ).toBe(sha256);
+          }
+          await writeFile(rebuiltConfiguration, changedConfiguration);
+          await writeFile(rebuiltCountSource, changedCount);
+          expect(
+            await lstat(rebuiltConfiguration, { bigint: true })
+          ).toMatchObject({
+            dev: configurationIdentity.dev,
+            ino: configurationIdentity.ino,
+            mode: configurationIdentity.mode,
+            nlink: configurationIdentity.nlink,
+          });
+          expect(
+            await lstat(rebuiltCountSource, { bigint: true })
+          ).toMatchObject({
+            dev: countIdentity.dev,
+            ino: countIdentity.ino,
+            mode: countIdentity.mode,
+            nlink: countIdentity.nlink,
+            size: countIdentity.size,
+          });
+          const changedInputsBefore = [
+            await fileEvidence(rebuiltConfiguration),
+            await treeEvidence(join(emptyProject, "shaders")),
+          ];
+          const rebuiltCheck = await rebuiltCommands.command(
+            process.execPath,
+            [
+              bin,
+              "native",
+              "check",
+              "--config",
+              "../empty-project/vgpu.native.json",
+            ],
+            runtime,
+            { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+          );
+          console.info(
+            "Installed changed-module check actual result",
+            JSON.stringify(rebuiltCheck)
+          );
+          expect(rebuiltCheck.code, JSON.stringify(rebuiltCheck)).toBe(0);
+          expect(rebuiltCheck.signal).toBeNull();
+          expect(rebuiltCheck.stderr).toBe("");
+          expect(rebuiltCheck.stdout).toMatch(
+            /^Native shaders: valid\nModule: RebuiltShadersLonger\n\[ok\] Count: compute\n\[ok\] Gradient: vertex, fragment\nInput fingerprint: [a-f0-9]{64}\n$/u
+          );
+          const rebuiltFingerprint = rebuiltCheck.stdout.match(
+            /^Input fingerprint: ([a-f0-9]{64})$/mu
+          )![1];
+          expect(rebuiltFingerprint).not.toBe(fingerprint);
+          expect(await treeEvidence(emptyOutput)).toEqual(
+            ownedGenerationBeforeVerify
+          );
+          expect(await lstat(emptyOutput, { bigint: true })).toMatchObject({
+            dev: previousRoot.dev,
+            ino: previousRoot.ino,
+            mode: previousRoot.mode,
+          });
+          for (const { file } of previousFiles)
+            expect((await file.stat({ bigint: true })).nlink).toBe(1n);
+          expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+          const rebuilt = await rebuiltCommands.command(
+            process.execPath,
+            [
+              bin,
+              "native",
+              "build",
+              "--config",
+              "../empty-project/vgpu.native.json",
+            ],
+            runtime,
+            doctorEnvironment
+          );
+          console.info(
+            "Installed changed-module rebuild actual result",
+            JSON.stringify(rebuilt)
+          );
+          expect(rebuilt.code, JSON.stringify(rebuilt)).toBe(0);
+          expect(rebuilt.signal).toBeNull();
+          expect(rebuilt.stderr).toBe("");
+          const rebuiltRoot = await lstat(emptyOutput, { bigint: true });
+          expect(rebuiltRoot.isDirectory()).toBe(true);
+          expect(rebuiltRoot.dev).toBe(previousRoot.dev);
+          expect(rebuiltRoot.ino).not.toBe(previousRoot.ino);
+          expect(await previousDirectory.stat({ bigint: true })).toMatchObject({
+            dev: previousRoot.dev,
+            ino: previousRoot.ino,
+            mode: previousRoot.mode,
+          });
+          for (const { file, bytes } of previousFiles) {
+            expect((await file.stat({ bigint: true })).nlink).toBe(0n);
+            const retained = Buffer.alloc(bytes.length + 1);
+            let length = 0;
+            while (length < retained.length) {
+              const { bytesRead } = await file.read(
+                retained,
+                length,
+                retained.length - length,
+                length
+              );
+              if (bytesRead === 0) break;
+              length += bytesRead;
+            }
+            expect(retained.subarray(0, length)).toEqual(bytes);
+          }
+          const generation = await readInstalledGeneration(
+            emptyOutput,
+            "RebuiltShadersLonger",
+            rebuiltFingerprint,
+            rebuiltRoot.dev
+          );
+          expect(generation.recordHash).not.toBe(ownedRecordHash);
+          expect(rebuilt.stdout).toBe(
+            `Native package: published\nModule: RebuiltShadersLonger\nOutput: ${emptyOutput}\nInput fingerprint: ${rebuiltFingerprint}\nRecord SHA-256: ${generation.recordHash}\n`
+          );
+          const rebuiltBeforeVerify = await treeEvidence(emptyOutput);
+          const rebuiltVerify = await rebuiltCommands.command(
+            process.execPath,
+            [
+              bin,
+              "native",
+              "verify",
+              "--config",
+              "../empty-project/vgpu.native.json",
+            ],
+            runtime,
+            { ...doctorEnvironment, DEVELOPER_DIR: missingDeveloper }
+          );
+          console.info(
+            "Installed changed-module verify actual result",
+            JSON.stringify(rebuiltVerify)
+          );
+          expect(rebuiltVerify.code, JSON.stringify(rebuiltVerify)).toBe(0);
+          expect(rebuiltVerify.signal).toBeNull();
+          expect(rebuiltVerify.stderr).toBe("");
+          expect(rebuiltVerify.stdout).toBe(
+            `Native package: current\nModule: RebuiltShadersLonger\nOutput: ${emptyOutput}\nInput fingerprint: ${rebuiltFingerprint}\n`
+          );
+          expect(await treeEvidence(emptyOutput)).toEqual(rebuiltBeforeVerify);
+          expect(await lstat(emptyOutput, { bigint: true })).toMatchObject({
+            dev: rebuiltRoot.dev,
+            ino: rebuiltRoot.ino,
+            mode: rebuiltRoot.mode,
+          });
+          expect((await readdir(emptyProject)).sort()).toEqual([
+            "Generated",
+            "shaders",
+            "vgpu.native.json",
+          ]);
+          expect(await readdir(dirname(emptyOutput))).toEqual(["AppShaders"]);
+          expect(await readFile(rebuiltConfiguration, "utf8")).toBe(
+            changedConfiguration
+          );
+          expect(await readFile(rebuiltCountSource, "utf8")).toBe(changedCount);
+          expect([
+            await fileEvidence(rebuiltConfiguration),
+            await treeEvidence(join(emptyProject, "shaders")),
+          ]).toEqual(changedInputsBefore);
+          expect(
+            await lstat(rebuiltConfiguration, { bigint: true })
+          ).toMatchObject({
+            dev: configurationIdentity.dev,
+            ino: configurationIdentity.ino,
+            mode: configurationIdentity.mode,
+            nlink: configurationIdentity.nlink,
+          });
+          expect(await treeEvidence(project)).toEqual(
+            originalProjectBeforeEmpty
+          );
+          expect(await lstat(output, { bigint: true })).toMatchObject({
+            dev: originalOutputBeforeEmpty.dev,
+            ino: originalOutputBeforeEmpty.ino,
+            mode: originalOutputBeforeEmpty.mode,
+          });
+          expect(await readdir(scratch)).toEqual([]);
+          expect(await treeEvidence(nativeRoot)).toEqual(nativeBefore);
+          expect(await treeEvidence(publicRoot)).toEqual(publicBefore);
+          expect(await fileEvidence(sentinel)).toEqual(sentinelBefore);
+          expect(await readdir(runtime)).toEqual(["vgpu.native.json"]);
+          for (const [filename, before] of archiveEvidence)
+            expect(await fileEvidence(join(archives, filename))).toEqual(
+              before
+            );
+        } finally {
+          const closed = await Promise.allSettled([
+            previousDirectory.close(),
+            ...previousFiles.map(({ file }) => file.close()),
+          ]);
+          const failures = closed.flatMap((result) =>
+            result.status === "rejected" ? [result.reason] : []
+          );
+          if (failures.length)
+            throw new AggregateError(
+              failures,
+              "Previous module generation close failed"
+            );
+        }
       } finally {
         const closed = await Promise.allSettled([
           ownedDirectory.close(),
