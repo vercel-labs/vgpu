@@ -240,8 +240,14 @@ test('initialization failure delegates resource teardown to the GPU', async () =
   }
 });
 
-test('thumbnail destroys its target graph when prewarm fails', async () => {
-  const env = setup({ failCompile: true });
+test.each(['effect construction', 'prewarm'])('thumbnail destroys its target graph when %s fails', async (stage) => {
+  const env = setup({ failCompile: stage === 'prewarm' });
+  const message = stage === 'prewarm' ? 'compile failed' : 'effect construction failed';
+  if (stage === 'effect construction') {
+    env.gpu.fns.effect.mockImplementationOnce(() => {
+      throw new Error(message);
+    });
+  }
   const output = {
     size: [160, 90],
     format: 'rgba8unorm',
@@ -262,7 +268,7 @@ test('thumbnail destroys its target graph when prewarm fails', async () => {
   }
   drainPending.resolve();
   settledPending.resolve();
-  await expect(rendering).rejects.toThrow('compile failed');
+  await expect(rendering).rejects.toThrow(message);
   for (const target of env.targetObjects) {
     expect(target.destroy).toHaveBeenCalledOnce();
   }

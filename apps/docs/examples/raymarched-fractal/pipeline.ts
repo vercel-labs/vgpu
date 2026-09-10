@@ -23,9 +23,9 @@ const CLEAR: readonly [number, number, number, number] = [0, 0, 0, 1];
 export const POSTER: Readonly<Orbit> = { yaw: 0.58, pitch: 0.24 };
 
 export function createScene(gpu: Gpu, size: readonly [number, number]) {
-  const effects = createEffects(gpu);
   const targets = createTargets(gpu, size);
   try {
+    const effects = createEffects(gpu, targets);
     bindTargets(effects, targets);
     return { effects, targets };
   } catch (error) {
@@ -34,7 +34,7 @@ export function createScene(gpu: Gpu, size: readonly [number, number]) {
   }
 }
 
-function createEffects(gpu: Gpu) {
+function createEffects(gpu: Gpu, targets: Targets) {
   const sharedSampler = sampler(gpu, {
     minFilter: "linear",
     magFilter: "linear",
@@ -46,10 +46,16 @@ function createEffects(gpu: Gpu) {
     blurV: effect(gpu, blurWgsl),
     composite: effect(gpu, compositeWgsl),
   };
-  effects.scene.set({ params: { resolution: [1, 1], ...POSTER } });
+  effects.scene.set({ params: { resolution: targets.scene.size, ...POSTER } });
   effects.brightPass.set({ samp: sharedSampler });
-  effects.blurH.set({ samp: sharedSampler, blur: { direction: [1, 0] } });
-  effects.blurV.set({ samp: sharedSampler, blur: { direction: [0, 1] } });
+  effects.blurH.set({
+    samp: sharedSampler,
+    blur: { direction: [1, 0], texelSize: targets.bloomA.texelSize },
+  });
+  effects.blurV.set({
+    samp: sharedSampler,
+    blur: { direction: [0, 1], texelSize: targets.bloomB.texelSize },
+  });
   effects.composite.set({
     samp: sharedSampler,
     composite: { bloomStrength: 0.65 },

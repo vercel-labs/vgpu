@@ -31,6 +31,11 @@ transaction across `set({ a, b })` or a rollback of arbitrary GPU errors. Shared
 uniform updates preserve the previous accepted value on validation failure, and
 half-float packing uses round-to-nearest, ties-to-even.
 
+Migrate the rendered examples' initial uniform values to the strict contract:
+provide every reflected member, including explicit shader padding, and use
+actual render-target dimensions for initial resolution and bloom texel size.
+Retain partial updates for animation and resizing without resetting their state.
+
 The strict binding checks and candidate handling add approximately 1.4 KB gzip to
 the measured full client entry; `init-only` is unchanged. The changed WGSL runtime
 modules add approximately 2.8 KB gzip to the tooling entry. Captured-graph modules
