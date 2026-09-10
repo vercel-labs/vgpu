@@ -26,12 +26,28 @@ Do not infer migration requirements from patch/minor/major alone. Run `pnpm migr
 ## Release documentation
 
 Use `pnpm release:version` instead of calling `changeset version` directly. Enter/exit Changesets RC
-mode separately as described in CONTRIBUTING.md. The wrapper collects fragments before Changesets
-consumes them, versions packages, updates the lockfile, and generates CLI/web docs. Review the full diff.
+mode separately as described in CONTRIBUTING.md. This only prepares versions, the lockfile and inputs;
+it does NOT finish the release. Before EVERY RC and stable release, read **docs/release-migrations.md**
+completely and follow its editorial checklist. Run `pnpm migrations:review` and read its ENTIRE output,
+including changesets already shipped in earlier RCs and every `None` justification. If output is
+truncated, continue reading until all sources and the guide have been read. Never delegate or skip this
+review merely because CI is green or the previous RC had a guide.
 
-`docs/migrations/<version>.docs.md` is generated. `docs/migrations/records/<version>.json` archives its
-changeset sources so stable history survives Changesets cleanup. Author in `.changeset/*.md`, not in
-generated guides or records. RCs upsert by changeset ID into the same destination-version guide.
+Write the final `docs/migrations/<version>.docs.md` yourself: compare the final API, consolidate related
+changes, resolve reversals, order steps by dependency, and separate stable-origin from RC-origin paths.
+Do not concatenate changesets or instruct users to apply a change and then undo it. A reversal may mean
+no work for stable users but still require a migration for RC adopters. Retain relevant RC instructions
+in the stable guide. Explicitly justify paths requiring no migration.
+
+Only after that review, run `pnpm release:finalize` to record the reviewed inputs/guide and generate
+CLI/web docs. Include per-changeset coverage and verification evidence in the release PR as described
+in the checklist. Finalization is your attestation, not an automated proof of correct prose. Changes to
+the inputs, target version or guide require another review; never hand-edit a review fingerprint.
+
+`docs/migrations/records/<version>.json` archives changeset sources so stable history survives Changesets
+cleanup. Records, the index and CLI/web copies are generated; individual version guides are editorial.
+Author progressive notes in `.changeset/*.md`; edit the consolidated guide during release preparation.
+RCs upsert sources by ID and preserve the guide for revision, rather than overwriting it.
 Do not rename or delete changesets already included in an RC. Stable records are finalized; new
-fragments belong to the next release, not a regeneration of the previous stable guide.
+fragments belong to the next release, not a rewrite of the previous finalized stable guide.
 Released npm packages and Git tags remain immutable; never rewrite/reuse a release tag.

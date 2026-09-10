@@ -20,9 +20,7 @@ try {
   if (actual !== version) throw new Error(`Changesets planned ${version} but generated ${actual}; inspect the release diff.`);
   syncMigration(root, version, sources);
   execFileSync("pnpm", ["install"], { stdio: "inherit" });
-  execFileSync("pnpm", ["--filter", "@vgpu/cli", "generate:docs"], { stdio: "inherit" });
-  execFileSync("pnpm", ["--filter", "@vgpu/cli", "generate:docs:geistdocs"], { stdio: "inherit" });
-  console.log(`Prepared ${version}, changelogs and migration guides. Review and commit the entire diff.`);
+  console.log(`Prepared ${version}, changelogs and migration inputs. Release is NOT finalized.\nRead docs/release-migrations.md and the complete output of pnpm migrations:review, edit docs/migrations/${version.replace(/-rc\.\d+$/, "")}.docs.md, then run pnpm release:finalize to attest review and generate CLI/web docs.`);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

@@ -158,7 +158,9 @@ versions before committing; do not publish an unexpected major or hand-edit gene
 ```bash
 pnpm changeset status   # what will be bumped, and why
 pnpm changeset pre enter rc
-pnpm release:version    # versions, migration collection, lockfile and CLI/web docs
+pnpm release:version    # versions, migration inputs and lockfile; not finalized yet
+pnpm migrations:review # read ALL inputs; follow docs/release-migrations.md and edit the guide
+pnpm release:finalize   # only after editorial review; attest and generate CLI/web docs
 ```
 
 Commit `.changeset/pre.json` along with the generated versions and changelogs. Review the
@@ -168,16 +170,27 @@ leave prerelease mode active and run `pnpm release:version` again after new chan
 Changesets increments the `-rc.N` suffix.
 
 `release:version` reads the Changesets plan and captures fragments before versioning can consume
-them. Summary sections become changelogs with immutable release-tag links to required migrations; Migration sections become
-`docs/migrations/<stable-destination>.docs.md`, served by the website and bundled with the local
-CLI/MCP. For example: `pnpm exec vgpu docs cat /migrations/0.5.0.docs.md`.
-Source snapshots are archived under `docs/migrations/records/`; they are generated release metadata,
-not a second authoring location. Within an RC cycle, collection upserts by changeset ID instead of
-appending duplicates. Review the complete guide for overlapping or contradictory instructions.
-Use `pnpm migrations:sync <exact-release-version>` only to regenerate an already-prepared guide;
-it does not version packages or publish anything. Commit its record, guide and regenerated web docs.
-The release workflow runs `pnpm migrations:check --release` and rejects missing, stale or wrong-version
-collections. Do not call `changeset version` directly or hand-edit generated guides/records.
+them. Summary sections become changelogs with immutable release-tag links to required migrations.
+Source snapshots are archived under `docs/migrations/records/`; collection upserts by changeset ID
+and preserves the existing guide. A new cycle starts with a draft, not concatenated release prose.
+
+For **every RC and stable release**, the preparing agent must read and follow
+[the editorial migration checklist](docs/release-migrations.md). Read all cycle changesets (not just
+new ones), the previous guide and the final affected API. Write the consolidated
+`docs/migrations/<stable-destination>.docs.md`: deduplicate related changes, resolve reversals,
+order net changes by dependency, and separate previous-stable from RC-origin upgrade paths.
+This file is editorial, not generated. Records, the index and CLI/web copies remain generated.
+Even if a change is reverted for stable users, earlier RC adopters may still need repair instructions.
+
+Run `pnpm release:finalize` only after that review. It records the exact version/input/guide fingerprint,
+generates CLI/web docs and checks release readiness. Read with, for example,
+`pnpm exec vgpu docs cat /migrations/0.5.0.docs.md`. Include a `## Migration review` section in the
+release PR with per-changeset coverage and verification evidence, as specified in the checklist.
+Use `pnpm migrations:sync <exact-current-version>` to recollect corrected sources without bumping
+versions or overwriting the guide; review and finalize again afterward. Commit the record, guide
+and regenerated docs. The release workflow runs `pnpm migrations:check --release` and rejects missing,
+stale or wrong-version collections and absent/outdated review attestations. CI cannot prove the
+editorial quality of the guide. Do not call `changeset version` directly or hand-edit records/fingerprints.
 
 Private packages (`@vgpu/cli`, the docs app) are versioned so they get changelog entries,
 but they are never published. `@vgpu/cli` ships _inside_ the `vgpu` tarball: `copy-cli.mjs`
@@ -203,6 +216,8 @@ and exit prerelease mode:
 ```bash
 pnpm changeset pre exit
 pnpm release:version
+pnpm migrations:review # follow the editorial checklist and revise stable/RC upgrade paths
+pnpm release:finalize
 ```
 
 The resulting package versions must be the stable `X.Y.Z` with no suffix. Merge that release

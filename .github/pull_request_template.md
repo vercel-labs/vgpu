@@ -15,3 +15,9 @@ Tests, CI, docs-only work, release preparation and behavior-preserving internal 
 ## Validation
 
 Describe the tests/checks run.
+
+<!-- Release-preparation PRs also require a ## Migration review section.
+Follow docs/release-migrations.md: exact target, stable/RC origins considered, per-changeset coverage,
+overlaps/reversals resolved, guide link, and verification evidence/limitations. Do not substitute
+a generic reviewed checkbox. Omit this section for ordinary development PRs.
+-->
