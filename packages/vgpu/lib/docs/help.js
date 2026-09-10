@@ -16,6 +16,8 @@ Commands:
 Examples:
   vgpu docs cat getting-started.md
   vgpu docs ls /guides
+  vgpu docs ls /migrations
+  vgpu docs cat /migrations/0.5.0.docs.md
   vgpu docs ls
   vgpu docs cat /@vgpu/core/Buffer.docs.md
   vgpu docs grep -i --package @vgpu/wgsl minify

@@ -50,8 +50,15 @@ export function createManifest(allowlistText, options = {}) {
     content: load(repoPath),
   }));
 
-  const records = withUniqueAnchors([...apiRecords, ...guideRecords].sort(compareRecord));
-  return { schemaVersion: MANIFEST_VERSION, generatedFrom: "docs/allowlist.txt + docs/topics", records };
+  const migrationRecords = (options.migrations ?? []).map(repoPath => {
+    const version = repoPath.split("/").at(-1).replace(/\.docs\.md$/u, "");
+    if (version !== "index" && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error(`Invalid migration version: ${repoPath}`);
+    return { ...enrichRecord({ package: "migrations", symbol: version === "index" ? "migrations" : `migration-${version}`, repoPath,
+      kind: "guide", virtualPath: `/migrations/${version}.docs.md`, content: load(repoPath),
+    }), websitePath: version === "index" ? "/migrations" : `/migrations/${version}` };
+  });
+  const records = withUniqueAnchors([...apiRecords, ...guideRecords, ...migrationRecords].sort(compareRecord));
+  return { schemaVersion: MANIFEST_VERSION, generatedFrom: "docs/allowlist.txt + docs/topics + docs/migrations", records };
 }
 
 export function serializeManifest(manifest) {

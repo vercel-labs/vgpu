@@ -26,6 +26,7 @@ export const PUBLISHED_PACKAGES = Object.freeze([
 ]);
 
 export const CI_REQUIRED_JOBS = Object.freeze([
+  "release-migrations",
   "test-fast",
   "docker-gpu",
   "visual-snapshots / Verify visual snapshots",

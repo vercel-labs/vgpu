@@ -7,6 +7,20 @@
 
 ## Making changes
 
+Every PR description must contain exactly one `## PR type` section with exactly `development` or
+`release` (no default). Use `release` only to prepare a new RC/stable package version on `canary`.
+Use `development` for other work, including stable promotions to `main` and branch synchronization
+whose versions are already accounted for on the target. Titles and branch names do not determine type.
+
+Type is independent of `Release impact`: a release-preparation PR normally has impact `none` because
+its changes were accounted for in earlier PRs. The trusted `release-impact` check rejects new public
+package version changes labeled `development` on `canary`. Release PRs must advance the current
+canary version, have coherent public package versions, contain a substantive `## Migration review`
+section and pass the same `migrations:check --release` validation used at publication. These checks
+run before merge and rerun on description edits, without executing candidate code with write access.
+Private tooling version changes or new package creation alone do not constitute release preparation.
+Promotions to `main` remain subject to their separate main-policy, not the new-version preparation gate.
+
 If your PR changes published package behavior, add a changeset before opening it:
 
 ```bash
@@ -14,6 +28,49 @@ pnpm changeset
 ```
 
 Choose each affected `@vgpu/*` package, select the appropriate semver bump (`patch`, `minor`, or `major`), and write a short summary. That summary becomes the changelog entry for the release.
+
+Every PR description must contain exactly one `## Release impact` section. Use either
+`none — <specific justification>` or `changeset — .changeset/<id>.md` (comma-separated for multiple
+new files). Tests, CI, repository/site docs with no published-package effect, release preparation and behavior-preserving internal
+refactors do not need a changeset. Stable promotions and branch synchronization may also use `none`
+when their changes were already accounted for in the original PRs. Changes affecting published behavior do. Review the declaration
+against the diff: automation cannot prove that a change has no consumer impact.
+Documentation bundled in the published CLI/MCP corpus does need a changeset, even without an API change.
+
+Every changeset must use this body structure after its normal package/bump frontmatter:
+
+```md
+## Summary
+
+Describe the observable change for the changelog.
+
+## Migration
+
+None: explain specifically why existing consumers need no adaptation.
+```
+
+If adaptation is required, replace the `None:` line with `### Affected usage`, `### Steps`, and
+`### Verification`. Identify applicable source versions or API usage, include before/after examples
+under level-four headings where useful, and explain how to validate the result. Migration can involve
+deployment requirements or defaults, not only removed APIs. Do not infer it from the semver bump.
+Historical or partial code samples may use a `ts illustrative` fence; complete current-API examples
+use `ts` and participate in `pnpm docs:verify-snippets`.
+Older destination guides retain the examples checked for their own release. The current guide is
+checked once its archive targets the exact package version and contains every pending changeset
+unchanged; development with new or edited uncollected changesets defers that guide until release
+preparation. Future guides and regular API/topic documentation remain checked.
+
+Run `pnpm migrations:check` before opening the PR. The `release-impact` check validates the PR
+description and new changesets, including on description edits. It executes trusted policy code
+and reads candidate Git blobs as data, never running candidate code with write permissions.
+GitHub attaches checks to commits, so the check validates every open PR targeting `canary` or `main`
+with the same head SHA. An invalid declaration in any of those PRs blocks the shared commit. Correct
+the declaration or close the duplicate PR to refresh the result. If a duplicate moves to a different
+head SHA, edit the remaining PR's description to refresh the old commit's result.
+When first deploying this workflow, merge it to `canary` and configure `release-impact` as a required
+check on both `canary` and `main`; configure `release-migrations` as required on `canary` too.
+Existing open PRs need both type and impact declarations and an edit/synchronize event after rollout. Branch protection
+is a separate GitHub setting; adding workflow YAML alone does not make a check merge-blocking.
 
 ## Visual tests
 
@@ -74,8 +131,11 @@ Run `pnpm build` first, since budgets are measured from `dist`.
 ## PR checklist
 
 - [ ] Normal work targets `canary`; only `site/*` and `promote/vX.Y.Z` target `main`.
+- [ ] The PR explicitly declares `development` or `release`; release preparation passes the strict readiness checks before merge.
 - [ ] Code changes to a published package include a `.changeset/*.md` file.
-- [ ] Docs-only and CI-only PRs may skip a changeset.
+- [ ] The PR declares release impact; changesets declare a migration or a justified `None`.
+- [ ] `pnpm migrations:check` passes.
+- [ ] Repository/site docs without published-package impact and CI-only PRs may skip a changeset; bundled CLI/MCP documentation may not.
 - [ ] `pnpm typecheck` passes locally.
 - [ ] `pnpm test:fast` passes locally.
 
@@ -122,15 +182,44 @@ versions before committing; do not publish an unexpected major or hand-edit gene
 ```bash
 pnpm changeset status   # what will be bumped, and why
 pnpm changeset pre enter rc
-pnpm changeset version  # applies the bumps, writes CHANGELOGs, consumes .changeset/*.md
-pnpm install            # refresh the lockfile with the new internal versions
+pnpm release:version    # versions, migration inputs and lockfile; not finalized yet
+pnpm migrations:review # read ALL inputs; follow docs/release-migrations.md and edit the guide
+pnpm release:finalize   # only after editorial review; attest and generate CLI/web docs
 ```
 
 Commit `.changeset/pre.json` along with the generated versions and changelogs. Review the
 diff—the changelog text is the public release note—then open a PR such as
-`chore(release): 0.5.0-rc.0` targeting `canary`. For later candidates in the same cycle,
-leave prerelease mode active and run `pnpm changeset version` again after new changesets land;
+`chore(release): 0.5.0-rc.0` targeting `canary`, explicitly declaring `## PR type` as `release`.
+Its trusted PR check validates finalized migrations and package versions before merge.
+For later candidates in the same cycle,
+leave prerelease mode active and run `pnpm release:version` again after new changesets land;
 Changesets increments the `-rc.N` suffix.
+
+`release:version` reads the Changesets plan and captures fragments before versioning can consume
+them. Summary sections become changelogs with immutable release-tag links to required migrations.
+Source snapshots are archived under `docs/migrations/records/`; collection upserts by changeset ID
+and preserves the existing guide. A new cycle starts with a draft, not concatenated release prose.
+
+For **every RC and stable release**, the preparing agent must read and follow
+[the editorial migration checklist](docs/release-migrations.md). Read all cycle changesets (not just
+new ones), the previous guide and the final affected API. Write the consolidated
+`docs/migrations/<stable-destination>.docs.md`: deduplicate related changes, resolve reversals,
+order net changes by dependency, and separate previous-stable from RC-origin upgrade paths.
+This file is editorial, not generated. Records, the index and CLI/web copies remain generated.
+Even if a change is reverted for stable users, earlier RC adopters may still need repair instructions.
+
+Run `pnpm release:finalize` only after that review. It records the exact version/input/guide fingerprint,
+generates CLI/web docs and checks release readiness. Read with, for example,
+`pnpm exec vgpu docs cat /migrations/0.5.0.docs.md`. Include a `## Migration review` section in the
+release PR with per-changeset coverage and verification evidence, as specified in the checklist.
+Use `pnpm migrations:sync <exact-current-version>` to recollect corrected sources without bumping
+versions or overwriting the guide; review and finalize again afterward. Commit the record, guide
+and regenerated docs. The release workflow runs `pnpm migrations:check --release` and rejects missing,
+stale or wrong-version collections and absent/outdated review attestations. CI cannot prove the
+editorial quality of the guide. Do not call `changeset version` directly or hand-edit records/fingerprints.
+The current prepared guide can be corrected and re-finalized during its PR, including stable
+preparation. Finalization is not publication. After stable versioning has consumed changesets,
+make editorial corrections in the guide, not by restoring consumed files as new pending changesets.
 
 Private packages (`@vgpu/cli`, the docs app) are versioned so they get changelog entries,
 but they are never published. `@vgpu/cli` ships _inside_ the `vgpu` tarball: `copy-cli.mjs`
@@ -155,8 +244,9 @@ and exit prerelease mode:
 
 ```bash
 pnpm changeset pre exit
-pnpm changeset version
-pnpm install
+pnpm release:version
+pnpm migrations:review # follow the editorial checklist and revise stable/RC upgrade paths
+pnpm release:finalize
 ```
 
 The resulting package versions must be the stable `X.Y.Z` with no suffix. Merge that release
