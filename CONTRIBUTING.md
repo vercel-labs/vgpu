@@ -387,6 +387,11 @@ emergency operation, never the normal release path.
 
 ### npm Trusted Publishing
 
+For the prerequisite rollout of the native companion, see
+[native compiler release inputs](docs/release/native.md). The companion remains private
+until its separate release-preparation PR activates it; adding a supported package to
+the trusted validator does not add it to the npm publishing workflow.
+
 Publishing uses OIDC, not a token — the repository must not retain an `NPM_TOKEN` secret. Each published package
 has a Trusted Publisher configured on npm (provider GitHub Actions, owner `vercel-labs`,
 repository `vgpu`, workflow `release.yml`, no environment). Under **Allowed actions**, explicitly

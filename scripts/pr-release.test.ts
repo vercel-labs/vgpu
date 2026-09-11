@@ -68,6 +68,22 @@ describe("explicit PR type", () => {
 });
 
 describe("release PR readiness before merge", () => {
+  it("allows an explicitly activated native companion only through full release preparation", () => {
+    const { input, data, before } = fixture();
+    const nativePath = "packages/native/package.json";
+    before[nativePath] = JSON.stringify({ name: "@vgpu/native", version: "0.0.0", private: true });
+    data[nativePath] = JSON.stringify({
+      name: "@vgpu/native", version: "0.5.0-rc.0", private: false,
+      repository: { type: "git", url: "git+https://github.com/vercel-labs/vgpu.git", directory: "packages/native" },
+      publishConfig: { access: "public" },
+    });
+    data[".changeset/config.json"] = JSON.stringify({ fixed: [[...RELEASE_PACKAGES.map(item => item.name), "@vgpu/native"]] });
+    const activation = { ...input, head: reader(data), changedFiles: [...input.changedFiles, { status: "M", path: nativePath }] };
+    expect(checkPrRelease(activation)).toMatchObject({ type: "release", version: "0.5.0-rc.0" });
+    expect(() => checkPrRelease({ ...activation, body: body("development") })).toThrow("Declare PR type release");
+    data["docs/migrations/0.5.0.docs.md"] += "\nChanged guide after review.\n";
+    expect(() => checkPrRelease(activation)).toThrow("review drift");
+  });
   it("accepts a fully prepared release using the publication migration checks", () => {
     const { input } = fixture();
     expect(checkPrRelease(input)).toMatchObject({ type: "release", version: "0.5.0-rc.0" });

@@ -2,7 +2,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { validateReleasePackages } from "./lib/release-packages.mjs";
+import {
+  releasePackagesFor,
+  validateReleasePackages,
+} from "./lib/release-packages.mjs";
 
 const expectedVersion = process.env.EXPECTED_VERSION;
 if (!expectedVersion) {
@@ -37,6 +40,8 @@ if (errors.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Release package validation accepted exactly seven public packages at ${expectedVersion}.`
+    `Release package validation accepted exactly ${
+      releasePackagesFor(config.fixed.flat()).length
+    } public packages at ${expectedVersion}.`
   );
 }
