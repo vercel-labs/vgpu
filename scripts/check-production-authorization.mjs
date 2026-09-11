@@ -6,10 +6,10 @@ import { resolve } from "node:path";
 import {
   CI_WORKFLOW_ID,
   CI_WORKFLOW_PATH,
-  PUBLISHED_PACKAGES,
   PRODUCTION_AUTHORIZATION_CONTEXT,
   ProductionAuthorizationError,
   STABLE_NPM_AUDIT_CONTEXT,
+  collectNpmPublicationEvidence,
   confirmsProductionAuthorizationWrite,
   evaluateProductionAuthorization,
   inspectExistingProductionAuthorization,
@@ -23,6 +23,7 @@ import {
   requireCurrentMainTip,
   requireSha,
   requireUnchangedStableRefs,
+  selectPublishedPackages,
   validateCiWorkflowJobs,
   validateCiWorkflowRun,
   validateProductionAuthorizationWorkflowRun,
@@ -279,7 +280,7 @@ function collectWorkspaceManifests(repositoryRoot) {
   return manifests;
 }
 
-function releasePackageVersionErrors(repositoryRoot, expectedVersion) {
+function releasePackageValidation(repositoryRoot, expectedVersion) {
   const config = readJson(
     resolve(repositoryRoot, ".changeset/config.json"),
     ".changeset/config.json"
@@ -289,11 +290,15 @@ function releasePackageVersionErrors(repositoryRoot, expectedVersion) {
       ".changeset/config.json must define fixed package groups."
     );
   }
-  return validateReleasePackageVersions({
-    configuredFixedPackageNames: config.fixed.flat(),
-    manifests: collectWorkspaceManifests(repositoryRoot),
-    expectedVersion,
-  });
+  const publishedPackages = selectPublishedPackages(config.fixed.flat());
+  return {
+    publishedPackages,
+    packageVersionErrors: validateReleasePackageVersions({
+      configuredFixedPackageNames: publishedPackages,
+      manifests: collectWorkspaceManifests(repositoryRoot),
+      expectedVersion,
+    }),
+  };
 }
 
 function candidateMatchesTrustedFiles(candidateRoot, trustedRoot, paths) {
@@ -375,20 +380,15 @@ async function inspectMainPolicyRevision({
   return { isAncestor: true, matchesTrusted: matches.every(Boolean) };
 }
 
-async function npmPublicationEvidence(version) {
-  return Promise.all(
-    PUBLISHED_PACKAGES.map(async (name) => {
-      const packument = await fetchJson(
-        `https://registry.npmjs.org/${encodeURIComponent(name)}`,
-        { description: `Reading npm metadata for ${name}` }
-      );
-      return {
-        name,
-        versionExists: packument.versions?.[version]?.version === version,
-        latest: packument["dist-tags"]?.latest ?? null,
-      };
-    })
-  );
+async function npmPublicationEvidence(version, publishedPackages) {
+  return collectNpmPublicationEvidence({
+    expectedVersion: version,
+    publishedPackages,
+    readMetadata: (name) =>
+      fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+        description: `Reading npm metadata for ${name}`,
+      }),
+  });
 }
 
 async function main() {
@@ -696,11 +696,12 @@ async function main() {
       if (!String(error.message).includes("failed (404)")) throw error;
     }
 
+    const packageValidation = releasePackageValidation(repositoryRoot, version);
     stableEvidence = {
-      npmEvidence: await npmPublicationEvidence(version),
-      packageVersionErrors: releasePackageVersionErrors(
-        repositoryRoot,
-        version
+      ...packageValidation,
+      npmEvidence: await npmPublicationEvidence(
+        version,
+        packageValidation.publishedPackages
       ),
       parentIsTagAncestor: gitSucceeds(repositoryRoot, [
         "merge-base",

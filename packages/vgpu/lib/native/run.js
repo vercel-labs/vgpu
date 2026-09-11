@@ -1,6 +1,6 @@
 import { NativeUsageError, parseNativeArguments } from "./arguments.js";
 
-export async function runNative(args) {
+export async function runNative(args, { version } = {}) {
   try {
     const parsed = parseNativeArguments(args, process.cwd());
     if (parsed.kind === "help")
@@ -11,13 +11,13 @@ export async function runNative(args) {
       );
     }
     const { kind, ...operation } = parsed;
-    return await execute(operation);
+    return await execute(operation, version);
   } catch (error) {
     return failure(error, error instanceof NativeUsageError ? 2 : 1);
   }
 }
 
-async function execute(operation) {
+async function execute(operation, version) {
   // Install handlers only for execution, keep them through companion cleanup,
   // and leave any pre-existing process listeners in place.
   const controller = new AbortController();
@@ -32,7 +32,7 @@ async function execute(operation) {
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onTerminate);
   try {
-    const companion = await import(resolveCompanion());
+    const companion = await import(resolveCompanion(version));
     controller.signal.throwIfAborted();
     if (
       companion.nativeCliProtocol !== 1 ||
@@ -94,19 +94,35 @@ function checkedResult(result) {
   return snapshot;
 }
 
-function resolveCompanion() {
+function resolveCompanion(version) {
   try {
     return import.meta.resolve("@vgpu/native/cli");
   } catch (cause) {
     if (cause.code === "ERR_MODULE_NOT_FOUND") {
       throw new Error(
-        "The optional @vgpu/native companion is not installed. Run: npm install --save-dev vgpu @vgpu/native",
+        `The optional @vgpu/native companion is not installed. ${installationHint(
+          version
+        )}`,
         { cause }
       );
     }
     if (cause.code === "ERR_PACKAGE_PATH_NOT_EXPORTED") throw incompatible();
     throw cause;
   }
+}
+
+function installationHint(version) {
+  // Use the public CLI's version stamp, never a moving tag (native latest may be
+  // the empty bootstrap). Do not interpolate arbitrary manifest text into a shell command.
+  if (
+    typeof version === "string" &&
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
+      version
+    )
+  ) {
+    return `Run: npm install --save-dev --save-exact vgpu@${version} @vgpu/native@${version}`;
+  }
+  return "Install vgpu and @vgpu/native as development dependencies at the same exact version using --save-exact; @vgpu/native@0.0.1 is only a placeholder.";
 }
 
 function incompatible() {

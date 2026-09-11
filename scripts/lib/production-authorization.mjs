@@ -553,19 +553,49 @@ export async function inspectExistingProductionAuthorization({
   }
 }
 
+function supportedPublishedPackages(configuredFixedPackageNames) {
+  return configuredFixedPackageNames.includes("@vgpu/native")
+    ? [...PUBLISHED_PACKAGES, "@vgpu/native"]
+    : PUBLISHED_PACKAGES;
+}
+
+// Read the stable candidate's fixed group, never the current canary or npm set.
+// Only the historical seven packages and their explicit native extension are supported.
+export function selectPublishedPackages(configuredFixedPackageNames) {
+  requireCondition(
+    Array.isArray(configuredFixedPackageNames),
+    "Invalid Changesets fixed package group."
+  );
+  const publishedPackages = supportedPublishedPackages(
+    configuredFixedPackageNames
+  );
+  requireCondition(
+    configuredFixedPackageNames.length === publishedPackages.length &&
+      new Set(configuredFixedPackageNames).size === publishedPackages.length &&
+      publishedPackages.every((name) =>
+        configuredFixedPackageNames.includes(name)
+      ),
+    "Changesets fixed group must contain exactly the seven historical packages, optionally extended with @vgpu/native."
+  );
+  return publishedPackages;
+}
+
 export function validateReleasePackageVersions({
   configuredFixedPackageNames,
   manifests,
   expectedVersion,
 }) {
-  const expectedPackages = new Set(PUBLISHED_PACKAGES);
+  const publishedPackages = supportedPublishedPackages(
+    configuredFixedPackageNames
+  );
+  const expectedPackages = new Set(publishedPackages);
   const configuredPackages = new Set(configuredFixedPackageNames);
   const byName = new Map(
     manifests.map((entry) => [entry.manifest.name, entry])
   );
   const errors = [];
 
-  for (const packageName of PUBLISHED_PACKAGES) {
+  for (const packageName of publishedPackages) {
     if (!configuredPackages.has(packageName)) {
       errors.push(`${packageName}: missing from the Changesets fixed group`);
     }
@@ -608,7 +638,31 @@ export function validateReleasePackageVersions({
   return errors;
 }
 
-export function validateNpmEvidence({ evidence, expectedVersion }) {
+export async function collectNpmPublicationEvidence({
+  publishedPackages,
+  expectedVersion,
+  readMetadata,
+}) {
+  const packageNames = selectPublishedPackages(publishedPackages);
+  return Promise.all(
+    packageNames.map(async (name) => {
+      const packument = await readMetadata(name);
+      return {
+        name,
+        versionExists:
+          packument.versions?.[expectedVersion]?.version === expectedVersion,
+        latest: packument["dist-tags"]?.latest ?? null,
+      };
+    })
+  );
+}
+
+export function validateNpmEvidence({
+  evidence,
+  expectedVersion,
+  publishedPackages = PUBLISHED_PACKAGES,
+}) {
+  selectPublishedPackages(publishedPackages);
   requireCondition(
     Array.isArray(evidence),
     "Invalid npm publication evidence."
@@ -624,11 +678,11 @@ export function validateNpmEvidence({ evidence, expectedVersion }) {
   }
 
   requireCondition(
-    byName.size === PUBLISHED_PACKAGES.length,
-    `Expected npm evidence for ${PUBLISHED_PACKAGES.length} packages; received ${byName.size}.`
+    byName.size === publishedPackages.length,
+    `Expected npm evidence for ${publishedPackages.length} packages; received ${byName.size}.`
   );
 
-  for (const packageName of PUBLISHED_PACKAGES) {
+  for (const packageName of publishedPackages) {
     const item = byName.get(packageName);
     requireCondition(item, `Missing npm evidence for ${packageName}.`);
     requireCondition(
@@ -789,6 +843,7 @@ function validateStableEvidence({
   githubRelease,
   npmEvidence,
   packageVersionErrors,
+  publishedPackages,
   parentIsTagAncestor,
   pullRequest,
   releaseJobs,
@@ -882,7 +937,11 @@ function validateStableEvidence({
     "The linked Release run has no successful publish job."
   );
 
-  validateNpmEvidence({ evidence: npmEvidence, expectedVersion: version });
+  validateNpmEvidence({
+    evidence: npmEvidence,
+    expectedVersion: version,
+    publishedPackages,
+  });
 
   return { tag, version };
 }
@@ -901,6 +960,7 @@ export function evaluateProductionAuthorization({
   mainPolicyPolicySha,
   npmEvidence,
   packageVersionErrors,
+  publishedPackages = PUBLISHED_PACKAGES,
   parentIsTagAncestor,
   parentAuthorizationRun,
   parentProductionStatus,
@@ -1002,6 +1062,7 @@ export function evaluateProductionAuthorization({
     githubRelease: release,
     npmEvidence,
     packageVersionErrors,
+    publishedPackages,
     parentIsTagAncestor,
     pullRequest,
     releaseJobs,

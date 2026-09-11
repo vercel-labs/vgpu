@@ -170,7 +170,7 @@ before npm changes. Every release re-reads its remote refs immediately before th
 a stable release rechecks them again before recording its audit status.
 
 All published packages (`vgpu`, `@vgpu/core`, `@vgpu/wgsl`, `@vgpu/wgsl-std`,
-`@vgpu/adapter-node`, `@vgpu/adapter-mock`, `@vgpu/render`) version together via the
+`@vgpu/adapter-node`, `@vgpu/adapter-mock`, `@vgpu/render`, `@vgpu/native`) version together via the
 `fixed` group in `.changeset/config.json`; private packages (`@vgpu/cli`, the docs app)
 keep independent lineages outside that group.
 
@@ -262,10 +262,10 @@ promotion is authorized and merged back. This also pins the trusted authorizatio
 evaluates the release. Create a **GitHub Release** on that exact canary tip with tag `vX.Y.Z`
 matching the new `vgpu` version. Do not mark it as a pre-release. Publishing it triggers
 `release.yml`. Its unprivileged job checks out the tag, builds, runs the release gates (typecheck,
-the test suites that run on a plain runner, and `pnpm bundle-check`), packs exactly seven packages,
+the test suites that run on a plain runner, and `pnpm bundle-check`), packs exactly eight packages,
 and uploads their checksummed tarballs as an immutable workflow artifact. A separate minimal job is
 the only one with npm's OIDC permission: it does not check out or execute repository code, verifies
-the artifact and refs again, and publishes only those seven tarballs under `latest`. Extra public
+the artifact and refs again, and publishes only those eight tarballs under `latest`. Extra public
 workspaces are never implicitly added to the publish set.
 
 After the publish job succeeds, a separate job rechecks that both the stable tag and canary still
@@ -365,7 +365,7 @@ Roll out this policy in the following order:
 5. Create a repository-level tag ruleset for `refs/tags/v*` with update, deletion, and signature
    rules, then activate it before the next RC. Do not rely on an inherited ruleset whose include
    list is empty; it protects no tags. Keep all normal work targeting `canary`.
-6. Confirm all seven npm packages trust `release.yml` as their GitHub Actions publisher, with no
+6. Confirm all eight npm packages trust `release.yml` as their GitHub Actions publisher, with no
    environment and direct `npm publish` enabled under **Allowed actions**. Publish and verify an RC
    from canary; this proves OIDC works without using the stale `NPM_TOKEN`.
 7. Remove the repository-level `NPM_TOKEN` after that successful RC; no workflow references it.
@@ -387,10 +387,9 @@ emergency operation, never the normal release path.
 
 ### npm Trusted Publishing
 
-For the prerequisite rollout of the native companion, see
-[native compiler release inputs](docs/release/native.md). The companion remains private
-until its separate release-preparation PR activates it; adding a supported package to
-the trusted validator does not add it to the npm publishing workflow.
+For the optional beta native companion's compiler transport and qualification gates, see
+[native compiler release inputs](docs/release/native.md). It is included in the fixed
+release group and all three workflow lists: packing, artifact validation and publication.
 
 Publishing uses OIDC, not a token — the repository must not retain an `NPM_TOKEN` secret. Each published package
 has a Trusted Publisher configured on npm (provider GitHub Actions, owner `vercel-labs`,

@@ -41,8 +41,8 @@ do not load the compiler.
 > `native check`, `native build`, and `native verify` are tested using real local tarballs installed offline with
 > dependency install scripts disabled; build coverage publishes to an initially absent destination.
 > An external Swift consumer executes the published compute and render programs on this host.
-> The companion is not published; broader installed replacement/recovery diagnostics and release
-> qualification remain unfinished.
+> Install the optional `@vgpu/native` beta at the same exact RC version as `vgpu`.
+> Pin versions and validate your build environment; a broad release compatibility matrix is not qualified.
 
 ```terminal
 npx vgpu native --help

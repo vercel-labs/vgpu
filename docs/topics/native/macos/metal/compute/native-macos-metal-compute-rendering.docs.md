@@ -13,7 +13,7 @@ shader and consumed by another without reading it back to the CPU between passes
 > Warning: Native tests on Apple silicon execute this example and verify every target pixel. They
 > also compose application-owned blits before and after the passes. This is a bounded integration
 > test, not a device support matrix. The command shim exists; the generated package, operational
-> companion, and complete installed workflow are not published yet.
+> companion, and complete installed workflow are provided by the optional beta companion.
 
 ## Share the shader layout
 

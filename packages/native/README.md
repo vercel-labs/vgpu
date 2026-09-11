@@ -1,10 +1,39 @@
 # @vgpu/native
 
-Private build-time tooling for generated Metal integration. This package is not published and does
-not implement a Swift renderer. Its local companion candidate supports `vgpu native doctor`,
+> **Beta:** `@vgpu/native` is under active development. Its APIs, generated Swift
+> interfaces, configuration format, and toolchain requirements may change between
+> beta releases. Pin exact versions and validate upgrades in your own build environment;
+> do not assume stable compatibility yet.
+
+Build-time tooling for generated Metal integration; it does not implement a Swift renderer.
+The `0.0.1` npm release is an empty name-reservation placeholder, not a functional beta.
+The companion implemented in this repository supports `vgpu native doctor`,
 `vgpu native check`, `vgpu native build`, and `vgpu native verify`.
 
-`generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
+## Install the beta
+
+Install `vgpu` and `@vgpu/native` as development dependencies at the same exact RC
+version. Select the release under npm's `next` tag and pin it with `--save-exact`.
+The companion is optional; existing browser/WebGPU projects do not need it.
+Use `vgpu native` commands rather than importing the generator directly. The only
+package export is `@vgpu/native/cli`, an internal protocol for the CLI dispatcher.
+
+Generation requires Node.js 22 and Xcode with its Metal compiler component on an
+Apple Silicon Mac. The bundled worker is ad hoc signed, not Developer ID signed or
+notarized. Validate your development/CI environment without disabling security
+protections. No Intel GPU or minimum-macOS release matrix is claimed. The generated
+Swift package does not require Node, Tint or Xcode when the application runs.
+
+The RC candidate is also checked in a separate project with an empty npm cache,
+normal dependency install scripts and no workspace links or overrides. Its installed
+native commands run with network denied. A generated Swift consumer builds with
+SwiftPM's normal sandbox, relocates, and executes real compute/render work with
+network denied. Swift compilation itself is not under an outer network sandbox.
+This is one Apple Silicon host's qualification, not a clean-OS or compatibility matrix.
+
+## Internal generator
+
+The internal `generateMetalPackage` accepts compiled library bytes and selected emitted function names. It
 returns the files of a self-contained Swift package without writing to disk. Optional reflected
 flat-float uniform layouts generate binding-specific CPU packers. Complete stage-slot mappings
 also generate explicit range validation and render binding helpers. Caller-supplied metadata does
@@ -122,8 +151,8 @@ their original hashes and sizes, builds with no external Swift package or target
 relocates the complete build tree, and executes the documented compute and render programs on
 this host. The original package, ownership record and recovery files remain unchanged. Its guards
 detect generation-tool lookup through PATH only; they do not block absolute executable paths or
-SDK discovery, or establish a clean-machine or release-matrix result. The package remains private
-and unpublished.
+SDK discovery, or establish a clean-machine or release-matrix result. These local results do not
+establish qualification of a published npm release.
 
 Installed verification succeeds without compiler or temporary-directory prerequisites and leaves
 parent recovery files untouched. It reports current ownership, integrity and input freshness,

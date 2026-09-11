@@ -8,7 +8,7 @@ requiring a vgpu renderer. You create the device, resources, pipelines, encoders
 vgpu generates the package and resolves its compiled function names.
 
 > Warning: This is the direct Metal API under development. The command shim exists, but its
-> operational companion and complete installed workflow are not published yet. This page defines
+> operational companion and complete installed workflow are provided by the optional beta companion. This page defines
 > the first function-loading slice; generated uniform packing and resource binding helpers are
 > separate work, not APIs implemented by this example.
 

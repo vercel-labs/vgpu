@@ -1,8 +1,8 @@
 # Native compiler release inputs
 
-`@vgpu/native` release integration is being prepared; the npm `0.0.1` bootstrap
-package only reserves the name. Do not create an npm RC until the companion is
-included in the release allowlists and its installed candidate has been verified.
+`@vgpu/native` is an optional public beta in the fixed release group. The npm `0.0.1`
+bootstrap package only reserves the name and contains no operational tooling.
+Do not create an npm RC until its installed candidate has been verified.
 
 ## Compiler artifact transport
 
@@ -12,12 +12,13 @@ The existing `source-lock.json` under
 `tooling/native-tint-worker/c1-tint-direct-build/provenance/` remains the authority
 for its byte length and SHA-256. Transport never changes the runtime trust list.
 
-The proposed transport is a separate GitHub Release in `vercel-labs/vgpu`, tagged
+The transport is a separate GitHub Release in `vercel-labs/vgpu`, tagged
 `native-tint-<full universal SHA-256>`, with an asset named
 `vgpu-tint-worker-universal`. This tag does not start with `v`, so it cannot trigger
 npm publication. The binary release must also carry the authenticated Dawn/Tint,
-Abseil and JsonCpp license notices. Creating that release requires maintainer approval;
-documenting its address does not mean the asset is already published.
+Abseil and JsonCpp license notices. Creating a new binary release requires maintainer
+approval. The baseline selected by the current source lock is already hosted there;
+verify its download from a clean checkout rather than relying on a local build.
 
 Run `node scripts/fetch-native-worker.mjs` in a clean release checkout before packing.
 The command downloads only that content-addressed asset, checks its exact length
@@ -32,14 +33,14 @@ receive only verified tarballs, without checking out or executing repository cod
 
 ## Qualification and publication gates
 
-Roll out in two PRs. The prerequisite development PR adds transport and explicitly
-allowlisted support for a future `@vgpu/native` fixed-group member, leaving today's
-seven-package publication and private native manifest unchanged. The trusted
+The initial rollout uses two PRs. The prerequisite development PR adds transport and
+explicitly allowlisted support for `@vgpu/native`, preserving historical seven-package
+publication. The trusted
 `release-impact` evaluator must land on `canary` first: it reads candidate data but
 does not execute the candidate's updated validation code. A subsequent release PR
 activates native, advances the fixed group and finalizes the migration guide. Do not
 weaken the private-to-public version-change checks to bypass release preparation.
-That activation must also update both workflow tarball allowlists and exact artifact
+That activation must also update both workflow tarball allowlists, the publish list and exact artifact
 counts, and extend production authorization's package-version and npm-evidence checks.
 For historical releases, derive the supported package set from the stable candidate's
 fixed group, not the latest canary configuration. Validator acceptance alone does not
@@ -56,7 +57,8 @@ worker, licenses and C helper sources, with no local checkout dependency or inst
 
 The currently accepted worker has an ad hoc signature, not an Apple Developer ID
 signature or notarization. Hash authentication is not Apple signing. Publishing it
-as a limited preview requires an explicit decision; signing it would change its bytes
+as a controlled beta is the accepted initial scope; Developer ID signing and notarization
+are deferred. Do not disable system security to make it run. Signing would change its bytes
 and require a separately reviewed compiler baseline. A universal binary and Rosetta
 tests do not establish Intel GPU support or a minimum-macOS qualification matrix.
 

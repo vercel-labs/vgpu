@@ -15,6 +15,7 @@ import {
   RELEASE_WORKFLOW_PATH,
   STABLE_NPM_AUDIT_CONTEXT,
   ProductionAuthorizationError,
+  collectNpmPublicationEvidence,
   confirmsProductionAuthorizationWrite,
   evaluateProductionAuthorization,
   inspectExistingProductionAuthorization,
@@ -30,6 +31,7 @@ import {
   requireCurrentMainTip,
   requireUnchangedStableRefs,
   selectCiPushRunForRelease,
+  selectPublishedPackages,
   validateCiWorkflowJobs,
   validateCiWorkflowRun,
   validateCanonicalProductionAuthorizationStatus,
@@ -797,6 +799,51 @@ describe("web-only authorization", () => {
 });
 
 describe("stable promotion authorization", () => {
+  it("authorizes all eight packages when the stable candidate activates native", () => {
+    expect(
+      evaluateStable({
+        publishedPackages: [...PUBLISHED_PACKAGES, "@vgpu/native"],
+        npmEvidence: [
+          ...npmEvidence,
+          { name: "@vgpu/native", versionExists: true, latest: version },
+        ],
+      })
+    ).toMatchObject({ kind: "stable", version });
+  });
+
+  it("requires native registry evidence only for candidates that activate native", () => {
+    const publishedPackages = selectPublishedPackages([
+      ...PUBLISHED_PACKAGES,
+      "@vgpu/native",
+    ]);
+    const nativeEvidence = {
+      name: "@vgpu/native",
+      versionExists: true,
+      latest: version,
+    };
+    expectPolicyError(
+      () => evaluateStable({ publishedPackages }),
+      "Expected npm evidence for 8 packages"
+    );
+    expectPolicyError(
+      () => evaluateStable({ npmEvidence: [...npmEvidence, nativeEvidence] }),
+      "Expected npm evidence for 7 packages"
+    );
+    for (const invalidNative of [
+      { ...nativeEvidence, versionExists: false },
+      { ...nativeEvidence, latest: "0.0.1" },
+      { ...nativeEvidence, name: "@vgpu/unknown" },
+      { ...nativeEvidence, name: "vgpu" },
+    ]) {
+      expect(() =>
+        evaluateStable({
+          publishedPackages,
+          npmEvidence: [...npmEvidence, invalidNative],
+        })
+      ).toThrowError(ProductionAuthorizationError);
+    }
+  });
+
   it("authorizes a released tag whose tree exactly matches main", () => {
     expect(evaluateStable()).toMatchObject({
       kind: "stable",
@@ -1217,6 +1264,142 @@ describe("status and release helpers", () => {
 });
 
 describe("package evidence", () => {
+  it("fetches registry evidence for exactly the stable candidate's package set", async () => {
+    for (const names of [
+      PUBLISHED_PACKAGES,
+      [...PUBLISHED_PACKAGES, "@vgpu/native"],
+    ]) {
+      const publishedPackages = selectPublishedPackages(names);
+      const readMetadata = vi.fn(async () => ({
+        versions: { [version]: { version } },
+        "dist-tags": { latest: version },
+      }));
+      const evidence = await collectNpmPublicationEvidence({
+        publishedPackages,
+        expectedVersion: version,
+        readMetadata,
+      });
+      expect(readMetadata.mock.calls).toEqual(
+        publishedPackages.map((name) => [name])
+      );
+      expect(evidence).toEqual(
+        publishedPackages.map((name) => ({
+          name,
+          versionExists: true,
+          latest: version,
+        }))
+      );
+      expect(() =>
+        validateNpmEvidence({
+          evidence,
+          expectedVersion: version,
+          publishedPackages,
+        })
+      ).not.toThrow();
+    }
+  });
+
+  it("rejects arbitrary package sets even with matching npm evidence", () => {
+    expectPolicyError(
+      () =>
+        validateNpmEvidence({
+          publishedPackages: ["vgpu"],
+          evidence: npmEvidence.filter((item) => item.name === "vgpu"),
+          expectedVersion: version,
+        }),
+      "fixed group must contain exactly"
+    );
+  });
+
+  it("selects only the historical group or its explicit native extension", () => {
+    expect(selectPublishedPackages([...PUBLISHED_PACKAGES])).toEqual(
+      PUBLISHED_PACKAGES
+    );
+    expect(
+      selectPublishedPackages(["@vgpu/native", ...PUBLISHED_PACKAGES])
+    ).toEqual([...PUBLISHED_PACKAGES, "@vgpu/native"]);
+    for (const names of [
+      PUBLISHED_PACKAGES.slice(1),
+      [...PUBLISHED_PACKAGES, "@vgpu/unknown"],
+      [...PUBLISHED_PACKAGES, "vgpu"],
+    ]) {
+      expect(() => selectPublishedPackages(names)).toThrowError(
+        ProductionAuthorizationError
+      );
+    }
+  });
+
+  it("validates native when the stable candidate fixed group activates it", () => {
+    const names = [...PUBLISHED_PACKAGES, "@vgpu/native"];
+    expect(
+      validateReleasePackageVersions({
+        configuredFixedPackageNames: names,
+        expectedVersion: version,
+        manifests: names.map((name) => ({
+          manifestPath: `${name}/package.json`,
+          manifest: { name, version },
+        })),
+      })
+    ).toEqual([]);
+  });
+
+  it("requires an activated native manifest to be public and version-coherent", () => {
+    const historicalManifests = PUBLISHED_PACKAGES.map((name) => ({
+      manifestPath: `${name}/package.json`,
+      manifest: { name, version },
+    }));
+    const validateNative = (manifest?: Record<string, unknown>) =>
+      validateReleasePackageVersions({
+        configuredFixedPackageNames: [...PUBLISHED_PACKAGES, "@vgpu/native"],
+        expectedVersion: version,
+        manifests: [
+          ...historicalManifests,
+          ...(manifest
+            ? [{ manifestPath: "packages/native/package.json", manifest }]
+            : []),
+        ],
+      });
+    expect(validateNative()).toContain("@vgpu/native: package.json not found");
+    expect(
+      validateNative({ name: "@vgpu/native", version, private: true })
+    ).toContain("@vgpu/native: package.json must not be private");
+    expect(
+      validateNative({ name: "@vgpu/native", version: "0.0.1" })
+    ).toContain("@vgpu/native: 0.0.1 (expected 0.5.0)");
+    expect(
+      validateReleasePackageVersions({
+        configuredFixedPackageNames: [...PUBLISHED_PACKAGES],
+        expectedVersion: version,
+        manifests: [
+          ...historicalManifests,
+          {
+            manifestPath: "packages/native/package.json",
+            manifest: {
+              name: "@vgpu/native",
+              version: "0.0.0",
+              private: true,
+            },
+          },
+        ],
+      })
+    ).toEqual([]);
+    expect(
+      validateReleasePackageVersions({
+        configuredFixedPackageNames: [...PUBLISHED_PACKAGES],
+        expectedVersion: version,
+        manifests: [
+          ...historicalManifests,
+          {
+            manifestPath: "packages/native/package.json",
+            manifest: { name: "@vgpu/native", version },
+          },
+        ],
+      })
+    ).toContain(
+      "@vgpu/native: public workspace package missing from the release allowlist"
+    );
+  });
+
   it("validates the exact Changesets fixed group and versions", () => {
     expect(
       validateReleasePackageVersions({

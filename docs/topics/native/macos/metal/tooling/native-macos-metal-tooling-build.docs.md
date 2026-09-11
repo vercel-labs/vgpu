@@ -10,24 +10,32 @@ keywords: native, macos, metal, swift, doctor, check, build, verify, output, int
 Native tooling runs on the machine that generates the shaders. The Swift application consumes the
 resulting package without running Node.js or translating WGSL at launch.
 
-> Warning: This is a docs-first workflow contract. The grammar, help, lazy dispatch, `doctor`,
+> Beta: The grammar, help, lazy dispatch, `doctor`,
 > `check`, `build`, and `verify` are implemented. These commands have real local-tarball coverage with an offline
 > installation and dependency install scripts disabled; build coverage publishes to an initially
 > absent destination and independently checks the resulting files and hashes. Verification succeeds
 > without compiler or temporary-directory prerequisites and leaves parent recovery files untouched.
 > An external Swift consumer builds those published payloads, relocates its build tree, and executes
-> the documented compute and render programs on this host. The companion remains private and unpublished.
+> the documented compute and render programs on this host. The companion is an optional public beta.
 > See [Local installed qualification](/native/macos/metal/tooling/publication#local-installed-qualification)
-> for replacement, interruption and recovery coverage. Empty-cache installation and release support remain unqualified.
+> for replacement, interruption and recovery coverage and the separate cold-cache RC candidate check.
+> Broader platform compatibility and release support remain unqualified.
 
 ## Prepare the build machine
 
-The intended installation keeps build tooling in development dependencies:
+Keep build tooling in development dependencies and pin both packages to the same exact RC:
 
 ```sh
-npm install --save-dev vgpu @vgpu/native
+npm install --save-dev --save-exact vgpu@next @vgpu/native@next
 npx vgpu native doctor
 ```
+
+Check that both resolved versions match. The `0.0.1` native bootstrap has no functionality.
+The worker is bundled in npm; consumers do not download or build Tint separately.
+This beta uses an ad hoc signed worker without Developer ID signing or notarization.
+Validate it on the intended Apple Silicon development/CI hosts without disabling system
+security protections. Stable compatibility, Intel GPU support and a minimum-OS matrix
+are not promised. APIs, generated Swift and toolchain requirements may change during beta.
 
 `doctor` checks the supported Node version, selected Xcode/SDK and Swift tools, the authenticated
 vgpu-owned Tint worker, and Apple's Metal compiler. It compiles and links a small Metal probe;

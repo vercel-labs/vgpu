@@ -187,7 +187,7 @@ describe("agent readiness metadata", () => {
     expect(build).toContain(
       "absent destination and independently checks the resulting files and hashes"
     );
-    expect(build).toContain("private and unpublished");
+    expect(build).toContain("optional public beta");
     expect(build).toContain(
       "without compiler or temporary-directory prerequisites and leaves parent recovery files untouched"
     );

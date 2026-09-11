@@ -10,11 +10,11 @@ keywords: native, macos, metal, generated package, publication, atomic, staging,
 A generated package contains Swift code and a compiled library that must agree. The build prepares
 them together, then replaces the output directory as one operation.
 
-> Warning: The companion remains private and unpublished. The local qualification below uses
+> Warning: The companion is an optional public beta. The local qualification below uses
 > an offline local-tarball installation with a warm dependency store and dependency install scripts
-> disabled. It does not qualify empty-cache installation, normal dependency install scripts,
-> signing, quarantine, other hosts or filesystems, or a release compatibility matrix.
-> Fault instrumentation does not establish ordinary loader behavior. This is not a released workflow.
+> disabled. The separate RC candidate check below covers a cold npm cache and normal install scripts.
+> Neither qualifies signing, quarantine, other hosts or filesystems, or a release compatibility matrix.
+> Fault instrumentation does not establish ordinary loader behavior. Pin exact matching RC versions and validate your build environment.
 
 ## Local installed qualification
 
@@ -51,6 +51,15 @@ Complementary lower-level native tests cover staging, missing/empty publication 
 reconciliation, byte-identical and changed-module owned exchanges, owned recovery before and after
 exchange, and rejection of an old generated subtree on another filesystem device. These bounded
 representatives do not establish every fault combination or a broader platform support matrix.
+
+## Cold-cache RC candidate qualification
+
+The `0.5.0-rc.1` candidate installs eight matching tarballs outside the checkout with an empty
+npm cache, normal lifecycle scripts, no workspace links or overrides, and verified versions/hashes.
+Installed native commands and the relocated compute/render consumer run with network denied.
+Swift compilation keeps its normal SwiftPM sandbox without outer network denial; no system
+security is disabled. This covers one Apple Silicon host (macOS 26.6.2, Node22.19.0, Xcode26.2),
+not a clean OS or compatibility matrix. After publication, check npm against exact CI tarballs.
 
 ## Reserve the destination
 
