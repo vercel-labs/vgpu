@@ -4,13 +4,10 @@ import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo
 import { getExampleComponentLoader } from '@/lib/example-components';
 import { createDeduplicatedExampleErrorReporter, ExampleErrorReporterProvider } from '@/lib/example-error-reporter';
 import { type ExampleSlug } from '@/lib/example-slugs';
+import { formatPreviewError } from '@/lib/preview-error-message';
 
 interface ExampleCanvasProps {
   slug: ExampleSlug;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.stack || error.message : String(error);
 }
 
 function postPreviewError(slug: ExampleSlug, message: string): void {
@@ -42,7 +39,7 @@ class PreviewErrorBoundary extends Component<PreviewErrorBoundaryProps, PreviewE
   state: PreviewErrorBoundaryState = { message: null };
 
   static getDerivedStateFromError(error: unknown): PreviewErrorBoundaryState {
-    return { message: messageOf(error) };
+    return { message: formatPreviewError(error) };
   }
 
   componentDidCatch(error: unknown, _info: ErrorInfo): void {
@@ -71,8 +68,8 @@ function ReactExampleCanvas({ slug }: { slug: ExampleSlug }) {
 function PreviewHost({ slug }: { slug: ExampleSlug }) {
   const [asyncError, setAsyncError] = useState<string | null>(null);
   const reportError = useMemo(() => createDeduplicatedExampleErrorReporter(
-    (error) => setAsyncError(messageOf(error)),
-    (error) => postPreviewError(slug, messageOf(error)),
+    (error) => setAsyncError(formatPreviewError(error)),
+    (error) => postPreviewError(slug, formatPreviewError(error)),
   ), [slug]);
 
   useEffect(() => {
