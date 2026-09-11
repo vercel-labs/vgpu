@@ -36,6 +36,7 @@ export const exampleComponentLoaders = {
   'particle-orbit': () => import('../examples/particle-orbit/index'),
   'typegpu-liquid-glass': () => import('../examples/typegpu-liquid-glass/index'),
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
+  'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

@@ -35,7 +35,8 @@
     "particle-orbit": 160967,
     "typegpu-liquid-glass": 143135,
     "adaptive-quality": 56238,
-    "atmosphere": 106391
+    "atmosphere": 106391,
+    "spiral-galaxy": 76801
   },
   "exampleGrowth": {
     "percent": 2,
