@@ -125,6 +125,63 @@ describe("release package validation", () => {
     expect(validateReleasePackages(validInput())).toEqual([]);
   });
 
+  it("accepts native only when explicitly activated in the fixed group with coherent public metadata", () => {
+    const input = validInput();
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: {
+        name: "@vgpu/native",
+        version,
+        private: false,
+        repository: {
+          type: "git",
+          url: "git+https://github.com/vercel-labs/vgpu.git",
+          directory: "packages/native",
+        },
+        publishConfig: { access: "public" },
+      },
+    });
+    expect(validateReleasePackages(input)).toEqual([]);
+    input.configuredFixedPackageNames.pop();
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: public workspace package missing from the release allowlist"
+    );
+  });
+
+  it("requires the activated native package to be present, public and version-aligned", () => {
+    const input = validInput();
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: package.json not found at packages/native/package.json"
+    );
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: { name: "@vgpu/native", version: "0.0.0", private: true },
+    });
+    expect(validateReleasePackages(input)).toEqual(
+      expect.arrayContaining([
+        "@vgpu/native: package.json must set private to false",
+        `@vgpu/native: 0.0.0 (expected ${version})`,
+        "@vgpu/native: package.json has invalid repository metadata",
+        '@vgpu/native: publishConfig must be exactly { access: "public" }',
+      ])
+    );
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: duplicated in the Changesets fixed group"
+    );
+  });
+
+  it("preserves the current seven-package release with a private native workspace", () => {
+    const input = validInput();
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: { name: "@vgpu/native", version: "0.0.0", private: true },
+    });
+    expect(validateReleasePackages(input)).toEqual([]);
+  });
+
   it("rejects an allowlisted package removed from Changesets or made private", () => {
     const input = validInput();
     input.configuredFixedPackageNames =
