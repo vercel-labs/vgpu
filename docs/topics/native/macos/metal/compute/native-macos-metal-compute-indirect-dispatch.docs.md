@@ -14,7 +14,7 @@ encodes one reusable indirect compute command. There is no generated command-buf
 > Warning: Native tests on Apple silicon execute this CPU-encoded command, replay it, and reset it
 > for changed buffer ranges. This is a bounded composition example, not general indirect-command
 > support. The command shim exists; the generated package, operational companion, and complete
-> installed workflow are not published yet.
+> installed workflow are provided by the optional beta companion.
 
 ## Create a compatible pipeline
 

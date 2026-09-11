@@ -9,7 +9,7 @@ to dispatch.
 
 > Warning: The internal compiler and generated bindings execute this guide in native tests on
 > Apple silicon, including GPU readback for both visible ranges. The command shim exists; the
-> generated package, operational companion, and complete installed workflow are not published yet.
+> generated package, operational companion, and complete installed workflow are provided by the optional beta companion.
 > These tests do not establish the release support matrix.
 
 ## Read a bounded storage view

@@ -11,9 +11,9 @@ Use vgpu's WGSL module system with native GPU code. A build step resolves import
 selected programs, compiles a shader library, and generates the host-language integration. Your
 application keeps control of the platform GPU API.
 
-> Warning: Native tooling is in development and is not published yet. The direct Metal guides
+> Beta: Native tooling is available through the optional `@vgpu/native` companion. The direct Metal guides
 > identify the generated APIs exercised by native tests. Those tests do not establish a complete
-> installation workflow or a release support matrix.
+> release support matrix. Pin matching exact RC versions of `vgpu` and `@vgpu/native`.
 
 ## Compile once, use native code
 

@@ -13,7 +13,7 @@ together so native code does not accidentally combine a new range with an old si
 
 > Warning: Native tests on Apple silicon execute both the prepared helper and manual upload path
 > with the exact WGSL from the dispatch guide. The command shim exists; the generated package,
-> operational companion, and complete installed workflow are not published yet. A separate
+> operational companion, and complete installed workflow are provided by the optional beta companion. A separate
 > [indirect dispatch example](/native/macos/metal/compute/indirect-dispatch) tests
 > a bounded native command-buffer integration.
 

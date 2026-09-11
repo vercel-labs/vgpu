@@ -8,7 +8,7 @@ and commands. The generated package connects the compiled shader functions to th
 it does not introduce an effect, frame, or renderer object.
 
 > Warning: Native build tooling is under development. The `vgpu native` shim exists, but its
-> operational companion and complete installed workflow are not published yet.
+> operational companion and complete installed workflow are provided by the optional beta companion.
 > This guide's Triangle example is exercised through the internal compiler adapter. The configuration
 > format and local companion are implemented; separate installed-candidate coverage builds and runs
 > the documented Count and Gradient programs. The compiler also supports the fixed uniform profile described in

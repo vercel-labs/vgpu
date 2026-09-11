@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@3.1.4/schema.json",
   "changelog": "../scripts/changeset-changelog.cjs",
   "commit": false,
-  "fixed": [["vgpu", "@vgpu/core", "@vgpu/wgsl", "@vgpu/wgsl-std", "@vgpu/adapter-node", "@vgpu/adapter-mock", "@vgpu/render"]],
+  "fixed": [["vgpu", "@vgpu/core", "@vgpu/wgsl", "@vgpu/wgsl-std", "@vgpu/adapter-node", "@vgpu/adapter-mock", "@vgpu/render", "@vgpu/native"]],
   "linked": [],
   "access": "public",
   "baseBranch": "canary",

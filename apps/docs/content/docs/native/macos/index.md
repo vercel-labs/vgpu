@@ -6,7 +6,7 @@ description: "Generate a Swift shader package from WGSL and use its functions, p
 Generate a Swift package from WGSL modules, then use its functions and bindings with Metal.
 Your application owns the device, pipelines, resources, encoders, synchronization, and presentation.
 
-> Warning: The native package and complete command workflow are not published yet. Native tests
+> Beta: Install the optional `@vgpu/native` companion alongside the same exact RC version of `vgpu`. Native tests
 > exercise the direct integration on Apple silicon; they do not establish a release support matrix.
 
 ## Start with a draw

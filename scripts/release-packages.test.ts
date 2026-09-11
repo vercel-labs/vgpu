@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_PACKAGES,
+  releasePackagesFor,
   validateReleasePackages,
 } from "./lib/release-packages.mjs";
 
@@ -59,10 +60,14 @@ describe("release package validation", () => {
       "@vgpu/adapter-node",
       "@vgpu/adapter-mock",
       "@vgpu/render",
+      "@vgpu/native",
       "vgpu",
     ];
     const packageByName = new Map(
-      RELEASE_PACKAGES.map((entry) => [entry.name, entry])
+      releasePackagesFor([
+        ...RELEASE_PACKAGES.map(({ name }) => name),
+        "@vgpu/native",
+      ]).map((entry) => [entry.name, entry])
     );
     const expectedPairs = expectedOrder.map((name) => {
       const entry = packageByName.get(name);
@@ -76,6 +81,24 @@ describe("release package validation", () => {
     ].map(([, name, directory]) => `${name}|${directory}`);
 
     expect(workflowPairs).toEqual([...expectedPairs, ...expectedPairs]);
+    const publishTarballs = workflow.match(
+      /tarballs=\(([\s\S]*?)\n          \)/
+    )?.[1];
+    expect(publishTarballs?.match(/"([^"\n]+)"/g)).toEqual(
+      expectedOrder.map(
+        (name) =>
+          `"${name.replace(/^@/, "").replace("/", "-")}-\${version}.tgz"`
+      )
+    );
+    expect(workflow).toContain('if [ "$entry_count" != "9" ]');
+    expect(
+      workflow.indexOf("node scripts/fetch-native-worker.mjs")
+    ).toBeGreaterThan(0);
+    expect(
+      workflow.indexOf("node scripts/fetch-native-worker.mjs")
+    ).toBeLessThan(
+      workflow.indexOf("- name: Pack and validate the exact release artifacts")
+    );
     expect(workflow).toContain(
       'EXPECTED_VERSION="$tag_version" node scripts/check-release-packages.mjs'
     );

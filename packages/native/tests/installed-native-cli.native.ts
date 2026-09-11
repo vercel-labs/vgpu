@@ -25,14 +25,14 @@ import { projectFixture } from "./project-operation-fixture.ts";
 import { copyInstalledObserver } from "./installed-observer.ts";
 
 const workspace = fileURLToPath(new URL("../../..", import.meta.url));
-const packages = [
-  ["@vgpu/wgsl-std", "wgsl-std", "0.5.0-rc.0"],
-  ["@vgpu/wgsl", "wgsl", "0.5.0-rc.0"],
-  ["@vgpu/core", "core", "0.5.0-rc.0"],
-  ["@vgpu/adapter-mock", "adapter-mock", "0.5.0-rc.0"],
-  ["@vgpu/adapter-node", "adapter-node", "0.5.0-rc.0"],
-  ["vgpu", "vgpu-api", "0.5.0-rc.0"],
-  ["@vgpu/native", "native", "0.0.0"],
+const packageLocations = [
+  ["@vgpu/wgsl-std", "wgsl-std"],
+  ["@vgpu/wgsl", "wgsl"],
+  ["@vgpu/core", "core"],
+  ["@vgpu/adapter-mock", "adapter-mock"],
+  ["@vgpu/adapter-node", "adapter-node"],
+  ["vgpu", "vgpu-api"],
+  ["@vgpu/native", "native"],
 ] as const;
 const external = {
   "@modelcontextprotocol/core": "2.0.0",
@@ -57,6 +57,26 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
   expect(process.platform).toBe("darwin");
   const workflowDeadline = Date.now() + 240_000;
   const { command, checked } = boundedCommands(workflowDeadline);
+  // Snapshot candidate versions before packing; release bumps must not change
+  // which exact packages and archive bytes this installed qualification checks.
+  const packages = await Promise.all(
+    packageLocations.map(async ([name, directory]) => {
+      const manifest = JSON.parse(
+        await readFile(
+          join(workspace, "packages", directory, "package.json"),
+          "utf8"
+        )
+      );
+      expect(manifest.name).toBe(name);
+      const version: unknown = manifest.version;
+      if (typeof version !== "string")
+        throw new Error(`Setup: missing package version for ${name}`);
+      expect(version).toMatch(
+        /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
+      );
+      return [name, directory, version] as const;
+    })
+  );
   const pnpm = await realpath(process.env.npm_execpath!);
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -288,7 +308,7 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
       );
       expect(installedLock.get(key)?.integrity).toMatch(/^sha512-/u);
     }
-    for (const [name] of packages) {
+    for (const [name, , version] of packages) {
       const filename = dependencies[name]!.split("/").at(-1)!;
       const matches = [...installedLock].filter(([key]) =>
         key.startsWith(`${name}@file:`)
@@ -301,13 +321,16 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
       inside(fixture, packageRoot);
       expect(
         JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"))
-          .name
-      ).toBe(name);
+      ).toMatchObject({ name, version });
     }
     await assertContainedLinks(join(fixture, "node_modules"), fixture);
     const publicRoot = await realpath(join(fixture, "node_modules/vgpu"));
     const nativeRoot = await realpath(
       join(fixture, "node_modules/@vgpu/native")
+    );
+    const nativeArchive = join(
+      fixture,
+      dependencies["@vgpu/native"]!.slice("file:".length)
     );
     const bin = await realpath(join(publicRoot, "bin/vgpu.js"));
     inside(fixture, bin);
@@ -373,7 +396,7 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
     const nativeEntries = (
       await checked(
         "/usr/bin/tar",
-        ["-tzf", join(archives, "vgpu-native-0.0.0.tgz")],
+        ["-tzf", nativeArchive],
         fixture,
         environment
       )
@@ -417,7 +440,7 @@ test("an offline installed public vgpu diagnoses, checks, builds, verifies, and 
         "/usr/bin/tar",
         [
           "-xOf",
-          join(archives, "vgpu-native-0.0.0.tgz"),
+          nativeArchive,
           `package/dist/compiler/assets/darwin/${item.path}`,
         ],
         fixture,

@@ -84,7 +84,7 @@ export function runCli(args) {
   if (command === "docs") return runDocs(rest);
   if (command === "examples") return runExamples(rest, { version: VERSION });
   if (command === "native") {
-    return import("../lib/native/run.js").then(({ runNative }) => runNative(rest));
+    return import("../lib/native/run.js").then(({ runNative }) => runNative(rest, { version: VERSION }));
   }
   if (command === "mcp") {
     return import("../lib/mcp/stdio.js").then(({ runMcpStdio }) => runMcpStdio(rest, { version: VERSION }));

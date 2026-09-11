@@ -120,7 +120,9 @@ test("an absent optional companion produces an installation diagnostic without a
   const result = await invoke(input.directory, ["check"]);
   expect(result.result).toMatchObject({
     code: 1,
-    stderr: expect.stringContaining("npm install --save-dev vgpu @vgpu/native"),
+    stderr: expect.stringContaining(
+      "at the same exact version using --save-exact"
+    ),
   });
   expect(result.result.stdout).toBeUndefined();
   expect(result.after).toEqual(result.before);
@@ -492,6 +494,44 @@ async function invokeRoot(directory: string, args: string[]) {
     return error as { stdout: string; stderr: string; code: number };
   }
 }
+
+test.each(["1.2.3", "0.5.0-rc.1"])(
+  "the root CLI recommends its exact %s companion version",
+  async (version) => {
+    const input = await rootFixture();
+    await writeFile(
+      join(input.directory, "package.json"),
+      JSON.stringify({ type: "module", version })
+    );
+    expect(
+      await invokeRoot(input.directory, ["native", "check"])
+    ).toMatchObject({
+      code: 1,
+      stdout: "",
+      stderr: expect.stringContaining(
+        `npm install --save-dev --save-exact vgpu@${version} @vgpu/native@${version}`
+      ),
+    });
+  }
+);
+
+test.each(["latest", "1.2.3; echo unsafe"])(
+  "invalid version %s cannot enter a suggested shell command",
+  async (version) => {
+    const input = await rootFixture();
+    await writeFile(
+      join(input.directory, "package.json"),
+      JSON.stringify({ type: "module", version })
+    );
+    const result = await invokeRoot(input.directory, ["native", "check"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "at the same exact version using --save-exact"
+    );
+    expect(result.stderr).not.toContain("Run: npm install");
+    expect(result.stderr).not.toContain(version);
+  }
+);
 
 test("the root CLI lazily routes native commands and prints companion diagnostics", async () => {
   const input = await rootFixture(`export const nativeCliProtocol = 1;

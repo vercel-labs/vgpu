@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/cli",
-  "version": "0.2.2",
+  "version": "0.2.3-rc.0",
   "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
     "webgpu",

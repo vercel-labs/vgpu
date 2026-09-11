@@ -12,10 +12,14 @@
     "@vgpu/cli": "0.2.2",
     "vgpu": "0.4.1",
     "@vgpu/wgsl": "0.4.1",
-    "@vgpu/wgsl-std": "0.4.1"
+    "@vgpu/wgsl-std": "0.4.1",
+    "@vgpu/native": "0.0.0"
   },
   "changesets": [
     "explicit-texture-contract",
-    "linux-vulkan-default"
+    "linux-vulkan-default",
+    "native-beta-distribution",
+    "native-metal-and-host-layouts",
+    "versioned-migration-guides"
   ]
 }

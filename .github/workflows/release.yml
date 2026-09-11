@@ -4,7 +4,7 @@ on:
   release:
     types: [published]
 
-# npm publishes are irreversible and a seven-package publish is not atomic. Never allow
+# npm publishes are irreversible and an eight-package publish is not atomic. Never allow
 # two release events to mutate the dist-tags concurrently, and never cancel one mid-publish.
 concurrency:
   group: npm-release
@@ -162,6 +162,9 @@ jobs:
       - name: Check bundle budgets
         run: pnpm bundle-check
 
+      - name: Fetch and authenticate the bundled native compiler
+        run: node scripts/fetch-native-worker.mjs
+
       # `pnpm pack` resolves workspace:* dependencies and intentionally runs vgpu's prepack docs
       # generation here, in the job that has no OIDC permission. The privileged job receives only
       # these inert tarballs and never checks out or executes repository code.
@@ -182,6 +185,7 @@ jobs:
             "@vgpu/adapter-node|packages/adapter-node|vgpu-adapter-node-${version}.tgz"
             "@vgpu/adapter-mock|packages/adapter-mock|vgpu-adapter-mock-${version}.tgz"
             "@vgpu/render|packages/render|vgpu-render-${version}.tgz"
+            "@vgpu/native|packages/native|vgpu-native-${version}.tgz"
             "vgpu|packages/vgpu-api|vgpu-${version}.tgz"
           )
 
@@ -322,7 +326,7 @@ jobs:
           digest-mismatch: error
 
       # This validation is intentionally inline: the OIDC job must not execute a verifier from the
-      # tagged checkout. It accepts only the seven named regular files and their checksum manifest.
+      # tagged checkout. It accepts only the eight named regular files and their checksum manifest.
       - name: Validate downloaded tarballs without executing package code
         shell: bash
         env:
@@ -339,12 +343,13 @@ jobs:
             "@vgpu/adapter-node|packages/adapter-node|vgpu-adapter-node-${version}.tgz"
             "@vgpu/adapter-mock|packages/adapter-mock|vgpu-adapter-mock-${version}.tgz"
             "@vgpu/render|packages/render|vgpu-render-${version}.tgz"
+            "@vgpu/native|packages/native|vgpu-native-${version}.tgz"
             "vgpu|packages/vgpu-api|vgpu-${version}.tgz"
           )
 
           entry_count="$(find "$artifact_dir" -mindepth 1 -maxdepth 1 -exec printf x \; | wc -c | tr -d '[:space:]')"
-          if [ "$entry_count" != "8" ] || [ ! -f "$artifact_dir/SHA256SUMS" ] || [ -L "$artifact_dir/SHA256SUMS" ]; then
-            echo "::error::Release artifact must contain exactly seven tarballs and one regular SHA256SUMS file."
+          if [ "$entry_count" != "9" ] || [ ! -f "$artifact_dir/SHA256SUMS" ] || [ -L "$artifact_dir/SHA256SUMS" ]; then
+            echo "::error::Release artifact must contain exactly eight tarballs and one regular SHA256SUMS file."
             exit 1
           fi
           checksum_count="$(wc -l < "$artifact_dir/SHA256SUMS" | tr -d '[:space:]')"
@@ -487,6 +492,7 @@ jobs:
             "vgpu-adapter-node-${version}.tgz"
             "vgpu-adapter-mock-${version}.tgz"
             "vgpu-render-${version}.tgz"
+            "vgpu-native-${version}.tgz"
             "vgpu-${version}.tgz"
           )
           for tarball in "${tarballs[@]}"; do
